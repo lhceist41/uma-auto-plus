@@ -2,7 +2,8 @@ import React, { useMemo, useState, useEffect, useContext, useRef } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from "react-native"
 import { DrawerContentScrollView, DrawerContentComponentProps, useDrawerStatus } from "@react-navigation/drawer"
 import { CommonActions } from "@react-navigation/native"
-import { Ionicons } from "@expo/vector-icons"
+import { House, Settings, Dumbbell, CalendarDays, Flag, Map, Swords, Eye, MessageCircle, Sliders, Bug, Repeat, ChevronUp, ChevronDown, Cube, Github } from "lucide-react-native"
+import type { LucideIcon } from "lucide-react-native"
 import { Avatar, AvatarImage } from "../ui/avatar"
 import { markNavigationStart } from "../../lib/performanceLogger"
 import { useTheme } from "../../context/ThemeContext"
@@ -14,8 +15,8 @@ interface MenuItem {
     name: string
     /** The display label shown in the drawer. */
     label: string
-    /** Function returning the Ionicons icon name based on focused state. */
-    icon: (focused: boolean) => string
+    /** The Lucide icon component to display. */
+    icon: LucideIcon
     /** Optional nested menu items for expandable sections. */
     nested?: MenuItem[]
 }
@@ -45,6 +46,7 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
         ...Object.values(skillPlanSettingsPages).flatMap((item) => item.name),
         "EventLogVisualizer",
         "DiscordSettings",
+        "RunQueueSettings",
         "ScenarioOverridesSettings",
         "DebugSettings",
     ]
@@ -197,64 +199,69 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
         {
             name: "Home",
             label: "Home",
-            icon: (focused: boolean) => (focused ? "home" : "home-outline"),
+            icon: House,
         },
         {
             name: "Settings",
             label: "Settings",
-            icon: (focused: boolean) => (focused ? "settings" : "settings-outline"),
+            icon: Settings,
             nested: [
                 {
                     name: "TrainingSettings",
                     label: "Training Settings",
-                    icon: () => "barbell-outline",
+                    icon: Dumbbell,
                 },
                 {
                     name: "TrainingEventSettings",
                     label: "Training Event Settings",
-                    icon: () => "calendar-outline",
+                    icon: CalendarDays,
                 },
                 {
                     name: "RacingSettings",
                     label: "Racing Settings",
-                    icon: () => "flag-outline",
+                    icon: Flag,
                     nested: [
                         {
                             name: "RacingPlanSettings",
                             label: "Racing Plan Settings",
-                            icon: () => "map-outline",
+                            icon: Map,
                         },
                     ],
                 },
                 {
                     name: "SkillSettings",
                     label: "Skill Settings",
-                    icon: () => "american-football-outline",
+                    icon: Swords,
                     nested: Object.values(skillPlanSettingsPages).map((item) => ({
                         name: item.name,
                         label: `${item.title} Plan Settings`,
-                        icon: () => "cube-outline",
+                        icon: Cube,
                     })),
                 },
                 {
                     name: "EventLogVisualizer",
                     label: "Event Log Visualizer",
-                    icon: () => "eye-outline",
+                    icon: Eye,
                 },
                 {
                     name: "DiscordSettings",
                     label: "Discord Settings",
-                    icon: () => "logo-discord",
+                    icon: MessageCircle,
+                },
+                {
+                    name: "RunQueueSettings",
+                    label: "Run Queue Settings",
+                    icon: Repeat,
                 },
                 {
                     name: "ScenarioOverridesSettings",
                     label: "Scenario Overrides Settings",
-                    icon: () => "options-outline",
+                    icon: Sliders,
                 },
                 {
                     name: "DebugSettings",
                     label: "Debug Settings",
-                    icon: () => "bug-outline",
+                    icon: Bug,
                 },
             ],
         },
@@ -481,13 +488,13 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
                         activeOpacity={0.7}
                     >
                         <View style={iconStyle}>
-                            <Ionicons name={item.icon(isActive) as any} size={iconSize} color={isActive ? colors.primary : colors.foreground} />
+                            <item.icon size={iconSize} color={isActive ? colors.primary : colors.foreground} />
                         </View>
                         <Text style={[textStyle, isActive && textActiveStyle]}>{item.label}</Text>
                     </TouchableOpacity>
                     {item.nested && (
                         <TouchableOpacity onPress={(e) => handleChevronPress(e, item)} style={styles.chevronButton} activeOpacity={0.7}>
-                            <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={chevronSize} color={colors.mutedForeground} />
+                            {isExpanded ? <ChevronUp size={chevronSize} color={colors.mutedForeground} /> : <ChevronDown size={chevronSize} color={colors.mutedForeground} />}
                         </TouchableOpacity>
                     )}
                 </View>
@@ -513,7 +520,7 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
             <View style={styles.footer}>
                 <TouchableOpacity onPress={() => Linking.openURL("https://github.com/steve1316/uma-android-automation")} activeOpacity={0.7}>
                     <View style={styles.footerButton}>
-                        <Ionicons name="logo-github" size={32} color={colors.primary} style={{ marginRight: 8 }} />
+                        <Github size={32} color={colors.primary} style={{ marginRight: 8 }} />
                         <Text style={styles.footerText}>Go to GitHub</Text>
                     </View>
                 </TouchableOpacity>
