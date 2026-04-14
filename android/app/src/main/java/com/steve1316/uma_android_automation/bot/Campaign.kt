@@ -183,6 +183,18 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     protected var bHasHandledSkillPointCheck: Boolean = false
 
+    /** The number of consecutive failed attempts at handling the skill point check for this run.
+     * Used in conjunction with [skillPointCheckMaxAttempts] to prevent an infinite retry loop
+     * if [handleSkillListScreen] repeatedly fails to respond (e.g. UI state we never recover from).
+     * Reset when skill points drop below the threshold or when the check succeeds.
+     */
+    protected var skillPointCheckAttempts: Int = 0
+
+    /** The maximum number of consecutive failed attempts at handling the skill point check
+     * before we give up for this run and allow normal turn execution to resume.
+     */
+    protected val skillPointCheckMaxAttempts: Int = 3
+
     /** Flag indicating if the pre-finals check has been handled. */
     protected var bHasHandledPreFinalsCheck: Boolean = false
 
@@ -1740,6 +1752,7 @@ abstract class Campaign(game: Game) : Task(game) {
         if (trainee.skillPoints < skillPointsRequired) {
             // Reset the flag if the skill points drop below the threshold.
             bHasHandledSkillPointCheck = false
+            skillPointCheckAttempts = 0
         }
 
         if (!bHasHandledSkillPointCheck && enableSkillPointCheck && trainee.skillPoints >= skillPointsRequired) {
@@ -1751,10 +1764,23 @@ abstract class Campaign(game: Game) : Task(game) {
                     ButtonSkills.click(game.imageUtils)
                     game.wait(1.0)
                     if (!handleSkillListScreen("skillPointCheck")) {
-                        MessageLog.e(TAG, "[ERROR] performGlobalChecks:: Failed to handle Skill Point Check. Aborting...")
+                        skillPointCheckAttempts++
+                        if (skillPointCheckAttempts >= skillPointCheckMaxAttempts) {
+                            MessageLog.w(
+                                TAG,
+                                "[WARN] performGlobalChecks:: Skill Point Check exhausted max attempts ($skillPointCheckMaxAttempts). Marking it handled for this run so execution can continue.",
+                            )
+                            bHasHandledSkillPointCheck = true
+                        } else {
+                            MessageLog.e(
+                                TAG,
+                                "[ERROR] performGlobalChecks:: Failed to handle Skill Point Check (attempt $skillPointCheckAttempts/$skillPointCheckMaxAttempts). Will retry next turn...",
+                            )
+                        }
                         return true
                     }
                     bHasHandledSkillPointCheck = true
+                    skillPointCheckAttempts = 0
                     return true
                 } else {
                     MessageLog.i(TAG, "[SKILLS] Skipping skill purchase check for now since we are not confirmed to be sitting on the Main screen.")
@@ -1810,6 +1836,12 @@ abstract class Campaign(game: Game) : Task(game) {
                 MessageLog.i(TAG, "[INFO] Energy is low (${trainee.energy}% < 70%). Forcing rest during $date in preparation for Summer Training.")
                 return MainScreenAction.REST
             } else if (trainee.mood < Mood.GREAT) {
+                // If firstTrainingCheck is active, mood recovery will be refused. Do a
+                // training first to clear the flag, then the next turn can recover mood.
+                if (training.firstTrainingCheck) {
+                    MessageLog.i(TAG, "[INFO] Mood is ${trainee.mood} but firstTrainingCheck is active. Doing a training first to clear the flag before mood recovery can proceed.")
+                    return MainScreenAction.TRAIN
+                }
                 MessageLog.i(TAG, "[INFO] Energy is sufficient (>= 70%) but Mood is not Great (${trainee.mood}). Forcing mood recovery during $date in preparation for Summer Training.")
                 forcedTargetMood = Mood.GREAT
                 return MainScreenAction.RECOVER_MOOD
