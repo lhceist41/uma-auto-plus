@@ -1,8 +1,8 @@
 <resources>
-    <string name="app_name">ウマ娘 Android Automation</string>
+    <string name="app_name">UMA Auto+</string>
 
     <!-- This is the name of the app that will appear right below its icon on the Android Home screen. -->
-    <string name="title_activity_main">ウマ娘 Automation</string>
+    <string name="title_activity_main">UMA Auto+</string>
 
     <string name="menu_home">Home</string>
     <string name="menu_settings">Settings</string>
