@@ -17,6 +17,7 @@ import PageHeader from "../../components/PageHeader"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 import SelectButton from "../../components/SelectButton"
 import CustomSelect from "../../components/CustomSelect"
+import { characterPresets } from "../../data/characterPresets"
 import { useNavigation } from "@react-navigation/native"
 
 const styles = StyleSheet.create({
@@ -76,6 +77,7 @@ const Home = () => {
     const [showAccessibilityDialog, setShowAccessibilityDialog] = useState<boolean>(false)
     const [accessibilityRequirement, setAccessibilityRequirement] = useState<"enable" | "restart" | null>(null)
     const [queueProgress, setQueueProgress] = useState<{ currentRun: number; totalRuns: number; status: string; message?: string } | null>(null)
+    const [selectedPreset, setSelectedPreset] = useState<string | undefined>(undefined)
     const [interruptedQueue, setInterruptedQueue] = useState<{ currentRun: number; totalRuns: number; ageMinutes: number } | null>(null)
 
     const navigation = useNavigation()
@@ -173,6 +175,44 @@ const Home = () => {
     const isScenarioValid: boolean = useMemo(() => {
         return scenarios.some((it) => it.value === bsc.settings.general.scenario)
     }, [bsc.settings.general.scenario])
+
+    /**
+     * Character presets filtered by the currently selected scenario.
+     */
+    const filteredPresets = useMemo(() => {
+        const scenario = bsc.settings.general.scenario
+        if (!scenario) return []
+        return characterPresets
+            .filter((p) => p.scenario === scenario)
+            .map((p) => ({ value: p.name, label: p.name }))
+    }, [bsc.settings.general.scenario])
+
+    /**
+     * Applies a character preset's settings to the current configuration.
+     */
+    const handlePresetChange = async (presetName: string | undefined) => {
+        setSelectedPreset(presetName)
+        if (!presetName) return
+
+        const preset = characterPresets.find((p) => p.name === presetName && p.scenario === bsc.settings.general.scenario)
+        if (!preset) return
+
+        // Deep merge preset settings with current settings
+        const merged = { ...bsc.settings }
+        for (const [category, values] of Object.entries(preset.settings)) {
+            if (typeof values === "object" && values !== null && !Array.isArray(values)) {
+                ;(merged as any)[category] = { ...(merged as any)[category], ...values }
+            } else {
+                ;(merged as any)[category] = values
+            }
+        }
+
+        bsc.setSettings(merged)
+        await saveSettings()
+        logWithTimestamp(`[Home] Applied preset: ${presetName} (${bsc.settings.general.scenario})`)
+        setSnackbarMessage(`Preset "${presetName}" applied`)
+        setSnackbarOpen(true)
+    }
 
     /**
      * Fetch device metrics from NativeModule.
@@ -414,6 +454,18 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                             <Text style={{ fontSize: 12, color: colors.foreground }}>Dismiss</Text>
                         </TouchableOpacity>
                     </View>
+                </View>
+            )}
+
+            {isScenarioValid && filteredPresets.length > 0 && !isRunning && (
+                <View style={{ width: "100%", paddingHorizontal: 4, marginBottom: 6 }}>
+                    <CustomSelect
+                        placeholder="Select Character Preset"
+                        options={filteredPresets}
+                        value={selectedPreset}
+                        onValueChange={handlePresetChange}
+                        width="100%"
+                    />
                 </View>
             )}
 
