@@ -1,0 +1,40 @@
+[versions]
+# The Android Studio warning about these not being used in any build scripts is wrong and can be ignored.
+# https://issuetracker.google.com/issues/343889864
+app-compileSdk = "36"
+app-buildToolsVersion = "36.0.0"
+app-minSdk = "24"
+#noinspection ExpiredTargetSdkVersion
+app-targetSdk = "30"
+app-versionCode = "63"
+app-versionName = "5.4.8"
+app-jvm-toolchain = "17"
+
+androidGradleBuildTools = "8.13.0"
+junitJupiter = "6.0.2"
+junitPlatformLauncher = "6.0.2"
+kotlinGradlePlugin = "2.2.0"
+androidCvAutomationLibrary = "2.5.5"
+lottie = "6.6.9"
+ktor = "3.4.1"
+onnxruntime = "1.24.3"
+ktlint = "14.2.0"
+
+[libraries]
+androidGradleBuildTools = { group = "com.android.tools.build", name = "gradle", version.ref = "androidGradleBuildTools" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junitJupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junitPlatformLauncher" }
+kotlinGradlePlugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlinGradlePlugin" }
+lottie = { module = "com.airbnb.android:lottie", version.ref = "lottie" }
+react-native-gradle-plugin = { module = "com.facebook.react:react-native-gradle-plugin" }
+android-cv-automation-library = { module = "com.github.steve1316:android-cv-automation-library", version.ref = "androidCvAutomationLibrary" }
+ktor-server-core = { module = "io.ktor:ktor-server-core", version.ref = "ktor" }
+ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }
+ktor-server-websockets = { module = "io.ktor:ktor-server-websockets", version.ref = "ktor" }
+react-android = { module = "com.facebook.react:react-android" }
+hermes-android = { module = "com.facebook.react:hermes-android" }
+onnxruntime = { module = "com.microsoft.onnxruntime:onnxruntime-android", version.ref = "onnxruntime" }
+
+[plugins]
+foojayJDKResolver = { id = "org.gradle.toolchains.foojay-resolver-convention", version = "1.0.0" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }
