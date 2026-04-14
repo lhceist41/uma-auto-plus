@@ -103,7 +103,6 @@ android {
     defaultConfig {
         applicationId 'com.lhceist41.uma_auto_plus'
         minSdkVersion libs.versions.app.minSdk.get() as Integer
-        //noinspection ExpiredTargetSdkVersion
         targetSdkVersion libs.versions.app.targetSdk.get() as Integer
         versionCode libs.versions.app.versionCode.get() as Integer
         versionName libs.versions.app.versionName.get()
@@ -117,20 +116,27 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            def storeFilePath = System.getenv("UMA_RELEASE_STORE_FILE") ?: findProperty("UMA_RELEASE_STORE_FILE")
+            if (storeFilePath) {
+                storeFile file(storeFilePath)
+                storePassword System.getenv("UMA_RELEASE_STORE_PASSWORD") ?: findProperty("UMA_RELEASE_STORE_PASSWORD") ?: ""
+                keyAlias System.getenv("UMA_RELEASE_KEY_ALIAS") ?: findProperty("UMA_RELEASE_KEY_ALIAS") ?: ""
+                keyPassword System.getenv("UMA_RELEASE_KEY_PASSWORD") ?: findProperty("UMA_RELEASE_KEY_PASSWORD") ?: ""
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
-            crunchPngs true  // Good for reducing APK size.
-            // Usually no minification or resource shrinking.
+            crunchPngs true
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
-            shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
-            minifyEnabled enableMinifyInReleaseBuilds
-            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+            // Release builds require a real signing config. No debug fallback.
+            signingConfig signingConfigs.release
+            shrinkResources true
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             crunchPngs (findProperty('android.enablePngCrunchInReleaseBuilds')?.toBoolean() ?: true)
         }
     }
@@ -242,6 +248,36 @@ dependencies {
 
     // ONNX Runtime for YOLOv8 inference.
     implementation(libs.onnxruntime)
+}
+
+// ============================================================================
+// Release Signing Validation
+// ============================================================================
+
+// Fail early with a clear message if release signing inputs are missing.
+// Runs at task-graph-ready time, before any compilation or packaging starts.
+gradle.taskGraph.whenReady { graph ->
+    def hasReleaseTasks = graph.allTasks.any { it.name.matches(/.*Release.*/) && !it.name.contains("Debug") }
+    if (hasReleaseTasks) {
+        def storeFile = System.getenv("UMA_RELEASE_STORE_FILE") ?: findProperty("UMA_RELEASE_STORE_FILE")
+        if (!storeFile) {
+            throw new GradleException(
+                "\n" +
+                "========================================================================\n" +
+                " Release signing is not configured.\n" +
+                "\n" +
+                " To build a release APK, set these environment variables:\n" +
+                "   UMA_RELEASE_STORE_FILE      path to the release keystore file\n" +
+                "   UMA_RELEASE_STORE_PASSWORD   keystore password\n" +
+                "   UMA_RELEASE_KEY_ALIAS        key alias\n" +
+                "   UMA_RELEASE_KEY_PASSWORD     key password\n" +
+                "\n" +
+                " For local testing without a release keystore, use:\n" +
+                "   ./gradlew assembleDebug\n" +
+                "========================================================================\n"
+            )
+        }
+    }
 }
 
 // ============================================================================
