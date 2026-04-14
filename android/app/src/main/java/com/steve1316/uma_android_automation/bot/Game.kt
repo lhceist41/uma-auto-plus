@@ -5,6 +5,10 @@ import android.graphics.Bitmap
 import android.util.Log
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.BotService
+import com.steve1316.uma_android_automation.CareerLaunchNavigator
+import com.steve1316.uma_android_automation.StartModule
+import com.steve1316.uma_android_automation.components.ButtonTraining
+import com.steve1316.uma_android_automation.components.ButtonRest
 import com.steve1316.automation_library.utils.DiscordUtils
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
@@ -122,6 +126,14 @@ class Game(val myContext: Context) {
                 throw InterruptedException()
             }
 
+            // Check queue control flags at safe boundaries.
+            if (StartModule.queueStopRequested) {
+                throw InterruptedException()
+            }
+            if (StartModule.queueSkipRequested) {
+                throw InterruptedException()
+            }
+
             val sleepTime = minOf(checkInterval, remainingMillis)
             runBlocking {
                 delay(sleepTime)
@@ -226,15 +238,26 @@ class Game(val myContext: Context) {
         }
     }
 
+    /**
+     * Checks if the bot is currently on the in-career training menu.
+     * Uses the same detection as the CareerLaunchNavigator's ACTIVE_TRAINING_MENU state:
+     * looks for the Training or Rest buttons which are unique to that screen.
+     */
+    private fun isOnTrainingMenu(): Boolean {
+        val bitmap = imageUtils.getSourceBitmap()
+        return ButtonTraining.check(imageUtils, sourceBitmap = bitmap) ||
+               ButtonRest.check(imageUtils, sourceBitmap = bitmap)
+    }
+
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
      * Begins automation here.
      *
-     * @return True if all automation goals have been met. False otherwise.
+     * @return The [TaskResult] from the task's execution.
      */
-    fun start(): Boolean {
+    fun start(): TaskResult {
         MessageLog.i(TAG, "Started at ${MessageLog.getSystemTimeString()}.")
         val startTime: Long = System.currentTimeMillis()
 
@@ -285,6 +308,29 @@ class Game(val myContext: Context) {
         // Start debug tests here if enabled. Otherwise, proceed with regular bot operations.
         // A small delay here to ensure any notifications are out of the way.
         wait(3.0)
+
+        // Auto-navigate to the training menu if the bot is not already there.
+        // This allows starting the bot from the home screen, scenario select, or any
+        // other screen in the career launch flow — the navigator will find its way.
+        if (!isOnTrainingMenu()) {
+            MessageLog.i(TAG, "[INFO] Bot is not on the training menu. Attempting auto-navigation...")
+            val navigator = CareerLaunchNavigator(myContext)
+            val reuseSetup = SettingsHelper.getBooleanSetting("runQueue", "reuseLastLaunchSetup", true)
+            val navResult = navigator.navigate(reuseSetup)
+            if (!navResult.success) {
+                MessageLog.e(TAG, "[INFO] Auto-navigation failed: ${navResult.failureReason}")
+                MessageLog.e(TAG, "[INFO] Last state: ${navResult.lastDetectedState}, transition: ${navResult.failedTransition}")
+                MessageLog.e(TAG, "[INFO] ${navResult.recommendedAction}")
+                return TaskResult.Error(
+                    TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED,
+                    "Auto-navigation to training menu failed: ${navResult.failureReason}",
+                )
+            }
+            MessageLog.i(TAG, "[INFO] Auto-navigation complete. Bot is now on the training menu.")
+            wait(2.0)
+        }
+
+        val taskResult: TaskResult
         if (!task.startTests()) {
             // Send Discord notification that the run has started.
             if (DiscordUtils.enableDiscordNotifications) {
@@ -299,7 +345,9 @@ class Game(val myContext: Context) {
                 }
                 DiscordUtils.queue.add("```diff\n+ ${MessageLog.getSystemTimeString()} Bot run started! Scenario: $scenario```$logViewerString")
             }
-            task.start()
+            taskResult = task.start()
+        } else {
+            taskResult = TaskResult.Success(TaskResultCode.TASK_RESULT_COMPLETE, "Debug tests completed.")
         }
 
         MessageLog.i(TAG, "[INFO] Total runtime of ${MessageLog.formatElapsedTime(startTime, System.currentTimeMillis())} and stopped at ${MessageLog.getSystemTimeString()}.")
@@ -309,6 +357,6 @@ class Game(val myContext: Context) {
             wait(1.0, skipWaitingForLoading = true)
         }
 
-        return true
+        return taskResult
     }
 }

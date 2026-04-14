@@ -18,6 +18,10 @@ object ButtonAutoSelect : ButtonInterface {
     override val template = Template("components/button/auto_select")
 }
 
+object ButtonAutoFill : ButtonInterface {
+    override val template = Template("components/button/auto_fill", region = Region.bottomHalf, confidence = 0.75)
+}
+
 object ButtonBack : ButtonInterface {
     override val template = Template("components/button/back", region = Region.bottomHalf)
 }
@@ -96,6 +100,14 @@ object ButtonGiveUp : ButtonInterface {
 
 object ButtonToHome : ButtonInterface {
     override val template = Template("components/button/to_home")
+}
+
+object ButtonCareerHome : ButtonInterface {
+    override val template = Template("components/button/career_home", region = Region.bottomHalf, confidence = 0.6)
+}
+
+object ButtonCareerHomeText : ButtonInterface {
+    override val template = Template("components/button/career_home_text", region = Region.bottomHalf, confidence = 0.55)
 }
 
 object ButtonHomeSpecialMissions : ButtonInterface {
@@ -272,6 +284,18 @@ object ButtonShop : ButtonInterface {
 
 object ButtonSkip : ButtonInterface {
     override val template = Template("components/button/skip", region = Region.bottomHalf)
+}
+
+object ButtonSkipCinematic : ButtonInterface {
+    override val template = Template("components/button/skip_cinematic", region = Region.bottomHalf)
+}
+
+object ButtonSkipOff : ButtonInterface {
+    override val template = Template("components/button/skip_off", region = Region.bottomHalf)
+}
+
+object ButtonSkipOn : ButtonInterface {
+    override val template = Template("components/button/skip_on", region = Region.bottomHalf)
 }
 
 object ButtonSkills : ButtonInterface {

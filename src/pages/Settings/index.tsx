@@ -196,6 +196,16 @@ const Settings = () => {
         )
     }
 
+    const renderRunQueueLink = () => {
+        return (
+            <NavigationLink
+                title="Go to Run Queue Settings"
+                description="Queue multiple consecutive runs of the same scenario to let the bot run unattended."
+                onPress={() => navigation.navigate("RunQueueSettings" as never)}
+            />
+        )
+    }
+
     const renderDebugLink = () => {
         return (
             <NavigationLink
@@ -471,6 +481,7 @@ const Settings = () => {
                         {renderSkillsLink()}
                         {renderEventLogVisualizerLink()}
                         {renderDiscordLink()}
+                        {renderRunQueueLink()}
                         {renderScenarioOverridesLink()}
                         {renderDebugLink()}
                         {renderMiscSettings()}

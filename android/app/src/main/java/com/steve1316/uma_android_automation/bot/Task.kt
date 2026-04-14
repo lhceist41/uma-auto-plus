@@ -26,6 +26,12 @@ enum class TaskResultCode {
 
     /** The task timed out before completing its objectives. */
     TASK_RESULT_TIMED_OUT,
+
+    /** The current run was skipped by the queue system. */
+    TASK_RESULT_SKIPPED_BY_QUEUE,
+
+    /** Queue navigation between runs failed. */
+    TASK_RESULT_QUEUE_NAVIGATION_FAILED,
 }
 
 /** Represents the final result of a task's execution. */

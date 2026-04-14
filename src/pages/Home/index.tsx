@@ -4,17 +4,19 @@ import { useContext, useEffect, useRef, useState, useMemo } from "react"
 import { BotStateContext } from "../../context/BotStateContext"
 import { useSettings } from "../../context/SettingsContext"
 import { logWithTimestamp, logErrorWithTimestamp } from "../../lib/logger"
-import { Animated, DeviceEventEmitter, StyleSheet, View, NativeModules } from "react-native"
+import { Animated, DeviceEventEmitter, StyleSheet, TouchableOpacity, View, NativeModules } from "react-native"
 import { Snackbar } from "react-native-paper"
 import { MessageLogContext } from "../../context/MessageLogContext"
 import { useTheme } from "../../context/ThemeContext"
 import { Text } from "../../components/ui/text"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../components/ui/alert-dialog"
-import { Ionicons } from "@expo/vector-icons"
+import { Play, Square, AlertCircle, Info, CircleCheck, Repeat } from "lucide-react-native"
+import type { LucideIcon } from "lucide-react-native"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip"
 import PageHeader from "../../components/PageHeader"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 import SelectButton from "../../components/SelectButton"
+import CustomSelect from "../../components/CustomSelect"
 import { useNavigation } from "@react-navigation/native"
 
 const styles = StyleSheet.create({
@@ -73,6 +75,8 @@ const Home = () => {
     const [unsupportedReason, setUnsupportedReason] = useState<string | null>(null)
     const [showAccessibilityDialog, setShowAccessibilityDialog] = useState<boolean>(false)
     const [accessibilityRequirement, setAccessibilityRequirement] = useState<"enable" | "restart" | null>(null)
+    const [queueProgress, setQueueProgress] = useState<{ currentRun: number; totalRuns: number; status: string; message?: string } | null>(null)
+    const [interruptedQueue, setInterruptedQueue] = useState<{ currentRun: number; totalRuns: number; ageMinutes: number } | null>(null)
 
     const navigation = useNavigation()
 
@@ -122,12 +126,44 @@ const Home = () => {
             }
         })
 
+        const queueProgressSubscription = DeviceEventEmitter.addListener("RunQueueProgress", (data) => {
+            try {
+                const payload = JSON.parse(data["message"])
+                setQueueProgress({
+                    currentRun: payload.currentRun,
+                    totalRuns: payload.totalRuns,
+                    status: payload.status,
+                    message: payload.message,
+                })
+                // Clear queue progress when queue is complete or failed.
+                if (payload.status === "queueComplete" || payload.status === "queueFailed") {
+                    setTimeout(() => setQueueProgress(null), 10000)
+                }
+            } catch (e) {
+                // Ignore parse errors.
+            }
+        })
+
         getVersion()
         fetchDeviceMetrics()
+
+        // Check for interrupted queue state from a previous crash.
+        StartModule.getInterruptedQueueState()
+            .then((state: any) => {
+                if (state) {
+                    setInterruptedQueue({
+                        currentRun: state.currentRun,
+                        totalRuns: state.totalRuns,
+                        ageMinutes: state.ageMinutes,
+                    })
+                }
+            })
+            .catch(() => {})
 
         return () => {
             mediaProjectionSubscription.remove()
             botServiceSubscription.remove()
+            queueProgressSubscription.remove()
         }
     }, [])
 
@@ -212,14 +248,14 @@ const Home = () => {
         }
     }
 
-    /** Gets the appropriate icon name for the SelectButton based on device state. */
-    const getSelectButtonIconName = (): React.ComponentProps<typeof Ionicons>["name"] | undefined => {
+    /** Gets the appropriate icon component for the SelectButton based on device state. */
+    const getSelectButtonIconName = (): LucideIcon | undefined => {
         if (!isScenarioValid) {
             return undefined
         } else if (isRunning) {
-            return "stop-outline"
+            return Square
         } else {
-            return "play-outline"
+            return Play
         }
     }
 
@@ -263,7 +299,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                 <Tooltip delayDuration={150}>
                     <TooltipTrigger>
                         <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-                            <Ionicons name="alert-circle-outline" size={24} color={colors.warning} />
+                            <AlertCircle size={24} color={colors.warning} />
                         </Animated.View>
                     </TooltipTrigger>
                     <TooltipContent sideOffset={12} side="bottom" style={{ maxWidth: 350, backgroundColor: colors.warningBg, borderColor: colors.warningBorder, borderWidth: 1 }}>
@@ -277,7 +313,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
             return (
                 <Tooltip delayDuration={150}>
                     <TooltipTrigger>
-                        <Ionicons name="information-circle-outline" size={24} color={colors.info} />
+                        <Info size={24} color={colors.info} />
                     </TooltipTrigger>
                     <TooltipContent sideOffset={12} side="bottom" style={{ width: 200 }}>
                         <Text>Select a Scenario to start from the center button dropdown.</Text>
@@ -290,7 +326,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
             return (
                 <Tooltip delayDuration={150}>
                     <TooltipTrigger>
-                        <Ionicons name="checkmark-circle-outline" size={24} color={colors.success} />
+                        <CircleCheck size={24} color={colors.success} />
                     </TooltipTrigger>
                     <TooltipContent sideOffset={12} side="bottom">
                         <Text>Everything looks good and ready to go!</Text>
@@ -319,12 +355,112 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                             const newScenario = value || ""
                             bsc.setSettings({ ...bsc.settings, general: { ...bsc.settings.general, scenario: newScenario } })
                             bsc.setReadyStatus(newScenario !== "")
+                            setSelectedPreset(undefined)
                         }}
                         onPress={handleButtonPress}
                     />
                 }
                 rightComponent={renderStatus()}
             />
+
+            {interruptedQueue && !isRunning && (
+                <View
+                    style={{
+                        width: "100%",
+                        paddingHorizontal: 12,
+                        paddingVertical: 10,
+                        marginBottom: 6,
+                        backgroundColor: colors.warningBg || "#3d2e00",
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: colors.warningBorder || "#665200",
+                    }}
+                >
+                    <Text style={{ fontSize: 13, color: colors.warningText || "#ffd000", fontWeight: "600", marginBottom: 6 }}>
+                        Queue interrupted at run {interruptedQueue.currentRun} of {interruptedQueue.totalRuns} ({Math.round(interruptedQueue.ageMinutes)} min ago)
+                    </Text>
+                    <Text style={{ fontSize: 12, color: colors.warningText || "#ffd000", marginBottom: 8 }}>
+                        The app crashed during a queued session. Navigate to the training menu in-game and tap Start to resume.
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                        <TouchableOpacity
+                            onPress={() => {
+                                // Update queue settings to resume from the interrupted run.
+                                const remainingRuns = interruptedQueue.totalRuns - interruptedQueue.currentRun + 1
+                                bsc.setSettings({
+                                    ...bsc.settings,
+                                    runQueue: {
+                                        ...bsc.settings.runQueue,
+                                        enableRunQueue: true,
+                                        totalRuns: remainingRuns,
+                                    },
+                                })
+                                StartModule.clearInterruptedQueueState()
+                                setInterruptedQueue(null)
+                                setSnackbarMessage(`Queue will resume: ${remainingRuns} runs remaining`)
+                                setSnackbarOpen(true)
+                            }}
+                            style={{ paddingHorizontal: 14, paddingVertical: 6, backgroundColor: colors.primary, borderRadius: 6 }}
+                        >
+                            <Text style={{ fontSize: 12, color: colors.primaryForeground, fontWeight: "600" }}>Resume ({interruptedQueue.totalRuns - interruptedQueue.currentRun + 1} runs left)</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={() => {
+                                StartModule.clearInterruptedQueueState()
+                                setInterruptedQueue(null)
+                            }}
+                            style={{ paddingHorizontal: 14, paddingVertical: 6, backgroundColor: colors.muted, borderRadius: 6 }}
+                        >
+                            <Text style={{ fontSize: 12, color: colors.foreground }}>Dismiss</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            )}
+
+            {queueProgress && (
+                <View
+                    style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        width: "100%",
+                        paddingHorizontal: 8,
+                        paddingVertical: 6,
+                        marginBottom: 4,
+                        backgroundColor: colors.muted,
+                        borderRadius: 8,
+                    }}
+                >
+                    <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
+                        <Repeat size={16} color={colors.primary} style={{ marginRight: 6 }} />
+                        <Text style={{ fontSize: 13, color: colors.foreground }}>
+                            {queueProgress.status === "queueComplete"
+                                ? `Queue complete: ${queueProgress.currentRun}/${queueProgress.totalRuns} runs`
+                                : queueProgress.status === "queueFailed"
+                                  ? `Queue failed at run ${queueProgress.currentRun}/${queueProgress.totalRuns}`
+                                  : queueProgress.status === "waiting"
+                                    ? `Run ${queueProgress.currentRun}/${queueProgress.totalRuns} - Waiting...`
+                                    : queueProgress.status === "navigating"
+                                      ? `Run ${queueProgress.currentRun}/${queueProgress.totalRuns} - Navigating...`
+                                      : `Run ${queueProgress.currentRun}/${queueProgress.totalRuns} - ${queueProgress.status}`}
+                        </Text>
+                    </View>
+                    {isRunning && queueProgress.status !== "queueComplete" && queueProgress.status !== "queueFailed" && (
+                        <TouchableOpacity
+                            onPress={() => StartModule.skipQueueRun()}
+                            style={{
+                                paddingHorizontal: 10,
+                                paddingVertical: 4,
+                                backgroundColor: colors.primary,
+                                borderRadius: 6,
+                                marginLeft: 8,
+                            }}
+                        >
+                            <Text style={{ fontSize: 12, color: colors.primaryForeground, fontWeight: "600" }}>Skip Run</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+            )}
 
             <View style={styles.contentContainer}>
                 <MessageLog />
@@ -382,7 +518,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                         setSnackbarOpen(false)
                     },
                 }}
-                style={{ backgroundColor: "red", borderRadius: 10 }}
+                style={{ backgroundColor: snackbarMessage.startsWith("Preset") ? "green" : "red", borderRadius: 10 }}
             >
                 {snackbarMessage}
             </Snackbar>

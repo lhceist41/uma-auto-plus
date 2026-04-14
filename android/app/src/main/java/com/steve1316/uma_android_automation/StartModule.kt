@@ -20,11 +20,14 @@ import com.steve1316.automation_library.events.ExceptionEvent
 import com.steve1316.automation_library.events.JSEvent
 import com.steve1316.automation_library.events.StartEvent
 import com.steve1316.automation_library.utils.BatteryOptimizationUtils
+import com.steve1316.automation_library.utils.BotService
 import com.steve1316.automation_library.utils.MediaProjectionService
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.TaskResult
+import com.steve1316.uma_android_automation.bot.TaskResultCode
 import com.steve1316.uma_android_automation.utils.LogStreamServer
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.Kord
@@ -32,6 +35,8 @@ import kotlinx.coroutines.runBlocking
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.SubscriberExceptionEvent
+import android.database.sqlite.SQLiteDatabase
+import org.json.JSONObject
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -47,6 +52,52 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         private val TAG = "[${MainActivity.loggerTag}]StartModule"
         private var reactContext: ReactApplicationContext? = null
         private var emitter: DeviceEventManagerModule.RCTDeviceEventEmitter? = null
+
+        /** When true, the entire queue should stop after the current run. */
+        @Volatile
+        var queueStopRequested: Boolean = false
+
+        /** When true, the current run should be skipped and the queue should advance. */
+        @Volatile
+        var queueSkipRequested: Boolean = false
+
+        /**
+         * Persists the current queue state to SQLite so it can survive app crashes.
+         * Writes directly to the settings database using INSERT OR REPLACE.
+         */
+        fun saveQueueState(context: Context, active: Boolean, currentRun: Int = 0, totalRuns: Int = 0) {
+            try {
+                val dbFile = File(context.filesDir, "SQLite/settings.db")
+                if (!dbFile.exists()) return
+                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
+                db.execSQL(
+                    "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+                    arrayOf("queueState", "active", active.toString()),
+                )
+                db.execSQL(
+                    "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+                    arrayOf("queueState", "currentRun", currentRun.toString()),
+                )
+                db.execSQL(
+                    "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+                    arrayOf("queueState", "totalRuns", totalRuns.toString()),
+                )
+                db.execSQL(
+                    "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+                    arrayOf("queueState", "timestamp", System.currentTimeMillis().toString()),
+                )
+                db.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to save queue state: ${e.message}")
+            }
+        }
+
+        /**
+         * Clears the persisted queue state (called when queue finishes normally).
+         */
+        fun clearQueueState(context: Context) {
+            saveQueueState(context, active = false)
+        }
     }
 
     private val context: Context = reactContext.applicationContext
@@ -161,7 +212,80 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     /** This is called when the Stop button is pressed and will begin stopping the MediaProjection service. */
     @ReactMethod
     fun stop() {
+        // Also signal the queue to stop so it doesn't continue after the current run.
+        queueStopRequested = true
         stopProjection()
+    }
+
+    /** Stops the entire queue after the current run finishes. The current run is interrupted. */
+    @ReactMethod
+    fun stopQueue() {
+        Log.d(TAG, "stopQueue() called — requesting full queue stop.")
+        queueStopRequested = true
+    }
+
+    /**
+     * Checks if there is an interrupted queue state from a previous crash.
+     * Returns a WritableMap with {active, currentRun, totalRuns, timestamp} or null values if no state exists.
+     */
+    @ReactMethod
+    fun getInterruptedQueueState(promise: Promise) {
+        try {
+            val dbFile = File(context.filesDir, "SQLite/settings.db")
+            if (!dbFile.exists()) {
+                promise.resolve(null)
+                return
+            }
+            val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+            val cursor = db.rawQuery(
+                "SELECT key, value FROM settings WHERE category = 'queueState'",
+                null,
+            )
+            val state = mutableMapOf<String, String>()
+            while (cursor.moveToNext()) {
+                state[cursor.getString(0)] = cursor.getString(1)
+            }
+            cursor.close()
+            db.close()
+
+            val active = state["active"]?.toBoolean() ?: false
+            if (!active) {
+                promise.resolve(null)
+                return
+            }
+
+            // Check that the crash wasn't too long ago (stale state = older than 6 hours).
+            val timestamp = state["timestamp"]?.toLongOrNull() ?: 0
+            val ageMs = System.currentTimeMillis() - timestamp
+            if (ageMs > 6 * 60 * 60 * 1000) {
+                // State is stale, clear it.
+                clearQueueState(context)
+                promise.resolve(null)
+                return
+            }
+
+            val map = Arguments.createMap()
+            map.putInt("currentRun", state["currentRun"]?.toIntOrNull() ?: 0)
+            map.putInt("totalRuns", state["totalRuns"]?.toIntOrNull() ?: 0)
+            map.putDouble("ageMinutes", ageMs / 60000.0)
+            promise.resolve(map)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to read queue state: ${e.message}")
+            promise.resolve(null)
+        }
+    }
+
+    /** Clears any persisted interrupted queue state. */
+    @ReactMethod
+    fun clearInterruptedQueueState() {
+        clearQueueState(context)
+    }
+
+    /** Skips the current run and advances to the next one in the queue. */
+    @ReactMethod
+    fun skipQueueRun() {
+        Log.d(TAG, "skipQueueRun() called — requesting skip of current run.")
+        queueSkipRequested = true
     }
 
     /** Opens the system Accessibility settings page to allow the user to toggle the service off and on. */
@@ -357,34 +481,227 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      *
      * @param event The StartEvent object to parse its message.
      */
+    /**
+     * Sends a structured queue progress event to the JS frontend.
+     *
+     * @param currentRun The current run index (1-based).
+     * @param totalRuns The total number of runs in the queue.
+     * @param status The current status string (e.g. "starting", "completed", "navigating", "waiting", "queueComplete", "queueFailed").
+     * @param resultCode Optional result code name from the completed run.
+     * @param message Optional descriptive message.
+     */
+    private fun sendQueueProgressEvent(currentRun: Int, totalRuns: Int, status: String, resultCode: String? = null, message: String? = null) {
+        val payload = JSONObject().apply {
+            put("currentRun", currentRun)
+            put("totalRuns", totalRuns)
+            put("status", status)
+            if (resultCode != null) put("resultCode", resultCode)
+            if (message != null) put("message", message)
+        }
+        sendEvent("RunQueueProgress", payload.toString())
+    }
+
+    /**
+     * Runs a single Game instance on a background thread and returns its TaskResult.
+     *
+     * @return The TaskResult from Game.start(), or an Error result if an exception occurred.
+     */
+    private fun runSingleGame(): TaskResult {
+        var taskResult: TaskResult? = null
+
+        val botThread = Thread {
+            try {
+                val entryPoint = Game(context)
+                taskResult = entryPoint.start()
+            } catch (e: Exception) {
+                EventBus.getDefault().postSticky(ExceptionEvent(e))
+                taskResult = TaskResult.Error(
+                    TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
+                    "Unhandled exception: ${e.message}",
+                )
+            }
+        }
+
+        botThread.start()
+
+        try {
+            botThread.join()
+        } catch (e: InterruptedException) {
+            Log.d(TAG, "EventBus StartEvent subscriber was interrupted. Propagating to Bot Thread...")
+            botThread.interrupt()
+            try {
+                botThread.join()
+            } catch (_: InterruptedException) {
+            }
+        }
+
+        return taskResult ?: TaskResult.Error(
+            TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
+            "Game did not return a result.",
+        )
+    }
+
+    /**
+     * Waits for the specified number of seconds, checking queue control flags every 100ms.
+     * Returns false if the wait was interrupted by a stop request.
+     */
+    private fun interruptibleWait(seconds: Int): Boolean {
+        val totalMs = seconds * 1000L
+        var elapsed = 0L
+        while (elapsed < totalMs) {
+            if (queueStopRequested || !BotService.isRunning) {
+                return false
+            }
+            Thread.sleep(100)
+            elapsed += 100
+        }
+        return true
+    }
+
     @Subscribe
     fun onStartEvent(event: StartEvent) {
         if (event.message == "Entry Point ON") {
+            // Reset queue control flags at the start of every new session.
+            queueStopRequested = false
+            queueSkipRequested = false
+
             // Reset the log stream mute to ensure logs for the new run are broadcasted.
             LogStreamServer.resetMute()
 
-            val entryPoint = Game(context)
+            // Read queue settings from SQLite.
+            val enableRunQueue = SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", false)
+            val totalRuns = if (enableRunQueue) SettingsHelper.getIntSetting("runQueue", "totalRuns", 2) else 1
+            val delayBetweenRuns = SettingsHelper.getIntSetting("runQueue", "delayBetweenRunsSeconds", 15)
+            val stopOnError = SettingsHelper.getBooleanSetting("runQueue", "stopOnError", true)
+            val reuseLastLaunchSetup = SettingsHelper.getBooleanSetting("runQueue", "reuseLastLaunchSetup", true)
 
-            val botThread =
-                Thread {
-                    try {
-                        entryPoint.start()
-                    } catch (e: Exception) {
-                        EventBus.getDefault().postSticky(ExceptionEvent(e))
+            if (enableRunQueue) {
+                MessageLog.i(TAG, "[QUEUE] Run queue enabled. Total runs: $totalRuns, delay: ${delayBetweenRuns}s, stopOnError: $stopOnError")
+            }
+
+            var completedRuns = 0
+
+            for (i in 1..totalRuns) {
+                // Check stop flag before starting each run.
+                if (queueStopRequested || !BotService.isRunning) {
+                    MessageLog.i(TAG, "[QUEUE] Queue stop requested before run $i. Exiting queue.")
+                    break
+                }
+
+                // Reset the skip flag for this run.
+                queueSkipRequested = false
+
+                if (enableRunQueue) {
+                    // Reset log stream mute for each subsequent run.
+                    LogStreamServer.resetMute()
+                    // Persist queue state so it can survive crashes.
+                    saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns)
+                    sendQueueProgressEvent(i, totalRuns, "starting")
+                    MessageLog.i(TAG, "\n[QUEUE] ========================================")
+                    MessageLog.i(TAG, "[QUEUE] Starting run $i of $totalRuns")
+                    MessageLog.i(TAG, "[QUEUE] ========================================\n")
+                }
+
+                // Run the game.
+                val result = runSingleGame()
+
+                // Determine the effective result considering queue flags.
+                val effectiveResult = when {
+                    queueSkipRequested -> {
+                        MessageLog.i(TAG, "[QUEUE] Run $i was skipped by queue.")
+                        TaskResult.Success(TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE, "Run was skipped by queue.")
+                    }
+                    queueStopRequested -> {
+                        MessageLog.i(TAG, "[QUEUE] Run $i was stopped by user (queue stop).")
+                        result // Use original result
+                    }
+                    else -> result
+                }
+
+                if (enableRunQueue) {
+                    sendQueueProgressEvent(i, totalRuns, "completed", effectiveResult.code.name, effectiveResult.message)
+                }
+
+                // Evaluate the result.
+                when (effectiveResult.code) {
+                    TaskResultCode.TASK_RESULT_MANUALLY_STOPPED -> {
+                        // If user stopped and we didn't request skip, it's a full stop.
+                        if (!queueSkipRequested) {
+                            MessageLog.i(TAG, "[QUEUE] User stopped the bot. Exiting queue.")
+                            break
+                        }
+                        completedRuns++
+                    }
+                    TaskResultCode.TASK_RESULT_COMPLETE -> {
+                        completedRuns++
+                    }
+                    TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE -> {
+                        completedRuns++
+                    }
+                    TaskResultCode.TASK_RESULT_BREAKPOINT_REACHED -> {
+                        completedRuns++
+                        // Breakpoints stop the queue — the user set them for a reason.
+                        if (enableRunQueue) {
+                            MessageLog.i(TAG, "[QUEUE] Run $i hit a breakpoint. Stopping queue.")
+                        }
+                        break
+                    }
+                    else -> {
+                        // Error, timeout, connection error, etc.
+                        if (stopOnError) {
+                            MessageLog.e(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Stopping queue (stopOnError=true).")
+                            break
+                        } else {
+                            MessageLog.w(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Continuing queue (stopOnError=false).")
+                            completedRuns++
+                        }
                     }
                 }
 
-            botThread.start()
+                // If this is not the last run, navigate back and wait.
+                if (i < totalRuns && enableRunQueue) {
+                    // Check stop again before navigation.
+                    if (queueStopRequested || !BotService.isRunning) {
+                        MessageLog.i(TAG, "[QUEUE] Queue stop requested. Exiting queue.")
+                        break
+                    }
 
-            try {
-                botThread.join()
-            } catch (e: InterruptedException) {
-                Log.d(TAG, "EventBus StartEvent subscriber was interrupted. Propagating to Bot Thread...")
-                botThread.interrupt()
-                try {
-                    botThread.join()
-                } catch (_: InterruptedException) {
+                    sendQueueProgressEvent(i, totalRuns, "navigating")
+                    MessageLog.i(TAG, "[QUEUE] Navigating back to career start for next run...")
+
+                    val navigator = CareerLaunchNavigator(context)
+                    val navResult = navigator.navigate(reuseLastLaunchSetup)
+
+                    if (!navResult.success) {
+                        MessageLog.e(TAG, "[QUEUE] Navigation failed: ${navResult.failureReason}")
+                        MessageLog.e(TAG, "[QUEUE] Last detected state: ${navResult.lastDetectedState}")
+                        MessageLog.e(TAG, "[QUEUE] Failed transition: ${navResult.failedTransition}")
+                        MessageLog.e(TAG, "[QUEUE] Recommended action: ${navResult.recommendedAction}")
+                        if (navResult.screenshotPath.isNotEmpty()) {
+                            MessageLog.e(TAG, "[QUEUE] Failure screenshot: ${navResult.screenshotPath}")
+                        }
+                        sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, navResult.failureReason)
+                        break
+                    }
+
+                    // Wait between runs.
+                    sendQueueProgressEvent(i, totalRuns, "waiting")
+                    MessageLog.i(TAG, "[QUEUE] Waiting ${delayBetweenRuns}s before next run...")
+
+                    if (!interruptibleWait(delayBetweenRuns)) {
+                        MessageLog.i(TAG, "[QUEUE] Queue stop requested during wait. Exiting queue.")
+                        break
+                    }
                 }
+            }
+
+            if (enableRunQueue) {
+                // Clear persisted queue state — queue finished normally.
+                clearQueueState(context)
+                sendQueueProgressEvent(totalRuns, totalRuns, "queueComplete", message = "Completed $completedRuns of $totalRuns runs.")
+                MessageLog.i(TAG, "\n[QUEUE] ========================================")
+                MessageLog.i(TAG, "[QUEUE] Queue finished. Completed $completedRuns of $totalRuns runs.")
+                MessageLog.i(TAG, "[QUEUE] ========================================\n")
             }
         }
     }
