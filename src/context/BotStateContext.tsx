@@ -187,6 +187,7 @@ export interface Settings {
         enableRunQueue: boolean
         totalRuns: number
         delayBetweenRunsSeconds: number
+        maxRuntimePerRunMinutes: number
         stopOnError: boolean
         reuseLastLaunchSetup: boolean
         autoFillSupports: boolean
@@ -409,7 +410,8 @@ export const defaultSettings: Settings = {
         enableRunQueue: true,
         totalRuns: 5,
         delayBetweenRunsSeconds: 15,
-        stopOnError: true,
+        maxRuntimePerRunMinutes: 180,
+        stopOnError: false,
         reuseLastLaunchSetup: true,
         autoFillSupports: false,
     },

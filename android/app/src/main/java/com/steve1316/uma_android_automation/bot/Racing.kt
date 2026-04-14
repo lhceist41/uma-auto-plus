@@ -2566,7 +2566,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return false
         }
 
-        campaign.bHasCheckedForMaidenRaceToday = true
         if (IconRaceListMaidenPill.check(game.imageUtils)) {
             MessageLog.i(TAG, "[RACE] Detected maiden races in race list.")
             if (selectMaidenRace()) {
@@ -2574,11 +2573,16 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             } else {
                 MessageLog.v(TAG, "[RACE] Could not find any maiden races with good aptitudes. Aborting racing...")
                 ButtonBack.click(game.imageUtils)
+                // Leave bHasCheckedForMaidenRaceToday unset so a subsequent turn can retry
+                // this transient failure. The flag will be cleared on date change anyway.
                 return false
             }
         } else {
             // No maiden races available on this day. Check for extra races instead.
             MessageLog.v(TAG, "[RACE] No maiden races available on this day. Checking for extra races instead...")
+            // We confirmed there is no maiden race available today, so mark the daily maiden
+            // check as done before delegating to extra-race handling.
+            campaign.bHasCheckedForMaidenRaceToday = true
             return handleExtraRace()
         }
 
@@ -2601,6 +2605,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         MessageLog.v(TAG, "[RACE] Racing process for Maiden Race is completed. Grade: ${lastRaceGrade ?: "Maiden"}")
         MessageLog.v(TAG, "********************")
+        // Mark the daily maiden check as done now that the race actually ran.
+        campaign.bHasCheckedForMaidenRaceToday = true
         return true
     }
 

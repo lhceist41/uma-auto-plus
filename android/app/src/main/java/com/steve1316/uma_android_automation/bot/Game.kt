@@ -345,7 +345,12 @@ class Game(val myContext: Context) {
                 }
                 DiscordUtils.queue.add("```diff\n+ ${MessageLog.getSystemTimeString()} Bot run started! Scenario: $scenario```$logViewerString")
             }
-            taskResult = task.start()
+            // Read the per-run safety timeout from the run queue settings. Defaults to 180 min
+            // (3 hours), matching the TS-side default. Single-run sessions (queue disabled)
+            // also use this same setting since they call Game.start() the same way.
+            val maxRuntimeMinutes = SettingsHelper.getIntSetting("runQueue", "maxRuntimePerRunMinutes", 180)
+            MessageLog.i(TAG, "[INFO] Per-run max runtime timeout: $maxRuntimeMinutes minutes.")
+            taskResult = task.start(maxRuntimeMinutes = maxRuntimeMinutes)
         } else {
             taskResult = TaskResult.Success(TaskResultCode.TASK_RESULT_COMPLETE, "Debug tests completed.")
         }

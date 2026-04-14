@@ -97,12 +97,29 @@ const RunQueueSettings = () => {
                                     showLabels={true}
                                     description="Seconds to wait between runs. This allows the game to settle and gives you a window to intervene if needed."
                                 />
+
+                                <CustomSlider
+                                    searchId="run-queue-max-runtime"
+                                    value={runQueueSettings.maxRuntimePerRunMinutes}
+                                    placeholder={defaultSettings.runQueue.maxRuntimePerRunMinutes}
+                                    onValueChange={(value) => updateSetting("maxRuntimePerRunMinutes", value)}
+                                    onSlidingComplete={(value) => updateSetting("maxRuntimePerRunMinutes", value)}
+                                    min={30}
+                                    max={360}
+                                    step={15}
+                                    label="Max Runtime Per Run"
+                                    labelUnit="m"
+                                    showValue={true}
+                                    showLabels={true}
+                                    description="Per-run safety timeout in minutes. If a single run takes longer than this it ends with a timeout result. Default 180 (3 hours) is comfortable for any scenario; raise it if you run on a very slow device."
+                                />
+
                                 <CustomCheckbox
                                     searchId="run-queue-stop-on-error"
                                     checked={runQueueSettings.stopOnError}
                                     onCheckedChange={(checked) => updateSetting("stopOnError", checked)}
                                     label="Stop Queue on Error"
-                                    description="When enabled, the queue will halt if any run ends in an error or timeout. When disabled, the queue will skip the failed run and continue to the next one."
+                                    description="When enabled, the queue will halt if any run ends in an error or timeout. When disabled (recommended), the queue will skip the failed run and continue to the next one."
                                     className="mt-4"
                                 />
 
