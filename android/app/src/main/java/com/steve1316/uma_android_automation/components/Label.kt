@@ -6,6 +6,10 @@
 
 package com.steve1316.uma_android_automation.components
 
+object LabelSupportFormation : ComponentInterface {
+    override val template = Template("components/label/support_formation", region = Region.topHalf, confidence = 0.8)
+}
+
 object LabelStatDistance : ComponentInterface {
     override val template = Template("components/label/stat_distance", region = Region.topHalf)
 }

@@ -182,6 +182,16 @@ export interface Settings {
         discordUserID: string
     }
 
+    // Run Queue settings
+    runQueue: {
+        enableRunQueue: boolean
+        totalRuns: number
+        delayBetweenRunsSeconds: number
+        stopOnError: boolean
+        reuseLastLaunchSetup: boolean
+        autoFillSupports: boolean
+    }
+
     // Scenario specific overrides
     scenarioOverrides: {
         trackblazerConsecutiveRacesLimit: number
@@ -394,6 +404,14 @@ export const defaultSettings: Settings = {
         enableDiscordNotifications: false,
         discordToken: "",
         discordUserID: "",
+    },
+    runQueue: {
+        enableRunQueue: true,
+        totalRuns: 5,
+        delayBetweenRunsSeconds: 15,
+        stopOnError: true,
+        reuseLastLaunchSetup: true,
+        autoFillSupports: false,
     },
     scenarioOverrides: {
         trackblazerConsecutiveRacesLimit: 5,
