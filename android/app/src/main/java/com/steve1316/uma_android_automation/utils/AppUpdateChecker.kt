@@ -40,7 +40,7 @@ import java.net.URL
 class AppUpdateChecker(private val activity: Activity) {
     companion object {
         private const val UPDATE_XML_URL =
-            "https://raw.githubusercontent.com/steve1316/uma-android-automation/refs/heads/master/android/app/update.xml"
+            "https://raw.githubusercontent.com/lhceist41/uma-auto-plus/refs/heads/main/android/app/update.xml"
         private const val MAX_SCROLL_HEIGHT_RATIO = 0.5
     }
 
