@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useRef, useEffect } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, ViewStyle, TextInput, Animated, Keyboard, ScrollView } from "react-native"
 import { useNavigation, DrawerActions } from "@react-navigation/native"
-import { Ionicons } from "@expo/vector-icons"
+import { Menu, House, Search, X } from "lucide-react-native"
 import { useTheme } from "../../context/ThemeContext"
 import { useSearchRegistry } from "../../context/SearchRegistryContext"
 import { Portal } from "@rn-primitives/portal"
@@ -316,20 +316,20 @@ const PageHeader = ({ title, showHomeButton = true, titleComponent, leftComponen
                 <View style={[styles.headerLeft, { flex: isSearching ? 1 : undefined }]}>
                     {/* Hamburger menu button */}
                     <TouchableOpacity onPress={openDrawer} style={styles.menuButton} activeOpacity={0.7}>
-                        <Ionicons name="menu" size={28} color={colors.foreground} />
+                        <Menu size={28} color={colors.foreground} />
                     </TouchableOpacity>
 
                     {/* Home button */}
                     {!isSearching && showHomeButton && (
                         <TouchableOpacity onPress={goHome} style={styles.homeButton} activeOpacity={0.7}>
-                            <Ionicons name="home" size={24} color={colors.foreground} />
+                            <House size={24} color={colors.foreground} />
                         </TouchableOpacity>
                     )}
 
                     {/* Search button */}
                     {!isSearching && (
                         <TouchableOpacity onPress={handleSearchToggle} style={styles.homeButton} activeOpacity={0.7}>
-                            <Ionicons name="search" size={24} color={colors.foreground} />
+                            <Search size={24} color={colors.foreground} />
                         </TouchableOpacity>
                     )}
 
@@ -343,7 +343,7 @@ const PageHeader = ({ title, showHomeButton = true, titleComponent, leftComponen
                     {/* Search bar */}
                     {isSearching && (
                         <View style={styles.searchContainer}>
-                            <Ionicons name="search" size={20} color={colors.mutedForeground} />
+                            <Search size={20} color={colors.mutedForeground} />
                             <TextInput
                                 ref={searchInputRef}
                                 style={styles.searchInput}
@@ -353,7 +353,7 @@ const PageHeader = ({ title, showHomeButton = true, titleComponent, leftComponen
                                 onChangeText={setSearchQuery}
                             />
                             <TouchableOpacity onPress={handleSearchToggle} activeOpacity={0.7} style={{ padding: 4 }}>
-                                <Ionicons name="close" size={20} color={colors.foreground} />
+                                <X size={20} color={colors.foreground} />
                             </TouchableOpacity>
                         </View>
                     )}

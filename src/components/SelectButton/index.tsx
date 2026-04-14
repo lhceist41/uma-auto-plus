@@ -4,7 +4,8 @@ import { useTheme } from "../../context/ThemeContext"
 import { Option, Select, SelectContent, SelectGroup, SelectItem, SelectLabel, NativeSelectScrollView } from "../ui/select"
 import { Separator } from "../ui/separator"
 import CustomButton from "../CustomButton"
-import { Ionicons } from "@expo/vector-icons"
+import { ChevronDown } from "lucide-react-native"
+import type { LucideIcon } from "lucide-react-native"
 import * as SelectPrimitive from "@rn-primitives/select"
 
 /**
@@ -29,8 +30,8 @@ interface SelectButtonProps {
     size?: "default" | "sm" | "lg" | "icon"
     /** Optional custom icon element. */
     icon?: React.ReactElement
-    /** The name of the Ionicons icon to display. */
-    iconName?: React.ComponentProps<typeof Ionicons>["name"]
+    /** The Lucide icon component to display. */
+    iconName?: LucideIcon
     /** Whether the icon appears to the left or right of the text. */
     iconPosition?: "left" | "right"
     /** The list of options for the select dropdown. */
@@ -56,23 +57,8 @@ interface SelectButtonProps {
 }
 
 /**
- * A themed, configurable button component that opens a select dropdown.
- * Automatically applies theme-aware colors based on the selected variant and dark/light mode.
- * @param variant The visual style variant of the button.
- * @param size The size preset for the button.
- * @param icon Optional icon element.
- * @param iconName The name of the Ionicons icon to display.
- * @param iconPosition Whether the icon appears left or right.
- * @param options The list of options.
- * @param groupLabel The label for the option group.
- * @param portalHost The portal host for the select dropdown.
- * @param defaultValue The default selected value.
- * @param placeholder The placeholder text.
- * @param value The currently selected value.
- * @param setValue The function to set the selected value.
- * @param onValueChange Callback fired when the value changes.
- * @param onPress Callback fired when the button is pressed.
- * @param style Optional custom style for the container.
+ * A themed button that opens a select dropdown. Colors track the variant and dark/light mode.
+ * See SelectButtonProps for the props.
  */
 const SelectButton: React.FC<SelectButtonProps> = ({
     variant = "default",
@@ -213,8 +199,9 @@ const SelectButton: React.FC<SelectButtonProps> = ({
     const getIcon = (): React.ReactElement | undefined => {
         if (icon) {
             return icon
-        } else if (iconName) {
-            return <Ionicons name={iconName} size={20} color={getTextColor()} />
+        } else if (iconName != null && typeof iconName === "function") {
+            const IconComponent = iconName
+            return <IconComponent size={20} color={getTextColor()} />
         } else {
             return undefined
         }
@@ -229,7 +216,7 @@ const SelectButton: React.FC<SelectButtonProps> = ({
                 <Separator orientation="vertical" style={{ backgroundColor: "transparent" }} />
                 <SelectPrimitive.Trigger asChild>
                     <CustomButton style={styles.buttonDropdown} variant={variant as any} size={"icon"} isLoading={false}>
-                        <Ionicons name="caret-down" size={20} color={getTextColor()} />
+                        <ChevronDown size={20} color={getTextColor()} />
                     </CustomButton>
                 </SelectPrimitive.Trigger>
             </View>
