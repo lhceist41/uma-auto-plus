@@ -572,7 +572,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             val enableRunQueue = SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", false)
             val totalRuns = if (enableRunQueue) SettingsHelper.getIntSetting("runQueue", "totalRuns", 2) else 1
             val delayBetweenRuns = SettingsHelper.getIntSetting("runQueue", "delayBetweenRunsSeconds", 15)
-            val stopOnError = SettingsHelper.getBooleanSetting("runQueue", "stopOnError", true)
+            val stopOnError = SettingsHelper.getBooleanSetting("runQueue", "stopOnError", false)
             val reuseLastLaunchSetup = SettingsHelper.getBooleanSetting("runQueue", "reuseLastLaunchSetup", true)
 
             if (enableRunQueue) {

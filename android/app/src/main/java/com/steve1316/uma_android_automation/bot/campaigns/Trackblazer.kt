@@ -713,6 +713,14 @@ class Trackblazer(game: Game) : Campaign(game) {
                         // Mark that we've checked for Irregular Training this turn to avoid looping.
                         bHasCheckedIrregularTrainingThisTurn = true
                     }
+                } else {
+                    // The Training button could not be found/clicked. Mark the check as done for
+                    // this turn to prevent a tight retry loop and fall through to normal logic.
+                    MessageLog.w(
+                        TAG,
+                        "[WARN] decideNextAction:: Irregular Training evaluation could not click ButtonTraining. Skipping this turn's check.",
+                    )
+                    bHasCheckedIrregularTrainingThisTurn = true
                 }
             }
         }
