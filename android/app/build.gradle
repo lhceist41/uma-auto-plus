@@ -101,7 +101,7 @@ android {
 
     namespace 'com.steve1316.uma_android_automation'
     defaultConfig {
-        applicationId 'com.steve1316.uma_android_automation'
+        applicationId 'com.lhceist41.uma_auto_plus'
         minSdkVersion libs.versions.app.minSdk.get() as Integer
         //noinspection ExpiredTargetSdkVersion
         targetSdkVersion libs.versions.app.targetSdk.get() as Integer
@@ -167,7 +167,7 @@ android {
             def type = releaseType
             def versionName = variant.versionName
             def architecture = output.filters.first().identifier
-            output.outputFileName = "v${versionName}-UmaAndroidAutomation-${architecture}-${type}.apk"
+            output.outputFileName = "UMA-Auto-Plus-v${versionName}-${architecture}-${type}.apk"
         }
     }
 

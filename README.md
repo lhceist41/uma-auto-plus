@@ -1,15 +1,46 @@
-# Uma Musume Automation For Android
+# UMA Auto+
 
-![GitHub commit activity](https://img.shields.io/github/commit-activity/m/steve1316/uma-android-automation?logo=GitHub) ![GitHub last commit](https://img.shields.io/github/last-commit/steve1316/uma-android-automation?logo=GitHub) ![GitHub issues](https://img.shields.io/github/issues/steve1316/uma-android-automation?logo=GitHub) ![GitHub pull requests](https://img.shields.io/github/issues-pr/steve1316/uma-android-automation?logo=GitHub) ![GitHub](https://img.shields.io/github/license/steve1316/uma-android-automation?logo=GitHub)
+[![Latest release](https://img.shields.io/github/v/release/lhceist41/uma-auto-plus?label=latest%20release&color=blue)](https://github.com/lhceist41/uma-auto-plus/releases/latest)
+[![Changelog](https://img.shields.io/badge/changelog-CHANGELOG.md-informational)](CHANGELOG.md)
 
-> **Discord:** https://discord.gg/5Yv4kqjAbm
+> [!IMPORTANT]
+> **This is a personal fork of [steve1316/uma-android-automation](https://github.com/steve1316/uma-android-automation).**
+> All original credit goes to **steve1316** and the contributors of the upstream project. The core bot engine, computer vision pipeline, OCR system, training/racing/event logic, and the React Native + Kotlin architecture are entirely their work.
+>
+> I did not create the original bot. I only maintain this fork to add features that I personally want and feel the bot should have. If you're looking for the original project, please visit the upstream repository linked above.
 
-This Android application written in Kotlin is designed to fully automate a run of Uma Musume Pretty Derby by offering a comprehensive set of options to customize event rewards, stat prioritization, race scheduling, automatic skill point buying, and more. Featuring a robust modern frontend built on React Native (Expo) and an extensive computer-vision driven backend, this app aims to solve the issue of spending too much hands-on time completing runs into something you can set and forget.
+---
+
+## What this fork adds
+
+These are the features I've added on top of the original:
+
+- **Multi-run queue** -- Queue multiple consecutive career runs so the bot can grind unattended. Configurable run count, delay between runs, and error handling.
+- **Between-run navigation** -- After a career completes, the bot automatically navigates back through the game menus (career summary, home screen, scenario select, deck setup, cinematic skip) and starts the next run.
+- **Built-in character presets** -- 51 pre-configured character builds (17 per scenario) selectable from the Home page. Pick a scenario, pick a character, and all settings are applied instantly.
+- **Run Queue Settings page** -- Dedicated settings for queue behavior: run count, delay, stop-on-error, reuse-last-setup, auto-fill supports.
+- **Queue progress UI** -- Home page shows current run progress and a skip-run button during queued sessions.
+- **In-app update notifications** -- The app checks for new releases from this fork and notifies the user when an update is available.
+- **Custom branding** -- Renamed to "UMA Auto+" with a distinct gold icon so it can be installed alongside the original without confusion.
+- **Switched to Lucide icons** -- Replaced Ionicons (which had font-loading issues in offline builds) with Lucide SVG icons throughout the UI.
+
+Everything else -- the bot logic, OpenCV template matching, YOLOv8 stat detection, Tesseract OCR, accessibility service integration, the entire decision engine -- is from the original project.
+
+---
+
+## Upstream project
+
+| | |
+|---|---|
+| **Original repo** | [steve1316/uma-android-automation](https://github.com/steve1316/uma-android-automation) |
+| **Original author** | [steve1316](https://github.com/steve1316) |
+| **Discord** | https://discord.gg/5Yv4kqjAbm |
+| **Fork base version** | v5.4.8 |
 
 > [!TIP]
-> For a detailed explanation of how the bot works — including the decision engine, training scoring, racing system, item management, and scenario-specific logic — see [HOW_IT_WORKS.md](HOW_IT_WORKS.md).
+> For a detailed explanation of how the bot works -- including the decision engine, training scoring, racing system, item management, and scenario-specific logic -- see [HOW_IT_WORKS.md](HOW_IT_WORKS.md). That document is from the original project.
 
-https://github.com/user-attachments/assets/962adaf4-5e78-4807-8c25-e39be9a68fb4
+---
 
 # Disclaimer
 
