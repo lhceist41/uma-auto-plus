@@ -1,0 +1,65 @@
+const trackblazerIcons: { [key: string]: { icon: any; description: string } } = {
+    // Stats
+    "Speed Notepad": { icon: require("./trackblazer/speed_notepad.png"), description: "Speed +3" },
+    "Stamina Notepad": { icon: require("./trackblazer/stamina_notepad.png"), description: "Stamina +3" },
+    "Power Notepad": { icon: require("./trackblazer/power_notepad.png"), description: "Power +3" },
+    "Guts Notepad": { icon: require("./trackblazer/guts_notepad.png"), description: "Guts +3" },
+    "Wit Notepad": { icon: require("./trackblazer/wit_notepad.png"), description: "Wit +3" },
+    "Speed Manual": { icon: require("./trackblazer/speed_manual.png"), description: "Speed +7" },
+    "Stamina Manual": { icon: require("./trackblazer/stamina_manual.png"), description: "Stamina +7" },
+    "Power Manual": { icon: require("./trackblazer/power_manual.png"), description: "Power +7" },
+    "Guts Manual": { icon: require("./trackblazer/guts_manual.png"), description: "Guts +7" },
+    "Wit Manual": { icon: require("./trackblazer/wit_manual.png"), description: "Wit +7" },
+    "Speed Scroll": { icon: require("./trackblazer/speed_scroll.png"), description: "Speed +15" },
+    "Stamina Scroll": { icon: require("./trackblazer/stamina_scroll.png"), description: "Stamina +15" },
+    "Power Scroll": { icon: require("./trackblazer/power_scroll.png"), description: "Power +15" },
+    "Guts Scroll": { icon: require("./trackblazer/guts_scroll.png"), description: "Guts +15" },
+    "Wit Scroll": { icon: require("./trackblazer/wit_scroll.png"), description: "Wit +15" },
+    // Energy and Motivation
+    "Vita 20": { icon: require("./trackblazer/vita_20.png"), description: "Energy +20" },
+    "Vita 40": { icon: require("./trackblazer/vita_40.png"), description: "Energy +40" },
+    "Vita 65": { icon: require("./trackblazer/vita_65.png"), description: "Energy +65" },
+    "Royal Kale Juice": { icon: require("./trackblazer/royal_kale_juice.png"), description: "Energy +100, Motivation -1" },
+    "Energy Drink MAX": { icon: require("./trackblazer/energy_drink_max.png"), description: "Maximum energy +4, Energy +5" },
+    "Energy Drink MAX EX": { icon: require("./trackblazer/energy_drink_max_ex.png"), description: "Maximum energy +8" },
+    "Plain Cupcake": { icon: require("./trackblazer/plain_cupcake.png"), description: "Motivation +1" },
+    "Berry Sweet Cupcake": { icon: require("./trackblazer/berry_sweet_cupcake.png"), description: "Motivation +2" },
+    // Bond
+    "Yummy Cat Food": { icon: require("./trackblazer/yummy_cat_food.png"), description: "Yayoi Akikawa's bond +5" },
+    "Grilled Carrots": { icon: require("./trackblazer/grilled_carrots.png"), description: "All Support card bonds +5" },
+    // Get Good Conditions
+    "Pretty Mirror": { icon: require("./trackblazer/pretty_mirror.png"), description: "Get Charming ○ status effect" },
+    "Reporter's Binoculars": { icon: require("./trackblazer/reporters_binoculars.png"), description: "Get Hot Topic status effect" },
+    "Master Practice Guide": { icon: require("./trackblazer/master_practice_guide.png"), description: "Get Practice Perfect ○ status effect" },
+    "Scholar's Hat": { icon: require("./trackblazer/scholars_hat.png"), description: "Get Fast Learner status effect" },
+    // Heal Bad Conditions
+    "Fluffy Pillow": { icon: require("./trackblazer/fluffy_pillow.png"), description: "Heal Night Owl" },
+    "Pocket Planner": { icon: require("./trackblazer/pocket_planner.png"), description: "Heal Slacker" },
+    "Rich Hand Cream": { icon: require("./trackblazer/rich_hand_cream.png"), description: "Heal Skin Outbreak" },
+    "Smart Scale": { icon: require("./trackblazer/smart_scale.png"), description: "Heal Slow Metabolism" },
+    "Aroma Diffuser": { icon: require("./trackblazer/aroma_diffuser.png"), description: "Heal Migraine" },
+    "Practice Drills DVD": { icon: require("./trackblazer/practice_drills_dvd.png"), description: "Heal Practice Poor" },
+    "Miracle Cure": { icon: require("./trackblazer/miracle_cure.png"), description: "Heal all negative status effects" },
+    // Training Facilities
+    "Speed Training Application": { icon: require("./trackblazer/speed_training_application.png"), description: "Speed Training Level +1" },
+    "Stamina Training Application": { icon: require("./trackblazer/stamina_training_application.png"), description: "Stamina Training Level +1" },
+    "Power Training Application": { icon: require("./trackblazer/power_training_application.png"), description: "Power Training Level +1" },
+    "Guts Training Application": { icon: require("./trackblazer/guts_training_application.png"), description: "Guts Training Level +1" },
+    "Wit Training Application": { icon: require("./trackblazer/wit_training_application.png"), description: "Wit Training Level +1" },
+    // Training Effects
+    "Coaching Megaphone": { icon: require("./trackblazer/coaching_megaphone.png"), description: "Training bonus +20% for 4 turns" },
+    "Motivating Megaphone": { icon: require("./trackblazer/motivating_megaphone.png"), description: "Training bonus +40% for 3 turns" },
+    "Empowering Megaphone": { icon: require("./trackblazer/empowering_megaphone.png"), description: "Training bonus +60% for 2 turns" },
+    "Speed Ankle Weights": { icon: require("./trackblazer/speed_ankle_weights.png"), description: "Speed training bonus +50%, Energy consumption +20% (One turn)" },
+    "Stamina Ankle Weights": { icon: require("./trackblazer/stamina_ankle_weights.png"), description: "Stamina training bonus +50%, Energy consumption +20% (One turn)" },
+    "Power Ankle Weights": { icon: require("./trackblazer/power_ankle_weights.png"), description: "Power training bonus +50%, Energy consumption +20% (One turn)" },
+    "Guts Ankle Weights": { icon: require("./trackblazer/guts_ankle_weights.png"), description: "Guts training bonus +50%, Energy consumption +20% (One turn)" },
+    "Good-Luck Charm": { icon: require("./trackblazer/good_luck_charm.png"), description: "Training failure rate set to 0% (One turn)" },
+    "Reset Whistle": { icon: require("./trackblazer/reset_whistle.png"), description: "Shuffle support card distribution" },
+    // Races
+    "Artisan Cleat Hammer": { icon: require("./trackblazer/artisan_cleat_hammer.png"), description: "Race bonus +20% (One turn)" },
+    "Master Cleat Hammer": { icon: require("./trackblazer/master_cleat_hammer.png"), description: "Race bonus +35% (One turn)" },
+    "Glow Sticks": { icon: require("./trackblazer/glow_sticks.png"), description: "Race fan gain +50% (One turn)" },
+}
+
+export default trackblazerIcons
