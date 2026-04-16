@@ -489,25 +489,6 @@ class CareerLaunchNavigator(private val context: Context) {
      * Transition: ButtonCompleteCareer.click() → leads to COMPLETE_CAREER_CONFIRMATION dialog.
      */
     private fun handleCareerSummary(): TransitionResult {
-        // Before dismissing the career, check whether unspent skill points are still
-        // available. The Skills button (ButtonCareerEndSkills) is only visible on the End
-        // screen until the user enters the skill list or finalizes the career, so its
-        // presence indicates the previous run did not complete its skill purchase phase.
-        // This typically happens after a mid-run crash or a SP-detection failure aborted
-        // the in-bot skill plan. Refusing to dismiss prevents the navigator from clicking
-        // through Complete Career -> Finish and losing the unspent points.
-        if (ButtonCareerEndSkills.check(iu)) {
-            MessageLog.w(
-                TAG,
-                "[NAV] Career summary screen detected with the Skills button still visible: the previous run did not complete its skill purchase phase. Refusing to dismiss to preserve unspent skill points.",
-            )
-            return TransitionResult.Failed(
-                reason = "CAREER_SUMMARY detected with unspent skill points (Skills button still visible).",
-                transition = "CAREER_SUMMARY -> SKILL_PURCHASE",
-                recommendedAction = "Stop the queue, run the bot once with queue length 1 to spend the remaining skill points (the bot's normal end-of-run flow handles the End screen), then resume the queue.",
-            )
-        }
-
         MessageLog.i(TAG, "[NAV] Career summary screen detected. Clicking 'Complete Career'...")
 
         if (ButtonCompleteCareer.click(iu)) {
