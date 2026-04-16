@@ -47,10 +47,6 @@ A big reliability + content release. The bot is dramatically more stable on MuMu
 - **The freeze-recovery no longer misfires on long loading screens.** The old 45-second trigger could fire during legitimately slow loads or popup chains. It now waits 3 minutes and properly counts between-run activity as progress, so it never trips during normal play.
 - **Distance preference defaulting wrong on aptitude ties.** Characters with two A-rank distances (like Matikanefukukitaru with Medium=A and Long=A) were trained for Medium even when their preset said Long. All 51 presets now lock in the distance their build intends.
 
-### Documentation
-
-- New `CHARACTER_PRESETS.md` at the repo root — a full reference of every character preset, scenario by scenario. Build identity, active stat targets, training config, full skill priority list with names (not just IDs), racing settings, Trackblazer scenario overrides, and event override counts. Useful if you want to see exactly what the bot is going to do for any character without diving into the JSON.
-
 ---
 
 ## [1.1.0] - 2026-04-14
