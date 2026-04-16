@@ -1284,7 +1284,22 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         }
 
                         null -> {
-                            MessageLog.w(TAG, "[WARN] runRaceWithRetries:: At Race prep screen but failed to detect ViewResults button.")
+                            // ButtonViewResults template can fall just below the configured confidence
+                            // threshold (observed at ~0.73 vs the 0.80 default) on certain race-prep
+                            // variants — confirmed on Matikanefukukitaru's "Saudi Arabia Royal Cup" race
+                            // detail screen, where the View Results button IS visible but its rendering
+                            // doesn't quite match the bundled template at the global threshold.
+                            // ButtonChangeRunningStyle already confirms we're on the race-prep screen,
+                            // so fall back to clicking the green Race CTA (matches ButtonRaceManual at
+                            // ~0.96 confidence on the same screen) to get the race started instead of
+                            // looping forever. The race will play with the full animation rather than
+                            // being skipped, which is a tolerable cost vs. the bot stalling indefinitely.
+                            if (ButtonRaceManual.click(game.imageUtils, sourceBitmap = bitmap)) {
+                                MessageLog.i(TAG, "[RACE] ViewResults template did not match at threshold; fell back to clicking the Race button manually.")
+                                game.waitForLoading()
+                            } else {
+                                MessageLog.w(TAG, "[WARN] runRaceWithRetries:: At Race prep screen but failed to detect ViewResults button (and ButtonRaceManual fallback also failed to click).")
+                            }
                         }
                     }
                 }
@@ -2298,8 +2313,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return handleSelectedRace()
         } else if (ButtonChangeRunningStyle.check(game.imageUtils)) {
             MessageLog.i(TAG, "[RACE] The bot is currently sitting on the race screen. Most likely here for a scheduled race.")
-            handleStandaloneRace()
-            return true
+            return handleStandaloneRace()
         }
 
         // Clear requirement flags if no race selection buttons were found.
@@ -2308,17 +2322,33 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         return false
     }
 
-    /** The entry point for handling standalone races if the user started the bot on the Racing screen. */
-    fun handleStandaloneRace() {
+    /**
+     * The entry point for handling standalone races if the user started the bot on the Racing screen.
+     *
+     * @return True if both the race itself and the post-race finalization completed successfully; false otherwise.
+     */
+    fun handleStandaloneRace(): Boolean {
         MessageLog.v(TAG, "\n********************")
         MessageLog.v(TAG, "[RACE] Starting Standalone Racing process...")
 
         // Skip the race if possible, otherwise run it manually.
-        runRaceWithRetries()
-        finalizeRaceResults()
+        val raceCompleted = runRaceWithRetries()
+        val resultsFinalized = finalizeRaceResults()
+        val succeeded = raceCompleted && resultsFinalized
+
+        if (!succeeded) {
+            MessageLog.w(
+                TAG,
+                "[WARN] handleStandaloneRace:: Race did not fully complete (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). " +
+                    "Reporting failure so downstream state isn't incorrectly advanced.",
+            )
+            MessageLog.v(TAG, "********************")
+            return false
+        }
 
         MessageLog.v(TAG, "[RACE] Racing process for Standalone Race is completed. Grade: ${lastRaceGrade ?: "Standalone"}")
         MessageLog.v(TAG, "********************")
+        return true
     }
 
     /**
@@ -2338,8 +2368,19 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         game.waitForLoading()
 
         // Skip the race if possible, otherwise run it manually.
-        runRaceWithRetries()
-        finalizeRaceResults(isExtra = true)
+        val raceCompleted = runRaceWithRetries()
+        val resultsFinalized = finalizeRaceResults(isExtra = true)
+        val succeeded = raceCompleted && resultsFinalized
+
+        if (!succeeded) {
+            MessageLog.w(
+                TAG,
+                "[WARN] handleSelectedRace:: Race did not fully complete (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). " +
+                    "Leaving nextSmartRaceDay intact and reporting failure so the consecutive race count and downstream state aren't incorrectly advanced.",
+            )
+            MessageLog.v(TAG, "********************")
+            return false
+        }
 
         // Clear the next smart race day tracker since we just completed a race.
         nextSmartRaceDay = null
@@ -2387,8 +2428,19 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         game.waitForLoading()
 
         // Skip the race if possible, otherwise run it manually.
-        runRaceWithRetries()
-        finalizeRaceResults()
+        val raceCompleted = runRaceWithRetries()
+        val resultsFinalized = finalizeRaceResults()
+        val succeeded = raceCompleted && resultsFinalized
+
+        if (!succeeded) {
+            MessageLog.w(
+                TAG,
+                "[WARN] handleMandatoryRace:: Race did not fully complete (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). " +
+                    "Reporting failure so downstream state isn't incorrectly advanced.",
+            )
+            MessageLog.v(TAG, "********************")
+            return false
+        }
 
         MessageLog.v(TAG, "[RACE] Racing process for Mandatory Race is completed. Grade: ${lastRaceGrade ?: "Mandatory"}")
         MessageLog.v(TAG, "********************")
@@ -2601,8 +2653,19 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         game.wait(2.0)
 
         // Skip the race if possible, otherwise run it manually.
-        runRaceWithRetries()
-        finalizeRaceResults(isExtra = true)
+        val raceCompleted = runRaceWithRetries()
+        val resultsFinalized = finalizeRaceResults(isExtra = true)
+        val succeeded = raceCompleted && resultsFinalized
+
+        if (!succeeded) {
+            MessageLog.w(
+                TAG,
+                "[WARN] handleMaidenRace:: Race did not fully complete (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). " +
+                    "Leaving bHasCheckedForMaidenRaceToday unset and nextSmartRaceDay intact so a subsequent turn can retry.",
+            )
+            MessageLog.v(TAG, "********************")
+            return false
+        }
 
         // Clear the next smart race day tracker since we just completed a race.
         nextSmartRaceDay = null
@@ -2787,8 +2850,19 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         game.wait(2.0)
 
         // Skip the race if possible, otherwise run it manually.
-        runRaceWithRetries()
-        finalizeRaceResults(isExtra = true)
+        val raceCompleted = runRaceWithRetries()
+        val resultsFinalized = finalizeRaceResults(isExtra = true)
+        val succeeded = raceCompleted && resultsFinalized
+
+        if (!succeeded) {
+            MessageLog.w(
+                TAG,
+                "[WARN] handleExtraRace:: Race did not fully complete (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). " +
+                    "Leaving nextSmartRaceDay intact and reporting failure so the consecutive race count and downstream state aren't incorrectly advanced.",
+            )
+            MessageLog.v(TAG, "********************")
+            return false
+        }
 
         // Clear the next smart race day tracker since we just completed a race.
         nextSmartRaceDay = null

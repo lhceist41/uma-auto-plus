@@ -748,7 +748,23 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         val srcBitmap: Bitmap = bitmap ?: game.imageUtils.getSourceBitmap()
 
         // Verify the presence of key UI elements.
-        if (ButtonSkillListFullStats.check(game.imageUtils, sourceBitmap = srcBitmap) && LabelSkillListScreenSkillPoints.check(game.imageUtils, sourceBitmap = srcBitmap)) {
+        //
+        // The "Skill Points" label template can match below the global confidence
+        // threshold on certain skill-list-screen variants — observed at ~0.68 vs the
+        // 0.80 default on the post-career skill list during a Trackblazer run, which
+        // caused both pre-finals AND career-complete skill plans to abort with
+        // "Not at skill list screen" and ~1300 SP went unspent. We relax JUST this
+        // label's detection check to 0.60 so it tolerates the drift. The "Full Stats"
+        // button still requires the full global threshold, so the dual-check guard
+        // against false positives on unrelated screens stays intact.
+        //
+        // The same label template is also used by detectSkillPoints() for skill-point
+        // OCR localization — that call site is intentionally NOT relaxed because a
+        // wrong-location match there would yield wrong skill point numbers.
+        val labelConfidence = 0.60
+        if (ButtonSkillListFullStats.check(game.imageUtils, sourceBitmap = srcBitmap) &&
+            LabelSkillListScreenSkillPoints.check(game.imageUtils, sourceBitmap = srcBitmap, confidence = labelConfidence)
+        ) {
             return true
         }
 
@@ -760,7 +776,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         // Re-check if we are at the SkillList screen after handling dialogs.
         return (
             ButtonSkillListFullStats.check(game.imageUtils) &&
-                LabelSkillListScreenSkillPoints.check(game.imageUtils)
+                LabelSkillListScreenSkillPoints.check(game.imageUtils, confidence = labelConfidence)
         )
     }
 
