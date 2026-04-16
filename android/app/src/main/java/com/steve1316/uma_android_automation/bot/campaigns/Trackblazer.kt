@@ -457,8 +457,16 @@ class Trackblazer(game: Game) : Campaign(game) {
         val turnsRemaining = game.imageUtils.determineTurnsRemainingBeforeNextGoal()
         val onlyOneTurnLeft = turnsRemaining == 1
 
-        if (consecutiveRaceCount < (consecutiveRacesLimit + 1) || onlyOneTurnLeft) {
-            if (onlyOneTurnLeft && consecutiveRaceCount >= (consecutiveRacesLimit + 1)) {
+        // Late December is the last racing opportunity before a mandatory goal race, so ignore the limit.
+        val isLateDecember = date.month == DateMonth.DECEMBER && date.phase == DatePhase.LATE
+
+        if (consecutiveRaceCount < (consecutiveRacesLimit + 1) || onlyOneTurnLeft || isLateDecember) {
+            if (isLateDecember && consecutiveRaceCount >= (consecutiveRacesLimit + 1)) {
+                MessageLog.i(
+                    TAG,
+                    "[TRACKBLAZER] Consecutive race count $consecutiveRaceCount >= ${consecutiveRacesLimit + 1}, but it is Late December. Ignoring limit to maximize races before mandatory goal race.",
+                )
+            } else if (onlyOneTurnLeft && consecutiveRaceCount >= (consecutiveRacesLimit + 1)) {
                 MessageLog.i(
                     TAG,
                     "[TRACKBLAZER] Consecutive race count $consecutiveRaceCount >= ${consecutiveRacesLimit + 1}, but only 1 turn remains before mandatory race. Racing is safe. Continuing.",
