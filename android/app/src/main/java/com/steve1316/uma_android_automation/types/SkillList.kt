@@ -284,10 +284,20 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
             return null
         }
 
-        // Find the label on the screen.
-        val point: Point? = LabelSkillListScreenSkillPoints.findImageWithBitmap(game.imageUtils, srcBitmap)
+        // Find the label on the screen. Try strict confidence first; if that fails, fall back to
+        // the same relaxed threshold used in checkSkillListScreen so that template drift doesn't
+        // cause SP to be silently abandoned. The OCR region (1.5x label width below) is wide
+        // enough to absorb a small location mismatch, and the digit parse on the OCR result
+        // rejects garbage rather than corrupting the stored skill point count.
+        var point: Point? = LabelSkillListScreenSkillPoints.findImageWithBitmap(game.imageUtils, srcBitmap)
         if (point == null) {
-            MessageLog.e(TAG, "[ERROR] detectSkillPoints:: Failed to find LabelSkillListScreenSkillPoints.")
+            point = LabelSkillListScreenSkillPoints.findImageWithBitmap(game.imageUtils, srcBitmap, confidence = 0.60)
+            if (point != null) {
+                MessageLog.w(TAG, "[WARN] detectSkillPoints:: LabelSkillListScreenSkillPoints matched only at relaxed threshold; using fallback location.")
+            }
+        }
+        if (point == null) {
+            MessageLog.e(TAG, "[ERROR] detectSkillPoints:: Failed to find LabelSkillListScreenSkillPoints (tried both strict and relaxed thresholds).")
             return null
         }
 
