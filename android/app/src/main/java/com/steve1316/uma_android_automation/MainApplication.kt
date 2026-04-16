@@ -41,25 +41,15 @@ class MainApplication : Application(), ReactApplication {
     override fun onCreate() {
         super.onCreate()
 
-        // Initialize ML Kit explicitly. We removed the auto-init ContentProvider
-        // in AndroidManifest.xml (tools:node="remove") because under certain
-        // Android process-restart conditions on emulators, the static
-        // MlKitContext from the dying process incarnation lingers into the
-        // new one — and the ContentProvider's attachInfo() then crashes with
-        // an uncatchable "IllegalStateException: MlKitContext is already
-        // initialized" before this onCreate even runs. Initializing here
-        // puts the call inside user code where we CAN catch that case, so a
-        // stale static just means "reuse what's there" instead of killing
-        // the new process within ~2 seconds.
-        //
-        // Must run before anything that uses ML Kit APIs (CustomImageUtils
-        // uses InputImage for OCR), which is why this is the very first
-        // statement after super.onCreate().
+        // Initialize ML Kit explicitly. The auto-init ContentProvider is removed in
+        // AndroidManifest.xml (tools:node="remove") because on quick process restarts the
+        // stale static MlKitContext from the prior process can throw an uncatchable
+        // IllegalStateException from the provider's attachInfo before onCreate runs. Doing
+        // it here puts the call inside catchable user code. Must run before any ML Kit API.
         try {
             MlKit.initialize(this)
         } catch (e: IllegalStateException) {
-            // Static context from prior process incarnation is still populated.
-            // ML Kit is already usable — just log and move on.
+            // Static context from prior process is still populated; ML Kit is already usable.
             Log.i("MainApplication", "[MLKIT] Context already initialized (reusing prior state): ${e.message}")
         }
 

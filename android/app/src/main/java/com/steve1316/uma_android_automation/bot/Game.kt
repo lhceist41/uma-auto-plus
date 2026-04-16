@@ -115,14 +115,7 @@ class Game(val myContext: Context) {
 
         /**
          * Kill the process if no heartbeat in this many ms while the bot is running.
-         *
-         * Set generously (3 minutes) because legitimate activity — popup animations,
-         * loading screens, post-run dialog chains routed through CareerLaunchNavigator,
-         * etc. — can eat 30–60s without any actual problem. The cost of a false-positive
-         * kill (process SIGKILL, overlay gone, queue run interrupted) is much higher
-         * than the cost of waiting longer before killing a genuine freeze, so err on
-         * the lenient side. MuMu GPU-pipeline freezes that this was originally designed
-         * to catch typically last many minutes, so 3 minutes still recovers them in time.
+         * Set to 3 minutes so popup animations and dialog chains don't false-trigger.
          */
         private const val HEARTBEAT_TIMEOUT_MS: Long = 180_000L
 
@@ -131,14 +124,14 @@ class Game(val myContext: Context) {
 
         /**
          * Record forward progress. Called at safe boundaries in the bot loop
-         * (e.g., every tick of [wait]). Cheap — just a volatile store.
+         * (e.g., every tick of [wait]). Cheap, just a volatile store.
          */
         fun heartbeat() {
             lastHeartbeatMs = System.currentTimeMillis()
         }
 
         /**
-         * Start the watchdog. Idempotent — if already running, does nothing. Runs for
+         * Start the watchdog. Idempotent: if already running, does nothing. Runs for
          * the lifetime of the process; the check inside accounts for the bot being
          * stopped/restarted.
          */
@@ -150,7 +143,7 @@ class Game(val myContext: Context) {
                     while (isActive) {
                         delay(WATCHDOG_INTERVAL_MS)
                         if (!BotService.isRunning) {
-                            // Bot isn't running — reset so we don't fire immediately on resume.
+                            // Bot isn't running, reset so we don't fire immediately on resume.
                             heartbeat()
                             continue
                         }
@@ -179,21 +172,20 @@ class Game(val myContext: Context) {
         // Paired with the FGS foregroundServiceType="dataSync" on BotService in the manifest.
         // Holding a PARTIAL_WAKE_LOCK while a run is active keeps the process-bucket
         // classification stable so Android's OomAdjuster doesn't mark us as 'empty' and SIGKILL
-        // the process to reclaim memory (observed as ApplicationExitInfo reason=SIGNALED,
-        // subreason=TRIM_EMPTY even with the FGS notification alive). The lock has a safety
-        // timeout so it can't leak indefinitely if the release path is skipped.
+        // the process to reclaim memory under TRIM_EMPTY. The lock has a safety timeout so it
+        // can't leak indefinitely if the release path is skipped.
 
         @Volatile
         private var wakeLock: PowerManager.WakeLock? = null
 
-        /** WakeLock tag — visible in `adb shell dumpsys power`. */
+        /** WakeLock tag (visible in `adb shell dumpsys power`). */
         private const val WAKE_LOCK_TAG: String = "UmaAutoPlus:BotRun"
 
         /** Hard cap on a single WakeLock acquisition. If we're still running after 6h something's wrong. */
         private const val WAKE_LOCK_TIMEOUT_MS: Long = 6 * 60 * 60 * 1000L
 
         /**
-         * Acquire a partial wake lock. Safe to call repeatedly — if one is already held,
+         * Acquire a partial wake lock. Safe to call repeatedly: if one is already held,
          * this is a no-op. Call from the bot-run entry point.
          */
         @Synchronized
@@ -234,10 +226,8 @@ class Game(val myContext: Context) {
         }
 
         // --- Between-run cleanup ---
-        // Called between queued runs to reduce RSS drift before the next run starts. We can't
-        // force-release caches owned by the external automation_library, but hinting GC plus
-        // refreshing the watchdog heartbeat gives the runtime a chance to reclaim what it can —
-        // lower PSS at the end-of-run peak means lower probability of a TRIM_EMPTY kill.
+        // Called between queued runs to reduce RSS drift. Hints a GC at the known idle
+        // boundary to lower peak PSS before the next run's allocation spike.
 
         /**
          * Reset per-run soft state and suggest a GC. Intended for between-run boundaries in the
@@ -245,14 +235,12 @@ class Game(val myContext: Context) {
          */
         fun cleanupBetweenRuns() {
             try {
-                // Refresh the watchdog heartbeat so we don't false-positive during the cleanup
-                // window (the bot loop won't be calling wait() while we're between runs).
+                // Refresh the watchdog heartbeat so it doesn't false-trigger during the cleanup
+                // window (the bot loop is not calling wait() between runs).
                 heartbeat()
-                // Suggest a GC. System.gc() is traditionally discouraged in hot paths, but at a
-                // known idle boundary (between runs) it's fine and measurably reduces PSS before
-                // the next run's peak allocation.
+                // Suggest a GC. Generally discouraged in hot paths, but fine at this idle boundary.
                 System.gc()
-                Log.i(TAG, "[CLEANUP] Between-run cleanup completed (heartbeat refreshed + GC hint).")
+                Log.i(TAG, "[CLEANUP] Between-run cleanup completed.")
             } catch (_: Throwable) {
                 // Cleanup must never be the thing that kills the bot.
             }
