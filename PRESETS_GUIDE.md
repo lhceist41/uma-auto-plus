@@ -167,7 +167,7 @@ const handlePresetChange = async (presetName) => {
    - `tokai-teio-profile-unity-cup.json`
    - `silence-suzuka-profile-ura-finale.json`
 
-4. **Place the file** in the appropriate scenario folder:
+4. **Place the file** in the appropriate scenario folder (the same `<YOUR_PROFILES_DIRECTORY>` referenced by the extraction script below):
    ```
    <YOUR_PROFILES_DIRECTORY>/Trackblazer/
    <YOUR_PROFILES_DIRECTORY>/Unity-Cup/
