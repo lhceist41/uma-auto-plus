@@ -98,6 +98,69 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         fun clearQueueState(context: Context) {
             saveQueueState(context, active = false)
         }
+
+        /**
+         * Snapshot of an interrupted queue, loaded from SQLite.
+         *
+         * @property active True if the queue was in progress (matches the `active` column).
+         * @property currentRun 1-indexed run number that was in flight when the process died.
+         * @property totalRuns Total runs the user requested when the queue started.
+         * @property ageMs Milliseconds between when the state was persisted and now.
+         */
+        data class QueueState(
+            val active: Boolean,
+            val currentRun: Int,
+            val totalRuns: Int,
+            val ageMs: Long,
+        )
+
+        /** Stale queue state older than this is ignored — 6 hours matches the UI-side check. */
+        private const val QUEUE_STATE_STALE_MS: Long = 6 * 60 * 60 * 1000L
+
+        /**
+         * Load the persisted queue state, if any, and return it only if it represents a
+         * genuinely resumable session (active, recent, with sensible run numbers). Returns
+         * null in all the cases where we shouldn't auto-resume — no state, explicitly
+         * cleared, stale, or malformed.
+         *
+         * Used on bot-session entry (`onStartEvent`) to detect and resume a queue that
+         * was interrupted by a SIGKILL / TRIM_EMPTY in a previous process lifetime.
+         */
+        fun loadQueueState(context: Context): QueueState? {
+            try {
+                val dbFile = File(context.filesDir, "SQLite/settings.db")
+                if (!dbFile.exists()) return null
+                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+                val raw = mutableMapOf<String, String>()
+                try {
+                    db.rawQuery(
+                        "SELECT key, value FROM settings WHERE category = ?",
+                        arrayOf("queueState"),
+                    ).use { cursor ->
+                        while (cursor.moveToNext()) {
+                            raw[cursor.getString(0)] = cursor.getString(1)
+                        }
+                    }
+                } finally {
+                    db.close()
+                }
+                val active = raw["active"] == "true"
+                if (!active) return null
+
+                val currentRun = raw["currentRun"]?.toIntOrNull() ?: return null
+                val totalRuns = raw["totalRuns"]?.toIntOrNull() ?: return null
+                if (currentRun <= 0 || totalRuns <= 0) return null
+
+                val timestamp = raw["timestamp"]?.toLongOrNull() ?: 0L
+                val ageMs = System.currentTimeMillis() - timestamp
+                if (ageMs < 0 || ageMs > QUEUE_STATE_STALE_MS) return null
+
+                return QueueState(active, currentRun, totalRuns, ageMs)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to load queue state: ${e.message}")
+                return null
+            }
+        }
     }
 
     private val context: Context = reactContext.applicationContext
@@ -544,6 +607,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     /**
      * Waits for the specified number of seconds, checking queue control flags every 100ms.
      * Returns false if the wait was interrupted by a stop request.
+     *
+     * Ticks [Game.heartbeat] each iteration so the stall watchdog doesn't false-fire
+     * during user-configured between-runs delays (which can be longer than the watchdog
+     * timeout). The bot is genuinely alive and idle here, not stuck.
      */
     private fun interruptibleWait(seconds: Int): Boolean {
         val totalMs = seconds * 1000L
@@ -552,6 +619,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             if (queueStopRequested || !BotService.isRunning) {
                 return false
             }
+            Game.heartbeat()
             Thread.sleep(100)
             elapsed += 100
         }
@@ -561,6 +629,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     @Subscribe
     fun onStartEvent(event: StartEvent) {
         if (event.message == "Entry Point ON") {
+            // Acquire a PARTIAL_WAKE_LOCK for the entire bot session. This keeps the process-bucket
+            // classification stable so Android's OomAdjuster can't mark the process as 'empty' and
+            // send SIGKILL under memory pressure (observed as ApplicationExitInfo reason=SIGNALED,
+            // subreason=TRIM_EMPTY on MuMu). The lock is released in the finally below regardless of
+            // how the session ends (normal completion, stop request, unhandled exception).
+            Game.acquireWakeLock(context)
+            try {
             // Reset queue control flags at the start of every new session.
             queueStopRequested = false
             queueSkipRequested = false
@@ -579,9 +654,49 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 MessageLog.i(TAG, "[QUEUE] Run queue enabled. Total runs: $totalRuns, delay: ${delayBetweenRuns}s, stopOnError: $stopOnError")
             }
 
+            // --- Layer 4: auto-resume after process death ---
+            // If a queue was running when the previous process was killed (TRIM_EMPTY,
+            // watchdog self-restart, etc.), SQLite still has queueState.active=true with
+            // the run number that was in flight. Skip past that run and pick up the next
+            // one. Only applies when queueing is currently enabled AND the saved totalRuns
+            // matches the current setting — if the user changed queue config after the
+            // crash, the saved state is no longer applicable and we ignore it.
+            val startFromRun: Int = run {
+                if (!enableRunQueue) return@run 1
+                val saved = loadQueueState(context) ?: return@run 1
+                if (saved.totalRuns != totalRuns) {
+                    MessageLog.i(
+                        TAG,
+                        "[RESUME] Ignoring saved queue state (saved totalRuns=${saved.totalRuns} differs from current totalRuns=$totalRuns).",
+                    )
+                    clearQueueState(context)
+                    return@run 1
+                }
+                val next = saved.currentRun + 1
+                if (next > totalRuns) {
+                    MessageLog.i(
+                        TAG,
+                        "[RESUME] Saved queue was at its last run (${saved.currentRun}/${saved.totalRuns}); nothing to resume. Treating as complete.",
+                    )
+                    clearQueueState(context)
+                    return@run totalRuns + 1 // skips the for-loop entirely
+                }
+                MessageLog.w(
+                    TAG,
+                    "[RESUME] Detected interrupted queue from ${saved.ageMs / 60_000}m ago — resuming at run $next of $totalRuns (run ${saved.currentRun} was in flight when the previous process died).",
+                )
+                sendQueueProgressEvent(
+                    next,
+                    totalRuns,
+                    "resuming",
+                    message = "Auto-resuming: starting at run $next of $totalRuns (previous run was interrupted)",
+                )
+                next
+            }
+
             var completedRuns = 0
 
-            for (i in 1..totalRuns) {
+            for (i in startFromRun..totalRuns) {
                 // Check stop flag before starting each run.
                 if (queueStopRequested || !BotService.isRunning) {
                     MessageLog.i(TAG, "[QUEUE] Queue stop requested before run $i. Exiting queue.")
@@ -666,6 +781,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         break
                     }
 
+                    // Between-run cleanup: hint GC and refresh the watchdog heartbeat so the
+                    // next run starts with lower PSS. Every KB we save here reduces the chance
+                    // of a TRIM_EMPTY kill at end-of-next-run.
+                    Game.cleanupBetweenRuns()
+
                     sendQueueProgressEvent(i, totalRuns, "navigating")
                     MessageLog.i(TAG, "[QUEUE] Navigating back to career start for next run...")
 
@@ -702,6 +822,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 MessageLog.i(TAG, "\n[QUEUE] ========================================")
                 MessageLog.i(TAG, "[QUEUE] Queue finished. Completed $completedRuns of $totalRuns runs.")
                 MessageLog.i(TAG, "[QUEUE] ========================================\n")
+            }
+            } finally {
+                // Always release the wake lock, even on exception or break paths.
+                Game.releaseWakeLock()
             }
         }
     }
