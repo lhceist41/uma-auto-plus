@@ -30,9 +30,8 @@
     <!--Enables Battery Optimization coming from the Automation Library.-->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
-    <!--Wake lock: acquired while a bot run is active so the process-bucket classification stays
-        stable and Android doesn't decide the process is 'empty' enough to SIGKILL under memory
-        pressure. Paired with the FGS declarations below.-->
+    <!--Wake lock: held during bot runs so Android doesn't classify the process as 'empty'
+        and SIGKILL it under memory pressure. Paired with the FGS declarations below.-->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
@@ -84,10 +83,9 @@
             android:name="com.steve1316.automation_library.utils.MediaProjectionService"
             android:foregroundServiceType="mediaProjection" />
 
-        <!--Bot Service that automates the specified workflow. dataSync foregroundServiceType is
-            required on targetSdk 34+ for any service that calls startForeground(); without it,
-            Android can classify the process as 'empty' even while the notification is posted and
-            send SIGKILL under moderate memory pressure (observed TRIM_EMPTY kills on MuMu).-->
+        <!--Bot Service that automates the specified workflow. dataSync foregroundServiceType
+            is required on targetSdk 34+ for any service that calls startForeground(); without
+            it, Android can SIGKILL the process under memory pressure (TRIM_EMPTY).-->
         <service
             android:name="com.steve1316.automation_library.utils.BotService"
             android:foregroundServiceType="dataSync" />
@@ -98,19 +96,11 @@
             android:enabled="true"
             android:process=":remote" />
 
-        <!--Remove ML Kit's auto-init ContentProvider. The ML Kit `common` library
-            declares its own `MlKitInitProvider` via manifest-merger, which runs
-            during process startup BEFORE Application.onCreate. Under certain
-            Android process-restart conditions (observed on MuMu after TRIM_EMPTY
-            kills) the static MlKitContext from the dying process incarnation
-            lingers into the new one, and the provider's onCreate crashes with
-            "IllegalStateException: MlKitContext is already initialized" — which
-            is uncatchable from app code and kills the new process within ~2s.
-
-            tools:node="remove" strips the provider from the final merged
-            manifest. MainApplication.onCreate initializes ML Kit explicitly
-            in a try/catch instead, so if the static state is already populated
-            from a prior incarnation we quietly reuse it.-->
+        <!--Remove ML Kit's auto-init ContentProvider so it doesn't run before
+            Application.onCreate. On quick process restarts the stale static MlKitContext
+            from the prior process can throw an uncatchable IllegalStateException from the
+            provider's attachInfo. MainApplication.onCreate initializes ML Kit explicitly
+            in a try/catch instead.-->
         <provider
             android:name="com.google.mlkit.common.internal.MlKitInitProvider"
             android:authorities="${applicationId}.mlkitinitprovider"

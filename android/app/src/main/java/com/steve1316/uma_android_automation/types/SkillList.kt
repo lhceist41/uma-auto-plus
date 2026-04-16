@@ -748,19 +748,12 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         val srcBitmap: Bitmap = bitmap ?: game.imageUtils.getSourceBitmap()
 
         // Verify the presence of key UI elements.
-        //
-        // The "Skill Points" label template can match below the global confidence
-        // threshold on certain skill-list-screen variants — observed at ~0.68 vs the
-        // 0.80 default on the post-career skill list during a Trackblazer run, which
-        // caused both pre-finals AND career-complete skill plans to abort with
-        // "Not at skill list screen" and ~1300 SP went unspent. We relax JUST this
-        // label's detection check to 0.60 so it tolerates the drift. The "Full Stats"
-        // button still requires the full global threshold, so the dual-check guard
-        // against false positives on unrelated screens stays intact.
-        //
-        // The same label template is also used by detectSkillPoints() for skill-point
-        // OCR localization — that call site is intentionally NOT relaxed because a
-        // wrong-location match there would yield wrong skill point numbers.
+        // The Skill Points label template can match below the global confidence threshold
+        // on some skill-list-screen variants (e.g. post-career), so we use a lower threshold
+        // here only for screen detection. The Full Stats button check stays at the global
+        // threshold so the dual check still rejects unrelated screens.
+        // The same label is used by detectSkillPoints() for OCR localization where a wrong
+        // location would corrupt the skill point read; do not lower confidence there.
         val labelConfidence = 0.60
         if (ButtonSkillListFullStats.check(game.imageUtils, sourceBitmap = srcBitmap) &&
             LabelSkillListScreenSkillPoints.check(game.imageUtils, sourceBitmap = srcBitmap, confidence = labelConfidence)

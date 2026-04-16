@@ -1284,16 +1284,11 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         }
 
                         null -> {
-                            // ButtonViewResults template can fall just below the configured confidence
-                            // threshold (observed at ~0.73 vs the 0.80 default) on certain race-prep
-                            // variants — confirmed on Matikanefukukitaru's "Saudi Arabia Royal Cup" race
-                            // detail screen, where the View Results button IS visible but its rendering
-                            // doesn't quite match the bundled template at the global threshold.
-                            // ButtonChangeRunningStyle already confirms we're on the race-prep screen,
-                            // so fall back to clicking the green Race CTA (matches ButtonRaceManual at
-                            // ~0.96 confidence on the same screen) to get the race started instead of
-                            // looping forever. The race will play with the full animation rather than
-                            // being skipped, which is a tolerable cost vs. the bot stalling indefinitely.
+                            // ButtonViewResults can occasionally fall below the confidence threshold
+                            // even when the button is visible. ButtonChangeRunningStyle already
+                            // confirms we're on the race-prep screen, so fall back to ButtonRaceManual
+                            // (the Race button) to get the race started rather than looping forever.
+                            // The race plays with full animation instead of being skipped.
                             if (ButtonRaceManual.click(game.imageUtils, sourceBitmap = bitmap)) {
                                 MessageLog.i(TAG, "[RACE] ViewResults template did not match at threshold; fell back to clicking the Race button manually.")
                                 game.waitForLoading()
@@ -2339,8 +2334,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         if (!succeeded) {
             MessageLog.w(
                 TAG,
-                "[WARN] handleStandaloneRace:: Race did not fully complete (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). " +
-                    "Reporting failure so downstream state isn't incorrectly advanced.",
+                "[WARN] handleStandaloneRace:: Race did not complete cleanly (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). Reporting failure.",
             )
             MessageLog.v(TAG, "********************")
             return false
@@ -2375,8 +2369,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         if (!succeeded) {
             MessageLog.w(
                 TAG,
-                "[WARN] handleSelectedRace:: Race did not fully complete (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). " +
-                    "Leaving nextSmartRaceDay intact and reporting failure so the consecutive race count and downstream state aren't incorrectly advanced.",
+                "[WARN] handleSelectedRace:: Race did not complete cleanly (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). Leaving nextSmartRaceDay intact and reporting failure.",
             )
             MessageLog.v(TAG, "********************")
             return false
@@ -2435,8 +2428,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         if (!succeeded) {
             MessageLog.w(
                 TAG,
-                "[WARN] handleMandatoryRace:: Race did not fully complete (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). " +
-                    "Reporting failure so downstream state isn't incorrectly advanced.",
+                "[WARN] handleMandatoryRace:: Race did not complete cleanly (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). Reporting failure.",
             )
             MessageLog.v(TAG, "********************")
             return false
@@ -2660,8 +2652,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         if (!succeeded) {
             MessageLog.w(
                 TAG,
-                "[WARN] handleMaidenRace:: Race did not fully complete (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). " +
-                    "Leaving bHasCheckedForMaidenRaceToday unset and nextSmartRaceDay intact so a subsequent turn can retry.",
+                "[WARN] handleMaidenRace:: Race did not complete cleanly (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). Leaving bHasCheckedForMaidenRaceToday unset so a subsequent turn can retry.",
             )
             MessageLog.v(TAG, "********************")
             return false
@@ -2857,8 +2848,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         if (!succeeded) {
             MessageLog.w(
                 TAG,
-                "[WARN] handleExtraRace:: Race did not fully complete (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). " +
-                    "Leaving nextSmartRaceDay intact and reporting failure so the consecutive race count and downstream state aren't incorrectly advanced.",
+                "[WARN] handleExtraRace:: Race did not complete cleanly (raceCompleted=$raceCompleted, resultsFinalized=$resultsFinalized). Leaving nextSmartRaceDay intact and reporting failure.",
             )
             MessageLog.v(TAG, "********************")
             return false
