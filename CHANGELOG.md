@@ -47,10 +47,6 @@ A big reliability + content release. The bot is dramatically more stable on MuMu
 - **Watchdog false positives during loading screens.** The previous 45-second watchdog timeout would occasionally fire during legitimate long loading screens or popup chains. Raised to 3 minutes, plus the bot now correctly reports forward progress during navigator and between-runs activity so the watchdog never false-fires during normal operation.
 - **Distance preference defaulting wrong on aptitude ties.** Characters with tied A-rank aptitudes (e.g. Matikanefukukitaru with Medium=A and Long=A) were defaulting to Medium even when their preset said Long, because the bot was reading the game's aptitude detection instead of honoring the preset's intended build. All 51 presets now lock the distance override to match the preset's chosen build.
 
-### Documentation
-
-- New `CHARACTER_PRESETS.md` at the repo root — a full reference of every character preset, scenario by scenario. Build identity, active stat targets, training config, full skill priority list with names (not just IDs), racing settings, Trackblazer scenario overrides, and event override counts. Useful if you want to see exactly what the bot is going to do for any character without diving into the JSON.
-
 ---
 
 ## [1.1.0] - 2026-04-14
