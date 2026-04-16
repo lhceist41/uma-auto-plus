@@ -897,6 +897,12 @@ class CareerLaunchNavigator(private val context: Context) {
 
     /**
      * Waits for the specified number of seconds, checking if the bot is still running.
+     *
+     * Ticks [Game.heartbeat] each iteration so the stall watchdog sees forward
+     * progress while CareerLaunchNavigator's retry loops are active. Without this
+     * the navigator (which uses its own sleep/tap helpers instead of [Game.wait]
+     * and [Game.tap]) could starve the watchdog during legitimate multi-tap
+     * post-run dialog chains and trigger a false-positive self-kill.
      */
     private fun waitSafe(seconds: Double) {
         val totalMs = (seconds * 1000).toLong()
@@ -904,6 +910,7 @@ class CareerLaunchNavigator(private val context: Context) {
         var remaining = totalMs
         while (remaining > 0) {
             if (!BotService.isRunning || StartModule.queueStopRequested) return
+            Game.heartbeat()
             val sleep = minOf(checkInterval, remaining)
             Thread.sleep(sleep)
             remaining -= sleep

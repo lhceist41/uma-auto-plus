@@ -2,6 +2,7 @@ package com.steve1316.uma_android_automation.bot
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.PowerManager
 import android.util.Log
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.BotService
@@ -23,7 +24,12 @@ import com.steve1316.uma_android_automation.bot.campaigns.UraFinale
 import com.steve1316.uma_android_automation.components.LabelConnecting
 import com.steve1316.uma_android_automation.components.LabelNowLoading
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.opencv.core.Point
 import java.text.DecimalFormat
@@ -88,9 +94,172 @@ class Game(val myContext: Context) {
 
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]Game"
+
+        // --- Stall watchdog ---
+        // On MuMu (and other emulators) the AccessibilityService's gesture injector can
+        // deadlock under load, causing the system InputDispatcher's queue to back up
+        // until the whole emulator appears frozen. To recover automatically, the bot
+        // loop updates a heartbeat every time it makes forward progress. A background
+        // coroutine watches that heartbeat and, if nothing has moved for
+        // HEARTBEAT_TIMEOUT_MS while the bot is supposedly running, kills the process.
+        // The AccessibilityService is sticky so Android restarts it within ~1 second
+        // and input dispatch unfreezes.
+
+        /** Milliseconds since boot of the last recorded forward progress. */
+        @Volatile
+        private var lastHeartbeatMs: Long = System.currentTimeMillis()
+
+        /** The watchdog coroutine job, or null if not running. */
+        @Volatile
+        private var watchdogJob: Job? = null
+
+        /**
+         * Kill the process if no heartbeat in this many ms while the bot is running.
+         *
+         * Set generously (3 minutes) because legitimate activity — popup animations,
+         * loading screens, post-run dialog chains routed through CareerLaunchNavigator,
+         * etc. — can eat 30–60s without any actual problem. The cost of a false-positive
+         * kill (process SIGKILL, overlay gone, queue run interrupted) is much higher
+         * than the cost of waiting longer before killing a genuine freeze, so err on
+         * the lenient side. MuMu GPU-pipeline freezes that this was originally designed
+         * to catch typically last many minutes, so 3 minutes still recovers them in time.
+         */
+        private const val HEARTBEAT_TIMEOUT_MS: Long = 180_000L
+
+        /** How often the watchdog checks the heartbeat. */
+        private const val WATCHDOG_INTERVAL_MS: Long = 5_000L
+
+        /**
+         * Record forward progress. Called at safe boundaries in the bot loop
+         * (e.g., every tick of [wait]). Cheap — just a volatile store.
+         */
+        fun heartbeat() {
+            lastHeartbeatMs = System.currentTimeMillis()
+        }
+
+        /**
+         * Start the watchdog. Idempotent — if already running, does nothing. Runs for
+         * the lifetime of the process; the check inside accounts for the bot being
+         * stopped/restarted.
+         */
+        private fun startWatchdog() {
+            if (watchdogJob?.isActive == true) return
+            heartbeat()
+            watchdogJob =
+                CoroutineScope(Dispatchers.Default).launch {
+                    while (isActive) {
+                        delay(WATCHDOG_INTERVAL_MS)
+                        if (!BotService.isRunning) {
+                            // Bot isn't running — reset so we don't fire immediately on resume.
+                            heartbeat()
+                            continue
+                        }
+                        val age = System.currentTimeMillis() - lastHeartbeatMs
+                        if (age >= HEARTBEAT_TIMEOUT_MS) {
+                            val msg =
+                                "[WATCHDOG] No bot progress for ${age / 1000}s while BotService.isRunning=true. " +
+                                    "Likely a stalled gesture injector / input-dispatch freeze. Self-restarting process to recover."
+                            Log.e(TAG, msg)
+                            try {
+                                MessageLog.e(TAG, msg)
+                            } catch (_: Exception) {
+                                // MessageLog may be unusable if the JS bridge is gone; don't block the restart on it.
+                            }
+                            // Give the log line a brief window to flush, then self-terminate.
+                            // AccessibilityService is sticky, Android will restart it.
+                            delay(250)
+                            android.os.Process.killProcess(android.os.Process.myPid())
+                            return@launch
+                        }
+                    }
+                }
+        }
+
+        // --- WakeLock ---
+        // Paired with the FGS foregroundServiceType="dataSync" on BotService in the manifest.
+        // Holding a PARTIAL_WAKE_LOCK while a run is active keeps the process-bucket
+        // classification stable so Android's OomAdjuster doesn't mark us as 'empty' and SIGKILL
+        // the process to reclaim memory (observed as ApplicationExitInfo reason=SIGNALED,
+        // subreason=TRIM_EMPTY even with the FGS notification alive). The lock has a safety
+        // timeout so it can't leak indefinitely if the release path is skipped.
+
+        @Volatile
+        private var wakeLock: PowerManager.WakeLock? = null
+
+        /** WakeLock tag — visible in `adb shell dumpsys power`. */
+        private const val WAKE_LOCK_TAG: String = "UmaAutoPlus:BotRun"
+
+        /** Hard cap on a single WakeLock acquisition. If we're still running after 6h something's wrong. */
+        private const val WAKE_LOCK_TIMEOUT_MS: Long = 6 * 60 * 60 * 1000L
+
+        /**
+         * Acquire a partial wake lock. Safe to call repeatedly — if one is already held,
+         * this is a no-op. Call from the bot-run entry point.
+         */
+        @Synchronized
+        fun acquireWakeLock(context: Context) {
+            try {
+                val existing = wakeLock
+                if (existing != null && existing.isHeld) return
+                val pm = context.applicationContext.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                if (pm == null) {
+                    Log.w(TAG, "[WAKELOCK] PowerManager unavailable; cannot acquire wake lock.")
+                    return
+                }
+                val lock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
+                lock.setReferenceCounted(false)
+                lock.acquire(WAKE_LOCK_TIMEOUT_MS)
+                wakeLock = lock
+                Log.i(TAG, "[WAKELOCK] Acquired PARTIAL_WAKE_LOCK (timeout ${WAKE_LOCK_TIMEOUT_MS / 1000 / 60}m).")
+            } catch (e: Throwable) {
+                // Never let wake-lock plumbing crash the bot.
+                Log.w(TAG, "[WAKELOCK] Acquire failed: ${e.message}")
+            }
+        }
+
+        /** Release the wake lock if held. Safe to call multiple times. */
+        @Synchronized
+        fun releaseWakeLock() {
+            try {
+                val lock = wakeLock ?: return
+                if (lock.isHeld) {
+                    lock.release()
+                    Log.i(TAG, "[WAKELOCK] Released.")
+                }
+                wakeLock = null
+            } catch (e: Throwable) {
+                Log.w(TAG, "[WAKELOCK] Release failed: ${e.message}")
+                wakeLock = null
+            }
+        }
+
+        // --- Between-run cleanup ---
+        // Called between queued runs to reduce RSS drift before the next run starts. We can't
+        // force-release caches owned by the external automation_library, but hinting GC plus
+        // refreshing the watchdog heartbeat gives the runtime a chance to reclaim what it can —
+        // lower PSS at the end-of-run peak means lower probability of a TRIM_EMPTY kill.
+
+        /**
+         * Reset per-run soft state and suggest a GC. Intended for between-run boundaries in the
+         * queue loop; do NOT call mid-run. Cheap; never throws.
+         */
+        fun cleanupBetweenRuns() {
+            try {
+                // Refresh the watchdog heartbeat so we don't false-positive during the cleanup
+                // window (the bot loop won't be calling wait() while we're between runs).
+                heartbeat()
+                // Suggest a GC. System.gc() is traditionally discouraged in hot paths, but at a
+                // known idle boundary (between runs) it's fine and measurably reduces PSS before
+                // the next run's peak allocation.
+                System.gc()
+                Log.i(TAG, "[CLEANUP] Between-run cleanup completed (heartbeat refreshed + GC hint).")
+            } catch (_: Throwable) {
+                // Cleanup must never be the thing that kills the bot.
+            }
+        }
     }
 
-    // Initialize Discord settings from SQLite.
+    // Initialize Discord settings from SQLite and start the stall watchdog.
     init {
         DiscordUtils.enableDiscordNotifications = SettingsHelper.getBooleanSetting("discord", "enableDiscordNotifications", false)
         if (DiscordUtils.enableDiscordNotifications) {
@@ -102,6 +271,10 @@ class Game(val myContext: Context) {
                 DiscordUtils.enableDiscordNotifications = false
             }
         }
+
+        // Kick the watchdog. This is idempotent; if the user starts a new run in the same
+        // process, the existing watchdog just picks up where it left off.
+        startWatchdog()
     }
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -122,6 +295,12 @@ class Game(val myContext: Context) {
 
         var remainingMillis = totalMillis
         while (remainingMillis > 0) {
+            // Record forward progress for the stall watchdog. Putting it here means
+            // every tick of any wait() call keeps the heartbeat fresh, so the watchdog
+            // only fires if we're genuinely stuck outside the wait loop for 45s+
+            // (most commonly a deadlocked gesture injector).
+            heartbeat()
+
             if (!BotService.isRunning) {
                 throw InterruptedException()
             }
@@ -208,6 +387,11 @@ class Game(val myContext: Context) {
     fun tap(x: Double, y: Double, imageName: String? = null, taps: Int = 1, ignoreWaiting: Boolean = false) {
         // Perform the tap.
         gestureUtils.tap(x, y, imageName, taps = taps)
+
+        // Mark forward progress for the watchdog. If the gesture injector deadlocked
+        // the call above would have blocked past the watchdog threshold and we'd
+        // already be restarting; if it returned, we made progress.
+        heartbeat()
 
         if (!ignoreWaiting) {
             // Now check if the game is waiting for a server response from the tap and wait if necessary.
