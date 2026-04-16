@@ -8,6 +8,51 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [1.2.0] - 2026-04-16
+
+A big reliability + content release. The bot is dramatically more stable on MuMu (no more random mid-queue crashes), no longer gets stuck in race-prep loops, and every single one of the 17 baked-in character presets has been overhauled with proper distances, styles, stat targets, skill priorities, and event picks. Fresh installs now ship with skill buying enabled and a strong starting build for every character.
+
+### Highlights
+
+- **Bot survives long queues now.** A whole stack of fixes for the random "the bot just died after a while" problem on MuMu and similar emulators. Combined with auto-resume, you can leave a 10-run queue going overnight and expect to find it on run 8 or 9 the next morning instead of stopped at run 2.
+- **Auto-resume after crash.** If the bot does get killed mid-queue (force-stop, OOM, system kill), the next time you start it the queue picks up from where it left off instead of starting over.
+- **No more "stuck on the race prep screen" hang.** The bot used to occasionally get stuck looping on the pre-race screen forever when it couldn't find the View Results button. It recognizes the button's current look now, and falls back to the Race button as a safety net.
+- **Skill buying is on by default and actually works.** Previously, the skill purchase screen was being misread, so pre-finals and post-career skill buys were silently aborting and your hard-earned skill points went unspent. Now both fire correctly, and fresh installs have skill buying enabled out of the box with a meta-aligned priority list per character.
+- **Every character preset rebuilt.** All 17 characters × 3 scenarios (Trackblazer / Unity Cup / URA Finale) — 51 presets in total — got proper distance/style/surface assignments matching their best aptitudes, full skill priority lists, character-specific event picks (so the bot picks the right option on character story events instead of falling back to defaults), per-character stat targets, and Trackblazer shop blacklists so the bot doesn't waste coins on stat scrolls the character doesn't need.
+
+### Character preset changes
+
+- **Agnes Tachyon** — Fixed wrong unique skill in her priority list (was Mejiro Ardan's skill by mistake). Her real unique `U=ma2` is now top priority. Stamina and Power targets raised to 800 each for Medium reliability. Stat priority adjusted (Power moves up to rank 2) to match Pace Chaser Medium meta.
+- **Grass Wonder** — Distance changed from **Medium → Long**. Medium was a B-rank distance for her (efficiency penalty); Long is A-rank. Skill plan and racing preferences updated accordingly.
+- **King Halo** — Distance changed from **Mile → Sprint**. Mile was a B-rank distance for her; Sprint is her only A-rank distance. Stat targets adjusted to Sprint shape (Speed 1200, Wit 600, no Stamina focus). Skill plan and racing preferences updated.
+- **Gold City (Autumn Cosmos)** — Style changed from **Pace Chaser → Late Surger**. Her unique "Dancing in the Leaves" activates when midpack on the final corner — that's a Late Surger pattern, and her awakening skill pool reinforces it.
+- **Air Groove** — Style changed from **Pace Chaser → Late Surger**. Her unique "Empress's Pride" triggers on the final corner when overtaking, favoring Late Surger.
+- **Vodka** — Distance changed from **Mile → Medium**. Both are A-rank for her, but her career schedule is heavily Medium-focused (Japan Derby at 2400m, etc.).
+- **Matikanefukukitaru, Gold Ship, Mayano Top Gun, Hishi Amazon, etc.** — Aptitudes verified as already optimal; got the same skill plan / event override / stat target overhaul as everyone else.
+
+### What's new under the hood
+
+- **Self-recovery from freezes.** If the bot genuinely freezes (a rare emulator-level hang), it restarts itself within a few seconds instead of needing you to notice. The 3-minute threshold is generous enough that normal popups and dialog chains never trigger it.
+- **Android is told to leave the bot alone.** The app now declares "this process is doing important work, don't kill it", and gets more memory to work with. This is the main reason long queues don't randomly die anymore.
+- **Auto-resume queue state.** Queue position is persisted between iterations, so the next bot start can pick up where the previous session was killed.
+- **Skill priority defaults.** Fresh installs now have skill buying enabled with `Optimize Skills` strategy and inherited unique skill purchasing on. The mid-run skill buy threshold is set to 1200 SP, which only fires late-Senior — matching the community "Senior April" buy window.
+
+### Bug fixes
+
+- **Race-prep "View Results" hang.** The biggest individual bug fix in this release. The bot would loop forever on the pre-race screen when it couldn't spot the View Results button. It now recognizes the current button, and falls back to clicking Race if View Results isn't found.
+- **False race success cascade.** When a race actually failed to complete (e.g. due to the hang above), the bot was still telling itself the race finished and incrementing internal counters. This caused secondary problems on the next turn (wrong consecutive-race count, "I already raced" confusion, queue death). The bot now correctly tracks race success vs. failure across all five race-handling code paths.
+- **Skill plans silently aborting.** Pre-finals and career-complete skill purchases were both refusing to run because the bot couldn't recognize the skill purchase screen reliably. Each failed run was leaving 1000+ SP unspent. Fixed.
+- **Crash within seconds of reopening the app after a crash.** The text-reading library could take down the new process before the bot UI even loaded. It starts up safely now.
+- **Maiden race retry.** A transient failure on a maiden race attempt was marking "checked today" before the attempt completed, so the bot wouldn't retry that day even when the failure was just bad timing. Now only marks the day done after actual completion.
+- **The freeze-recovery no longer misfires on long loading screens.** The old 45-second trigger could fire during legitimately slow loads or popup chains. It now waits 3 minutes and properly counts between-run activity as progress, so it never trips during normal play.
+- **Distance preference defaulting wrong on aptitude ties.** Characters with two A-rank distances (like Matikanefukukitaru with Medium=A and Long=A) were trained for Medium even when their preset said Long. All 51 presets now lock in the distance their build intends.
+
+### Documentation
+
+- New `CHARACTER_PRESETS.md` at the repo root — a full reference of every character preset, scenario by scenario. Build identity, active stat targets, training config, full skill priority list with names (not just IDs), racing settings, Trackblazer scenario overrides, and event override counts. Useful if you want to see exactly what the bot is going to do for any character without diving into the JSON.
+
+---
+
 ## [1.1.0] - 2026-04-14
 
 ### Added
@@ -130,6 +175,7 @@ The fork already differed substantially from upstream v5.4.8 on day one. The lis
 
 ---
 
+[1.2.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.2.0
 [1.1.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.1.0
 [1.0.2]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.0.2
 [1.0.1]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.0.1
