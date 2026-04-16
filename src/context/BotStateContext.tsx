@@ -258,17 +258,27 @@ export const defaultSettings: Settings = {
         improvementThreshold: 50.0,
     },
     skills: {
-        enableSkillPointCheck: false,
-        skillPointCheck: 750,
+        // Out-of-box defaults for a first-time user who hasn't selected a character preset.
+        // These match the safe baseline applied to every character preset: mid-run buying
+        // enabled with a conservative 1200 SP threshold (triggers only in late Senior year,
+        // when hints have accumulated and skills are cheaper) plus preFinals + careerComplete
+        // as safety nets. Strategy is optimize_skills across all three plans so the bot filters
+        // by the trainee's aptitudes and sorts by community-tier ranking from skills.json.
+        // enableBuyInheritedUniqueSkills: true lets the bot buy inherited unique skills when
+        // affordable — these are almost always worth it. enableBuyNegativeSkills stays false
+        // so the bot never buys debuffs. Previously all three plans were disabled by default,
+        // meaning a first-time user who never picked a preset got zero skill buying at all.
+        enableSkillPointCheck: true,
+        skillPointCheck: 1200,
         preferredRunningStyle: "inherit",
         preferredTrackDistance: "inherit",
         preferredTrackSurface: "no_preference",
         plans: Object.keys(skillPlanSettingsPages).reduce(
             (acc, curr) => {
                 acc[curr] = {
-                    enabled: false,
-                    strategy: "default",
-                    enableBuyInheritedUniqueSkills: false,
+                    enabled: true,
+                    strategy: "optimize_skills",
+                    enableBuyInheritedUniqueSkills: true,
                     enableBuyNegativeSkills: false,
                     plan: "",
                 }
