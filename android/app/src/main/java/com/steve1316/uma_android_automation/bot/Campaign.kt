@@ -207,6 +207,18 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     protected var bHasCheckedDateThisTurn: Boolean = false
 
+    /**
+     * Per-turn caches for race-day detection. Computed once at the top of [handleMainScreen]
+     * (where we already have a fresh main-screen bitmap from [performTurnStartUpdates]) and
+     * reused by [decideNextAction] and the post-decision tail of [handleMainScreen]. Prevents
+     * three separate template-match scans per turn for the same two checks.
+     *
+     * Lifetime: same as [bHasCheckedDateThisTurn]. Reset to false at the start of every fresh
+     * turn so that stale results from a prior turn never leak into the new turn's decisions.
+     */
+    protected var cachedScheduledRaceDay: Boolean = false
+    protected var cachedMandatoryRaceDay: Boolean = false
+
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // Debug Tests
@@ -837,12 +849,18 @@ abstract class Campaign(game: Game) : Task(game) {
      * @return True if the bot is at the Main screen, false otherwise.
      */
     open fun checkMainScreen(): Boolean {
+        // Single screenshot shared across all four checks. Each check otherwise grabs its own
+        // bitmap, costing 4 MediaProjection screenshots per Campaign.process() iteration.
+        val bitmap: Bitmap = game.imageUtils.getSourceBitmap()
+
         // If there is a dialog on the screen, then we are not directly on the Main screen.
-        if (DialogUtils.check(game.imageUtils)) {
+        if (DialogUtils.check(game.imageUtils, sourceBitmap = bitmap)) {
             return false
         }
 
-        return ButtonHomeFullStats.check(game.imageUtils) && IconTazuna.check(game.imageUtils) && ButtonTraining.check(game.imageUtils)
+        return ButtonHomeFullStats.check(game.imageUtils, sourceBitmap = bitmap) &&
+            IconTazuna.check(game.imageUtils, sourceBitmap = bitmap) &&
+            ButtonTraining.check(game.imageUtils, sourceBitmap = bitmap)
     }
 
     /**
@@ -1618,6 +1636,11 @@ abstract class Campaign(game: Game) : Task(game) {
             val bIsScheduledRaceDayInitial = LabelScheduledRace.check(game.imageUtils, sourceBitmap = sourceBitmap)
             val bIsMandatoryRaceDayInitial = IconRaceDayRibbon.check(game.imageUtils, sourceBitmap = sourceBitmap)
 
+            // Cache for downstream consumers (decideNextAction, executeAction tail) so we
+            // don't re-run the same template scans 2-3 more times per turn.
+            cachedScheduledRaceDay = bIsScheduledRaceDayInitial
+            cachedMandatoryRaceDay = bIsMandatoryRaceDayInitial
+
             if (!date.bIsFinaleSeason && !bIsMandatoryRaceDayInitial && !bIsScheduledRaceDayInitial && bNeedToCheckFans && !bHasTriedCheckingFansToday) {
                 openFansDialog()
                 if (tryHandleAllDialogs()) return true
@@ -1641,8 +1664,10 @@ abstract class Campaign(game: Game) : Task(game) {
 
         // Decision-making process.
         val action = decideNextAction()
-        val bIsScheduledRaceDay = LabelScheduledRace.check(game.imageUtils)
-        return executeAction(action, bIsScheduledRaceDay)
+        // Reuse the cached value populated above instead of re-running LabelScheduledRace.check —
+        // nothing between performTurnStartUpdates() and here would have changed scheduled-race
+        // status (no game-advancing actions occurred), and the third scan was redundant.
+        return executeAction(action, cachedScheduledRaceDay)
     }
 
     /**
@@ -1809,11 +1834,12 @@ abstract class Campaign(game: Game) : Task(game) {
      * @return The decided [MainScreenAction].
      */
     open fun decideNextAction(): MainScreenAction {
+        // Use cached race-day flags populated in handleMainScreen rather than re-running the
+        // same two template scans. The bitmap below is still needed for downstream checks
+        // (checkInjury, shouldRecoverMood) that haven't been migrated to the cache yet.
         val sourceBitmap = game.imageUtils.getSourceBitmap()
-        val bIsScheduledRaceDay = LabelScheduledRace.check(game.imageUtils, sourceBitmap = sourceBitmap)
-        val bIsMandatoryRaceDay = IconRaceDayRibbon.check(game.imageUtils, sourceBitmap = sourceBitmap)
 
-        if (bIsMandatoryRaceDay || bIsScheduledRaceDay) {
+        if (cachedMandatoryRaceDay || cachedScheduledRaceDay) {
             return MainScreenAction.RACE
         }
 
@@ -1901,8 +1927,6 @@ abstract class Campaign(game: Game) : Task(game) {
             return true
         }
 
-        val sourceBitmap = game.imageUtils.getSourceBitmap()
-
         when (action) {
             MainScreenAction.RACE -> {
                 MessageLog.i(TAG, "[INFO] All checks are cleared for racing.")
@@ -1919,13 +1943,15 @@ abstract class Campaign(game: Game) : Task(game) {
             }
 
             MainScreenAction.REST -> {
-                recoverEnergy(sourceBitmap)
+                // Capture the bitmap only when REST/RECOVER_MOOD actually use it. RACE/TRAIN
+                // (the vast majority of turns) do not need a fresh screenshot here.
+                recoverEnergy(game.imageUtils.getSourceBitmap())
                 bHasCheckedDateThisTurn = false
             }
 
             MainScreenAction.RECOVER_MOOD -> {
                 val target = forcedTargetMood ?: Mood.GOOD
-                if (performMoodRecovery(sourceBitmap, targetMood = target)) {
+                if (performMoodRecovery(game.imageUtils.getSourceBitmap(), targetMood = target)) {
                     bHasCheckedDateThisTurn = false
                     forcedTargetMood = null
                 }
