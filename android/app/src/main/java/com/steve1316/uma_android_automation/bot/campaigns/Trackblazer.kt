@@ -1756,7 +1756,12 @@ class Trackblazer(game: Game) : Campaign(game) {
             val reason = "Recovering mood (current: ${trainee.mood}, energy: ${trainee.energy}% < 70%)."
             if (clickItemPlusButton(itemName, entry, "[TRACKBLAZER] Queuing $itemName for mood recovery.", nextInventory, reason = reason)) {
                 val oldMood = trainee.mood
-                trainee.mood = if (itemName == "Berry Sweet Cupcake") Mood.GOOD else Mood.NORMAL
+                // Cupcakes are additive, not absolute: Plain = +1 mood, Berry Sweet = +2.
+                // Mood.increment() caps at GREAT, so over-stacking is safe.
+                trainee.mood = trainee.mood.increment()
+                if (itemName == "Berry Sweet Cupcake") {
+                    trainee.mood = trainee.mood.increment()
+                }
                 MessageLog.i(TAG, "[TRACKBLAZER] Trainee mood updated: $oldMood -> ${trainee.mood}.")
                 return reason
             }

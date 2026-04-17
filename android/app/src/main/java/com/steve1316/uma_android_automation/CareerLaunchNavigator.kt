@@ -841,8 +841,13 @@ class CareerLaunchNavigator(private val context: Context) {
             // Check for a second "Start Career!" confirmation screen.
             if (ButtonStartCareer.check(iu) || ButtonStartCareerOffset.check(iu)) {
                 MessageLog.i(TAG, "[NAV] Second 'Start Career!' confirmation detected. Clicking...")
-                ButtonStartCareer.click(iu)
-                ButtonStartCareerOffset.click(iu)
+                // Short-circuit: if the primary template clicks the button successfully, do NOT
+                // also fire the offset variant. Without this guard, the offset click lands on
+                // whatever screen appeared after the first click (cinematic, dialog) and produces
+                // an unintended early tap.
+                if (!ButtonStartCareer.click(iu)) {
+                    ButtonStartCareerOffset.click(iu)
+                }
                 waitSafe(3.0)
             }
             return TransitionResult.Continue
