@@ -277,27 +277,39 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
     fun detectSkillPoints(bitmap: Bitmap? = null): Int? {
         val srcBitmap: Bitmap = bitmap ?: game.imageUtils.getSourceBitmap()
 
-        // Load the template for the Skill Points label.
-        val templateBitmap: Bitmap? = LabelSkillListScreenSkillPoints.template.getBitmap(game.imageUtils)
-        if (templateBitmap == null) {
-            MessageLog.e(TAG, "[ERROR] detectSkillPoints:: Failed to load template bitmap for LabelSkillListScreenSkillPoints.")
+        // Two color variants of the Skill Points banner: legacy yellow-green and the
+        // post-Trackblazer-refresh teal/mint (career-end and possibly elsewhere). Same shape/size,
+        // so we try each: strict confidence first, then relaxed 0.60 fallback per variant.
+        val v1Bitmap: Bitmap? = LabelSkillListScreenSkillPoints.template.getBitmap(game.imageUtils)
+        val v2Bitmap: Bitmap? = LabelSkillListScreenSkillPointsV2.template.getBitmap(game.imageUtils)
+        if (v1Bitmap == null && v2Bitmap == null) {
+            MessageLog.e(TAG, "[ERROR] detectSkillPoints:: Failed to load both Skill Points label template bitmaps.")
             return null
         }
 
-        // Find the label on the screen. Try strict confidence first; if that fails, fall back to
-        // the same relaxed threshold used in checkSkillListScreen so that template drift doesn't
-        // cause SP to be silently abandoned. The OCR region (1.5x label width below) is wide
-        // enough to absorb a small location mismatch, and the digit parse on the OCR result
-        // rejects garbage rather than corrupting the stored skill point count.
-        var point: Point? = LabelSkillListScreenSkillPoints.findImageWithBitmap(game.imageUtils, srcBitmap)
-        if (point == null) {
-            point = LabelSkillListScreenSkillPoints.findImageWithBitmap(game.imageUtils, srcBitmap, confidence = 0.60)
-            if (point != null) {
-                MessageLog.w(TAG, "[WARN] detectSkillPoints:: LabelSkillListScreenSkillPoints matched only at relaxed threshold; using fallback location.")
+        var point: Point? = null
+        var templateBitmap: Bitmap? = null
+        for ((label, component, tmplBitmap) in listOf(
+            Triple("v1", LabelSkillListScreenSkillPoints, v1Bitmap),
+            Triple("v2", LabelSkillListScreenSkillPointsV2, v2Bitmap),
+        )) {
+            if (tmplBitmap == null) continue
+            val strict = component.findImageWithBitmap(game.imageUtils, srcBitmap)
+            if (strict != null) {
+                point = strict
+                templateBitmap = tmplBitmap
+                break
+            }
+            val relaxed = component.findImageWithBitmap(game.imageUtils, srcBitmap, confidence = 0.60)
+            if (relaxed != null) {
+                MessageLog.w(TAG, "[WARN] detectSkillPoints:: SkillPoints label ($label) matched only at relaxed threshold; using fallback location.")
+                point = relaxed
+                templateBitmap = tmplBitmap
+                break
             }
         }
-        if (point == null) {
-            MessageLog.e(TAG, "[ERROR] detectSkillPoints:: Failed to find LabelSkillListScreenSkillPoints (tried both strict and relaxed thresholds).")
+        if (point == null || templateBitmap == null) {
+            MessageLog.e(TAG, "[ERROR] detectSkillPoints:: Failed to find Skill Points label (tried both v1+v2 templates at strict and relaxed thresholds).")
             return null
         }
 
@@ -757,17 +769,14 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
     fun checkSkillListScreen(bitmap: Bitmap? = null): Boolean {
         val srcBitmap: Bitmap = bitmap ?: game.imageUtils.getSourceBitmap()
 
-        // Verify the presence of key UI elements.
-        // The Skill Points label template can match below the global confidence threshold
-        // on some skill-list-screen variants (e.g. post-career), so we use a lower threshold
-        // here only for screen detection. The Full Stats button check stays at the global
-        // threshold so the dual check still rejects unrelated screens.
-        // The same label is used by detectSkillPoints() for OCR localization where a wrong
-        // location would corrupt the skill point read; do not lower confidence there.
+        // Full Stats button stays at the global confidence threshold so the dual check still rejects
+        // unrelated screens. The Skill Points label can match below threshold across its yellow-green
+        // vs teal/mint variants, so use a lowered threshold and try the v2 (teal) template too.
         val labelConfidence = 0.60
-        if (ButtonSkillListFullStats.check(game.imageUtils, sourceBitmap = srcBitmap) &&
-            LabelSkillListScreenSkillPoints.check(game.imageUtils, sourceBitmap = srcBitmap, confidence = labelConfidence)
-        ) {
+        val labelMatched = { LabelSkillListScreenSkillPoints.check(game.imageUtils, sourceBitmap = srcBitmap, confidence = labelConfidence) ||
+            LabelSkillListScreenSkillPointsV2.check(game.imageUtils, sourceBitmap = srcBitmap, confidence = labelConfidence) }
+
+        if (ButtonSkillListFullStats.check(game.imageUtils, sourceBitmap = srcBitmap) && labelMatched()) {
             return true
         }
 
@@ -777,10 +786,10 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         }
 
         // Re-check if we are at the SkillList screen after handling dialogs.
-        return (
-            ButtonSkillListFullStats.check(game.imageUtils) &&
-                LabelSkillListScreenSkillPoints.check(game.imageUtils, confidence = labelConfidence)
-        )
+        val freshBitmap: Bitmap = game.imageUtils.getSourceBitmap()
+        val freshLabelMatched = LabelSkillListScreenSkillPoints.check(game.imageUtils, sourceBitmap = freshBitmap, confidence = labelConfidence) ||
+            LabelSkillListScreenSkillPointsV2.check(game.imageUtils, sourceBitmap = freshBitmap, confidence = labelConfidence)
+        return ButtonSkillListFullStats.check(game.imageUtils, sourceBitmap = freshBitmap) && freshLabelMatched
     }
 
     /**
