@@ -15,7 +15,9 @@ object ButtonAgenda : ButtonInterface {
 }
 
 object ButtonAutoSelect : ButtonInterface {
-    override val template = Template("components/button/auto_select")
+    // Auto-Select on the Legacy Select screen renders mid-bottom; restricting to bottomHalf
+    // skips scanning the top half of a 1920px screen every check without any loss of accuracy.
+    override val template = Template("components/button/auto_select", region = Region.bottomHalf)
 }
 
 object ButtonAutoFill : ButtonInterface {
@@ -99,7 +101,9 @@ object ButtonGiveUp : ButtonInterface {
 }
 
 object ButtonToHome : ButtonInterface {
-    override val template = Template("components/button/to_home")
+    // The "To Home" button only ever appears as a dialog action on the Career Complete dialog,
+    // which renders in the lower half of the screen.
+    override val template = Template("components/button/to_home", region = Region.bottomHalf)
 }
 
 object ButtonCareerHome : ButtonInterface {
@@ -247,11 +251,13 @@ object ButtonRestore : ButtonInterface {
 }
 
 object ButtonRetry : ButtonInterface {
-    override val template = Template("components/button/retry")
+    // Retry only appears as a dialog action (connection error, race retry) — always bottomHalf.
+    override val template = Template("components/button/retry", region = Region.bottomHalf)
 }
 
 object ButtonResume : ButtonInterface {
-    override val template = Template("components/button/resume")
+    // Resume only appears on the Continue Career dialog (bottom-of-screen dialog action).
+    override val template = Template("components/button/resume", region = Region.bottomHalf)
 }
 
 object ButtonSave : ButtonInterface {
@@ -357,7 +363,8 @@ object ButtonRaceStrategyEnd : ButtonInterface {
 // More complex buttons
 
 object ButtonMenuBarHomeSelected : ButtonInterface {
-    override val template = Template("components/button/menu_bar_home_selected")
+    // The game's bottom nav bar renders in the bottom ~10% of the screen on every menu.
+    override val template = Template("components/button/menu_bar_home_selected", region = Region.bottomHalf)
 }
 
 object ButtonMenuBarHomeUnselected : ButtonInterface {
