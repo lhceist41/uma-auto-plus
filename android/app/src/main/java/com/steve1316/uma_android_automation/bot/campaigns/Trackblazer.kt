@@ -874,7 +874,9 @@ class Trackblazer(game: Game) : Campaign(game) {
      */
     fun updateShopCoins(): Boolean {
         MessageLog.i(TAG, "[TRACKBLAZER] Updating current amount of Shop Coins...")
-        game.wait(3.0)
+        // Brief settle wait for popup-dismiss animations; the find(tries=30) below already polls
+        // with its own per-try delay, so a longer pre-wait would just be dead air.
+        game.wait(1.0)
         val (trainingItemsButtonLocation, sourceBitmap) = ButtonTrainingItems.find(game.imageUtils, tries = 30)
         if (trainingItemsButtonLocation == null) {
             MessageLog.e(TAG, "[ERROR] updateShopCoins:: Failed to find Training Items button.")
