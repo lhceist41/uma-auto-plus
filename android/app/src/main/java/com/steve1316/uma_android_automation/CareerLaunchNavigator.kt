@@ -276,17 +276,28 @@ class CareerLaunchNavigator(private val context: Context) {
     private fun detectScreenState(): LaunchScreenState {
         val bitmap = iu.getSourceBitmap()
 
+        // Detection order is performance-sensitive: each check on a non-matching screen still
+        // costs one OpenCV TM_CCOEFF_NORMED scan. We frontload the goal state, then the most
+        // common transition states (which dominate iteration count during between-run nav),
+        // then the discriminating-but-unique buttons that could otherwise hide a generic
+        // POST_RUN_RESULTS Next/Ok/Confirm/Close match underneath them.
+        //
+        // Hard ordering constraints:
+        //   - ACTIVE_TRAINING_MENU first: it's the success/exit state.
+        //   - LEGACY_SELECT_SCREEN must precede POST_RUN_RESULTS Next: Legacy Select shows a
+        //     greyed Next that template-matches but is non-clickable; misclassifying as
+        //     POST_RUN_RESULTS would trap the navigator in a stuck-iteration loop.
+        //   - HOME_SCREEN (CareerHome) must precede POST_RUN_RESULTS: the home screen has no
+        //     Next/Ok/Confirm/Close but other screens with those buttons should not be
+        //     misclassified as HOME by the weaker MenuBarHomeSelected fallback at the bottom.
+
         // GOAL STATE: Active training menu — Training or Rest button visible.
         if (ButtonTraining.check(iu, sourceBitmap = bitmap) || ButtonRest.check(iu, sourceBitmap = bitmap)) {
             return LaunchScreenState.ACTIVE_TRAINING_MENU
         }
 
-        // "Continue Career" dialog — Resume button takes us straight back into an active career.
-        if (ButtonResume.check(iu, sourceBitmap = bitmap)) {
-            return LaunchScreenState.CONTINUE_CAREER_DIALOG
-        }
-
         // Career Complete dialog — "To Home" button is uniquely present on this screen.
+        // Common immediately after a career run completes.
         if (ButtonToHome.check(iu, sourceBitmap = bitmap)) {
             return LaunchScreenState.CAREER_COMPLETE_DIALOG
         }
@@ -297,6 +308,34 @@ class CareerLaunchNavigator(private val context: Context) {
         // from the home screen but still have the bottom nav visible.
         if (ButtonCareerHome.check(iu, sourceBitmap = bitmap)) {
             return LaunchScreenState.HOME_SCREEN
+        }
+
+        // Legacy Select screen — Auto-Select button (green pill, optionally under a pink
+        // Racing Carnival Underway banner). Checked BEFORE the generic POST_RUN_RESULTS Next
+        // check because Next on Legacy Select is greyed out / non-clickable until Auto-Select
+        // populates both legacy slots; clicking Next there is a no-op and would trap the
+        // navigator in a 15-iteration stuck loop.
+        if (ButtonAutoSelect.check(iu, sourceBitmap = bitmap)) {
+            return LaunchScreenState.LEGACY_SELECT_SCREEN
+        }
+
+        // POST_RUN_RESULTS — generic post-run / between-screens dialog with Next, OK, Confirm,
+        // or Close as the primary advance button. This is the most common state during
+        // between-run navigation (10-20 iterations per career), so we check it early.
+        // Consolidated into a single short-circuit `||` chain so a Next match avoids running
+        // the other three template scans. Order within the chain is most-common-first.
+        if (ButtonNext.check(iu, sourceBitmap = bitmap) ||
+            ButtonOk.check(iu, sourceBitmap = bitmap) ||
+            ButtonConfirm.check(iu, sourceBitmap = bitmap) ||
+            ButtonClose.check(iu, sourceBitmap = bitmap)
+        ) {
+            return LaunchScreenState.POST_RUN_RESULTS
+        }
+
+        // "Continue Career" dialog — Resume button takes us straight back into an active career.
+        // Rare but discriminating.
+        if (ButtonResume.check(iu, sourceBitmap = bitmap)) {
+            return LaunchScreenState.CONTINUE_CAREER_DIALOG
         }
 
         // Deck screen has the unique "Support Formation" purple banner at the top.
@@ -348,30 +387,6 @@ class CareerLaunchNavigator(private val context: Context) {
         // "Complete Career" confirmation dialog — Finish button is unique to this screen.
         if (ButtonFinish.check(iu, sourceBitmap = bitmap)) {
             return LaunchScreenState.COMPLETE_CAREER_CONFIRMATION
-        }
-
-        // Legacy Select screen — Auto-Select button (green pill, optionally under a pink
-        // Racing Carnival Underway banner). Checked BEFORE the generic POST_RUN_RESULTS Next
-        // check because Next on Legacy Select is greyed out / non-clickable until Auto-Select
-        // populates both legacy slots; clicking Next there is a no-op and would trap the
-        // navigator in a 15-iteration stuck loop.
-        if (ButtonAutoSelect.check(iu, sourceBitmap = bitmap)) {
-            return LaunchScreenState.LEGACY_SELECT_SCREEN
-        }
-
-        // Next button — on Scenario Select / Trainee Select / post-run result screens.
-        if (ButtonNext.check(iu, sourceBitmap = bitmap)) {
-            return LaunchScreenState.POST_RUN_RESULTS
-        }
-
-        // Post-run: OK or Confirm on intermediate result dialogs.
-        if (ButtonOk.check(iu, sourceBitmap = bitmap) || ButtonConfirm.check(iu, sourceBitmap = bitmap)) {
-            return LaunchScreenState.POST_RUN_RESULTS
-        }
-
-        // Post-run: Close button as a last-resort result screen indicator.
-        if (ButtonClose.check(iu, sourceBitmap = bitmap)) {
-            return LaunchScreenState.POST_RUN_RESULTS
         }
 
         // Last-resort home screen detection — menu bar Home tab is selected but no other
