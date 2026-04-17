@@ -82,6 +82,8 @@ class CareerLaunchNavigator(private val context: Context) {
         TRAINEE_SETUP,
         /** Inheritance selection popup. */
         INHERITANCE_SCREEN,
+        /** Legacy / Inheritance selection screen with Auto-Select button (and Carnival event banner during the Racing Carnival event). The Next button is disabled until Auto-Select fills both legacy slots. */
+        LEGACY_SELECT_SCREEN,
         /** Support card deck with Auto-Select / Reset buttons. */
         SUPPORT_DECK_SCREEN,
         /** "Start Career!" button visible for final confirmation. */
@@ -106,6 +108,11 @@ class CareerLaunchNavigator(private val context: Context) {
     // Session-scoped flag: Auto-Fill has already been clicked in this navigation session.
     // Prevents infinite loops when the Auto-Fill button remains visible after clicking it.
     private var autoFillAlreadyDone: Boolean = false
+
+    // Session-scoped flag: Auto-Select on the Legacy Select screen has already been clicked.
+    // The Auto-Select button stays visible after a successful run — without this guard the
+    // navigator would re-enter Legacy Select handling each iteration instead of clicking Next.
+    private var legacyAutoSelectAlreadyDone: Boolean = false
 
     // Session-scoped flag: Skip toggle has already been maxed (Skip >>) in this session.
     private var skipToggleAlreadyDone: Boolean = false
@@ -144,6 +151,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // Reset session-scoped flags for this navigation run.
         autoFillAlreadyDone = false
         skipToggleAlreadyDone = false
+        legacyAutoSelectAlreadyDone = false
 
         if (!ensureInitialised()) {
             return NavigationResult(
@@ -342,17 +350,18 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.COMPLETE_CAREER_CONFIRMATION
         }
 
-        // Next button — on Scenario Select / Trainee Select / Legacy Select / post-run result
-        // screens. Check BEFORE SUPPORT_DECK_SCREEN because Legacy Select also has
-        // Auto-Select/Reset buttons but the primary action is Next, not Auto-Select.
-        if (ButtonNext.check(iu, sourceBitmap = bitmap)) {
-            return LaunchScreenState.POST_RUN_RESULTS
+        // Legacy Select screen — Auto-Select button (green pill, optionally under a pink
+        // Racing Carnival Underway banner). Checked BEFORE the generic POST_RUN_RESULTS Next
+        // check because Next on Legacy Select is greyed out / non-clickable until Auto-Select
+        // populates both legacy slots; clicking Next there is a no-op and would trap the
+        // navigator in a 15-iteration stuck loop.
+        if (ButtonAutoSelect.check(iu, sourceBitmap = bitmap)) {
+            return LaunchScreenState.LEGACY_SELECT_SCREEN
         }
 
-        // Fallback support deck detection — AutoSelect template matched but Reset didn't
-        // (unusual, but possible if Reset template has display variants).
-        if (ButtonAutoSelect.check(iu, sourceBitmap = bitmap)) {
-            return LaunchScreenState.SUPPORT_DECK_SCREEN
+        // Next button — on Scenario Select / Trainee Select / post-run result screens.
+        if (ButtonNext.check(iu, sourceBitmap = bitmap)) {
+            return LaunchScreenState.POST_RUN_RESULTS
         }
 
         // Post-run: OK or Confirm on intermediate result dialogs.
@@ -411,6 +420,7 @@ class CareerLaunchNavigator(private val context: Context) {
             LaunchScreenState.COMPLETE_CAREER_CONFIRMATION -> handleCompleteCareerConfirmation()
             LaunchScreenState.POST_RUN_RESULTS -> handlePostRunResults()
             LaunchScreenState.CAREER_COMPLETE_DIALOG -> handleCareerCompleteDialog()
+            LaunchScreenState.LEGACY_SELECT_SCREEN -> handleLegacySelectScreen()
             LaunchScreenState.PRE_RUN_CONFIRMATION -> handlePreRunConfirmation()
             LaunchScreenState.SUPPORT_DECK_SCREEN -> handleSupportDeckScreen(reuseLastLaunchSetup, autoFillSupports)
             LaunchScreenState.CINEMATIC_INTRO -> handleCinematicIntro()
@@ -766,6 +776,63 @@ class CareerLaunchNavigator(private val context: Context) {
      * Detection: ButtonStartCareer / ButtonStartCareerOffset template match.
      * Transition: ButtonStartCareer.click() (template-matched).
      */
+    /**
+     * LEGACY_SELECT_SCREEN: Click Auto-Select to populate both legacy slots, tick all unchecked
+     * options on the resulting Confirm Auto-Select dialog (Include Guests, plus Prioritize
+     * Carnival Bonus Sparks during the Racing Carnival event), then click OK. After the legacies
+     * are populated the Next button becomes active and the regular POST_RUN_RESULTS handler
+     * advances the flow on the next iteration.
+     *
+     * Detection: ButtonAutoSelect template match.
+     * Transition: ButtonAutoSelect.click() -> Checkbox.click() x N -> ButtonOk.click() -> ButtonNext (next iteration).
+     */
+    private fun handleLegacySelectScreen(): TransitionResult {
+        if (legacyAutoSelectAlreadyDone) {
+            MessageLog.i(TAG, "[NAV] Legacy Auto-Select already done this session. Clicking Next to advance...")
+            if (ButtonNext.click(iu)) {
+                waitSafe(2.0)
+                return TransitionResult.Continue
+            }
+            return TransitionResult.Failed(
+                reason = "LEGACY_SELECT_SCREEN detected after Auto-Select but ButtonNext click failed.",
+                transition = "LEGACY_SELECT_SCREEN -> SUPPORT_DECK_SCREEN",
+                recommendedAction = "Manually click Next on the Legacy Select screen and restart the queue.",
+            )
+        }
+
+        MessageLog.i(TAG, "[NAV] On Legacy Select screen. Clicking Auto-Select...")
+        if (!ButtonAutoSelect.click(iu)) {
+            return TransitionResult.Failed(
+                reason = "LEGACY_SELECT_SCREEN detected (ButtonAutoSelect matched) but click failed.",
+                transition = "LEGACY_SELECT_SCREEN -> Confirm Auto-Select dialog",
+                recommendedAction = "Manually click Auto-Select and restart the queue.",
+            )
+        }
+        // Mark as done even if subsequent steps fail — the button stays visible after click,
+        // so without this guard the next iteration would re-enter this handler.
+        legacyAutoSelectAlreadyDone = true
+        waitSafe(2.0)
+
+        // Tick all unchecked checkboxes on the Confirm Auto-Select dialog. The dialog has 1 or
+        // 2 checkboxes depending on whether the Racing Carnival event is active. Iterate while
+        // an unchecked Checkbox can be clicked, with a safety cap of 3 iterations.
+        for (i in 0 until 3) {
+            if (!Checkbox.click(iu, tries = 1)) break
+            waitSafe(0.4)
+        }
+
+        if (ButtonOk.click(iu)) {
+            waitSafe(2.0)
+            return TransitionResult.Continue
+        }
+
+        return TransitionResult.Failed(
+            reason = "Confirm Auto-Select dialog OK click failed after ticking checkboxes.",
+            transition = "LEGACY_SELECT_SCREEN -> next screen",
+            recommendedAction = "Manually click OK on the Confirm Auto-Select dialog and restart the queue.",
+        )
+    }
+
     private fun handlePreRunConfirmation(): TransitionResult {
         MessageLog.i(TAG, "[NAV] Clicking 'Start Career!'...")
 
