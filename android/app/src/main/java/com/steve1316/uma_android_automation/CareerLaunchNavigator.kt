@@ -167,7 +167,16 @@ class CareerLaunchNavigator(private val context: Context) {
         var currentState = LaunchScreenState.POST_RUN_RESULTS
         var consecutiveUnknowns = 0
         var stuckInStateCount = 0
-        var lastAdvancingState: LaunchScreenState? = null
+        // Secondary bail-out: total iterations since the last time we made meaningful progress
+        // (i.e. reached a state we hadn't seen yet OR actually advanced to a new state). The
+        // per-state `stuckInStateCount` resets whenever the detected state changes, so a screen
+        // that oscillates between two misdetected states (e.g. POST_RUN_RESULTS ↔ UNKNOWN, or
+        // Confirm dialog flickering on/off) would reset it every cycle and never trigger.
+        // This counter only resets when we actually enter a NEW state, so oscillation still
+        // fails cleanly instead of wasting MAX_DETECTION_ATTEMPTS iterations.
+        var iterationsWithoutProgress = 0
+        val seenStates = mutableSetOf<LaunchScreenState>()
+        val progressBailThreshold = MAX_STUCK_ITERATIONS * 2
 
         for (attempt in 0 until MAX_DETECTION_ATTEMPTS) {
             if (!BotService.isRunning || StartModule.queueStopRequested) {
@@ -203,7 +212,25 @@ class CareerLaunchNavigator(private val context: Context) {
                     }
                 } else {
                     stuckInStateCount = 0
-                    lastAdvancingState = detectedState
+                }
+                // Progress counter: resets only when we enter a state we haven't seen this
+                // navigation session yet. Just oscillating between known states does NOT reset.
+                if (seenStates.add(detectedState)) {
+                    iterationsWithoutProgress = 0
+                } else if (detectedState != LaunchScreenState.ACTIVE_TRAINING_MENU) {
+                    iterationsWithoutProgress++
+                    if (iterationsWithoutProgress >= progressBailThreshold) {
+                        val screenshotPath = captureFailureScreenshot("no_progress_${detectedState.name}")
+                        return NavigationResult(
+                            success = false,
+                            lastDetectedState = detectedState.name,
+                            failureReason = "Navigation made no forward progress for $progressBailThreshold iterations (oscillating between ${seenStates.joinToString()}). Bailing before MAX_DETECTION_ATTEMPTS timeout.",
+                            failedTransition = "${currentState.name} -> ${detectedState.name}",
+                            isRecoverable = true,
+                            recommendedAction = "Manually navigate past the current screen loop and restart the queue.",
+                            screenshotPath = screenshotPath,
+                        )
+                    }
                 }
                 currentState = detectedState
                 consecutiveUnknowns = 0
@@ -660,19 +687,22 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.i(TAG, "[NAV] [HOME] Detector 2 did not match.")
         }
 
-        // Detector 3: OCR scan for "CAREER" text across the bottom third of the screen.
+        // Detector 3: OCR scan for "CAREER" text near the CAREER button's known position.
         // The CAREER button area changes decorations (event banners, character art) but
         // the "CAREER" text itself is always present.
         MessageLog.i(TAG, "[NAV] [HOME] Trying detector 3: OCR scan for 'CAREER' text...")
         try {
             val screenWidth = bitmap.width
             val screenHeight = bitmap.height
-            // Scan the bottom third of the screen, full width.
-            // CAREER button sits roughly at 75-85% height but decorations shift it.
-            // CAREER text is at roughly 85-88% height. Scan 80-92% to give OCR room.
-            val ocrX = 0
+            // The CAREER button sits at ~75% width. Limit the OCR region to 55%-95% width so
+            // decorative "Event" banners on the left side of the screen (common during
+            // seasonal events / campaign promos) cannot false-trigger the Event fallback
+            // below — which would otherwise fire a blind tap at the fixed CAREER button
+            // coordinates and navigate the bot to the wrong screen.
+            // Vertically, CAREER text is at 85-88% height. Scan 80-92% to give OCR room.
+            val ocrX = (screenWidth * 0.55).toInt()
             val ocrY = (screenHeight * 0.80).toInt()
-            val ocrW = screenWidth
+            val ocrW = (screenWidth * 0.40).toInt()
             val ocrH = (screenHeight * 0.12).toInt()
 
             val ocrText = iu.performOCROnRegion(

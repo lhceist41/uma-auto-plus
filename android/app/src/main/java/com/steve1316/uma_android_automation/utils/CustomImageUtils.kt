@@ -186,13 +186,14 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @return An array of points for all occurrences found.
      */
     fun findAllWithBitmap(templateName: String, sourceBitmap: Bitmap, region: IntArray = intArrayOf(0, 0, 0, 0), customConfidence: Double = 0.0): ArrayList<Point> {
-        var templateBitmap: Bitmap?
+        var templateBitmap: Bitmap? = null
         context.assets?.open("images/$templateName.png").use { inputStream ->
             templateBitmap = BitmapFactory.decodeStream(inputStream)
         }
+        val localTemplate: Bitmap = templateBitmap ?: return arrayListOf()
 
-        if (templateBitmap != null) {
-            val matchLocations = matchAll(sourceBitmap, templateBitmap, region = region, customConfidence = customConfidence)
+        try {
+            val matchLocations = matchAll(sourceBitmap, localTemplate, region = region, customConfidence = customConfidence)
 
             // Sort the match locations by ascending x and y coordinates.
             matchLocations.sortBy { it.x }
@@ -205,9 +206,14 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
             }
 
             return matchLocations
+        } finally {
+            // Free the decoded template bitmap. Without this, every template check leaks a
+            // small native allocation; over multi-hour queued sessions this accumulates and
+            // can trigger OOM / LMK kills even though the Java heap stays healthy.
+            if (!localTemplate.isRecycled) {
+                localTemplate.recycle()
+            }
         }
-
-        return arrayListOf()
     }
 
     /**
@@ -223,13 +229,14 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @return The location of the first occurrence found, or null if missing.
      */
     fun findImageWithBitmap(templateName: String, sourceBitmap: Bitmap, region: IntArray = intArrayOf(0, 0, 0, 0), customConfidence: Double = 0.0, suppressError: Boolean = false): Point? {
-        var templateBitmap: Bitmap?
+        var templateBitmap: Bitmap? = null
         context.assets?.open("images/$templateName.png").use { inputStream ->
             templateBitmap = BitmapFactory.decodeStream(inputStream)
         }
+        val localTemplate: Bitmap = templateBitmap ?: return null
 
-        if (templateBitmap != null) {
-            val matchLocation = match(sourceBitmap, templateBitmap, templateName, region = region, customConfidence = customConfidence).second
+        try {
+            val matchLocation = match(sourceBitmap, localTemplate, templateName, region = region, customConfidence = customConfidence).second
             if (matchLocation == null && !suppressError) {
                 if (debugMode) {
                     MessageLog.e(TAG, "[ERROR] findImageWithBitmap:: Could not find $templateName in the provided source bitmap.")
@@ -238,8 +245,14 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 }
             }
             return matchLocation
+        } finally {
+            // Free the decoded template bitmap. Without this, every template check leaks a
+            // small native allocation; over multi-hour queued sessions this accumulates and
+            // can trigger OOM / LMK kills even though the Java heap stays healthy.
+            if (!localTemplate.isRecycled) {
+                localTemplate.recycle()
+            }
         }
-        return null
     }
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
