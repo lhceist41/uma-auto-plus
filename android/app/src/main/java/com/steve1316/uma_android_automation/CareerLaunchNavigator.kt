@@ -535,6 +535,19 @@ class CareerLaunchNavigator(private val context: Context) {
         MessageLog.i(TAG, "[NAV] On post-run results screen. Clicking detected button...")
         val bitmap = iu.getSourceBitmap()
 
+        // Defense: if the post-career SkillList screen lingered (e.g. SkillPlan failed to detect
+        // the screen and bailed without exiting), the navigator would loop forever clicking the
+        // green Confirm button (which does nothing when no skills are selected). Detect the
+        // SkillList screen via its unique Full Stats button and back out instead.
+        if (ButtonSkillListFullStats.check(iu, sourceBitmap = bitmap)) {
+            MessageLog.w(TAG, "[NAV] SkillList screen detected during POST_RUN_RESULTS. Backing out via ButtonBack to escape Confirm-loop.")
+            if (ButtonBack.click(iu, sourceBitmap = bitmap)) {
+                waitSafe(1.5)
+                return TransitionResult.Continue
+            }
+            MessageLog.w(TAG, "[NAV] ButtonBack click failed on SkillList screen. Falling through to standard post-run handling.")
+        }
+
         val clicked = when {
             ButtonNext.check(iu, sourceBitmap = bitmap) -> ButtonNext.click(iu, sourceBitmap = bitmap)
             ButtonOk.check(iu, sourceBitmap = bitmap) -> ButtonOk.click(iu, sourceBitmap = bitmap)

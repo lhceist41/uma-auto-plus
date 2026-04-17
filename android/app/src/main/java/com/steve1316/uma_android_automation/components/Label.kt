@@ -62,6 +62,16 @@ object LabelSkillListScreenSkillPoints : ComponentInterface {
     override val template = Template("components/label/skill_list_screen_skill_points", region = Region.topHalf)
 }
 
+/**
+ * Teal/mint variant of the Skill Points banner used on the post-career skill purchase screen
+ * (and possibly other variants after the Trackblazer-era UI refresh). Pixel-identical layout
+ * to [LabelSkillListScreenSkillPoints], just with different banner color, so it can be used
+ * interchangeably for screen detection and OCR localization.
+ */
+object LabelSkillListScreenSkillPointsV2 : ComponentInterface {
+    override val template = Template("components/label/skill_list_screen_skill_points_v2", region = Region.topHalf)
+}
+
 object LabelScheduledRace : ComponentInterface {
     override val template = Template("components/label/scheduled_race", region = Region.bottomHalf)
 }
