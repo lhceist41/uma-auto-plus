@@ -40,6 +40,11 @@ const styles = StyleSheet.create({
 
 /**
  * List of scenarios that are supported by the app.
+ *
+ * The first three are Career scenarios (the bot runs a full training career from debut
+ * to finale). The last two are "misc" modes that run a single non-career session:
+ * Daily Races consumes the daily 3 tickets via Multi-Race, Team Trials runs matches
+ * until RP is exhausted. Character presets only apply to career scenarios.
  */
 const scenarios = [
     {
@@ -57,7 +62,20 @@ const scenarios = [
         label: "Trackblazer",
         disabled: false,
     },
+    {
+        value: "Daily Races",
+        label: "Daily Races (misc)",
+        disabled: false,
+    },
+    {
+        value: "Team Trials",
+        label: "Team Trials (misc)",
+        disabled: false,
+    },
 ]
+
+/** Returns true if the given scenario string is a non-career misc task. */
+const isMiscScenario = (scenario: string): boolean => scenario === "Daily Races" || scenario === "Team Trials"
 
 /**
  * The main Home page of the application.

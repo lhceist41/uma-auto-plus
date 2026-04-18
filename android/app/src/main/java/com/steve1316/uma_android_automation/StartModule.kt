@@ -783,21 +783,32 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     Game.cleanupBetweenRuns()
 
                     sendQueueProgressEvent(i, totalRuns, "navigating")
-                    MessageLog.i(TAG, "[QUEUE] Navigating back to career start for next run...")
 
-                    val navigator = CareerLaunchNavigator(context)
-                    val navResult = navigator.navigate(reuseLastLaunchSetup)
+                    // Misc task modes (Daily Races, Team Trials) skip the career
+                    // navigator entirely — their own state machines handle navigation
+                    // from whatever screen the previous run left the game on.
+                    val currentScenario = SettingsHelper.getStringSetting("general", "scenario")
+                    val isMiscQueue = currentScenario == "Daily Races" || currentScenario == "Team Trials"
 
-                    if (!navResult.success) {
-                        MessageLog.e(TAG, "[QUEUE] Navigation failed: ${navResult.failureReason}")
-                        MessageLog.e(TAG, "[QUEUE] Last detected state: ${navResult.lastDetectedState}")
-                        MessageLog.e(TAG, "[QUEUE] Failed transition: ${navResult.failedTransition}")
-                        MessageLog.e(TAG, "[QUEUE] Recommended action: ${navResult.recommendedAction}")
-                        if (navResult.screenshotPath.isNotEmpty()) {
-                            MessageLog.e(TAG, "[QUEUE] Failure screenshot: ${navResult.screenshotPath}")
+                    if (isMiscQueue) {
+                        MessageLog.i(TAG, "[QUEUE] Misc task queue — skipping career navigator for next run.")
+                    } else {
+                        MessageLog.i(TAG, "[QUEUE] Navigating back to career start for next run...")
+
+                        val navigator = CareerLaunchNavigator(context)
+                        val navResult = navigator.navigate(reuseLastLaunchSetup)
+
+                        if (!navResult.success) {
+                            MessageLog.e(TAG, "[QUEUE] Navigation failed: ${navResult.failureReason}")
+                            MessageLog.e(TAG, "[QUEUE] Last detected state: ${navResult.lastDetectedState}")
+                            MessageLog.e(TAG, "[QUEUE] Failed transition: ${navResult.failedTransition}")
+                            MessageLog.e(TAG, "[QUEUE] Recommended action: ${navResult.recommendedAction}")
+                            if (navResult.screenshotPath.isNotEmpty()) {
+                                MessageLog.e(TAG, "[QUEUE] Failure screenshot: ${navResult.screenshotPath}")
+                            }
+                            sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, navResult.failureReason)
+                            break
                         }
-                        sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, navResult.failureReason)
-                        break
                     }
 
                     // Wait between runs.

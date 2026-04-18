@@ -77,8 +77,13 @@ class Game(val myContext: Context) {
             "URA Finale" -> UraFinale(this)
             "Unity Cup" -> UnityCup(this)
             "Trackblazer" -> Trackblazer(this)
+            "Daily Races" -> com.steve1316.uma_android_automation.bot.misc.DailyRaceTask(this)
+            "Team Trials" -> com.steve1316.uma_android_automation.bot.misc.TeamTrialsTask(this)
             else -> throw InterruptedException("Invalid scenario: $scenario")
         }
+
+    /** True if the currently selected task is a misc (non-career) mode. */
+    val isMiscTask: Boolean = task is com.steve1316.uma_android_automation.bot.misc.MiscTask
 
     /** The maximum number of connection error retry attempts allowed. */
     internal val maxConnectionErrorRetryAttempts: Int = 3
@@ -484,7 +489,12 @@ class Game(val myContext: Context) {
         // Auto-navigate to the training menu if the bot is not already there.
         // This allows starting the bot from the home screen, scenario select, or any
         // other screen in the career launch flow — the navigator will find its way.
-        if (!isOnTrainingMenu()) {
+        //
+        // Misc tasks (Daily Races, Team Trials) skip this entirely — they start from
+        // the game's Home Screen and have their own state machines to navigate from
+        // there to their target mode. The user is expected to have the game open on
+        // the Home Screen (or any screen with the bottom nav visible) when starting.
+        if (!isMiscTask && !isOnTrainingMenu()) {
             MessageLog.i(TAG, "[INFO] Bot is not on the training menu. Attempting auto-navigation...")
             val navigator = CareerLaunchNavigator(myContext)
             val reuseSetup = SettingsHelper.getBooleanSetting("runQueue", "reuseLastLaunchSetup", true)
@@ -500,6 +510,8 @@ class Game(val myContext: Context) {
             }
             MessageLog.i(TAG, "[INFO] Auto-navigation complete. Bot is now on the training menu.")
             wait(2.0)
+        } else if (isMiscTask) {
+            MessageLog.i(TAG, "[INFO] Misc task mode (\"$scenario\"). Starting from Home Screen — bot's state machine will navigate from there.")
         }
 
         val taskResult: TaskResult
