@@ -483,7 +483,7 @@ class Game(val myContext: Context) {
 
         // Auto-navigate to the training menu if the bot is not already there.
         // This allows starting the bot from the home screen, scenario select, or any
-        // other screen in the career launch flow — the navigator will find its way.
+        // other screen in the career launch flow - the navigator will find its way.
         if (!isOnTrainingMenu()) {
             MessageLog.i(TAG, "[INFO] Bot is not on the training menu. Attempting auto-navigation...")
             val navigator = CareerLaunchNavigator(myContext)

@@ -78,9 +78,8 @@ object DialogUtils {
     /**
      * Check if any dialog is currently displayed on the screen.
      *
-     * Restricts the search to [Region.topHalf] because dialog title-gradient banners always
-     * render in the upper portion of the screen — restricting the search region cuts the
-     * template-matching cost roughly in half on every Campaign.process() iteration.
+     * Restricts the search to [Region.topHalf] since title-gradient banners always render in the
+     * upper portion - roughly halving template-matching cost on every Campaign.process() iteration.
      *
      * @param imageUtils The CustomImageUtils instance used to find the dialog.
      * @param tries The number of times to attempt to find the image (only honored when

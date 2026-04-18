@@ -533,7 +533,7 @@ class Trackblazer(game: Game) : Campaign(game) {
             return true
         }
 
-        // Has mood items and energy is low — skip recovery, items will handle mood in useItems().
+        // Has mood items and energy is low - skip recovery, items will handle mood in useItems().
         return false
     }
 
@@ -1685,9 +1685,8 @@ class Trackblazer(game: Game) : Campaign(game) {
             }
         }
 
-        // Determine if a Good-Luck Charm is being used this turn (either already queued or will be queued).
-        // If so, skip energy items because the Charm sets failure to 0% regardless of energy, and the energy cost
-        // is subtracted after training — so using energy items would waste them.
+        // If a Good-Luck Charm is (or will be) queued this turn, skip energy items: the Charm sets failure
+        // to 0% regardless of energy and the energy cost is subtracted after training, so they'd be wasted.
         val charmBeingUsedThisTurn =
             bUsedCharmToday ||
                 (date.day >= 13 && failureChance >= 20 && (nextInventory["Good-Luck Charm"] ?: 0) > 0)
