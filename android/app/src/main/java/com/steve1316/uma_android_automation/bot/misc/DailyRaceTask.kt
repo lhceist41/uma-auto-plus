@@ -22,6 +22,7 @@ import com.steve1316.uma_android_automation.components.ButtonNextWithImage
 import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.components.ButtonRaceConfirm
 import com.steve1316.uma_android_automation.components.LabelDailyPrograms
+import com.steve1316.uma_android_automation.components.LabelDailyRacesHeader
 import com.steve1316.uma_android_automation.components.LabelRaceDetails
 import com.steve1316.uma_android_automation.components.Region
 
@@ -195,9 +196,11 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
             return DailyRaceScreenState.RACE_DETAILS
         }
 
-        // Inside Daily Races — detect by the "Daily Races" label at top.
-        if (ButtonDailyRaces.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.topHalf)) {
-            // The same label is visible on both the race-pick screen and the difficulty-pick
+        // Inside Daily Races screen group — detect by the purple "Daily Races" header
+        // banner at top. This is distinct from the [ButtonDailyRaces] tile (dark-purple
+        // text on white) which lives on the Daily Programs container and is used for clicks.
+        if (LabelDailyRacesHeader.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.topHalf)) {
+            // The same header is visible on both the race-pick screen and the difficulty-pick
             // screen. Disambiguate by checking for a per-race logo: if either Moonlight Sho
             // or Jupiter Cup tile logo is visible, we're on the race-pick screen.
             val onRacePick =
