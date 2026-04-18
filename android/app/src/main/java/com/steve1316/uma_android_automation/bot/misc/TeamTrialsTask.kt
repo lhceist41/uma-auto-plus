@@ -357,18 +357,22 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
     /**
      * Items Selected popup → skip item picking and commit Race! directly.
      *
-     * The popup always has a green Race! button regardless of whether items are selected.
-     * Bot never picks items — minimum viable automation, user can always pre-set favourites.
+     * The popup always has a green Race! button (with "RP Cost: 1" subtitle) regardless of
+     * whether items are selected. Bot never picks items — minimum viable automation, user
+     * can always pre-set favourites.
+     *
+     * Uses coordinate-based tap rather than ButtonRaceConfirm template because the latter
+     * also matches the Team Preview's "Next" button visible behind the popup, causing the
+     * click to land on the dimmed underlay instead of the popup's actual Race! button.
+     * Pixel-measured location: x=565-975, y=1320-1420 → center (770, 1370) → ratios.
      */
     private fun handleItemsSelected() {
         MessageLog.v(TAG, "[STATE] handleItemsSelected:: skipping item picker, clicking Race!.")
-        if (ButtonRaceConfirm.click(game.imageUtils)) {
-            matchInProgress = true
-            game.wait(3.0)
-        } else {
-            MessageLog.w(TAG, "[WARN] handleItemsSelected:: Race! button click failed; retrying.")
-            game.wait(1.5)
-        }
+        val x: Double = SharedData.displayWidth * 0.713
+        val y: Double = SharedData.displayHeight * 0.714
+        game.gestureUtils.tap(x, y, "items_selected_race_confirm")
+        matchInProgress = true
+        game.wait(3.0)
     }
 
     /**
