@@ -66,11 +66,13 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
     /** Whether debug mode is enabled for additional logging and saving debugging images to storage. */
     override var debugMode: Boolean = SettingsHelper.getBooleanSetting("debug", "enableDebugMode")
 
-    /** Template matching confidence threshold. */
-    override var confidence: Double = SettingsHelper.getStringSetting("debug", "templateMatchConfidence").toDouble()
+    /** Template matching confidence threshold. Defaults to 0.8 if setting is missing/empty. */
+    override var confidence: Double =
+        SettingsHelper.getStringSetting("debug", "templateMatchConfidence").toDoubleOrNull() ?: 0.8
 
-    /** Custom scale factor for template matching. */
-    override var customScale: Double = SettingsHelper.getStringSetting("debug", "templateMatchCustomScale").toDouble()
+    /** Custom scale factor for template matching. Defaults to 1.0 if setting is missing/empty. */
+    override var customScale: Double =
+        SettingsHelper.getStringSetting("debug", "templateMatchCustomScale").toDoubleOrNull() ?: 1.0
 
     /** Maximum allowed value for a single stat. */
     private val manualStatCap: Int = SettingsHelper.getIntSetting("training", "manualStatCap")
