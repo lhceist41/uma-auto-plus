@@ -39,7 +39,9 @@ const styles = StyleSheet.create({
 })
 
 /**
- * List of scenarios that are supported by the app.
+ * Supported scenarios. First three are Career scenarios (full debut-to-finale run); last two
+ * are single-session "misc" modes: Daily Races spends the 3 daily tickets via Multi-Race,
+ * Team Trials runs until RP is exhausted. Character presets apply only to career scenarios.
  */
 const scenarios = [
     {
@@ -57,7 +59,20 @@ const scenarios = [
         label: "Trackblazer",
         disabled: false,
     },
+    {
+        value: "Daily Races",
+        label: "Daily Races (misc)",
+        disabled: false,
+    },
+    {
+        value: "Team Trials",
+        label: "Team Trials (misc)",
+        disabled: false,
+    },
 ]
+
+/** Returns true if the given scenario string is a non-career misc task. */
+const isMiscScenario = (scenario: string): boolean => scenario === "Daily Races" || scenario === "Team Trials"
 
 /**
  * The main Home page of the application.
