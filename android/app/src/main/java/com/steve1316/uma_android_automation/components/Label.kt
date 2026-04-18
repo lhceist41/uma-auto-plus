@@ -215,6 +215,11 @@ object LabelMultiRacePopup : ComponentInterface {
     override val template = Template("components/label/multi_race_popup", region = Region.middle)
 }
 
+/** "Daily Sale" green header on the shop popup that appears after daily races finish. Bot always taps Cancel (user shops manually). */
+object LabelDailySale : ComponentInterface {
+    override val template = Template("components/label/daily_sale", region = Region.middle)
+}
+
 /** "Recover TP" header on the TP recharge popup. */
 object LabelRecoverTP : ComponentInterface {
     override val template = Template("components/label/recover_tp", region = Region.topHalf)
