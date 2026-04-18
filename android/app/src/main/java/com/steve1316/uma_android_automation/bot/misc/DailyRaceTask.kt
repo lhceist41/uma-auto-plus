@@ -394,10 +394,14 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
      * the dynamic "Consumes N" subtitle which would make template matching fragile.
      */
     private fun handleMultiRacePopup() {
-        // The Race! button on the Multi-Race popup is at the bottom-right of the dialog.
-        // Measured ratios from the 2026-04-18 capture at 1080x1920: center ~x=770, y=1640.
-        val x: Double = SharedData.displayWidth * 0.713
-        val y: Double = SharedData.displayHeight * 0.854
+        // The Race! button on the Multi-Race popup is in the center of the dialog, not
+        // the bottom of the screen. Earlier coords were clicking through the popup backdrop
+        // onto the Runner Selection Confirm button behind it, causing a close-reopen loop.
+        //
+        // Verified pixel location from the 2026-04-18 capture at 1080x1920: button spans
+        // x=550-1010, y=1180-1320. Center: (780, 1250). Ratios: 0.722 x, 0.651 y.
+        val x: Double = SharedData.displayWidth * 0.722
+        val y: Double = SharedData.displayHeight * 0.651
         MessageLog.v(TAG, "[STATE] handleMultiRacePopup:: clicking Race! (3/3) at ($x, $y).")
         raceSequenceCommitted = true
         game.gestureUtils.tap(x, y, "multi_race_popup_race_confirm")
