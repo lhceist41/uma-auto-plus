@@ -558,3 +558,49 @@ object ButtonConditions : ButtonInterface {
 object ButtonEventProgressChevron : ButtonInterface {
     override val template = Template("components/button/event_progress_chevron")
 }
+
+// -----------------------------------------------------------------------------
+// Misc automation (bot/misc/*) — components for Daily Races, Team Trials, and
+// TP/RP recharge flows. Template PNGs captured during the 2026-04-18 calibration
+// pass. See bot/misc/MiscTask.kt for the architecture.
+// -----------------------------------------------------------------------------
+
+/** The "Daily Program" tile on the Race tab (chibi character + trophy). */
+object ButtonDailyProgramTile : ButtonInterface {
+    override val template = Template("components/button/daily_program_tile", region = Region.bottomHalf)
+}
+
+/** The big green "Race!" button on the Race Details confirmation screen. Distinct from the bottom-nav Race tab. */
+object ButtonRaceConfirm : ButtonInterface {
+    override val template = Template("components/button/race_confirm", region = Region.bottomHalf)
+}
+
+/** The "Multi-Race: On" pill (green) on the Race Details screen. */
+object ButtonMultiRaceOn : ButtonInterface {
+    override val template = Template("components/button/multi_race_on", region = Region.bottomHalf)
+}
+
+/** The "Multi-Race: Off" pill (white/grey) on the Race Details screen. */
+object ButtonMultiRaceOff : ButtonInterface {
+    override val template = Template("components/button/multi_race_off", region = Region.bottomHalf)
+}
+
+/** Generic "Use" button on the Recover TP/RP item-select popup. Shared across Carats and F2P item rows. */
+object ButtonUseItem : ButtonInterface {
+    override val template = Template("components/button/use_item", region = Region.middle)
+}
+
+/** "Max" button on the Recover TP/RP quantity popup. */
+object ButtonMax : ButtonInterface {
+    override val template = Template("components/button/max", region = Region.middle)
+}
+
+/** The refresh (circular arrow) button on the Team Trials Select Opponent screen. */
+object ButtonRefreshOpponents : ButtonInterface {
+    override val template = Template("components/button/refresh_opponents", region = Region.bottomHalf)
+}
+
+/** The "See All Race Results" chibi-decorated button on the post-Team-Trials-match summary screen. */
+object ButtonSeeAllRaceResults : ButtonInterface {
+    override val template = Template("components/button/see_all_race_results", region = Region.bottomHalf)
+}

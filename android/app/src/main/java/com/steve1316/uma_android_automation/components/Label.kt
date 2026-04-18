@@ -179,3 +179,43 @@ object LabelOnSale : ComponentInterface {
 object LabelRivalRacer : ComponentInterface {
     override val template = Template("components/label/rival_racer", region = Region.rightHalf)
 }
+
+// -----------------------------------------------------------------------------
+// Misc automation (bot/misc/*) — screen-identification labels for Daily Races,
+// Team Trials, and TP/RP recharge flows. See bot/misc/MiscTask.kt.
+// -----------------------------------------------------------------------------
+
+/** Header on the Daily Programs container screen (contains Daily Races + Daily Legend Races tiles). */
+object LabelDailyPrograms : ComponentInterface {
+    override val template = Template("components/label/daily_programs", region = Region.middle)
+}
+
+/** Header on the Daily Legend Races grid screen. */
+object LabelDailyLegendRaces : ComponentInterface {
+    override val template = Template("components/label/daily_legend_races", region = Region.topHalf)
+}
+
+/** "Race Details" header on the Daily Races pre-race confirmation screen (with Multi-Race toggle + Race!). */
+object LabelRaceDetails : ComponentInterface {
+    override val template = Template("components/label/race_details_header", region = Region.topHalf)
+}
+
+/** "Recover TP" header on the TP recharge popup. */
+object LabelRecoverTP : ComponentInterface {
+    override val template = Template("components/label/recover_tp", region = Region.topHalf)
+}
+
+/** "Recover RP" header on the RP recharge popup. */
+object LabelRecoverRP : ComponentInterface {
+    override val template = Template("components/label/recover_rp", region = Region.topHalf)
+}
+
+/** "Team Trials" text label at the top-left of all Team Trials screens. Used to detect we're still in-mode during post-match cascades. */
+object LabelTeamTrials : ComponentInterface {
+    override val template = Template("components/label/team_trials_header", region = Region.topHalf)
+}
+
+/** "Items Selected" header on the pre-match item-picker popup. */
+object LabelItemsSelected : ComponentInterface {
+    override val template = Template("components/label/items_selected", region = Region.middle)
+}
