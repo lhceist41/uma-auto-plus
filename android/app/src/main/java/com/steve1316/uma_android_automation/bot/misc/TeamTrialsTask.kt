@@ -236,11 +236,18 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
             return TeamTrialsScreenState.HOME_SCREEN
         }
 
-        // Team Trials label at top-left corner of Team Trials screens — catch-all for
-        // post-match result screens (Race Finished, LOSE/WIN banner, etc) that we haven't
-        // individually identified.
-        if (matchInProgress && LabelTeamTrials.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.topHalf)) {
-            return TeamTrialsScreenState.POST_MATCH_RESULTS
+        // Team Trials label at top-left — catch-all for any TT screen that isn't one of
+        // the specifically-detected ones. Common cases:
+        //   - Pre-match:  Team Preview screen (after picking opponent, before committing)
+        //   - Post-match: Race Finished / LOSE-WIN / Story Unlocked chain
+        // We distinguish via [matchInProgress] which is set true when we commit Race! on
+        // the Items Selected popup and reset false on TEAM_TRIALS_HOME.
+        if (LabelTeamTrials.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.topHalf)) {
+            return if (matchInProgress) {
+                TeamTrialsScreenState.POST_MATCH_RESULTS
+            } else {
+                TeamTrialsScreenState.TEAM_PREVIEW
+            }
         }
 
         return TeamTrialsScreenState.UNKNOWN
