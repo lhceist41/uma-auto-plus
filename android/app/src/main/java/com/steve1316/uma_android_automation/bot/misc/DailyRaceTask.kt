@@ -21,6 +21,7 @@ import com.steve1316.uma_android_automation.components.ButtonNext
 import com.steve1316.uma_android_automation.components.ButtonNextWithImage
 import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.components.ButtonRaceConfirm
+import com.steve1316.uma_android_automation.components.LabelDailyPrograms
 import com.steve1316.uma_android_automation.components.LabelRaceDetails
 import com.steve1316.uma_android_automation.components.Region
 
@@ -206,15 +207,14 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
             }
         }
 
-        // Daily Programs container - detect by the Daily Program tile visible alongside
-        // the Daily Races tile. The container shows the two sub-tiles.
-        if (ButtonDailyProgramTile.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
+        // Daily Programs container - detect by the green "Daily Programs" banner, which only
+        // appears here (NOT on the Race tab).
+        if (LabelDailyPrograms.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
             return DailyRaceScreenState.DAILY_PROGRAMS_CONTAINER
         }
 
-        // Race tab - the Daily Program tile appears in the outer Race tab's bottom-left
-        // position. Without the Daily Programs header visible it means we're one level up.
-        // Differentiate by: the bottom nav's Race tab is SELECTED.
+        // Race tab - Race nav tab selected, showing the 4 mode tiles. The menubar check is the
+        // fast path here.
         if (ButtonMenuBarRaceSelected.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.bottomHalf)) {
             return DailyRaceScreenState.RACE_TAB
         }
