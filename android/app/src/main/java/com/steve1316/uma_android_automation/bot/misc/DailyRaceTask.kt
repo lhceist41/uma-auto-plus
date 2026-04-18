@@ -24,6 +24,7 @@ import com.steve1316.uma_android_automation.components.ButtonRaceConfirm
 import com.steve1316.uma_android_automation.components.LabelDailyPrograms
 import com.steve1316.uma_android_automation.components.LabelDailyRacesHeader
 import com.steve1316.uma_android_automation.components.LabelRaceDetails
+import com.steve1316.uma_android_automation.components.LabelRunnerSelection
 import com.steve1316.uma_android_automation.components.Region
 
 /**
@@ -79,6 +80,9 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
 
         /** Difficulty tier list for the picked race (VERY HARD / HARD / NORMAL / EASY). */
         DAILY_RACES_DIFFICULTY_PICK,
+
+        /** Horse-picker step between difficulty and race details. Bot just clicks Confirm; the user pre-sets their runner by running manually once. */
+        RUNNER_SELECTION,
 
         /** Race Details confirmation screen with Multi-Race toggle and Race! button. */
         RACE_DETAILS,
@@ -147,6 +151,11 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
                 null
             }
 
+            DailyRaceScreenState.RUNNER_SELECTION -> {
+                handleRunnerSelection()
+                null
+            }
+
             DailyRaceScreenState.RACE_DETAILS -> {
                 handleRaceDetails()
                 null
@@ -191,6 +200,11 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         // Race Details is the goal screen before racing - check first for fast-path exits.
         if (LabelRaceDetails.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.topHalf)) {
             return DailyRaceScreenState.RACE_DETAILS
+        }
+
+        // Runner Selection - horse-picker screen between difficulty and Race Details.
+        if (LabelRunnerSelection.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.topHalf)) {
+            return DailyRaceScreenState.RUNNER_SELECTION
         }
 
         // Daily Races screen group - detect by the purple "Daily Races" header banner. Distinct
@@ -342,6 +356,20 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         MessageLog.v(TAG, "[STATE] handleDifficultyPick:: picking $targetDifficulty at ($x, $y).")
         game.gestureUtils.tap(x, y, "daily_race_difficulty_${targetDifficulty.lowercase()}")
         game.wait(2.5)
+    }
+
+    /**
+     * Runner Selection - click Confirm to accept the preselected runner. The user is expected
+     * to have run the race manually once so their preferred horse is already selected here.
+     */
+    private fun handleRunnerSelection() {
+        MessageLog.v(TAG, "[STATE] handleRunnerSelection:: clicking Confirm to accept preset runner.")
+        if (ButtonConfirm.click(game.imageUtils, region = Region.bottomHalf)) {
+            game.wait(2.5)
+        } else {
+            MessageLog.w(TAG, "[WARN] handleRunnerSelection:: Confirm button not found; retrying.")
+            game.wait(1.5)
+        }
     }
 
     /**
