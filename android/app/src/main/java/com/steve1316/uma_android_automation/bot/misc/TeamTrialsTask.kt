@@ -226,7 +226,25 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
             return TeamTrialsScreenState.POST_MATCH_RESULTS
         }
 
-        // Race tab — detect via bottom nav Race tab being selected.
+        // Team Trials label at top-left — catch-all for any TT screen that isn't one of
+        // the specifically-detected ones above. Must come BEFORE the bottom-nav fallbacks
+        // because the Race bottom-nav tab is highlighted on every TT screen, not just the
+        // outer Race tab — so without this ordering Team Preview / post-match screens get
+        // misclassified as RACE_TAB and the bot loops trying to click the TT tile.
+        // We distinguish pre/post-match via the [matchInProgress] flag which is set true
+        // when we commit Race! on the Items Selected popup and reset false on TT home.
+        if (LabelTeamTrials.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.topHalf)) {
+            return if (matchInProgress) {
+                TeamTrialsScreenState.POST_MATCH_RESULTS
+            } else {
+                TeamTrialsScreenState.TEAM_PREVIEW
+            }
+        }
+
+        // Outer navigation — only fires when NOT inside a Team Trials screen (those have
+        // the TT header label above and would have returned earlier).
+
+        // Race tab — bottom nav Race tab selected, on the 4-tile Race menu.
         if (ButtonMenuBarRaceSelected.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.bottomHalf)) {
             return TeamTrialsScreenState.RACE_TAB
         }
@@ -234,20 +252,6 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
         // Home Screen — bottom nav's Home tab is selected.
         if (ButtonMenuBarHomeSelected.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.bottomHalf)) {
             return TeamTrialsScreenState.HOME_SCREEN
-        }
-
-        // Team Trials label at top-left — catch-all for any TT screen that isn't one of
-        // the specifically-detected ones. Common cases:
-        //   - Pre-match:  Team Preview screen (after picking opponent, before committing)
-        //   - Post-match: Race Finished / LOSE-WIN / Story Unlocked chain
-        // We distinguish via [matchInProgress] which is set true when we commit Race! on
-        // the Items Selected popup and reset false on TEAM_TRIALS_HOME.
-        if (LabelTeamTrials.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.topHalf)) {
-            return if (matchInProgress) {
-                TeamTrialsScreenState.POST_MATCH_RESULTS
-            } else {
-                TeamTrialsScreenState.TEAM_PREVIEW
-            }
         }
 
         return TeamTrialsScreenState.UNKNOWN
