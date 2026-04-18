@@ -205,6 +205,11 @@ object LabelDailyRacesHeader : ComponentInterface {
     override val template = Template("components/label/daily_races_header", region = Region.topHalf)
 }
 
+/** "Runner Selection" purple header visible after picking a difficulty — the horse-picker step before Race Details. */
+object LabelRunnerSelection : ComponentInterface {
+    override val template = Template("components/label/runner_selection", region = Region.topHalf)
+}
+
 /** "Recover TP" header on the TP recharge popup. */
 object LabelRecoverTP : ComponentInterface {
     override val template = Template("components/label/recover_tp", region = Region.topHalf)
