@@ -277,7 +277,7 @@ object ButtonSeeResults : ButtonInterface {
 }
 
 object ButtonSelectOpponent : ButtonInterface {
-    override val template = Template("components/button/select_opponent", region = Region.bottomHalf)
+    override val template = Template("components/button/select_opponent", region = Region.topHalf)
 }
 
 object ButtonSelectLegacy : ButtonInterface {
