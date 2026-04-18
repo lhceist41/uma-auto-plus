@@ -23,6 +23,7 @@ import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.components.ButtonRaceConfirm
 import com.steve1316.uma_android_automation.components.LabelDailyPrograms
 import com.steve1316.uma_android_automation.components.LabelDailyRacesHeader
+import com.steve1316.uma_android_automation.components.LabelMultiRacePopup
 import com.steve1316.uma_android_automation.components.LabelRaceDetails
 import com.steve1316.uma_android_automation.components.LabelRunnerSelection
 import com.steve1316.uma_android_automation.components.Region
@@ -85,6 +86,9 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
 
         /** Runner selection screen — horse-picker step between difficulty and race details. Bot just clicks Confirm since the user pre-sets their runner by running manually at least once. */
         RUNNER_SELECTION,
+
+        /** Multi-Race popup — asks how many races to run (1/3, 2/3, 3/3). Bot clicks Race! to commit 3/3 (the default). */
+        MULTI_RACE_POPUP,
 
         /** Race Details confirmation screen with Multi-Race toggle and Race! button. */
         RACE_DETAILS,
@@ -158,6 +162,11 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
                 null
             }
 
+            DailyRaceScreenState.MULTI_RACE_POPUP -> {
+                handleMultiRacePopup()
+                null
+            }
+
             DailyRaceScreenState.RACE_DETAILS -> {
                 handleRaceDetails()
                 null
@@ -203,6 +212,13 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         // Race Details is the goal screen before racing — check first for fast-path exits.
         if (LabelRaceDetails.check(game.imageUtils, sourceBitmap = sourceBitmap, region = Region.topHalf)) {
             return DailyRaceScreenState.RACE_DETAILS
+        }
+
+        // Multi-Race popup — appears on top of Runner Selection after Confirm is tapped.
+        // Check before Runner Selection since the popup overlays it and the Runner Selection
+        // header is still visible (just dimmed).
+        if (LabelMultiRacePopup.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
+            return DailyRaceScreenState.MULTI_RACE_POPUP
         }
 
         // Runner Selection — horse-picker screen between difficulty and Race Details.
@@ -366,6 +382,26 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         MessageLog.v(TAG, "[STATE] handleDifficultyPick:: picking $targetDifficulty at ($x, $y).")
         game.gestureUtils.tap(x, y, "daily_race_difficulty_${targetDifficulty.lowercase()}")
         game.wait(2.5)
+    }
+
+    /**
+     * Multi-Race popup — click Race! (Consumes 3) at fixed coordinates.
+     *
+     * The popup lets you adjust the number of races via +/- buttons. Default is all held
+     * tickets (e.g. 3/3), which is exactly what the bot wants. Just clicks Race! to commit.
+     *
+     * Uses coordinate-based tap rather than template because the button text contains
+     * the dynamic "Consumes N" subtitle which would make template matching fragile.
+     */
+    private fun handleMultiRacePopup() {
+        // The Race! button on the Multi-Race popup is at the bottom-right of the dialog.
+        // Measured ratios from the 2026-04-18 capture at 1080x1920: center ~x=770, y=1640.
+        val x: Double = SharedData.displayWidth * 0.713
+        val y: Double = SharedData.displayHeight * 0.854
+        MessageLog.v(TAG, "[STATE] handleMultiRacePopup:: clicking Race! (3/3) at ($x, $y).")
+        raceSequenceCommitted = true
+        game.gestureUtils.tap(x, y, "multi_race_popup_race_confirm")
+        game.wait(3.0)
     }
 
     /**

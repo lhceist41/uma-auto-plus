@@ -210,6 +210,11 @@ object LabelRunnerSelection : ComponentInterface {
     override val template = Template("components/label/runner_selection", region = Region.topHalf)
 }
 
+/** "Multi-Race" green header on the popup that asks how many races to run (1/3, 2/3, 3/3). Bot commits 3/3. */
+object LabelMultiRacePopup : ComponentInterface {
+    override val template = Template("components/label/multi_race_popup", region = Region.middle)
+}
+
 /** "Recover TP" header on the TP recharge popup. */
 object LabelRecoverTP : ComponentInterface {
     override val template = Template("components/label/recover_tp", region = Region.topHalf)
