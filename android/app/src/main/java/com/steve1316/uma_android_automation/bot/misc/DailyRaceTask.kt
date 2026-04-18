@@ -6,6 +6,7 @@ import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.TaskResult
 import com.steve1316.uma_android_automation.bot.TaskResultCode
+import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonClose
 import com.steve1316.uma_android_automation.components.ButtonConfirm
 import com.steve1316.uma_android_automation.components.ButtonDailyProgramTile
@@ -23,6 +24,7 @@ import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.components.ButtonRaceConfirm
 import com.steve1316.uma_android_automation.components.LabelDailyPrograms
 import com.steve1316.uma_android_automation.components.LabelDailyRacesHeader
+import com.steve1316.uma_android_automation.components.LabelDailySale
 import com.steve1316.uma_android_automation.components.LabelMultiRacePopup
 import com.steve1316.uma_android_automation.components.LabelRaceDetails
 import com.steve1316.uma_android_automation.components.LabelRunnerSelection
@@ -87,6 +89,9 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
 
         /** Multi-Race popup asking how many races to run. Bot clicks Race! to commit the default 3/3. */
         MULTI_RACE_POPUP,
+
+        /** Daily Sale popup after races complete. Bot dismisses via Cancel; user decides what to buy. */
+        DAILY_SALE_POPUP,
 
         /** Race Details confirmation screen with Multi-Race toggle and Race! button. */
         RACE_DETAILS,
@@ -165,6 +170,11 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
                 null
             }
 
+            DailyRaceScreenState.DAILY_SALE_POPUP -> {
+                handleDailySalePopup()
+                null
+            }
+
             DailyRaceScreenState.RACE_DETAILS -> {
                 handleRaceDetails()
                 null
@@ -215,6 +225,12 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         // Selection since its (dimmed) header is still visible beneath the popup.
         if (LabelMultiRacePopup.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
             return DailyRaceScreenState.MULTI_RACE_POPUP
+        }
+
+        // Daily Sale popup appears after races finish; check before other screens since the
+        // Runner Selection header is still visible beneath it.
+        if (LabelDailySale.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
+            return DailyRaceScreenState.DAILY_SALE_POPUP
         }
 
         // Runner Selection - horse-picker screen between difficulty and Race Details.
@@ -390,6 +406,20 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         raceSequenceCommitted = true
         game.gestureUtils.tap(x, y, "multi_race_popup_race_confirm")
         game.wait(3.0)
+    }
+
+    /**
+     * Daily Sale popup - dismiss via Cancel. It advertises limited-time purchases after races
+     * finish; always cancel and leave shopping to the user.
+     */
+    private fun handleDailySalePopup() {
+        MessageLog.v(TAG, "[STATE] handleDailySalePopup:: dismissing via Cancel (user decides shopping).")
+        if (ButtonCancel.click(game.imageUtils, region = Region.bottomHalf)) {
+            game.wait(2.0)
+        } else {
+            MessageLog.w(TAG, "[WARN] handleDailySalePopup:: Cancel button not found; retrying.")
+            game.wait(1.5)
+        }
     }
 
     /**
