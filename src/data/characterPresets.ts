@@ -176,9 +176,9 @@ export const characterPresets: CharacterPreset[] =
                     "Power",
                     "Stamina"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Medium",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -236,11 +236,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -248,7 +249,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Guts Scroll",
@@ -427,9 +428,9 @@ export const characterPresets: CharacterPreset[] =
                     "Power",
                     "Stamina"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Medium",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -487,11 +488,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -499,7 +501,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Guts Scroll",
@@ -677,9 +679,9 @@ export const characterPresets: CharacterPreset[] =
                     "Power",
                     "Stamina"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Mile",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -737,11 +739,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -749,7 +752,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Guts Scroll",
@@ -927,9 +930,9 @@ export const characterPresets: CharacterPreset[] =
                     "Power",
                     "Stamina"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Mile",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -987,11 +990,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -999,7 +1003,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Guts Scroll",
@@ -1188,9 +1192,9 @@ export const characterPresets: CharacterPreset[] =
                     "Stamina",
                     "Guts"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Long",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -1248,11 +1252,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -1260,7 +1265,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Wit Scroll",
@@ -1450,9 +1455,9 @@ export const characterPresets: CharacterPreset[] =
                     "Power",
                     "Stamina"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Long",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -1510,11 +1515,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -1522,7 +1528,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [],
                 "trackblazerShopCheckFrequency": 1
@@ -1704,9 +1710,9 @@ export const characterPresets: CharacterPreset[] =
                     "Speed",
                     "Power"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Sprint",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -1764,11 +1770,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -1776,7 +1783,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Stamina Scroll",
@@ -1965,9 +1972,9 @@ export const characterPresets: CharacterPreset[] =
                     "Power",
                     "Stamina"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Medium",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -2025,11 +2032,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -2037,7 +2045,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Wit Scroll",
@@ -2226,9 +2234,9 @@ export const characterPresets: CharacterPreset[] =
                     "Power",
                     "Stamina"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Sprint",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -2286,11 +2294,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -2298,7 +2307,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [],
                 "trackblazerShopCheckFrequency": 1
@@ -2484,9 +2493,9 @@ export const characterPresets: CharacterPreset[] =
                     "Stamina",
                     "Power"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Long",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -2544,11 +2553,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -2556,7 +2566,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Guts Scroll",
@@ -2748,9 +2758,9 @@ export const characterPresets: CharacterPreset[] =
                     "Stamina",
                     "Power"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Long",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -2808,11 +2818,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -2820,7 +2831,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Guts Scroll",
@@ -3007,9 +3018,9 @@ export const characterPresets: CharacterPreset[] =
                     "Power",
                     "Stamina"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Medium",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -3067,11 +3078,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -3079,7 +3091,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Guts Scroll",
@@ -3265,9 +3277,9 @@ export const characterPresets: CharacterPreset[] =
                     "Speed",
                     "Power"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Sprint",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -3325,11 +3337,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -3337,7 +3350,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Stamina Scroll",
@@ -3524,9 +3537,9 @@ export const characterPresets: CharacterPreset[] =
                     "Power",
                     "Stamina"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Mile",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -3584,11 +3597,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -3596,7 +3610,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Stamina Scroll",
@@ -3784,9 +3798,9 @@ export const characterPresets: CharacterPreset[] =
                     "Power",
                     "Stamina"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Medium",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -3844,11 +3858,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -3856,7 +3871,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Guts Scroll",
@@ -11735,9 +11750,9 @@ export const characterPresets: CharacterPreset[] =
                     "Power",
                     "Stamina"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Mile",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -11795,11 +11810,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -11807,7 +11823,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Guts Scroll",
@@ -12512,9 +12528,9 @@ export const characterPresets: CharacterPreset[] =
                     "Power",
                     "Stamina"
                 ],
-                "enableRainbowTrainingBonus": false,
+                "enableRainbowTrainingBonus": true,
                 "preferredDistanceOverride": "Mile",
-                "mustRestBeforeSummer": true,
+                "mustRestBeforeSummer": false,
                 "enableRiskyTraining": false,
                 "riskyTrainingMinStatGain": 20,
                 "riskyTrainingMaxFailureChance": 30,
@@ -12572,11 +12588,12 @@ export const characterPresets: CharacterPreset[] =
                 "discordUserID": ""
             },
             "scenarioOverrides": {
-                "trackblazerConsecutiveRacesLimit": 3,
+                "trackblazerConsecutiveRacesLimit": 2,
                 "trackblazerEnergyThreshold": 40,
                 "trackblazerShopCheckGrades": [
                     "G1",
-                    "G2"
+                    "G2",
+                    "G3"
                 ],
                 "trackblazerMinStatGainForCharm": 30,
                 "trackblazerMaxRetriesPerRace": 1,
@@ -12584,7 +12601,7 @@ export const characterPresets: CharacterPreset[] =
                 "trackblazerRetryRacesBeforeFinalGrades": [
                     "G1"
                 ],
-                "trackblazerEnableIrregularTraining": true,
+                "trackblazerEnableIrregularTraining": false,
                 "trackblazerIrregularTrainingMinStatGain": 20,
                 "trackblazerExcludedItems": [
                     "Guts Scroll",

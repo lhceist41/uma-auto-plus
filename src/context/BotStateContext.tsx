@@ -300,7 +300,10 @@ export const defaultSettings: Settings = {
         ),
     },
     trainingEvent: {
-        enablePrioritizeEnergyOptions: false,
+        // Prefer energy rewards in training events. Energy is scenario-critical in Trackblazer
+        // ("empty energy bar is normal"), and prioritizing energy rewards (scored 100x in
+        // TrainingEvent.kt:558) keeps item spend lower. Every character preset ships this true.
+        enablePrioritizeEnergyOptions: true,
         enableAutomaticOCRRetry: true,
         ocrConfidence: 90,
         enableHideOCRComparisonResults: true,
@@ -380,7 +383,11 @@ export const defaultSettings: Settings = {
         riskyTrainingMinStatGain: 20,
         riskyTrainingMaxFailureChance: 30,
         trainWitDuringFinale: false,
-        enablePrioritizeSkillHints: false,
+        // Prioritize training facilities that offer skill hints. Training.kt:656 adds a weight
+        // bonus to facilities with hint icons when this is true, helping the bot pick the
+        // training that also teaches a hinted skill (skill-point efficient across any scenario).
+        // Every character preset in the codebase already ships with this true.
+        enablePrioritizeSkillHints: true,
         enableTrainingAnalysisValidation: false,
         enableYoloStatDetection: false,
     },
@@ -458,7 +465,11 @@ export const defaultSettings: Settings = {
         trackblazerEnableIrregularTraining: false,
         trackblazerIrregularTrainingMinStatGain: 30,
         trackblazerExcludedItems: [],
-        trackblazerShopCheckFrequency: 3,
+        // Trackblazer guide's "Order Mantra" - Check Training, Check Shop, Go Race - is per-turn.
+        // Frequency 1 means the bot checks the shop after every race (not every 3 races),
+        // matching the guide's constant-shop-interaction tempo. Every character preset already
+        // ships with 1; this aligns the non-preset default with that tempo.
+        trackblazerShopCheckFrequency: 1,
     },
 }
 
