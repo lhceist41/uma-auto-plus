@@ -251,7 +251,7 @@ object ButtonRestore : ButtonInterface {
 }
 
 object ButtonRetry : ButtonInterface {
-    // Retry only appears as a dialog action (connection error, race retry) — always bottomHalf.
+    // Retry only appears as a dialog action (connection error, race retry) - always bottomHalf.
     override val template = Template("components/button/retry", region = Region.bottomHalf)
 }
 

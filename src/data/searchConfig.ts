@@ -469,7 +469,7 @@ const searchConfig: SearchOption[] = [
     },
 
     // ============================================================
-    // Skill Plan Settings — Skill Point Check
+    // Skill Plan Settings - Skill Point Check
     // ============================================================
     {
         id: "enable-skill-plan-skillPointCheck",
@@ -493,7 +493,7 @@ const searchConfig: SearchOption[] = [
     },
 
     // ============================================================
-    // Skill Plan Settings — Pre-Finals
+    // Skill Plan Settings - Pre-Finals
     // ============================================================
     {
         id: "enable-skill-plan-preFinals",
@@ -517,7 +517,7 @@ const searchConfig: SearchOption[] = [
     },
 
     // ============================================================
-    // Skill Plan Settings — Career Complete
+    // Skill Plan Settings - Career Complete
     // ============================================================
     {
         id: "enable-skill-plan-careerComplete",

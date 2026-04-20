@@ -648,7 +648,7 @@ abstract class Campaign(game: Game) : Task(game) {
      * Determines whether to proceed with a consecutive race despite the warning.
      *
      * Called after [onConsecutiveRaceWarningDetected] and after force-race flags have been checked.
-     * This is only called when force-race flags are NOT active — if they are, the race proceeds unconditionally.
+     * This is only called when force-race flags are NOT active - if they are, the race proceeds unconditionally.
      *
      * @param args Additional arguments from dialog handling.
      * @return True to proceed with the race, false to abort and clear racing requirement flags.
@@ -1664,7 +1664,7 @@ abstract class Campaign(game: Game) : Task(game) {
 
         // Decision-making process.
         val action = decideNextAction()
-        // Reuse the cached value populated above instead of re-running LabelScheduledRace.check —
+        // Reuse the cached value populated above instead of re-running LabelScheduledRace.check -
         // nothing between performTurnStartUpdates() and here would have changed scheduled-race
         // status (no game-advancing actions occurred), and the third scan was redundant.
         return executeAction(action, cachedScheduledRaceDay)

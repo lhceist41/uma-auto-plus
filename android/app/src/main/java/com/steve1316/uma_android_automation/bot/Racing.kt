@@ -131,7 +131,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Optional custom agenda title that overrides the selected agenda name for OCR matching. */
     private val customAgendaTitle = SettingsHelper.getStringSetting("racing", "customAgendaTitle")
 
-    /** The effective agenda name used for OCR matching — custom title if provided, otherwise the selected agenda. */
+    /** The effective agenda name used for OCR matching - custom title if provided, otherwise the selected agenda. */
     private val effectiveAgendaName = if (customAgendaTitle.isNotBlank()) customAgendaTitle else selectedUserAgenda
 
     /** Whether to skip Summer training to do races from the in-game agenda. */
