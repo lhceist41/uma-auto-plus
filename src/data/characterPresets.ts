@@ -11658,21 +11658,21 @@ export const characterPresets: CharacterPreset[] =
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200541,200331,200371,200551,200681,201041,201031,201251,201241,201051,201281,201521,200431,200531"
+                        "plan": "200541,200331,200371,200551,200681,201041,201031,201251,201241,201051,200351,201521,200431,200531"
                     },
                     "preFinals": {
                         "enabled": true,
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200541,200331,200371,200551,200681,201041,201031,201251,201241,201051,201281,201521,200431,200531"
+                        "plan": "200541,200331,200371,200551,200681,201041,201031,201251,201241,201051,200351,201521,200431,200531"
                     },
                     "careerComplete": {
                         "enabled": true,
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200541,200331,200371,200551,200681,201041,201031,201251,201241,201051,201281,201521,200431,200531"
+                        "plan": "200541,200331,200371,200551,200681,201041,201031,201251,201241,201051,200351,201521,200431,200531"
                     }
                 }
             },
