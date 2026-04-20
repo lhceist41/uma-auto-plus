@@ -211,9 +211,17 @@ export interface Settings {
 }
 
 // Set the default settings.
+//
+// Defaults are tuned for a zero-config Trackblazer run: pick a Character, hit Start,
+// and the rest is handled. Each change from the upstream baseline is called out inline
+// with its Trackblazer-guide justification and the verified code path it affects.
+// Users running other scenarios (URA Finale, Unity Cup) can override any of these via
+// the Settings UI - these are defaults, not locks.
 export const defaultSettings: Settings = {
     general: {
-        scenario: "",
+        // Trackblazer pre-selected so the Home screen is ready on first launch.
+        // Existing installs keep their last-used scenario (SQLite takes precedence over defaults).
+        scenario: "Trackblazer",
         enablePopupCheck: false,
         enableCraneGameAttempt: false,
         enableStopBeforeFinals: false,
@@ -225,7 +233,12 @@ export const defaultSettings: Settings = {
     racing: {
         enableFarmingFans: false,
         ignoreConsecutiveRaceWarning: false,
-        ignoreLowEnergyRacingBlock: false,
+        // Trackblazer guide: "In MANT, you'll play with an empty energy bar most of
+        // the time - it's totally normal." The low-energy racing block (Trackblazer.kt
+        // shouldAllowConsecutiveRace) is overly conservative for this scenario, so
+        // bypass it by default. Non-Trackblazer scenarios aren't affected - the block
+        // only exists in the Trackblazer override.
+        ignoreLowEnergyRacingBlock: true,
         daysToRunExtraRaces: 5,
         disableRaceRetries: false,
         enableFreeRaceRetry: false,
@@ -355,7 +368,12 @@ export const defaultSettings: Settings = {
         maximumFailureChance: 20,
         disableTrainingOnMaxedStat: true,
         focusOnSparkStatTarget: ["Speed", "Stamina", "Power"],
-        enableRainbowTrainingBonus: false,
+        // Trackblazer guide repeatedly emphasizes rainbow training during summer camp.
+        // Code at Training.kt:730-740 applies a 2.0x multiplier to rainbow training
+        // scoring when on vs 1.5x when off - the extra decisiveness matters during
+        // the 4 high-value camp turns where stat gains compound with Megaphones +
+        // Ankle Weights. Only applies Classic year onward (Junior has no rainbows).
+        enableRainbowTrainingBonus: true,
         preferredDistanceOverride: "Auto",
         mustRestBeforeSummer: false,
         enableRiskyTraining: false,
@@ -425,7 +443,12 @@ export const defaultSettings: Settings = {
         autoFillSupports: false,
     },
     scenarioOverrides: {
-        trackblazerConsecutiveRacesLimit: 5,
+        // Trackblazer guide: "After 3 consecutive races, you could gamble on a fourth,
+        // but the risk is high" - the -30 stat penalty can apply. Code at
+        // Trackblazer.kt:543 checks `consecutiveRaceCount < (limit + 1)`, so limit=2
+        // permits counts 0/1/2 (three races) and aborts at 4+. Previous default of 5
+        // silently allowed six consecutive races, well past the penalty threshold.
+        trackblazerConsecutiveRacesLimit: 2,
         trackblazerEnergyThreshold: 40,
         trackblazerShopCheckGrades: ["G1", "G2", "G3"],
         trackblazerMinStatGainForCharm: 30,
