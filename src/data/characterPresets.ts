@@ -74,21 +74,21 @@ export const characterPresets: CharacterPreset[] =
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161"
+                        "plan": "200331,200351,200571,200581,201322,201312,201112,201102,201591,200462,201611,201151,201532,200431"
                     },
                     "preFinals": {
                         "enabled": true,
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161"
+                        "plan": "200331,200351,200571,200581,201322,201312,201112,201102,201591,200462,201611,201151,201532,200431"
                     },
                     "careerComplete": {
                         "enabled": true,
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161"
+                        "plan": "200331,200351,200571,200581,201322,201312,201112,201102,201591,200462,201611,201151,201532,200431"
                     }
                 }
             },
@@ -327,21 +327,21 @@ export const characterPresets: CharacterPreset[] =
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200431,100711,200581,201391,201381,201351,201111,201101,201161,200331,200351,200021,200352,200382,200571"
+                        "plan": "200331,200351,200512,201391,201392,200601,200612,201112,201102,200371,201651,201542,200431,201381"
                     },
                     "preFinals": {
                         "enabled": true,
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200431,100711,200581,201391,201381,201351,201111,201101,201161,200331,200351,200021,200352,200382,200571"
+                        "plan": "200331,200351,200512,201391,201392,200601,200612,201112,201102,200371,201651,201542,200431,201381"
                     },
                     "careerComplete": {
                         "enabled": true,
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200431,100711,200581,201391,201381,201351,201111,201101,201161,200331,200351,200021,200352,200382,200571"
+                        "plan": "200331,200351,200512,201391,201392,200601,200612,201112,201102,200371,201651,201542,200431,201381"
                     }
                 }
             },
@@ -581,21 +581,21 @@ export const characterPresets: CharacterPreset[] =
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200431,200541,200551,200531,201251,201241,201041,201031,200681,200331,200021,201281,200352,200382,200552"
+                        "plan": "200721,200331,200351,200371,200512,201601,200362,201251,201241,201041,200431,200551,200541,200531,201031"
                     },
                     "preFinals": {
                         "enabled": true,
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200431,200541,200551,200531,201251,201241,201041,201031,200681,200331,200021,201281,200352,200382,200552"
+                        "plan": "200721,200331,200351,200371,200512,201601,200362,201251,201241,201041,200431,200551,200541,200531,201031"
                     },
                     "careerComplete": {
                         "enabled": true,
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200431,200541,200551,200531,201251,201241,201041,201031,200681,200331,200021,201281,200352,200382,200552"
+                        "plan": "200721,200331,200351,200371,200512,201601,200362,201251,201241,201041,200431,200551,200541,200531,201031"
                     }
                 }
             },
@@ -843,21 +843,21 @@ export const characterPresets: CharacterPreset[] =
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200431,100711,200581,201321,201311,201041,201031,201351,200681,200331,200351,200021,200352,200382,201051"
+                        "plan": "200331,200351,201322,201042,200342,200582,200512,201651,201312,200362,201532,201031,200431,200681"
                     },
                     "preFinals": {
                         "enabled": true,
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200431,100711,200581,201321,201311,201041,201031,201351,200681,200331,200351,200021,200352,200382,201051"
+                        "plan": "200331,200351,201322,201042,200342,200582,200512,201651,201312,200362,201532,201031,200431,200681"
                     },
                     "careerComplete": {
                         "enabled": true,
                         "strategy": "optimize_skills",
                         "enableBuyInheritedUniqueSkills": true,
                         "enableBuyNegativeSkills": false,
-                        "plan": "200431,100711,200581,201321,201311,201041,201031,201351,200681,200331,200351,200021,200352,200382,201051"
+                        "plan": "200331,200351,201322,201042,200342,200582,200512,201651,201312,200362,201532,201031,200431,200681"
                     }
                 }
             },
