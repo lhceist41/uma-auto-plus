@@ -107,6 +107,7 @@ export interface Settings {
         trainingBlacklist: string[]
         statPrioritization: string[]
         maximumFailureChance: number
+        manualStatCap: number
         disableTrainingOnMaxedStat: boolean
         focusOnSparkStatTarget: string[]
         enableRainbowTrainingBonus: boolean
@@ -355,7 +356,63 @@ export const defaultSettings: Settings = {
         },
         characterEventOverrides: {},
         supportEventOverrides: {},
-        scenarioEventOverrides: {},
+        // Scenario-wide event picks sourced from Game8's All Trackblazer Events and Choices
+        // (https://game8.co/games/Umamusume-Pretty-Derby/archives/585951, updated Mar 14, 2026)
+        // and Deltia's Gaming skill tier data. Default framework per community consensus:
+        // +6/+6 stats (~12 stat pts, ~60-80 SP-equivalent) beats a +1 skill hint unless
+        // the skill is build-essential, expensive, gold, or unobtainable elsewhere.
+        //
+        // Unconditional Option 2 (skill hint wins): only "Leave It to the Great Detective!"
+        // (Nimble Navigator - best last-spurt lane-change skill, community staple).
+        //
+        // Conditional Option 2 picks - handled per-character via characterEventOverrides
+        // in characterPresets.ts (applied based on running style / distance):
+        //   #5  A Grandkid Get-Together     -> Pace Chasers
+        //   #7  The Inescapable Ardan       -> Front Runners
+        //   #12 The Exciting Fruit Fest     -> Front Runners
+        //   #15 Vega and Spica              -> Front Runners
+        //   #17 Expressing My Feelings...   -> Mile runners (Shifting Gears upgrades to gold)
+        //   #18 Worldwide Windy             -> End Closers
+        scenarioEventOverrides: {
+            "Trackblazer|Ordinary? Or Full Throttle?!": 0,
+            "Trackblazer|All on the Line": 0,
+            "Trackblazer|Pondering over Perennials": 0,
+            "Trackblazer|Living Alone": 0,
+            "Trackblazer|A Grandkid Get-Together": 0,
+            "Trackblazer|Agnes Digital Explodes": 0,
+            "Trackblazer|The Inescapable Ardan": 0,
+            "Trackblazer|Tamamo's Struggle at the Arcade": 0,
+            "Trackblazer|The Strongest, Mightiest Cinderella!": 0,
+            "Trackblazer|A Trip to the Victory Club!": 0,
+            "Trackblazer|Golshi Games: Who Is the Werewolf?!": 0,
+            "Trackblazer|The Exciting Fruit Fest": 0,
+            "Trackblazer|Taiki and Pearl's Language Exchange": 0,
+            "Trackblazer|Brian Gets Jealous?": 0,
+            "Trackblazer|Vega and Spica": 0,
+            "Trackblazer|The Little Marvelous Match Girl": 0,
+            "Trackblazer|Expressing My Feelings to Maruzen": 0,
+            "Trackblazer|Worldwide Windy": 0,
+            "Trackblazer|Keeping It Cute!": 0,
+            "Trackblazer|Mission: Big Surprise!": 0,
+            "Trackblazer|What's Wrong with Golshi?!": 0,
+            "Trackblazer|The Perfect Combo": 0,
+            "Trackblazer|Idle Committee Banter": 0,
+            "Trackblazer|A Family (?) Shopping Trip!": 0,
+            "Trackblazer|An Unusual Addition": 0,
+            "Trackblazer|Under the Same Umbrella": 0,
+            "Trackblazer|Hungry for Affection": 0,
+            "Trackblazer|Fear the Fearless": 0,
+            "Trackblazer|Leave It to the Great Detective!": 1,
+            "Trackblazer|Gullible Socialites": 0,
+            "Trackblazer|I Wanna Join the Discussion!": 0,
+            // URA Finale - 3 events from Game8 scenario event pages. Stamina > Guts
+            // universally for the 3-race finale gauntlet; Speed is #1 at every distance;
+            // Best Foot Forward Opt 2 is the safe (no-energy-cost) compound-reward path
+            // with gold Breath of Fresh Air (solid stamina heal).
+            "URA Finale|Exhilarating! What a Scoop!": 0,
+            "URA Finale|A Trainer's Knowledge": 1,
+            "URA Finale|Best Foot Forward!": 1,
+        },
     },
     misc: {
         enableSettingsDisplay: false,
@@ -369,6 +426,13 @@ export const defaultSettings: Settings = {
         trainingBlacklist: [],
         statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
         maximumFailureChance: 20,
+        // OCR sanity ceiling per stat. The Global EN hard stat cap is 1200 unless
+        // raised by Trackblazer shop items (Speed Shoes, etc.) per Game8 Stats Explained
+        // (https://game8.co/games/Umamusume-Pretty-Derby/archives/535820). CustomImageUtils.kt
+        // uses this to reject OCR misreads above the ceiling. 1200 is the safe fleet-wide
+        // value; per-character overrides (e.g. 1300 for cap-raising-item builds) can be
+        // applied via character presets.
+        manualStatCap: 1200,
         disableTrainingOnMaxedStat: true,
         focusOnSparkStatTarget: ["Speed", "Stamina", "Power"],
         // Trackblazer guide repeatedly emphasizes rainbow training during summer camp.

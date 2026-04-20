@@ -742,16 +742,20 @@ class Trackblazer(game: Game) : Campaign(game) {
             return MainScreenAction.TRAIN
         }
 
-        // Three Dead Turns (post-debut Junior Early July, Late July, Early August):
-        // Per the Trackblazer guide, these three turns are dominated by OP races which
-        // cannot spawn rivals in MANT, so racing them produces minimal stats/skill points.
-        // Prefer training to push support-card bonds toward orange and level up facilities
-        // before the real graded-race calendar begins in Late August. If the user has
-        // explicitly scheduled a race via the in-game Agenda, respect that (agenda wins).
-        val isDeadTurnsWindow = date.year == DateYear.JUNIOR &&
-            (date.month == DateMonth.JULY || (date.month == DateMonth.AUGUST && date.phase == DatePhase.EARLY))
-        if (isDeadTurnsWindow && !LabelScheduledRace.check(game.imageUtils)) {
-            MessageLog.i(TAG, "[TRACKBLAZER] Three Dead Turns window (post-debut Junior OP-race dead zone). Prioritizing training.")
+        // Post-debut bond-building window (Junior Early July + Late July, turns 13-14):
+        // Per uma.guide (https://uma.guide/guides/trackblazer), Rival Races unlock from
+        // Junior Early August (turn 15) onward - so the two turns immediately after the
+        // June debut have no rival opportunities and only OP-grade races. Training instead
+        // pushes support-card bonds toward orange before the real graded-race calendar.
+        // Junior Early August (turn 15) is intentionally excluded since rival races become
+        // available there. If the user has scheduled a race via the in-game Agenda, respect
+        // that (agenda wins). Source-corrected from the earlier 3-turn implementation
+        // ("Three Dead Turns" was bot-internal nomenclature; the actual no-rival window
+        // is 2 turns per uma.guide's Rival Race unlock timing).
+        val isPostDebutBondWindow =
+            date.year == DateYear.JUNIOR && date.month == DateMonth.JULY
+        if (isPostDebutBondWindow && !LabelScheduledRace.check(game.imageUtils)) {
+            MessageLog.i(TAG, "[TRACKBLAZER] Post-debut bond-building window (Junior July, no rival races yet). Prioritizing training.")
             return MainScreenAction.TRAIN
         }
 
@@ -1453,10 +1457,20 @@ class Trackblazer(game: Game) : Campaign(game) {
 
         val hasMasterHammer =
             if (date.day == 73) {
-                // Save the last Master Cleat Hammer for the Semi-Final and Final (turns 74-75).
+                // Twinkle Star Climax race 1 of 3. Need ≥3 to chain through all 3 races.
+                masterHammerCount >= 3
+            } else if (date.day == 74) {
+                // Twinkle race 2 of 3. Need ≥2 (one for this and one for the Final).
                 masterHammerCount >= 2
+            } else if (date.day == 75) {
+                // Twinkle Final. Use the last reserved hammer.
+                masterHammerCount >= 1
             } else {
-                masterHammerCount > 0
+                // Pre-climax: reserve 3 Masters for the 3 Twinkle Climax races. Per
+                // uma.guide and Game8 Trackblazer guides, the climax races have the highest
+                // stat-return per hammer of the entire run, so 3 Masters must be hoarded.
+                // Excess (4+) can be spent on regular G1s before the climax.
+                masterHammerCount > 3
             }
         val hasArtisanHammer =
             if (date.day == 73) {
