@@ -372,53 +372,68 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
      */
     private fun handlePostMatchResults() {
         // Try See All Race Results first - only appears once per match.
-        if (ButtonSeeAllRaceResults.check(game.imageUtils)) {
+        // Restrict to bottomHalf since the button is always in the bottom region.
+        if (ButtonSeeAllRaceResults.check(game.imageUtils, region = Region.bottomHalf)) {
             MessageLog.v(TAG, "[STATE] handlePostMatchResults:: See All Race Results.")
-            ButtonSeeAllRaceResults.click(game.imageUtils)
+            ButtonSeeAllRaceResults.click(game.imageUtils, region = Region.bottomHalf)
+            game.wait(2.5)
+            return
+        }
+
+        // SeeAllRaceResults coordinate fallback. The standby screen's Race 1 / Race 2 green
+        // header bands (around y=1300) get falsely matched by ButtonNext/ButtonNextWithImage,
+        // so when the template match fails here tap the button's known location instead.
+        // Center (540, 1775) → ratios (0.5, 0.925). Only while still in the standby phase.
+        if (matchInProgress && iterationsWithoutProgress >= 3) {
+            val x = SharedData.displayWidth * 0.5
+            val y = SharedData.displayHeight * 0.925
+            MessageLog.v(TAG, "[STATE] handlePostMatchResults:: coord-fallback tap on See All Race Results at ($x, $y).")
+            game.gestureUtils.tap(x, y, "see_all_race_results_coord_fallback")
             game.wait(2.5)
             return
         }
 
         // Cancel incidental popups like Daily Sale - user can shop manually.
-        if (ButtonCancel.check(game.imageUtils)) {
+        if (ButtonCancel.check(game.imageUtils, region = Region.bottomHalf)) {
             MessageLog.v(TAG, "[STATE] handlePostMatchResults:: dismissing Daily Sale / cancel popup.")
-            ButtonCancel.click(game.imageUtils)
+            ButtonCancel.click(game.imageUtils, region = Region.bottomHalf)
             game.wait(2.0)
             return
         }
 
         // Close - for Story Unlocked popups or similar.
-        if (ButtonClose.check(game.imageUtils)) {
+        if (ButtonClose.check(game.imageUtils, region = Region.bottomHalf)) {
             MessageLog.v(TAG, "[STATE] handlePostMatchResults:: dismissing popup via Close.")
-            ButtonClose.click(game.imageUtils)
+            ButtonClose.click(game.imageUtils, region = Region.bottomHalf)
             game.wait(2.0)
             return
         }
 
-        // Chibi Next (green with two chibi characters) - the post-result button.
-        // Clicking it transitions us out of the post-match cascade.
-        if (ButtonNextWithImage.click(game.imageUtils)) {
+        // Chibi Next (green with two chibi characters) - the post-result button. Restricted
+        // to bottomHalf to avoid matching the standby screen's green "Race 2" header band
+        // (around y=1300).
+        if (ButtonNextWithImage.click(game.imageUtils, region = Region.bottomHalf)) {
             MessageLog.v(TAG, "[STATE] handlePostMatchResults:: clicked chibi Next.")
             game.wait(2.5)
             matchesCompleted += 1
             return
         }
 
-        // Generic Next - bot's normal fallback advance.
-        if (ButtonNext.click(game.imageUtils)) {
+        // Generic Next - bot's normal fallback advance, also restricted to bottomHalf.
+        if (ButtonNext.click(game.imageUtils, region = Region.bottomHalf)) {
             MessageLog.v(TAG, "[STATE] handlePostMatchResults:: clicked generic Next.")
             game.wait(2.0)
             return
         }
 
-        // OK / Confirm as final fallbacks.
-        if (ButtonOk.click(game.imageUtils)) {
+        // OK / Confirm as final fallbacks, restricted to bottomHalf.
+        if (ButtonOk.click(game.imageUtils, region = Region.bottomHalf)) {
             MessageLog.v(TAG, "[STATE] handlePostMatchResults:: clicked OK.")
             game.wait(2.0)
             return
         }
 
-        if (ButtonConfirm.click(game.imageUtils)) {
+        if (ButtonConfirm.click(game.imageUtils, region = Region.bottomHalf)) {
             MessageLog.v(TAG, "[STATE] handlePostMatchResults:: clicked Confirm.")
             game.wait(2.0)
             return
