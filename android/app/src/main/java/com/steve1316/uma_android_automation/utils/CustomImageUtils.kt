@@ -2471,6 +2471,22 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         ocrEngine: String = "tesseract",
         debugName: String = "",
     ): String {
+        // Bitmap.createBitmap throws IllegalArgumentException when the crop is out of bounds, which
+        // happens when the caller is on the wrong screen (e.g. shop screen while assuming main, so
+        // date-region offsets land outside the bitmap). Returning empty turns the crash into a
+        // recoverable OCR miss that the caller retries once screen-state detection re-converges.
+        if (x < 0 || y < 0 || width <= 0 || height <= 0 ||
+            x + width > sourceBitmap.width || y + height > sourceBitmap.height
+        ) {
+            MessageLog.w(
+                TAG,
+                "[WARN] performOCROnRegion:: Invalid crop region for \"$debugName\" - " +
+                    "x=$x y=$y w=$width h=$height vs source ${sourceBitmap.width}x${sourceBitmap.height}. " +
+                    "Returning empty result instead of crashing. (Caller likely on the wrong screen.)",
+            )
+            return ""
+        }
+
         // Perform OCR using findText() from ImageUtils.
         return findText(
             cropRegion = intArrayOf(x, y, width, height),
