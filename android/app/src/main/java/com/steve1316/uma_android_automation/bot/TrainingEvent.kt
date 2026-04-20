@@ -90,6 +90,19 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
             emptyMap()
         }
 
+    /**
+     * Skill-hint reward lines that should always win an event option choice over any alternative.
+     *
+     * Per the Trackblazer guide, Nimble Navigator and Uma Stan are the two scenario-event skill hints
+     * to always grab regardless of the other option's stat payoff. Lowercased so a single `.contains(...)`
+     * check against a lowercased reward line suffices.
+     */
+    private val priorityScenarioSkillHints: List<String> =
+        listOf(
+            "nimble navigator",
+            "uma stan",
+        )
+
     /** Scenario event overrides loaded from SQLite settings. */
     private val scenarioEventOverrides: Map<String, Int> =
         try {
@@ -586,6 +599,12 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                             } else if (line.lowercase().contains("bond")) {
                                 val bondWeight = if (formattedLine.contains("-")) -20 else 20
                                 selectionWeight[rewardIndex] += bondWeight
+                            } else if (priorityScenarioSkillHints.any { line.lowercase().contains(it) }) {
+                                // Per Trackblazer guide: always grab Nimble Navigator and Uma Stan hints. The
+                                // large bump beats stat-option alternatives while both options still compete on
+                                // their full weight sum.
+                                selectionWeight[rewardIndex] += 500
+                                MessageLog.v(TAG, "[TRAINING_EVENT] Priority scenario-skill hint in option ${rewardIndex + 1}: +500 weight.")
                             } else if (line.lowercase().contains("hint")) {
                                 selectionWeight[rewardIndex] += 25
                             } else if (PositiveStatus.names.any { status -> line.contains(status) }) {

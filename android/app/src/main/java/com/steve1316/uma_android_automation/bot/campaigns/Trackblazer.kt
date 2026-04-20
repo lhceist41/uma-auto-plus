@@ -170,6 +170,20 @@ class Trackblazer(game: Game) : Campaign(game) {
     /** Tracks the number of days since the last race for shop check frequency. */
     private var shopCheckCounter: Int = 0
 
+    /**
+     * Number of recreation dates consumed across this entire career. Rio Kashimoto decks get ~5
+     * recs and should save one for Senior-year mood instead of burning them all on streak breaks;
+     * non-Rio decks with fewer recs never reach the cap, so behavior is unchanged.
+     */
+    private var recreationUsedCount: Int = 0
+
+    /**
+     * Soft cap on recreation usages in non-Senior years, applied only to energy-recovery calls
+     * (streak breaking). Past the cap, energy-path recs defer to Senior and the caller falls back
+     * to Rest. Mood-recovery calls are never gated - saving one rec for mood is the point.
+     */
+    private val recreationUsageCapBeforeSenior: Int = 4
+
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // Debug Tests
@@ -401,6 +415,35 @@ class Trackblazer(game: Game) : Campaign(game) {
         MessageLog.i(TAG, "[TRACKBLAZER] Resetting $consecutiveRaceCount consecutive race counts due to mood recovery.")
         consecutiveRaceCount = 0
         return super.recoverMood(sourceBitmap, targetMood)
+    }
+
+    /**
+     * Enforces the recreation budget: save at least one rec for Senior-year mood instead of burning
+     * them all on streak breaks in Junior/Classic. Gates only energy-recovery calls
+     * (`recoverMoodIfCompleted` false); mood-recovery calls pass through, since the reserve exists
+     * for them. A blocked energy-path rec falls back to [recoverEnergy]'s Rest.
+     *
+     * @param recoverMoodIfCompleted True for mood-recovery (always allowed); false for energy /
+     * streak-break calls (gated by the budget).
+     * @return True if a recreation was consumed, false if the budget was enforced.
+     */
+    override fun handleRecreationDate(recoverMoodIfCompleted: Boolean): Boolean {
+        val isMoodRecovery = recoverMoodIfCompleted
+        val isSenior = date.year == DateYear.SENIOR
+        if (!isMoodRecovery && !isSenior && recreationUsedCount >= recreationUsageCapBeforeSenior) {
+            MessageLog.i(
+                TAG,
+                "[TRACKBLAZER] Recreation budget exhausted ($recreationUsedCount/$recreationUsageCapBeforeSenior) in ${date.year} on energy-recovery call. Reserving remaining rec(s) for Senior-year mood management. Falling back to rest.",
+            )
+            return false
+        }
+
+        val success = super.handleRecreationDate(recoverMoodIfCompleted)
+        if (success) {
+            recreationUsedCount++
+            MessageLog.i(TAG, "[TRACKBLAZER] Recreation used. Total this career: $recreationUsedCount.")
+        }
+        return success
     }
 
     override fun onConsecutiveRaceWarningDetected(dialog: DialogInterface, args: Map<String, Any>) {
@@ -696,6 +739,19 @@ class Trackblazer(game: Game) : Campaign(game) {
         // Finale: Train during the final 3 turns (Qualifier, Semifinal, Finals).
         if (date.bIsFinaleSeason && date.day >= 73) {
             MessageLog.i(TAG, "[TRACKBLAZER] It is the Finale. Prioritizing training.")
+            return MainScreenAction.TRAIN
+        }
+
+        // Three Dead Turns (post-debut Junior Early July, Late July, Early August):
+        // Per the Trackblazer guide, these three turns are dominated by OP races which
+        // cannot spawn rivals in MANT, so racing them produces minimal stats/skill points.
+        // Prefer training to push support-card bonds toward orange and level up facilities
+        // before the real graded-race calendar begins in Late August. If the user has
+        // explicitly scheduled a race via the in-game Agenda, respect that (agenda wins).
+        val isDeadTurnsWindow = date.year == DateYear.JUNIOR &&
+            (date.month == DateMonth.JULY || (date.month == DateMonth.AUGUST && date.phase == DatePhase.EARLY))
+        if (isDeadTurnsWindow && !LabelScheduledRace.check(game.imageUtils)) {
+            MessageLog.i(TAG, "[TRACKBLAZER] Three Dead Turns window (post-debut Junior OP-race dead zone). Prioritizing training.")
             return MainScreenAction.TRAIN
         }
 
@@ -1038,6 +1094,34 @@ class Trackblazer(game: Game) : Campaign(game) {
         priorityList.add("Master Cleat Hammer")
         priorityList.add("Artisan Cleat Hammer")
         priorityList.add("Glow Sticks")
+
+        // 1b. Summer Camp Prep Window (per Trackblazer guide).
+        // Before Classic/Senior summer camp (starts Early July), promote training-effect items
+        // (Megaphones, top-stat Ankle Weights, Reset Whistles) and the energy combo (Royal Kale
+        // Juice + Plain Cupcake) above stat scrolls, to stock up for the 4 all-Level-5 camp turns.
+        // Duplicate later entries are idempotent: calculatePurchases() removes each bought unit from
+        // the pool, so a later occurrence is a no-op once the limit is claimed at the promoted spot.
+        val isPreSummerCampWindow = isInPreSummerCampPrepWindow()
+        if (isPreSummerCampWindow) {
+            MessageLog.i(TAG, "[TRACKBLAZER] Pre-summer-camp prep window active. Promoting training-effect and energy-combo items to top priority.")
+            priorityList.add("Empowering Megaphone")
+            priorityList.add("Motivating Megaphone")
+            topStats.forEach { stat ->
+                val ankleWeight =
+                    when (stat) {
+                        StatName.SPEED -> "Speed Ankle Weights"
+                        StatName.STAMINA -> "Stamina Ankle Weights"
+                        StatName.POWER -> "Power Ankle Weights"
+                        StatName.GUTS -> "Guts Ankle Weights"
+                        else -> null
+                    }
+                if (ankleWeight != null) priorityList.add(ankleWeight)
+            }
+            priorityList.add("Reset Whistle")
+            priorityList.add("Royal Kale Juice")
+            priorityList.add("Plain Cupcake")
+        }
+
         priorityList.add("Royal Kale Juice")
         priorityList.add("Grilled Carrots")
         priorityList.add("Rich Hand Cream")
@@ -1107,6 +1191,19 @@ class Trackblazer(game: Game) : Campaign(game) {
         priorityList.add("Scholar's Hat")
 
         return priorityList
+    }
+
+    /**
+     * Pre-summer-camp prep window: Classic/Senior June, the month before camp starts (Early July).
+     * Inventory must be stocked with Megaphones, Ankle Weights, Reset Whistles, and the Royal Kale +
+     * Plain Cupcake combo before camp, or the run's highest-value training turns are forfeited.
+     *
+     * @return True when the current turn is in the prep window (Classic or Senior, month is June).
+     */
+    private fun isInPreSummerCampPrepWindow(): Boolean {
+        val isTargetYear = date.year == DateYear.CLASSIC || date.year == DateYear.SENIOR
+        val isPrepMonth = date.month == DateMonth.JUNE
+        return isTargetYear && isPrepMonth
     }
 
     /**
