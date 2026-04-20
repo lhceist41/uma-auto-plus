@@ -445,21 +445,29 @@ class Trackblazer(game: Game) : Campaign(game) {
 
     override fun shouldAllowConsecutiveRace(args: Map<String, Any>): Boolean {
         // Block racing at 0-1 energy with 3+ consecutive races to avoid -30 stat penalty.
+        // User can opt out via racing.ignoreLowEnergyRacingBlock setting if they accept the risk.
         if (trainee.energy <= 1 && consecutiveRaceCount >= 3) {
-            val conserveItem = energyItemConservationOrder.firstOrNull { (currentInventory[it] ?: 0) > 0 }
-            if (conserveItem != null) {
+            if (racing.ignoreLowEnergyRacingBlock) {
                 MessageLog.w(
                     TAG,
-                    "[WARN] shouldAllowConsecutiveRace:: Energy critically low but $conserveItem exists in inventory. This should have been used in decideNextAction(). Blocking race as safety net.",
+                    "[WARN] shouldAllowConsecutiveRace:: Energy critically low (${trainee.energy}%) with $consecutiveRaceCount consecutive races, but ignoreLowEnergyRacingBlock is enabled. Allowing race.",
                 )
             } else {
-                MessageLog.w(
-                    TAG,
-                    "[WARN] shouldAllowConsecutiveRace:: Energy is critically low (${trainee.energy}%) with $consecutiveRaceCount consecutive races. Blocking to avoid possible -30 stat penalty.",
-                )
+                val conserveItem = energyItemConservationOrder.firstOrNull { (currentInventory[it] ?: 0) > 0 }
+                if (conserveItem != null) {
+                    MessageLog.w(
+                        TAG,
+                        "[WARN] shouldAllowConsecutiveRace:: Energy critically low but $conserveItem exists in inventory. This should have been used in decideNextAction(). Blocking race as safety net.",
+                    )
+                } else {
+                    MessageLog.w(
+                        TAG,
+                        "[WARN] shouldAllowConsecutiveRace:: Energy is critically low (${trainee.energy}%) with $consecutiveRaceCount consecutive races. Blocking to avoid possible -30 stat penalty.",
+                    )
+                }
+                racing.encounteredRacingPopup = false
+                return false
             }
-            racing.encounteredRacingPopup = false
-            return false
         }
 
         // A -30 stat penalty can apply starting from 3 consecutive races.
@@ -533,7 +541,7 @@ class Trackblazer(game: Game) : Campaign(game) {
             return true
         }
 
-        // Has mood items and energy is low — skip recovery, items will handle mood in useItems().
+        // Has mood items and energy is low - skip recovery, items will handle mood in useItems().
         return false
     }
 
@@ -1267,11 +1275,39 @@ class Trackblazer(game: Game) : Campaign(game) {
         if (trainingSelected != null) {
             training.executeTraining(trainingSelected)
         } else {
-            MessageLog.i(TAG, "[TRACKBLAZER] Still no suitable training found. Backing out to rest/recollect.")
-            ButtonBack.click(game.imageUtils)
-            game.wait(1.0)
-            if (checkMainScreen()) {
-                recoverEnergy()
+            // No suitable training, so take the best recovery action to avoid a wasted turn.
+            // Resting is 62.5% chance of +50 energy; Shrine (clears status conditions) is 30% in recreation.
+            if (trainee.mood <= Mood.NORMAL || trainee.energy <= 50) {
+                MessageLog.i(TAG, "[TRACKBLAZER] Still no suitable training found. Backing out for recovery.")
+                // Set to false to avoid possible rest/recreation looping on the next turn.
+                training.firstTrainingCheck = false
+                ButtonBack.click(game.imageUtils)
+                game.wait(1.0)
+
+                if (checkMainScreen()) {
+                    if (trainee.mood == Mood.AWFUL || (trainee.mood <= Mood.NORMAL && trainee.energy >= 20)) {
+                        MessageLog.i(TAG, "[TRACKBLAZER] Mood is ${trainee.mood}. Attempting to recover mood.")
+                        recoverMood()
+                    } else {
+                        MessageLog.i(TAG, "[TRACKBLAZER] Energy is ${trainee.energy}%. Attempting to recover energy.")
+                        recoverEnergy()
+                    }
+                }
+            } else {
+                // Force a training (Wit when we'd risk stat reductions, else Speed). 80 Energy is
+                // optimal for Wit since there may be post events that provide additional energy.
+                val forcedStat =
+                    if (trainee.energy >= 80 && trainee.currentNegativeStatuses.isEmpty()) {
+                        StatName.SPEED
+                    } else {
+                        StatName.WIT
+                    }
+                MessageLog.i(
+                    TAG,
+                    "[TRACKBLAZER] Still no suitable training found. Energy (${trainee.energy}%) and Mood (${trainee.mood}) are sufficient. Forcing $forcedStat training.",
+                )
+                training.executeTraining(forcedStat)
+                training.firstTrainingCheck = false
             }
         }
 
@@ -1685,9 +1721,8 @@ class Trackblazer(game: Game) : Campaign(game) {
             }
         }
 
-        // Determine if a Good-Luck Charm is being used this turn (either already queued or will be queued).
-        // If so, skip energy items because the Charm sets failure to 0% regardless of energy, and the energy cost
-        // is subtracted after training — so using energy items would waste them.
+        // If a Good-Luck Charm is (or will be) queued this turn, skip energy items: the Charm sets failure
+        // to 0% regardless of energy and the energy cost is subtracted after training, so they'd be wasted.
         val charmBeingUsedThisTurn =
             bUsedCharmToday ||
                 (date.day >= 13 && failureChance >= 20 && (nextInventory["Good-Luck Charm"] ?: 0) > 0)

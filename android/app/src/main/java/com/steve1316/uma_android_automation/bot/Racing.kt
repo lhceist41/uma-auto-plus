@@ -68,6 +68,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Whether to ignore the warning that appears when racing three times in a row. */
     val ignoreConsecutiveRaceWarning = SettingsHelper.getBooleanSetting("racing", "ignoreConsecutiveRaceWarning")
 
+    /** Whether to bypass the low-energy racing block in Trackblazer. User opt-in to override the safety net. */
+    val ignoreLowEnergyRacingBlock = SettingsHelper.getBooleanSetting("racing", "ignoreLowEnergyRacingBlock")
+
     /** The number of days to wait between running extra races. */
     private val daysToRunExtraRaces: Int = SettingsHelper.getIntSetting("racing", "daysToRunExtraRaces")
 
@@ -131,7 +134,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Optional custom agenda title that overrides the selected agenda name for OCR matching. */
     private val customAgendaTitle = SettingsHelper.getStringSetting("racing", "customAgendaTitle")
 
-    /** The effective agenda name used for OCR matching — custom title if provided, otherwise the selected agenda. */
+    /** The effective agenda name used for OCR matching - custom title if provided, otherwise the selected agenda. */
     private val effectiveAgendaName = if (customAgendaTitle.isNotBlank()) customAgendaTitle else selectedUserAgenda
 
     /** Whether to skip Summer training to do races from the in-game agenda. */

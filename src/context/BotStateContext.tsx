@@ -41,6 +41,7 @@ export interface Settings {
     racing: {
         enableFarmingFans: boolean
         ignoreConsecutiveRaceWarning: boolean
+        ignoreLowEnergyRacingBlock: boolean
         daysToRunExtraRaces: number
         disableRaceRetries: boolean
         enableFreeRaceRetry: boolean
@@ -224,6 +225,7 @@ export const defaultSettings: Settings = {
     racing: {
         enableFarmingFans: false,
         ignoreConsecutiveRaceWarning: false,
+        ignoreLowEnergyRacingBlock: false,
         daysToRunExtraRaces: 5,
         disableRaceRetries: false,
         enableFreeRaceRetry: false,
@@ -258,16 +260,13 @@ export const defaultSettings: Settings = {
         improvementThreshold: 50.0,
     },
     skills: {
-        // Out-of-box defaults for a first-time user who hasn't selected a character preset.
-        // These match the safe baseline applied to every character preset: mid-run buying
-        // enabled with a conservative 1200 SP threshold (triggers only in late Senior year,
-        // when hints have accumulated and skills are cheaper) plus preFinals + careerComplete
-        // as safety nets. Strategy is optimize_skills across all three plans so the bot filters
-        // by the trainee's aptitudes and sorts by community-tier ranking from skills.json.
-        // enableBuyInheritedUniqueSkills: true lets the bot buy inherited unique skills when
-        // affordable — these are almost always worth it. enableBuyNegativeSkills stays false
-        // so the bot never buys debuffs. Previously all three plans were disabled by default,
-        // meaning a first-time user who never picked a preset got zero skill buying at all.
+        // Out-of-box defaults matching the safe baseline every character preset applies: mid-run
+        // buying with a conservative 1200 SP threshold (triggers only in late Senior year, when hints
+        // have accumulated and skills are cheaper) plus preFinals + careerComplete as safety nets.
+        // Strategy optimize_skills across all three plans filters by the trainee's aptitudes and sorts
+        // by community-tier ranking from skills.json. enableBuyInheritedUniqueSkills: true buys
+        // inherited uniques when affordable (almost always worth it); enableBuyNegativeSkills stays
+        // false so the bot never buys debuffs.
         enableSkillPointCheck: true,
         skillPointCheck: 1200,
         preferredRunningStyle: "inherit",

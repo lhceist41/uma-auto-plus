@@ -35,7 +35,7 @@ export const clamp = (value: number, min: number, max: number): number => {
  * Calculates the orthogonal (cross-axis) style position for the indicator.
  *
  * This determines where the scrollbar should be anchored relative to
- * its parent container — either top/bottom for horizontal scrolls,
+ * its parent container - either top/bottom for horizontal scrolls,
  * or left/right for vertical scrolls.
  *
  * If a numeric value is provided instead of a keyword, it is treated as

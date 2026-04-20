@@ -92,14 +92,14 @@ class CareerLaunchNavigator(private val context: Context) {
         QUICK_MODE_PROMPT,
         /** Opening cinematic / intro. Detected via Skip button or requires Pause template. */
         CINEMATIC_INTRO,
-        /** Bot's normal start point — the in-career training menu. Navigation is complete. */
+        /** Bot's normal start point - the in-career training menu. Navigation is complete. */
         ACTIVE_TRAINING_MENU,
         /** Screen could not be identified by any detector. */
         UNKNOWN,
     }
 
     // Create a temporary Game instance to access CustomImageUtils for template matching.
-    // Lightweight — reads settings from SQLite and instantiates CV utils, but starts no automation.
+    // Lightweight - reads settings from SQLite and instantiates CV utils, but starts no automation.
     // The scenario has already been validated by the first successful run, so the Game
     // constructor should not throw. If it does, navigate() catches it and returns a failure.
     private var tempGame: Game? = null
@@ -110,7 +110,7 @@ class CareerLaunchNavigator(private val context: Context) {
     private var autoFillAlreadyDone: Boolean = false
 
     // Session-scoped flag: Auto-Select on the Legacy Select screen has already been clicked.
-    // The Auto-Select button stays visible after a successful run — without this guard the
+    // The Auto-Select button stays visible after a successful run - without this guard the
     // navigator would re-enter Legacy Select handling each iteration instead of clicking Next.
     private var legacyAutoSelectAlreadyDone: Boolean = false
 
@@ -248,7 +248,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         screenshotPath = screenshotPath,
                     )
                 }
-                // Wait and retry detection — do NOT tap blindly.
+                // Wait and retry detection - do NOT tap blindly.
                 MessageLog.w(TAG, "[NAV] Unknown screen state ($consecutiveUnknowns/$MAX_CONSECUTIVE_UNKNOWNS). Waiting before retry...")
                 waitSafe(2.0)
                 continue
@@ -297,7 +297,7 @@ class CareerLaunchNavigator(private val context: Context) {
     /**
      * Detects the current screen state by checking for known UI elements via template matching.
      *
-     * States are checked in priority order — the first match wins. Every detection here
+     * States are checked in priority order - the first match wins. Every detection here
      * uses real template matching against existing button/component assets.
      */
     private fun detectScreenState(): LaunchScreenState {
@@ -318,18 +318,18 @@ class CareerLaunchNavigator(private val context: Context) {
         //     Next/Ok/Confirm/Close but other screens with those buttons should not be
         //     misclassified as HOME by the weaker MenuBarHomeSelected fallback at the bottom.
 
-        // GOAL STATE: Active training menu — Training or Rest button visible.
+        // GOAL STATE: Active training menu - Training or Rest button visible.
         if (ButtonTraining.check(iu, sourceBitmap = bitmap) || ButtonRest.check(iu, sourceBitmap = bitmap)) {
             return LaunchScreenState.ACTIVE_TRAINING_MENU
         }
 
-        // Career Complete dialog — "To Home" button is uniquely present on this screen.
+        // Career Complete dialog - "To Home" button is uniquely present on this screen.
         // Common immediately after a career run completes.
         if (ButtonToHome.check(iu, sourceBitmap = bitmap)) {
             return LaunchScreenState.CAREER_COMPLETE_DIALOG
         }
 
-        // Home screen — CAREER button visible (the strongest home-screen signal).
+        // Home screen - CAREER button visible (the strongest home-screen signal).
         // We do NOT use ButtonMenuBarHomeSelected alone because that menu bar appears on
         // many intermediate screens (Scenario Select, Trainee Select, etc.) that are reached
         // from the home screen but still have the bottom nav visible.
@@ -337,7 +337,7 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.HOME_SCREEN
         }
 
-        // Legacy Select screen — Auto-Select button (green pill, optionally under a pink
+        // Legacy Select screen - Auto-Select button (green pill, optionally under a pink
         // Racing Carnival Underway banner). Checked BEFORE the generic POST_RUN_RESULTS Next
         // check because Next on Legacy Select is greyed out / non-clickable until Auto-Select
         // populates both legacy slots; clicking Next there is a no-op and would trap the
@@ -346,7 +346,7 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.LEGACY_SELECT_SCREEN
         }
 
-        // POST_RUN_RESULTS — generic post-run / between-screens dialog with Next, OK, Confirm,
+        // POST_RUN_RESULTS - generic post-run / between-screens dialog with Next, OK, Confirm,
         // or Close as the primary advance button. This is the most common state during
         // between-run navigation (10-20 iterations per career), so we check it early.
         // Consolidated into a single short-circuit `||` chain so a Next match avoids running
@@ -359,7 +359,7 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.POST_RUN_RESULTS
         }
 
-        // "Continue Career" dialog — Resume button takes us straight back into an active career.
+        // "Continue Career" dialog - Resume button takes us straight back into an active career.
         // Rare but discriminating.
         if (ButtonResume.check(iu, sourceBitmap = bitmap)) {
             return LaunchScreenState.CONTINUE_CAREER_DIALOG
@@ -372,13 +372,13 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.SUPPORT_DECK_SCREEN
         }
 
-        // Pre-run confirmation — "Start Career!" button visible without the Support
+        // Pre-run confirmation - "Start Career!" button visible without the Support
         // Formation banner. This is the Final Confirmation popup.
         if (ButtonStartCareer.check(iu, sourceBitmap = bitmap) || ButtonStartCareerOffset.check(iu, sourceBitmap = bitmap)) {
             return LaunchScreenState.PRE_RUN_CONFIRMATION
         }
 
-        // Quick Mode / Skip toggle — Skip Off, Skip >, or Skip >> button visible at the
+        // Quick Mode / Skip toggle - Skip Off, Skip >, or Skip >> button visible at the
         // bottom-left. Detection uses template match first, then falls back to OCR for
         // "Skip" text in the bottom-left area (handles template variations across game
         // versions and event cinematics).
@@ -386,7 +386,7 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.QUICK_MODE_PROMPT
         }
         try {
-            // Scan 22%-53% width, 94%-98% height — centered on the Skip Off pill button.
+            // Scan 22%-53% width, 94%-98% height - centered on the Skip Off pill button.
             val skipOcr = iu.performOCROnRegion(
                 bitmap,
                 (bitmap.width * 0.22).toInt(), (bitmap.height * 0.94).toInt(),
@@ -401,22 +401,22 @@ class CareerLaunchNavigator(private val context: Context) {
             }
         } catch (_: Exception) { }
 
-        // Cinematic — Skip or fast-forward button visible.
+        // Cinematic - Skip or fast-forward button visible.
         if (ButtonSkipCinematic.check(iu, sourceBitmap = bitmap) || ButtonSkip.check(iu, sourceBitmap = bitmap)) {
             return LaunchScreenState.CINEMATIC_INTRO
         }
 
-        // Career summary screen — "Complete Career" button visible (the button to initiate completion).
+        // Career summary screen - "Complete Career" button visible (the button to initiate completion).
         if (ButtonCompleteCareer.check(iu, sourceBitmap = bitmap)) {
             return LaunchScreenState.CAREER_SUMMARY
         }
 
-        // "Complete Career" confirmation dialog — Finish button is unique to this screen.
+        // "Complete Career" confirmation dialog - Finish button is unique to this screen.
         if (ButtonFinish.check(iu, sourceBitmap = bitmap)) {
             return LaunchScreenState.COMPLETE_CAREER_CONFIRMATION
         }
 
-        // Last-resort home screen detection — menu bar Home tab is selected but no other
+        // Last-resort home screen detection - menu bar Home tab is selected but no other
         // specific buttons matched. This is a weaker signal because the menu bar appears
         // on many screens, but if nothing else matched we're likely on the home screen
         // with the CAREER button obscured by decorative banners.
@@ -432,7 +432,7 @@ class CareerLaunchNavigator(private val context: Context) {
     // ////////////////////////////////////////////////////////////////////////////
 
     private sealed class TransitionResult {
-        /** Navigation is complete — we reached the training menu. */
+        /** Navigation is complete - we reached the training menu. */
         object Success : TransitionResult()
 
         /** Transition was performed. Re-detect to find the next state. */
@@ -500,14 +500,14 @@ class CareerLaunchNavigator(private val context: Context) {
             )
 
             LaunchScreenState.UNKNOWN -> {
-                // Handled in the main loop — should not be dispatched here.
+                // Handled in the main loop - should not be dispatched here.
                 TransitionResult.Continue
             }
         }
     }
 
     // ////////////////////////////////////////////////////////////////////////////
-    // State Handlers — implemented with real template matching
+    // State Handlers - implemented with real template matching
     // ////////////////////////////////////////////////////////////////////////////
 
     /**
@@ -697,7 +697,7 @@ class CareerLaunchNavigator(private val context: Context) {
             // The CAREER button sits at ~75% width. Limit the OCR region to 55%-95% width so
             // decorative "Event" banners on the left side of the screen (common during
             // seasonal events / campaign promos) cannot false-trigger the Event fallback
-            // below — which would otherwise fire a blind tap at the fixed CAREER button
+            // below - which would otherwise fire a blind tap at the fixed CAREER button
             // coordinates and navigate the bot to the wrong screen.
             // Vertically, CAREER text is at 85-88% height. Scan 80-92% to give OCR room.
             val ocrX = (screenWidth * 0.55).toInt()
@@ -853,7 +853,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 recommendedAction = "Manually click Auto-Select and restart the queue.",
             )
         }
-        // Mark as done even if subsequent steps fail — the button stays visible after click,
+        // Mark as done even if subsequent steps fail - the button stays visible after click,
         // so without this guard the next iteration would re-enter this handler.
         legacyAutoSelectAlreadyDone = true
         waitSafe(2.0)

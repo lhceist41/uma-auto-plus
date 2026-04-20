@@ -32,6 +32,7 @@ const RacingSettings = () => {
     const {
         enableFarmingFans,
         ignoreConsecutiveRaceWarning,
+        ignoreLowEnergyRacingBlock,
         daysToRunExtraRaces,
         disableRaceRetries,
         enableFreeRaceRetry,
@@ -159,6 +160,14 @@ const RacingSettings = () => {
                                 onCheckedChange={(checked) => updateRacingSetting("ignoreConsecutiveRaceWarning", checked)}
                                 label="Ignore Consecutive Race Warning"
                                 description="When enabled, the bot will ignore the warning popup about consecutive races and continue racing."
+                                className="my-2"
+                            />
+                            <CustomCheckbox
+                                searchId="ignore-low-energy-racing-block"
+                                checked={ignoreLowEnergyRacingBlock}
+                                onCheckedChange={(checked) => updateRacingSetting("ignoreLowEnergyRacingBlock", checked)}
+                                label="Ignore Low Energy Racing Block"
+                                description="When enabled, the Trackblazer bot will not block racing when energy is critically low with consecutive races."
                                 className="my-2"
                             />
                         </View>
