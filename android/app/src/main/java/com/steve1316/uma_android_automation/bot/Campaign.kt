@@ -1598,6 +1598,19 @@ abstract class Campaign(game: Game) : Task(game) {
         // Scenario-specific pre-update hook.
         onBeforeMainScreenUpdate()
 
+        // Re-verify we're still on the main screen. The hook above may have navigated
+        // away (e.g. Trackblazer's shop check opens and tries to navigate the shop UI).
+        // If the hook left us on a non-main screen - for example because shop entry
+        // misfired - bail out instead of running updateDate() against the wrong UI.
+        // This prevents the IllegalArgumentException("y must be >= 0") crash that
+        // happens when date-OCR offset calculations land outside the source bitmap
+        // on a shop or dialog screen. The main process loop will re-detect screen
+        // state on the next iteration and converge.
+        if (!checkMainScreen()) {
+            MessageLog.w(TAG, "[WARN] handleMainScreen:: After onBeforeMainScreenUpdate, bot is no longer on the main screen. Bailing out so the main loop can re-detect.")
+            return false
+        }
+
         // Perform first-time setup of loading the user's race agenda if needed.
         racing.loadUserRaceAgenda()
 

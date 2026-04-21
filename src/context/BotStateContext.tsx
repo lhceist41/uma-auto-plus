@@ -355,7 +355,42 @@ export const defaultSettings: Settings = {
             },
         },
         characterEventOverrides: {},
-        supportEventOverrides: {},
+        // Support card event picks for the Auto-Fill default deck (verified against
+        // src/data/supports.json). Decision framework per Trackblazer
+        // guide: priority stats (Speed > Wit/Stamina/Power > Guts) beat low-tier skill
+        // hints; gold-tier skills beat stats; energy-positive options preferred when
+        // energy is tight; "Event chain ended" branches always avoided; "Can start
+        // dating" branches preferred when safe.
+        supportEventOverrides: {
+            // Satono Diamond (Special Dreamers!)
+            "Satono Diamond|I Love New Things!": 1, // Stamina +20 > Guts +10 (energy -10 negligible in TB)
+            "Satono Diamond|I Love Complicated Things!": 0, // Concrete stats > Hesitant Front Runners (situational debuff)
+            "Satono Diamond|(❯❯)\nDiamond Fixation": 0, // Reliable Wit +15 > random Mood-1/Energy+25 gamble
+            "Satono Diamond|(❯❯❯)\nOnly for You": 0, // Stamina +40 (huge) + Iron Will hint > Guts +5 + Iron Will
+            // Vodka (Wild Rider)
+            "Vodka|(❯)\nSlacking Off at Sundown": 0, // Reliable Max Energy +4 + Power +10 > random Speed/hint
+            "Vodka|The Coolest Line": 1, // Power +5 + SP +15 (more flexible) > pure Power +10
+            "Vodka|Enemies on Main Street": 0, // Nimble Navigator GOLD HINT (per scenarioEventOverrides priority list)
+            // Air Shakur (Mag!c Number)
+            "Air Shakur|//Verification Required": 0, // Energy +10 preserved (Trackblazer runs empty)
+            "Air Shakur|//Absolute Desire": 1, // Max Energy +4 (permanent) > Pace Strategy hint (low tier)
+            "Air Shakur|(❯)\nBoth High and Low": 0, // Speed +10/Power +10 > Eager hint
+            // Sakura Bakushin O (Eat Fast! Yum Fast!)
+            "Sakura Bakushin O|(❯)\nA Bakushin Greeting!": 0, // Speed +30 > SP +30 (~3x value)
+            "Sakura Bakushin O|Genius Efficiency!": 0, // Pure Speed +15 > Speed +5 / Power +10 (Speed is #1 priority)
+            "Sakura Bakushin O|Enough to Break into a Dash!": 1, // Speed +10 / Power +5 > Gap Closer hint (debuff prevention, situational)
+            "Sakura Bakushin O|(❯)\nUma Kids Footrace Meet": 0, // Groundwork hint (gold FR accel) - Sakura is Front Runner per preset
+            "Sakura Bakushin O|(❯❯)\nChasing My Sister": 0, // Avoid "Event chain ended" in Opt 2
+            // Smart Falcon (Almost... an Umadol?!)
+            "Smart Falcon|Chants Are the Life of a Concert ☆": 1, // Wit +15 (single high-priority stat) > Stamina +5 / Guts +10
+            "Smart Falcon|If I'm Cute, Come to My Show! ☆": 0, // Power +10 + Final Push hint > Energy +10 / Wit +5
+            "Smart Falcon|(❯)\nAlways on Stage ☆": 0, // Avoid "Event chain ended" in Opt 2
+            "Smart Falcon|(❯)\nWhat Is an Umadol?": 1, // Energy +10 + Power +5 > Leader's Pride hint
+            // Riko Kashimoto (Planned Perfection) - friend slot, energy/mood Pal card
+            "Riko Kashimoto|(❯❯❯)\nPicture Their Joy": 0, // Energy +24 / Mood +1 / Stamina +12 / Guts +6 > SP +37 / Mood +1 (energy is liquid gold in TB)
+            "Riko Kashimoto|The Kashimoto Art of Tidying Up": 0, // Stamina +18 (broadly useful) > Guts +18 (only End Closer chars)
+            "Riko Kashimoto|Unexpected Side\nDating starts": 1, // Safe path: Mood +1 / Guts +18 / Can start dating (avoids random Event-chain-ended branch)
+        },
         // Scenario-wide event picks sourced from Game8's All Trackblazer Events and Choices
         // (https://game8.co/games/Umamusume-Pretty-Derby/archives/585951, updated Mar 14, 2026)
         // and Deltia's Gaming skill tier data. Default framework per community consensus:

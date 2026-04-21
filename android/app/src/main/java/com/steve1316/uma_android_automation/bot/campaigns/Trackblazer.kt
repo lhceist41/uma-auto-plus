@@ -703,6 +703,17 @@ class Trackblazer(game: Game) : Campaign(game) {
                 buyItems(bAfterRacePurchase = true)
             } else {
                 MessageLog.w(TAG, "[WARN] onBeforeMainScreenUpdate:: Failed to open the shop despite pending shop check.")
+                // A misfired shop entry can leave us on a partial shop dialog or greeting screen.
+                // Tap Back/Cancel/Close to claw back to the main screen so the next handleMainScreen
+                // re-check doesn't see non-main UI and the performOCROnRegion bounds check doesn't
+                // fire. Clear the pending flag either way so we don't loop on the same failure.
+                bShouldCheckShop = false
+                ButtonBack.click(game.imageUtils)
+                game.wait(0.5)
+                ButtonCancel.click(game.imageUtils)
+                game.wait(0.5)
+                ButtonClose.click(game.imageUtils)
+                game.wait(0.5)
             }
         }
     }
