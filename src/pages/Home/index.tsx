@@ -212,6 +212,13 @@ const Home = () => {
         const preset = characterPresets.find((p) => p.name === presetName && p.scenario === bsc.settings.general.scenario)
         if (!preset) return
 
+        // Capture the user's per-event override maps before the merge. Presets ship empty
+        // `supportEventOverrides`/`scenarioEventOverrides` placeholders, so a shallow merge would wipe
+        // the user's picks. These maps are deck- and scenario-specific, not character-specific, so they
+        // must survive a preset switch.
+        const preservedSupportOverrides = bsc.settings.trainingEvent?.supportEventOverrides || {}
+        const preservedScenarioOverrides = bsc.settings.trainingEvent?.scenarioEventOverrides || {}
+
         // Deep merge preset settings with current settings
         const merged = { ...bsc.settings }
         for (const [category, values] of Object.entries(preset.settings)) {
@@ -220,6 +227,15 @@ const Home = () => {
             } else {
                 ;(merged as any)[category] = values
             }
+        }
+
+        // Restore the preserved override maps. If a preset ever ships non-empty values for these keys
+        // (currently none do), those preset values still take precedence via the spread.
+        if (merged.trainingEvent) {
+            const presetSupport = (preset.settings as any)?.trainingEvent?.supportEventOverrides || {}
+            const presetScenario = (preset.settings as any)?.trainingEvent?.scenarioEventOverrides || {}
+            merged.trainingEvent.supportEventOverrides = { ...preservedSupportOverrides, ...presetSupport }
+            merged.trainingEvent.scenarioEventOverrides = { ...preservedScenarioOverrides, ...presetScenario }
         }
 
         bsc.setSettings(merged)

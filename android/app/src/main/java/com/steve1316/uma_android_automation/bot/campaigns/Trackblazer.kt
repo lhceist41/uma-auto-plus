@@ -627,6 +627,11 @@ class Trackblazer(game: Game) : Campaign(game) {
             val dialogResult = handleDialogs()
             if (dialogResult is DialogHandlerResult.Handled && consecutiveRaceCount > consecutiveRacesLimit && game.imageUtils.determineTurnsRemainingBeforeNextGoal() != 1) {
                 MessageLog.i(TAG, "[TRACKBLAZER] Consecutive race warning obeyed. Aborting racing.")
+                // Back off the race list onto a detectable screen (matches the "no suitable races"
+                // abort below). Without it the bot is stranded on the race list and the next
+                // handleMainScreen fails checkMainScreen, wasting cycles until something recovers.
+                ButtonBack.click(game.imageUtils)
+                game.wait(0.5)
                 return false
             }
 
@@ -1027,17 +1032,20 @@ class Trackblazer(game: Game) : Campaign(game) {
 
                 val maxLimit =
                     if (isBadConditionItem || isGoodConditionItem) {
-                        // Check if we already have the item in inventory.
-                        if (itemCount >= 1) {
+                        // Stockpile items go FIRST, before the "already have one" guard. Miracle Cure and
+                        // Rich Hand Cream get burned through during high-frequency racing, so target up to 5.
+                        // Otherwise the `itemCount >= 1` guard short-circuits to 0 once you own one and the
+                        // stockpile never builds.
+                        if (isBadConditionItem && (itemName == "Miracle Cure" || itemName == "Rich Hand Cream")) {
+                            5
+                        } else if (itemCount >= 1) {
+                            // Already have one of this single-use condition item - don't buy more.
                             0
                         } else {
                             // Check if the condition is active/inactive.
                             if (isBadConditionItem) {
                                 val condition = badConditionMap[itemName]
-                                if (itemName == "Miracle Cure" || itemName == "Rich Hand Cream") {
-                                    // We want to buy as many of these when possible as we will be racing above the consecutive race limit often.
-                                    5
-                                } else if (condition != null && trainee.currentNegativeStatuses.contains(condition)) {
+                                if (condition != null && trainee.currentNegativeStatuses.contains(condition)) {
                                     1
                                 } else {
                                     0

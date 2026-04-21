@@ -758,56 +758,67 @@ class Trainee {
                 }
             }
         } else {
-            // Sequential processing (fallback).
-            val statMapping: Map<StatName, Int> =
-                imageUtils.determineStatValues(
-                    sourceBitmap = null,
-                    skillPointsLocation = skillPointsLocation,
-                    isAptitudeDialog = isAptitudeDialog,
-                )
+            // Sequential processing (fallback), e.g. skillPointsLocation is null because the stat-table
+            // header template did not match. The caller (Campaign.performTurnStartUpdates) sized
+            // externalLatch for 5 stat-thread decrements; the finally block below contributes them so the
+            // caller's await(10s) doesn't block to timeout every turn this path runs.
+            try {
+                val statMapping: Map<StatName, Int> =
+                    imageUtils.determineStatValues(
+                        sourceBitmap = null,
+                        skillPointsLocation = skillPointsLocation,
+                        isAptitudeDialog = isAptitudeDialog,
+                    )
 
-            for ((statName, newValue) in statMapping) {
-                val oldValue = getStat(statName)
-                val diff = abs(newValue - oldValue)
+                for ((statName, newValue) in statMapping) {
+                    val oldValue = getStat(statName)
+                    val diff = abs(newValue - oldValue)
 
-                if (oldValue <= 0 || diff < 150) {
-                    stats.setStat(statName, newValue)
-                    bHasUpdatedStats = true
+                    if (oldValue <= 0 || diff < 150) {
+                        stats.setStat(statName, newValue)
+                        bHasUpdatedStats = true
 
-                    mismatchCounts[statName] = 0
-                    lastMismatchedValues[statName] = -1
-                } else {
-                    val lastMismatchedValue = lastMismatchedValues[statName] ?: -1
-                    val mismatchDiff = abs(newValue - lastMismatchedValue)
-                    val currentCount = mismatchCounts[statName] ?: 0
+                        mismatchCounts[statName] = 0
+                        lastMismatchedValues[statName] = -1
+                    } else {
+                        val lastMismatchedValue = lastMismatchedValues[statName] ?: -1
+                        val mismatchDiff = abs(newValue - lastMismatchedValue)
+                        val currentCount = mismatchCounts[statName] ?: 0
 
-                    if (mismatchDiff < 50) {
-                        val newCount = currentCount + 1
-                        mismatchCounts[statName] = newCount
+                        if (mismatchDiff < 50) {
+                            val newCount = currentCount + 1
+                            mismatchCounts[statName] = newCount
 
-                        if (newCount >= 2) {
-                            MessageLog.d(
-                                TAG,
-                                "[DEBUG] updateStats:: New $statName stat value has been consistent for $newCount updates via sequential processing. Trusting the new value: $newValue (was $oldValue)",
-                            )
-                            stats.setStat(statName, newValue)
-                            bHasUpdatedStats = true
-                            mismatchCounts[statName] = 0
-                            lastMismatchedValues[statName] = -1
+                            if (newCount >= 2) {
+                                MessageLog.d(
+                                    TAG,
+                                    "[DEBUG] updateStats:: New $statName stat value has been consistent for $newCount updates via sequential processing. Trusting the new value: $newValue (was $oldValue)",
+                                )
+                                stats.setStat(statName, newValue)
+                                bHasUpdatedStats = true
+                                mismatchCounts[statName] = 0
+                                lastMismatchedValues[statName] = -1
+                            } else {
+                                MessageLog.w(
+                                    TAG,
+                                    "[WARN] updateStats:: New $statName stat value has changed too much since last update (old=$oldValue, new=$newValue) via sequential processing. Consecutive mismatch count: $newCount",
+                                )
+                            }
                         } else {
+                            mismatchCounts[statName] = 1
+                            lastMismatchedValues[statName] = newValue
                             MessageLog.w(
                                 TAG,
-                                "[WARN] updateStats:: New $statName stat value has changed too much since last update (old=$oldValue, new=$newValue) via sequential processing. Consecutive mismatch count: $newCount",
+                                "[WARN] updateStats:: New $statName stat value has changed too much since last update (old=$oldValue, new=$newValue) via sequential processing. Resetting mismatch count.",
                             )
                         }
-                    } else {
-                        mismatchCounts[statName] = 1
-                        lastMismatchedValues[statName] = newValue
-                        MessageLog.w(
-                            TAG,
-                            "[WARN] updateStats:: New $statName stat value has changed too much since last update (old=$oldValue, new=$newValue) via sequential processing. Resetting mismatch count.",
-                        )
                     }
+                }
+            } finally {
+                // Decrement the external latch 5 times (one per stat thread the parallel branch would have
+                // run) so the caller's await reaches zero promptly instead of hanging to its 10s timeout.
+                if (externalLatch != null) {
+                    repeat(5) { externalLatch.countDown() }
                 }
             }
         }

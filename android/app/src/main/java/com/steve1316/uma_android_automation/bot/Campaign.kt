@@ -198,6 +198,18 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Flag indicating if the pre-finals check has been handled. */
     protected var bHasHandledPreFinalsCheck: Boolean = false
 
+    /** The number of consecutive failed attempts at handling the pre-finals skill purchase for this run.
+     * Used in conjunction with [preFinalsCheckMaxAttempts] to prevent an infinite retry loop if
+     * [handleSkillListScreen] repeatedly fails (e.g. UI state we never recover from while the bot keeps
+     * clicking ButtonSkills on a wrong screen). Resets when the check succeeds or run advances past day 72.
+     */
+    protected var preFinalsCheckAttempts: Int = 0
+
+    /** The maximum number of consecutive failed attempts at handling the pre-finals skill purchase before
+     * we give up for this run and allow normal turn execution to resume.
+     */
+    protected val preFinalsCheckMaxAttempts: Int = 3
+
     /** Flag indicating if the bot has checked for a maiden race today. */
     var bHasCheckedForMaidenRaceToday: Boolean = false
 
@@ -1221,7 +1233,11 @@ abstract class Campaign(game: Game) : Task(game) {
             } else {
                 // Otherwise, recover mood as normal.
                 // Note that if a date was already completed, the Recreation popup will still show so it will require an additional step to recover mood.
-                recreationDateCompleted = true
+                // Do NOT speculatively set `recreationDateCompleted = true` here - `IconRecreationDate.check` may have
+                // returned false due to a transient OCR / timing miss rather than the date actually being consumed.
+                // Setting the flag here permanently disables recreation-date checking for the rest of the run; instead,
+                // we rely on the genuine "complete" detection at line ~1274 (LabelRecreationDateComplete.check) AND
+                // the daily reset in handleMainScreen so a fresh icon-check happens every turn.
                 if (!ButtonRecreation.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
                     ButtonRestAndRecreation.click(game.imageUtils, sourceBitmap = sourceBitmap)
                 }
@@ -1280,7 +1296,10 @@ abstract class Campaign(game: Game) : Task(game) {
                 } else {
                     MessageLog.i(TAG, "[RECREATION_DATE] Mood does not require recovery. Moving on...")
                     ButtonCancel.click(game.imageUtils)
-                    true
+                    // Return false: no recreation date was actually consumed (we just confirmed it was already
+                    // completed and cancelled out). The recoverEnergy caller falls through to ButtonRest, and the
+                    // Trackblazer override no longer increments its recreationUsedCount budget on this no-op path.
+                    false
                 }
             } else {
                 // If not complete, handle both regular support dates and Group Support Card dates.
@@ -1626,6 +1645,10 @@ abstract class Campaign(game: Game) : Task(game) {
                 racing.raceRepeatWarningCheck = false
                 bHasTriedCheckingFansToday = false
                 bHasCheckedForMaidenRaceToday = false
+                // Reset recreation-date check so a fresh icon detection runs every turn.
+                // The flag is only meant to short-circuit re-checks within a single recovery sequence,
+                // not to permanently disable recreation date detection for the rest of the run.
+                recreationDateCompleted = false
 
                 // Reset scenario-specific daily flags.
                 resetDailyFlags()
@@ -1777,10 +1800,23 @@ abstract class Campaign(game: Game) : Task(game) {
             ButtonSkills.click(game.imageUtils)
             game.wait(1.0)
             if (!handleSkillListScreen()) {
-                MessageLog.w(TAG, "[WARN] performGlobalChecks:: handleSkillList() for Pre-Finals failed.")
+                preFinalsCheckAttempts++
+                if (preFinalsCheckAttempts >= preFinalsCheckMaxAttempts) {
+                    MessageLog.w(
+                        TAG,
+                        "[WARN] performGlobalChecks:: Pre-Finals skill purchase exhausted max attempts ($preFinalsCheckMaxAttempts). Marking it handled for this run so execution can continue.",
+                    )
+                    bHasHandledPreFinalsCheck = true
+                } else {
+                    MessageLog.w(
+                        TAG,
+                        "[WARN] performGlobalChecks:: handleSkillList() for Pre-Finals failed (attempt $preFinalsCheckAttempts/$preFinalsCheckMaxAttempts). Will retry next turn...",
+                    )
+                }
                 return false
             }
             bHasHandledPreFinalsCheck = true
+            preFinalsCheckAttempts = 0
             return true
         }
 
@@ -1857,6 +1893,11 @@ abstract class Campaign(game: Game) : Task(game) {
         }
 
         if (racing.encounteredRacingPopup) {
+            // Consume the flag at decision time. If the resulting race succeeds the date advances and
+            // the daily reset would clear it anyway; if the race attempt fails or finds no suitable
+            // race, we don't want to spin on RACE decisions turn after turn just because a popup
+            // appeared two turns ago. A fresh popup on a future turn will simply set the flag again.
+            racing.encounteredRacingPopup = false
             return MainScreenAction.RACE
         }
 
@@ -1964,8 +2005,15 @@ abstract class Campaign(game: Game) : Task(game) {
 
             MainScreenAction.RECOVER_MOOD -> {
                 val target = forcedTargetMood ?: Mood.GOOD
-                if (performMoodRecovery(game.imageUtils.getSourceBitmap(), targetMood = target)) {
-                    bHasCheckedDateThisTurn = false
+                val recovered = performMoodRecovery(game.imageUtils.getSourceBitmap(), targetMood = target)
+                // Always clear bHasCheckedDateThisTurn so the next main-screen pass re-runs updateDate/stats
+                // and can pick a different action based on fresh state. Previously this only reset on success,
+                // which meant a failed mood recovery (e.g. Recreation/RestAndRecreation buttons briefly missing
+                // due to a mid-transition screenshot) could spin indefinitely: shouldRecoverMood keeps returning
+                // true, decideNextAction keeps returning RECOVER_MOOD, and the same screenshot produced the same
+                // failure.
+                bHasCheckedDateThisTurn = false
+                if (recovered) {
                     forcedTargetMood = null
                 }
             }

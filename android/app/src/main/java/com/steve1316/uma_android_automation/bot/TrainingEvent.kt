@@ -626,7 +626,15 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                                         }
                                         sum
                                     } else {
-                                        formattedLine.toInt()
+                                        // Guard against OCR leaving non-numeric chars the letter-stripping regex
+                                        // misses (e.g. the colon in "Skill points: 24"); otherwise the parse throws
+                                        // and crashes the turn. Fallback of 10 matches the slash-separated branch.
+                                        try {
+                                            formattedLine.toInt()
+                                        } catch (_: NumberFormatException) {
+                                            MessageLog.w(TAG, "[WARN] Training event reward skill-points parse failed for \"$line\" (formatted=\"$formattedLine\"). Using fallback weight of 10.")
+                                            10
+                                        }
                                     }
                                 selectionWeight[rewardIndex] += finalSkillPoints
                             } else {

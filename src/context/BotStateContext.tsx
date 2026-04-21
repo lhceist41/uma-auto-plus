@@ -322,7 +322,10 @@ export const defaultSettings: Settings = {
                 requiresConfirmation: false,
             },
             "Solid Showing": {
-                selectedOption: "Option 2: Energy -5/-20 and random stat gain",
+                // Match every character preset's pick: Option 1 has a deterministic Energy -15 outcome,
+                // whereas Option 2's -5/-20 random branch can swing into a 20-energy hit. Aligns the
+                // no-preset default with what users get the moment they apply any character preset.
+                selectedOption: "Option 1: Energy -15 and random stat gain",
                 requiresConfirmation: false,
             },
             Defeat: {
@@ -334,7 +337,9 @@ export const defaultSettings: Settings = {
                 requiresConfirmation: false,
             },
             "Don't Overdo It!": {
-                selectedOption: "Option 2: (Random) Mood -3 / Stat decrease / Get Practice Poor negative status",
+                // Match every character preset's pick: Option 1 actually recovers Energy +10, while Option 2
+                // is a -3 mood hit with no recovery. Aligns the no-preset default with the consensus pick.
+                selectedOption: "Option 1: Energy +10 / Mood -2 / Stat decrease / Get Practice Poor negative status",
                 requiresConfirmation: false,
             },
             "Extra Training": {

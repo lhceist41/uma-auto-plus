@@ -2639,6 +2639,11 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val result: DialogHandlerResult = campaign.handleDialogs()
         if (result !is DialogHandlerResult.Handled || result.dialog.name != "race_details") {
             Log.w(TAG, "[WARN] handleMaidenRace:: Failed to handle dialogs. Aborting racing...")
+            // Navigate back so the bot isn't left stranded on the race confirmation screen. Without this
+            // the main loop has to rely on tryHandleAllDialogs / screen detection to recover, which can
+            // waste cycles or re-enter this flow in an inconsistent state on the next turn.
+            ButtonBack.click(game.imageUtils)
+            game.wait(0.5)
             return false
         }
         game.wait(2.0)
@@ -3263,7 +3268,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
 
         // If trophy requirement is active, filter to only G1 races.
-        val (filteredRaces, filteredLocations, _) =
+        val (filteredRaces, filteredLocations, filteredNames) =
             if (hasTrophyRequirement && !hasPreOpOrAboveRequirement && !hasG3OrAboveRequirement) {
                 campaign.updateDate(isOnMainScreen = false)
                 val g1Indices =
@@ -3332,11 +3337,14 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             }
 
         // Determine the grade of the selected race and store it for retry purposes.
+        // IMPORTANT: `index` is a position into `filteredRaces` (potentially a subset of the original list
+        // when the trophy-G1 filter applied). Use `filteredNames` / `filteredLocations` here so we look up
+        // the grade/fans for the actually-selected race rather than misindexing into the unfiltered lists.
         val selectedRaceName =
-            if (hasTrophyRequirement && index < raceNamesList.size) {
-                raceNamesList[index]
+            if (hasTrophyRequirement && index < filteredNames.size) {
+                filteredNames[index]
             } else {
-                game.imageUtils.extractRaceName(extraRaceLocations[index])
+                game.imageUtils.extractRaceName(filteredLocations[index])
             }
         val raceDataList = lookupRaceInDatabase(campaign.date.day, selectedRaceName)
         lastRaceGrade = raceDataList.firstOrNull()?.grade
