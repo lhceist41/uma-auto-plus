@@ -758,16 +758,10 @@ class Trackblazer(game: Game) : Campaign(game) {
             return MainScreenAction.TRAIN
         }
 
-        // Post-debut bond-building window (Junior Early July + Late July, turns 13-14):
-        // Per uma.guide (https://uma.guide/guides/trackblazer), Rival Races unlock from
-        // Junior Early August (turn 15) onward - so the two turns immediately after the
-        // June debut have no rival opportunities and only OP-grade races. Training instead
-        // pushes support-card bonds toward orange before the real graded-race calendar.
-        // Junior Early August (turn 15) is intentionally excluded since rival races become
-        // available there. If the user has scheduled a race via the in-game Agenda, respect
-        // that (agenda wins). Source-corrected from the earlier 3-turn implementation
-        // ("Three Dead Turns" was bot-internal nomenclature; the actual no-rival window
-        // is 2 turns per uma.guide's Rival Race unlock timing).
+        // Post-debut bond-building window (Junior July, turns 13-14): Rival Races unlock Junior
+        // Early August (turn 15), so the two turns after the June debut have only OP-grade races.
+        // Train instead to push support bonds toward orange before the graded calendar starts.
+        // Turn 15 is excluded (rival races available). A scheduled in-game Agenda race wins over this.
         val isPostDebutBondWindow =
             date.year == DateYear.JUNIOR && date.month == DateMonth.JULY
         if (isPostDebutBondWindow && !LabelScheduledRace.check(game.imageUtils)) {
@@ -1118,7 +1112,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         priorityList.add("Artisan Cleat Hammer")
         priorityList.add("Glow Sticks")
 
-        // 1b. Summer Camp Prep Window (per Trackblazer guide).
+        // 1b. Summer Camp Prep Window.
         // Before Classic/Senior summer camp (starts Early July), promote training-effect items
         // (Megaphones, top-stat Ankle Weights, Reset Whistles) and the energy combo (Royal Kale
         // Juice + Plain Cupcake) above stat scrolls, to stock up for the 4 all-Level-5 camp turns.
@@ -1485,10 +1479,10 @@ class Trackblazer(game: Game) : Campaign(game) {
                 // Twinkle Final. Use the last reserved hammer.
                 masterHammerCount >= 1
             } else {
-                // Pre-climax: reserve 3 Masters for the 3 Twinkle Climax races. Per
-                // uma.guide and Game8 Trackblazer guides, the climax races have the highest
-                // stat-return per hammer of the entire run, so 3 Masters must be hoarded.
-                // Excess (4+) can be spent on regular G1s before the climax.
+                // Pre-climax: reserve 3 Masters for the 3 Twinkle Climax races. The climax
+                // races have the highest stat-return per hammer of the entire run, so 3
+                // Masters must be hoarded. Excess (4+) can be spent on regular G1s before
+                // the climax.
                 masterHammerCount > 3
             }
         val hasArtisanHammer =

@@ -8,6 +8,40 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [1.2.5] - 2026-04-22
+
+A pile of stability fixes for stuff that was silently sabotaging runs, plus some real speed wins. Fourteen bugs squashed across the bot loop, settings, and UI, and the bot is noticeably faster on the hot path.
+
+### Highlights
+
+- **Recreation dates no longer get permanently turned off mid-run.** One bad screenshot of the recreation icon used to flip a flag that never got reset, so the bot would stop checking for dates for the rest of the career. They're huge mood and energy bombs, so missing them silently was costing entire runs. Re-checked every turn now.
+- **Miracle Cure and Rich Hand Cream stockpile actually works.** Was meant to keep up to 5 of each because Trackblazer races so much, but the inventory check bailed out the moment you owned even one. Now actually stockpiles up to 5.
+- **Trophy-requirement race selection picks the right G1.** When filtering down to G1-only races for a Trophy goal, the bot was reading the wrong race's grade and fan count whenever the chosen G1 wasn't first on screen. Now picks the actual race.
+- **No more 10-second per-turn stalls.** When the bot couldn't cleanly read the stat-table header (any UI flicker), it was burning a full 10 seconds waiting for a thread that would never finish. Fixed at the source. Big win for smooth turn pacing.
+- **Mood recovery no longer loops forever.** If the Recreation buttons briefly weren't visible during a mood recovery attempt, the bot would keep retrying the same broken screenshot forever. Now bails cleanly and falls through to other actions.
+- **Picking a character preset no longer wipes your custom event picks.** Switching characters used to nuke your 22 default support card picks and 31 Trackblazer scenario picks. They survive preset switches now.
+- **Bot is faster on the hot path.** Four per-turn savings: lazy screenshot capture in the decision loop (skipped on race days and a few other fast paths), removed a redundant 1-second wait after skill-hint training, halved the worst-case turn-start stall ceiling from 10s to 5s, and trimmed back-button settling from 1s to 0.5s.
+
+### Reliability fixes
+
+- **Cancelled "already complete" recreation date no longer eats your monthly budget.** The recreation counter was ticking up even on no-op cancels. Now only ticks when you actually use a date.
+- **Pre-finals skill purchase has a 3-attempt retry cap.** If the skill list fails to open on day 72, the bot used to click Skills on the wrong screen forever. Now caps at 3 tries and moves on.
+- **Trackblazer consecutive-race-warning abort navigates back properly.** Used to leave the bot stranded on the race list with no way to recover. Now backs out cleanly like the other Trackblazer aborts already did.
+- **Maiden race dialog-failure abort navigates back too.** Same fix on the race confirmation screen.
+- **Race-popup flag no longer forces RACE turn after turn.** When the game showed "goal not reached" or "insufficient fans", the bot would correctly try to race next turn. But if that race attempt found nothing suitable, the flag stayed set and the bot would keep trying to race every single turn after. Fixed.
+- **Training analysis no longer mixes up two different evaluation modes.** The bot remembers its training analysis to avoid re-scanning the same turn twice, and that memory now resets when it should.
+- **A garbled "Skill points" reward reading no longer crashes the turn.** A bad read on a skill-points event reward used to kill the event handling. Now falls back safely.
+- **Default options for "Solid Showing" and "Don't Overdo It!" match the consensus pick.** Defaults said Option 2 (worse: random energy hit, mood damage with no recovery), but every character preset picks Option 1. New users now get Option 1 out of the box.
+
+### Speed wins
+
+- **Fewer screenshots per decision.** The bot was taking a screenshot at the start of every decision even when it didn't need one. Saves a slice of time on most turns, which adds up across a Trackblazer career.
+- **Removed redundant 1-second wait after skill-hint training tap.** Pure dead time stacked on top of work the tap function was already doing. About 1 second saved per skill-hint training turn.
+- **Halved the worst-case turn-start stall from 10s to 5s.** The turn-start reads finish in under 2 seconds on a healthy device, so the old 10-second safety ceiling was overkill.
+- **Back-button settling wait from 1s to 0.5s** in the misc-checks recovery path. Back-navigation is almost always a pure UI transition with nothing to wait for.
+
+---
+
 ## [1.2.0] - 2026-04-17
 
 A big reliability + content release. The bot is dramatically more stable on MuMu (no more random mid-queue crashes), handles the new Trackblazer Racing Carnival event end-to-end, no longer gets stuck after the game's recent UI color refresh, and is measurably snappier on every loop tick. Every single one of the 17 baked-in character presets has been overhauled with proper distances, styles, stat targets, skill priorities, and event picks. Fresh installs now ship with skill buying enabled and a strong starting build for every character.

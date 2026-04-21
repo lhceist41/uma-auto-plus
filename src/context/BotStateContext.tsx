@@ -214,10 +214,9 @@ export interface Settings {
 // Set the default settings.
 //
 // Defaults are tuned for a zero-config Trackblazer run: pick a Character, hit Start,
-// and the rest is handled. Each change from the upstream baseline is called out inline
-// with its Trackblazer-guide justification and the verified code path it affects.
-// Users running other scenarios (URA Finale, Unity Cup) can override any of these via
-// the Settings UI - these are defaults, not locks.
+// and the rest is handled. Each change from the upstream baseline has a short inline
+// note on what it does. Users running other scenarios (URA Finale, Unity Cup) can
+// override any of these via the Settings UI - these are defaults, not locks.
 export const defaultSettings: Settings = {
     general: {
         // Trackblazer pre-selected so the Home screen is ready on first launch.
@@ -360,9 +359,8 @@ export const defaultSettings: Settings = {
             },
         },
         characterEventOverrides: {},
-        // Support card event picks for the Auto-Fill default deck (verified against
-        // src/data/supports.json). Decision framework per Trackblazer
-        // guide: priority stats (Speed > Wit/Stamina/Power > Guts) beat low-tier skill
+        // Support card event picks for the Auto-Fill default deck. Decision rules:
+        // priority stats (Speed > Wit/Stamina/Power > Guts) beat low-tier skill
         // hints; gold-tier skills beat stats; energy-positive options preferred when
         // energy is tight; "Event chain ended" branches always avoided; "Can start
         // dating" branches preferred when safe.
@@ -396,11 +394,9 @@ export const defaultSettings: Settings = {
             "Riko Kashimoto|The Kashimoto Art of Tidying Up": 0, // Stamina +18 (broadly useful) > Guts +18 (only End Closer chars)
             "Riko Kashimoto|Unexpected Side\nDating starts": 1, // Safe path: Mood +1 / Guts +18 / Can start dating (avoids random Event-chain-ended branch)
         },
-        // Scenario-wide event picks sourced from Game8's All Trackblazer Events and Choices
-        // (https://game8.co/games/Umamusume-Pretty-Derby/archives/585951, updated Mar 14, 2026)
-        // and Deltia's Gaming skill tier data. Default framework per community consensus:
-        // +6/+6 stats (~12 stat pts, ~60-80 SP-equivalent) beats a +1 skill hint unless
-        // the skill is build-essential, expensive, gold, or unobtainable elsewhere.
+        // Scenario-wide event picks for Trackblazer. Default framework: +6/+6 stats
+        // (~12 stat pts, ~60-80 SP-equivalent) beats a +1 skill hint unless the skill
+        // is build-essential, expensive, gold, or unobtainable elsewhere.
         //
         // Unconditional Option 2 (skill hint wins): only "Leave It to the Great Detective!"
         // (Nimble Navigator - best last-spurt lane-change skill, community staple).
@@ -445,10 +441,10 @@ export const defaultSettings: Settings = {
             "Trackblazer|Leave It to the Great Detective!": 1,
             "Trackblazer|Gullible Socialites": 0,
             "Trackblazer|I Wanna Join the Discussion!": 0,
-            // URA Finale - 3 events from Game8 scenario event pages. Stamina > Guts
-            // universally for the 3-race finale gauntlet; Speed is #1 at every distance;
-            // Best Foot Forward Opt 2 is the safe (no-energy-cost) compound-reward path
-            // with gold Breath of Fresh Air (solid stamina heal).
+            // URA Finale - 3 events. Stamina > Guts universally for the 3-race finale
+            // gauntlet; Speed is #1 at every distance; Best Foot Forward Opt 2 is the
+            // safe (no-energy-cost) compound-reward path with gold Breath of Fresh Air
+            // (solid stamina heal).
             "URA Finale|Exhilarating! What a Scoop!": 0,
             "URA Finale|A Trainer's Knowledge": 1,
             "URA Finale|Best Foot Forward!": 1,
@@ -466,20 +462,19 @@ export const defaultSettings: Settings = {
         trainingBlacklist: [],
         statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
         maximumFailureChance: 20,
-        // OCR sanity ceiling per stat. The Global EN hard stat cap is 1200 unless
-        // raised by Trackblazer shop items (Speed Shoes, etc.) per Game8 Stats Explained
-        // (https://game8.co/games/Umamusume-Pretty-Derby/archives/535820). CustomImageUtils.kt
-        // uses this to reject OCR misreads above the ceiling. 1200 is the safe fleet-wide
-        // value; per-character overrides (e.g. 1300 for cap-raising-item builds) can be
-        // applied via character presets.
+        // OCR sanity ceiling per stat. The Global EN hard stat cap is 1200 unless raised
+        // by Trackblazer shop items (Speed Shoes, etc.). CustomImageUtils.kt uses this to
+        // reject OCR misreads above the ceiling. 1200 is the safe fleet-wide value;
+        // per-character overrides (e.g. 1300 for cap-raising-item builds) can be applied
+        // via character presets.
         manualStatCap: 1200,
         disableTrainingOnMaxedStat: true,
         focusOnSparkStatTarget: ["Speed", "Stamina", "Power"],
-        // Trackblazer guide repeatedly emphasizes rainbow training during summer camp.
-        // Code at Training.kt:730-740 applies a 2.0x multiplier to rainbow training
-        // scoring when on vs 1.5x when off - the extra decisiveness matters during
-        // the 4 high-value camp turns where stat gains compound with Megaphones +
-        // Ankle Weights. Only applies Classic year onward (Junior has no rainbows).
+        // Rainbow training matters most during summer camp. Code at Training.kt:730-740
+        // applies a 2.0x multiplier to rainbow training scoring when on vs 1.5x when off.
+        // The extra decisiveness matters during the 4 high-value camp turns where stat
+        // gains compound with Megaphones + Ankle Weights. Only applies Classic year
+        // onward (Junior has no rainbows).
         enableRainbowTrainingBonus: true,
         preferredDistanceOverride: "Auto",
         mustRestBeforeSummer: false,
