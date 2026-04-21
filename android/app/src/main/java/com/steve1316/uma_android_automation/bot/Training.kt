@@ -1061,8 +1061,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     MessageLog.i(TAG, "[TRAINING] Found ${skillHintLocations.size} skill hint(s) on the training screen. Tapping on the first skill hint location and skipping training analysis.")
                     val firstHint = skillHintLocations.first()
 
+                    // game.tap() already runs wait(0.20) + waitForLoading() internally (ignoreWaiting
+                    // defaults to false), so no extra fixed wait here — the next caller's screen check re-polls.
                     game.tap(firstHint.x, firstHint.y, IconStatSkillHint.template.path, taps = 3)
-                    game.wait(1.0)
                     MessageLog.v(TAG, "[TRAINING] Process to execute skill hint training completed.")
                     return
                 } else {

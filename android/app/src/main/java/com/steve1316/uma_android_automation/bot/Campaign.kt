@@ -1585,7 +1585,12 @@ abstract class Campaign(game: Game) : Task(game) {
             return true
         } else if (ButtonBack.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
             MessageLog.i(TAG, "[MISC] Navigating back a screen since all the other misc checks have been completed.")
-            game.wait(1.0)
+            // ButtonBack.click does NOT auto-wait (Component.click goes through Components.tap which
+            // calls the accessibility service directly, not Game.tap). A back-navigation is almost
+            // always a pure UI transition with no server round-trip, so 0.5s is enough to let the
+            // animation settle before the next iteration re-scans. game.wait() also includes a
+            // waitForLoading() poll at the end, so any actual server call is still covered.
+            game.wait(0.5)
             return true
         } else if (ButtonSkip.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
             MessageLog.i(TAG, "[MISC] Clicked skip button.")
@@ -1780,8 +1785,14 @@ abstract class Campaign(game: Game) : Task(game) {
         }.apply { isDaemon = true }.start()
 
         // Wait for all threads to complete.
+        // 5s is the worst-case bound for the parallel update set (5 stat OCRs + skill points + mood +
+        // racing reqs + energy on a single bitmap typically completes in well under 2 s on a healthy
+        // device). The previous 10s timeout served only to bound a hung thread - narrowing it to 5s
+        // halves the worst-case turn-start stall when something genuinely doesn't decrement the latch
+        // (e.g. an OCR thread stuck inside Tesseract). On timeout the bot logs and proceeds with stale
+        // values for one turn rather than crashing.
         try {
-            latch.await(10, TimeUnit.SECONDS)
+            latch.await(5, TimeUnit.SECONDS)
         } catch (_: InterruptedException) {
             MessageLog.e(TAG, "[ERROR] performTurnStartUpdates:: Date change operations threads timed out.")
         } finally {
@@ -1884,10 +1895,9 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     open fun decideNextAction(): MainScreenAction {
         // Use cached race-day flags populated in handleMainScreen rather than re-running the
-        // same two template scans. The bitmap below is still needed for downstream checks
-        // (checkInjury, shouldRecoverMood) that haven't been migrated to the cache yet.
-        val sourceBitmap = game.imageUtils.getSourceBitmap()
-
+        // same two template scans. The bitmap is captured lazily - only the late branches
+        // (checkInjury, shouldRecoverMood) actually use it, so race/popup/maiden/etc. fast
+        // paths can return before paying the MediaProjection screenshot cost (~50-150 ms).
         if (cachedMandatoryRaceDay || cachedScheduledRaceDay) {
             return MainScreenAction.RACE
         }
@@ -1910,6 +1920,9 @@ abstract class Campaign(game: Game) : Task(game) {
             MessageLog.i(TAG, "[INFO] Bot has not yet completed maiden race. Checking for valid maiden race...")
             return MainScreenAction.RACE
         }
+
+        // From here on the downstream branches need a screenshot - capture it now.
+        val sourceBitmap = game.imageUtils.getSourceBitmap()
 
         if (mustRestBeforeSummer && (date.year == DateYear.CLASSIC || date.year == DateYear.SENIOR) && date.month == DateMonth.JUNE && date.phase == DatePhase.LATE) {
             if (trainee.energy < 70) {
