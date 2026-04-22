@@ -36,6 +36,7 @@ const RacingSettings = () => {
         daysToRunExtraRaces,
         disableRaceRetries,
         enableFreeRaceRetry,
+        spendCaratsForAlarmClocks,
         enableCompleteCareerOnFailure,
         enableStopOnMandatoryRaces,
         enableForceRacing,
@@ -191,6 +192,14 @@ const RacingSettings = () => {
                                 onCheckedChange={(checked) => updateRacingSetting("enableFreeRaceRetry", checked)}
                                 label="Allow Daily Free Race Retry"
                                 description="When enabled, the bot will attempt to retry a failed mandatory race only if the daily free race retry is available."
+                                className="my-2"
+                            />
+                            <CustomCheckbox
+                                searchId="spend-carats-for-alarm-clocks"
+                                checked={spendCaratsForAlarmClocks}
+                                onCheckedChange={(checked) => updateRacingSetting("spendCaratsForAlarmClocks", checked)}
+                                label="Spend Carats to Buy Alarm Clocks"
+                                description="When the bot runs out of free Alarm Clocks (5 per career) and the game prompts to buy one for 10 carats, this controls what happens. ON = spend the 10 carats and retry the race. OFF = cancel the popup and continue the run without retrying. Off by default so the bot never spends premium currency without your permission."
                                 className="my-2"
                             />
                             <CustomCheckbox

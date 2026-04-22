@@ -3,6 +3,7 @@ package com.steve1316.uma_android_automation.bot
 import android.util.Log
 import com.steve1316.automation_library.utils.DiscordUtils
 import com.steve1316.automation_library.utils.MessageLog
+import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.components.ButtonRaceRecommendationsCenterStage
 import com.steve1316.uma_android_automation.components.Checkbox
@@ -256,7 +257,22 @@ open class DialogHandler(val game: Game) {
             }
 
             "purchase_alarm_clock" -> {
-                throw InterruptedException("Ran out of alarm clocks. Stopping bot...")
+                // Player ran out of free Alarm Clocks for the career. The game offers to buy one
+                // for 10 carats. Two paths based on the user's `racing.spendCaratsForAlarmClocks`
+                // toggle:
+                //   - true  -> spend the 10 carats (click OK), retry the race normally.
+                //   - false -> cancel the popup and continue the run without retrying. The race
+                //              result stands, but the run keeps going (vs. the previous behavior
+                //              of stopping the bot entirely).
+                val spendCarats = SettingsHelper.getBooleanSetting("racing", "spendCaratsForAlarmClocks")
+                if (spendCarats) {
+                    MessageLog.i(TAG, "[DIALOG] Out of free Alarm Clocks. Spending 10 carats to retry per user setting.")
+                    dialog.ok(game.imageUtils)
+                } else {
+                    MessageLog.i(TAG, "[DIALOG] Out of free Alarm Clocks. Cancelling the purchase popup and continuing without retry.")
+                    // ButtonCancel is the first entry in the dialog's buttons list, so close() clicks it.
+                    dialog.close(game.imageUtils)
+                }
             }
 
             "quick_mode_settings" -> {

@@ -45,6 +45,7 @@ export interface Settings {
         daysToRunExtraRaces: number
         disableRaceRetries: boolean
         enableFreeRaceRetry: boolean
+        spendCaratsForAlarmClocks: boolean
         enableCompleteCareerOnFailure: boolean
         enableStopOnMandatoryRaces: boolean
         enableForceRacing: boolean
@@ -242,6 +243,11 @@ export const defaultSettings: Settings = {
         daysToRunExtraRaces: 5,
         disableRaceRetries: false,
         enableFreeRaceRetry: false,
+        // Default off: when the bot runs out of free Alarm Clocks the game offers a paid retry
+        // for 10 carats. Off = cancel the popup and continue without retry. On = spend the
+        // carats and retry. Stays off by default so the bot never spends premium currency unless
+        // the user explicitly opts in.
+        spendCaratsForAlarmClocks: false,
         enableCompleteCareerOnFailure: false,
         enableStopOnMandatoryRaces: false,
         enableForceRacing: false,

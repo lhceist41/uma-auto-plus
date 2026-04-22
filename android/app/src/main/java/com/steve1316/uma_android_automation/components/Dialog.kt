@@ -1168,19 +1168,24 @@ object DialogPresents : DialogInterface {
 /**
  * Career.
  *
- * If the player has 0 carats, then this dialog shows a "Purchase Carats" button instead of ButtonOk. We don't even want to humor this as an option, so that button will not be added.
+ * Two variants exist depending on the player's carat count:
+ *  - If the player has carats, the dialog shows ButtonOk which spends 10 carats to buy a clock.
+ *  - If the player has 0 carats, the dialog instead shows a "Purchase Carats" button (handled
+ *    elsewhere via DialogPurchaseCarats); we never want to humor that.
  *
- * The other, less scary option is it will have a ButtonOk button which will attempt to buy a clock using carats. Again, we don't want to even give the bot a chance to do this, so we just won't even
- * add that button in here.
+ * The DialogHandler decides whether to take ButtonOk or ButtonCancel here based on the
+ * `racing.spendCaratsForAlarmClocks` user setting. Both are listed in `buttons` so the
+ * matcher can resolve either one on screen.
  */
 object DialogPurchaseAlarmClock : DialogInterface {
     override val name: String = "purchase_alarm_clock"
     override val title: String = "Purchase Alarm Clock"
     override val closeButton = null
-    override val okButton = null
+    override val okButton: BaseComponentInterface = ButtonOk
     override val buttons: List<BaseComponentInterface> =
         listOf(
             ButtonCancel,
+            ButtonOk,
         )
 }
 
