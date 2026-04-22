@@ -154,7 +154,9 @@ export const characterPresets: CharacterPreset[] =
                     "Agnes Tachyon|A Grandkid Get-Together": 1
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|A Grandkid Get-Together": 1
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,
@@ -408,7 +410,9 @@ export const characterPresets: CharacterPreset[] =
                     "Air Groove|Empress and Emperor": 0
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|All on the Line": 1
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,
@@ -670,7 +674,14 @@ export const characterPresets: CharacterPreset[] =
                     "Daiwa Scarlet|Expressing My Feelings to Maruzen": 1
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|The Inescapable Ardan": 1,
+                    "Trackblazer|The Strongest, Mightiest Cinderella!": 1,
+                    "Trackblazer|The Exciting Fruit Fest": 1,
+                    "Trackblazer|Vega and Spica": 1,
+                    "Trackblazer|Leave It to the Great Detective!": 0,
+                    "Trackblazer|Gullible Socialites": 0
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,
@@ -923,7 +934,9 @@ export const characterPresets: CharacterPreset[] =
                     "El Condor Pasa|Expressing My Feelings to Maruzen": 1
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|A Grandkid Get-Together": 1
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,
@@ -1448,7 +1461,9 @@ export const characterPresets: CharacterPreset[] =
                     "Grass Wonder|Hate to Lose": 0
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|All on the Line": 1
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,
@@ -1704,7 +1719,9 @@ export const characterPresets: CharacterPreset[] =
                     "Haru Urara|Tug of War Tournament!": 1
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|All on the Line": 1
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,
@@ -2225,7 +2242,9 @@ export const characterPresets: CharacterPreset[] =
                     "King Halo|Dance Lesson": 1
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|All on the Line": 1
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,
@@ -2484,7 +2503,9 @@ export const characterPresets: CharacterPreset[] =
                     "Matikanefukukitaru|Under the Meteor Shower": 0
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|All on the Line": 1
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,
@@ -2748,7 +2769,9 @@ export const characterPresets: CharacterPreset[] =
                     "Mayano Top Gun|Mayano Takes Off ☆": 0
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|A Grandkid Get-Together": 1
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,
@@ -3007,7 +3030,9 @@ export const characterPresets: CharacterPreset[] =
                     "Nice Nature|Dance Lesson": 0
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|All on the Line": 1
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,
@@ -3268,7 +3293,14 @@ export const characterPresets: CharacterPreset[] =
                     "Sakura Bakushin O|Dance Lesson": 1
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|The Inescapable Ardan": 1,
+                    "Trackblazer|The Strongest, Mightiest Cinderella!": 1,
+                    "Trackblazer|The Exciting Fruit Fest": 1,
+                    "Trackblazer|Vega and Spica": 1,
+                    "Trackblazer|Leave It to the Great Detective!": 0,
+                    "Trackblazer|Gullible Socialites": 0
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,
@@ -3530,7 +3562,9 @@ export const characterPresets: CharacterPreset[] =
                     "Taiki Shuttle|Dance Lesson": 1
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|A Grandkid Get-Together": 1
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,
@@ -3792,7 +3826,9 @@ export const characterPresets: CharacterPreset[] =
                     "Vodka|Dance Lesson": 1
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|All on the Line": 1
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,
@@ -11750,7 +11786,14 @@ export const characterPresets: CharacterPreset[] =
                     "Maruzensky|Expressing My Feelings to Maruzen": 1
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|The Inescapable Ardan": 1,
+                    "Trackblazer|The Strongest, Mightiest Cinderella!": 1,
+                    "Trackblazer|The Exciting Fruit Fest": 1,
+                    "Trackblazer|Vega and Spica": 1,
+                    "Trackblazer|Leave It to the Great Detective!": 0,
+                    "Trackblazer|Gullible Socialites": 0
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,
@@ -12529,7 +12572,9 @@ export const characterPresets: CharacterPreset[] =
                     "Gold City|Expressing My Feelings to Maruzen": 1
                 },
                 "supportEventOverrides": {},
-                "scenarioEventOverrides": {}
+                "scenarioEventOverrides": {
+                    "Trackblazer|All on the Line": 1
+                }
             },
             "misc": {
                 "enableSettingsDisplay": false,

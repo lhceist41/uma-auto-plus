@@ -439,7 +439,7 @@ export const defaultSettings: Settings = {
             "Trackblazer|Hungry for Affection": 0,
             "Trackblazer|Fear the Fearless": 0,
             "Trackblazer|Leave It to the Great Detective!": 1,
-            "Trackblazer|Gullible Socialites": 0,
+            "Trackblazer|Gullible Socialites": 1,
             "Trackblazer|I Wanna Join the Discussion!": 0,
             // URA Finale - 3 events. Stamina > Guts universally for the 3-race finale
             // gauntlet; Speed is #1 at every distance; Best Foot Forward Opt 2 is the
