@@ -1318,7 +1318,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     game.wait(1.0)
 
                     // After closing the popup, check if we can retry a specific race grade.
-                    if (lastRaceGrade != null &&
+                    if (!disableRaceRetries &&
+                        lastRaceGrade != null &&
                         trackblazerRetryGrades.contains(lastRaceGrade) &&
                         raceRetries > 0 &&
                         retriesThisRace < maxRetriesPerRace &&
@@ -1330,7 +1331,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                             retriesThisRace++
                             raceRetries--
                         }
-                    } else if (lastRaceIsRival &&
+                    } else if (!disableRaceRetries &&
+                        lastRaceIsRival &&
                         lastRaceGrade != null &&
                         trackblazerRetryGrades.contains(lastRaceGrade) &&
                         !bRetriedCurrentRace &&
@@ -1352,6 +1354,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 }
 
                 game.scenario == "Trackblazer" &&
+                    !disableRaceRetries &&
                     lastRaceGrade != null &&
                     trackblazerRetryGrades.contains(lastRaceGrade) &&
                     raceRetries > 0 &&
@@ -1370,6 +1373,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 }
 
                 game.scenario == "Trackblazer" &&
+                    !disableRaceRetries &&
                     lastRaceIsRival &&
                     lastRaceGrade != null &&
                     trackblazerRetryGrades.contains(lastRaceGrade) &&
