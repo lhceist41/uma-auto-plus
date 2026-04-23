@@ -693,7 +693,7 @@
         "condition": "phase>=2&is_finalcorner_laterhalf==1&order>=3&order_rate<=40@phase>=2&is_finalcorner==1&corner==0&order>=3&order_rate<=40",
         "precondition": "phase==1&blocked_side_continuetime>=2&corner!=0",
         "inherited": true,
-        "community_tier": null,
+        "community_tier": 0,
         "versions": [],
         "upgrade": null,
         "downgrade": null
@@ -5461,10 +5461,10 @@
         "eval_pt": 508,
         "pt_ratio": 1.41,
         "rarity": 2,
-        "condition": "running_style==2&phase_firsthalf_random==2&order_rate<=50",
+        "condition": "running_style==2&phase_random==2&order_rate<=50",
         "precondition": "",
         "inherited": false,
-        "community_tier": null,
+        "community_tier": 1,
         "versions": [
             201902
         ],
@@ -6204,7 +6204,7 @@
         "condition": "remain_distance<=300&order_rate<=40",
         "precondition": "is_finalcorner==1&change_order_onetime<0",
         "inherited": true,
-        "community_tier": null,
+        "community_tier": 1,
         "versions": [],
         "upgrade": null,
         "downgrade": null
