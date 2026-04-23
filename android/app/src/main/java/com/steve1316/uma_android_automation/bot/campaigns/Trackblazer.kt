@@ -1416,12 +1416,39 @@ class Trackblazer(game: Game) : Campaign(game) {
                     } else {
                         StatName.WIT
                     }
-                MessageLog.i(
-                    TAG,
-                    "[TRACKBLAZER] Still no suitable training found. Energy (${trainee.energy}%) and Mood (${trainee.mood}) are sufficient. Forcing $forcedStat training.",
-                )
-                training.executeTraining(forcedStat)
-                training.firstTrainingCheck = false
+
+                // Refuse to force-train a stat the analysis rejected (high failure, low gain even with
+                // a charm) or that the user blacklisted; mood/energy recovery beats a guaranteed-bad turn.
+                val skippedForced = training.skippedTrainingMap[forcedStat]
+                val forcedIsBlacklisted = forcedStat in training.blacklist
+                if (skippedForced != null || forcedIsBlacklisted) {
+                    val reason = skippedForced?.skipReason ?: "blacklisted"
+                    MessageLog.w(
+                        TAG,
+                        "[WARN] handleTrackblazerTraining:: Cannot force $forcedStat training ($reason). Backing out for recovery instead.",
+                    )
+
+                    training.firstTrainingCheck = false
+                    ButtonBack.click(game.imageUtils)
+                    game.wait(1.0)
+
+                    if (checkMainScreen()) {
+                        if (trainee.mood == Mood.AWFUL || (trainee.mood <= Mood.NORMAL && trainee.energy >= 20)) {
+                            MessageLog.i(TAG, "[TRACKBLAZER] Mood is ${trainee.mood}. Attempting to recover mood.")
+                            recoverMood()
+                        } else {
+                            MessageLog.i(TAG, "[TRACKBLAZER] Energy is ${trainee.energy}%. Attempting to recover energy.")
+                            recoverEnergy()
+                        }
+                    }
+                } else {
+                    MessageLog.i(
+                        TAG,
+                        "[TRACKBLAZER] Still no suitable training found. Energy (${trainee.energy}%) and Mood (${trainee.mood}) are sufficient. Forcing $forcedStat training.",
+                    )
+                    training.executeTraining(forcedStat)
+                    training.firstTrainingCheck = false
+                }
             }
         }
 
