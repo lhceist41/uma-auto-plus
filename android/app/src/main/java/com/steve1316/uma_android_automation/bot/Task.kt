@@ -153,18 +153,25 @@ abstract class Task(game: Game) : DialogHandler(game) {
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
-     * Run the task's main loop until completion or manual stop.
+     * Run the task's main loop until completion, manual stop, or per-run timeout.
      *
+     * The timeout exists as a safety net for queue runs - we never want a single career to
+     * stall forever and prevent later runs in the queue from starting. Default is 180 minutes
+     * (3 hours), configurable per run via the `runQueue.maxRuntimePerRunMinutes` setting.
+     *
+     * @param maxRuntimeMinutes Per-run safety timeout in minutes. Default 180.
      * @return The final [TaskResult] of the task's execution.
      */
-    open fun start(): TaskResult {
+    open fun start(maxRuntimeMinutes: Int = 180): TaskResult {
         var result: TaskResult =
             TaskResult.Error(
-                TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
-                "Task ended unexpectedly.",
+                TaskResultCode.TASK_RESULT_TIMED_OUT,
+                "The task timed out after $maxRuntimeMinutes minutes.",
             )
 
-        while (true) {
+        val timeoutMs = (maxRuntimeMinutes * (60 * 1000)).toLong()
+        val startTime = System.currentTimeMillis()
+        while (System.currentTimeMillis() - startTime < timeoutMs) {
             try {
                 val tmpResult: TaskResult? = process()
                 // Stop the task if a non-null result is received.
