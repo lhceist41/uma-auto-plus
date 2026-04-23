@@ -1880,11 +1880,11 @@ class Trackblazer(game: Game) : Campaign(game) {
 
         // Energy Items Check.
         if (!charmBeingUsedThisTurn && trainee.energy <= energyThresholdToUseEnergyItems && shopList.energyItemNames.contains(itemName)) {
-            // Conservation: skip the last unit of the lowest-level energy item for race recovery.
-            if (!bForceUseReservedItem && consecutiveRaceCount >= 2) {
+            // Conservation: always keep the last unit of the lowest-level energy item for emergency race recovery.
+            if (!bForceUseReservedItem) {
                 val conserveItem = energyItemConservationOrder.firstOrNull { (nextInventory[it] ?: 0) > 0 }
                 if (conserveItem == itemName && (nextInventory[itemName] ?: 0) <= 1) {
-                    MessageLog.i(TAG, "[TRACKBLAZER] Conserving last $itemName for emergency race recovery (consecutive races: $consecutiveRaceCount).")
+                    MessageLog.i(TAG, "[TRACKBLAZER] Conserving last $itemName for emergency race recovery.")
                     return null
                 }
             }
@@ -2116,8 +2116,9 @@ class Trackblazer(game: Game) : Campaign(game) {
     }
 
     /**
-     * Determines if using the current energy item is part of the best possible combination of available energy items.
-     * This follows a greedy approach to maximize energy gain while staying at or below 100%.
+     * Whether the current energy item belongs in the best combination of available energy items. Greedy
+     * maximization with a small overshoot above 100% allowed, so a larger combined gain (Vita 65 + 40 =
+     * 105) beats a strictly-under-100 one (65 + 20 = 85).
      *
      * @param trainee The trainee's current state.
      * @param itemName The name of the item being considered.
@@ -2145,8 +2146,9 @@ class Trackblazer(game: Game) : Campaign(game) {
         }
 
         // Collect all available energy items from this scan pass.
+        // Always reserve one unit of the lowest-tier item for emergency race recovery, unless force-override is active.
         val availableEnergyItems = mutableListOf<Int>()
-        val conserveItem = if (!bForceUseReservedItem && consecutiveRaceCount >= 2) energyItemConservationOrder.firstOrNull { (nextInventory[it] ?: 0) > 0 } else null
+        val conserveItem = if (!bForceUseReservedItem) energyItemConservationOrder.firstOrNull { (nextInventory[it] ?: 0) > 0 } else null
         remainingItemsOfInterest.forEach { name ->
             val gain = energyGains[name]
             if (gain != null) {
@@ -2164,17 +2166,22 @@ class Trackblazer(game: Game) : Campaign(game) {
             }
         }
 
-        // Current item (we know we have at least one because we are looking at it).
-        availableEnergyItems.add(currentGain)
+        // Safety net: if the current item was not counted via remainingItemsOfInterest (already-removed edge case),
+        // make sure the greedy sees it as an available option.
+        if (!remainingItemsOfInterest.contains(itemName)) {
+            availableEnergyItems.add(currentGain)
+        }
 
         // Sort gains descending for greedy selection.
         availableEnergyItems.sortDescending()
 
-        // Find the combination that provides max gain <= (100 - currentEnergy).
+        // Greedy with soft overshoot: prefer combinations that approach 100% even if they exceed it by up to 10.
+        // This prefers Vita 65 + Vita 40 (= 105) over Vita 65 + Vita 20 (= 85) so we don't leave ~15% on the table.
+        val overshootCap = 110
         var simulatedEnergy = currentEnergy
         val pickedEnergyItems = mutableListOf<Int>()
         for (gain in availableEnergyItems) {
-            if (simulatedEnergy + gain <= 100) {
+            if (simulatedEnergy + gain <= overshootCap) {
                 simulatedEnergy += gain
                 pickedEnergyItems.add(gain)
             }
