@@ -1,7 +1,7 @@
 {
     "expo": {
-        "name": "Uma Android Automation",
-        "slug": "uma-android-automation",
+        "name": "UMA Auto+",
+        "slug": "uma-auto-plus",
         "platforms": ["android"]
     }
 }
