@@ -37,6 +37,24 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.pow
 
 /**
+ * Identifies which branch of `recommendTraining` produced the most recent selection so that
+ * callers (and the logs) can distinguish an analysis-driven pick from a fallback pick.
+ */
+enum class SelectionSource {
+    /** Returned the highest-scoring training from `trainingScores` (normal happy path). */
+    ANALYSIS,
+
+    /** Analysis rejected everything; `forceSelection=true` picked the highest-scored skipped training. */
+    FORCED_FROM_SKIPPED,
+
+    /** Analysis rejected everything and no skipped scores existed; `forceSelection=true` defaulted to first non-blacklisted. */
+    FORCED_DEFAULT,
+
+    /** Analysis returned no winner and `forceSelection=false`; first non-blacklisted returned for the caller to handle. */
+    UNFORCED_DEFAULT,
+}
+
+/**
  * Handle the training process, including analysis of options, scoring recommendations, and execution.
  *
  * @property game The [Game] instance for interacting with the game state.
@@ -48,6 +66,10 @@ class Training(private val game: Game, private val campaign: Campaign) {
 
     /** Map to store training options that were skipped. */
     internal var skippedTrainingMap: MutableMap<StatName, TrainingOption> = mutableMapOf()
+
+    /** Records which branch of `recommendTraining` produced the most recent selection (analysis vs. fallback). */
+    var lastSelectionSource: SelectionSource? = null
+        private set
 
     /** List of training names that are restricted or unavailable. */
     private var restrictedTrainingNames: MutableSet<StatName> = mutableSetOf()
@@ -1794,11 +1816,43 @@ class Training(private val game: Game, private val campaign: Campaign) {
         val finalScoringMode = if (isIrregularEvaluation) "Trackblazer (Irregular Training)" else scoringMode
         logSelectionReasoning(trainingConfig, finalScoringMode, trainingScores, skippedScores, best)
 
-        return best?.name ?: if (forceSelection) {
-            skippedScores.maxByOrNull { it.value }?.key?.name ?: trainingMap.keys.firstOrNull { it !in blacklist }
-        } else {
-            trainingMap.keys.firstOrNull { it !in blacklist }
+        if (best != null) {
+            lastSelectionSource = SelectionSource.ANALYSIS
+            return best.name
         }
+
+        // Analysis produced no winning training. Pick a fallback and log which branch fired so that
+        // a downstream `Selected Training: X` is never preceded by an unexplained "no training selected".
+        if (forceSelection) {
+            val topSkipped = skippedScores.maxByOrNull { it.value }
+            if (topSkipped != null) {
+                val pick = topSkipped.key
+                val mainGain = pick.statGains[pick.name] ?: 0
+                MessageLog.i(
+                    TAG,
+                    "[TRAINING] Analysis rejected all trainings. forceSelection=true → picking highest-scored REJECTED training: " +
+                        "${pick.name} (score=${String.format("%.2f", topSkipped.value)}, fail=${pick.failureChance}%, mainGain=$mainGain). " +
+                        "This selection will execute despite analysis rejection.",
+                )
+                lastSelectionSource = SelectionSource.FORCED_FROM_SKIPPED
+                return pick.name
+            }
+            val defaulted = trainingMap.keys.firstOrNull { it !in blacklist }
+            MessageLog.i(
+                TAG,
+                "[TRAINING] Analysis produced no scored entries. forceSelection=true → defaulting to first non-blacklisted training: ${defaulted ?: "none available"}.",
+            )
+            lastSelectionSource = SelectionSource.FORCED_DEFAULT
+            return defaulted
+        }
+
+        val unforced = trainingMap.keys.firstOrNull { it !in blacklist }
+        MessageLog.i(
+            TAG,
+            "[TRAINING] Analysis returned no winning training. forceSelection=false → returning first non-blacklisted training: ${unforced ?: "none available"}. Caller decides whether to execute.",
+        )
+        lastSelectionSource = SelectionSource.UNFORCED_DEFAULT
+        return unforced
     }
 
     /**
@@ -2148,7 +2202,13 @@ class Training(private val game: Game, private val campaign: Campaign) {
             game.wait(0.5)
             // Acquire the percentages and stat gains for each training.
             analyzeTrainings()
-            trainingSelected = forceStat ?: recommendTraining()
+            trainingSelected =
+                if (forceStat != null) {
+                    MessageLog.i(TAG, "[TRAINING] forceStat override active — selecting $forceStat without running recommendTraining.")
+                    forceStat
+                } else {
+                    recommendTraining()
+                }
 
             if (trainingMap.isEmpty()) {
                 // Check if we should force Wit training during the Finale instead of recovering energy.
