@@ -71,7 +71,7 @@ export const useBootstrap = () => {
             logWithTimestamp("[Bootstrap] Starting races data population...")
 
             // Convert races.json data to database format.
-            const races: Array<Omit<DatabaseRace, "id">> = Object.entries(racesData).map(([key, race]) => ({
+            const races: Omit<DatabaseRace, "id">[] = Object.entries(racesData).map(([key, race]) => ({
                 key,
                 name: race.name,
                 date: race.date,
@@ -109,7 +109,7 @@ export const useBootstrap = () => {
             logWithTimestamp("[Bootstrap] Starting skills data population...")
 
             // Convert skills.json data to database format.
-            const skills: Array<Omit<DatabaseSkill, "id">> = Object.entries(skillsData).map(([key, skill]) => ({
+            const skills: Omit<DatabaseSkill, "id">[] = Object.entries(skillsData).map(([key, skill]) => ({
                 key,
                 skill_id: skill.id,
                 gene_id: skill.gene_id,

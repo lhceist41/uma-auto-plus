@@ -452,7 +452,7 @@ const RacingPlanSettings = () => {
                         placeholder="0.70"
                     />
                     <Text style={styles.inputDescription}>
-                        Future race scores are multiplied by this factor (0.0 to 1.0) before comparison. This simulates the "opportunity cost" of not training today.
+                        Future race scores are multiplied by this factor (0.0 to 1.0) before comparison. This simulates the &quot;opportunity cost&quot; of not training today.
                         {"\n\n"}
                         Example: At 0.70, a future race scoring 100 is treated as only 70. A lower factor (like 0.50) makes reaching the Improvement Threshold much harder.
                     </Text>
@@ -487,9 +487,10 @@ const RacingPlanSettings = () => {
                         placeholder="50.0"
                     />
                     <Text style={styles.inputDescription}>
-                        The required gap (in points) between today's best race and the discounted future race. High values mean the bot will only wait if the future reward is significantly better.
+                        The required gap (in points) between today&apos;s best race and the discounted future race. High values mean the bot will only wait if the future reward is significantly
+                        better.
                         {"\n\n"}
-                        Example: If set to 50, even if a future race is 40 points better than today's (after decay), the bot will still race today.
+                        Example: If set to 50, even if a future race is 40 points better than today&apos;s (after decay), the bot will still race today.
                     </Text>
                 </SearchableItem>
 

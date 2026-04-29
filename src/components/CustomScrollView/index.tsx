@@ -296,4 +296,8 @@ export const CustomScrollView = forwardRef<any, CustomScrollViewProps<any>>(
     }
 )
 
+// Set displayName for React DevTools and to satisfy react/display-name (forwardRef inner fns are
+// anonymous by default; without this, DevTools shows "ForwardRef" instead of "CustomScrollView").
+CustomScrollView.displayName = "CustomScrollView"
+
 export default CustomScrollView

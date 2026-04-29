@@ -230,9 +230,9 @@ const SkillSettings = () => {
                                     </View>
                                     <View style={styles.infoBlock}>
                                         <Text style={styles.infoDescription}>
-                                            This setting will filter skills based on both of these conditions. This helps us avoid having situations like an End Closer purchasing a skill like "Keeping
-                                            the Lead". This skill doesn't require using the Front Runner style to activate, but it does require the runner to be in the lead mid-race which is very
-                                            unlikely for an End Closer.
+                                            This setting will filter skills based on both of these conditions. This helps us avoid having situations like an End Closer purchasing a skill like
+                                            &quot;Keeping the Lead&quot;. This skill doesn&apos;t require using the Front Runner style to activate, but it does require the runner to be in the lead
+                                            mid-race which is very unlikely for an End Closer.
                                         </Text>
                                     </View>
                                     <Text style={[styles.infoLabel, { marginTop: 12 }]}>Detailed breakdown of examples:</Text>
@@ -240,24 +240,24 @@ const SkillSettings = () => {
                                     <View style={styles.infoBlock}>
                                         <Text style={styles.infoLabel}>Use [Racing Settings] {"->"} [Original Race Strategy]</Text>
                                         <Text style={styles.infoDescription}>
-                                            • Inherits the running style from your Racing Settings. For example, if you set the Strategy to "Late Surger" in Racing Settings, only Late Surger skills
-                                            will be considered.
+                                            • Inherits the running style from your Racing Settings. For example, if you set the Strategy to &quot;Late Surger&quot; in Racing Settings, only Late Surger
+                                            skills will be considered.
                                         </Text>
                                     </View>
 
                                     <View style={styles.infoBlock}>
                                         <Text style={styles.infoLabel}>Any</Text>
                                         <Text style={styles.infoDescription}>
-                                            • Does not filter any skills based on running style. For example, even if your trainee is an "End Closer", the bot may still purchase "Pace Chaser Corners
-                                            ○" (a Pace Chaser skill) if it's available.
+                                            • Does not filter any skills based on running style. For example, even if your trainee is an &quot;End Closer&quot;, the bot may still purchase &quot;Pace
+                                            Chaser Corners ○&quot; (a Pace Chaser skill) if it&apos;s available.
                                         </Text>
                                     </View>
 
                                     <View style={styles.infoBlock}>
                                         <Text style={styles.infoLabel}>Front Runner</Text>
                                         <Text style={styles.infoDescription}>
-                                            • Only considers skills that are compatible with the Front Runner style. For example, skills like "Escape Artist" will be included, while "Outer Swell"
-                                            (Late Surger) will be ignored.
+                                            • Only considers skills that are compatible with the Front Runner style. For example, skills like &quot;Escape Artist&quot; will be included, while
+                                            &quot;Outer Swell&quot; (Late Surger) will be ignored.
                                         </Text>
                                     </View>
                                 </View>

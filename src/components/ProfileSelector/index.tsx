@@ -30,7 +30,7 @@ interface ProfileSelectorProps {
  * @param profiles The list of available profiles.
  * @returns The default profile name to select.
  */
-const getDefaultSelectedProfile = (profiles: Array<{ name: string }>): string => {
+const getDefaultSelectedProfile = (profiles: { name: string }[]): string => {
     return profiles.length > 0 ? profiles[0].name : DEFAULT_PROFILE_NAME
 }
 

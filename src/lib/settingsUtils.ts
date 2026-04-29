@@ -24,7 +24,7 @@ export const deepMerge = <T extends Record<string, any>>(target: T, source: Part
  * @returns An array of objects in the format `{ category: string; key: string; value: any }`.
  */
 export const convertSettingsToBatch = (settings: Record<string, any>) => {
-    const batch: Array<{ category: string; key: string; value: any }> = []
+    const batch: { category: string; key: string; value: any }[] = []
 
     Object.entries(settings).forEach(([category, categorySettings]) => {
         Object.entries(categorySettings).forEach(([key, value]) => {

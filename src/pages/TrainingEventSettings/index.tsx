@@ -174,7 +174,7 @@ const TrainingEventSettings = () => {
      * Filters out excluded events and events with fewer than two options.
      */
     const allEvents = useMemo(() => {
-        const events: Array<{ key: string; characterOrSupport: string; eventName: string; options: string[]; type: "character" | "support" | "scenario" }> = []
+        const events: { key: string; characterOrSupport: string; eventName: string; options: string[]; type: "character" | "support" | "scenario" }[] = []
 
         // Add all character events from the data file.
         Object.keys(charactersData).forEach((characterName) => {
@@ -356,7 +356,7 @@ const TrainingEventSettings = () => {
      * Retrieve a list of all current character and support event overrides.
      */
     const currentOverrides = useMemo(() => {
-        const overrides: Array<{ key: string; characterOrSupport: string; eventName: string; optionIndex: number; options: string[] }> = []
+        const overrides: { key: string; characterOrSupport: string; eventName: string; optionIndex: number; options: string[] }[] = []
         const characterOverrides = characterEventOverrides || {}
         const supportOverrides = supportEventOverrides || {}
 
@@ -734,7 +734,7 @@ const TrainingEventSettings = () => {
                                     children: (
                                         <View>
                                             <View style={styles.section}>
-                                                <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground, marginBottom: 12 }}>New Year's Resolutions (Classic Year)</Text>
+                                                <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground, marginBottom: 12 }}>New Year&apos;s Resolutions (Classic Year)</Text>
                                                 <CustomSelect
                                                     options={newYearResolutionsOptions}
                                                     value={specialEventOverrides["New Year's Resolutions"]?.selectedOption || "Option 2: Energy +20"}
@@ -745,7 +745,7 @@ const TrainingEventSettings = () => {
                                             </View>
 
                                             <View style={styles.section}>
-                                                <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground, marginBottom: 12 }}>New Year's Shrine Visit (Senior Year)</Text>
+                                                <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground, marginBottom: 12 }}>New Year&apos;s Shrine Visit (Senior Year)</Text>
                                                 <CustomSelect
                                                     options={newYearShrineVisitOptions}
                                                     value={specialEventOverrides["New Year's Shrine Visit"]?.selectedOption || "Option 1: Energy +30"}
@@ -814,7 +814,7 @@ const TrainingEventSettings = () => {
                                             </View>
 
                                             <View style={styles.section}>
-                                                <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground, marginBottom: 12 }}>Don't Overdo It!</Text>
+                                                <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground, marginBottom: 12 }}>Don&apos;t Overdo It!</Text>
                                                 <CustomSelect
                                                     options={dontOverdoItOptions}
                                                     value={
@@ -859,7 +859,7 @@ const TrainingEventSettings = () => {
                                             </View>
 
                                             <View style={styles.section}>
-                                                <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground, marginBottom: 12 }}>Etsuko's Exhaustive Coverage</Text>
+                                                <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground, marginBottom: 12 }}>Etsuko&apos;s Exhaustive Coverage</Text>
                                                 <CustomSelect
                                                     options={etsukoOptions}
                                                     value={specialEventOverrides["Etsuko's Exhaustive Coverage"]?.selectedOption || "Option 2: Energy Down / Gain skill points"}
@@ -873,7 +873,7 @@ const TrainingEventSettings = () => {
                                                 <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground, marginBottom: 8 }}>A Team at Last (Unity Cup)</Text>
                                                 <Text style={{ fontSize: 14, color: colors.mutedForeground, marginBottom: 12 }}>
                                                     Select your preferred team name for Unity Cup (must be available via your chosen trainee or supports). The available options depend on which
-                                                    characters you have bonded with. "Default" will always select the first option.
+                                                    characters you have bonded with. &quot;Default&quot; will always select the first option.
                                                 </Text>
                                                 <CustomSelect
                                                     options={aTeamAtLastOptions}

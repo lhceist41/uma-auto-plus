@@ -342,13 +342,13 @@ const DebugSettings = () => {
                                         <View style={styles.infoBlock}>
                                             <Text style={styles.infoLabel}>Option 1:</Text>
                                             <Text style={styles.infoDescription}>
-                                                In your Emulator settings, enable "Network Bridging" or the equivalent, and restart the emulator to get a real IP.
+                                                In your Emulator settings, enable &quot;Network Bridging&quot; or the equivalent, and restart the emulator to get a real IP.
                                             </Text>
                                         </View>
 
                                         <View style={styles.infoBlock}>
                                             <Text style={styles.infoLabel}>Option 2 (Access on Computer only):</Text>
-                                            <Text style={styles.infoDescription}>Run these commands on your computer (port may vary) to use your emulator's localhost URL:</Text>
+                                            <Text style={styles.infoDescription}>Run these commands on your computer (port may vary) to use your emulator&apos;s localhost URL:</Text>
                                             <Text style={[styles.infoLabel, { marginTop: 8 }]}>
                                                 adb connect localhost:5555{"\n"}
                                                 adb forward tcp:{bsc.settings.debug.remoteLogViewerPort} tcp:{bsc.settings.debug.remoteLogViewerPort}

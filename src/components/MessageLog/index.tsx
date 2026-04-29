@@ -182,6 +182,10 @@ const LogItem = memo(({ item, fontSize, onLongPress, enableMessageIdDisplay }: {
     )
 })
 
+// Name the memo'd anonymous arrow so it shows as "LogItem" instead of "Memo" in DevTools and
+// satisfies react/display-name.
+LogItem.displayName = "LogItem"
+
 /**
  * A full-featured message log display component with search, sort, copy, and font size controls.
  * Uses virtualized rendering via `FlashList` for performant display of large log volumes.

@@ -6,6 +6,16 @@
 # Legitimate asset PNGs live under android/app/src/main/assets/ and are unaffected.
 /*.png
 
+
+# Bot run logs captured at the repo root (large, single-session, regeneratable).
+# Real bot logs live in the app's own data dir, not here.
+/run-*.txt
+/run-*.log
+
+# Brand asset preview output (regenerate via: python scripts/generate-brand-assets.py).
+# Source PNGs that ship in the APK live under android/app/src/main/res/ instead.
+/scripts/splash-preview.png
+
 # Xcode
 #
 build/

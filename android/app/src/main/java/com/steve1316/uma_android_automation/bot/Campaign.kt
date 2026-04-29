@@ -1098,6 +1098,18 @@ abstract class Campaign(game: Game) : Task(game) {
     }
 
     /**
+     * Public accessor for the grade of the most recent race processed in this career.
+     *
+     * Exposes the protected [racing.lastRaceGrade] field so that base classes like [DialogHandler]
+     * can make grade-aware decisions (e.g., the alarm clock carat policy) without using reflection
+     * or relaxing the encapsulation of the [Racing] property.
+     *
+     * @return The [RaceGrade] of the last processed race, or null if no race has been processed yet
+     *   in this career run.
+     */
+    fun getLastRaceGrade(): com.steve1316.uma_android_automation.types.RaceGrade? = racing.lastRaceGrade
+
+    /**
      * Updates the current date by detecting it on screen.
      *
      * @param isOnMainScreen If true, checks the Main screen for the date directly. Defaults to true.

@@ -186,7 +186,7 @@ export const useSettingsManager = () => {
      * @param fileUri - The URI/path to the JSON settings file.
      * @returns A promise that resolves with the imported settings and profiles.
      */
-    const loadFromJSONFile = async (fileUri: string): Promise<{ settings: Settings; profiles?: Array<{ id: number; name: string; settings: any; created_at: string; updated_at: string }> }> => {
+    const loadFromJSONFile = async (fileUri: string): Promise<{ settings: Settings; profiles?: { id: number; name: string; settings: any; created_at: string; updated_at: string }[] }> => {
         try {
             const data = await FileSystem.readAsStringAsync(fileUri)
             const parsed: any = JSON.parse(data)
@@ -302,7 +302,7 @@ export const useSettingsManager = () => {
 
         try {
             // Fetch all profiles from database.
-            let profiles: Array<{ id: number; name: string; settings: any; created_at: string; updated_at: string }> = []
+            let profiles: { id: number; name: string; settings: any; created_at: string; updated_at: string }[] = []
             try {
                 if (isSQLiteInitialized) {
                     const dbProfiles = await databaseManager.getAllProfiles()

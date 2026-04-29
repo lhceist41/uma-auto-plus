@@ -36,7 +36,7 @@ const RacingSettings = () => {
         daysToRunExtraRaces,
         disableRaceRetries,
         enableFreeRaceRetry,
-        spendCaratsForAlarmClocks,
+        alarmClockPolicy,
         enableCompleteCareerOnFailure,
         enableStopOnMandatoryRaces,
         enableForceRacing,
@@ -194,14 +194,32 @@ const RacingSettings = () => {
                                 description="When enabled, the bot will attempt to retry a failed mandatory race only if the daily free race retry is available."
                                 className="my-2"
                             />
-                            <CustomCheckbox
-                                searchId="spend-carats-for-alarm-clocks"
-                                checked={spendCaratsForAlarmClocks}
-                                onCheckedChange={(checked) => updateRacingSetting("spendCaratsForAlarmClocks", checked)}
-                                label="Spend Carats to Buy Alarm Clocks"
-                                description="When the bot runs out of free Alarm Clocks (5 per career) and the game prompts to buy one for 10 carats, this controls what happens. ON = spend the 10 carats and retry the race. OFF = cancel the popup and continue the run without retrying. Off by default so the bot never spends premium currency without your permission."
-                                className="my-2"
+                            <Text style={styles.inputLabel}>Alarm Clock Carat Policy</Text>
+                            <CustomSelect
+                                searchId="alarm-clock-policy"
+                                searchTitle="Alarm Clock Carat Policy"
+                                searchDescription="When the bot runs out of free Alarm Clocks (5 per career) and the game prompts to buy one for 10 carats, this policy decides whether to spend carats based on what race was lost."
+                                options={[
+                                    { value: "Never", label: "Never (cancel popup, save carats)" },
+                                    { value: "G1Only", label: "G1 only" },
+                                    { value: "G1AndFinale", label: "G1 + Twinkle Star Climax finale" },
+                                    { value: "Always", label: "Always (spend carats every time)" },
+                                ]}
+                                value={alarmClockPolicy}
+                                onValueChange={(value) => updateRacingSetting("alarmClockPolicy", value)}
+                                placeholder="Select policy"
                             />
+                            <Text style={styles.inputDescription}>
+                                When the bot runs out of free Alarm Clocks (5 per career) and the game prompts to buy one for 10 carats, this policy controls whether to spend.
+                                {"\n\n"}
+                                <Text style={{ fontWeight: "bold" }}>Never</Text>: always cancel and continue the run without retry. Default — never spends carats without opt-in.
+                                {"\n"}
+                                <Text style={{ fontWeight: "bold" }}>G1 only</Text>: spend 10 carats only for failed G1 races.
+                                {"\n"}
+                                <Text style={{ fontWeight: "bold" }}>G1 + Finale</Text>: G1 races plus the Twinkle Star Climax finale races (turns 73-75 in Trackblazer). Recommended for active players.
+                                {"\n"}
+                                <Text style={{ fontWeight: "bold" }}>Always</Text>: spend 10 carats on every alarm clock prompt.
+                            </Text>
                             <CustomCheckbox
                                 searchId="enable-complete-career-on-failure"
                                 checked={enableCompleteCareerOnFailure}

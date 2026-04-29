@@ -78,7 +78,7 @@ export type ParseError = {
 
 export type ParseResult = {
     /** The records parsed from the log files. */
-    records: Array<DayRecord | GapRecord | FileDividerRecord>
+    records: (DayRecord | GapRecord | FileDividerRecord)[]
     /** The errors that occurred during parsing. */
     errors: ParseError[]
     /** The metadata of the parsing. */
@@ -514,7 +514,7 @@ export function parseLogs(files: LogFileInput[]): ParseResult {
     }
 
     const dayNumbers = Array.from(dayMap.keys()).sort((a, b) => a - b)
-    const records: Array<DayRecord | GapRecord | FileDividerRecord> = []
+    const records: (DayRecord | GapRecord | FileDividerRecord)[] = []
     let prevDay: number | undefined
     let prevFileName: string | undefined
 

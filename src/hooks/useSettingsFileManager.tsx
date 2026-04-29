@@ -40,9 +40,9 @@ const deepEqual = (a: any, b: any): boolean => {
  * `current`, and return only the keys that would actually change on import.
  */
 const compareSettings = (current: Settings, imported: Settings) => {
-    const changes: Array<{ category: string; key: string; oldValue: any; newValue: any }> = []
+    const changes: { category: string; key: string; oldValue: any; newValue: any }[] = []
 
-    for (const category of Object.keys(imported) as Array<keyof Settings>) {
+    for (const category of Object.keys(imported) as (keyof Settings)[]) {
         const currentCategory = current[category]
         const importedCategory = imported[category]
 

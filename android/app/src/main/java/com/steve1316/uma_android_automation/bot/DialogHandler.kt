@@ -13,6 +13,7 @@ import com.steve1316.uma_android_automation.components.IconHorseshoe
 import com.steve1316.uma_android_automation.components.RadioCareerQuickShortenAllEvents
 import com.steve1316.uma_android_automation.components.RadioPortrait
 import com.steve1316.uma_android_automation.types.BoundingBox
+import com.steve1316.uma_android_automation.types.RaceGrade
 import org.opencv.core.Point
 
 /** Represents the result of a dialog handling operation. */
@@ -258,18 +259,29 @@ open class DialogHandler(val game: Game) {
 
             "purchase_alarm_clock" -> {
                 // Player ran out of free Alarm Clocks for the career. The game offers to buy one
-                // for 10 carats. Two paths based on the user's `racing.spendCaratsForAlarmClocks`
-                // toggle:
-                //   - true  -> spend the 10 carats (click OK), retry the race normally.
-                //   - false -> cancel the popup and continue the run without retrying. The race
-                //              result stands, but the run keeps going (vs. the previous behavior
-                //              of stopping the bot entirely).
-                val spendCarats = SettingsHelper.getBooleanSetting("racing", "spendCaratsForAlarmClocks")
-                if (spendCarats) {
-                    MessageLog.i(TAG, "[DIALOG] Out of free Alarm Clocks. Spending 10 carats to retry per user setting.")
+                // for 10 carats. Decision is driven by `racing.alarmClockPolicy` and the grade
+                // of the most recent race (tracked on Racing.lastRaceGrade):
+                //   - "Never"        -> always cancel.
+                //   - "G1Only"       -> spend only if last race was G1.
+                //   - "G1AndFinale"  -> spend for G1 or Twinkle Star Climax finale (RaceGrade.FINALE).
+                //   - "Always"       -> always spend.
+                // Falls back to "Never" for unknown policies or if race grade is somehow unavailable
+                // (e.g., misc tasks where this dialog shouldn't fire anyway).
+                val policy = SettingsHelper.getStringSetting("racing", "alarmClockPolicy", "Never")
+                val grade = (game.task as? Campaign)?.getLastRaceGrade()
+                val shouldSpend =
+                    when (policy) {
+                        "Never" -> false
+                        "G1Only" -> grade == RaceGrade.G1
+                        "G1AndFinale" -> grade == RaceGrade.G1 || grade == RaceGrade.FINALE
+                        "Always" -> true
+                        else -> false
+                    }
+                if (shouldSpend) {
+                    MessageLog.i(TAG, "[DIALOG] Out of free Alarm Clocks. Spending 10 carats to retry (policy='$policy', grade=$grade).")
                     dialog.ok(game.imageUtils)
                 } else {
-                    MessageLog.i(TAG, "[DIALOG] Out of free Alarm Clocks. Cancelling the purchase popup and continuing without retry.")
+                    MessageLog.i(TAG, "[DIALOG] Out of free Alarm Clocks. Skipping carats spend (policy='$policy', grade=$grade). Continuing without retry.")
                     // ButtonCancel is the first entry in the dialog's buttons list, so close() clicks it.
                     dialog.close(game.imageUtils)
                 }

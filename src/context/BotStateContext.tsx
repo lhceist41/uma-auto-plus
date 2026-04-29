@@ -45,7 +45,7 @@ export interface Settings {
         daysToRunExtraRaces: number
         disableRaceRetries: boolean
         enableFreeRaceRetry: boolean
-        spendCaratsForAlarmClocks: boolean
+        alarmClockPolicy: "Never" | "G1Only" | "G1AndFinale" | "Always"
         enableCompleteCareerOnFailure: boolean
         enableStopOnMandatoryRaces: boolean
         enableForceRacing: boolean
@@ -245,11 +245,15 @@ export const defaultSettings: Settings = {
         daysToRunExtraRaces: 5,
         disableRaceRetries: false,
         enableFreeRaceRetry: false,
-        // Default off: when the bot runs out of free Alarm Clocks the game offers a paid retry
-        // for 10 carats. Off = cancel the popup and continue without retry. On = spend the
-        // carats and retry. Stays off by default so the bot never spends premium currency unless
-        // the user explicitly opts in.
-        spendCaratsForAlarmClocks: false,
+        // Policy for when the bot runs out of free Alarm Clocks (5 per career) and the game
+        // offers a paid retry for 10 carats. Four-option policy:
+        //   - "Never"        -> always cancel the popup, never spend carats.
+        //   - "G1Only"       -> spend carats only if the failed race was G1.
+        //   - "G1AndFinale"  -> spend carats for G1 races OR Twinkle Star Climax finale races
+        //                       (turns 73-75 in Trackblazer, tagged as RaceGrade.FINALE).
+        //   - "Always"       -> always spend the 10 carats and retry.
+        // Defaults to "Never" so the bot never spends premium currency without explicit opt-in.
+        alarmClockPolicy: "Never",
         enableCompleteCareerOnFailure: false,
         enableStopOnMandatoryRaces: false,
         enableForceRacing: false,
@@ -577,6 +581,11 @@ export const defaultSettings: Settings = {
         // matching the guide's constant-shop-interaction tempo. Every character preset already
         // ships with 1; this aligns the non-preset default with that tempo.
         trackblazerShopCheckFrequency: 1,
+        // Empty-by-default filters for distance/surface preferences. Bot treats empty arrays as
+        // "no filter applied" - all distances/surfaces are eligible. Character presets override
+        // these per-trainee where a focused build wants to lock to e.g. ["Sprint","Mile"] only.
+        trackblazerPreferredDistances: [],
+        trackblazerPreferredSurfaces: [],
     },
 }
 

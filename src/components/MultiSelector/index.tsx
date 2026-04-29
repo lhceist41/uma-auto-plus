@@ -330,7 +330,7 @@ const MultiSelector: React.FC<MultiSelectorProps> = ({
                     {selectedOptions.length} of {options.length} selected
                 </Text>
 
-                {selectAll && <Text style={[styles.disabledNote, { flex: 1, marginLeft: 12 }]}>Individual selection is disabled when "Select All" is enabled</Text>}
+                {selectAll && <Text style={[styles.disabledNote, { flex: 1, marginLeft: 12 }]}>Individual selection is disabled when &quot;Select All&quot; is enabled</Text>}
             </View>
 
             {/* Modal for individual selection */}

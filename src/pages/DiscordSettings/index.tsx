@@ -1,5 +1,5 @@
 import { useMemo, useContext, useRef, useState, useCallback } from "react"
-import { View, ScrollView, StyleSheet, TextInput, Text } from "react-native"
+import { View, ScrollView, StyleSheet, TextInput, Text, NativeModules } from "react-native"
 import { useTheme } from "../../context/ThemeContext"
 import { BotStateContext, defaultSettings } from "../../context/BotStateContext"
 import { SearchPageProvider } from "../../context/SearchPageContext"
@@ -9,7 +9,6 @@ import PageHeader from "../../components/PageHeader"
 import WarningContainer from "../../components/WarningContainer"
 import SearchableItem from "../../components/SearchableItem"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
-import { NativeModules } from "react-native"
 
 /**
  * Discord Settings page for configuring Discord bot notifications.
@@ -183,7 +182,7 @@ const DiscordSettings = () => {
                             style={styles.section}
                         >
                             <Text style={styles.inputLabel}>Discord User ID</Text>
-                            <Text style={styles.inputDescription}>Your Discord user ID. Enable Developer Mode in Discord settings, then click your name and select 'Copy User ID'.</Text>
+                            <Text style={styles.inputDescription}>Your Discord user ID. Enable Developer Mode in Discord settings, then click your name and select &apos;Copy User ID&apos;.</Text>
                             <TextInput
                                 style={[styles.textInput, !enableDiscordNotifications && styles.textInputDisabled]}
                                 value={discordUserID}

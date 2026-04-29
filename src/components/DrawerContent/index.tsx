@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect, useContext, useRef } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from "react-native"
 import { DrawerContentScrollView, DrawerContentComponentProps, useDrawerStatus } from "@react-navigation/drawer"
 import { CommonActions } from "@react-navigation/native"
-import { House, Settings, Dumbbell, CalendarDays, Flag, Map, Swords, Eye, MessageCircle, Sliders, Bug, Repeat, ChevronUp, ChevronDown, Cube, Github } from "lucide-react-native"
+import { House, Settings, Dumbbell, CalendarDays, Flag, Map, Swords, Eye, MessageCircle, Sliders, Bug, Repeat, ChevronUp, ChevronDown, Box, Github } from "lucide-react-native"
 import type { LucideIcon } from "lucide-react-native"
 import { Avatar, AvatarImage } from "../ui/avatar"
 import { markNavigationStart } from "../../lib/performanceLogger"
@@ -234,7 +234,7 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
                     nested: Object.values(skillPlanSettingsPages).map((item) => ({
                         name: item.name,
                         label: `${item.title} Plan Settings`,
-                        icon: Cube,
+                        icon: Box,
                     })),
                 },
                 {
