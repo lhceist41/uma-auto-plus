@@ -472,7 +472,11 @@ export const defaultSettings: Settings = {
     },
     training: {
         trainingBlacklist: [],
-        statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
+        // Wit-first is the meta tiebreaker: Wit training restores energy and is the only stat
+        // where a "training" turn is also a near-zero-cost stamina recovery. When two trainings
+        // tie on score, picking Wit first keeps the engine running. Speed/Power/Stamina follow
+        // for build prioritization on non-tied turns.
+        statPrioritization: ["Wit", "Speed", "Power", "Stamina", "Guts"],
         maximumFailureChance: 20,
         // OCR sanity ceiling per stat. The Global EN hard stat cap is 1200 unless raised
         // by Trackblazer shop items (Speed Shoes, etc.). CustomImageUtils.kt uses this to
@@ -489,10 +493,17 @@ export const defaultSettings: Settings = {
         // onward (Junior has no rainbows).
         enableRainbowTrainingBonus: true,
         preferredDistanceOverride: "Auto",
-        mustRestBeforeSummer: false,
-        enableRiskyTraining: false,
-        riskyTrainingMinStatGain: 20,
-        riskyTrainingMaxFailureChance: 30,
+        // Force a rest the turn before summer camp begins so the trainee enters camp at full
+        // energy and gets the camp's high-value rainbow turns at peak return. Without this the
+        // bot can burn the camp on a depleted trainee and leave a lot of stat gain on the table.
+        mustRestBeforeSummer: true,
+        // Risky training: take a high-failure-chance training when the stat reward is large enough.
+        // Min gain 30 + max fail 25% defines a sweet spot where the EV is positive after the
+        // expected-failure penalty. Pairs with `enableRainbowTrainingBonus: true` to chase
+        // big rainbow turns even when fail % is uncomfortable.
+        enableRiskyTraining: true,
+        riskyTrainingMinStatGain: 30,
+        riskyTrainingMaxFailureChance: 25,
         trainWitDuringFinale: false,
         // Prioritize training facilities that offer skill hints. Training.kt:656 adds a weight
         // bonus to facilities with hint icons when this is true, helping the bot pick the
@@ -569,13 +580,20 @@ export const defaultSettings: Settings = {
         trackblazerConsecutiveRacesLimit: 2,
         trackblazerEnergyThreshold: 40,
         trackblazerShopCheckGrades: ["G1", "G2", "G3"],
-        trackblazerMinStatGainForCharm: 30,
+        // Lower threshold (25 vs prior 30) burns Good-Luck Charm on more trainings. The charm
+        // converts a risky training into a guaranteed pick, so any time the projected gain is
+        // 25+ it's worth the consumable. Steve1316's settings ship with 25 and it's the meta.
+        trackblazerMinStatGainForCharm: 25,
         trackblazerMaxRetriesPerRace: 1,
         trackblazerWhistleForcesTraining: true,
         trackblazerRetryRacesBeforeFinalGrades: ["G1", "G2", "G3"],
         trackblazerEnableIrregularTraining: false,
         trackblazerIrregularTrainingMinStatGain: 30,
-        trackblazerExcludedItems: [],
+        // Reserve top-tier energy items (Energy Drink MAX/MAX EX) for the Twinkle Star Climax
+        // races on days 73-75, where +50 energy from a single drink can rescue a critical
+        // training pass. Yummy Cat Food is excluded for the same reason — its mood-restore +
+        // energy combination is a Finale-tier item that's wasted earlier in the run.
+        trackblazerExcludedItems: ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food"],
         // Trackblazer guide's "Order Mantra" - Check Training, Check Shop, Go Race - is per-turn.
         // Frequency 1 means the bot checks the shop after every race (not every 3 races),
         // matching the guide's constant-shop-interaction tempo. Every character preset already
