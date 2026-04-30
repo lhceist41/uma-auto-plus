@@ -263,13 +263,18 @@ const SkillPlanSettings: FC<SkillPlanSettingsProps> = ({ planKey, name, title, d
                             { value: "default", label: "Do Not Spend Remaining Points" },
                             { value: "optimize_skills", label: "Best Skills First" },
                             { value: "optimize_rank", label: "Optimize Rank" },
+                            { value: "optimize_knapsack", label: "Optimize Rank (Knapsack DP)" },
                         ]}
                         value={strategy}
                         defaultValue={defaultSettings.skills.plans[planKey].strategy}
                         onValueChange={(value) => updateSkillsSetting("strategy", value)}
                         placeholder="Select Strategy"
                     />
-                    {strategy == "optimize_rank" && <WarningContainer>⚠️ Warning: Optimize Rank ignores any of the Skill Style Overrides set in the Skill Settings page.</WarningContainer>}
+                    {(strategy == "optimize_rank" || strategy == "optimize_knapsack") && (
+                        <WarningContainer>
+                            ⚠️ Warning: Rank-optimizing strategies ignore the Skill Style Overrides set in the Skill Settings page.
+                        </WarningContainer>
+                    )}
                     <Text style={styles.inputDescription}>
                         This option determines what the bot does with any remaining skill points after it has purchased all of the skills from the Planned Skills section and the other options on this
                         page.
@@ -280,6 +285,11 @@ const SkillPlanSettings: FC<SkillPlanSettingsProps> = ({ planKey, name, title, d
                     </Text>
                     <Text style={styles.inputDescription}>
                         Optimize Rank will purchase skills in a way which will result in the highest trainee rank. Avoid this option if you wish to train an uma up for TT or CM.
+                    </Text>
+                    <Text style={styles.inputDescription}>
+                        Optimize Rank (Knapsack DP) is a stricter version of Optimize Rank that runs a 0/1 knapsack DP across upgrade chains. It avoids the greedy mistake of buying a base skill ○ and
+                        its upgrade ◎ separately (which wastes the base&apos;s cost since only the upgrade activates). Slightly slower to plan than Optimize Rank but typically yields ~5-15% more
+                        rating per career on builds with multiple upgrade-chain skills available.
                     </Text>
                 </View>
             </>

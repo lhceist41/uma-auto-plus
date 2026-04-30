@@ -84,6 +84,13 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         /** Prioritize skills that offer the best rank increase per point spent. */
         OPTIMIZE_RANK,
 
+        /** Grouped 0/1 knapsack DP across upgrade chains to maximize total rank under budget. Unlike
+         * [OPTIMIZE_RANK]'s greedy ratio, it respects mutual exclusion between a base skill and its
+         * upgrade — owning both wastes the base cost since only the upgrade activates — and evaluates
+         * non-greedy combos the ratio sort misses (two cheap mid-tier skills vs one unaffordable top-tier).
+         */
+        OPTIMIZE_KNAPSACK,
+
         ;
 
         companion object {
@@ -175,6 +182,227 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             }
 
             return result
+        }
+
+        /**
+         * One mutually-exclusive choice within a [KnapsackGroup].
+         *
+         * For an upgrade-chain group like base ○ → upgrade ◎, choices look like:
+         *   - empty list (skip the group)
+         *   - [base only] (cost = base.price, score = base.evalPt)
+         *   - [base, upgrade] (cost = base.price + upgrade.price, score = upgrade.evalPt;
+         *     only the upgraded form activates so we don't sum the scores)
+         *
+         * @property items Skill candidates picked together by this choice. Empty = "skip this group".
+         */
+        data class KnapsackChoice(
+            val items: List<SkillCandidate>,
+        ) {
+            /** Combined SP cost of all skills in this choice. */
+            val cost: Int = items.sumOf { it.price }
+
+            /** Score for this choice: the max [SkillCandidate.evaluationPoints] across the items, not
+             * the sum — owning both base ○ and upgrade ◎ activates only the upgrade, so the base's
+             * score is superseded. Singleton = the one item's eval_pt; skip = 0.
+             */
+            val score: Int = items.maxOfOrNull { it.evaluationPoints } ?: 0
+
+            /** True if this choice picks nothing (the implicit skip option). */
+            val isSkip: Boolean = items.isEmpty()
+
+            /** Names of the skills picked by this choice, in order. */
+            val names: List<String> = items.map { it.name }
+        }
+
+        /**
+         * A group of mutually-exclusive [KnapsackChoice] options the DP must pick at most one from.
+         *
+         * Typical groups:
+         *   - **Singleton standalone skill** — choices: [skip], [pick]
+         *   - **Upgrade chain** — choices: [skip], [base], [base, upgrade1], [base, upgrade1, upgrade2]
+         *   - **Required skill** (user-planned, negative, inherited unique) — choices: [pick] only
+         *     (no skip option) so the DP must include it
+         *
+         * @property choices All possible selections within this group. Must contain at least one choice.
+         * @property isRequired When true, the DP cannot choose to skip this group; it must pick a
+         *   non-empty choice. Used for skills the user explicitly planned or for negative-skill cleanup.
+         */
+        data class KnapsackGroup(
+            val choices: List<KnapsackChoice>,
+            val isRequired: Boolean = false,
+        )
+
+        /**
+         * Run a grouped 0/1 knapsack DP to choose the highest-scoring combination of skill purchases
+         * within [budget].
+         *
+         * Algorithm: standard grouped knapsack with rolling DP arrays for memory efficiency
+         * (`O(2 × budget)` instead of `O(groups × budget)` for the value table). Reconstruction uses
+         * a full `choice[g][b]` table to recover which option was picked per group.
+         *
+         * Faithful Kotlin port of the algorithm in `daftuyda/UmaTools` `js/optimizer.js`
+         * (`optimizeGrouped` function). Adapted to use [SkillCandidate] directly instead of
+         * row-metadata, and to treat empty/required choices via [KnapsackChoice.isSkip] +
+         * [KnapsackGroup.isRequired] flags rather than a JS `none` sentinel.
+         *
+         * @param groups Mutually-exclusive groups of skill choices.
+         * @param budget Total SP budget available.
+         * @return Ordered list of (name, price) pairs to buy. Empty if a required group is unreachable
+         *   under the budget.
+         */
+        fun calculateOptimizeKnapsackPurchases(
+            groups: List<KnapsackGroup>,
+            budget: Int,
+        ): List<Pair<String, Int>> {
+            if (groups.isEmpty() || budget <= 0) return emptyList()
+
+            val numGroups = groups.size
+            val sentinel = Int.MIN_VALUE / 4 // Avoids overflow when added to a positive score
+            val budgetLimit = budget
+
+            // Rolling DP arrays: dpPrev[b] = best score using first (g-1) groups with exactly b budget used.
+            // dpCurr[b] = best score using first g groups. After processing g, swap and continue.
+            var dpPrev = IntArray(budgetLimit + 1) { 0 }
+            var dpCurr = IntArray(budgetLimit + 1) { sentinel }
+
+            // choice[g][b] = index of the chosen option in groups[g-1] for state (g, b), or -1 for "skip".
+            val choice = Array(numGroups + 1) { IntArray(budgetLimit + 1) { -1 } }
+
+            for (g in 1..numGroups) {
+                val group = groups[g - 1]
+                val opts = group.choices
+                // The group has an implicit skip path if it isn't required AND no explicit skip option exists,
+                // OR if any of its choices is already a skip (cost=0, score=0).
+                val skipAllowed = !group.isRequired || opts.any { it.isSkip }
+
+                for (b in 0..budgetLimit) {
+                    if (skipAllowed) {
+                        dpCurr[b] = dpPrev[b]
+                        choice[g][b] = -1
+                    } else {
+                        dpCurr[b] = sentinel
+                        choice[g][b] = -1
+                    }
+
+                    for (k in opts.indices) {
+                        val o = opts[k]
+                        if (o.isSkip) continue
+                        val w = o.cost.coerceAtLeast(0)
+                        val v = o.score.coerceAtLeast(0)
+                        if (w <= b && dpPrev[b - w] > sentinel / 2) {
+                            val cand = dpPrev[b - w] + v
+                            if (cand > dpCurr[b]) {
+                                dpCurr[b] = cand
+                                choice[g][b] = k
+                            }
+                        }
+                    }
+                }
+
+                // Swap and clear curr for the next group iteration.
+                val tmp = dpPrev
+                dpPrev = dpCurr
+                dpCurr = tmp
+                dpCurr.fill(sentinel)
+            }
+
+            // dpPrev[budgetLimit] now holds the optimal score for all groups within budget.
+            if (dpPrev[budgetLimit] <= sentinel / 2) {
+                // A required group was unreachable under the budget — no feasible plan.
+                return emptyList()
+            }
+
+            // Reconstruct the chosen options by walking the choice table backwards.
+            val result = mutableListOf<Pair<String, Int>>()
+            var remaining = budgetLimit
+            val pickedGroups = mutableListOf<KnapsackChoice>()
+            for (g in numGroups downTo 1) {
+                val k = choice[g][remaining]
+                if (k < 0) continue // Skipped this group
+                val picked = groups[g - 1].choices[k]
+                if (picked.isSkip) continue
+                pickedGroups.add(picked)
+                remaining -= picked.cost
+            }
+
+            // Groups were walked backwards above, so reverse to emit in selection order with
+            // base-before-upgrade within each chain.
+            for (choice in pickedGroups.asReversed()) {
+                for (item in choice.items) {
+                    result.add(item.name to item.price)
+                }
+            }
+            return result
+        }
+
+        /**
+         * Build [KnapsackGroup]s from a flat list of skill candidates by merging skills that share an
+         * upgrade chain into a single group with combo choices.
+         *
+         * For each chain `[base, up1, up2]` from [upgradeChains], if any of those names appear in
+         * [candidates], the corresponding skills become one group with options:
+         *   - skip
+         *   - [base] only
+         *   - [base, up1]
+         *   - [base, up1, up2]
+         *
+         * Skills not part of any chain become singleton groups with choices [skip, pick].
+         *
+         * @param candidates Available skills the bot can currently purchase.
+         * @param upgradeChains Map of skill name → ordered chain (base first, upgrades after) from
+         *   [SkillDatabase.skillUpgradeChains].
+         * @param requiredNames Names of skills that must be included (user-planned, negatives, etc.);
+         *   their groups are marked [KnapsackGroup.isRequired].
+         * @return List of groups suitable for [calculateOptimizeKnapsackPurchases].
+         */
+        fun buildKnapsackGroups(
+            candidates: List<SkillCandidate>,
+            upgradeChains: Map<String, List<String>>,
+            requiredNames: Set<String> = emptySet(),
+        ): List<KnapsackGroup> {
+            val byName: Map<String, SkillCandidate> = candidates.associateBy { it.name }
+            val processedNames = mutableSetOf<String>()
+            val groups = mutableListOf<KnapsackGroup>()
+
+            for (candidate in candidates) {
+                if (candidate.name in processedNames) continue
+
+                // Resolve the canonical chain order for this candidate. The map may key by any chain
+                // member; the value is the full ordered chain.
+                val chain: List<String> = upgradeChains[candidate.name].orEmpty()
+                val chainPresent: List<SkillCandidate> =
+                    if (chain.isNotEmpty()) {
+                        chain.mapNotNull { byName[it] }
+                    } else {
+                        listOf(candidate)
+                    }
+
+                // If only one chain member is present in the candidate list, treat as singleton.
+                if (chainPresent.size <= 1) {
+                    val item = chainPresent.firstOrNull() ?: candidate
+                    val isRequired = item.name in requiredNames
+                    val choices = buildList {
+                        if (!isRequired) add(KnapsackChoice(emptyList()))
+                        add(KnapsackChoice(listOf(item)))
+                    }
+                    groups.add(KnapsackGroup(choices, isRequired))
+                    processedNames.add(item.name)
+                    continue
+                }
+
+                // Multi-link chain: choices are [skip, base, base+up1, base+up1+up2, ...].
+                val chainRequired = chainPresent.any { it.name in requiredNames }
+                val choices = buildList {
+                    if (!chainRequired) add(KnapsackChoice(emptyList()))
+                    for (i in chainPresent.indices) {
+                        add(KnapsackChoice(chainPresent.subList(0, i + 1).toList()))
+                    }
+                }
+                groups.add(KnapsackGroup(choices, chainRequired))
+                chainPresent.forEach { processedNames.add(it.name) }
+            }
+
+            return groups
         }
 
         /**
@@ -289,6 +517,20 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                                 tieredBought,
                             )
                         tieredResult + rankFallback
+                    }
+                    SpendingStrategy.OPTIMIZE_KNAPSACK -> {
+                        // No upgrade-chain map here (it lives in SkillDatabase), so this static helper
+                        // runs the DP with singleton groups only — still better than greedy on budget-fit
+                        // edge cases, but without the mutual-exclusion benefit. Callers with the chain map
+                        // should call [calculateOptimizeKnapsackPurchases] + [buildKnapsackGroups] directly;
+                        // the in-bot [getSkillsToBuyOptimizeKnapsackStrategy] does and gets the full benefit.
+                        val singletonGroups = remainingCandidates.map { c ->
+                            KnapsackGroup(
+                                choices = listOf(KnapsackChoice(emptyList()), KnapsackChoice(listOf(c))),
+                                isRequired = false,
+                            )
+                        }
+                        calculateOptimizeKnapsackPurchases(singletonGroups, budget - spent)
                     }
                 }
             result.addAll(strategyPurchases)
@@ -730,6 +972,103 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
+     * Retrieve skills to purchase using the grouped 0/1 knapsack DP strategy.
+     *
+     * Builds [KnapsackGroup]s from the live skill list using [SkillDatabase.skillUpgradeChains] so
+     * base ○ and its upgrade ◎ form one mutually-exclusive group. The DP picks the optimal combo per
+     * group within budget, fixing the greedy-by-ratio bug where a base could be bought now and its
+     * upgrade later, wasting the base's cost when only the upgrade activates.
+     *
+     * Single planning pass + single buy pass: we don't re-run the DP after each purchase like
+     * [getSkillsToBuyOptimizeRankStrategy] does for greedy. The DP already considers the full
+     * candidate list as a batch, so iterative re-scanning would mostly re-compute the same plan.
+     * If any planned skill becomes unavailable mid-execution (e.g. scrolls off-screen), it's
+     * picked up by the next skillPointCheck cycle.
+     *
+     * @param skillPlanSettings The [SkillPlanSettings] to follow.
+     * @param skillList The [SkillList] to analyze.
+     * @param skillsToBuy The list of skills already planned for purchase by the common phase.
+     * @param availableSkillPoints The current amount of available skill points.
+     * @return A map of skill names to their prices for the Knapsack strategy.
+     */
+    private fun getSkillsToBuyOptimizeKnapsackStrategy(
+        skillPlanSettings: SkillPlanSettings,
+        skillList: SkillList,
+        skillsToBuy: List<String>,
+        availableSkillPoints: Int,
+    ): Map<String, Int> {
+        val result: MutableMap<String, Int> = mutableMapOf()
+        if (availableSkillPoints <= 0) return result.toMap()
+
+        val available = skillList.getAvailableSkills().filterValues { entry ->
+            entry.bIsAvailable && entry.name !in skillsToBuy && entry.screenPrice > 0
+        }
+        if (available.isEmpty()) {
+            MessageLog.i(TAG, "[KNAPSACK] No available skills to plan against. Budget remaining: $availableSkillPoints.")
+            return result.toMap()
+        }
+
+        // Convert live SkillListEntry instances into SkillCandidate snapshots for the DP.
+        val candidates: List<SkillCandidate> = available.values.map { entry ->
+            SkillCandidate(
+                name = entry.name,
+                price = entry.screenPrice,
+                evaluationPoints = entry.evaluationPoints,
+                isNegative = entry.skillData.bIsNegative,
+                isInheritedUnique = entry.skillData.bIsInheritedUnique,
+                isUserPlanned = entry.name in skillPlanSettings.skillNames,
+                communityTier = entry.skillData.communityTier,
+            )
+        }
+
+        // Group skills that share an upgrade chain so the DP can evaluate the
+        // "buy base then upgrade" combo as a single mutually-exclusive option.
+        val groups = buildKnapsackGroups(
+            candidates = candidates,
+            upgradeChains = game.skillDatabase.skillUpgradeChains,
+            requiredNames = emptySet(), // Common phase already handled user-planned/negative/inherited.
+        )
+
+        MessageLog.d(
+            TAG,
+            "[KNAPSACK] Planning ${candidates.size} candidates across ${groups.size} groups under $availableSkillPoints SP.",
+        )
+
+        val plan: List<Pair<String, Int>> = calculateOptimizeKnapsackPurchases(groups, availableSkillPoints)
+        if (plan.isEmpty()) {
+            MessageLog.i(TAG, "[KNAPSACK] DP returned empty plan (no feasible purchases under budget).")
+            return result.toMap()
+        }
+
+        val planTotal = plan.sumOf { it.second }
+        MessageLog.i(
+            TAG,
+            "[KNAPSACK] DP plan: ${plan.size} skills for $planTotal SP. Skills: ${plan.joinToString { "${it.first}(${it.second})" }}",
+        )
+
+        // Execute the plan: buy each chosen skill via the live SkillListEntry. We iterate the plan
+        // in DP order (base before upgrade within an upgrade chain) so the in-game purchase chain
+        // works correctly — buying the upgrade requires the base to already be owned.
+        var remaining = availableSkillPoints
+        for ((name, price) in plan) {
+            if (price > remaining) {
+                MessageLog.w(TAG, "[KNAPSACK] Skipping \"$name\" — DP plan price $price exceeds remaining budget $remaining (live re-scan may have changed prices).")
+                continue
+            }
+            val entry = skillList.getAvailableSkills()[name]
+            if (entry == null || !entry.bIsAvailable) {
+                MessageLog.w(TAG, "[KNAPSACK] Planned skill \"$name\" no longer available on screen. Skipping.")
+                continue
+            }
+            entry.buy()
+            result[name] = entry.screenPrice
+            remaining -= entry.screenPrice
+        }
+
+        return result.toMap()
+    }
+
+    /**
      * Retrieve all available skills to purchase based on the specified spending strategy.
      *
      * @param skillPlanSettings The [SkillPlanSettings] to follow.
@@ -779,6 +1118,15 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
 
                 SpendingStrategy.OPTIMIZE_RANK -> {
                     getSkillsToBuyOptimizeRankStrategy(
+                        skillPlanSettings = skillPlanSettings,
+                        skillList = skillList,
+                        skillsToBuy = result.keys.toList(),
+                        availableSkillPoints = availableSkillPoints - result.values.sum(),
+                    )
+                }
+
+                SpendingStrategy.OPTIMIZE_KNAPSACK -> {
+                    getSkillsToBuyOptimizeKnapsackStrategy(
                         skillPlanSettings = skillPlanSettings,
                         skillList = skillList,
                         skillsToBuy = result.keys.toList(),
