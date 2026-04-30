@@ -271,9 +271,7 @@ const SkillPlanSettings: FC<SkillPlanSettingsProps> = ({ planKey, name, title, d
                         placeholder="Select Strategy"
                     />
                     {(strategy == "optimize_rank" || strategy == "optimize_knapsack") && (
-                        <WarningContainer>
-                            ⚠️ Warning: Rank-optimizing strategies ignore the Skill Style Overrides set in the Skill Settings page.
-                        </WarningContainer>
+                        <WarningContainer>⚠️ Warning: Rank-optimizing strategies ignore the Skill Style Overrides set in the Skill Settings page.</WarningContainer>
                     )}
                     <Text style={styles.inputDescription}>
                         This option determines what the bot does with any remaining skill points after it has purchased all of the skills from the Planned Skills section and the other options on this

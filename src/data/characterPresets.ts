@@ -90,7 +90,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200571,200581,201322,201312,201112,201102,201591,200462,201611,201151,201532,200431",
@@ -315,7 +315,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200512,201391,201392,200601,200612,201112,201102,200371,201651,201542,200431,201381",
@@ -541,7 +541,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200721,200331,200351,200371,200512,201601,200362,201251,201241,201041,200431,200551,200541,200531,201031",
@@ -780,7 +780,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,201322,201042,200342,200582,200512,201651,201312,200362,201532,201031,200431,200681",
@@ -1005,7 +1005,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200431,200371,201461,201451,201552,200552,200701,201181,201171,200512,200362,201651",
@@ -1237,7 +1237,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201181,201171,200512,200362,201651",
@@ -1472,7 +1472,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,200971,200961,200512,200362,201651",
@@ -1703,7 +1703,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200431,200371,201461,201451,201552,200552,200701,201111,201101,200512,200362,201651",
@@ -1932,7 +1932,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,200971,200961,200512,200362,201651",
@@ -2165,7 +2165,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201181,201171,200512,200362,201651",
@@ -2399,7 +2399,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201181,201171,200512,200362,201651",
@@ -2633,7 +2633,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201111,201101,200512,200362,201651",
@@ -2864,7 +2864,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200431,200371,201251,201241,201522,200531,200551,200541,200971,200961,200512,200362",
@@ -3100,7 +3100,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201041,201031,200681,200512,200362",
@@ -3333,7 +3333,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201111,201101,200512,200362,201651",
@@ -3565,7 +3565,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161",
@@ -3786,7 +3786,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200431,100711,200581,201391,201381,201351,201111,201101,201161,200331,200351,200021,200352,200382,200571",
@@ -4008,7 +4008,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200431,200541,200551,200531,201251,201241,201041,201031,200681,200331,200021,201281,200352,200382,200552",
@@ -4229,7 +4229,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200431,100711,200581,201321,201311,201041,201031,201351,200681,200331,200351,200021,200352,200382,201051",
@@ -4450,7 +4450,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "100071,201691,201173,201171,201181,200351,200331,200511,201692,201211,201221,201202,201201,200512,200352",
@@ -4682,7 +4682,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200591,200601,200611,201691,201441,201171,201181,201381,201391,201161,200331,200512,201692,201442",
@@ -4915,7 +4915,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "201681,201671,201011,202041,200651,200961,200971,201381,201391,200991,200671,201001,202002,201682,200992",
@@ -5144,7 +5144,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200641,200631,202021,200621,201481,201451,201461,201101,201111,200331,201161,200512,200642,201651,200352",
@@ -5373,7 +5373,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200591,200601,200611,201691,201441,200961,200971,201381,201391,201051,200701,200331,200512,201692",
@@ -5604,7 +5604,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200591,200611,200331,200351,201691,200691,200601,201391,201381,201181,201171,201201,201541,200741,200431",
@@ -5836,7 +5836,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200571,201351,200581,201321,201311,201181,201171,201531,201201,200371,200431,200561",
@@ -6068,7 +6068,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431",
@@ -6297,7 +6297,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "201011,200651,200541,200331,200351,200552,200961,200971,201241,201251,201282,200431,200371,200372",
@@ -6526,7 +6526,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200581,200681,201051,200341,200331,200431,200582,201031,201041,201311,201321,201902,200351,200512",
@@ -6757,7 +6757,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "201441,200601,200591,200611,201691,200331,200681,201111,201101,201391,201381,200351,200602,200512",
@@ -6987,7 +6987,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161",
@@ -7208,7 +7208,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200431,100711,200581,201391,201381,201351,201111,201101,201161,200331,200351,200021,200352,200382,200571",
@@ -7430,7 +7430,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200431,200541,200551,200531,201251,201241,201041,201031,200681,200331,200021,201281,200352,200382,200552",
@@ -7651,7 +7651,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200431,100711,200581,201321,201311,201041,201031,201351,200681,200331,200351,200021,200352,200382,201051",
@@ -7872,7 +7872,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "100071,201691,201173,201171,201181,200351,200331,200511,201692,201211,201221,201202,201201,200512,200352",
@@ -8104,7 +8104,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200591,200601,200611,201691,201441,201171,201181,201381,201391,201161,200331,200512,201692,201442",
@@ -8337,7 +8337,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "201681,201671,201011,202041,200651,200961,200971,201381,201391,200991,200671,201001,202002,201682,200992",
@@ -8566,7 +8566,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200641,200631,202021,200621,201481,201451,201461,201101,201111,200331,201161,200512,200642,201651,200352",
@@ -8795,7 +8795,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200591,200601,200611,201691,201441,200961,200971,201381,201391,201051,200701,200331,200512,201692",
@@ -9026,7 +9026,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200591,200611,200331,200351,201691,200691,200601,201391,201381,201181,201171,201201,201541,200741,200431",
@@ -9258,7 +9258,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200571,201351,200581,201321,201311,201181,201171,201531,201201,200371,200431,200561",
@@ -9490,7 +9490,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431",
@@ -9719,7 +9719,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "201011,200651,200541,200331,200351,200552,200961,200971,201241,201251,201282,200431,200371,200372",
@@ -9948,7 +9948,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200581,200681,201051,200341,200331,200431,200582,201031,201041,201311,201321,201902,200351,200512",
@@ -10179,7 +10179,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "201441,200601,200591,200611,201691,200331,200681,201111,201101,201391,201381,200351,200602,200512",
@@ -10409,7 +10409,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200541,200331,200371,200551,200681,201041,201031,201251,201241,201051,200351,201521,200431,200531",
@@ -10656,7 +10656,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200541,200331,200371,200551,200681,201041,201031,201251,201241,201051,201281,201521,200431,200531",
@@ -10892,7 +10892,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200541,200331,200371,200551,200681,201041,201031,201251,201241,201051,201281,201521,200431,200531",
@@ -11128,7 +11128,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201041,201031,200681,200512,200362",
@@ -11351,7 +11351,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200431,100711,200581,201391,201381,201041,201031,200681,201351,200331,200351,200021,200352,200382,201051",
@@ -11571,7 +11571,7 @@ export const characterPresets: CharacterPreset[] = [
                     },
                     careerComplete: {
                         enabled: true,
-                        strategy: "optimize_skills",
+                        strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
                         plan: "200431,100711,200581,201391,201381,201041,201031,200681,201351,200331,200351,200021,200352,200382,201051",
