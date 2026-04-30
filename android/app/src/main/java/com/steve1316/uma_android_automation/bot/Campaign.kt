@@ -1110,6 +1110,18 @@ abstract class Campaign(game: Game) : Task(game) {
     fun getLastRaceGrade(): com.steve1316.uma_android_automation.types.RaceGrade? = racing.lastRaceGrade
 
     /**
+     * Marks the current race as having had its alarm-clock retry option declined per
+     * [Racing.bAlarmClockPolicySkippedThisRace]. Exposed so [DialogHandler]'s purchase_alarm_clock
+     * branch can write the flag without breaking the protected encapsulation of [racing] — same
+     * cross-class-access pattern as [getLastRaceGrade].
+     *
+     * Reset automatically when the race state is cleared (in `Racing` post-race cleanup).
+     */
+    fun markAlarmClockPolicySkipped() {
+        racing.bAlarmClockPolicySkippedThisRace = true
+    }
+
+    /**
      * Updates the current date by detecting it on screen.
      *
      * @param isOnMainScreen If true, checks the Main screen for the date directly. Defaults to true.

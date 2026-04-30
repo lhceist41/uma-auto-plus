@@ -183,6 +183,14 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Tracks if the last race selected was a Rival Race. */
     var lastRaceIsRival: Boolean = false
 
+    /** Whether the Purchase Alarm Clock dialog was rejected this race per the user's `alarmClockPolicy`.
+     * Once rejected, [shouldRetryRace] short-circuits further retries for the SAME race even with
+     * [raceRetries] positive — the only retry option was the carat purchase, which the user declined.
+     * Without it the bot loops: tap retry, get the alarm-clock popup, reject, land back on the still-active
+     * retry button, tap again, until raceRetries hits zero. Reset alongside [lastRaceGrade].
+     */
+    var bAlarmClockPolicySkippedThisRace: Boolean = false
+
     /** Tracks if the current race has already been retried. */
     var bRetriedCurrentRace: Boolean = false
 
@@ -2313,6 +2321,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             lastRaceDistance = null
             lastRaceIsRival = false
             bRetriedCurrentRace = false
+            bAlarmClockPolicySkippedThisRace = false
         }
         MessageLog.v(TAG, "\n********************")
         MessageLog.v(TAG, "[RACE] Starting Racing process on ${campaign.date}.")

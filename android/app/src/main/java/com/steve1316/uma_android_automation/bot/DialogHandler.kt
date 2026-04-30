@@ -282,6 +282,12 @@ open class DialogHandler(val game: Game) {
                     dialog.ok(game.imageUtils)
                 } else {
                     MessageLog.i(TAG, "[DIALOG] Out of free Alarm Clocks. Skipping carats spend (policy='$policy', grade=$grade). Continuing without retry.")
+                    // Mark this race as having had its retry option exhausted via policy. Without this
+                    // flag the bot loops: cancel popup → game returns to retry screen → bot taps retry
+                    // button again → popup reopens → policy rejects again. shouldRetryRace short-circuits
+                    // when the flag is set so the loop exits after one rejection. Routed through a
+                    // public Campaign method since racing is `protected` and not accessible via cast.
+                    (game.task as? Campaign)?.markAlarmClockPolicySkipped()
                     // ButtonCancel is the first entry in the dialog's buttons list, so close() clicks it.
                     dialog.close(game.imageUtils)
                 }

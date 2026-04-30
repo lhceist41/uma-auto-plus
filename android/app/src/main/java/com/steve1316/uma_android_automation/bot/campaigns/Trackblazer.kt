@@ -550,6 +550,13 @@ class Trackblazer(game: Game) : Campaign(game) {
     }
 
     override fun shouldRetryRace(dialog: DialogInterface, args: Map<String, Any>): Boolean {
+        // Once all free Alarm Clocks are used up, the only retry option is the carat-purchase popup.
+        // If alarmClockPolicy already declined that popup this race, accepting the retry just
+        // re-triggers the same declined popup, so bail out and proceed to results.
+        if (racing.bAlarmClockPolicySkippedThisRace) {
+            MessageLog.i(TAG, "[TRACKBLAZER] Alarm clock policy already declined the carat-retry option this race. Skipping further retry attempts and proceeding to race results.")
+            return false
+        }
         if (racing.lastRaceGrade != null && racing.trackblazerRetryGrades.contains(racing.lastRaceGrade) && racing.raceRetries >= 0) {
             if (racing.lastRaceIsRival && !racing.bRetriedCurrentRace) {
                 MessageLog.i(TAG, "[TRACKBLAZER] ${racing.lastRaceGrade} Rival Race retry button is available. Retrying once.")
