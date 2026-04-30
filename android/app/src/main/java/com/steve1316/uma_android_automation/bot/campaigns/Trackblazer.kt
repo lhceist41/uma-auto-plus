@@ -28,6 +28,7 @@ import com.steve1316.uma_android_automation.components.DialogInterface
 import com.steve1316.uma_android_automation.components.DialogUtils
 import com.steve1316.uma_android_automation.components.IconGoalRibbon
 import com.steve1316.uma_android_automation.components.IconRaceDayRibbon
+import com.steve1316.uma_android_automation.components.IconRaceListPredictionDoubleStar
 import com.steve1316.uma_android_automation.components.IconTrainingEventHorseshoe
 import com.steve1316.uma_android_automation.components.IconUnityCupTutorialHeader
 import com.steve1316.uma_android_automation.components.LabelScheduledRace
@@ -660,7 +661,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                 racing.lastRaceGrade = raceData.grade
                 racing.lastRaceDistance = raceData.trackDistance
                 racing.lastRaceIsRival = raceData.isRival
-                game.tap(suitableRaceLocation.x, suitableRaceLocation.y, "race_list_prediction_double_star", ignoreWaiting = true)
+                game.tap(suitableRaceLocation.x, suitableRaceLocation.y, IconRaceListPredictionDoubleStar.template.path, ignoreWaiting = true)
                 game.wait(0.5)
             } else {
                 MessageLog.i(TAG, "[TRACKBLAZER] No suitable races found. Backing out and training.")
