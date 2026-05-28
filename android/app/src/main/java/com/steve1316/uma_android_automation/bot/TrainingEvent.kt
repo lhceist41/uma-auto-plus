@@ -132,6 +132,22 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
 
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]TrainingEvent"
+
+        /**
+         * Whether a recognized event match is trustworthy enough to act on its option rewards.
+         * Returns false (caller falls back to the safe first-option default) when there are no
+         * rewards, or when a non-special match scored below the recognizer's confidence floor.
+         * Special events bypass the floor: they're matched by distinctive substrings, not fuzzy score.
+         */
+        fun shouldActOnEventMatch(
+            eventRewards: List<String>,
+            specialEventHandled: Boolean,
+            confidence: Double,
+            minimumConfidence: Double,
+        ): Boolean {
+            if (eventRewards.isEmpty() || eventRewards[0] == "") return false
+            return specialEventHandled || confidence >= minimumConfidence
+        }
     }
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -477,7 +493,8 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
             specialEventHandled = true
         }
 
-        if (eventRewards.isNotEmpty() && eventRewards[0] != "") {
+        // Guard against acting on a sub-threshold fuzzy match (mis-read title or un-imported support card returns the wrong event's rewards); below the floor, fall through to the safe first-option default.
+        if (shouldActOnEventMatch(eventRewards, specialEventHandled, confidence, trainingEventRecognizer.minimumConfidence)) {
             if (!specialEventHandled) {
                 // Check for character, support, or scenario event overrides.
                 val characterOverride = checkCharacterEventOverride(characterOrSupportName, eventTitle)

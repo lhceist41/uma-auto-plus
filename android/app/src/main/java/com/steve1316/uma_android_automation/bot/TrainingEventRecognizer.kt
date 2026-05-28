@@ -86,7 +86,7 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
     private val hideComparisonResults: Boolean = SettingsHelper.getBooleanSetting("trainingEvent", "enableHideOCRComparisonResults")
 
     /** The minimum confidence score required for an OCR match to be accepted immediately. */
-    private val minimumConfidence = SettingsHelper.getIntSetting("trainingEvent", "ocrConfidence").toDouble() / 100.0
+    val minimumConfidence = SettingsHelper.getIntSetting("trainingEvent", "ocrConfidence").toDouble() / 100.0
 
     /** The grayscale threshold used for OCR pre-processing. */
     private val threshold = SettingsHelper.getIntSetting("debug", "ocrThreshold").toDouble()
