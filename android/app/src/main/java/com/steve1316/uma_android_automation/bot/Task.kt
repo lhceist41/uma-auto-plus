@@ -6,6 +6,9 @@ import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.bot.DialogHandler
 import com.steve1316.uma_android_automation.bot.DialogHandlerResult
 import com.steve1316.uma_android_automation.bot.Game
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /** The possible result codes for a task's execution. */
 enum class TaskResultCode {
@@ -186,6 +189,39 @@ abstract class Task(game: Game) : DialogHandler(game) {
                         "Bot was manually stopped by the user.",
                     )
                 break
+            } catch (e: IllegalStateException) {
+                // Most often this is `tryHandleAllDialogs` reporting an unrecognized dialog. The
+                // upstream design treats that as fatal, but in practice MuMu can spawn transient
+                // dialogs (shop/server/scenario popups) that the next iteration can handle once
+                // they animate away. Killing a 60-turn career over one mis-OCR'd dialog is the
+                // wrong tradeoff. (An `Unhandled dialog: shop` once bubbled to Game.start and
+                // ended a career 24 turns early.) Save a screenshot so we know which dialog the
+                // bot didn't recognize next time this fires.
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                val filename = "unhandled_dialog_$timestamp"
+                try {
+                    game.imageUtils.saveBitmap(filename = filename, fullRes = true)
+                    MessageLog.w(
+                        TAG,
+                        "[WARN] start:: Recovered from unhandled dialog: ${e.message}. Screenshot saved: $filename.png. Continuing main loop.",
+                    )
+                } catch (saveErr: Exception) {
+                    MessageLog.w(
+                        TAG,
+                        "[WARN] start:: Recovered from unhandled dialog: ${e.message}. (Failed to save screenshot: ${saveErr.message}.) Continuing main loop.",
+                    )
+                }
+                // Brief breather so we don't tightloop on the same screen if the dialog persists.
+                try {
+                    game.wait(1.0, skipWaitingForLoading = true)
+                } catch (_: InterruptedException) {
+                    result =
+                        TaskResult.Success(
+                            TaskResultCode.TASK_RESULT_MANUALLY_STOPPED,
+                            "Bot was manually stopped by the user.",
+                        )
+                    break
+                }
             }
         }
 

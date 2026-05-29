@@ -22,6 +22,7 @@ import com.steve1316.uma_android_automation.components.IconTrainingHeaderPower
 import com.steve1316.uma_android_automation.components.IconTrainingHeaderSpeed
 import com.steve1316.uma_android_automation.components.IconTrainingHeaderStamina
 import com.steve1316.uma_android_automation.components.IconTrainingHeaderWit
+import com.steve1316.uma_android_automation.components.LabelEnergy
 import com.steve1316.uma_android_automation.components.LabelStatTableHeaderSkillPoints
 import com.steve1316.uma_android_automation.components.LabelTrainingCannotPerform
 import com.steve1316.uma_android_automation.components.LabelTrainingFailureChance
@@ -30,6 +31,9 @@ import com.steve1316.uma_android_automation.types.GameDate
 import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import org.opencv.core.Point
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -75,7 +79,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
     private var restrictedTrainingNames: MutableSet<StatName> = mutableSetOf()
 
     /** List of analysis results cached for reuse during the current turn. */
-    private var cachedAnalysisResults: List<TrainingAnalysisResult>? = null
+    var cachedAnalysisResults: List<TrainingAnalysisResult>? = null
+        private set
 
     /** The `ignoreFailureChance` flag in effect when [cachedAnalysisResults] was written. A cache hit must
      * match this value, or [processAnalysisResults]'s failure-chance filtering replays inconsistent inputs. */
@@ -121,6 +126,12 @@ class Training(private val game: Game, private val campaign: Campaign) {
 
     /** Whether to prioritize skill hints. */
     private val enablePrioritizeSkillHints: Boolean = SettingsHelper.getBooleanSetting("training", "enablePrioritizeSkillHints")
+
+    /** Whether to weight training scores by the OCR-detected training level (1-5) of the priority-list stats. */
+    internal val enableTrainingLevelWeighting: Boolean = SettingsHelper.getBooleanSetting("training", "enableTrainingLevelWeighting", false)
+
+    /** Cached screen location of the Energy label, used as the anchor for training level OCR. Resolved lazily on first use, reused for the rest of the bot session. */
+    private var cachedEnergyLocation: Point? = null
 
     /** Whether to enable validation of training analysis. */
     private val enableTrainingAnalysisValidation: Boolean = SettingsHelper.getBooleanSetting("training", "enableTrainingAnalysisValidation")
@@ -190,6 +201,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
 
         /** Total number of detected skill hints. */
         var numSkillHints: Int = 0
+
+        /** The OCR-detected training level (1-5) for this stat, or null if the feature is disabled or OCR failed. */
+        var trainingLevel: Int? = null
     }
 
     /**
@@ -216,6 +230,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         val numSpiritGaugesCanFill: Int = 0,
         val numSpiritGaugesReadyToBurst: Int = 0,
         val numSkillHints: Int = 0,
+        val trainingLevel: Int? = null,
         val skipReason: String? = null,
     ) {
         override fun equals(other: Any?): Boolean {
@@ -233,6 +248,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             if (numSpiritGaugesCanFill != other.numSpiritGaugesCanFill) return false
             if (numSpiritGaugesReadyToBurst != other.numSpiritGaugesReadyToBurst) return false
             if (numSkillHints != other.numSkillHints) return false
+            if (trainingLevel != other.trainingLevel) return false
             if (skipReason != other.skipReason) return false
 
             return true
@@ -248,6 +264,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             result = 31 * result + numSpiritGaugesCanFill
             result = 31 * result + numSpiritGaugesReadyToBurst
             result = 31 * result + numSkillHints
+            result = 31 * result + (trainingLevel ?: 0)
             result = 31 * result + (skipReason?.hashCode() ?: 0)
             return result
         }
@@ -284,6 +301,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         val trainingOptions: List<TrainingOption>,
         val skillHintsPerLocation: Map<StatName, Int> = StatName.entries.associateWith { 0 },
         val enablePrioritizeSkillHints: Boolean = false,
+        val enableTrainingLevelWeighting: Boolean = false,
         val statsTrainedOverBuffer: Set<StatName> = emptySet(),
     ) {
         override fun equals(other: Any?): Boolean {
@@ -304,6 +322,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             if (trainingOptions != other.trainingOptions) return false
             if (skillHintsPerLocation != other.skillHintsPerLocation) return false
             if (enablePrioritizeSkillHints != other.enablePrioritizeSkillHints) return false
+            if (enableTrainingLevelWeighting != other.enableTrainingLevelWeighting) return false
             if (statsTrainedOverBuffer != other.statsTrainedOverBuffer) return false
 
             return true
@@ -322,6 +341,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             result = 31 * result + trainingOptions.hashCode()
             result = 31 * result + skillHintsPerLocation.hashCode()
             result = 31 * result + enablePrioritizeSkillHints.hashCode()
+            result = 31 * result + enableTrainingLevelWeighting.hashCode()
             result = 31 * result + statsTrainedOverBuffer.hashCode()
             return result
         }
@@ -510,6 +530,33 @@ class Training(private val game: Game, private val campaign: Campaign) {
         }
 
         /**
+         * Compute the level-based amplifier for a stat's priority weight.
+         *
+         * Returns 1.0 when the feature is disabled or has no effect; values > 1.0 amplify the
+         * priority weight of stats that are both high in the user's priority list and have a
+         * high training level (1-5). Only ranks 1-3 get a boost; rank 4-5 and level 1 return 1.0.
+         * At Lvl 5: rank 1 = 1.75x, rank 2 = 1.25x, rank 3 = 1.10x — the fade keeps the boost on
+         * the top priority while still rewarding the secondary.
+         *
+         * @param priorityRank The 1-indexed position of the stat in the active priority list (1 = highest priority).
+         * @param trainingLevel The detected training level (1-5), or null if OCR was unavailable.
+         * @return Multiplier in [1.0, 1.75].
+         */
+        fun levelBoostMultiplier(priorityRank: Int, trainingLevel: Int?): Double {
+            val level = trainingLevel ?: 1
+            if (level <= 1) return 1.0
+            val priorityFactor =
+                when (priorityRank) {
+                    1 -> 0.75
+                    2 -> 0.25
+                    3 -> 0.10
+                    else -> 0.0
+                }
+            val levelFactor = (level - 1) / 4.0
+            return 1.0 + priorityFactor * levelFactor
+        }
+
+        /**
          * Calculate the stat efficiency score based on the ratio completion toward targets.
          *
          * This method treats stat targets as desired ratios and scores training based on how well it balances the overall stat distribution.
@@ -576,6 +623,15 @@ class Training(private val game: Game, private val campaign: Campaign) {
                             1.0
                         }
 
+                    // Level-based amplifier: when the feature is enabled, scale up the contribution from this training's primary stat
+                    // based on its OCR-detected training level (1-5) and its position in the priority list. See [levelBoostMultiplier].
+                    val levelMultiplier =
+                        if (config.enableTrainingLevelWeighting && statName == training.name && priorityIndex != -1) {
+                            levelBoostMultiplier(priorityIndex + 1, training.trainingLevel)
+                        } else {
+                            1.0
+                        }
+
                     // Main stat gain bonus: If training improves its MAIN stat by a large amount, it is most likely an undetected rainbow.
                     val isMainStat = training.name == statName
                     val mainStatBonus =
@@ -598,19 +654,21 @@ class Training(private val game: Game, private val campaign: Campaign) {
 
                     val bonusNote = if (isMainStat && statGain >= 30) " [HIGH MAIN STAT]" else ""
                     val sparkNote = if (isSparkStat && canTriggerSpark) " [SPARK PRIORITY]" else ""
+                    val levelNote = if (levelMultiplier > 1.0) " [LVL ${training.trainingLevel} BOOST ${String.format("%.2f", levelMultiplier)}x]" else ""
                     val completionString: String = String.format("%.2f", completionPercent)
                     val ratioMultiplierString: String = String.format("%.2f", ratioMultiplier)
                     val priorityMultiplierString: String = String.format("%.2f", priorityMultiplier)
                     Log.d(
                         TAG,
                         "$statName: gain=$statGain, completion=$completionString%, " +
-                            "ratioMultiplierString=$ratioMultiplierString, priorityMultiplierString=${priorityMultiplierString}$bonusNote$sparkNote",
+                            "ratioMultiplierString=$ratioMultiplierString, priorityMultiplierString=${priorityMultiplierString}$bonusNote$sparkNote$levelNote",
                     )
 
                     // Calculate final score for this stat.
                     var statScore = statGain.toDouble()
                     statScore *= ratioMultiplier
                     statScore *= priorityMultiplier
+                    statScore *= levelMultiplier
                     statScore *= mainStatBonus
                     statScore *= sparkBonus
 
@@ -657,7 +715,17 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     // Trainer support bonus to prioritize them slightly above regular supports.
                     val trainerSupportBonus = if (bar.isTrainerSupport) 1.15 else 1.0
 
-                    val contribution = baseValue * diminishingFactor * earlyGameBonus * trainerSupportBonus
+                    // Trackblazer Akikawa bonding priority: Yayoi Akikawa is the scenario's MotY
+                    // (Umamusume of the Year) trainer support, and her bond drives MotY point gains, so
+                    // trainings showing her get an extra multiplier on top of the generic trainer-support
+                    // bonus. We have no OCR template for the MotY ranking UI, so bond is the best proxy.
+                    val akikawaBondingBonus = if (
+                        config.scenario == "Trackblazer" &&
+                        bar.isTrainerSupport &&
+                        bar.trainerName == "Yayoi Akikawa"
+                    ) 1.25 else 1.0
+
+                    val contribution = baseValue * diminishingFactor * earlyGameBonus * trainerSupportBonus * akikawaBondingBonus
                     score += contribution
                     maxScore += 2.5 * 1.3
                 }
@@ -1039,6 +1107,76 @@ class Training(private val game: Game, private val campaign: Campaign) {
             return false
         }
 
+        /**
+         * Recover from a failed first failure-chance detection by backing out to the Main
+         * screen and re-entering the Training screen, then retry once. Surfaced as a top-level
+         * helper so the recovery path is grep-able when triaging logs.
+         *
+         * @return The retried failure chance, or -1 if recovery or retry failed.
+         */
+        fun recoverAndRetryFailureChance(): Int {
+            // Back out to the Main screen.
+            ButtonBack.click(game.imageUtils)
+            game.wait(1.0)
+
+            // Clear any dialog that surfaced during the back-out before checking for Main.
+            // `checkMainScreen()` returns false whenever any DialogUtils-detected dialog is up, so a
+            // transient event/scenario popup (e.g. Trackblazer's Insufficient Goal Race Result Pts,
+            // which fires concurrently with OCR retries) blocks recovery even though the bot is at or
+            // one step from Main. Wrap the call so an unrecognized dialog doesn't kill the bot here;
+            // the throw is intentionally non-fatal in this scope.
+            try {
+                campaign.tryHandleAllDialogs(timeoutMs = 5000)
+            } catch (e: IllegalStateException) {
+                MessageLog.w(
+                    TAG,
+                    "[WARN] recoverAndRetryFailureChance:: Unhandled dialog seen during back-out: ${e.message}. Continuing to main-screen check.",
+                )
+            }
+
+            if (!campaign.checkMainScreen()) {
+                // Save the actual failure-state screen so we can identify which screen the bot
+                // was stuck on and patch root cause. Filename mirrors CareerLaunchNavigator's
+                // nav_failure_*.png pattern for grep-ability.
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                val screenshotName = "ocr_retry_abort_$timestamp"
+                try {
+                    game.imageUtils.saveBitmap(filename = screenshotName, fullRes = true)
+                    MessageLog.w(
+                        TAG,
+                        "[WARN] recoverAndRetryFailureChance:: Could not confirm Main screen after backing out. Aborting recovery. Screenshot saved: $screenshotName.png",
+                    )
+                } catch (saveErr: Exception) {
+                    MessageLog.w(
+                        TAG,
+                        "[WARN] recoverAndRetryFailureChance:: Could not confirm Main screen after backing out. Aborting recovery. (Failed to save screenshot: ${saveErr.message}.)",
+                    )
+                }
+                return -1
+            }
+
+            // Re-enter the Training screen.
+            if (!ButtonTraining.click(game.imageUtils)) {
+                MessageLog.w(TAG, "[WARN] recoverAndRetryFailureChance:: Could not click Training button to re-enter Training screen.")
+                return -1
+            }
+            game.wait(0.5)
+
+            // Re-establish SPEED as the active stat.
+            if (!goToStat(StatName.SPEED)) {
+                MessageLog.w(TAG, "[WARN] recoverAndRetryFailureChance:: goToStat(SPEED) failed after re-entering Training screen.")
+                return -1
+            }
+
+            val retried = game.imageUtils.findTrainingFailureChance(tries = 3)
+            if (retried == -1) {
+                MessageLog.w(TAG, "[WARN] recoverAndRetryFailureChance:: Retry of findTrainingFailureChance still returned -1.")
+            } else {
+                MessageLog.i(TAG, "[TRAINING] Recovery succeeded. Failure chance detected on retry: $retried%.")
+            }
+            return retried
+        }
+
         // If not doing single training and speed training isn't active, make it active.
         if (!singleTraining && !goToStat(StatName.SPEED)) {
             MessageLog.w(TAG, "[WARN] analyzeTrainings:: Skipping training due to not being able to confirm whether the bot is at the training screen.")
@@ -1050,7 +1188,11 @@ class Training(private val game: Game, private val campaign: Campaign) {
 
         // Check if failure chance is acceptable: either within regular threshold or within risky threshold (if enabled).
         // This acts as an early exit from training analysis to speed up training.
-        val failureChance: Int = game.imageUtils.findTrainingFailureChance(tries = 3)
+        var failureChance: Int = game.imageUtils.findTrainingFailureChance(tries = 3)
+        if (failureChance == -1 && !singleTraining) {
+            MessageLog.w(TAG, "[WARN] analyzeTrainings:: First failure chance detection failed all attempts. Attempting recovery by backing out to the Main screen and re-entering the Training screen.")
+            failureChance = recoverAndRetryFailureChance()
+        }
         if (failureChance == -1) {
             MessageLog.w(TAG, "[WARN] analyzeTrainings:: Skipping training due to not being able to confirm whether or not the bot is at the Training screen.")
             return
@@ -1270,6 +1412,33 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     }.start()
                 }
 
+                // OCR the displayed training level (1-5) for this stat while its panel is on screen.
+                // Skipped during Pre-Debut, Junior, and Summer since the level boost only fires in
+                // Year 2+ Stat Efficiency scoring, and Summer forces every training to Lvl 5 (the
+                // boost would equalize across stats anyway). Runs inline since a single ~200ms OCR
+                // call doesn't justify a fifth analysis thread.
+                if (enableTrainingLevelWeighting && !campaign.date.bIsPreDebut && campaign.date.year != DateYear.JUNIOR && !campaign.date.isSummer()) {
+                    val energyAnchor =
+                        cachedEnergyLocation ?: run {
+                            val located = LabelEnergy.find(game.imageUtils).first
+                            if (located != null) {
+                                cachedEnergyLocation = located
+                            }
+                            located
+                        }
+                    if (energyAnchor != null) {
+                        val detectedLevel = game.imageUtils.extractTrainingLevel(sourceBitmap, energyAnchor)
+                        result.trainingLevel = detectedLevel
+                        if (detectedLevel == null) {
+                            MessageLog.w(TAG, "[WARN] analyzeTrainings:: Training level OCR failed for $statName. Falling back to no level boost.")
+                        } else {
+                            MessageLog.i(TAG, "[TRAINING] $statName training level detected as Lvl $detectedLevel.")
+                        }
+                    } else {
+                        MessageLog.w(TAG, "[WARN] analyzeTrainings:: Failed to locate Energy label anchor for training level OCR. Falling back to no level boost.")
+                    }
+                }
+
                 // Branch on singleTraining vs parallel processing.
                 if (singleTraining) {
                     // For singleTraining, wait here and process immediately.
@@ -1338,6 +1507,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                             numSpiritGaugesCanFill = result.numSpiritGaugesCanFill,
                             numSpiritGaugesReadyToBurst = result.numSpiritGaugesReadyToBurst,
                             numSkillHints = result.numSkillHints,
+                            trainingLevel = result.trainingLevel,
                         )
                     trainingMap[result.name] = newTraining
                     break
@@ -1467,6 +1637,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         numSpiritGaugesCanFill = result.numSpiritGaugesCanFill,
                         numSpiritGaugesReadyToBurst = result.numSpiritGaugesReadyToBurst,
                         numSkillHints = result.numSkillHints,
+                        trainingLevel = result.trainingLevel,
                         skipReason = skipReason,
                     )
                 skippedTrainingMap[result.name] = skippedTraining
@@ -1491,6 +1662,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         numSpiritGaugesCanFill = result.numSpiritGaugesCanFill,
                         numSpiritGaugesReadyToBurst = result.numSpiritGaugesReadyToBurst,
                         numSkillHints = result.numSkillHints,
+                        trainingLevel = result.trainingLevel,
                         skipReason = "low gain with charm",
                     )
                 skippedTrainingMap[result.name] = skippedTraining
@@ -1514,6 +1686,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                             numSpiritGaugesCanFill = result.numSpiritGaugesCanFill,
                             numSpiritGaugesReadyToBurst = result.numSpiritGaugesReadyToBurst,
                             numSkillHints = result.numSkillHints,
+                            trainingLevel = result.trainingLevel,
                             skipReason = "low irregular gain",
                         )
                     skippedTrainingMap[result.name] = skippedTraining
@@ -1532,6 +1705,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     numSpiritGaugesCanFill = result.numSpiritGaugesCanFill,
                     numSpiritGaugesReadyToBurst = result.numSpiritGaugesReadyToBurst,
                     numSkillHints = result.numSkillHints,
+                    trainingLevel = result.trainingLevel,
                 )
             trainingMap[result.name] = newTraining
         }
@@ -1783,6 +1957,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 trainingOptions = trainingMap.values.toList(),
                 skillHintsPerLocation = skillHintsPerLocation,
                 enablePrioritizeSkillHints = enablePrioritizeSkillHints,
+                enableTrainingLevelWeighting = enableTrainingLevelWeighting,
                 statsTrainedOverBuffer = statsTrainedOverBuffer,
             )
 
@@ -2063,7 +2238,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
      */
     private fun appendTrainingDetails(sb: StringBuilder, blacklist: List<StatName?> = emptyList(), selected: TrainingOption? = null) {
         if (trainingMap.isEmpty() && skippedTrainingMap.isEmpty()) {
-            if (trainWitDuringFinale && campaign.date.day > 72) {
+            if (!needsEnergyRecovery) {
+                sb.appendLine("Could not confirm bot is on the Training screen. No analysis performed.")
+            } else if (trainWitDuringFinale && campaign.date.day > 72) {
                 sb.appendLine("Energy recovery needed. No analysis performed. Bot will force Wit training during Finale.")
             } else {
                 sb.appendLine("Energy recovery needed. No analysis performed.")
@@ -2123,7 +2300,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 }
             }.joinToString(", ", "{", "}")
 
-        val basicInfo = "${training.name} Training: stats=$formattedStatGains, fail=${training.failureChance}%, rainbows=${training.numRainbow}$skippedIndicator$selectedIndicator"
+        val levelInfo = training.trainingLevel?.let { ", level=Lvl $it" } ?: ""
+        val basicInfo = "${training.name} Training: stats=$formattedStatGains, fail=${training.failureChance}%, rainbows=${training.numRainbow}$levelInfo$skippedIndicator$selectedIndicator"
         sb.appendLine(basicInfo)
 
         // Print relationship bars if any.

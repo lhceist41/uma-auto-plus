@@ -621,7 +621,7 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
      *
      * @param bitmap Optional source bitmap to use when detecting scrollbar.
      */
-    private fun scrollToBottom(bitmap: Bitmap? = null) {
+    internal fun scrollToBottom(bitmap: Bitmap? = null) {
         val bboxThumb: BoundingBox? = getListScrollBarBoundingRegion().second
         if (!bIsScrollable) {
             MessageLog.d(TAG, "[DEBUG] scrollToBottom:: List is not scrollable.")
@@ -762,9 +762,10 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
 
         if (bScrollBottomToTop) scrollToBottom(bitmap) else scrollToTop(bitmap)
 
-        // Max time limit for the while loop to scroll through the list.
+        // Max time for the scroll loop, in ms. Use the caller-supplied value: an earlier version
+        // shadowed the parameter with a hardcoded 60_000 local, pinning every caller to 60s.
         val startTime: Long = System.currentTimeMillis()
-        val maxTimeMs: Long = 60000
+        val maxTimeMsLong: Long = maxTimeMs.toLong()
 
         // Track bounding boxes for average entry height calculation.
         val entryBboxes: MutableList<BoundingBox> = mutableListOf()
@@ -775,7 +776,7 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
         var lastFrameKeys: List<String> = emptyList()
 
         var index = 0
-        while (System.currentTimeMillis() - startTime < maxTimeMs) {
+        while (System.currentTimeMillis() - startTime < maxTimeMsLong) {
             var currentFrameEntries: List<ScrollListEntry> = emptyList()
             var retries = 3
             while (retries > 0) {

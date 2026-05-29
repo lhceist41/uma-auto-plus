@@ -64,6 +64,10 @@ object DialogUtils {
     /** List of templates used to detect the title bar gradient of a dialog. */
     private val titleGradientTemplates: List<String> =
         listOf(
+            // The legacy _0/_1 swatches only weakly correlate (~0.70 CCOEFF, below the 0.8 threshold)
+            // with the current header rendering, so getTitle found no title bar and detection of every
+            // title dialog broke. This recaptured swatch is listed first so the strong match wins.
+            "components/dialog/dialog_title_gradient_2",
             "components/dialog/dialog_title_gradient_0",
             "components/dialog/dialog_title_gradient_1",
         )

@@ -2103,29 +2103,94 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         sb.appendLine("Current Date: ${campaign.date}")
         sb.appendLine("Consecutive Race Count: $consecutiveRaceCount")
 
+        // ============================ PRE-FLIGHT CHECK ============================
+        // The full scan below scrolls through and template-matches every visible race-list entry —
+        // ~12-15s on a fully-populated list with zero eligible races. Trackblazer opens the race
+        // list every turn, so an early-Junior trainee with weak aptitudes pays that ~12s per turn
+        // even when nothing's eligible.
+        //
+        // Short-circuit only with STRONG evidence the list has no eligible races. Create the
+        // ScrollList first as a render-readiness gate: if anchors aren't detected, the page hasn't
+        // finished rendering, so an empty findAll can't be trusted — fall through to the full-scan
+        // path (which has its own retries). Only when ScrollList.create succeeds AND top has zero
+        // AND (non-scrollable OR scrollable with empty bottom) is it safe to declare nothing eligible.
+        val preflightScrollList = ScrollList.create(game)
+        if (preflightScrollList != null) {
+            val preflightTopBitmap = game.imageUtils.getSourceBitmap()
+            val preflightTopMatches = IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = preflightTopBitmap)
+            if (preflightTopMatches.isEmpty()) {
+                val skipFullScan: Boolean =
+                    if (!preflightScrollList.bIsScrollable) {
+                        // Whole list visible, zero matches found. Definitively nothing.
+                        true
+                    } else {
+                        // List is scrollable — check the bottom too, in case later-dated races
+                        // have different terrain/distance combos that match the trainee.
+                        preflightScrollList.scrollToBottom()
+                        game.wait(0.5, skipWaitingForLoading = true)
+                        val preflightBottomBitmap = game.imageUtils.getSourceBitmap()
+                        val preflightBottomMatches =
+                            IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = preflightBottomBitmap)
+                        preflightBottomMatches.isEmpty()
+                    }
+
+                if (skipFullScan) {
+                    MessageLog.i(TAG, "[RACE] Trackblazer pre-flight: zero double-star icons visible at top + bottom of confirmed race list. Skipping full scroll-scan.")
+                    sb.appendLine("\nSummary: No eligible races (pre-flight short-circuit; zero double-star icons at top + bottom of list).")
+                    sb.appendLine("================================================")
+                    MessageLog.v(TAG, sb.toString())
+                    return null
+                }
+            }
+        }
+        // ========================== END PRE-FLIGHT CHECK ==========================
+
         data class Candidate(val point: Point, val race: RaceData, val detectedName: String, val isRival: Boolean)
+        // Cache: entry.index → list of (location-within-entry-bitmap, OCR'd race name) pairs.
+        // Eliminates the redundant double-star findAll the original implementation did inside
+        // onEntry on top of the keyExtractor's findAll. Halves the template-match work per
+        // scroll page.
+        data class StarMatch(val location: Point, val name: String)
 
         val allSuitableRaces = mutableListOf<Candidate>()
 
         val scrollList = ScrollList.create(game)
         if (scrollList != null) {
             MessageLog.i(TAG, "[RACE] Scanning the whole race list for suitable Trackblazer races...")
-            val entryRaceNamesMap = mutableMapOf<Int, List<String>>()
+            val entryStarMatches = mutableMapOf<Int, List<StarMatch>>()
             scrollList.process(
+                // Hard cap (10s). Was effectively 60s before the ScrollList shadow-bug fix that made
+                // the maxTimeMs parameter silently ignored. Pre-flight + cache rarely approach this
+                // cap; it's a backstop against pathological lists.
+                maxTimeMs = 10000,
                 keyExtractor = { entry ->
-                    val doubleStarPredictions = IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = entry.bitmap, region = intArrayOf(0, 0, 0, 0))
-                    val names =
-                        doubleStarPredictions.map { predictionLocation ->
-                            val screenPoint = Point(entry.bbox.x + predictionLocation.x, entry.bbox.y + predictionLocation.y)
-                            game.imageUtils.extractRaceName(screenPoint)
+                    val locations = IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = entry.bitmap, region = intArrayOf(0, 0, 0, 0))
+                    val matches =
+                        locations.map { loc ->
+                            val screenPoint = Point(entry.bbox.x + loc.x, entry.bbox.y + loc.y)
+                            StarMatch(loc, game.imageUtils.extractRaceName(screenPoint))
                         }
-                    if (names.isNotEmpty()) entryRaceNamesMap[entry.index] = names
-                    if (names.isEmpty()) null else names.joinToString("|")
+                    if (matches.isNotEmpty()) entryStarMatches[entry.index] = matches
+                    if (matches.isEmpty()) null else matches.joinToString("|") { it.name }
                 },
             ) { _, entry ->
-                val doubleStarPredictions = IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = entry.bitmap, region = intArrayOf(0, 0, 0, 0))
-                val cachedNames = entryRaceNamesMap[entry.index] ?: emptyList()
-                for ((idx, predictionLocation) in doubleStarPredictions.withIndex()) {
+                // First-page fallback: ScrollList.process only calls keyExtractor for overlap detection
+                // on subsequent pages, so the first page's entries never populate entryStarMatches before
+                // onEntry runs. Compute matches inline on a cache miss so first-page races aren't skipped;
+                // subsequent pages still hit the cached fast path.
+                val matchesForEntry: List<StarMatch> =
+                    entryStarMatches[entry.index] ?: run {
+                        val locations = IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = entry.bitmap, region = intArrayOf(0, 0, 0, 0))
+                        val inlineMatches =
+                            locations.map { loc ->
+                                val screenPoint = Point(entry.bbox.x + loc.x, entry.bbox.y + loc.y)
+                                StarMatch(loc, game.imageUtils.extractRaceName(screenPoint))
+                            }
+                        if (inlineMatches.isNotEmpty()) entryStarMatches[entry.index] = inlineMatches
+                        inlineMatches
+                    }
+                for (sm in matchesForEntry) {
+                    val predictionLocation = sm.location
                     // Check for Rival status on the entry's bitmap using relative coordinates.
                     val rivalBitmap =
                         game.imageUtils.createSafeBitmap(
@@ -2149,7 +2214,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     }
 
                     val screenPoint = Point(entry.bbox.x + predictionLocation.x, entry.bbox.y + predictionLocation.y)
-                    val detectedName = if (idx < cachedNames.size) cachedNames[idx] else game.imageUtils.extractRaceName(screenPoint)
+                    val detectedName = sm.name
                     val matches = lookupRaceInDatabase(campaign.date.day, detectedName)
 
                     for (race in matches) {
@@ -2483,6 +2548,28 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             lastRaceGrade = RaceGrade.FINALE
             lastRaceFans = if (campaign.date.day == 75) 30000 else 10000
             // Distance is unknown for Finale races; per-distance strategy will fall back to blanket.
+        }
+
+        // OCR the mandatory race name via the on-screen prediction icon so per-distance strategy
+        // uses the actual race distance. Without this, lastRaceDistance stays null and per-distance
+        // strategy falls back to the blanket strategy for every mandatory race. Gated on
+        // enablePerDistanceStrategy so users without it don't pay the OCR + DB lookup overhead.
+        if (enablePerDistanceStrategy && lastRaceDistance == null) {
+            val predictionLocations = IconRaceListPredictionDoubleStar.findAll(game.imageUtils)
+            if (predictionLocations.isNotEmpty()) {
+                val raceName = game.imageUtils.extractRaceName(predictionLocations[0])
+                val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
+                if (raceDataList.isNotEmpty()) {
+                    val raceData = raceDataList[0]
+                    lastRaceDistance = raceData.trackDistance
+                    // Preserve any grade/fans already set above (e.g. by the Finale block).
+                    if (lastRaceGrade == null) lastRaceGrade = raceData.grade
+                    if (lastRaceFans == 0) lastRaceFans = raceData.fans
+                    MessageLog.i(TAG, "[RACE] Detected mandatory race \"${raceData.name}\" (Grade: ${raceData.grade}, Distance: ${raceData.trackDistance}).")
+                }
+            } else {
+                MessageLog.i(TAG, "[RACE] No double-star prediction found on mandatory race screen. Per-distance strategy will fall back to blanket.")
+            }
         }
 
         // Let the campaign handle any pre-race logic (e.g. using race items in Trackblazer).

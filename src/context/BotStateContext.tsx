@@ -119,8 +119,25 @@ export interface Settings {
         riskyTrainingMaxFailureChance: number
         trainWitDuringFinale: boolean
         enablePrioritizeSkillHints: boolean
+        // When enabled (Year 2+), the bot reads each training's level (1-5) via OCR and amplifies the
+        // score for trainings whose primary stat sits in the top 3 of the active priority list, so it
+        // sticks with stats the user has invested in. OCR is skipped during Pre-Debut, Junior, and
+        // Summer where the boost wouldn't differentiate.
+        enableTrainingLevelWeighting: boolean
         enableTrainingAnalysisValidation: boolean
         enableYoloStatDetection: boolean
+        // Bot recovers mood when current mood drops below this level. "Normal" | "Good" | "Great".
+        // "Good" matches base Campaign.shouldRecoverMood (`mood < Mood.GOOD`). "Great" is the strict
+        // guard for single-option mood-trap events (Agnes Tachyon's "Report: A Clear Gaze" diverts the
+        // objective to NHK Mile if mood is Normal or worse on the trigger date).
+        moodFloor: string
+        // Pre-career deck validation: on the first aptitude read of a run, log a warning if the
+        // trainee's preferred-distance and preferred-style aptitudes are below the floor.
+        // Informational only; the run continues either way.
+        enableDeckValidation: boolean
+        // Aptitude letter floor for deck validation. "B" matches the in-game soft
+        // requirement for race-bonus uplift; "A" is the strict meta-deck floor.
+        deckValidationMinAptitude: string
     }
 
     // Training Stat Target settings
@@ -202,6 +219,7 @@ export interface Settings {
         trackblazerEnergyThreshold: number
         trackblazerShopCheckGrades: string[]
         trackblazerMinStatGainForCharm: number
+        trackblazerLowMainStatGainItemFloor: number
         trackblazerMaxRetriesPerRace: number
         trackblazerWhistleForcesTraining: boolean
         trackblazerRetryRacesBeforeFinalGrades: string[]
@@ -510,8 +528,20 @@ export const defaultSettings: Settings = {
         // training that also teaches a hinted skill (skill-point efficient across any scenario).
         // Every character preset in the codebase already ships with this true.
         enablePrioritizeSkillHints: true,
+        // Default true: improves Year 2+ scoring across every trainee/scenario with no downside when
+        // OCR fails (multiplier falls back to 1.0).
+        enableTrainingLevelWeighting: true,
         enableTrainingAnalysisValidation: false,
         enableYoloStatDetection: false,
+        // Default Good matches base Campaign.shouldRecoverMood (`mood < Mood.GOOD`).
+        // Override to "Great" only for trainees with single-option mood-trap events.
+        moodFloor: "Good",
+        // Pre-career deck validation is on by default — purely informational, no
+        // behavior change beyond a one-time log line per career.
+        enableDeckValidation: true,
+        // "B" matches the in-game soft floor for race-bonus uplift. Tighten to "A"
+        // for meta-deck runs where any sub-A aptitude indicates a build mistake.
+        deckValidationMinAptitude: "B",
     },
     trainingStatTarget: {
         trainingSprintStatTarget_speedStatTarget: 1200,
@@ -584,6 +614,10 @@ export const defaultSettings: Settings = {
         // converts a risky training into a guaranteed pick, so any time the projected gain is
         // 25+ it's worth the consumable. Steve1316's settings ship with 25 and it's the meta.
         trackblazerMinStatGainForCharm: 25,
+        // When mood is BAD or AWFUL, refuse to use Reset Whistle / Good-Luck Charm / Megaphone
+        // if main-stat gain is below this floor. Prevents wasting items on structurally low-return
+        // turns where the mood multiplier caps the stat gain. Default 15 matches upstream.
+        trackblazerLowMainStatGainItemFloor: 15,
         trackblazerMaxRetriesPerRace: 1,
         trackblazerWhistleForcesTraining: true,
         trackblazerRetryRacesBeforeFinalGrades: ["G1", "G2", "G3"],
@@ -593,7 +627,10 @@ export const defaultSettings: Settings = {
         // races on days 73-75, where +50 energy from a single drink can rescue a critical
         // training pass. Yummy Cat Food is excluded for the same reason — its mood-restore +
         // energy combination is a Finale-tier item that's wasted earlier in the run.
-        trackblazerExcludedItems: ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food"],
+        // Coaching Megaphone is the trainer guide's "trap" item — its 5-turn skill-point bonus
+        // doesn't pay back in Trackblazer's compressed schedule and burns a shop slot the bot
+        // would otherwise spend on a stat scroll or hint book that converts directly to gains.
+        trackblazerExcludedItems: ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food", "Coaching Megaphone"],
         // Trackblazer guide's "Order Mantra" - Check Training, Check Shop, Go Race - is per-turn.
         // Frequency 1 means the bot checks the shop after every race (not every 3 races),
         // matching the guide's constant-shop-interaction tempo. Every character preset already

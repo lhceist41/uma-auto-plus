@@ -6,7 +6,7 @@ This document explains how built-in character presets work in UMA Auto+, how the
 
 ## Overview
 
-UMA Auto+ ships with **45 built-in character presets** (15 characters x 3 scenarios). When a user selects a scenario on the Home page, a dropdown appears showing only the characters available for that scenario. Picking a character instantly applies all of its optimized settings.
+UMA Auto+ ships with **57 built-in character presets** (19 characters x 3 scenarios). When a user selects a scenario on the Home page, a dropdown appears showing only the characters available for that scenario. Picking a character instantly applies all of its optimized settings.
 
 ### Currently included characters
 

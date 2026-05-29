@@ -138,6 +138,13 @@ const searchConfig: SearchOption[] = [
         page: "TrainingSettings",
     },
     {
+        id: "enable-training-level-weighting",
+        title: "Weight Score by Training Level",
+        description:
+            "When enabled (Year 2+), the bot reads each training's level (1-5) via OCR and boosts the score for trainings whose stat sits in the top 3 of your Stat Prioritization list. OCR is skipped during Pre-Debut, Junior, and Summer.",
+        page: "TrainingSettings",
+    },
+    {
         id: "must-rest-before-summer",
         title: "Must Rest before Summer",
         description: "Forces the bot to rest during June Late Phase in Classic and Senior Years to ensure enough energy for Summer Training in July.",
@@ -574,6 +581,13 @@ const searchConfig: SearchOption[] = [
         page: "ScenarioOverridesSettings",
     },
     {
+        id: "trackblazer-low-main-stat-gain-item-floor",
+        title: "Trackblazer Low Main Stat Gain Item Floor",
+        description:
+            "When mood is BAD or AWFUL, refuse to use Reset Whistle, Good-Luck Charm, or Megaphone if main-stat gain is below this floor. Prevents wasting items on structurally low-return turns where the mood multiplier caps the stat gains.",
+        page: "ScenarioOverridesSettings",
+    },
+    {
         id: "trackblazer-max-retries-per-race",
         title: "Trackblazer Max Retries per Race",
         description: "Sets the maximum number of retries allowed for a single race in the Trackblazer scenario.",
@@ -704,8 +718,7 @@ const searchConfig: SearchOption[] = [
     {
         id: "debug-main-screen-update-test",
         title: "Start Main Screen Update Test",
-        description:
-            "Disables normal bot operations and starts the Main Screen update test. This test will go through all Main Screen updates and then print the Trainee information.",
+        description: "Disables normal bot operations and starts the Main Screen update test. This test will go through all Main Screen updates and then print the Trainee information.",
         page: "DebugSettings",
     },
     {

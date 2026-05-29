@@ -55,6 +55,7 @@ import com.steve1316.uma_android_automation.components.LabelRecreationUmamusume
 import com.steve1316.uma_android_automation.components.LabelScheduledRace
 import com.steve1316.uma_android_automation.components.LabelStatTableHeaderSkillPoints
 import com.steve1316.uma_android_automation.components.LabelUmamusumeClassFans
+import com.steve1316.uma_android_automation.types.Aptitude
 import com.steve1316.uma_android_automation.types.BoundingBox
 import com.steve1316.uma_android_automation.types.DateMonth
 import com.steve1316.uma_android_automation.types.DatePhase
@@ -126,6 +127,56 @@ abstract class Campaign(game: Game) : Task(game) {
 
     /** Flag to track if the bot should force a specific target mood during recovery. */
     var forcedTargetMood: Mood? = null
+
+    /**
+     * Configurable mood floor: bot recovers mood when current mood drops below this level.
+     *
+     * Values: "Normal", "Good", "Great". Default "Good" matches historical
+     * `shouldRecoverMood` behavior (`mood < Mood.GOOD`). Setting to "Great" is the strict
+     * guard for trainees with single-option mood-trap events (e.g. Agnes Tachyon's
+     * "Report: A Clear Gaze" event redirects the objective race to NHK Mile Cup if mood
+     * is Normal or worse on the trigger date — running with a Great floor keeps mood
+     * at or above Good across the trigger window).
+     *
+     * Trade-off: stricter floors burn more turns on Recreation/Date and reduce training
+     * pixels. Only enable when the trainee actually has the trap event.
+     */
+    private val moodFloorString: String = SettingsHelper.getStringSetting("training", "moodFloor", "Good")
+
+    /** Resolved Mood enum form of [moodFloorString]. Falls back to GOOD on unrecognized strings. */
+    protected val moodFloor: Mood = when (moodFloorString.lowercase()) {
+        "normal" -> Mood.NORMAL
+        "great" -> Mood.GREAT
+        else -> Mood.GOOD
+    }
+
+    /**
+     * Pre-career deck validation: when enabled, the first time aptitudes are read for a
+     * career run, the bot checks that the trainee's preferred-distance and preferred-style
+     * aptitudes meet [deckValidationMinAptitude]. If the deck is below the floor, the bot
+     * logs a high-visibility MessageLog warning so the user knows the trainee/scenario
+     * combo will fight the chosen race lineup.
+     *
+     * Validation is informational — it does NOT halt the run. The user can interrupt and
+     * pick a better deck if they care, or let it ride.
+     */
+    protected val enableDeckValidation: Boolean = SettingsHelper.getBooleanSetting("training", "enableDeckValidation", true)
+
+    /**
+     * Minimum aptitude letter required for the trainee's preferred distance and running
+     * style to clear deck validation. Default "B" matches the in-game soft requirement
+     * for race-bonus uplift; "A" is the strict meta-deck floor.
+     */
+    private val deckValidationMinString: String = SettingsHelper.getStringSetting("training", "deckValidationMinAptitude", "B")
+
+    /** Resolved Aptitude floor for deck validation. Falls back to B on unrecognized strings. */
+    protected val deckValidationMinAptitude: Aptitude = Aptitude.fromName(deckValidationMinString) ?: Aptitude.B
+
+    /**
+     * Set once after the first successful aptitude read so the validation check fires only
+     * once per career run (not on every aptitude refresh).
+     */
+    private var bDeckValidationChecked: Boolean = false
 
     /** Whether the bot should attempt the crane game. */
     protected val enableCraneGameAttempt: Boolean = SettingsHelper.getBooleanSetting("general", "enableCraneGameAttempt")
@@ -581,6 +632,15 @@ abstract class Campaign(game: Game) : Task(game) {
                     // Reset this flag since our preferred running style has changed.
                     trainee.bHasSetRunningStyle = false
                 }
+
+                // First-pass deck validation: warn the user if the trainee's preferred
+                // distance/style aptitude is below the configured floor. Runs once per
+                // career so we don't spam the log on every aptitude refresh.
+                if (enableDeckValidation && !bDeckValidationChecked && trainee.bHasUpdatedAptitudes) {
+                    runDeckValidation()
+                    bDeckValidationChecked = true
+                }
+
                 result.dialog.close(game.imageUtils)
             }
 
@@ -839,7 +899,10 @@ abstract class Campaign(game: Game) : Task(game) {
             }
         }
 
-        return (trainee.mood < Mood.GOOD)
+        // Recover when current mood is strictly below the configured floor.
+        // Default floor is GOOD which preserves historical behavior. A "Great" floor
+        // is the strict guard for trap-event trainees like Agnes Tachyon (NHK Mile).
+        return (trainee.mood < moodFloor)
     }
 
     /**
@@ -851,6 +914,73 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     open fun performMoodRecovery(sourceBitmap: Bitmap, targetMood: Mood = Mood.GOOD): Boolean {
         return recoverMood(sourceBitmap, targetMood = targetMood)
+    }
+
+    /**
+     * One-shot deck validation: log a high-visibility warning if the trainee's preferred
+     * distance and running-style aptitudes are below [deckValidationMinAptitude].
+     *
+     * Called from the `umamusume_details` dialog handler the first time aptitudes are
+     * successfully read. The check is informational only — it does not halt the run.
+     *
+     * Logs:
+     *  - INFO when both aptitudes meet the floor (one line: "deck OK").
+     *  - WARN with the specific shortfall (distance, style, or both) when below the floor.
+     *
+     * Subclasses MAY override to extend the check (e.g. add scenario-specific terrain
+     * checks for Trackblazer's mixed turf/dirt schedule), but should call super() first.
+     */
+    protected open fun runDeckValidation() {
+        val distance = trainee.trackDistance
+        val style = trainee.runningStyle
+        val distAptitude = trainee.trackDistanceAptitudes[distance] ?: Aptitude.G
+        val styleAptitude = trainee.runningStyleAptitudes[style] ?: Aptitude.G
+
+        val distOk = distAptitude >= deckValidationMinAptitude
+        val styleOk = styleAptitude >= deckValidationMinAptitude
+
+        if (distOk && styleOk) {
+            MessageLog.i(
+                TAG,
+                "[DECK_VALIDATION] Deck OK — preferred distance ${distance.name} aptitude=$distAptitude, " +
+                    "preferred style ${style.name} aptitude=$styleAptitude, floor=$deckValidationMinAptitude.",
+            )
+            return
+        }
+
+        val shortfalls = buildList {
+            if (!distOk) add("distance ${distance.name}=$distAptitude (need ${deckValidationMinAptitude}+)")
+            if (!styleOk) add("style ${style.name}=$styleAptitude (need ${deckValidationMinAptitude}+)")
+        }.joinToString(", ")
+
+        MessageLog.w(
+            TAG,
+            "[DECK_VALIDATION] [WARN] Deck below aptitude floor: $shortfalls. The bot will continue, " +
+                "but expect lower race-finishing positions and reduced fan/skill-point gains. " +
+                "Consider rebuilding the deck with stronger support cards for this distance/style, " +
+                "or pick a scenario that better matches the trainee's signature aptitudes.",
+        )
+
+        // Junior fan-farm viability check. The 3000-fan checkpoint at Junior Late Dec is
+        // a hard career-fail gate in URA Finale, Unity Cup, and Trackblazer. The bot's
+        // race finder requires double-star predictions (terrain+distance aptitude both
+        // ≥B). In Junior year, the only OP/Pre-OP races available are Sprint or Mile
+        // distance. If a trainee has no aptitude ≥B in either Sprint or Mile, the bot
+        // cannot enter Junior fan-farm races and the career WILL force-fail at Rank E.
+        val sprintApt = trainee.trackDistanceAptitudes[com.steve1316.uma_android_automation.types.TrackDistance.SPRINT] ?: Aptitude.G
+        val mileApt = trainee.trackDistanceAptitudes[com.steve1316.uma_android_automation.types.TrackDistance.MILE] ?: Aptitude.G
+        val canFarmJunior = sprintApt >= Aptitude.B || mileApt >= Aptitude.B
+        if (!canFarmJunior) {
+            MessageLog.w(
+                TAG,
+                "[DECK_VALIDATION] [WARN] Junior fan-farm risk: Sprint=$sprintApt, Mile=$mileApt — both " +
+                    "below B. The bot's race finder needs ≥B aptitude on terrain AND distance to enter " +
+                    "Junior OP races, so it cannot farm fans this year. The 3000-fan checkpoint at Junior " +
+                    "Late Dec WILL FAIL and the career will force-end at Rank E. Either stop now and raise " +
+                    "Sprint or Mile aptitude to B via 7+ pink sparks before running, or pick a different " +
+                    "trainee whose Junior aptitudes match the OP race lineup.",
+            )
+        }
     }
 
     /**
@@ -906,11 +1036,21 @@ abstract class Campaign(game: Game) : Task(game) {
         } else if (IconGoalRibbon.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
             // Most likely the user started the bot here so a delay will need to be placed to allow the start banner of the Service to disappear.
             game.wait(2.0)
-            MessageLog.v(TAG, "[INFO] Bot is at the Race Selection screen with a mandatory race needing to be selected.")
-            // Walk back to the preparation screen.
-            ButtonBack.click(game.imageUtils, sourceBitmap = sourceBitmap)
-            game.wait(1.0)
-            true
+            // The goal ribbon also stays visible on the Main screen and behind blocking info popups (e.g. the
+            // "Umamusume Class" fan-class popup the game shows around debut, which only has a Close button). A
+            // goal-ribbon match alone therefore does NOT prove we're on the Race Selection screen. Only treat this
+            // as the race-prep flow if a Back button is actually present and gets clicked. Re-capture a fresh
+            // screenshot (the start banner has had 2s to clear) so the check reflects the current screen. If there
+            // is no Back button, return false so process() falls through to performMiscChecks for real recovery
+            // instead of looping forever on a no-op back tap.
+            if (ButtonBack.click(game.imageUtils)) {
+                MessageLog.v(TAG, "[INFO] Bot is at the Race Selection screen with a mandatory race needing to be selected.")
+                game.wait(1.0)
+                true
+            } else {
+                MessageLog.w(TAG, "[WARN] checkMandatoryRacePrepScreen:: Goal ribbon detected but no Back button is present — not the Race Selection screen. Deferring to misc recovery.")
+                false
+            }
         } else if (game.scenario == "Unity Cup" && ButtonUnityCupRace.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
             MessageLog.v(TAG, "[INFO] Bot is awaiting opponent selection for a Unity Cup race.")
             true
@@ -1068,13 +1208,18 @@ abstract class Campaign(game: Game) : Task(game) {
                     ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
                     game.wait(game.dialogWaitDelay)
 
+                    // Infirmary button click already succeeded above, which means the in-game
+                    // heal has fired server-side. The follow-up event-header template match is a
+                    // best-effort visual confirmation only — when it misses (template drift,
+                    // animation timing, "Connecting" overlay), the heal still happened. Treat
+                    // the button click as authoritative so a failed visual match doesn't make
+                    // the bot believe injuries persist across turns.
                     if (IconInfirmaryEventHeader.check(game.imageUtils)) {
                         MessageLog.v(TAG, "[INJURY] Injury detected and attempted to heal.")
-                        true
                     } else {
-                        MessageLog.w(TAG, "[WARN] checkInjury:: Injury detected but failed to detect Infirmary event.")
-                        false
+                        MessageLog.v(TAG, "[INJURY] Injury detected and no follow-up Infirmary event appeared.")
                     }
+                    true
                 } else {
                     MessageLog.w(TAG, "[WARN] checkInjury:: Injury detected but failed to click Infirmary button.")
                     false
@@ -1606,6 +1751,19 @@ abstract class Campaign(game: Game) : Task(game) {
             MessageLog.i(TAG, "[MISC] There was a popup about insufficient fans.")
             racing.encounteredRacingPopup = true
             ButtonCancel.click(game.imageUtils, sourceBitmap = sourceBitmap)
+            return true
+        } else if (LabelUmamusumeClassFans.check(game.imageUtils, sourceBitmap = sourceBitmap) && ButtonClose.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
+            // Dismiss the "Umamusume Class" fan-pyramid popup ONLY. The bot opens this itself (openFansDialog)
+            // to read the fan count, but its title bar is blue and the title-gradient detector only knows the
+            // green header, so handleDialogs can't recognize it — without this it traps the bot.
+            //
+            // CRITICAL: scope this strictly to the class popup via LabelUmamusumeClassFans. A blanket ButtonClose
+            // here also closes the green-header Umamusume Details / Strategy dialogs the bot opens to read
+            // aptitudes / set the running style. handleDialogs reads those on a later pass once the dialog is
+            // stable+open; closing them here first leaves aptitudes unread (all "G") and spins the bot in an
+            // open/close loop. Leave non-class dialogs alone so the real dialog handler can read them.
+            MessageLog.i(TAG, "[MISC] Dismissed the Umamusume Class popup via its Close button.")
+            game.wait(0.5)
             return true
         } else if (ButtonBack.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
             MessageLog.i(TAG, "[MISC] Navigating back a screen since all the other misc checks have been completed.")

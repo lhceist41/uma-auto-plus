@@ -10,14 +10,14 @@ import { MessageLogContext } from "../../context/MessageLogContext"
 import { useTheme } from "../../context/ThemeContext"
 import { Text } from "../../components/ui/text"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../components/ui/alert-dialog"
-import { Play, Square, AlertCircle, Info, CircleCheck, Repeat } from "lucide-react-native"
+import { Play, Square, AlertCircle, Info, CircleCheck, Repeat, AlertTriangle, ThumbsUp } from "lucide-react-native"
 import type { LucideIcon } from "lucide-react-native"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip"
 import PageHeader from "../../components/PageHeader"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 import SelectButton from "../../components/SelectButton"
 import CustomSelect from "../../components/CustomSelect"
-import { characterPresets } from "../../data/characterPresets"
+import { characterPresets, trainerAdvisories } from "../../data/characterPresets"
 import { useNavigation } from "@react-navigation/native"
 
 const styles = StyleSheet.create({
@@ -197,10 +197,26 @@ const Home = () => {
     const filteredPresets = useMemo(() => {
         const scenario = bsc.settings.general.scenario
         if (!scenario) return []
-        return characterPresets
-            .filter((p) => p.scenario === scenario)
-            .map((p) => ({ value: p.name, label: p.name }))
+        return characterPresets.filter((p) => p.scenario === scenario).map((p) => ({ value: p.name, label: p.name }))
     }, [bsc.settings.general.scenario])
+
+    /**
+     * Computes whether the current (preset, scenario) combination is a known mismatch
+     * (avoid) or an above-average fit (recommended). Result drives the colored banner
+     * shown directly below the preset selector. `null` means no advisory exists for
+     * this trainee/scenario pair (most common case → no banner rendered).
+     */
+    const presetAdvisory: { kind: "avoid"; reason: string } | { kind: "recommend" } | null = useMemo(() => {
+        if (!selectedPreset) return null
+        const scenario = bsc.settings.general.scenario
+        if (!scenario) return null
+        const advisories = trainerAdvisories[selectedPreset]
+        if (!advisories) return null
+        const avoidEntry = advisories.avoid?.find((a) => a.scenario === scenario)
+        if (avoidEntry) return { kind: "avoid", reason: avoidEntry.reason }
+        if (advisories.recommended?.includes(scenario)) return { kind: "recommend" }
+        return null
+    }, [selectedPreset, bsc.settings.general.scenario])
 
     /**
      * Applies a character preset's settings to the current configuration.
@@ -488,13 +504,48 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
 
             {isScenarioValid && filteredPresets.length > 0 && !isRunning && (
                 <View style={{ width: "100%", paddingHorizontal: 4, marginBottom: 6 }}>
-                    <CustomSelect
-                        placeholder="Select Character Preset"
-                        options={filteredPresets}
-                        value={selectedPreset}
-                        onValueChange={handlePresetChange}
-                        width="100%"
-                    />
+                    <CustomSelect placeholder="Select Character Preset" options={filteredPresets} value={selectedPreset} onValueChange={handlePresetChange} width="100%" />
+                    {presetAdvisory?.kind === "avoid" && (
+                        <View
+                            style={{
+                                flexDirection: "row",
+                                alignItems: "flex-start",
+                                marginTop: 6,
+                                paddingHorizontal: 10,
+                                paddingVertical: 8,
+                                backgroundColor: "rgba(234, 179, 8, 0.15)",
+                                borderLeftWidth: 3,
+                                borderLeftColor: "#eab308",
+                                borderRadius: 6,
+                            }}
+                        >
+                            <AlertTriangle size={16} color="#eab308" style={{ marginRight: 6, marginTop: 2 }} />
+                            <Text style={{ flex: 1, fontSize: 12, color: colors.foreground, lineHeight: 16 }}>
+                                <Text style={{ fontWeight: "700", color: "#eab308" }}>Mismatch warning: </Text>
+                                {presetAdvisory.reason}
+                            </Text>
+                        </View>
+                    )}
+                    {presetAdvisory?.kind === "recommend" && (
+                        <View
+                            style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                marginTop: 6,
+                                paddingHorizontal: 10,
+                                paddingVertical: 6,
+                                backgroundColor: "rgba(34, 197, 94, 0.15)",
+                                borderLeftWidth: 3,
+                                borderLeftColor: "#22c55e",
+                                borderRadius: 6,
+                            }}
+                        >
+                            <ThumbsUp size={14} color="#22c55e" style={{ marginRight: 6 }} />
+                            <Text style={{ fontSize: 12, color: colors.foreground }}>
+                                <Text style={{ fontWeight: "700", color: "#22c55e" }}>Good pick </Text>— this trainee is a recommended fit for {bsc.settings.general.scenario}.
+                            </Text>
+                        </View>
+                    )}
                 </View>
             )}
 

@@ -85,6 +85,7 @@ const TrainingSettings = () => {
         riskyTrainingMaxFailureChance,
         trainWitDuringFinale,
         enablePrioritizeSkillHints,
+        enableTrainingLevelWeighting,
         enableTrainingAnalysisValidation,
         enableYoloStatDetection,
     } = trainingSettings
@@ -579,6 +580,17 @@ const TrainingSettings = () => {
                                 description="When enabled, the bot will prioritize acquiring skill hints, bypassing stat prioritization and blacklist, while still being constrained by the failure chance thresholds."
                                 className="my-2"
                                 searchId="enable-prioritize-skill-hints"
+                            />
+                        </View>
+
+                        <View style={styles.section}>
+                            <CustomCheckbox
+                                checked={enableTrainingLevelWeighting}
+                                onCheckedChange={(checked) => updateTrainingSetting("enableTrainingLevelWeighting", checked)}
+                                label="Weight Score by Training Level"
+                                description="When enabled (Year 2+), the bot reads each training's level (1-5) via OCR and boosts the score for trainings whose stat sits in the top 3 of your Stat Prioritization list. Helps the bot stick with stats you've invested in. OCR is skipped during Pre-Debut, Junior, and Summer."
+                                className="my-2"
+                                searchId="enable-training-level-weighting"
                             />
                         </View>
 

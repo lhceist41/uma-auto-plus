@@ -2546,6 +2546,40 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         )
     }
 
+    /**
+     * Extract the displayed training level (1-5) from the currently selected training panel.
+     *
+     * The label appears as "Speed Lvl 4", "Stamina Lvl 2", etc., in white characters on a solid colored
+     * background at a fixed offset from the Energy label.
+     *
+     * @param sourceBitmap The current screenshot.
+     * @param energyAnchor The Point returned by `LabelEnergy.find().first` for the same bitmap.
+     * @return The parsed level (1-5), or null if OCR or parsing failed.
+     */
+    fun extractTrainingLevel(sourceBitmap: Bitmap, energyAnchor: Point): Int? {
+        val x = relX(energyAnchor.x, -140)
+        val y = relY(energyAnchor.y, 65)
+        val width = relWidth(240)
+        val height = relHeight(40)
+        val rawText =
+            findTextByColor(
+                sourceBitmap = sourceBitmap,
+                x = x,
+                y = y,
+                width = width,
+                height = height,
+                targetR = 255,
+                targetG = 255,
+                targetB = 255,
+                tolerance = 30,
+                scale = 2.0,
+                debugName = "trainingLevel",
+            )
+        if (rawText.isEmpty()) return null
+        val match = Regex("""Lvl\s*([1-5])""", RegexOption.IGNORE_CASE).find(rawText) ?: return null
+        return match.groupValues.getOrNull(1)?.toIntOrNull()
+    }
+
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // Misc Helper Functions
