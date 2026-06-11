@@ -22,6 +22,7 @@ import com.steve1316.uma_android_automation.components.IconEnergyBarRightPart0
 import com.steve1316.uma_android_automation.components.IconEnergyBarRightPart1
 import com.steve1316.uma_android_automation.components.IconEventTitleSpacer
 import com.steve1316.uma_android_automation.components.IconRaceListPredictionDoubleStar
+import com.steve1316.uma_android_automation.components.IconRaceListPredictionSingleStar
 import com.steve1316.uma_android_automation.components.IconStatBlockGroup
 import com.steve1316.uma_android_automation.components.IconStatBlockGuts
 import com.steve1316.uma_android_automation.components.IconStatBlockPower
@@ -42,6 +43,7 @@ import com.steve1316.uma_android_automation.components.LabelStatTrackSurface
 import com.steve1316.uma_android_automation.components.LabelTrainingFailureChance
 import com.steve1316.uma_android_automation.components.Region
 import com.steve1316.uma_android_automation.types.BoundingBox
+import com.steve1316.uma_android_automation.types.PredictionTier
 import com.steve1316.uma_android_automation.types.StatName
 import org.opencv.android.Utils
 import org.opencv.core.*
@@ -86,8 +88,15 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @property fans The number of fans awarded by the race.
      * @property hasDoublePredictions Whether the race has double circle predictions.
      * @property isRival Whether the race features a rival Umamusume.
+     * @property predictionTier The fan-prediction tier of the race-list entry. Defaults to a value
+     *    consistent with [hasDoublePredictions] for callers that don't detect single stars.
      */
-    data class RaceDetails(val fans: Int, val hasDoublePredictions: Boolean, val isRival: Boolean = false)
+    data class RaceDetails(
+        val fans: Int,
+        val hasDoublePredictions: Boolean,
+        val isRival: Boolean = false,
+        val predictionTier: PredictionTier = if (hasDoublePredictions) PredictionTier.DOUBLE else PredictionTier.NONE,
+    )
 
     /**
      * Defines a block of stat information on the screen.
@@ -2201,12 +2210,20 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         Utils.bitmapToMat(croppedBitmap, cvImage)
         if (debugMode) Imgcodecs.imwrite("$matchFilePath/debugExtraRacePrediction.png", cvImage)
 
-        // Determine if the extra race has double star prediction.
-        val predictionCheck = IconRaceListPredictionDoubleStar.check(this, sourceBitmap = croppedBitmap, region = intArrayOf(0, 0, 0, 0))
+        // Determine the prediction tier of the extra race. The double-star template also matches
+        // the top two stars of a triple-star stack, so check it first; only fall back to the
+        // single-star template when no double match exists.
+        val predictionTier =
+            when {
+                IconRaceListPredictionDoubleStar.check(this, sourceBitmap = croppedBitmap, region = intArrayOf(0, 0, 0, 0)) -> PredictionTier.DOUBLE
+                IconRaceListPredictionSingleStar.check(this, sourceBitmap = croppedBitmap, region = intArrayOf(0, 0, 0, 0)) -> PredictionTier.SINGLE
+                else -> PredictionTier.NONE
+            }
+        val predictionCheck = predictionTier == PredictionTier.DOUBLE
 
-        return if (forceRacing || predictionCheck) {
+        return if (forceRacing || predictionTier != PredictionTier.NONE) {
             if (debugMode && !forceRacing) {
-                MessageLog.d(TAG, "[DEBUG] determineExtraRaceFans:: This race has double predictions. Now checking how many fans this race gives.")
+                MessageLog.d(TAG, "[DEBUG] determineExtraRaceFans:: This race has $predictionTier predictions. Now checking how many fans this race gives.")
             } else if (debugMode) {
                 MessageLog.d(
                     TAG,
@@ -2232,7 +2249,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 )
             if (croppedBitmap2 == null) {
                 MessageLog.e(TAG, "[ERROR] determineExtraRaceFans:: Failed to create cropped bitmap for extra race fans detection.")
-                return RaceDetails(-1, predictionCheck, rivalCheck)
+                return RaceDetails(-1, predictionCheck, rivalCheck, predictionTier)
             }
 
             // Make the cropped screenshot grayscale.
@@ -2283,12 +2300,12 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
             try {
                 Log.d(TAG, "[DEBUG] determineExtraRaceFans:: Converting $result to integer for fans")
                 val cleanedResult = result.replace(Regex("[^0-9]"), "")
-                RaceDetails(cleanedResult.toInt(), predictionCheck, rivalCheck)
+                RaceDetails(cleanedResult.toInt(), predictionCheck, rivalCheck, predictionTier)
             } catch (_: NumberFormatException) {
-                RaceDetails(-1, predictionCheck, rivalCheck)
+                RaceDetails(-1, predictionCheck, rivalCheck, predictionTier)
             }
         } else {
-            Log.d(TAG, "[DEBUG] determineExtraRaceFans:: This race has no double prediction.")
+            Log.d(TAG, "[DEBUG] determineExtraRaceFans:: This race has no prediction icon (single or double).")
             RaceDetails(-1, false, rivalCheck)
         }
     }

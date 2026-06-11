@@ -175,6 +175,26 @@ enum class RaceGrade {
     }
 }
 
+/** The fan-prediction tier shown on a race-list entry.
+ *
+ * The double-star template also matches the top two stars of a triple-star stack, so
+ * [DOUBLE] effectively means "two or more stars". Ordinal order is the ranking order:
+ * higher tier = better predicted placement.
+ */
+enum class PredictionTier {
+    NONE,
+    SINGLE,
+    DOUBLE,
+    ;
+
+    companion object {
+        /** Mapping of prediction tier names to their corresponding enum entries. */
+        private val nameMap = entries.associateBy { it.name }
+
+        fun fromName(value: String): PredictionTier? = nameMap[value.uppercase()]
+    }
+}
+
 enum class DatePhase {
     EARLY,
     LATE,

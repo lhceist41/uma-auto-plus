@@ -74,6 +74,25 @@ object IconRaceListPredictionDoubleStar : ComponentInterface {
     override val template = Template("components/icon/race_list_prediction_double_star", region = Region.rightHalf)
 }
 
+object IconRaceListPredictionSingleStar : ComponentInterface {
+    override val template = Template("components/icon/race_list_prediction_single_star", region = Region.rightHalf)
+}
+
+object IconFriendSlotEmpty : ComponentInterface {
+    // Empty friend/guest slot on the career Support Formation screen (green "+" placeholder).
+    // The borrowed card never persists between careers, so the run queue must re-fill this
+    // slot before the game will respond to Start Career.
+    override val template = Template("components/icon/friend_slot_empty", region = Region.rightHalf)
+}
+
+object IconBorrowPreferredCard : ComponentInterface {
+    // Card art of the preferred friend card inside the Borrow Card list. Swap the PNG to
+    // change which card the run queue borrows; when it is not visible the navigator falls
+    // back to the first row. Blind first-row borrows left queued careers measurably weaker
+    // at their Classic gates.
+    override val template = Template("components/icon/borrow_preferred_card", region = Region.leftHalf)
+}
+
 object IconRaceListSelectionBracketBottomRight : ComponentInterface {
     override val template = Template("components/icon/race_list_selection_bracket_bottom_right", region = Region.rightHalf)
 }

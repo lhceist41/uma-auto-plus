@@ -29,6 +29,7 @@ import com.steve1316.uma_android_automation.components.IconRaceAgendaEmpty
 import com.steve1316.uma_android_automation.components.IconRaceDayRibbon
 import com.steve1316.uma_android_automation.components.IconRaceListMaidenPill
 import com.steve1316.uma_android_automation.components.IconRaceListPredictionDoubleStar
+import com.steve1316.uma_android_automation.components.IconRaceListPredictionSingleStar
 import com.steve1316.uma_android_automation.components.IconRaceListSelectionBracketBottomRight
 import com.steve1316.uma_android_automation.components.IconScrollListBottomRight
 import com.steve1316.uma_android_automation.components.IconScrollListTopLeft
@@ -43,6 +44,7 @@ import com.steve1316.uma_android_automation.components.LabelThereAreNoRacesToCom
 import com.steve1316.uma_android_automation.types.Aptitude
 import com.steve1316.uma_android_automation.types.BoundingBox
 import com.steve1316.uma_android_automation.types.DateYear
+import com.steve1316.uma_android_automation.types.PredictionTier
 import com.steve1316.uma_android_automation.types.RaceGrade
 import com.steve1316.uma_android_automation.types.RunningStyle
 import com.steve1316.uma_android_automation.types.TrackDistance
@@ -54,6 +56,7 @@ import net.ricecode.similarity.StringSimilarityServiceImpl
 import org.json.JSONArray
 import org.json.JSONObject
 import org.opencv.core.Point
+import kotlin.math.abs
 
 /**
  * Manage and orchestrate the racing process, including mandatory, maiden, and extra races.
@@ -166,6 +169,22 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
     /** Indicates that an insufficient goal race result pts requirement has been detected. */
     var hasInsufficientGoalRacePtsRequirement = false
+
+    /** True when the next goal deadline is within [FAN_EMERGENCY_TURN_WINDOW] turns.
+     * Cached on the main screen by [checkEligibilityToStartExtraRacingProcess] because the
+     * turns-remaining OCR anchors on the energy label, which is not visible on the race list. */
+    var bGoalDeadlineNear = false
+
+    /** The cached turns-remaining value behind [bGoalDeadlineNear], for urgency tiering on
+     * screens where the OCR anchor is unavailable. Int.MAX_VALUE when unknown. */
+    var goalDeadlineTurnsRemaining = Int.MAX_VALUE
+
+    /** Fan-emergency mode: an unmet fan goal is due within [FAN_EMERGENCY_TURN_WINDOW] turns.
+     * While active, race selection accepts single-star prediction races instead of skipping to
+     * training. A weak trainee (e.g. an early-Junior Medium specialist) can draw single-star
+     * predictions on its whole race pool; without this, every extra race is invisible and the
+     * career force-ends at the fan checkpoint. */
+    var bFanEmergencyActive = false
 
     /** Tracks the specific day to race based on opportunity cost analysis. */
     private var nextSmartRaceDay: Int? = null
@@ -317,6 +336,14 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     data class ScoredRace(val raceData: RaceData, val score: Double, val fansScore: Double, val gradeScore: Double, val aptitudeBonus: Double)
 
     /**
+     * A race-list prediction icon match and its tier.
+     *
+     * @property location The screen (or entry-bitmap) coordinates of the prediction icon.
+     * @property tier The prediction tier of the matched icon.
+     */
+    data class PredictionAnchor(val location: Point, val tier: PredictionTier)
+
+    /**
      * Stores information about a race that the user has planned.
      *
      * @property raceName The name of the planned race.
@@ -355,6 +382,68 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         /** The threshold for fuzzy string matching (0.0 to 1.0). */
         private const val SIMILARITY_THRESHOLD = 0.7
+
+        /** How many turns before an unmet goal deadline the fan-emergency policy activates. */
+        internal const val FAN_EMERGENCY_TURN_WINDOW = 6
+
+        /** Score multiplier applied to single-star prediction races during smart racing. A weak
+         * predicted placement scales the realized fan payout down sharply, so a single-star race
+         * has to be roughly twice as good on paper to outrank a double-star one. */
+        internal const val SINGLE_STAR_SCORE_MULTIPLIER = 0.5
+
+        /** Decides whether the fan-emergency policy is active.
+         *
+         * @param hasFanRequirement Whether an unmet fan goal is shown on the main screen.
+         * @param turnsRemaining Turns until the next goal deadline (-1 when OCR failed).
+         * @return True when the fan goal is due within [FAN_EMERGENCY_TURN_WINDOW] turns.
+         */
+        internal fun isFanEmergency(hasFanRequirement: Boolean, turnsRemaining: Int): Boolean {
+            return hasFanRequirement && turnsRemaining in 0..FAN_EMERGENCY_TURN_WINDOW
+        }
+
+        /** Merges double- and single-star prediction matches into one row-deduplicated list.
+         *
+         * The single-star template can also weakly match inside a taller star stack, so any
+         * single match within [rowProximityPx] of an already-accepted match is treated as the
+         * same row and dropped (the double wins). Result is sorted top to bottom.
+         *
+         * @param doubles Locations matched by the double-star template.
+         * @param singles Locations matched by the single-star template.
+         * @param rowProximityPx Maximum distance for two matches to count as the same row. Race
+         *    list rows are ~200px tall, so 80px is safely under one row.
+         * @return The merged list of [PredictionAnchor] entries.
+         */
+        internal fun mergePredictionAnchors(doubles: List<Point>, singles: List<Point>, rowProximityPx: Int = 80): List<PredictionAnchor> {
+            val merged = doubles.map { PredictionAnchor(it, PredictionTier.DOUBLE) }.toMutableList()
+            for (single in singles) {
+                val sameRow =
+                    merged.any {
+                        abs(it.location.y - single.y) < rowProximityPx && abs(it.location.x - single.x) < rowProximityPx
+                    }
+                if (!sameRow) {
+                    merged.add(PredictionAnchor(single, PredictionTier.SINGLE))
+                }
+            }
+            return merged.sortedBy { it.location.y }
+        }
+
+        /** Picks the best extra-race entry: highest prediction tier first, then most fans.
+         *
+         * @param races The walked race-list entries.
+         * @return The index of the best entry, or -1 when the list is empty.
+         */
+        internal fun indexOfBestByTierThenFans(races: List<RaceDetails>): Int {
+            var bestIndex = -1
+            for (i in races.indices) {
+                if (bestIndex == -1 ||
+                    races[i].predictionTier > races[bestIndex].predictionTier ||
+                    (races[i].predictionTier == races[bestIndex].predictionTier && races[i].fans > races[bestIndex].fans)
+                ) {
+                    bestIndex = i
+                }
+            }
+            return bestIndex
+        }
     }
 
     init {
@@ -379,13 +468,17 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Detect the current date first.
         campaign.updateDate(isOnMainScreen = false)
 
-        // Check for all double star predictions.
-        val doublePredictionLocations = IconRaceListPredictionDoubleStar.findAll(game.imageUtils)
-        MessageLog.i(TAG, "[TEST] Found ${doublePredictionLocations.size} races with double predictions.")
+        // Check for all prediction anchors, both single- and double-star.
+        val anchors = findPredictionAnchors(includeSingles = true)
+        MessageLog.i(
+            TAG,
+            "[TEST] Found ${anchors.size} races (${anchors.count { it.tier == PredictionTier.DOUBLE }} double-star, ${anchors.count { it.tier == PredictionTier.SINGLE }} single-star).",
+        )
 
-        doublePredictionLocations.forEachIndexed { index, location ->
+        anchors.forEachIndexed { index, anchor ->
+            val location = anchor.location
             val raceName = game.imageUtils.extractRaceName(location)
-            MessageLog.i(TAG, "[TEST] Race #${index + 1} - Detected name: \"$raceName\".")
+            MessageLog.i(TAG, "[TEST] Race #${index + 1} - Detected name: \"$raceName\" (${anchor.tier}).")
 
             // Query database for race details (may return multiple matches with different fan counts).
             val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
@@ -756,12 +849,34 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
-     * Scrolls the list of races up or down and returns the updated list of prediction locations.
+     * Finds all prediction anchors (race-list entry icons) in the source.
+     *
+     * @param includeSingles Whether to also detect single-star predictions.
+     * @param sourceBitmap Optional bitmap to search instead of taking a screenshot.
+     * @param region Optional search region override.
+     * @return Row-deduplicated anchors sorted top to bottom.
+     */
+    private fun findPredictionAnchors(includeSingles: Boolean, sourceBitmap: Bitmap? = null, region: IntArray? = null): List<PredictionAnchor> {
+        // Reuse one bitmap for both template passes so the two searches see the same frame.
+        val bitmap = sourceBitmap ?: game.imageUtils.getSourceBitmap()
+        val doubles = IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = bitmap, region = region)
+        val singles =
+            if (includeSingles) {
+                IconRaceListPredictionSingleStar.findAll(game.imageUtils, sourceBitmap = bitmap, region = region)
+            } else {
+                arrayListOf()
+            }
+        return mergePredictionAnchors(doubles, singles)
+    }
+
+    /**
+     * Scrolls the list of races up or down and returns the updated list of prediction anchors.
      *
      * @param scrollDown If true, scroll down; if false, scroll up.
-     * @return The updated list of double-prediction locations after scrolling, or null if scroll failed.
+     * @param includeSingles Whether to also detect single-star predictions after the scroll.
+     * @return The updated list of prediction anchors after scrolling, or null if scroll failed.
      */
-    private fun scrollRaceListAndRedetect(scrollDown: Boolean = true): ArrayList<Point>? {
+    private fun scrollRaceListAndRedetectAnchors(scrollDown: Boolean = true, includeSingles: Boolean = false): List<PredictionAnchor>? {
         val confirmButtonLocation = ButtonRace.find(game.imageUtils).first
         if (confirmButtonLocation == null) {
             MessageLog.i(TAG, "[RACE] Could not find \"Race\" button for scroll reference.")
@@ -779,7 +894,18 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
         game.wait(2.0)
 
-        return IconRaceListPredictionDoubleStar.findAll(game.imageUtils)
+        return findPredictionAnchors(includeSingles)
+    }
+
+    /**
+     * Scrolls the list of races up or down and returns the updated list of prediction locations.
+     *
+     * @param scrollDown If true, scroll down; if false, scroll up.
+     * @param includeSingles Whether to also detect single-star predictions after the scroll.
+     * @return The updated list of prediction locations after scrolling, or null if scroll failed.
+     */
+    private fun scrollRaceListAndRedetect(scrollDown: Boolean = true, includeSingles: Boolean = false): ArrayList<Point>? {
+        return scrollRaceListAndRedetectAnchors(scrollDown, includeSingles)?.let { anchors -> ArrayList(anchors.map { it.location }) }
     }
 
     /**
@@ -905,6 +1031,57 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val turnsRemaining = game.imageUtils.determineTurnsRemainingBeforeNextGoal()
         MessageLog.i(TAG, "[RACE] Current remaining number of days before the next mandatory race: $turnsRemaining.")
 
+        // Cache goal-deadline proximity while the OCR anchor (the energy label) is still visible.
+        // This flag drives single-star fallback inside selectMaidenRace, which runs on the race
+        // list screen where this OCR is unavailable.
+        bGoalDeadlineNear = turnsRemaining in 0..FAN_EMERGENCY_TURN_WINDOW
+        goalDeadlineTurnsRemaining = if (turnsRemaining >= 0) turnsRemaining else Int.MAX_VALUE
+
+        // Fan-emergency: an unmet fan goal within the deadline window. Detect the "fan(s) to go"
+        // banner here on a FRESH screenshot rather than trusting cached hasFanRequirement — that
+        // flag is computed on a shared turn-start bitmap in a parallel thread and was seen missing
+        // the banner on a mid-transition frame (trained instead of racing on the final checkpoint
+        // turn). When active, race selection admits single-star races and eligibility is forced
+        // below. Deliberately NOT gated on enableFarmingFans: that toggle governs optional fan
+        // padding, while an unmet fan goal force-ends the career — survival is not a tuning knob,
+        // and since every shipped preset has farming off, a farming gate would make this dead code.
+        // Not-summer stays: no race entries exist at summer camp.
+        //
+        // The PRIMARY signal is goal-text OCR ("Acquire 3,000 fans" etc.): the race_criteria_*
+        // template family has been dead since the v1.22.0 UI update (zero post-update detections,
+        // which also silently killed the old hasFanRequirement forcing for all trainees). Both
+        // template arms stay as cheap fast paths that self-heal if the templates get recaptured.
+        // Matching "fans" (plural) on purpose: "Japan Cup" race goals contain "fan". OCR runs at
+        // most once per turn and only near a deadline.
+        val goalTextNearDeadline: String =
+            if (bGoalDeadlineNear && !campaign.date.isSummer()) game.imageUtils.getGoalText() else ""
+        if (bGoalDeadlineNear && goalTextNearDeadline.isNotEmpty()) {
+            MessageLog.i(TAG, "[RACE] Goal deadline near ($turnsRemaining turn(s) left). Goal text: \"$goalTextNearDeadline\"")
+        }
+        // Stand down once the goal is already satisfied: parse the required count from the goal
+        // text ("Earn 3000 fans") and compare against the tracked fan count — otherwise the
+        // emergency keeps forcing races after the goal is met. If either number is unavailable,
+        // err toward racing.
+        val goalFanTarget: Int? =
+            Regex("([0-9][0-9,]*)\\s*fans", RegexOption.IGNORE_CASE)
+                .find(goalTextNearDeadline)?.groupValues?.get(1)?.replace(",", "")?.toIntOrNull()
+        val bFanGoalAlreadyMet: Boolean =
+            goalFanTarget != null && campaign.trainee.fans > 0 && campaign.trainee.fans >= goalFanTarget
+        if (bFanGoalAlreadyMet) {
+            MessageLog.i(TAG, "[RACE] Fan goal already met (${campaign.trainee.fans}/$goalFanTarget). Fan emergency stands down.")
+        }
+        val fanGoalUnmet =
+            bGoalDeadlineNear && !campaign.date.isSummer() && !bFanGoalAlreadyMet &&
+                (
+                    hasFanRequirement ||
+                        goalTextNearDeadline.contains("fans", ignoreCase = true) ||
+                        LabelRaceCriteriaFans.check(game.imageUtils, confidence = 0.9)
+                    )
+        bFanEmergencyActive = isFanEmergency(fanGoalUnmet, turnsRemaining)
+        if (bFanEmergencyActive) {
+            MessageLog.i(TAG, "[RACE] Fan emergency: unmet fan goal due in $turnsRemaining turn(s). Forcing racing; single-star prediction races are acceptable entries.")
+        }
+
         // Don't bother looking for races on Junior Year Early July (Turn 13) since they only start showing up on Turn 14.
         if (campaign.date.day == 13) {
             MessageLog.i(TAG, "[RACE] Junior Year Early July (Turn 13) detected. No races available until Turn 14. Skipping extra race check.")
@@ -939,6 +1116,16 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 return false
             }
 
+            return !raceRepeatWarningCheck
+        }
+
+        // Fan emergency (non-Trackblazer): unmet fan goal within the deadline window. Force racing
+        // this turn regardless of the interval/smart cadence that would otherwise skip it. This is
+        // the path that clears the Junior 3000-fan checkpoint for trainees whose early race pool is
+        // single-star only (e.g. Medium specialists); without it the bot trains on the final turn
+        // and the career force-ends short of the gate.
+        if (bFanEmergencyActive) {
+            MessageLog.i(TAG, "[RACE] Fan emergency active. Forcing eligibility to race this turn.")
             return !raceRepeatWarningCheck
         }
 
@@ -2098,10 +2285,15 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      * @return Pair of the best suitable race's location and [RaceData], or null if none found.
      */
     fun findSuitableTrackblazerRace(consecutiveRaceCount: Int): Pair<Point, RaceData>? {
+        // Fan-emergency (or force racing) admits single-star prediction races as last-resort
+        // candidates; they always rank below every double-star candidate.
+        val allowSingles = bFanEmergencyActive || enableForceRacing
+
         val sb = StringBuilder()
         sb.appendLine("\n========== Trackblazer Race Analysis ==========")
         sb.appendLine("Current Date: ${campaign.date}")
         sb.appendLine("Consecutive Race Count: $consecutiveRaceCount")
+        sb.appendLine("Fan Emergency: $bFanEmergencyActive")
 
         // ============================ PRE-FLIGHT CHECK ============================
         // The full scan below scrolls through and template-matches every visible race-list entry —
@@ -2117,7 +2309,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val preflightScrollList = ScrollList.create(game)
         if (preflightScrollList != null) {
             val preflightTopBitmap = game.imageUtils.getSourceBitmap()
-            val preflightTopMatches = IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = preflightTopBitmap)
+            val preflightTopMatches = findPredictionAnchors(includeSingles = allowSingles, sourceBitmap = preflightTopBitmap)
             if (preflightTopMatches.isEmpty()) {
                 val skipFullScan: Boolean =
                     if (!preflightScrollList.bIsScrollable) {
@@ -2130,13 +2322,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         game.wait(0.5, skipWaitingForLoading = true)
                         val preflightBottomBitmap = game.imageUtils.getSourceBitmap()
                         val preflightBottomMatches =
-                            IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = preflightBottomBitmap)
+                            findPredictionAnchors(includeSingles = allowSingles, sourceBitmap = preflightBottomBitmap)
                         preflightBottomMatches.isEmpty()
                     }
 
                 if (skipFullScan) {
-                    MessageLog.i(TAG, "[RACE] Trackblazer pre-flight: zero double-star icons visible at top + bottom of confirmed race list. Skipping full scroll-scan.")
-                    sb.appendLine("\nSummary: No eligible races (pre-flight short-circuit; zero double-star icons at top + bottom of list).")
+                    MessageLog.i(TAG, "[RACE] Trackblazer pre-flight: zero eligible prediction icons visible at top + bottom of confirmed race list. Skipping full scroll-scan.")
+                    sb.appendLine("\nSummary: No eligible races (pre-flight short-circuit; zero eligible prediction icons at top + bottom of list).")
                     sb.appendLine("================================================")
                     MessageLog.v(TAG, sb.toString())
                     return null
@@ -2145,12 +2337,11 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
         // ========================== END PRE-FLIGHT CHECK ==========================
 
-        data class Candidate(val point: Point, val race: RaceData, val detectedName: String, val isRival: Boolean)
-        // Cache: entry.index → list of (location-within-entry-bitmap, OCR'd race name) pairs.
-        // Eliminates the redundant double-star findAll the original implementation did inside
-        // onEntry on top of the keyExtractor's findAll. Halves the template-match work per
-        // scroll page.
-        data class StarMatch(val location: Point, val name: String)
+        data class Candidate(val point: Point, val race: RaceData, val detectedName: String, val isRival: Boolean, val tier: PredictionTier)
+        // Cache: entry.index → list of (location-within-entry-bitmap, OCR'd race name, tier) triples.
+        // Eliminates the redundant prediction findAll the original did inside onEntry on top of the
+        // keyExtractor's findAll, halving the template-match work per scroll page.
+        data class StarMatch(val location: Point, val name: String, val tier: PredictionTier)
 
         val allSuitableRaces = mutableListOf<Candidate>()
 
@@ -2164,11 +2355,11 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 // cap; it's a backstop against pathological lists.
                 maxTimeMs = 10000,
                 keyExtractor = { entry ->
-                    val locations = IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = entry.bitmap, region = intArrayOf(0, 0, 0, 0))
+                    val entryAnchors = findPredictionAnchors(includeSingles = allowSingles, sourceBitmap = entry.bitmap, region = intArrayOf(0, 0, 0, 0))
                     val matches =
-                        locations.map { loc ->
-                            val screenPoint = Point(entry.bbox.x + loc.x, entry.bbox.y + loc.y)
-                            StarMatch(loc, game.imageUtils.extractRaceName(screenPoint))
+                        entryAnchors.map { anchor ->
+                            val screenPoint = Point(entry.bbox.x + anchor.location.x, entry.bbox.y + anchor.location.y)
+                            StarMatch(anchor.location, game.imageUtils.extractRaceName(screenPoint), anchor.tier)
                         }
                     if (matches.isNotEmpty()) entryStarMatches[entry.index] = matches
                     if (matches.isEmpty()) null else matches.joinToString("|") { it.name }
@@ -2180,11 +2371,11 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 // subsequent pages still hit the cached fast path.
                 val matchesForEntry: List<StarMatch> =
                     entryStarMatches[entry.index] ?: run {
-                        val locations = IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = entry.bitmap, region = intArrayOf(0, 0, 0, 0))
+                        val entryAnchors = findPredictionAnchors(includeSingles = allowSingles, sourceBitmap = entry.bitmap, region = intArrayOf(0, 0, 0, 0))
                         val inlineMatches =
-                            locations.map { loc ->
-                                val screenPoint = Point(entry.bbox.x + loc.x, entry.bbox.y + loc.y)
-                                StarMatch(loc, game.imageUtils.extractRaceName(screenPoint))
+                            entryAnchors.map { anchor ->
+                                val screenPoint = Point(entry.bbox.x + anchor.location.x, entry.bbox.y + anchor.location.y)
+                                StarMatch(anchor.location, game.imageUtils.extractRaceName(screenPoint), anchor.tier)
                             }
                         if (inlineMatches.isNotEmpty()) entryStarMatches[entry.index] = inlineMatches
                         inlineMatches
@@ -2224,7 +2415,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         // Set Rival status on the race object.
                         race.isRival = rivalFound
 
-                        if (campaign.date.year == DateYear.JUNIOR) {
+                        if (bFanEmergencyActive || sm.tier == PredictionTier.SINGLE) {
+                            // Fan emergency admits any race regardless of grade — fans are the
+                            // point. Single-star matches only exist when the emergency (or force
+                            // racing) admitted them, and tier-aware sorting keeps them strictly
+                            // below every double-star candidate.
+                            isSuitable = true
+                        } else if (campaign.date.year == DateYear.JUNIOR) {
                             // Junior Year: G1, G2, or G3 with double predictions.
                             if (listOf(RaceGrade.G1, RaceGrade.G2, RaceGrade.G3).contains(race.grade)) {
                                 isSuitable = true
@@ -2246,8 +2443,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         }
 
                         if (isSuitable) {
-                            allSuitableRaces.add(Candidate(screenPoint, race, detectedName, rivalFound))
-                            sb.appendLine("\n- Found Suitable Race: \"${race.name}\" (${race.grade}) Rival: $rivalFound")
+                            allSuitableRaces.add(Candidate(screenPoint, race, detectedName, rivalFound, sm.tier))
+                            sb.appendLine("\n- Found Suitable Race: \"${race.name}\" (${race.grade}) Rival: $rivalFound Prediction: ${sm.tier}")
                         } else {
                             sb.appendLine("\n- Ignored Race: \"${race.name}\" (${race.grade}). Reason: ${reasons.joinToString(", ")}")
                         }
@@ -2257,9 +2454,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             }
         } else {
             MessageLog.w(TAG, "[WARN] findSuitableTrackblazerRace:: Failed to create ScrollList. Falling back to single-page detection.")
-            val doubleStarPredictions = IconRaceListPredictionDoubleStar.findAll(game.imageUtils)
             val sourceBitmap = game.imageUtils.getSourceBitmap()
-            for (location in doubleStarPredictions) {
+            val fallbackAnchors = findPredictionAnchors(includeSingles = allowSingles, sourceBitmap = sourceBitmap)
+            for (fallbackAnchor in fallbackAnchors) {
+                val location = fallbackAnchor.location
                 // Check for Rival status.
                 val rivalBitmap =
                     game.imageUtils.createSafeBitmap(
@@ -2292,7 +2490,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     // Set Rival status on the race object.
                     race.isRival = rivalFound
 
-                    if (campaign.date.year == DateYear.JUNIOR) {
+                    if (bFanEmergencyActive || fallbackAnchor.tier == PredictionTier.SINGLE) {
+                        // Same admission rule as the scroll-scan path above.
+                        isSuitable = true
+                    } else if (campaign.date.year == DateYear.JUNIOR) {
                         if (listOf(RaceGrade.G1, RaceGrade.G2, RaceGrade.G3).contains(race.grade)) {
                             isSuitable = true
                         } else {
@@ -2311,7 +2512,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     }
 
                     if (isSuitable) {
-                        allSuitableRaces.add(Candidate(location, race, detectedName, rivalFound))
+                        allSuitableRaces.add(Candidate(location, race, detectedName, rivalFound, fallbackAnchor.tier))
                     }
                 }
             }
@@ -2324,7 +2525,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return null
         }
 
-        // Prioritize Rival Races then Grade.
+        // Prioritize Rival Races, then prediction tier, then Grade, then fans.
         val gradePriority =
             mapOf(
                 RaceGrade.G1 to 1,
@@ -2334,10 +2535,16 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 RaceGrade.PRE_OP to 5,
             )
 
-        val sortedRaces = allSuitableRaces.sortedWith(compareByDescending<Candidate> { it.isRival }.thenBy { gradePriority[it.race.grade] ?: 99 })
+        val sortedRaces =
+            allSuitableRaces.sortedWith(
+                compareByDescending<Candidate> { it.isRival }
+                    .thenByDescending { it.tier }
+                    .thenBy { gradePriority[it.race.grade] ?: 99 }
+                    .thenByDescending { it.race.fans },
+            )
         val winner = sortedRaces.first()
 
-        sb.appendLine("\nSelected Race: ${winner.race.name} (${winner.race.grade}) Rival: ${winner.isRival}")
+        sb.appendLine("\nSelected Race: ${winner.race.name} (${winner.race.grade}) Rival: ${winner.isRival} Prediction: ${winner.tier}")
         sb.appendLine("================================================")
         MessageLog.v(TAG, sb.toString())
 
@@ -2346,9 +2553,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             MessageLog.i(TAG, "[RACE] Scrolling to selected race: \"${winner.race.name}\"...")
             var finalWinnerPoint: Point? = null
             scrollList.process { _, entry ->
-                val stars = IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = entry.bitmap, region = intArrayOf(0, 0, 0, 0))
-                for (starLoc in stars) {
-                    val screenPoint = Point(entry.bbox.x + starLoc.x, entry.bbox.y + starLoc.y)
+                val entryAnchors = findPredictionAnchors(includeSingles = allowSingles, sourceBitmap = entry.bitmap, region = intArrayOf(0, 0, 0, 0))
+                for (entryAnchor in entryAnchors) {
+                    val screenPoint = Point(entry.bbox.x + entryAnchor.location.x, entry.bbox.y + entryAnchor.location.y)
                     val name = game.imageUtils.extractRaceName(screenPoint)
                     val matches = lookupRaceInDatabase(campaign.date.day, name)
 
@@ -2555,9 +2762,11 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // strategy falls back to the blanket strategy for every mandatory race. Gated on
         // enablePerDistanceStrategy so users without it don't pay the OCR + DB lookup overhead.
         if (enablePerDistanceStrategy && lastRaceDistance == null) {
-            val predictionLocations = IconRaceListPredictionDoubleStar.findAll(game.imageUtils)
-            if (predictionLocations.isNotEmpty()) {
-                val raceName = game.imageUtils.extractRaceName(predictionLocations[0])
+            // Anchor on any prediction tier — a mandatory race can show a single-star prediction
+            // when the trainee is weak, and we are racing it regardless.
+            val predictionAnchors = findPredictionAnchors(includeSingles = true)
+            if (predictionAnchors.isNotEmpty()) {
+                val raceName = game.imageUtils.extractRaceName(predictionAnchors[0].location)
                 val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
                 if (raceDataList.isNotEmpty()) {
                     val raceData = raceDataList[0]
@@ -2568,7 +2777,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     MessageLog.i(TAG, "[RACE] Detected mandatory race \"${raceData.name}\" (Grade: ${raceData.grade}, Distance: ${raceData.trackDistance}).")
                 }
             } else {
-                MessageLog.i(TAG, "[RACE] No double-star prediction found on mandatory race screen. Per-distance strategy will fall back to blanket.")
+                MessageLog.i(TAG, "[RACE] No prediction icon found on mandatory race screen. Per-distance strategy will fall back to blanket.")
             }
         }
 
@@ -2702,6 +2911,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val startTime: Long = System.currentTimeMillis()
         val maxTimeMs: Long = 10000
 
+        // One-shot log guard for the single-star deferral below (the scan loop iterates pages).
+        var bSingleStarDeferralLogged = false
+
         while (System.currentTimeMillis() - startTime < maxTimeMs) {
             bitmap = game.imageUtils.getSourceBitmap()
             val scrollBarBitmap: Bitmap? =
@@ -2742,6 +2954,51 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     ignoreWaiting = true,
                 )
                 return true
+            }
+
+            // Goal-deadline fallback: with the next goal (typically Make Debut) due within the
+            // emergency window and no double-star maiden visible, take a single-star one instead
+            // of skipping the day. A weak trainee may never draw a double-star maiden prediction
+            // before the deadline, and a failed debut force-ends the career.
+            //
+            // Tiered, not unconditional: an unguarded fallback raced four single-star maidens
+            // back-to-back and lost them all while energy drained. A single-star prediction is the
+            // game forecasting a loss, and each loss keeps maiden status, re-arming the loop next
+            // turn. While there is slack, defer so the bot can rest/train — better stats flip the
+            // prediction to double-star. Race a single-star maiden only when the deadline forces it
+            // or energy gives it a chance: last turn = race regardless; 1-2 turns left = need 30%
+            // energy; otherwise 50%.
+            if (bGoalDeadlineNear) {
+                val bSingleStarJustified: Boolean =
+                    when {
+                        goalDeadlineTurnsRemaining <= 0 -> true
+                        goalDeadlineTurnsRemaining <= 2 -> campaign.trainee.energy >= 30
+                        else -> campaign.trainee.energy >= 50
+                    }
+                if (bSingleStarJustified) {
+                    val singleLocations: ArrayList<Point> =
+                        IconRaceListPredictionSingleStar.findAll(
+                            game.imageUtils,
+                            region = bboxRaceListDoubleStars.toIntArray(),
+                            confidence = 0.0,
+                        )
+                    if (!singleLocations.isEmpty()) {
+                        MessageLog.i(TAG, "[RACE] Goal deadline near and no double-star maiden found. Selecting a single-star maiden race.")
+                        game.tap(
+                            singleLocations.first().x,
+                            singleLocations.first().y,
+                            IconRaceListPredictionSingleStar.template.path,
+                            ignoreWaiting = true,
+                        )
+                        return true
+                    }
+                } else if (!bSingleStarDeferralLogged) {
+                    bSingleStarDeferralLogged = true
+                    MessageLog.w(
+                        TAG,
+                        "[RACE] Only single-star maidens available at ${campaign.trainee.energy}% energy with $goalDeadlineTurnsRemaining turn(s) of slack. Deferring to rest/train so the prediction can improve.",
+                    )
+                }
             }
 
             // Longer swipe duration prevents overscrolling. Swipe up ~one entry (each is ~200px tall
@@ -2987,9 +3244,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
             // For scheduled races, we still want to detect the grade to determine when to check the Shop during Trackblazer.
             if (game.scenario == "Trackblazer") {
-                val doublePredictionLocations = IconRaceListPredictionDoubleStar.findAll(game.imageUtils)
-                if (doublePredictionLocations.isNotEmpty()) {
-                    val raceName = game.imageUtils.extractRaceName(doublePredictionLocations[0])
+                val predictionAnchors = findPredictionAnchors(includeSingles = true)
+                if (predictionAnchors.isNotEmpty()) {
+                    val raceName = game.imageUtils.extractRaceName(predictionAnchors[0].location)
                     val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
                     if (raceDataList.isNotEmpty()) {
                         lastRaceGrade = raceDataList[0].grade
@@ -3048,23 +3305,42 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Update the current date and aptitudes for accurate scoring.
         campaign.updateDate()
 
-        // Detect all double-star race predictions on screen.
-        val doublePredictionLocations = IconRaceListPredictionDoubleStar.findAll(game.imageUtils)
-        MessageLog.i(TAG, "[RACE] Found ${doublePredictionLocations.size} double-star prediction locations.")
-        if (doublePredictionLocations.isEmpty()) {
-            MessageLog.i(TAG, "[RACE] No double-star predictions found. Canceling racing process.")
+        // Detect all race predictions on screen. Singles participate as a scoring input only —
+        // without any double-star entry (or force racing), smart racing still skips the day, so
+        // singles cannot create a race day that the old double-only logic would have trained through.
+        val anchors = findPredictionAnchors(includeSingles = true)
+        MessageLog.i(
+            TAG,
+            "[RACE] Found ${anchors.count { it.tier == PredictionTier.DOUBLE }} double-star and ${anchors.count { it.tier == PredictionTier.SINGLE }} single-star prediction locations.",
+        )
+        if (anchors.isEmpty()) {
+            MessageLog.i(TAG, "[RACE] No predictions found. Canceling racing process.")
             return false
         }
+        if (anchors.none { it.tier == PredictionTier.DOUBLE } && !enableForceRacing) {
+            MessageLog.i(TAG, "[RACE] Only single-star predictions on screen. Skipping racing in smart mode.")
+            return false
+        }
+        val predictionPoints = ArrayList(anchors.map { it.location })
 
         // Extract race names from the screen and match them with the in-game database.
+        // Track the best prediction tier seen per race name so scoring can penalize single-star entries.
         MessageLog.i(TAG, "[RACE] Extracting race names and matching with database...")
+        val tierByName = mutableMapOf<String, PredictionTier>()
         val currentRaces =
-            doublePredictionLocations.flatMap { location ->
-                val raceName = game.imageUtils.extractRaceName(location)
+            anchors.flatMap { anchor ->
+                val raceName = game.imageUtils.extractRaceName(anchor.location)
                 val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
                 if (raceDataList.isNotEmpty()) {
                     raceDataList.forEach { raceData ->
-                        MessageLog.i(TAG, "[RACE] ✓ Matched in database: ${raceData.name} (Grade: ${raceData.grade}, Fans: ${raceData.fans}, Track Surface: ${raceData.trackSurface}).")
+                        val previousTier = tierByName[raceData.name]
+                        if (previousTier == null || anchor.tier > previousTier) {
+                            tierByName[raceData.name] = anchor.tier
+                        }
+                        MessageLog.i(
+                            TAG,
+                            "[RACE] ✓ Matched in database: ${raceData.name} (Grade: ${raceData.grade}, Fans: ${raceData.fans}, Track Surface: ${raceData.trackSurface}, Prediction: ${anchor.tier}).",
+                        )
                     }
                     raceDataList
                 } else {
@@ -3087,21 +3363,21 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             // Search for the mandatory extra race with scroll retry logic.
             // Some devices show fewer races due to shorter screen heights, so scroll down up to 2 times to check.
             val maxScrollAttempts = 2
-            var currentDoublePredictions = doublePredictionLocations
+            var currentPredictions = predictionPoints
 
             for (scrollAttempt in 0..maxScrollAttempts) {
                 // Find the mandatory extra race on screen.
-                val mandatoryExtraRaceLocation = findRaceLocationByName(currentDoublePredictions, mandatoryExtraRaceData.name)
+                val mandatoryExtraRaceLocation = findRaceLocationByName(currentPredictions, mandatoryExtraRaceData.name)
 
                 if (mandatoryExtraRaceLocation != null) {
                     // If multiple fan variants exist in the database, scroll to try to find the higher-fan version.
                     if (hasMultipleFanVariants && scrollAttempt == 0) {
                         MessageLog.i(TAG, "[RACE] Found a match but database shows multiple fan variants. Scrolling to check for higher-fan version...")
 
-                        val newPredictions = scrollRaceListAndRedetect(scrollDown = true)
+                        val newPredictions = scrollRaceListAndRedetect(scrollDown = true, includeSingles = true)
                         if (newPredictions != null) {
-                            currentDoublePredictions = newPredictions
-                            val higherFanLocation = findRaceLocationByName(currentDoublePredictions, mandatoryExtraRaceData.name)
+                            currentPredictions = newPredictions
+                            val higherFanLocation = findRaceLocationByName(currentPredictions, mandatoryExtraRaceData.name)
 
                             if (higherFanLocation != null) {
                                 MessageLog.i(TAG, "[RACE] ✓ Found higher-fan variant after scrolling. Selecting it.")
@@ -3110,10 +3386,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                             } else {
                                 // Not found after scroll, scroll back up and use the first found location.
                                 MessageLog.i(TAG, "[RACE] Higher-fan variant not found after scrolling. Scrolling back up...")
-                                val restoredPredictions = scrollRaceListAndRedetect(scrollDown = false)
+                                val restoredPredictions = scrollRaceListAndRedetect(scrollDown = false, includeSingles = true)
                                 if (restoredPredictions != null) {
-                                    currentDoublePredictions = restoredPredictions
-                                    val relocatedLocation = findRaceLocationByName(currentDoublePredictions, mandatoryExtraRaceData.name)
+                                    currentPredictions = restoredPredictions
+                                    val relocatedLocation = findRaceLocationByName(currentPredictions, mandatoryExtraRaceData.name)
                                     val finalLocation = relocatedLocation ?: mandatoryExtraRaceLocation
                                     MessageLog.i(TAG, "[RACE] Mandatory extra race \"${mandatoryExtraRaceData.name}\" found. Selecting it.")
                                     game.tap(finalLocation.x, finalLocation.y, IconRaceListPredictionDoubleStar.template.path, ignoreWaiting = true)
@@ -3139,15 +3415,15 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 if (scrollAttempt < maxScrollAttempts) {
                     MessageLog.i(TAG, "[RACE] Mandatory extra race \"${mandatoryExtraRaceData.name}\" not found on current screen. Scrolling down (attempt ${scrollAttempt + 1}/$maxScrollAttempts)...")
 
-                    val newPredictions = scrollRaceListAndRedetect(scrollDown = true)
+                    val newPredictions = scrollRaceListAndRedetect(scrollDown = true, includeSingles = true)
                     if (newPredictions == null) {
                         MessageLog.i(TAG, "[RACE] Stopping scroll attempts due to scroll failure.")
                         break
                     }
 
-                    currentDoublePredictions = newPredictions
-                    MessageLog.i(TAG, "[RACE] After scrolling, found ${currentDoublePredictions.size} double-star prediction locations.")
-                    if (currentDoublePredictions.isEmpty()) {
+                    currentPredictions = newPredictions
+                    MessageLog.i(TAG, "[RACE] After scrolling, found ${currentPredictions.size} double-star prediction locations.")
+                    if (currentPredictions.isEmpty()) {
                         MessageLog.i(TAG, "[RACE] No double-star predictions found after scrolling. Stopping scroll attempts.")
                         break
                     }
@@ -3248,17 +3524,25 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 filteredRegularRaces
             }
 
-        // Score all eligible races with bonus for planned races.
+        // Score all eligible races with a tier penalty for single-star entries and a bonus for planned races.
         val scoredRaces =
             racesToScore.map { race ->
-                val baseScore = scoreRace(race)
+                var scored = scoreRace(race)
+                if (tierByName[race.name] == PredictionTier.SINGLE) {
+                    val penalized = scored.copy(score = scored.score * SINGLE_STAR_SCORE_MULTIPLIER)
+                    MessageLog.i(
+                        TAG,
+                        "[RACE] Single-star prediction penalty for \"${race.name}\": ${game.decimalFormat.format(scored.score)} -> ${game.decimalFormat.format(penalized.score)}.",
+                    )
+                    scored = penalized
+                }
                 if (plannedRaces.contains(race)) {
                     // Add a bonus for planned races.
-                    val bonusScore = baseScore.copy(score = baseScore.score + 50.0)
-                    MessageLog.i(TAG, "[RACE] Planned race \"${race.name}\" gets a bonus: ${game.decimalFormat.format(baseScore.score)} -> ${game.decimalFormat.format(bonusScore.score)}.")
+                    val bonusScore = scored.copy(score = scored.score + 50.0)
+                    MessageLog.i(TAG, "[RACE] Planned race \"${race.name}\" gets a bonus: ${game.decimalFormat.format(scored.score)} -> ${game.decimalFormat.format(bonusScore.score)}.")
                     bonusScore
                 } else {
-                    baseScore
+                    scored
                 }
             }
 
@@ -3281,8 +3565,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         // Locates the best race on screen and selects it.
         MessageLog.v(TAG, "[RACE] Looking for target race \"${bestRace.raceData.name}\" on screen...")
-        var currentDoublePredictions = doublePredictionLocations
-        var targetRaceLocation = findRaceLocationByName(currentDoublePredictions, bestRace.raceData.name, logMatch = true)
+        var currentPredictions = predictionPoints
+        var targetRaceLocation = findRaceLocationByName(currentPredictions, bestRace.raceData.name, logMatch = true)
 
         // If multiple fan variants exist, and we found one, try scrolling to find the higher-fan version.
         if (hasMultipleFanVariants && targetRaceLocation != null) {
@@ -3291,10 +3575,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
             // Scroll down to look for the higher-fan variant.
             MessageLog.i(TAG, "[RACE] Scrolling down to check for higher-fan variant...")
-            val newPredictions = scrollRaceListAndRedetect(scrollDown = true)
+            val newPredictions = scrollRaceListAndRedetect(scrollDown = true, includeSingles = true)
             if (newPredictions != null) {
-                currentDoublePredictions = newPredictions
-                val newTargetLocation = findRaceLocationByName(currentDoublePredictions, bestRace.raceData.name)
+                currentPredictions = newPredictions
+                val newTargetLocation = findRaceLocationByName(currentPredictions, bestRace.raceData.name)
 
                 if (newTargetLocation != null) {
                     MessageLog.i(TAG, "[RACE] ✓ Found higher-fan variant at location (${newTargetLocation.x}, ${newTargetLocation.y}) after scrolling.")
@@ -3302,10 +3586,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 } else {
                     // Not found after scroll, scroll back up and use the first found location.
                     MessageLog.i(TAG, "[RACE] Higher-fan variant not found after scrolling. Scrolling back up...")
-                    val restoredPredictions = scrollRaceListAndRedetect(scrollDown = false)
+                    val restoredPredictions = scrollRaceListAndRedetect(scrollDown = false, includeSingles = true)
                     if (restoredPredictions != null) {
-                        currentDoublePredictions = restoredPredictions
-                        targetRaceLocation = findRaceLocationByName(currentDoublePredictions, bestRace.raceData.name)
+                        currentPredictions = restoredPredictions
+                        targetRaceLocation = findRaceLocationByName(currentPredictions, bestRace.raceData.name)
 
                         if (targetRaceLocation == null) {
                             MessageLog.i(TAG, "[RACE] Could not re-locate target race after scrolling back. Using last known position.")
@@ -3326,8 +3610,14 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return false
         }
 
+        val winnerTemplatePath =
+            if (tierByName[bestRace.raceData.name] == PredictionTier.SINGLE) {
+                IconRaceListPredictionSingleStar.template.path
+            } else {
+                IconRaceListPredictionDoubleStar.template.path
+            }
         MessageLog.v(TAG, "[RACE] Selecting smart racing choice: ${bestRace.raceData.name} (score: ${game.decimalFormat.format(bestRace.score)}).")
-        game.tap(targetRaceLocation.x, targetRaceLocation.y, IconRaceListPredictionDoubleStar.template.path, ignoreWaiting = true)
+        game.tap(targetRaceLocation.x, targetRaceLocation.y, winnerTemplatePath, ignoreWaiting = true)
         lastRaceGrade = bestRace.raceData.grade
         lastRaceFans = bestRace.raceData.fans
         lastRaceDistance = bestRace.raceData.trackDistance
@@ -3344,51 +3634,73 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     private fun processStandardRacing(): Boolean {
         MessageLog.v(TAG, "[RACE] Using traditional racing logic for extra races...")
 
-        // Detect double-star races on screen.
-        var doublePredictionLocations = IconRaceListPredictionDoubleStar.findAll(game.imageUtils)
+        // Fan-emergency (or force racing) admits single-star prediction races. Outside of that,
+        // singles are detected for logging only and the old double-star-only entry gate stands.
+        val allowSingles = bFanEmergencyActive || enableForceRacing
 
-        // If no double predictions found and fans/Pre-OP/G3/GoalPts requirement is active and is after Junior Year, scroll to find them.
-        if (doublePredictionLocations.isEmpty() &&
-            campaign.date.year != DateYear.JUNIOR &&
+        // Detect prediction anchors on screen, deduplicated by row.
+        var anchors = findPredictionAnchors(includeSingles = true)
+
+        /** Entries the bot may actually enter under the current policy. */
+        fun enterable(list: List<PredictionAnchor>) = list.filter { allowSingles || it.tier == PredictionTier.DOUBLE }
+
+        // If no enterable race was found and a fans/Pre-OP/G3/GoalPts requirement is active, scroll to
+        // find more. Originally this never ran in Junior year; the fan emergency extends it there
+        // because the Junior fan checkpoint is exactly when weak trainees need below-the-fold races.
+        if (enterable(anchors).isEmpty() &&
+            (campaign.date.year != DateYear.JUNIOR || bFanEmergencyActive) &&
             (hasFanRequirement || hasPreOpOrAboveRequirement || hasG3OrAboveRequirement || hasInsufficientGoalRacePtsRequirement)
         ) {
             val maxScrollAttempts = 5
-            MessageLog.i(TAG, "[RACE] No double-star predictions found on initial screen. Scrolling to find races to satisfy requirements...")
+            MessageLog.i(TAG, "[RACE] No enterable predictions found on initial screen. Scrolling to find races to satisfy requirements...")
 
             for (scrollAttempt in 1..maxScrollAttempts) {
                 MessageLog.i(TAG, "[RACE] Scrolling down (attempt $scrollAttempt/$maxScrollAttempts)...")
-                val newPredictions = scrollRaceListAndRedetect(scrollDown = true)
+                val newAnchors = scrollRaceListAndRedetectAnchors(scrollDown = true, includeSingles = true)
 
-                if (newPredictions == null) {
+                if (newAnchors == null) {
                     MessageLog.i(TAG, "[RACE] Scroll failed. Stopping scroll attempts.")
                     break
                 }
 
-                doublePredictionLocations = newPredictions
-                if (doublePredictionLocations.isNotEmpty()) {
-                    MessageLog.i(TAG, "[RACE] Found ${doublePredictionLocations.size} double-star prediction(s) after $scrollAttempt scroll(s).")
+                anchors = newAnchors
+                if (enterable(anchors).isNotEmpty()) {
+                    MessageLog.i(TAG, "[RACE] Found ${enterable(anchors).size} enterable prediction(s) after $scrollAttempt scroll(s).")
                     break
                 }
             }
         }
 
-        val maxCount = doublePredictionLocations.size
-        if (maxCount == 0) {
-            MessageLog.w(TAG, "[WARN] processStandardRacing:: No extra races with double predictions found on screen. Canceling racing process.")
-            return false
+        val usableAnchors = enterable(anchors)
+        val skippedSingles = anchors.size - usableAnchors.size
+        if (skippedSingles > 0) {
+            MessageLog.i(TAG, "[RACE] $skippedSingles single-star race(s) visible but not enterable (no fan emergency or force racing active).")
         }
 
-        // If only one race has double predictions, check if it's G1 when trophy requirement is active.
+        val maxCount = usableAnchors.size
+        if (maxCount == 0) {
+            MessageLog.w(TAG, "[WARN] processStandardRacing:: No enterable extra races found on screen. Canceling racing process.")
+            return false
+        }
+        if (allowSingles && usableAnchors.none { it.tier == PredictionTier.DOUBLE }) {
+            MessageLog.i(TAG, "[RACE] Fan emergency/force racing: proceeding with single-star prediction races only.")
+        }
+
+        val onlyAnchor = usableAnchors[0]
+        val onlyAnchorTemplatePath =
+            if (onlyAnchor.tier == PredictionTier.SINGLE) IconRaceListPredictionSingleStar.template.path else IconRaceListPredictionDoubleStar.template.path
+
+        // If only one race is enterable, check if it's G1 when trophy requirement is active.
         // If Pre-OP or G3 criteria is active, any race is acceptable.
         if (maxCount == 1) {
             if (hasTrophyRequirement && !hasPreOpOrAboveRequirement && !hasG3OrAboveRequirement) {
                 campaign.updateDate(isOnMainScreen = false)
-                val raceName = game.imageUtils.extractRaceName(doublePredictionLocations[0])
+                val raceName = game.imageUtils.extractRaceName(onlyAnchor.location)
                 val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
                 // Check if any matched race is G1.
                 if (raceDataList.any { it.grade == RaceGrade.G1 }) {
-                    MessageLog.i(TAG, "[RACE] Only one race with double predictions and it's G1. Selecting it.")
-                    game.tap(doublePredictionLocations[0].x, doublePredictionLocations[0].y, IconRaceListPredictionDoubleStar.template.path, ignoreWaiting = true)
+                    MessageLog.i(TAG, "[RACE] Only one enterable race (${onlyAnchor.tier}) and it's G1. Selecting it.")
+                    game.tap(onlyAnchor.location.x, onlyAnchor.location.y, onlyAnchorTemplatePath, ignoreWaiting = true)
                     return true
                 } else {
                     // Not G1. Trophy requirement specifically needs G1 races, so cancel.
@@ -3397,45 +3709,45 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 }
             } else if (hasTrophyRequirement && (hasPreOpOrAboveRequirement || hasG3OrAboveRequirement)) {
                 if (hasPreOpOrAboveRequirement) {
-                    MessageLog.i(TAG, "[RACE] Only one race with double predictions and Pre-OP or above criteria active. Selecting it.")
+                    MessageLog.i(TAG, "[RACE] Only one enterable race (${onlyAnchor.tier}) and Pre-OP or above criteria active. Selecting it.")
                 } else {
-                    MessageLog.i(TAG, "[RACE] Only one race with double predictions and G3 or above criteria active. Selecting it.")
+                    MessageLog.i(TAG, "[RACE] Only one enterable race (${onlyAnchor.tier}) and G3 or above criteria active. Selecting it.")
                 }
-                game.tap(doublePredictionLocations[0].x, doublePredictionLocations[0].y, IconRaceListPredictionDoubleStar.template.path, ignoreWaiting = true)
+                game.tap(onlyAnchor.location.x, onlyAnchor.location.y, onlyAnchorTemplatePath, ignoreWaiting = true)
                 return true
             } else {
-                MessageLog.i(TAG, "[RACE] Only one race with double predictions. Selecting it.")
-                game.tap(doublePredictionLocations[0].x, doublePredictionLocations[0].y, IconRaceListPredictionDoubleStar.template.path, ignoreWaiting = true)
+                MessageLog.i(TAG, "[RACE] Only one enterable race (${onlyAnchor.tier}). Selecting it.")
+                game.tap(onlyAnchor.location.x, onlyAnchor.location.y, onlyAnchorTemplatePath, ignoreWaiting = true)
                 return true
             }
         }
 
-        // Otherwise, iterate through each extra race to determine fan gain and double prediction status.
+        // Otherwise, iterate through each enterable race to determine fan gain and prediction tier.
+        // The original walk tapped "one row below the selection bracket" maxCount times, assuming
+        // every visible row was an enterable double-star one. That breaks with mixed single/double
+        // tiers on screen, so select each anchor row directly instead.
         val sourceBitmap: Bitmap = game.imageUtils.getSourceBitmap()
         val listOfRaces = ArrayList<RaceDetails>()
         val extraRaceLocations = ArrayList<Point>()
         val raceNamesList = ArrayList<String>()
 
-        for (count in 0 until maxCount) {
+        for (anchor in usableAnchors) {
+            val anchorTemplatePath =
+                if (anchor.tier == PredictionTier.SINGLE) IconRaceListPredictionSingleStar.template.path else IconRaceListPredictionDoubleStar.template.path
+            game.tap(anchor.location.x, anchor.location.y, anchorTemplatePath, ignoreWaiting = true)
+            game.wait(0.5)
+
             val selectedExtraRace = IconRaceListSelectionBracketBottomRight.find(game.imageUtils).first ?: break
             extraRaceLocations.add(selectedExtraRace)
 
             // Extract race name for G1 filtering if trophy requirement is active.
-            if (hasTrophyRequirement && count < doublePredictionLocations.size) {
-                val raceName = game.imageUtils.extractRaceName(doublePredictionLocations[count])
+            if (hasTrophyRequirement) {
+                val raceName = game.imageUtils.extractRaceName(anchor.location)
                 raceNamesList.add(raceName)
             }
 
             val raceDetails = game.imageUtils.determineExtraRaceFans(selectedExtraRace, sourceBitmap, forceRacing = enableForceRacing)
             listOfRaces.add(raceDetails)
-
-            if (count + 1 < maxCount) {
-                val nextX = game.imageUtils.relX(selectedExtraRace.x, -100)
-                val nextY = game.imageUtils.relY(selectedExtraRace.y, 150)
-                game.tap(nextX.toDouble(), nextY.toDouble(), IconRaceListSelectionBracketBottomRight.template.path, ignoreWaiting = true)
-            }
-
-            game.wait(0.5)
         }
 
         // If trophy requirement is active, filter to only G1 races.
@@ -3478,33 +3790,21 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             Log.w(TAG, "[RACE] Failed to determine max fans. Aborting racing...")
             return false
         }
-        MessageLog.v(TAG, "[RACE] Number of fans detected for each extra race are: ${filteredRaces.joinToString(", ") { it.fans.toString() }}")
+        MessageLog.v(
+            TAG,
+            "[RACE] Detected extra races (fans/tier): ${filteredRaces.joinToString(", ") { "${it.fans}/${it.predictionTier}" }}",
+        )
 
-        // Evaluate which race to select based on Rival priority, maximum fans and double prediction priority.
+        // Evaluate which race to select based on Rival priority, then prediction tier, then fans.
+        // Tier outranks raw fans: a weak predicted placement scales the realized fan payout down
+        // more than a smaller race's lower base, so a double-star race beats a bigger single-star one.
         val index =
             if (filteredRaces.any { it.isRival }) {
                 MessageLog.v(TAG, "[RACE] Rival Race(s) detected. Prioritizing Rival Races.")
-                val rivalRaces = filteredRaces.filter { it.isRival }
-
-                if (enableForceRacing) {
-                    val rivalsWithDouble = rivalRaces.filter { it.hasDoublePredictions }
-                    if (rivalsWithDouble.isNotEmpty()) {
-                        val maxFansDouble = rivalsWithDouble.maxOf { it.fans }
-                        filteredRaces.indexOfFirst { it.isRival && it.hasDoublePredictions && it.fans == maxFansDouble }
-                    } else {
-                        val maxRivalFans = rivalRaces.maxOf { it.fans }
-                        filteredRaces.indexOfFirst { it.isRival && it.fans == maxRivalFans }
-                    }
-                } else {
-                    val maxRivalFans = rivalRaces.maxOf { it.fans }
-                    filteredRaces.indexOfFirst { it.isRival && it.fans == maxRivalFans }
-                }
+                val rivalIndices = filteredRaces.indices.filter { filteredRaces[it].isRival }
+                rivalIndices[indexOfBestByTierThenFans(rivalIndices.map { filteredRaces[it] })]
             } else {
-                if (!enableForceRacing && !hasInsufficientGoalRacePtsRequirement) {
-                    filteredRaces.indexOfFirst { it.fans == maxFans }
-                } else {
-                    filteredRaces.indexOfFirst { it.hasDoublePredictions }.takeIf { it != -1 } ?: filteredRaces.indexOfFirst { it.fans == maxFans }
-                }
+                indexOfBestByTierThenFans(filteredRaces)
             }
 
         // Determine the grade of the selected race and store it for retry purposes.
