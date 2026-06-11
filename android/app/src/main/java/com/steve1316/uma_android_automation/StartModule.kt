@@ -35,6 +35,7 @@ import kotlinx.coroutines.runBlocking
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.SubscriberExceptionEvent
+import android.database.DatabaseErrorHandler
 import android.database.sqlite.SQLiteDatabase
 import org.json.JSONObject
 import java.io.File
@@ -233,6 +234,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 }
             }
 
+            // Validate the database and maintain the backup BEFORE anything opens it with
+            // Android's default error handler, which deletes the file outright on corruption.
+            safeguardSettingsDatabase()
+
             // Initialize the SettingsHelper's connection to the SQLite database.
             // This is required to correctly fetch the flag for enabling the Remote Log Viewer.
             if (!SettingsHelper.isAvailable()) {
@@ -248,6 +253,77 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             }
 
             startProjection()
+        }
+    }
+
+    /**
+     * Backup/restore guard for the settings database, run on every Start press before the
+     * automation library opens it.
+     *
+     * Android's DefaultDatabaseErrorHandler reacts to corruption by deleting the database
+     * file outright (an install force-killing the app mid-write can corrupt it, losing every
+     * setting and seed table). This guard validates the file with a no-op error handler so the
+     * probe itself cannot trigger a wipe, restores the last known-good backup when validation
+     * fails, and refreshes the backup after every successful validation. WAL mode (set on the
+     * React Native side) prevents the corruption; this recovers from whatever slips through anyway.
+     */
+    private fun safeguardSettingsDatabase() {
+        val dbFile = File(context.filesDir, "SQLite/settings.db")
+        val backupFile = File(context.filesDir, "SQLite/settings.db.bak")
+        if (!dbFile.exists()) {
+            Log.d(TAG, "Settings database does not exist yet. Nothing to safeguard.")
+            return
+        }
+
+        // A no-op handler: corruption is reported by the validation below, never acted on here.
+        val noopErrorHandler = DatabaseErrorHandler { Log.e(TAG, "Settings database reported corruption during validation.") }
+
+        fun validate(): Boolean =
+            try {
+                SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE, noopErrorHandler).use { db ->
+                    val bIntact: Boolean =
+                        db.rawQuery("PRAGMA integrity_check(1)", null).use { c -> c.moveToFirst() && c.getString(0).equals("ok", ignoreCase = true) }
+                    // A wipe can leave a recreated settings table with the seed tables missing,
+                    // so an intact file is not enough - the data has to be there too.
+                    val bSeeded: Boolean =
+                        bIntact &&
+                            db.rawQuery("SELECT COUNT(*) FROM settings", null).use { c -> c.moveToFirst() && c.getInt(0) > 0 } &&
+                            db.rawQuery("SELECT COUNT(*) FROM skills", null).use { c -> c.moveToFirst() && c.getInt(0) > 0 }
+                    bSeeded
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Settings database failed validation: ${e.message}")
+                false
+            }
+
+        if (validate()) {
+            try {
+                // Checkpoint the WAL so the main file is self-contained before copying it.
+                SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE, noopErrorHandler).use { db ->
+                    db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { c -> c.moveToFirst() }
+                }
+                dbFile.copyTo(backupFile, overwrite = true)
+                Log.d(TAG, "Settings database validated. Backup refreshed (${backupFile.length()} bytes).")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to refresh the settings database backup: ${e.message}")
+            }
+            return
+        }
+
+        if (backupFile.exists()) {
+            Log.e(TAG, "Settings database is unhealthy. Restoring the last known-good backup (${backupFile.length()} bytes)...")
+            try {
+                // Drop journal leftovers so the restored main file is authoritative.
+                File(dbFile.absolutePath + "-wal").delete()
+                File(dbFile.absolutePath + "-shm").delete()
+                File(dbFile.absolutePath + "-journal").delete()
+                backupFile.copyTo(dbFile, overwrite = true)
+                Log.d(TAG, "Settings database restored from backup. Healthy: ${validate()}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to restore the settings database backup: ${e.message}")
+            }
+        } else {
+            Log.e(TAG, "Settings database is unhealthy and no backup exists yet. Reopen the app so it reseeds before starting the bot.")
         }
     }
 

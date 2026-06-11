@@ -206,6 +206,12 @@ export class DatabaseManager {
                 throw new Error("Database object is null after opening")
             }
 
+            // WAL mode: a force-killed process mid-write corrupted the rollback-journal DB and
+            // Android's default error handler wiped it. journal_mode persists in the DB header,
+            // so the read-mostly Kotlin side (via the automation library) inherits it unchanged.
+            await this.db.execAsync("PRAGMA journal_mode = WAL;")
+            logWithTimestamp("Database journal mode set to WAL.")
+
             // Create settings table.
             logWithTimestamp("Creating settings table...")
             await this.db.execAsync(`
