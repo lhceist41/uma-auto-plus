@@ -175,6 +175,16 @@
         ],
         "(❯❯❯)\nSomeday, I'll Be Your Rival!": [
             "Randomly either\n----------\nMaximum Energy +4\nEnergy -5\nStamina +15\nPower +20\nRising Dragon hint +3\nBamboo Memory bond +5\n----------\n\n----------\nEnergy -15\nStamina +10\nPower +15\nOuter Swell hint +3\nBamboo Memory bond +5"
+        ],
+        "(❯)\nThe Ultimate Omlet Training Arc": [
+            "Mood +1\nEnergy -5\nGuts +15\nPosition Pilfer hint +1\nBamboo Memory bond +1",
+            "Skill points +30\nBamboo Memory bond +5\nEvent chain ended"
+        ],
+        "(❯❯)\nSweat, Discipline, and Friendship!": [
+            "Energy -10\nPower +15\nGuts +15\nBamboo Memory bond +5"
+        ],
+        "(❯❯❯)\nMiracle Makers! The Red-Hot Cheer Squad!": [
+            "Randomly either\n----------\nEnergy -10\nStamina +20\nGuts +20\nFull of Vigor hint +3\nBamboo Memory bond +5\n----------\n\n----------\nEnergy -10\nStamina +15\nGuts +15\nPumped hint +1\nBamboo Memory bond +5"
         ]
     },
     "Biko Pegasus": {
@@ -468,6 +478,16 @@
         ],
         "(❯❯❯)\nTrying Hard with Everyone's Support!": [
             "Energy +15\nHaru Urara bond +5\nUnruffled hint +1"
+        ],
+        "(❯)\nA Wonderful Wedding?": [
+            "Randomly either\n----------\nEnergy +15\nGet Charming ○ status\nHaru Urara bond +5\n----------\n\n----------\nEnergy +15\nHaru Urara bond +5"
+        ],
+        "(❯❯)\nThe Theme's Decided!": [
+            "Energy +25\nHaru Urara bond +5",
+            "Mood +2\nHeal a negative status effect\nHaru Urara bond +5"
+        ],
+        "(❯❯❯)\nThe Gift of Excitement": [
+            "Energy +50\nHard Worker hint +1\nHaru Urara bond +5"
         ]
     },
     "Hishi Akebono": {
@@ -531,6 +551,16 @@
         "(❯❯)\nIkuno-Style Support": [
             "Wit +15\nFrenzied Front Runners hint +3\nIkuno Dictus bond +5",
             "Wit +15\nFrenzied End Closers hint +3\nIkuno Dictus bond +5"
+        ],
+        "(❯)\nIkuno-style Cuteness Research": [
+            "Maximum Energy +4\nStamina +15\nWit +5\nIkuno Dictus bond +5"
+        ],
+        "(❯❯)\nGlasses-style Umadol Song ☆": [
+            "Energy +15\nIkuno Dictus bond +10",
+            "Get Practice Perfect ○ status\nIkuno Dictus bond +10"
+        ],
+        "(❯❯❯)\nIkuno-style Socializing": [
+            "Randomly either\n----------\nEnergy +15\nStamina +15\nGuts +8\nWit +8\nKeep Going! hint +3\nIkuno Dictus bond +5\n----------\n\n----------\nEnergy +10\nStamina +8\nGuts +5\nWit +5\nFull Throttle hint +3\nIkuno Dictus bond +5"
         ]
     },
     "Inari One": {
@@ -596,6 +626,15 @@
         "(❯❯❯)\nHit It! Princess Road!": [
             "Speed +15\nGuts +15\nCenter Stage hint +1\nKawakami Princess bond +5",
             "Energy +25\nSkill points +25"
+        ],
+        "(❯)\nOH! MY! Ghost Hunt!": [
+            "Energy -5\nPower +10\nKawakami Princess bond +5"
+        ],
+        "(❯❯)\nAllies Assemble! A Princess Must Be Regal!": [
+            "Energy -10\nPower +20\nKawakami Princess bond +5"
+        ],
+        "(❯❯❯)\nTogether as One! Grand Ghost Hunting Finale!": [
+            "Energy -15\nPower +30\nUnyielding hint +1\nKawakami Princess bond +5"
         ]
     },
     "King Halo": {
@@ -983,6 +1022,26 @@
             "Energy -10\nPower +5\nGuts +5\nFront Runner Straightaways ○ hint +1\nMihono Bourbon bond +5"
         ]
     },
+    "Mr. C.B.": {
+        "The Paths that Beckon": [
+            "Energy +10\nSkill points +10\nMr. C.B. bond +5",
+            "Power +20\nMr. C.B. bond +5"
+        ],
+        "Even if I Ruffle Feathers": [
+            "Wit +15\nMr. C.B. bond +5",
+            "Early Start hint +1\nMr. C.B. bond +5"
+        ],
+        "(❯)\nParty Ditcher": [
+            "Wit +10\nSkill points +10\nMr. C.B. bond +5"
+        ],
+        "(❯❯)\nThinking Freely": [
+            "Randomly either\n----------\nEnergy +20\nCorner Recovery ○ hint +2\nMr. C.B. bond +10\n----------\n\n----------\nEnergy +15\nMr. C.B. bond +5",
+            "Power +10\nIntense Gaze hint +1\nMr. C.B. bond +5"
+        ],
+        "(❯❯❯)\nOverwhelming Freedom": [
+            "Power +10\nWit +20\nDaring Strike hint +1\nMr. C.B. bond +5"
+        ]
+    },
     "Nakayama Festa": {
         "Sundown Showdown": [
             "Energy +15\nNakayama Festa bond +5",
@@ -1168,6 +1227,13 @@
         "Conquering the Crowds": [
             "Power +5\nSkill points +15\nOguri Cap bond +5",
             "Nakayama Racecourse ○ hint +1\nOguri Cap bond +5"
+        ],
+        "(❯)\n\"I Just Can't Quit Food\" —Oguri Cap": [
+            "Oguri Cap bond +15",
+            "(random) Energy -10\nGuts +15\nOguri Cap bond +5"
+        ],
+        "(❯❯)\n\"Happiness? Don't Mind If I Do\" —Oguri Cap": [
+            "Power +7\nGuts +7\nSkill points +10\nWet Conditions ○ hint +1\nOguri Cap bond +5"
         ]
     },
     "Rice Shower": {
@@ -1198,6 +1264,16 @@
         ],
         "(❯❯❯)\nA Page from a Day of Hard Work": [
             "Randomly either\n----------\nEnergy -10\nExtra Tank hint +1\nRice Shower bond +5\n----------\n\n----------\nEnergy -10\nAdrenaline Rush hint +1\nRice Shower bond +5\n----------\n\n----------\nEnergy -10\nStamina +5\nGuts +5\nAdrenaline Rush hint +3\nRice Shower bond +5"
+        ],
+        "(❯)\nForever a Child in Our Eyes": [
+            "Energy -5\nWit +15\nRice Shower bond +5"
+        ],
+        "(❯❯)\nThey Grow Up So Fast": [
+            "Energy -5\nKyoto Racecourse ○ hint +2\nRice Shower bond +5",
+            "Energy +20\nRice Shower bond +5"
+        ],
+        "(❯❯❯)\nHearts Full of Bittersweet Joy": [
+            "Energy -10\nWit +25\nShatterproof hint +1\nRice Shower bond +5"
         ]
     },
     "Riko Kashimoto": {
@@ -1384,6 +1460,16 @@
         ],
         "(❯❯)\nNever Give Up! Endless Possibilities!": [
             "Power +5\nGuts +5\nShifting Gears hint +1"
+        ],
+        "(❯)\nIt'll All Turn Out Fine": [
+            "Speed +10\nWit +10\nMaximum Energy +4\nSeeking the Pearl bond +5"
+        ],
+        "(❯❯)\nRe: START!": [
+            "Energy +10\nWit +10\nUpdrafters hint +2\nSeeking the Pearl bond +5",
+            "Power +20\nSkill points +10\nLight as a Feather hint +2\nSeeking the Pearl bond +5"
+        ],
+        "(❯❯❯)\nYou Are Me": [
+            "Speed +14\nGuts +7\nWit +7\nDauntless hint +1\nSeeking the Pearl bond +5"
         ]
     },
     "Seiun Sky": {
@@ -1657,6 +1743,16 @@
         "Yeehaw! Party Tonight ☆": [
             "Energy -10\nSpeed +5\nPower +10\nTaiki Shuttle bond +5",
             "Prepared to Pass hint +1\nTaiki Shuttle bond +5"
+        ],
+        "(❯)\nLesson One: Party Hearty": [
+            "Speed +7\nPower +7\nTaiki Shuttle bond +5"
+        ],
+        "(❯❯)\nLesson Two: The Show Must Go On": [
+            "Randomly either\n----------\nPower +15\nMile Corners ○ hint +2\nTaiki Shuttle bond +5\n----------\n\n----------\nPower +10\nEvent chain ended",
+            "Speed +10\nTaiki Shuttle bond +5"
+        ],
+        "(❯❯❯)\nLesson Three: Live in the Moment": [
+            "Speed +10\nPower +10\nGuts +10\nMile Maven hint +1\nTaiki Shuttle bond +5"
         ]
     },
     "Tamamo Cross": {
@@ -1867,6 +1963,13 @@
         ],
         "(❯❯❯)\nLegendary Act": [
             "Energy +10\nSpeed +5\nRushing Gale! hint +1\nTokai Teio bond +5"
+        ],
+        "(❯)\nA Selfish (?) Desire": [
+            "Maximum Energy +4\nSkill points +10\nTokai Teio bond +5"
+        ],
+        "(❯❯)\nSpreading the Love of Dance!": [
+            "Skill points +15\nMedium Corners ○ hint +1\nTokai Teio bond +5",
+            "Energy +20\nTokai Teio bond +5"
         ]
     },
     "Tosen Jordan": {
