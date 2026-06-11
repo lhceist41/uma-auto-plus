@@ -2242,9 +2242,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      *
      * @param currentRaces List of currently available [RaceData] races.
      * @param lookAheadDays Number of turns/days to consider for upcoming races.
+     * @param bypassQualityBar Waives the absolute minimum-quality check. Used by the preference
+     *    fallback: a grade-light pool (aptitude-matched OP races top out near 36 of the default
+     *    50) can never reach the bar, and in fallback mode no better-graded race is ever coming.
+     *    The worth-waiting comparison still applies.
      * @return True if the bot should race now, false if it is better to wait for a future race.
      */
-    private fun evaluateOpportunityCost(currentRaces: List<RaceData>, lookAheadDays: Int): Boolean {
+    private fun evaluateOpportunityCost(currentRaces: List<RaceData>, lookAheadDays: Int, bypassQualityBar: Boolean = false): Boolean {
         MessageLog.i(TAG, "[RACE] Evaluating whether to race now using Opportunity Cost logic...")
         if (currentRaces.isEmpty()) {
             MessageLog.i(TAG, "[RACE] No current races available, cannot race now.")
@@ -2299,7 +2303,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val improvementFromWaiting = discountedUpcomingScore - bestCurrentRace.score
 
         // Decision criteria.
-        val isGoodEnough = bestCurrentRace.score >= minimumQualityThreshold
+        val isGoodEnough = bypassQualityBar || bestCurrentRace.score >= minimumQualityThreshold
         val notWorthWaiting = improvementFromWaiting < improvementThreshold
         val shouldRace = isGoodEnough && notWorthWaiting
 
@@ -2308,7 +2312,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         MessageLog.i(TAG, "[RACE]     Upcoming score (raw): ${game.decimalFormat.format(bestUpcomingRace.score)}")
         MessageLog.i(TAG, "[RACE]     Upcoming score (discounted by ${game.decimalFormat.format((1 - timeDecayFactor) * 100)}%): ${game.decimalFormat.format(discountedUpcomingScore)}")
         MessageLog.i(TAG, "[RACE]     Improvement from waiting: ${game.decimalFormat.format(improvementFromWaiting)}")
-        MessageLog.i(TAG, "[RACE]     Quality check (≥$minimumQualityThreshold): ${if (isGoodEnough) "PASS" else "FAIL"}")
+        MessageLog.i(TAG, "[RACE]     Quality check (≥$minimumQualityThreshold): ${if (isGoodEnough) "PASS" else "FAIL"}${if (bypassQualityBar) " (waived: preference fallback)" else ""}")
         MessageLog.i(TAG, "[RACE]     Worth waiting check (<$improvementThreshold): ${if (notWorthWaiting) "PASS" else "FAIL"}")
         MessageLog.i(TAG, "[RACE]     Decision: ${if (shouldRace) "RACE NOW" else "WAIT FOR BETTER OPPORTUNITY"}")
 
@@ -3582,7 +3586,28 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         MessageLog.i(TAG, "[RACE] After filtering: ${filteredPlannedRaces.size} planned races and ${filteredRegularRaces.size} regular races remain.")
 
         // Combine all filtered races for Opportunity Cost analysis.
-        val allFilteredRaces = filteredPlannedRaces + filteredRegularRaces
+        // Preferences prefer — they don't forbid. The preferred-grades list can't express OP races
+        // at all, so an OP-heavy pool (dirt trainees) would otherwise never race a normal smart-
+        // racing turn and only bank fans in last-minute emergency bursts. When the filters leave
+        // nothing, fall back to every aptitude-qualified race (terrain and distance B+) and let
+        // scoring rank them.
+        var effectivePlannedRaces = filteredPlannedRaces
+        var effectiveRegularRaces = filteredRegularRaces
+        var bPreferenceFallback = false
+        if (filteredPlannedRaces.isEmpty() && filteredRegularRaces.isEmpty()) {
+            val aptitudeQualified = racesForSelection.filter { checkRaceAptitudeMatch(it) }
+            if (aptitudeQualified.isNotEmpty()) {
+                bPreferenceFallback = true
+                val (planned, regular) = aptitudeQualified.partition { race -> userPlannedRaces.any { it.raceName == race.name } }
+                effectivePlannedRaces = planned
+                effectiveRegularRaces = regular
+                MessageLog.i(
+                    TAG,
+                    "[RACE] Preference filters left zero candidates. Falling back to ${aptitudeQualified.size} aptitude-qualified race(s); the quality bar is waived for this turn.",
+                )
+            }
+        }
+        val allFilteredRaces = effectivePlannedRaces + effectiveRegularRaces
         if (allFilteredRaces.isEmpty()) {
             MessageLog.i(TAG, "[RACE] No races match current settings after filtering. Canceling racing process.")
             return false
@@ -3592,21 +3617,21 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // If fan or trophy requirement is active, bypass opportunity cost to prioritize clearing the requirement.
         if (hasFanRequirement || hasTrophyRequirement) {
             MessageLog.i(TAG, "[RACE] Bypassing opportunity cost analysis to prioritize satisfying the current requirement.")
-        } else if (!evaluateOpportunityCost(allFilteredRaces, lookAheadDays)) {
+        } else if (!evaluateOpportunityCost(allFilteredRaces, lookAheadDays, bypassQualityBar = bPreferenceFallback)) {
             MessageLog.i(TAG, "[RACE] Smart racing suggests waiting for better opportunities. Canceling racing process.")
             return false
         }
 
         // Decide which races to score based on availability.
         val racesToScore =
-            if (filteredPlannedRaces.isNotEmpty()) {
+            if (effectivePlannedRaces.isNotEmpty()) {
                 // Prefer planned races, but include regular races for comparison.
-                MessageLog.i(TAG, "[RACE] Prioritizing ${filteredPlannedRaces.size} planned races with ${filteredRegularRaces.size} regular races for comparison.")
-                filteredPlannedRaces + filteredRegularRaces
+                MessageLog.i(TAG, "[RACE] Prioritizing ${effectivePlannedRaces.size} planned races with ${effectiveRegularRaces.size} regular races for comparison.")
+                effectivePlannedRaces + effectiveRegularRaces
             } else {
                 // No planned races available, use regular races only.
-                MessageLog.i(TAG, "[RACE] No planned races available, using ${filteredRegularRaces.size} regular races only.")
-                filteredRegularRaces
+                MessageLog.i(TAG, "[RACE] No planned races available, using ${effectiveRegularRaces.size} regular races only.")
+                effectiveRegularRaces
             }
 
         // Score all eligible races with a tier penalty for single-star entries and a bonus for planned races.
