@@ -215,6 +215,10 @@ export interface Settings {
         stopOnError: boolean
         reuseLastLaunchSetup: boolean
         autoFillSupports: boolean
+        // When the game asks "Restore TP?" between queued runs, spend one Toughness 30 item
+        // (30 TP = one career) and continue instead of ending the queue. Items only - the
+        // bot never spends carats; with no drinks left it declines and stops gracefully.
+        enableTpRestoreWithItems: boolean
     }
 
     // Scenario specific overrides
@@ -605,6 +609,7 @@ export const defaultSettings: Settings = {
         stopOnError: false,
         reuseLastLaunchSetup: true,
         autoFillSupports: false,
+        enableTpRestoreWithItems: false,
     },
     scenarioOverrides: {
         // Trackblazer guide: "After 3 consecutive races, you could gamble on a fourth,

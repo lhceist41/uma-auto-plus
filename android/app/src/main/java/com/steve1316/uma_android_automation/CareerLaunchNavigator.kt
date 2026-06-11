@@ -56,6 +56,21 @@ class CareerLaunchNavigator(private val context: Context) {
         /** Maximum consecutive UNKNOWN detections before failing. */
         private const val MAX_CONSECUTIVE_UNKNOWNS = 5
 
+        /** TP-restore flow: center-to-center tap offsets on 1080-wide captures. Restore sits
+         * right of No on the confirm dialog; Use sits right of the Toughness 30 tile in the
+         * picker; the plus button sits above OK on the quantity dialog. All anchors are template
+         * matches, so the offsets ride dialog position. */
+        private const val TP_RESTORE_FROM_NO_DX = 475.0
+        private const val TP_USE_FROM_DRINK_DX = 719.0
+        private const val TP_USE_FROM_DRINK_DY = -4.0
+        private const val TP_PLUS_FROM_OK_DX = 7.0
+        private const val TP_PLUS_FROM_OK_DY = -372.0
+
+        /** Hard cap on item-based TP restores per queue session - bounds item spend even if
+         * something loops. One restore covers one career, so 10 outruns any queue length the
+         * UI offers. */
+        private const val MAX_TP_RESTORES_PER_SESSION = 10
+
         /** Maximum consecutive iterations stuck in the same non-goal state before failing. */
         private const val MAX_STUCK_ITERATIONS = 15
     }
@@ -643,24 +658,86 @@ class CareerLaunchNavigator(private val context: Context) {
      * Detection: template-matched (Next, OK, Confirm, Close, CompleteCareer).
      * Transition: template-matched button click.
      */
+    /** Item-based TP restores performed this queue session (bounded by [MAX_TP_RESTORES_PER_SESSION]). */
+    private var tpRestoresThisSession = 0
+
     /**
-     * Handles the "Restore TP?" confirmation: declines it and ends the queue gracefully.
+     * Handles the "Restore TP?" confirmation.
      *
-     * Restoring spends TP items or carats - a spending decision that belongs to the user,
-     * never the bot. Declining leaves the deck screen unable to start another career, so the
-     * navigator reports a precise, non-recoverable failure. Completed runs stand and TP
-     * regenerates over time.
+     * Default: decline and end the queue gracefully - restoring spends resources, and that
+     * decision belongs to the user. With the opt-in `runQueue.enableTpRestoreWithItems`
+     * setting, the flow the user specified runs instead: Restore -> pick the Toughness 30 row
+     * (never Carats - if the drink template is absent the bot declines) -> plus once (exactly
+     * one drink = 30 TP = one career) -> OK -> Close -> resume the career start.
      */
     private fun handleTpRestoreDialog(): TransitionResult {
-        MessageLog.w(TAG, "[NAV] Out of TP for another career playthrough. Declining the restore prompt and ending the queue.")
-        ButtonNo.click(iu)
+        val restoreWithItems = SettingsHelper.getBooleanSetting("runQueue", "enableTpRestoreWithItems", false)
+        val declineResult = {
+            ButtonNo.click(iu)
+            waitSafe(1.0)
+            TransitionResult.Failed(
+                reason = "Out of TP: the game needs more Training Points to start another career playthrough. The restore prompt was declined.",
+                transition = "PRE_RUN_CONFIRMATION -> TP_RESTORE_DIALOG",
+                isRecoverable = false,
+                recommendedAction = "TP regenerates over time - restart the queue later, restore TP manually, or enable \"Restore TP with items\" in the Run Queue settings. All completed runs are saved.",
+            )
+        }
+
+        if (!restoreWithItems) {
+            MessageLog.w(TAG, "[NAV] Out of TP for another career playthrough. Declining the restore prompt and ending the queue (item restore is disabled).")
+            return declineResult()
+        }
+        if (tpRestoresThisSession >= MAX_TP_RESTORES_PER_SESSION) {
+            MessageLog.w(TAG, "[NAV] TP restore cap reached ($MAX_TP_RESTORES_PER_SESSION this session). Declining and ending the queue.")
+            return declineResult()
+        }
+
+        val noLocation = ButtonNo.find(iu).first
+        if (noLocation == null) {
+            // Dialog state shifted between detection and handling - re-detect next tick.
+            return TransitionResult.Continue
+        }
+
+        MessageLog.i(TAG, "[NAV] Out of TP. Restoring with one Toughness 30 per the enabled setting...")
+        gestureUtils.tap(noLocation.x + TP_RESTORE_FROM_NO_DX, noLocation.y, "tp_restore_button")
+        waitSafe(1.5)
+
+        val drinkLocation = IconTpDrink.find(iu).first
+        if (drinkLocation == null) {
+            MessageLog.w(TAG, "[NAV] Toughness 30 row not found in the Recover TP picker - likely out of drinks. Carats are never spent; closing and ending the queue.")
+            ButtonClose.click(iu)
+            waitSafe(1.0)
+            return TransitionResult.Failed(
+                reason = "TP restore was enabled but no Toughness 30 drinks were found in the Recover TP picker. Carats are never spent automatically.",
+                transition = "TP_RESTORE_DIALOG -> RECOVER_TP_PICKER",
+                isRecoverable = false,
+                recommendedAction = "Stock Toughness 30 drinks or restore TP manually, then restart the queue. All completed runs are saved.",
+            )
+        }
+
+        gestureUtils.tap(drinkLocation.x + TP_USE_FROM_DRINK_DX, drinkLocation.y + TP_USE_FROM_DRINK_DY, "tp_use_button")
+        waitSafe(1.2)
+
+        val okLocation = ButtonOk.find(iu).first
+        if (okLocation == null) {
+            MessageLog.w(TAG, "[NAV] Quantity dialog OK button not found after Use. Re-detecting...")
+            return TransitionResult.Continue
+        }
+        // The quantity dialog opens with zero drinks selected; one plus press selects exactly
+        // one drink (30 TP), which always covers the 30 TP career cost.
+        gestureUtils.tap(okLocation.x + TP_PLUS_FROM_OK_DX, okLocation.y + TP_PLUS_FROM_OK_DY, "tp_plus_one")
+        waitSafe(0.6)
+        ButtonOk.click(iu)
+        waitSafe(1.2)
+        ButtonClose.click(iu)
         waitSafe(1.0)
-        return TransitionResult.Failed(
-            reason = "Out of TP: the game needs more Training Points to start another career playthrough. The restore prompt was declined because restoring spends items or carats.",
-            transition = "PRE_RUN_CONFIRMATION -> TP_RESTORE_DIALOG",
-            isRecoverable = false,
-            recommendedAction = "TP regenerates over time - restart the queue later, or restore TP manually in-game and restart now. All completed runs are saved.",
+
+        tpRestoresThisSession++
+        MessageLog.i(
+            TAG,
+            "[NAV] Restored 30 TP with one Toughness 30 (restore $tpRestoresThisSession/$MAX_TP_RESTORES_PER_SESSION this session). Resuming the career start.",
         )
+        return TransitionResult.Continue
     }
 
     private fun handlePostRunResults(): TransitionResult {

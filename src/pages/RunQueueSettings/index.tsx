@@ -141,6 +141,15 @@ const RunQueueSettings = () => {
                                     className="mt-4"
                                 />
 
+                                <CustomCheckbox
+                                    searchId="run-queue-tp-restore-items"
+                                    checked={runQueueSettings.enableTpRestoreWithItems}
+                                    onCheckedChange={(checked) => updateSetting("enableTpRestoreWithItems", checked)}
+                                    label="Restore TP with Items"
+                                    description="When the game asks to restore TP between queued runs, use one Toughness 30 item (30 TP, one career) and continue. Items only - carats are never spent. With no drinks left, the queue declines and stops cleanly. Capped at 10 restores per session."
+                                    className="mt-4"
+                                />
+
                                 <WarningContainer style={{ marginTop: 16 }}>
                                     The run queue navigates the game menus between runs automatically. If the bot encounters an unexpected screen it cannot handle, the queue will stop and report what happened. Make sure the game is in a stable state before starting a queued session.
                                 </WarningContainer>

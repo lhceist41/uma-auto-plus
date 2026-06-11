@@ -87,6 +87,13 @@ object IconRaceListFansIcon : ComponentInterface {
     override val template = Template("components/icon/race_list_fans_icon", region = Region.leftHalf)
 }
 
+object IconTpDrink : ComponentInterface {
+    // The Toughness 30 row in the "Recover TP" picker: the bottle tile plus the static label
+    // edge. Anchors the item-based TP restore so the flow can never tap the Carats row above
+    // it - if this template is absent, the bot is out of drinks and declines instead.
+    override val template = Template("components/icon/tp_drink", region = Region.leftHalf)
+}
+
 object IconFriendSlotEmpty : ComponentInterface {
     // Empty friend/guest slot on the career Support Formation screen (green "+" placeholder).
     // The borrowed card never persists between careers, so the run queue must re-fill this
