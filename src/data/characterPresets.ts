@@ -70,13 +70,14 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
         ],
     },
     "Haru Urara": {
-        // Turf=G, Dirt=A. Most career races are Turf, so her Turf aptitude G blocks
-        // the bot from running standard Turf races. She is canonically a meme trainee.
+        // Turf=G, Dirt=A. URA-viable: the preset ships her curated dirt stakes agenda
+        // (mandatory mode) and the aptitude fallback keeps her racing dirt between plan turns,
+        // which clears a full hands-off URA career (dirt-champion trophy). Earlier turf-roaming
+        // smart racing plus a grade filter starved her OP-heavy dirt pool, hence the old avoid.
+        // Unity Cup and Trackblazer remain avoids - both schedules are turf-dominant with no
+        // curated dirt path.
+        recommended: ["URA Finale"],
         avoid: [
-            {
-                scenario: "URA Finale",
-                reason: "Haru Urara has Turf=G aptitude. The bulk of URA Finale objective and extra races are Turf, so the bot loses races by default. Stick to her if you want the lore, not the wins.",
-            },
             {
                 scenario: "Unity Cup",
                 reason: "Haru Urara has Turf=G aptitude. Unity Cup races are Turf-dominant and her dirt specialty does not help.",
