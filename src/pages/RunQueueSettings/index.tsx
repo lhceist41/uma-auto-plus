@@ -151,7 +151,8 @@ const RunQueueSettings = () => {
                                 />
 
                                 <WarningContainer style={{ marginTop: 16 }}>
-                                    The run queue navigates the game menus between runs automatically. If the bot encounters an unexpected screen it cannot handle, the queue will stop and report what happened. Make sure the game is in a stable state before starting a queued session.
+                                    The run queue navigates the game menus between runs automatically. If the bot encounters an unexpected screen it cannot handle, the queue will stop and report what
+                                    happened. Make sure the game is in a stable state before starting a queued session.
                                 </WarningContainer>
                             </View>
                         )}

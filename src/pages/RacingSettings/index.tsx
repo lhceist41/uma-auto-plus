@@ -216,7 +216,8 @@ const RacingSettings = () => {
                                 {"\n"}
                                 <Text style={{ fontWeight: "bold" }}>G1 only</Text>: spend 10 carats only for failed G1 races.
                                 {"\n"}
-                                <Text style={{ fontWeight: "bold" }}>G1 + Finale</Text>: G1 races plus the Twinkle Star Climax finale races (turns 73-75 in Trackblazer). Recommended for active players.
+                                <Text style={{ fontWeight: "bold" }}>G1 + Finale</Text>: G1 races plus the Twinkle Star Climax finale races (turns 73-75 in Trackblazer). Recommended for active
+                                players.
                                 {"\n"}
                                 <Text style={{ fontWeight: "bold" }}>Always</Text>: spend 10 carats on every alarm clock prompt.
                             </Text>

@@ -15590,10 +15590,17 @@ export const characterPresets: CharacterPreset[] = [
                 enableRacingPlan: true,
                 enableMandatoryRacingPlan: true,
                 racingPlan: JSON.stringify([
-                    { raceName: "Hopeful Stakes", date: "Junior Class December, Second Half", priority: 1, turnNumber: 24 },
-                    { raceName: "American JCC", date: "Senior Class January, Second Half", priority: 2, turnNumber: 50 },
-                    { raceName: "Kyoto Kinen", date: "Senior Class February, First Half", priority: 3, turnNumber: 51 },
-                    { raceName: "Hanshin Daishoten", date: "Senior Class March, Second Half", priority: 4, turnNumber: 54 },
+                    // Pre-T35 fill for the 9,000-fan wall at Classic Early June. These make the
+                    // wall arithmetic work on wins alone (3,300 + 7,000 + 5,400 + 5,400 + debut)
+                    // instead of leaning on the fan-emergency backstop. All Medium Turf - her Mile
+                    // is F, keep it that way.
+                    { raceName: "Kyoto Junior Stakes", date: "Junior Class November, Second Half", priority: 1, turnNumber: 22 },
+                    { raceName: "Hopeful Stakes", date: "Junior Class December, Second Half", priority: 2, turnNumber: 24 },
+                    { raceName: "Yayoi Sho", date: "Classic Class March, First Half", priority: 3, turnNumber: 29 },
+                    { raceName: "Aoba Sho", date: "Classic Class April, Second Half", priority: 4, turnNumber: 32 },
+                    { raceName: "American JCC", date: "Senior Class January, Second Half", priority: 5, turnNumber: 50 },
+                    { raceName: "Kyoto Kinen", date: "Senior Class February, First Half", priority: 6, turnNumber: 51 },
+                    { raceName: "Hanshin Daishoten", date: "Senior Class March, Second Half", priority: 7, turnNumber: 54 },
                 ]),
                 minFansThreshold: 0,
                 preferredTerrain: "Turf",
@@ -16254,9 +16261,15 @@ export const characterPresets: CharacterPreset[] = [
                 enableRacingPlan: true,
                 enableMandatoryRacingPlan: true,
                 racingPlan: JSON.stringify([
-                    { raceName: "Mile Championship", date: "Classic Class November, Second Half", priority: 1, turnNumber: 46 },
-                    { raceName: "Yasuda Kinen", date: "Senior Class June, First Half", priority: 2, turnNumber: 59 },
-                    { raceName: "All Comers", date: "Senior Class September, Second Half", priority: 3, turnNumber: 66 },
+                    // Light Junior/Classic mile fill. Kept minimal and clear of the T31-35 window
+                    // where her mile-spine goal races likely sit; her goal chain is denser than
+                    // Super Creek's so this is padding, not life support.
+                    { raceName: "Daily Hai Junior Stakes", date: "Junior Class November, First Half", priority: 1, turnNumber: 21 },
+                    { raceName: "Kyodo News Hai", date: "Classic Class February, First Half", priority: 2, turnNumber: 27 },
+                    { raceName: "Mainichi Okan", date: "Classic Class October, First Half", priority: 3, turnNumber: 43 },
+                    { raceName: "Mile Championship", date: "Classic Class November, Second Half", priority: 4, turnNumber: 46 },
+                    { raceName: "Yasuda Kinen", date: "Senior Class June, First Half", priority: 5, turnNumber: 59 },
+                    { raceName: "All Comers", date: "Senior Class September, Second Half", priority: 6, turnNumber: 66 },
                 ]),
                 minFansThreshold: 0,
                 preferredTerrain: "Turf",
@@ -16914,9 +16927,18 @@ export const characterPresets: CharacterPreset[] = [
                 enableRacingPlan: true,
                 enableMandatoryRacingPlan: true,
                 racingPlan: JSON.stringify([
-                    { raceName: "American JCC", date: "Senior Class January, Second Half", priority: 1, turnNumber: 50 },
-                    { raceName: "Kyoto Kinen", date: "Senior Class February, First Half", priority: 2, turnNumber: 51 },
-                    { raceName: "All Comers", date: "Senior Class September, Second Half", priority: 3, turnNumber: 66 },
+                    // Junior/Classic fill: a Senior-only plan leaves turns 14-49 with no voluntary
+                    // races at all (the Super Creek starvation pattern). Yayoi Sho is the natural
+                    // Satsuki Sho trial two turns before her goal; the two late-Classic G2s rebuild
+                    // momentum after the 3D Nail Art debuff window.
+                    { raceName: "Kyoto Junior Stakes", date: "Junior Class November, Second Half", priority: 1, turnNumber: 22 },
+                    { raceName: "Keisei Hai", date: "Classic Class January, First Half", priority: 2, turnNumber: 25 },
+                    { raceName: "Yayoi Sho", date: "Classic Class March, First Half", priority: 3, turnNumber: 29 },
+                    { raceName: "Sapporo Kinen", date: "Classic Class August, Second Half", priority: 4, turnNumber: 40 },
+                    { raceName: "St. Lite Kinen", date: "Classic Class September, Second Half", priority: 5, turnNumber: 42 },
+                    { raceName: "American JCC", date: "Senior Class January, Second Half", priority: 6, turnNumber: 50 },
+                    { raceName: "Kyoto Kinen", date: "Senior Class February, First Half", priority: 7, turnNumber: 51 },
+                    { raceName: "All Comers", date: "Senior Class September, Second Half", priority: 8, turnNumber: 66 },
                 ]),
                 minFansThreshold: 0,
                 preferredTerrain: "Turf",
@@ -17574,9 +17596,21 @@ export const characterPresets: CharacterPreset[] = [
                 enableRacingPlan: true,
                 enableMandatoryRacingPlan: true,
                 racingPlan: JSON.stringify([
-                    { raceName: "Nikkei Sho", date: "Senior Class March, Second Half", priority: 1, turnNumber: 54 },
-                    { raceName: "Kyoto Daishoten", date: "Senior Class October, First Half", priority: 2, turnNumber: 67 },
-                    { raceName: "Japan Cup", date: "Senior Class November, Second Half", priority: 3, turnNumber: 70 },
+                    // Junior/Classic fill: her goal chain (debut, Sumire, Kikuka) is too sparse to
+                    // carry a mandatory-plan-only config — left alone the bot trains ~90% of turns
+                    // and force-ends at Kikuka Sho hundreds of stats short — so the plan supplies the
+                    // racing volume. All entries are Medium/Long Turf at A aptitude; Kobe Shimbun Hai
+                    // is the traditional Kikuka prep one rest-turn before the goal.
+                    { raceName: "Kyoto Junior Stakes", date: "Junior Class November, Second Half", priority: 1, turnNumber: 22 },
+                    { raceName: "Hopeful Stakes", date: "Junior Class December, Second Half", priority: 2, turnNumber: 24 },
+                    { raceName: "Yayoi Sho", date: "Classic Class March, First Half", priority: 3, turnNumber: 29 },
+                    { raceName: "Aoba Sho", date: "Classic Class April, Second Half", priority: 4, turnNumber: 32 },
+                    { raceName: "Naruo Kinen", date: "Classic Class June, First Half", priority: 5, turnNumber: 35 },
+                    { raceName: "Sapporo Kinen", date: "Classic Class August, Second Half", priority: 6, turnNumber: 40 },
+                    { raceName: "Kobe Shimbun Hai", date: "Classic Class September, Second Half", priority: 7, turnNumber: 42 },
+                    { raceName: "Nikkei Sho", date: "Senior Class March, Second Half", priority: 8, turnNumber: 54 },
+                    { raceName: "Kyoto Daishoten", date: "Senior Class October, First Half", priority: 9, turnNumber: 67 },
+                    { raceName: "Japan Cup", date: "Senior Class November, Second Half", priority: 10, turnNumber: 70 },
                 ]),
                 minFansThreshold: 0,
                 preferredTerrain: "Turf",
@@ -18237,9 +18271,16 @@ export const characterPresets: CharacterPreset[] = [
                 enableRacingPlan: true,
                 enableMandatoryRacingPlan: true,
                 racingPlan: JSON.stringify([
-                    { raceName: "Hopeful Stakes", date: "Junior Class December, Second Half", priority: 1, turnNumber: 24 },
-                    { raceName: "Kobe Shimbun Hai", date: "Classic Class September, Second Half", priority: 2, turnNumber: 42 },
-                    { raceName: "All Comers", date: "Senior Class September, Second Half", priority: 3, turnNumber: 66 },
+                    // Classic fill: without it turns 25-41 have no voluntary races (the Super Creek
+                    // starvation pattern). Kept clear of the Kikuka (T44) / Diamond (T53) / Tenno
+                    // Spring (T55) wall; Kobe Shimbun Hai stays as the Kikuka prep.
+                    { raceName: "Kyoto Junior Stakes", date: "Junior Class November, Second Half", priority: 1, turnNumber: 22 },
+                    { raceName: "Hopeful Stakes", date: "Junior Class December, Second Half", priority: 2, turnNumber: 24 },
+                    { raceName: "Yayoi Sho", date: "Classic Class March, First Half", priority: 3, turnNumber: 29 },
+                    { raceName: "Aoba Sho", date: "Classic Class April, Second Half", priority: 4, turnNumber: 32 },
+                    { raceName: "Hakodate Kinen", date: "Classic Class July, First Half", priority: 5, turnNumber: 37 },
+                    { raceName: "Kobe Shimbun Hai", date: "Classic Class September, Second Half", priority: 6, turnNumber: 42 },
+                    { raceName: "All Comers", date: "Senior Class September, Second Half", priority: 7, turnNumber: 66 },
                 ]),
                 minFansThreshold: 0,
                 preferredTerrain: "Turf",
