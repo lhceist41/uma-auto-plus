@@ -6,7 +6,9 @@ This document explains how built-in character presets work in UMA Auto+, how the
 
 ## Overview
 
-UMA Auto+ ships with **57 built-in character presets** (19 characters x 3 scenarios). When a user selects a scenario on the Home page, a dropdown appears showing only the characters available for that scenario. Picking a character instantly applies all of its optimized settings.
+UMA Auto+ ships with **78 built-in character presets** (26 character entries x 3 scenarios). When a user selects a scenario on the Home page, a dropdown appears showing only the characters available for that scenario. Picking a character instantly applies all of its optimized settings.
+
+The 2026-06-11 batch added seven entries from the June banner research pass: Sweep Tosho, Mihono Bourbon, Mejiro Palmer, El Condor Pasa (Kukulkan Warrior), Tosen Jordan, Super Creek, and Matikanetannhauser. Their URA presets ship curated racing plans (see "Curated racing plans in presets" below); Tosen Jordan's presets enable negative-skill buying so the buy pass clears her 3D Nail Art speed debuff.
 
 ### Currently included characters
 
