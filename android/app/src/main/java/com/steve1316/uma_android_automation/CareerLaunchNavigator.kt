@@ -96,6 +96,8 @@ class CareerLaunchNavigator(private val context: Context) {
         CINEMATIC_INTRO,
         /** Bot's normal start point - the in-career training menu. Navigation is complete. */
         ACTIVE_TRAINING_MENU,
+        /** "Restore TP?" confirmation - the account lacks Training Points for another career. */
+        TP_RESTORE_DIALOG,
         /** Screen could not be identified by any detector. */
         UNKNOWN,
     }
@@ -390,6 +392,26 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.POST_RUN_RESULTS
         }
 
+        // "Restore TP?" confirmation - the account lacks Training Points for another career
+        // playthrough (back-to-back completed runs can drain TP). The dialog offers No / Restore
+        // and matches none of the generic advance buttons. ButtonNo alone is ambiguous across
+        // dialogs, so confirm via body OCR.
+        if (ButtonNo.check(iu, sourceBitmap = bitmap)) {
+            try {
+                val body = iu.performOCROnRegion(
+                    bitmap,
+                    (bitmap.width * 0.10).toInt(), (bitmap.height * 0.35).toInt(),
+                    (bitmap.width * 0.80).toInt(), (bitmap.height * 0.25).toInt(),
+                    useThreshold = false, useGrayscale = true, scale = 2.0,
+                    debugName = "nav_tp_dialog_ocr",
+                )
+                if (Regex("\\bTP\\b").containsMatchIn(body.uppercase())) {
+                    MessageLog.i(TAG, "[NAV] Restore-TP confirmation detected: \"${body.replace("\n", " ").take(70)}\"")
+                    return LaunchScreenState.TP_RESTORE_DIALOG
+                }
+            } catch (_: Exception) { }
+        }
+
         // "Continue Career" dialog - Resume button takes us straight back into an active career.
         // Rare but discriminating.
         if (ButtonResume.check(iu, sourceBitmap = bitmap)) {
@@ -501,6 +523,7 @@ class CareerLaunchNavigator(private val context: Context) {
             LaunchScreenState.CAREER_COMPLETE_DIALOG -> handleCareerCompleteDialog()
             LaunchScreenState.LEGACY_SELECT_SCREEN -> handleLegacySelectScreen()
             LaunchScreenState.PRE_RUN_CONFIRMATION -> handlePreRunConfirmation()
+            LaunchScreenState.TP_RESTORE_DIALOG -> handleTpRestoreDialog()
             LaunchScreenState.SUPPORT_DECK_SCREEN -> handleSupportDeckScreen(reuseLastLaunchSetup, autoFillSupports)
             LaunchScreenState.CINEMATIC_INTRO -> handleCinematicIntro()
             LaunchScreenState.HOME_SCREEN -> handleHomeScreen()
@@ -620,6 +643,26 @@ class CareerLaunchNavigator(private val context: Context) {
      * Detection: template-matched (Next, OK, Confirm, Close, CompleteCareer).
      * Transition: template-matched button click.
      */
+    /**
+     * Handles the "Restore TP?" confirmation: declines it and ends the queue gracefully.
+     *
+     * Restoring spends TP items or carats - a spending decision that belongs to the user,
+     * never the bot. Declining leaves the deck screen unable to start another career, so the
+     * navigator reports a precise, non-recoverable failure. Completed runs stand and TP
+     * regenerates over time.
+     */
+    private fun handleTpRestoreDialog(): TransitionResult {
+        MessageLog.w(TAG, "[NAV] Out of TP for another career playthrough. Declining the restore prompt and ending the queue.")
+        ButtonNo.click(iu)
+        waitSafe(1.0)
+        return TransitionResult.Failed(
+            reason = "Out of TP: the game needs more Training Points to start another career playthrough. The restore prompt was declined because restoring spends items or carats.",
+            transition = "PRE_RUN_CONFIRMATION -> TP_RESTORE_DIALOG",
+            isRecoverable = false,
+            recommendedAction = "TP regenerates over time - restart the queue later, or restore TP manually in-game and restart now. All completed runs are saved.",
+        )
+    }
+
     private fun handlePostRunResults(): TransitionResult {
         MessageLog.i(TAG, "[NAV] On post-run results screen. Clicking detected button...")
         val bitmap = iu.getSourceBitmap()
