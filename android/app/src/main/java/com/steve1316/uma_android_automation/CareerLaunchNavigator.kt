@@ -64,6 +64,8 @@ class CareerLaunchNavigator(private val context: Context) {
     enum class LaunchScreenState {
         /** Career summary screen showing final stats, with "Complete Career" button. */
         CAREER_SUMMARY,
+        /** Career-end "Learn" skill purchase screen - the skill list without the in-career Log button. */
+        CAREER_END_SKILL_SCREEN,
         /** "Complete Career" confirmation dialog with "Cancel" and "Finish" buttons. */
         COMPLETE_CAREER_CONFIRMATION,
         /** Post-career result screens with Next/OK/Close/Confirm buttons. */
@@ -116,7 +118,19 @@ class CareerLaunchNavigator(private val context: Context) {
 
     // Session-scoped flag: Skip toggle has already been maxed (Skip >>) in this session.
     private var skipToggleAlreadyDone: Boolean = false
-    private val gestureUtils: MyAccessibilityService = MyAccessibilityService.getInstance()
+
+    // Session-scoped counters for the support deck screen. The borrowed friend card never
+    // persists between careers, and the game silently ignores Start Career while that slot
+    // is empty, so both paths need bounded retries instead of an open-ended click loop.
+    private var friendSlotFillAttempts: Int = 0
+    private var startCareerClickAttempts: Int = 0
+
+    // Vertical offset from the Borrow Card list's "Remove" bar to the center of the first
+    // card row. Both supported screen configs render game content at 1080px width, so this
+    // dialog-internal offset is stable across them.
+    private val borrowListFirstRowOffsetPx: Int = 220
+
+    private val gestureUtils: MyAccessibilityService get() = MyAccessibilityService.getInstance()
 
     /** Non-null accessor for imageUtils. Only call after ensureInitialised() returns true. */
     private val iu: CustomImageUtils get() = imageUtils!!
@@ -346,6 +360,23 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.LEGACY_SELECT_SCREEN
         }
 
+        // Career-end "Learn" (skill purchase) screen. MUST be checked before the generic
+        // POST_RUN_RESULTS chain and before CAREER_SUMMARY: this screen carries a Confirm
+        // button (matching the POST_RUN_RESULTS chain, whose handler closes the skill list)
+        // and the Complete Career button can also match here (CAREER_SUMMARY, whose handler
+        // would end the career with the skill points unspent). Misordering it once completed a
+        // career with ~1150 SP unspent.
+        val skillLabelConfidence = 0.60
+        if (ButtonSkillListFullStats.check(iu, sourceBitmap = bitmap) &&
+            !ButtonLog.check(iu, sourceBitmap = bitmap) &&
+            (
+                LabelSkillListScreenSkillPoints.check(iu, sourceBitmap = bitmap, confidence = skillLabelConfidence) ||
+                    LabelSkillListScreenSkillPointsV2.check(iu, sourceBitmap = bitmap, confidence = skillLabelConfidence)
+                )
+        ) {
+            return LaunchScreenState.CAREER_END_SKILL_SCREEN
+        }
+
         // POST_RUN_RESULTS - generic post-run / between-screens dialog with Next, OK, Confirm,
         // or Close as the primary advance button. This is the most common state during
         // between-run navigation (10-20 iterations per career), so we check it early.
@@ -459,6 +490,12 @@ class CareerLaunchNavigator(private val context: Context) {
 
             LaunchScreenState.CONTINUE_CAREER_DIALOG -> handleContinueCareerDialog()
             LaunchScreenState.CAREER_SUMMARY -> handleCareerSummary()
+            LaunchScreenState.CAREER_END_SKILL_SCREEN -> TransitionResult.Failed(
+                reason = "Career-end skill purchase (Learn) screen detected - the careerComplete skill plan has not run for this career.",
+                transition = "CAREER_END_SKILL_SCREEN -> (refusing to navigate)",
+                isRecoverable = true,
+                recommendedAction = "Start the bot while on this screen - the startup career-end guard hands it to the campaign, which buys skills and then completes the career.",
+            )
             LaunchScreenState.COMPLETE_CAREER_CONFIRMATION -> handleCompleteCareerConfirmation()
             LaunchScreenState.POST_RUN_RESULTS -> handlePostRunResults()
             LaunchScreenState.CAREER_COMPLETE_DIALOG -> handleCareerCompleteDialog()
@@ -799,10 +836,58 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.i(TAG, "[NAV] Auto-Fill already done this session, skipping to Start Career.")
         }
 
-        // Deck is already complete OR autoFillSupports is off. Click Start Career.
         val bitmap = iu.getSourceBitmap()
+
+        // The game renders Start Career as enabled but silently ignores it while the friend
+        // slot is empty, and the borrowed card never carries over between careers - so with
+        // reuseLastLaunchSetup the deck always arrives here one card short. Borrow the first card
+        // in the Borrow Card list to complete the deck. A single row tap selects the card and
+        // closes the picker.
+        if (IconFriendSlotEmpty.check(iu, sourceBitmap = bitmap)) {
+            if (friendSlotFillAttempts >= 2) {
+                return TransitionResult.Failed(
+                    reason = "Friend slot is empty and the Borrow Card flow failed to fill it after $friendSlotFillAttempts attempts.",
+                    transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                    recommendedAction = "Select a friend support card manually, then restart the queue.",
+                )
+            }
+            friendSlotFillAttempts++
+            MessageLog.i(TAG, "[NAV] Friend slot is empty. Opening the Borrow Card picker (attempt $friendSlotFillAttempts)...")
+            IconFriendSlotEmpty.click(iu, sourceBitmap = bitmap)
+            waitSafe(2.0)
+            val (removeLocation, _) = ButtonBorrowCardRemove.find(iu)
+            if (removeLocation != null) {
+                // Prefer the user's strong friend card when it is visible (template:
+                // borrow_preferred_card.png). Blind first-row borrows produced measurably
+                // weaker careers. Tap at the row's center X, not on the card art, which opens
+                // card details.
+                val (preferredLocation, _) = IconBorrowPreferredCard.find(iu)
+                if (preferredLocation != null) {
+                    MessageLog.i(TAG, "[NAV] Borrow Card list open. Preferred card found - selecting its row at (540, ${preferredLocation.y.toInt()})...")
+                    gestureUtils.tap(540.0, preferredLocation.y, "borrow_preferred_row")
+                } else {
+                    val tapY = removeLocation.y + borrowListFirstRowOffsetPx
+                    MessageLog.i(TAG, "[NAV] Borrow Card list open. Preferred card not visible - selecting the first card at (${removeLocation.x.toInt()}, ${tapY.toInt()})...")
+                    gestureUtils.tap(removeLocation.x, tapY, "borrow_card_first_row")
+                }
+                waitSafe(2.0)
+            } else {
+                MessageLog.w(TAG, "[NAV] Tapped the friend slot but the Borrow Card list did not appear. Re-detecting...")
+            }
+            return TransitionResult.Continue
+        }
+
+        // Deck is already complete OR autoFillSupports is off. Click Start Career.
         if (ButtonStartCareer.check(iu, sourceBitmap = bitmap) || ButtonStartCareerOffset.check(iu, sourceBitmap = bitmap)) {
-            MessageLog.i(TAG, "[NAV] Deck complete or auto-fill off. Clicking Start Career!...")
+            if (startCareerClickAttempts >= 5) {
+                return TransitionResult.Failed(
+                    reason = "Start Career was clicked $startCareerClickAttempts times with no screen transition. An empty or invalid deck slot is the usual cause.",
+                    transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                    recommendedAction = "Complete the support deck manually, then restart the queue.",
+                )
+            }
+            startCareerClickAttempts++
+            MessageLog.i(TAG, "[NAV] Deck complete or auto-fill off. Clicking Start Career! (attempt $startCareerClickAttempts)...")
             if (!ButtonStartCareer.click(iu, sourceBitmap = bitmap)) {
                 ButtonStartCareerOffset.click(iu, sourceBitmap = bitmap)
             }

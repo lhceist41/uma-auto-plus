@@ -24,6 +24,12 @@ object ButtonAutoFill : ButtonInterface {
     override val template = Template("components/button/auto_fill", region = Region.bottomHalf, confidence = 0.75)
 }
 
+object ButtonBorrowCardRemove : ButtonInterface {
+    // "Remove" bar at the top of the Borrow Card list (opened from the empty friend slot).
+    // Used as the positional anchor for tapping the first card row below it.
+    override val template = Template("components/button/borrow_card_remove", region = Region.topHalf)
+}
+
 object ButtonBack : ButtonInterface {
     override val template = Template("components/button/back", region = Region.bottomHalf)
 }
