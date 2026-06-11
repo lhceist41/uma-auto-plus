@@ -69,6 +69,10 @@ export interface Settings {
         minimumQualityThreshold: number
         timeDecayFactor: number
         improvementThreshold: number
+        // Internal: JSON snapshot of the racing-plan stance the last-applied preset set
+        // (written by the Home preset apply, read by the bot at career start for drift
+        // warnings). Not a user-facing control.
+        appliedRacingSnapshot: string
     }
 
     // Skill Settings
@@ -301,6 +305,7 @@ export const defaultSettings: Settings = {
         minimumQualityThreshold: 50.0,
         timeDecayFactor: 0.7,
         improvementThreshold: 50.0,
+        appliedRacingSnapshot: "",
     },
     skills: {
         // Out-of-box defaults matching the safe baseline every character preset applies: mid-run

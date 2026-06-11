@@ -254,6 +254,23 @@ const Home = () => {
             merged.trainingEvent.scenarioEventOverrides = { ...preservedScenarioOverrides, ...presetScenario }
         }
 
+        // Record what this preset intended for the racing plan so the bot can warn at career start
+        // when the live settings have drifted (a silently-off mandatory flag once dropped a career's
+        // planned races unnoticed).
+        let plannedRaceCount = 0
+        try {
+            plannedRaceCount = merged.racing.racingPlan ? JSON.parse(merged.racing.racingPlan).length : 0
+        } catch {
+            plannedRaceCount = 0
+        }
+        merged.racing.appliedRacingSnapshot = JSON.stringify({
+            presetName,
+            scenario: bsc.settings.general.scenario,
+            enableRacingPlan: merged.racing.enableRacingPlan,
+            enableMandatoryRacingPlan: merged.racing.enableMandatoryRacingPlan,
+            plannedRaceCount,
+        })
+
         bsc.setSettings(merged)
         await saveSettings()
         logWithTimestamp(`[Home] Applied preset: ${presetName} (${bsc.settings.general.scenario})`)

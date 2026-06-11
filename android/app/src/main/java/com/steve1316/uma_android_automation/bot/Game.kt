@@ -37,6 +37,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import org.json.JSONArray
+import org.json.JSONObject
 import org.opencv.core.Point
 import java.text.DecimalFormat
 import kotlin.intArrayOf
@@ -435,6 +437,51 @@ class Game(val myContext: Context) {
     }
 
     /**
+     * Warns loudly when key racing-plan settings deviate from what the last-applied preset set.
+     *
+     * The Home preset apply stores a snapshot of its racing-plan stance; a later manual toggle
+     * (or any stray write) silently reshapes racing for the whole career - e.g. mandatory
+     * racing-plan mode flipping to false mid-queue stops the planned races being entered until
+     * the career fails its fan goal. Log-only: the live settings still win; this just makes the
+     * deviation impossible to miss.
+     */
+    private fun warnOnRacingConfigDrift() {
+        val snapshotJson = SettingsHelper.getStringSetting("racing", "appliedRacingSnapshot")
+        if (snapshotJson.isEmpty()) return
+        try {
+            val snapshot = JSONObject(snapshotJson)
+            val drifts = mutableListOf<String>()
+            val livePlanEnabled = SettingsHelper.getBooleanSetting("racing", "enableRacingPlan")
+            val liveMandatory = SettingsHelper.getBooleanSetting("racing", "enableMandatoryRacingPlan")
+            val livePlanCount =
+                try {
+                    val plan = SettingsHelper.getStringSetting("racing", "racingPlan")
+                    if (plan.isEmpty()) 0 else JSONArray(plan).length()
+                } catch (e: Exception) {
+                    -1
+                }
+            if (snapshot.optBoolean("enableRacingPlan") != livePlanEnabled) {
+                drifts.add("enableRacingPlan: preset=${snapshot.optBoolean("enableRacingPlan")}, now=$livePlanEnabled")
+            }
+            if (snapshot.optBoolean("enableMandatoryRacingPlan") != liveMandatory) {
+                drifts.add("enableMandatoryRacingPlan: preset=${snapshot.optBoolean("enableMandatoryRacingPlan")}, now=$liveMandatory")
+            }
+            if (livePlanCount != -1 && snapshot.optInt("plannedRaceCount") != livePlanCount) {
+                drifts.add("planned races: preset=${snapshot.optInt("plannedRaceCount")}, now=$livePlanCount")
+            }
+            if (drifts.isNotEmpty()) {
+                MessageLog.w(
+                    TAG,
+                    "[CONFIG_DRIFT] Racing settings deviate from the applied preset \"${snapshot.optString("presetName")}\" " +
+                        "(${snapshot.optString("scenario")}): ${drifts.joinToString("; ")}. If unintended, re-apply the preset on the Home screen.",
+                )
+            }
+        } catch (e: Exception) {
+            Log.d(TAG, "[DEBUG] warnOnRacingConfigDrift:: Could not parse the preset snapshot: ${e.message}")
+        }
+    }
+
+    /**
      * Checks if the bot is sitting on one of the career-end screens: the End screen with the
      * Complete Career button, or the career-end "Learn" skill purchase screen (the skill list
      * without the in-career Log button).
@@ -573,6 +620,8 @@ class Game(val myContext: Context) {
             MessageLog.i(TAG, "[INFO] Debug test(s) complete. Stopping bot...")
             return TaskResult.Success(TaskResultCode.TASK_RESULT_COMPLETE, "Debug tests completed.")
         }
+
+        warnOnRacingConfigDrift()
 
         // Auto-navigate to the training menu if the bot is not already there.
         // This allows starting the bot from the home screen, scenario select, or any
