@@ -2569,6 +2569,13 @@ abstract class Campaign(game: Game) : Task(game) {
             game.wait(1.0)
             return
         }
+        // First-win trophy popups use a Close button instead of OK (the URA Finals dirt-champion
+        // trophy sat through OK attempts and both nudges, which land just above its button).
+        if (ButtonClose.click(game.imageUtils)) {
+            MessageLog.i(TAG, "[INFO] recoverFromUnknownScreen:: Dismissed an unrecognized screen via its Close button.")
+            game.wait(1.0)
+            return
+        }
         if (count % 2 == 0) {
             game.tap(540.0, 1300.0, taps = 1)
         } else {
