@@ -1,6 +1,8 @@
 package com.steve1316.uma_android_automation.bot
 
+import android.accessibilityservice.AccessibilityService
 import android.graphics.Bitmap
+import android.os.Build
 import android.util.Log
 import com.steve1316.automation_library.utils.BotService
 import com.steve1316.automation_library.utils.DiscordUtils
@@ -1844,6 +1846,13 @@ abstract class Campaign(game: Game) : Task(game) {
         } else if (ButtonBack.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
             bMiscBackPressedThisTick = true
             consecutiveMiscBackPresses++
+            if (consecutiveMiscBackPresses == 2) {
+                // Two presses without progress: if an open notification shade is eating the
+                // taps, clear it before the streak runs on. An open shade covers the top anchors,
+                // absorbs back-presses, and can let a misc template match shade content and tap
+                // the bot's own STOP BOT notification action.
+                dismissNotificationShade("misc back-press streak")
+            }
             if (consecutiveMiscBackPresses >= maxConsecutiveMiscBackPresses) {
                 game.imageUtils.saveBitmap(filename = "misc_backpress_stuck", fullRes = true)
                 throw InterruptedException(
@@ -2493,6 +2502,25 @@ abstract class Campaign(game: Game) : Task(game) {
     }
 
     /**
+     * Attempts to close the Android notification shade via the accessibility service.
+     *
+     * A pulled-down shade covers the top-region detection anchors and absorbs taps, so screen
+     * detection goes blind and template matching runs against a contaminated frame — a misc
+     * template can match shade content and tap the bot's own STOP BOT notification action, ending
+     * the session mid-career. Dismissal is a free no-op when the shade is already closed. Requires
+     * API 31+; older devices skip silently.
+     *
+     * @param reason Short context string for the log line.
+     */
+    protected fun dismissNotificationShade(reason: String) {
+        if (Build.VERSION.SDK_INT >= 31) {
+            val dispatched = game.gestureUtils.performGlobalAction(AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
+            MessageLog.i(TAG, "[INFO] Dismissed the notification shade in case it was open ($reason, dispatched=$dispatched).")
+            game.wait(0.5)
+        }
+    }
+
+    /**
      * Recovers from a process() tick where no known screen was detected.
      *
      * The previous behavior was a single unconditional tap at (350, 450) every tick with no bound,
@@ -2509,6 +2537,12 @@ abstract class Campaign(game: Game) : Task(game) {
      * @param count The current [consecutiveUnknownScreenCount] for this stuck streak.
      */
     private fun recoverFromUnknownScreen(count: Int) {
+        if (count == 1) {
+            // First unrecognized tick: clear the notification shade in case it is covering the
+            // top-region anchors (free no-op when closed).
+            dismissNotificationShade("unknown screen")
+        }
+
         if (DialogUtils.check(game.imageUtils)) {
             MessageLog.w(TAG, "[WARN] recoverFromUnknownScreen:: A dialog banner is present but could not be identified (tick $count). Closing it.")
             if (ButtonClose.click(game.imageUtils)) {
