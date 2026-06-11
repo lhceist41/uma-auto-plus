@@ -70,7 +70,18 @@ Each preset contains a **complete settings snapshot** covering:
 - `misc.formattedSettingsString` -- runtime display state
 - `misc.currentProfileName` -- runtime profile state
 - `racing.racingPlanData` -- large raw race data (the processed racing plan is included)
+- `racing.appliedRacingSnapshot` -- runtime bookkeeping written on preset apply, read by the bot for config-drift warnings
 - `profiles` array -- user-created profiles are separate from built-in presets
+
+### Curated racing plans in presets
+
+A preset MAY ship a curated `racing.racingPlan` (the selected-races JSON) together with
+`enableRacingPlan`/`enableMandatoryRacingPlan: true` when a trainee depends on specific race
+entries -- Haru Urara (URA Finale) ships her dirt stakes agenda this way because her viable
+pool is dirt sprint/mile and its plannable entries are sparse. Every preset states the
+racing-plan trio explicitly, so switching presets never drags one trainee's plan onto
+another. Entries use the same shape the Racing Plan screen saves:
+`{ raceName, date, priority, turnNumber }`.
 
 ---
 

@@ -8714,9 +8714,21 @@ export const characterPresets: CharacterPreset[] = [
                 skipSummerTrainingForAgenda: false,
                 selectedUserAgenda: "Agenda 1",
                 customAgendaTitle: "",
-                enableRacingPlan: false,
-                enableMandatoryRacingPlan: false,
-                racingPlan: "",
+                // Curated dirt agenda shipped with the preset: her viable pool is dirt
+                // sprint/mile and its plannable (G1-G3) entries are sparse, so every winnable
+                // stakes race is scheduled explicitly and entered by name (mandatory mode).
+                // This plan plus emergency racing carries a career to a URA Finals dirt win.
+                enableRacingPlan: true,
+                enableMandatoryRacingPlan: true,
+                racingPlan: JSON.stringify([
+                    { raceName: "Unicorn Stakes", date: "Classic Class June, Second Half", priority: 3, turnNumber: 36 },
+                    { raceName: "Leopard Stakes", date: "Classic Class August, First Half", priority: 1, turnNumber: 39 },
+                    { raceName: "Miyako Stakes", date: "Classic Class November, First Half", priority: 2, turnNumber: 45 },
+                    { raceName: "Capella Stakes", date: "Classic Class December, First Half", priority: 4, turnNumber: 47 },
+                    { raceName: "Tokai Stakes", date: "Senior Class January, Second Half", priority: 3, turnNumber: 50 },
+                    { raceName: "Antares Stakes", date: "Senior Class April, First Half", priority: 5, turnNumber: 55 },
+                    { raceName: "Capella Stakes", date: "Senior Class December, First Half", priority: 6, turnNumber: 71 },
+                ]),
                 minFansThreshold: 0,
                 preferredTerrain: "Dirt",
                 preferredGrades: ["G1", "G2", "G3"],
