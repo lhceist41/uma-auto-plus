@@ -63,6 +63,17 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         var queueSkipRequested: Boolean = false
 
         /**
+         * Wall-clock budget for one between-run navigation. Normal navigation (career summary
+         * through deck setup to the training menu, cinematic included) takes 2-5 minutes; a
+         * navigate() call that hasn't returned by this deadline is wedged below the FSM loop,
+         * where its own per-iteration bail-outs can never fire.
+         */
+        private const val NAV_DEADLINE_MS: Long = 10 * 60 * 1000L
+
+        /** How long after the deadline interrupt to wait before escalating to a queue stop. */
+        private const val NAV_INTERRUPT_GRACE_MS: Long = 60 * 1000L
+
+        /**
          * Persists the current queue state to SQLite so it can survive app crashes.
          * Writes directly to the settings database using INSERT OR REPLACE.
          */
@@ -871,8 +882,63 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     } else {
                         MessageLog.i(TAG, "[QUEUE] Navigating back to career start for next run...")
 
+                        // Between-run navigation runs outside the per-run timeout in Task.start, and
+                        // the 3-minute stall watchdog stays calm as long as anything ticks the
+                        // heartbeat - which the navigator's wait loops do. A single wedged call below
+                        // navigate() therefore used to hang the queue forever with zero log output
+                        // (20+ minutes parked on the career summary after MuMu killed the
+                        // accessibility service mid-navigation). This deadline thread interrupts the
+                        // queue thread if navigate() overruns; if the interrupt doesn't land within
+                        // the grace window, it requests a queue stop so the session still ends with a
+                        // saved log instead of an invisible hang.
                         val navigator = CareerLaunchNavigator(context)
-                        val navResult = navigator.navigate(reuseLastLaunchSetup)
+                        val navDone = java.util.concurrent.atomic.AtomicBoolean(false)
+                        val queueThread = Thread.currentThread()
+                        val deadlineThread =
+                            Thread {
+                                val deadline = System.currentTimeMillis() + NAV_DEADLINE_MS
+                                while (!navDone.get() && System.currentTimeMillis() < deadline) {
+                                    try {
+                                        Thread.sleep(2_000)
+                                    } catch (_: InterruptedException) {
+                                        return@Thread
+                                    }
+                                }
+                                if (navDone.get()) return@Thread
+                                MessageLog.e(TAG, "[QUEUE] Between-run navigation exceeded ${NAV_DEADLINE_MS / 60000} minutes. Interrupting the navigation thread.")
+                                queueThread.interrupt()
+                                try {
+                                    Thread.sleep(NAV_INTERRUPT_GRACE_MS)
+                                } catch (_: InterruptedException) {
+                                    return@Thread
+                                }
+                                if (!navDone.get()) {
+                                    MessageLog.e(TAG, "[QUEUE] Navigation thread did not respond to the interrupt. Requesting queue stop so the session ends cleanly.")
+                                    queueStopRequested = true
+                                }
+                            }
+                        deadlineThread.name = "NavDeadline"
+                        deadlineThread.isDaemon = true
+                        deadlineThread.start()
+
+                        val navResult =
+                            try {
+                                navigator.navigate(reuseLastLaunchSetup)
+                            } catch (e: InterruptedException) {
+                                // Clear the interrupt flag so queue teardown (log saving, events) is not poisoned.
+                                Thread.interrupted()
+                                NavigationResult(
+                                    success = false,
+                                    lastDetectedState = "WEDGED",
+                                    failureReason = "Navigation did not return within ${NAV_DEADLINE_MS / 60000} minutes and was interrupted by the deadline watchdog.",
+                                    failedTransition = "between-run navigation",
+                                    isRecoverable = true,
+                                    recommendedAction = "Check the emulator - the capture pipeline or accessibility service likely died mid-navigation. Restart the queue once the game is stable.",
+                                )
+                            } finally {
+                                navDone.set(true)
+                                deadlineThread.interrupt()
+                            }
 
                         if (!navResult.success) {
                             MessageLog.e(TAG, "[QUEUE] Navigation failed: ${navResult.failureReason}")

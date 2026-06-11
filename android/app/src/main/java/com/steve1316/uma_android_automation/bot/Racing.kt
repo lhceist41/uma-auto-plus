@@ -1358,7 +1358,28 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         // Conditionally start the standard racing process.
         // This fallback only applies when Racing Plan is disabled, so use interval-based logic.
-        return enableFarmingFans && !enableRacingPlan && (turnsRemaining % daysToRunExtraRaces == 0) && !raceRepeatWarningCheck
+        val eligibleForStandardRacing = enableFarmingFans && !enableRacingPlan && (turnsRemaining % daysToRunExtraRaces == 0) && !raceRepeatWarningCheck
+        if (!eligibleForStandardRacing) {
+            // Name the gate that closed. This return used to be silent, which hid a career-killing
+            // config for a whole run: a trainee whose mandatory racing plan had no Junior/Classic
+            // entries with fan farming off trained nearly every turn, and nothing in the log said
+            // why no extra race was ever considered.
+            val reason =
+                when {
+                    enableRacingPlan && enableMandatoryRacingPlan ->
+                        "racing plan is mandatory and has no entry for this turn (voluntary racing only happens on planned turns; add plan entries or enable fan farming emergencies to race more)"
+                    enableRacingPlan && !enableFarmingFans ->
+                        "racing plan is non-mandatory but fan farming is disabled (smart racing requires both)"
+                    !enableFarmingFans ->
+                        "fan farming is disabled"
+                    raceRepeatWarningCheck ->
+                        "consecutive race warning is active"
+                    else ->
+                        "turn $turnsRemaining is not on the racing interval (every $daysToRunExtraRaces turns)"
+                }
+            MessageLog.i(TAG, "[RACE] Extra racing skipped this turn: $reason.")
+        }
+        return eligibleForStandardRacing
     }
 
     /**

@@ -163,6 +163,11 @@ class CareerLaunchNavigator(private val context: Context) {
             tempGame = game
             imageUtils = game.imageUtils
             true
+        } catch (e: InterruptedException) {
+            // The queue-side navigation deadline interrupts this thread when a call below us
+            // wedges (e.g. Game construction never returning after a mid-navigation
+            // accessibility-service kill). Let it unwind instead of reporting a constructor error.
+            throw e
         } catch (e: Exception) {
             MessageLog.e(TAG, "[NAV] Failed to create Game instance for image utils: ${e.message}")
             false
@@ -424,6 +429,8 @@ class CareerLaunchNavigator(private val context: Context) {
                     MessageLog.i(TAG, "[NAV] Restore-TP confirmation detected: \"${body.replace("\n", " ").take(70)}\"")
                     return LaunchScreenState.TP_RESTORE_DIALOG
                 }
+            } catch (e: InterruptedException) {
+                throw e
             } catch (_: Exception) { }
         }
 
@@ -467,6 +474,8 @@ class CareerLaunchNavigator(private val context: Context) {
                 MessageLog.i(TAG, "[NAV] Skip button OCR: '$skipOcr' → QUICK_MODE_PROMPT")
                 return LaunchScreenState.QUICK_MODE_PROMPT
             }
+        } catch (e: InterruptedException) {
+            throw e
         } catch (_: Exception) { }
 
         // Cinematic - Skip or fast-forward button visible.
@@ -889,6 +898,8 @@ class CareerLaunchNavigator(private val context: Context) {
             } else {
                 MessageLog.i(TAG, "[NAV] [HOME] OCR did not find 'CAREER' or 'Event'.")
             }
+        } catch (e: InterruptedException) {
+            throw e
         } catch (e: Exception) {
             MessageLog.w(TAG, "[NAV] [HOME] OCR detector failed: ${e.message}")
         }

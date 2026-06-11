@@ -1241,6 +1241,14 @@ abstract class Campaign(game: Game) : Task(game) {
         return false
     }
 
+    // Forced-infirmary tracking. A negative status that persists while the Infirmary button reads
+    // disabled is either a misread of the button state or a condition the infirmary can't cure
+    // (e.g. Super Creek's story-locked "Under the Weather"). One forced click per episode resolves
+    // the misread case cheaply (a click on a genuinely disabled button is a no-op); the loud log
+    // captures the incurable case for later tuning.
+    private var turnsWithPersistentNegativeStatus = 0
+    private var bForcedInfirmaryAttempted = false
+
     /**
      * Checks if the trainee has an injury and attempts to heal it.
      *
@@ -1253,8 +1261,39 @@ abstract class Campaign(game: Game) : Task(game) {
 
         return when (ButtonInfirmary.checkDisabled(game.imageUtils, sourceBitmap)) {
             true -> {
-                MessageLog.i(TAG, "[INJURY] No injury detected.")
-                false
+                val statuses = trainee.currentNegativeStatuses
+                if (statuses.isEmpty()) {
+                    turnsWithPersistentNegativeStatus = 0
+                    bForcedInfirmaryAttempted = false
+                    MessageLog.i(TAG, "[INJURY] No injury detected.")
+                    false
+                } else {
+                    turnsWithPersistentNegativeStatus++
+                    if (turnsWithPersistentNegativeStatus >= 2 && !bForcedInfirmaryAttempted) {
+                        bForcedInfirmaryAttempted = true
+                        MessageLog.w(
+                            TAG,
+                            "[INJURY] Infirmary button reads disabled but negative status (${statuses.joinToString(", ")}) has persisted for " +
+                                "$turnsWithPersistentNegativeStatus turns. Forcing one infirmary attempt in case the disabled read is wrong.",
+                        )
+                        if (ButtonInfirmary.click(game.imageUtils)) {
+                            game.wait(game.dialogWaitDelay)
+                            ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
+                            game.wait(game.dialogWaitDelay)
+                            MessageLog.i(TAG, "[INJURY] Forced infirmary attempt clicked through. If the status persists next turn, the infirmary cannot cure it.")
+                            true
+                        } else {
+                            MessageLog.i(
+                                TAG,
+                                "[INJURY] Forced infirmary attempt found no clickable button - the disabled read was genuine and the current status is not infirmary-curable. Continuing without healing.",
+                            )
+                            false
+                        }
+                    } else {
+                        MessageLog.i(TAG, "[INJURY] No injury detected (Infirmary disabled; negative status \"${statuses.joinToString(", ")}\" present, turn $turnsWithPersistentNegativeStatus of episode).")
+                        false
+                    }
+                }
             }
 
             false -> {
