@@ -16,17 +16,21 @@ UMA Auto+ ships with **57 built-in character presets** (19 characters x 3 scenar
 | Air Groove | Yes | Yes | Yes |
 | Daiwa Scarlet | Yes | Yes | Yes |
 | El Condor Pasa | Yes | Yes | Yes |
+| Gold City (Autumn Cosmos) | Yes | Yes | Yes |
 | Gold Ship | Yes | Yes | Yes |
 | Grass Wonder | Yes | Yes | Yes |
 | Haru Urara | Yes | Yes | Yes |
 | Hishi Amazon | Yes | Yes | Yes |
 | King Halo | Yes | Yes | Yes |
+| Maruzensky (Formula R) | Yes | Yes | Yes |
 | Matikanefukukitaru | Yes | Yes | Yes |
 | Mayano Top Gun | Yes | Yes | Yes |
+| Mejiro McQueen (Frontline Elegance) | Yes | Yes | Yes |
 | Nice Nature | Yes | Yes | Yes |
 | Sakura Bakushin O | Yes | Yes | Yes |
 | Taiki Shuttle | Yes | Yes | Yes |
 | Vodka | Yes | Yes | Yes |
+| Winning Ticket (Get to Winning!) | Yes | Yes | Yes |
 
 ---
 
@@ -35,7 +39,7 @@ UMA Auto+ ships with **57 built-in character presets** (19 characters x 3 scenar
 ### User flow
 
 1. User opens UMA Auto+ and selects a **scenario** (e.g., "Trackblazer") on the Home page.
-2. A **character preset dropdown** appears below the scenario selector, filtered to show only presets for that scenario (15 characters).
+2. A **character preset dropdown** appears below the scenario selector, filtered to show only presets for that scenario (19 characters).
 3. User picks a character (e.g., "El Condor Pasa").
 4. The preset's full settings are **deep-merged** into the current app configuration, overwriting every settings category.
 5. Settings are **saved to SQLite immediately** so the Kotlin backend reads the correct values.
