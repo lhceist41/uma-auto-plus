@@ -601,24 +601,36 @@ class SkillListEntry(
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
-     * Purchases this skill and triggers updates for related versions.
+     * Selects this skill for purchase.
      *
-     * Upon purchasing a skill, all other versions in the same upgrade chain are updated to reflect the new state:
+     * Two modes:
+     * - Simulation (skillUpLocation == null): [SkillPlan] planning/knapsack modelling. Commits in-memory via [markObtained] without touching the screen.
+     * - Real (skillUpLocation != null): only taps the Skill Up (+) button. The caller ([SkillList.buySkill]) verifies the tap registered before committing via [markObtained]; never assume the tap landed.
+     *
+     * @param skillUpLocation The screen location ([Point]) of the Skill Up (+) button, or null to simulate.
+     */
+    fun buy(skillUpLocation: Point? = null) {
+        if (skillUpLocation == null) {
+            markObtained()
+            return
+        }
+
+        game.tap(
+            skillUpLocation.x,
+            skillUpLocation.y,
+            ButtonSkillUp.template.path,
+        )
+    }
+
+    /**
+     * Commits this skill as obtained and triggers updates for related versions.
+     *
+     * All other versions in the same upgrade chain are updated to reflect the new state:
      * - Downregulated versions are marked as [bIsObtained].
      * - In-place upgrades are swapped (current becomes virtual, next becomes available).
      * - Multi-entry upgrades have their [screenPrice] adjusted.
-     *
-     * @param skillUpLocation The screen location ([Point]) of the Skill Up (+) button. If provided, the bot will physically tap the button.
      */
-    fun buy(skillUpLocation: Point? = null) {
-        if (skillUpLocation != null) {
-            game.tap(
-                skillUpLocation.x,
-                skillUpLocation.y,
-                ButtonSkillUp.template.path,
-            )
-        }
-
+    fun markObtained() {
         bIsObtained = true
 
         // Update all related versions in the upgrade chain.

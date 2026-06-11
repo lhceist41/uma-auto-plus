@@ -549,61 +549,26 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
      * This method allows for testing the skill identification and selection logic without performing actual transactions in the game.
      */
     fun startSkillListBuyTest() {
-        MessageLog.i(TAG, "\n[TEST] Now beginning Skill List Buy test.")
-
-        val skillList = SkillList(game, campaign)
-
-        // Verify that the bot is currently at the skill list screen.
-        if (!skillList.checkSkillListScreen()) {
-            MessageLog.e(TAG, "[ERROR] startSkillListBuyTest:: Not on the Skill List screen. Ending test.")
+        // TEMP (verification harness): runs the REAL purchase pass on the current skill list screen
+        // instead of the read-only simulation, so the (+) tap fix can be exercised without a full career.
+        // To use: enable debugMode_startSkillListBuyTest, open the career-end "Learn" screen, Start.
+        // Revert to the simulation once the tap fix is confirmed.
+        MessageLog.i(TAG, "\n[TEST] Now beginning Skill List Buy test (REAL purchase pass). Waiting up to 30s for the Learn screen...")
+        val testSkillList = SkillList(game, campaign)
+        var bOnSkillScreen = false
+        for (i in 1..30) {
+            if (testSkillList.checkCareerCompleteSkillListScreen() || testSkillList.checkSkillListScreen()) {
+                bOnSkillScreen = true
+                break
+            }
+            game.wait(1.0, skipWaitingForLoading = true)
+        }
+        if (!bOnSkillScreen) {
+            MessageLog.e(TAG, "[ERROR] startSkillListBuyTest:: Learn/skill-list screen not detected within 30s. Open it in the game and restart the bot.")
             return
         }
-
-        // Detect the current skill points.
-        val currentPoints: Int? = skillList.detectSkillPoints()
-        if (currentPoints == null) {
-            MessageLog.e(TAG, "[ERROR] startSkillListBuyTest:: Failed to detect skill points. Ending test.")
-            return
-        }
-        MessageLog.i(TAG, "[TEST] Current Skill Points: $currentPoints")
-
-        // Scan the skill list and parse all available entries.
-        // Use mock data if enabled for logic testing without a game instance.
-        MessageLog.i(TAG, "[TEST] Scanning skill list...")
-        val allSkills: Map<String, SkillListEntry> = skillList.parseSkillListEntries(bUseMockData = USE_MOCK_DATA)
-
-        val availableSkills: Map<String, SkillListEntry> = allSkills.filter { !it.value.bIsObtained && !it.value.bIsVirtual }
-
-        // Log a summary of all identified available skills.
-        MessageLog.i(TAG, "[TEST] Summary of available skills:")
-        availableSkills.forEach { (name, entry) ->
-            MessageLog.i(TAG, "\t- $name: ${entry.price} SP")
-        }
-
-        // Calculate optimal purchases using a greedy heuristic to minimize remaining points.
-        val sortedSkills: List<SkillListEntry> = availableSkills.values.toList().sortedByDescending { it.price }
-
-        val skillsToBuy = mutableListOf<SkillListEntry>()
-        var remainingPoints = currentPoints
-
-        for (skill in sortedSkills) {
-            if (skill.price <= remainingPoints) {
-                skillsToBuy.add(skill)
-                remainingPoints -= skill.price
-            }
-        }
-
-        // Log a summary of the skills that would be purchased.
-        MessageLog.i(TAG, "[TEST] Identified skills that would be bought to bring SP close to zero:")
-        if (skillsToBuy.isEmpty()) {
-            MessageLog.i(TAG, "\t- No skills can be purchased with current SP.")
-        } else {
-            skillsToBuy.forEach { skill ->
-                MessageLog.i(TAG, "\t- ${skill.name}: ${skill.price} SP")
-            }
-        }
-        MessageLog.i(TAG, "[TEST] Expected remaining Skill Points: $remainingPoints")
-        MessageLog.i(TAG, "[TEST] Skill List Buy test complete.")
+        val result: Boolean = start()
+        MessageLog.i(TAG, "[TEST] Skill List Buy test complete (start() returned $result).")
     }
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -710,6 +675,18 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
 
             // Handle exact matches.
             if (entry.bIsAvailable) {
+                // Respect the wave budget in plan order. Without this, the plan committed every
+                // available planned skill regardless of total cost, and since the buyer purchases in
+                // scroll order (not plan order) an over-budget set stranded the expensive critical
+                // skills (careers reaching 2500m+ gates without Swinging Maestro). A budget-true set is
+                // order-insensitive — everything planned gets bought.
+                if (entry.screenPrice > remainingSkillPoints) {
+                    MessageLog.v(
+                        TAG,
+                        "[SKILLS] getUserPlannedSkills:: Skipping \"$name\" (${entry.screenPrice}pt) - exceeds the remaining wave budget (${remainingSkillPoints}pt).",
+                    )
+                    continue
+                }
                 result[name] = entry.screenPrice
                 remainingSkillPoints -= entry.screenPrice
                 entry.buy()
@@ -1276,6 +1253,11 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
 
         skillList.printSkillListEntries(verbose = true)
 
+        // Ground-truth snapshot: skills whose Obtained pill was detected on screen during the read
+        // pass (genuinely owned, e.g. on career-end re-entry). The post-planning state reset below
+        // must not clear these - doing so corrupts upgrade-chain pricing and ownership reads.
+        val ownedAtParse: Set<String> = skillList.getObtainedSkills().keys
+
         // Calculate the list of skills to purchase based on settings and points.
         val skillsToPurchase: Map<String, Int> =
             getSkillsToBuy(
@@ -1291,21 +1273,83 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             return true
         }
 
-        // Reset the internal purchase state before starting the actual buying process.
-        skillList.sellAllSkills()
+        // Reset the in-memory purchase simulation from planning, preserving screen-confirmed ownership.
+        skillList.sellAllSkills(preserve = ownedAtParse)
 
         // Iterate through the list again and perform the confirmed purchases.
-        skillList.parseSkillListEntries { currentList: SkillList, entry: SkillListEntry, point: Point ->
-            onSkillListEntryDetected(
-                entry = entry,
-                point = point,
-                skillsToBuy = skillsToPurchase.keys.toList(),
-                skillList = currentList,
-            )
+        //
+        // A single scroll pass is not trusted to cover the whole list: the end-of-list heuristics
+        // can conclude "done" early (dropped swipes, or purchases reflowing rows mid-pass), stranding
+        // planned skills unbought. Re-run from the top while planned skills remain. Re-runs are safe:
+        // obtained entries are skipped in the callback, and already-selected rows no longer present a
+        // matchable Skill Up button.
+        val maxBuyPasses = 3
+        var totalEntriesSeen = 0
+        for (buyPass in 1..maxBuyPasses) {
+            // Heal a wiped Accessibility grant between passes - the most common mid-buy failure
+            // (the emulator drops the service and every tap/swipe silently stops registering).
+            game.ensureAccessibilityService()
+            var entriesSeenThisPass = 0
+            skillList.parseSkillListEntries { currentList: SkillList, entry: SkillListEntry, point: Point ->
+                entriesSeenThisPass++
+                onSkillListEntryDetected(
+                    entry = entry,
+                    point = point,
+                    skillsToBuy = skillsToPurchase.keys.toList(),
+                    skillList = currentList,
+                )
+            }
+            totalEntriesSeen += entriesSeenThisPass
+
+            val unbought: List<String> = skillsToPurchase.keys.filter { it !in skillList.getObtainedSkills() }
+            // Drop what the current budget can no longer cover — re-scrolling the whole list for a
+            // skill that cannot be bought is pure waste. Prices can drift between parse and buy, so
+            // evaluate against the live screenPrice where known.
+            val remaining: List<String> = unbought.filter { name ->
+                val price: Int = skillList.getAllSkills()[name]?.screenPrice ?: skillsToPurchase[name] ?: Int.MAX_VALUE
+                price <= skillList.skillPoints
+            }
+            val droppedUnaffordable: List<String> = unbought - remaining.toSet()
+            if (droppedUnaffordable.isNotEmpty()) {
+                MessageLog.w(TAG, "[WARN] Dropping ${droppedUnaffordable.size} planned skill(s) no longer affordable with ${skillList.skillPoints} SP: ${droppedUnaffordable.joinToString(", ")}.")
+            }
+            if (remaining.isEmpty()) {
+                if (buyPass > 1 || droppedUnaffordable.isNotEmpty()) {
+                    MessageLog.i(TAG, "[SKILLS] Nothing further to buy after $buyPass buy pass(es). Proceeding to confirm.")
+                }
+                break
+            }
+            if (entriesSeenThisPass == 0) {
+                // The pass saw NOTHING - the list is unreadable or input is blocked (popup, stale
+                // capture, emulator input outage), not merely incomplete. Try to clear a blocking
+                // dialog before the next pass.
+                MessageLog.e(TAG, "[ERROR] Buy pass $buyPass processed zero entries - screen unreadable or input blocked. Attempting dialog recovery before retry.")
+                campaign.handleDialogs()
+                game.wait(1.0, skipWaitingForLoading = true)
+            }
+            if (buyPass < maxBuyPasses) {
+                MessageLog.w(TAG, "[WARN] Buy pass $buyPass ended with ${remaining.size} planned skill(s) unbought: ${remaining.joinToString(", ")}. Re-running the buy pass...")
+            } else {
+                MessageLog.w(TAG, "[WARN] ${remaining.size} planned skill(s) still unbought after $maxBuyPasses buy passes: ${remaining.joinToString(", ")}. Confirming what was bought.")
+            }
         }
 
-        skillList.confirmAndExit()
+        // If every pass was blind AND nothing new got bought, the screen state is unknown - do not
+        // blind-confirm (a misplaced Confirm/Back sequence is how selections get silently lost).
+        val boughtAny: Boolean = skillsToPurchase.keys.any { it in skillList.getObtainedSkills() && it !in ownedAtParse }
+        if (!boughtAny && totalEntriesSeen == 0) {
+            MessageLog.e(TAG, "[ERROR] start:: All buy passes processed zero entries and nothing was bought. Not confirming; aborting the skill plan.")
+            campaign.trainee.skillPoints = skillList.skillPoints
+            return false
+        }
+
+        // The commit must land on working input - heal the grant one more time if needed.
+        game.ensureAccessibilityService()
+        val committed: Boolean = skillList.confirmAndExit()
+        if (!committed) {
+            MessageLog.e(TAG, "[ERROR] start:: Purchase commit could not be verified - selections may still be pending on the Learn screen.")
+        }
         campaign.trainee.skillPoints = skillList.skillPoints
-        return true
+        return committed
     }
 }

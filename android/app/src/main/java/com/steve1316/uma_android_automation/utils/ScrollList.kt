@@ -584,9 +584,9 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
      *
      * @param bitmap Optional source bitmap to use when detecting scrollbar.
      */
-    private fun scrollToTop(bitmap: Bitmap? = null) {
+    private fun scrollToTop(bitmap: Bitmap? = null, force: Boolean = false) {
         val bboxThumb: BoundingBox? = getListScrollBarBoundingRegion().second
-        if (!bIsScrollable) {
+        if (!bIsScrollable && !force) {
             MessageLog.d(TAG, "[DEBUG] scrollToTop:: List is not scrollable.")
             return
         }
@@ -699,8 +699,8 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
      * @param entryHeight Optional entry height to determine scroll distance.
      * @param durationMs Swipe duration. Minimum 250ms for Accessibility Service registration.
      */
-    fun scrollDown(startLoc: Point? = null, entryHeight: Int = 0, durationMs: Long = 250L) {
-        if (!bIsScrollable) {
+    fun scrollDown(startLoc: Point? = null, entryHeight: Int = 0, durationMs: Long = 250L, force: Boolean = false) {
+        if (!bIsScrollable && !force) {
             MessageLog.d(TAG, "[DEBUG] scrollDown:: List is not scrollable.")
             return
         }
@@ -721,8 +721,8 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
      * @param entryHeight Optional entry height to determine scroll distance.
      * @param durationMs Swipe duration. Minimum 250ms for Accessibility Service registration.
      */
-    fun scrollUp(startLoc: Point? = null, entryHeight: Int = 0, durationMs: Long = 250L) {
-        if (!bIsScrollable) {
+    fun scrollUp(startLoc: Point? = null, entryHeight: Int = 0, durationMs: Long = 250L, force: Boolean = false) {
+        if (!bIsScrollable && !force) {
             MessageLog.d(TAG, "[DEBUG] scrollUp:: List is not scrollable.")
             return
         }
@@ -760,7 +760,11 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
     ): Boolean {
         var bitmap = game.imageUtils.getSourceBitmap()
 
-        if (bScrollBottomToTop) scrollToBottom(bitmap) else scrollToTop(bitmap)
+        // Force the initial scroll-to-top when the caller can detect list content by key: the
+        // scrollbar often fails to render on an idle list (career-end Learn list), so without this
+        // a second pass would start wherever the previous one ended and only see the bottom
+        // screenful. A forced swipe on a genuinely single-screen list is a harmless no-op.
+        if (bScrollBottomToTop) scrollToBottom(bitmap) else scrollToTop(bitmap, force = keyExtractor != null)
 
         // Max time for the scroll loop, in ms. Use the caller-supplied value: an earlier version
         // shadowed the parameter with a hardcoded 60_000 local, pinning every caller to 60s.
@@ -771,6 +775,24 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
         val entryBboxes: MutableList<BoundingBox> = mutableListOf()
         // Y position for termination check.
         var prevThumbY: Int? = null
+        // Consecutive "thumb didn't advance after a scroll" reads. A single no-move is usually a
+        // dropped/under-registered swipe (on MuMu the thumb climbs steadily, then one swipe no-ops
+        // mid-list), not the end of the list - so require several in a row, re-issuing the scroll
+        // each time, before concluding we've reached the bottom.
+        var consecutiveNoMove = 0
+        val maxConsecutiveNoMove = 3
+        // Content-based end detection for lists whose scrollbar is never detected (used by the
+        // no-scrollbar branch in the loop below): consecutive scrolls that reveal no new entries.
+        var consecutiveNoNew = 0
+        val maxConsecutiveNoNew = 3
+        // Consecutive frames in which detection found ZERO entries despite retries. Distinct from
+        // "no NEW entries": zero detections means the list is unreadable (occluded by a popup or a
+        // stale capture), and riding the end-of-list paths from that state silently drops the rest
+        // of the list (a buy pass saw zero entries and exited as a clean "end of list").
+        var consecutiveEmptyFrames = 0
+        val maxConsecutiveEmptyFrames = 3
+        // One-shot escalation for a scrollbar thumb pinned mid-track (frozen list / dropped input).
+        var bEscalatedScroll = false
 
         // Stores keys from the previous frame to identify the overlap with the current frame.
         var lastFrameKeys: List<String> = emptyList()
@@ -778,6 +800,9 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
         var index = 0
         while (System.currentTimeMillis() - startTime < maxTimeMsLong) {
             var currentFrameEntries: List<ScrollListEntry> = emptyList()
+            // Whether this frame revealed at least one entry not present in the previous frame.
+            // Drives content-based end detection when no scrollbar is available.
+            var foundNewEntries = false
             var retries = 3
             while (retries > 0) {
                 bitmap = game.imageUtils.getSourceBitmap()
@@ -809,8 +834,15 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
             }
 
             if (currentFrameEntries.isEmpty()) {
-                MessageLog.d(TAG, "[DEBUG] process:: No entries detected in current frame after retries.")
+                consecutiveEmptyFrames++
+                MessageLog.w(TAG, "[WARN] process:: No entries detected in current frame after retries (empty frame $consecutiveEmptyFrames/$maxConsecutiveEmptyFrames).")
+                if (consecutiveEmptyFrames >= maxConsecutiveEmptyFrames) {
+                    game.imageUtils.saveBitmap(filename = "scroll_list_empty_frames", fullRes = true)
+                    MessageLog.e(TAG, "[ERROR] process:: $consecutiveEmptyFrames consecutive frames with zero detected entries - the list is unreadable (occluded or input dead). Aborting the scroll pass.")
+                    return false
+                }
             } else {
+                consecutiveEmptyFrames = 0
                 // Determine the overlap with the previous frame's entries using the provided keyExtractor.
                 var skipCount = 0
                 if (keyExtractor != null && lastFrameKeys.isNotEmpty()) {
@@ -831,6 +863,9 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
                     }
                 }
 
+                // This frame is "new" if not every detected entry overlapped the previous frame.
+                foundNewEntries = skipCount < currentFrameEntries.size
+
                 // Process only the new entries that weren't part of the overlap.
                 for (i in skipCount until currentFrameEntries.size) {
                     val entry = currentFrameEntries[i]
@@ -848,36 +883,102 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
 
             entryBboxes.addAll(currentFrameEntries.map { it.bbox })
             val avgEntryHeight: Int = if (entryBboxes.isEmpty()) 0 else entryBboxes.map { it.h }.average().toInt()
-            val scrollStartLoc: Point? = if (currentFrameEntries.isEmpty()) null else Point(bboxEntries.x.toDouble(), currentFrameEntries.last().bbox.y.toDouble())
+            // Swipe from the list CENTER, not the left edge. bboxEntries.x is the list's left margin (~16px);
+            // edge swipes under-register and pin mid-list on MuMu. The horizontal center is reliably inside
+            // the scrollable area. The start Y stays at the last visible entry so the upward drag still
+            // spans the full list height.
+            val scrollStartLoc: Point? = if (currentFrameEntries.isEmpty()) null else Point((bboxList.x + (bboxList.w / 2)).toDouble(), currentFrameEntries.last().bbox.y.toDouble())
 
-            if (bIsScrollable) {
-                if (bScrollBottomToTop) {
-                    scrollUp(startLoc = scrollStartLoc, entryHeight = avgEntryHeight)
-                } else {
-                    scrollDown(startLoc = scrollStartLoc, entryHeight = avgEntryHeight)
-                }
-                // Slight delay to allow screen to settle before next iteration.
-                game.wait(0.5, skipWaitingForLoading = true)
+            // Always attempt a scroll. When the scrollbar wasn't detected on this frame
+            // (bIsScrollable == false) but the caller supplied a keyExtractor - so we can detect the
+            // end of the list by content - force a probe scroll instead of giving up. Some screens
+            // (notably the career-end "Learn" skill list) hide or fail to render a detectable
+            // scrollbar while idle; trusting that single detection truncated the read to one
+            // screenful and dropped every entry below (career-end skill buy left hundreds of SP
+            // unspent). A probe scroll usually makes the scrollbar appear, and the content-based
+            // check below terminates the loop if the list is genuinely a single screen.
+            val force: Boolean = !bIsScrollable && keyExtractor != null
+            if (bScrollBottomToTop) {
+                scrollUp(startLoc = scrollStartLoc, entryHeight = avgEntryHeight, force = force)
             } else {
-                MessageLog.d(TAG, "[DEBUG] process:: List is not scrollable. Exiting loop.")
-                return true // Return true since we processed the only frame.
+                scrollDown(startLoc = scrollStartLoc, entryHeight = avgEntryHeight, force = force)
             }
+            // Slight delay to allow screen to settle before next iteration.
+            game.wait(0.5, skipWaitingForLoading = true)
 
-            // SCROLLBAR CHANGE DETECTION LOGIC
-            // Breaks loop if no change to Y position or no scrollbar detected.
-            val bboxThumb: BoundingBox? = getListScrollBarBoundingRegion().second
-            if (bboxThumb == null) {
-                MessageLog.d(TAG, "[DEBUG] process:: No scrollbar thumb detected. Exiting loop.")
-                return true
+            // END-OF-LIST DETECTION
+            // A scroll can reveal a scrollbar that wasn't rendered while idle, so re-detect here.
+            val scrollBarBboxes: Pair<BoundingBox?, BoundingBox?> = getListScrollBarBoundingRegion()
+            val bboxBar: BoundingBox? = scrollBarBboxes.first
+            val bboxThumb: BoundingBox? = scrollBarBboxes.second
+            when {
+                bboxThumb != null -> {
+                    // Scrollbar present: terminate on thumb movement. If the thumb didn't advance,
+                    // the scroll either reached the end OR a swipe failed to register. Distinguish
+                    // them by counting consecutive no-moves and only concluding "end" after several;
+                    // each no-move falls through and re-issues the scroll, and the per-frame dedup
+                    // prevents double-processing.
+                    if (prevThumbY != null && bboxThumb.y == prevThumbY) {
+                        consecutiveNoMove++
+                        if (consecutiveNoMove >= maxConsecutiveNoMove) {
+                            // Only a thumb resting at the BOTTOM of its track is a genuine end of
+                            // list. A thumb pinned mid-track means the list stopped responding to
+                            // swipes entirely (pinned at 33% of track across
+                            // 12+ swipes during an emulator input outage) - treating that as "end"
+                            // silently dropped everything below. Escalate once, then abort loudly.
+                            val trackBottom: Int? = bboxBar?.let { it.y + it.h }
+                            val bAtTrackBottom: Boolean = trackBottom == null || (bboxThumb.y + bboxThumb.h) >= trackBottom - 20
+                            if (bAtTrackBottom) {
+                                MessageLog.w(TAG, "[WARN] process:: Reached end of scroll list ($consecutiveNoMove consecutive no-move reads, thumb at track bottom). Exiting loop.")
+                                return true
+                            }
+                            if (!bEscalatedScroll) {
+                                bEscalatedScroll = true
+                                consecutiveNoMove = 0
+                                MessageLog.w(TAG, "[WARN] process:: Thumb pinned mid-track at y=${bboxThumb.y} (track bottom $trackBottom); escalating with one slow full swipe.")
+                                if (bScrollBottomToTop) {
+                                    scrollUp(startLoc = scrollStartLoc, entryHeight = avgEntryHeight, durationMs = 600L, force = true)
+                                } else {
+                                    scrollDown(startLoc = scrollStartLoc, entryHeight = avgEntryHeight, durationMs = 600L, force = true)
+                                }
+                                game.wait(0.5, skipWaitingForLoading = true)
+                            } else {
+                                game.imageUtils.saveBitmap(filename = "scroll_list_frozen", fullRes = true)
+                                MessageLog.e(TAG, "[ERROR] process:: List frozen mid-track (thumb pinned at y=${bboxThumb.y} after escalation). Aborting the scroll pass.")
+                                return false
+                            }
+                        } else {
+                            MessageLog.w(TAG, "[WARN] process:: Thumb did not advance (no-move $consecutiveNoMove/$maxConsecutiveNoMove at y=${bboxThumb.y}); re-issuing scroll.")
+                        }
+                        // Do NOT update prevThumbY - keep comparing against the last position the thumb actually held.
+                    } else {
+                        consecutiveNoMove = 0
+                        prevThumbY = bboxThumb.y
+                    }
+                }
+                keyExtractor != null -> {
+                    // No scrollbar detected even after scrolling, but content tells us when the list
+                    // ends: if a scroll produced no new entries (the whole frame overlapped the
+                    // previous one), the list is done. Require several in a row so a single dropped
+                    // swipe - or a brief detection miss - doesn't end the read prematurely.
+                    if (foundNewEntries) {
+                        consecutiveNoNew = 0
+                    } else {
+                        consecutiveNoNew++
+                        if (consecutiveNoNew >= maxConsecutiveNoNew) {
+                            MessageLog.w(TAG, "[WARN] process:: No new entries after $consecutiveNoNew scrolls and no scrollbar; treating as end of list. Exiting loop.")
+                            return true
+                        }
+                        MessageLog.w(TAG, "[WARN] process:: No new entries (no-new $consecutiveNoNew/$maxConsecutiveNoNew) and no scrollbar; re-issuing scroll.")
+                    }
+                }
+                else -> {
+                    // No scrollbar and no keyExtractor to detect a content-based end: preserve the
+                    // original single-frame behavior rather than loop until the timeout.
+                    MessageLog.d(TAG, "[DEBUG] process:: No scrollbar thumb detected. Exiting loop.")
+                    return true
+                }
             }
-
-            // If the scrollbar hasn't changed after scrolling, that means we've reached the end of the list.
-            if (prevThumbY != null && bboxThumb.y == prevThumbY) {
-                MessageLog.d(TAG, "[DEBUG] process:: Reached end of scroll list. Exiting loop.")
-                return true
-            }
-
-            prevThumbY = bboxThumb.y
         }
 
         MessageLog.e(TAG, "[ERROR] process:: Timed out.")

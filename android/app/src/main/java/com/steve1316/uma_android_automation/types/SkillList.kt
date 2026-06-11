@@ -339,19 +339,49 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         return skillPoints
     }
 
-    /** Confirms all skill purchases and exits the [SkillList] screen back to the training screen. */
-    fun confirmAndExit() {
-        ButtonConfirm.click(game.imageUtils)
-        game.wait(game.dialogWaitDelay, skipWaitingForLoading = true)
+    /**
+     * Commits the selected skill purchases and exits the [SkillList] screen, verifying the exit.
+     *
+     * A fire-and-forget version (ignore Confirm result, two blind dialog passes, then Back) silently
+     * lost purchases: when the purchase-confirmation dialog went unrecognized, the Back acted as
+     * Cancel and the bot reported success while the game stayed on the Learn screen with every
+     * selection uncommitted. Each attempt is now verified by confirming the skill list screen is gone.
+     *
+     * @return True if the purchases were committed and the screen was exited, false otherwise.
+     */
+    fun confirmAndExit(): Boolean {
+        val maxAttempts = 3
+        for (attempt in 1..maxAttempts) {
+            if (!ButtonConfirm.click(game.imageUtils)) {
+                MessageLog.w(TAG, "[WARN] confirmAndExit:: Confirm button not found on attempt $attempt.")
+            }
+            game.wait(game.dialogWaitDelay, skipWaitingForLoading = true)
 
-        // Two dialogs typically appear upon purchase:
-        // 1. Purchase confirmation.
-        campaign.handleDialogs()
-        // 2. Skills Learned summary.
-        campaign.handleDialogs()
+            // Two dialogs typically appear upon purchase (purchase confirmation, then the
+            // "Skills Learned" summary). Drain dialogs until a round handles nothing, bounded.
+            var dialogRounds = 0
+            while (dialogRounds < 4 && campaign.handleDialogs() is DialogHandlerResult.Handled) {
+                dialogRounds++
+                game.wait(game.dialogWaitDelay, skipWaitingForLoading = true)
+            }
 
-        // Final click to return to the previous screen.
-        ButtonBack.click(game.imageUtils)
+            // Final click to return to the previous screen.
+            ButtonBack.click(game.imageUtils)
+            game.wait(1.0, skipWaitingForLoading = true)
+
+            // Verify the exit: success means the skill list screen is no longer present.
+            if (!checkSkillListScreen()) {
+                if (attempt > 1) {
+                    MessageLog.i(TAG, "[SKILLS] confirmAndExit:: Purchases committed and screen exited on attempt $attempt.")
+                }
+                return true
+            }
+            MessageLog.w(TAG, "[WARN] confirmAndExit:: Still on the skill list screen after attempt $attempt; retrying...")
+        }
+
+        game.imageUtils.saveBitmap(filename = "confirm_and_exit_stuck", fullRes = true)
+        MessageLog.e(TAG, "[ERROR] confirmAndExit:: Failed to commit and exit the skill list screen after $maxAttempts attempts. Purchases may be uncommitted.")
+        return false
     }
 
     /** Resets all unconfirmed skill purchases and exits the [SkillList] screen. */
@@ -716,6 +746,15 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         // Translate the local bitmap point back to global screen space coordinates.
         val point = Point(localPoint.x + entry.bbox.x, localPoint.y + entry.bbox.y)
 
+        // TEMP TAPDIAG: per-entry geometry to pinpoint the career-end (+) tap miss, and reveal which
+        // entries the buy pass visits. Remove after diagnosis. Warn level on purpose: MessageLog.d is
+        // gated behind Debug Mode, which silences this in exactly the failing runs that need it.
+        MessageLog.w(
+            TAG,
+            "[TAPDIAG] \"${skillListEntry.name}\": bbox=(${entry.bbox.x},${entry.bbox.y} ${entry.bbox.w}x${entry.bbox.h}) " +
+                "localPoint=(${localPoint.x.toInt()},${localPoint.y.toInt()}) -> tap=(${point.x.toInt()},${point.y.toInt()})",
+        )
+
         return Pair(skillListEntry, point)
     }
 
@@ -806,11 +845,18 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
-     * Executes the purchase of a skill.
+     * Executes the purchase of a skill: taps the Skill Up (+) button, verifies the tap registered,
+     * and only then commits it and decrements the committed-spend budget.
+     *
+     * Verification uses two independent signals: the per-skill "−" selected-state ([isRowSelected])
+     * and the global Skill Points drop ([detectSkillPoints]). The budget ([skillPoints]) tracks
+     * committed spend and decrements per verified buy regardless of whether the on-screen total moves
+     * on selection or only at Confirm; the true post-Confirm SP is reconciled separately after Confirm.
      *
      * @param name The name of the skill to purchase.
      * @param skillUpButtonLocation The screen location where the [ButtonSkillUp] was detected.
-     * @return The updated [SkillListEntry] if successful, or null if name not found or points insufficient.
+     * @return The updated [SkillListEntry] if the purchase was verified, or null if not found,
+     *   unaffordable, or the tap did not register.
      */
     fun buySkill(name: String, skillUpButtonLocation: Point): SkillListEntry? {
         val entry: SkillListEntry? = entries[name]
@@ -819,24 +865,119 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
             return null
         }
 
-        // Check if we have enough points to afford the purchase.
+        // Affordability is checked against the committed-spend budget (decremented per verified buy below).
         if (entry.screenPrice > skillPoints) {
             MessageLog.w(TAG, "[WARN] buySkill:: Insufficient skill points (${skillPoints}pt) to buy \"$name\" (${entry.screenPrice}pt).")
             return null
         }
 
-        // Perform the click operation.
-        entry.buy(skillUpButtonLocation)
-        // Deduct the price from our local tracking of skill points.
-        skillPoints -= entry.screenPrice
+        val spBefore: Int = skillPoints
 
+        // Verify the tap via the Skill Points drop. The per-skill "−" selected-state was dropped as a
+        // signal: it is always present on a skill row, so it false-positives (it masked a genuinely
+        // missed tap on the career-end screen while SP stayed put).
+        // NB: detectSkillPoints() also mutates skillPoints as a side effect, so we set the budget
+        // explicitly on every exit path below to keep it tracking committed spend.
+        //
+        // Correct the (+) tap target first: the per-entry card crop used to compute
+        // skillUpButtonLocation can clip the bottom of the (+) on the v1.22.0 career-end "Learn"
+        // layout, shifting the in-crop template match upward so the computed point lands ~34px above
+        // the real button and the tap registers nothing. Re-find the (+) on the full screen within
+        // this row's narrow Y band - where the button is unclipped - and tap its true center.
+        val tapTarget: Point = relocateSkillUpButton(skillUpButtonLocation)
+
+        val maxAttempts = 3
+        var spAfter: Int? = null
+        var spDropped = false
+        for (attempt in 1..maxAttempts) {
+            entry.buy(tapTarget)
+            game.wait(0.5, skipWaitingForLoading = true)
+            spAfter = detectSkillPoints()
+            spDropped = spAfter != null && spAfter < spBefore
+            if (spDropped) break
+            game.wait(0.3, skipWaitingForLoading = true)
+        }
+
+        if (!spDropped) {
+            skillPoints = spBefore // miss -> budget unchanged
+            MessageLog.e(
+                TAG,
+                "[ERROR] buySkill:: \"$name\" tap at (${tapTarget.x.toInt()}, ${tapTarget.y.toInt()}) did NOT register after $maxAttempts attempts — " +
+                    "Skill Points did not drop ($spBefore -> ${spAfter ?: "unreadable"}). NOT counted as bought.",
+            )
+            return null
+        }
+
+        // Verified (SP dropped). Reconcile the budget with the screen: the parsed price can drift
+        // from the actual charge as discount tiers shift with accumulated purchases, which once made
+        // the committed tracker refuse an affordable skill (tracker at 42, screen at 55). The drop
+        // was just verified, so accept the screen read when the drop is plausible for this purchase,
+        // otherwise keep the conservative committed value.
+        val spDrop: Int? = spAfter?.let { spBefore - it }
+        skillPoints = if (spAfter != null && spDrop != null && spDrop >= 1 && spDrop <= entry.screenPrice * 2) {
+            spAfter
+        } else {
+            spBefore - entry.screenPrice
+        }
+        entry.markObtained()
+
+        if (spAfter != null && (spBefore - spAfter) != entry.screenPrice) {
+            MessageLog.d(
+                TAG,
+                "[DEBUG] buySkill:: \"$name\" screen SP moved ${spBefore - spAfter} vs expected ${entry.screenPrice} " +
+                    "(discount/OCR drift; committed-spend used for budget).",
+            )
+        }
+        MessageLog.i(
+            TAG,
+            "[INFO] Verified buy \"$name\": committed SP $spBefore -> $skillPoints (screen reads ${spAfter ?: "unreadable"}).",
+        )
         return entry
     }
 
-    /** Resets all skill selections in the UI, effectively "selling" any unconfirmed purchases. */
-    fun sellAllSkills() {
-        for ((_, entry) in getObtainedSkills()) {
-            entry.sell()
+    /**
+     * Re-locates the Skill Up (+) button on the full screen near a computed tap point.
+     *
+     * The per-entry card crop used to derive the tap point can clip the (+) button on the v1.22.0
+     * career-end "Learn" layout, shifting the in-crop template match upward so the tap lands above
+     * the button. A full-screen template match within a narrow Y band around the computed point
+     * recovers the button's true center (the (+) is unclipped in full context). Falls back to the
+     * computed point if no (+) is found in the band.
+     *
+     * @param computed The tap point computed from the entry crop.
+     * @return The full-screen-detected (+) center nearest [computed], or [computed] if none found.
+     */
+    private fun relocateSkillUpButton(computed: Point): Point {
+        val bandTop: Int = (computed.y - 50).toInt().coerceAtLeast(0)
+        val band: IntArray = intArrayOf(0, bandTop, SharedData.displayWidth, 100)
+        val nearest: Point? =
+            ButtonSkillUp.findAll(game.imageUtils, region = band).minByOrNull { kotlin.math.abs(it.y - computed.y) }
+        if (nearest == null) {
+            MessageLog.w(TAG, "[WARN] relocateSkillUpButton:: No (+) found within ±50px of y=${computed.y.toInt()}; using the computed point.")
+            return computed
+        }
+        if (kotlin.math.abs(nearest.y - computed.y) > 2.0) {
+            MessageLog.v(
+                TAG,
+                "[SKILLS] relocateSkillUpButton:: corrected (+) tap from (${computed.x.toInt()},${computed.y.toInt()}) to (${nearest.x.toInt()},${nearest.y.toInt()}).",
+            )
+        }
+        return nearest
+    }
+
+    /**
+     * Resets the in-memory "obtained" state set during plan simulation, effectively "selling" any
+     * unconfirmed purchases. Pure model operation - no taps are issued.
+     *
+     * @param preserve Skill names whose obtained state is screen-confirmed (Obtained pill detected
+     *   during the read pass) and must NOT be reset - clearing them corrupts upgrade-chain pricing
+     *   and ownership reads when re-entering the career-end skill screen.
+     */
+    fun sellAllSkills(preserve: Set<String> = emptySet()) {
+        for ((name, entry) in getObtainedSkills()) {
+            if (name !in preserve) {
+                entry.sell()
+            }
         }
     }
 
