@@ -178,6 +178,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     private val context: Context = reactContext.applicationContext
     private var messageId = 1
 
+    /** Bounded hand-off between MessageLog's lock-held EventBus post and the bridge worker. */
+    private val jsEventQueue = java.util.concurrent.ArrayBlockingQueue<JSEvent>(512)
+
     init {
         StartModule.reactContext = reactContext
         StartModule.reactContext?.addActivityEventListener(this)
@@ -905,16 +908,21 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                     }
                                 }
                                 if (navDone.get()) return@Thread
-                                MessageLog.e(TAG, "[QUEUE] Between-run navigation exceeded ${NAV_DEADLINE_MS / 60000} minutes. Interrupting the navigation thread.")
+                                // Act FIRST, log via logcat only. MessageLog must never appear on
+                                // this thread: its global lock is the very thing the wedged queue
+                                // thread may be holding (first live firing deadlocked
+                                // right here on a MessageLog.e placed before the interrupt, and the
+                                // queue zombied for another 20 minutes).
                                 queueThread.interrupt()
+                                Log.e(TAG, "[QUEUE] Between-run navigation exceeded ${NAV_DEADLINE_MS / 60000} minutes. Navigation thread interrupted.")
                                 try {
                                     Thread.sleep(NAV_INTERRUPT_GRACE_MS)
                                 } catch (_: InterruptedException) {
                                     return@Thread
                                 }
                                 if (!navDone.get()) {
-                                    MessageLog.e(TAG, "[QUEUE] Navigation thread did not respond to the interrupt. Requesting queue stop so the session ends cleanly.")
                                     queueStopRequested = true
+                                    Log.e(TAG, "[QUEUE] Navigation thread did not respond to the interrupt. Queue stop requested; the stall watchdog is the next net.")
                                 }
                             }
                         deadlineThread.name = "NavDeadline"
@@ -1086,11 +1094,50 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             emitter = reactContext?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
         }
 
-        emitter?.emit(eventName, params)
+        try {
+            emitter?.emit(eventName, params)
+        } catch (e: RuntimeException) {
+            // A dead or tearing-down React context throws here. Swallow it: letting it escape
+            // turns into EventBus's SubscriberExceptionEvent, whose handler logs via MessageLog,
+            // which posts another JSEvent - a feedback loop on the logging path.
+            Log.w(TAG, "sendEvent:: emit failed: ${e.message}")
+        }
     }
 
     /**
-     * Listener function to call the inner event sending function in order to send the message back to the Javascript frontend.
+     * Single daemon worker that drains [jsEventQueue] onto the React Native bridge.
+     *
+     * MessageLog posts JSEvents synchronously from INSIDE its global log lock, so the subscriber
+     * must never do bridge IO on the posting thread: one blocked emit freezes every thread that
+     * ever logs (a parked queue thread held that lock and deadlocked both the stall watchdog and
+     * the navigation deadline behind it before they could recover anything).
+     */
+    private val jsEventWorkerStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    private fun ensureJsEventWorker() {
+        if (!jsEventWorkerStarted.compareAndSet(false, true)) return
+        val worker =
+            Thread {
+                while (true) {
+                    try {
+                        val event = jsEventQueue.take()
+                        sendEvent(event.eventName, event.message)
+                    } catch (_: InterruptedException) {
+                        return@Thread
+                    } catch (e: Exception) {
+                        Log.w(TAG, "JS event forwarding failed: ${e.message}")
+                    }
+                }
+            }
+        worker.name = "JsEventForwarder"
+        worker.isDaemon = true
+        worker.start()
+    }
+
+    /**
+     * Listener function to forward MessageLog events to the Javascript frontend.
+     *
+     * Runs synchronously inside MessageLog's lock - enqueue only, never emit here.
      *
      * @param event The JSEvent object to parse its event name and message.
      */
@@ -1098,8 +1145,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     fun onJSEvent(event: JSEvent) {
         // Only send the event to the React Native frontend if it's not internal.
         // This prevents flooding the bridge during parallel operations where disableOutput is true.
-        if (!event.isInternal) {
-            sendEvent(event.eventName, event.message)
+        if (event.isInternal) return
+        ensureJsEventWorker()
+        if (!jsEventQueue.offer(event)) {
+            // Queue full: the UI cannot keep up. Drop the oldest line rather than block the bot.
+            jsEventQueue.poll()
+            jsEventQueue.offer(event)
         }
     }
 

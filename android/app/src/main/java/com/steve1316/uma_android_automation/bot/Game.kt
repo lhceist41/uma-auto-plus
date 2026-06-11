@@ -168,10 +168,20 @@ class Game(val myContext: Context) {
                                 "[WATCHDOG] No bot progress for ${age / 1000}s while BotService.isRunning=true. " +
                                     "Likely a stalled gesture injector / input-dispatch freeze. Self-restarting process to recover."
                             Log.e(TAG, msg)
+                            // MessageLog goes on a throwaway thread: its global lock can be the
+                            // exact thing that wedged (EventBus subscribers run inside it), so a
+                            // blocked MessageLog.e here can neuter the watchdog before killProcess.
                             try {
-                                MessageLog.e(TAG, msg)
-                            } catch (_: Exception) {
-                                // MessageLog may be unusable if the JS bridge is gone; don't block the restart on it.
+                                Thread {
+                                    try {
+                                        MessageLog.e(TAG, msg)
+                                    } catch (_: Throwable) {
+                                    }
+                                }.apply {
+                                    isDaemon = true
+                                    start()
+                                }
+                            } catch (_: Throwable) {
                             }
                             // Give the log line a brief window to flush, then self-terminate.
                             // AccessibilityService is sticky, Android will restart it.
