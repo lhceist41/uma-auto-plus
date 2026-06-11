@@ -78,6 +78,15 @@ object IconRaceListPredictionSingleStar : ComponentInterface {
     override val template = Template("components/icon/race_list_prediction_single_star", region = Region.rightHalf)
 }
 
+object IconRaceListFansIcon : ComponentInterface {
+    // The coral fan-count glyph shown on every race-list row next to the "+N fans" value. Used as
+    // a universal row anchor so rows WITHOUT any prediction icon become findable (the game renders
+    // no icon at all on some rows, which made those races invisible to the bot). Similar glyphs
+    // exist on the goal banner and the fans header, so consumers must filter matches to the row
+    // column (see Racing.findPredictionAnchors).
+    override val template = Template("components/icon/race_list_fans_icon", region = Region.leftHalf)
+}
+
 object IconFriendSlotEmpty : ComponentInterface {
     // Empty friend/guest slot on the career Support Formation screen (green "+" placeholder).
     // The borrowed card never persists between careers, so the run queue must re-fill this

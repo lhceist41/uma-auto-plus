@@ -93,6 +93,33 @@ class RacingRaceSelectionTest {
     }
 
     @Test
+    @DisplayName("Starless points become none-tier anchors sorted with the rest")
+    fun mergeStarlessOnly() {
+        val merged = mergePredictionAnchors(emptyList(), emptyList(), listOf(Point(881.0, 600.0), Point(881.0, 400.0)))
+        assertEquals(2, merged.size)
+        assertEquals(400.0, merged[0].location.y)
+        assertTrue(merged.all { it.tier == PredictionTier.NONE })
+    }
+
+    @Test
+    @DisplayName("A starless point on the same row as a star anchor is dropped")
+    fun mergeDropsStarlessOnStarRow() {
+        // The fans icon exists on every row, so rows with a real prediction icon produce both a
+        // star match and a projected starless point. The real tier must win.
+        val merged =
+            mergePredictionAnchors(
+                listOf(Point(900.0, 400.0)),
+                listOf(Point(900.0, 650.0)),
+                listOf(Point(902.0, 402.0), Point(898.0, 648.0), Point(900.0, 880.0)),
+            )
+        assertEquals(3, merged.size)
+        assertEquals(PredictionTier.DOUBLE, merged[0].tier)
+        assertEquals(PredictionTier.SINGLE, merged[1].tier)
+        assertEquals(PredictionTier.NONE, merged[2].tier)
+        assertEquals(880.0, merged[2].location.y)
+    }
+
+    @Test
     @DisplayName("Rows a full entry apart are kept separate")
     fun mergeKeepsSeparateRows() {
         // Race list rows are ~200px apart; nothing at that distance may be merged.

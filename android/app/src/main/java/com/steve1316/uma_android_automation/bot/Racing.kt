@@ -28,6 +28,7 @@ import com.steve1316.uma_android_automation.components.ButtonViewResults
 import com.steve1316.uma_android_automation.components.IconRaceAgendaEmpty
 import com.steve1316.uma_android_automation.components.IconRaceDayRibbon
 import com.steve1316.uma_android_automation.components.IconRaceListMaidenPill
+import com.steve1316.uma_android_automation.components.IconRaceListFansIcon
 import com.steve1316.uma_android_automation.components.IconRaceListPredictionDoubleStar
 import com.steve1316.uma_android_automation.components.IconRaceListPredictionSingleStar
 import com.steve1316.uma_android_automation.components.IconRaceListSelectionBracketBottomRight
@@ -391,6 +392,20 @@ class Racing(private val game: Game, private val campaign: Campaign) {
          * has to be roughly twice as good on paper to outrank a double-star one. */
         internal const val SINGLE_STAR_SCORE_MULTIPLIER = 0.5
 
+        /** Center-to-center offset from a race row's fans icon to the same row's prediction-star
+         * column, measured on a 1080-wide capture with both elements visible (both supported
+         * screen configs are 1080 wide and the row layout is fixed-size, so the intra-row offset
+         * is resolution-stable). Projecting a fans-icon match onto the star column lets a row
+         * with NO prediction icon reuse all star-anchored geometry (name OCR crop, taps). */
+        internal const val FANS_ICON_TO_STAR_OFFSET_X = 424.0
+        internal const val FANS_ICON_TO_STAR_OFFSET_Y = 1.5
+
+        /** Expected X of a row fans-icon match center (1080-wide). The same coral glyph also
+         * appears on the goal banner and the fans header; only hits inside this column are race
+         * rows. */
+        internal const val FANS_ICON_ROW_COLUMN_X = 457.0
+        internal const val FANS_ICON_ROW_COLUMN_TOLERANCE = 25.0
+
         /** Decides whether the fan-emergency policy is active.
          *
          * @param hasFanRequirement Whether an unmet fan goal is shown on the main screen.
@@ -409,11 +424,19 @@ class Racing(private val game: Game, private val campaign: Campaign) {
          *
          * @param doubles Locations matched by the double-star template.
          * @param singles Locations matched by the single-star template.
+         * @param starless Star-column points derived from fans-icon matches (rows showing no
+         *    prediction icon at all). Any point on the same row as a star match is dropped —
+         *    the real prediction tier always wins over the icon-less fallback.
          * @param rowProximityPx Maximum distance for two matches to count as the same row. Race
          *    list rows are ~200px tall, so 80px is safely under one row.
          * @return The merged list of [PredictionAnchor] entries.
          */
-        internal fun mergePredictionAnchors(doubles: List<Point>, singles: List<Point>, rowProximityPx: Int = 80): List<PredictionAnchor> {
+        internal fun mergePredictionAnchors(
+            doubles: List<Point>,
+            singles: List<Point>,
+            starless: List<Point> = emptyList(),
+            rowProximityPx: Int = 80,
+        ): List<PredictionAnchor> {
             val merged = doubles.map { PredictionAnchor(it, PredictionTier.DOUBLE) }.toMutableList()
             for (single in singles) {
                 val sameRow =
@@ -422,6 +445,15 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     }
                 if (!sameRow) {
                     merged.add(PredictionAnchor(single, PredictionTier.SINGLE))
+                }
+            }
+            for (point in starless) {
+                val sameRow =
+                    merged.any {
+                        abs(it.location.y - point.y) < rowProximityPx && abs(it.location.x - point.x) < rowProximityPx
+                    }
+                if (!sameRow) {
+                    merged.add(PredictionAnchor(point, PredictionTier.NONE))
                 }
             }
             return merged.sortedBy { it.location.y }
@@ -468,11 +500,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Detect the current date first.
         campaign.updateDate(isOnMainScreen = false)
 
-        // Check for all prediction anchors, both single- and double-star.
-        val anchors = findPredictionAnchors(includeSingles = true)
+        // Check for all row anchors: single- and double-star predictions plus icon-less rows
+        // anchored via their fans icon.
+        val anchors = findPredictionAnchors(includeSingles = true, includeStarless = true)
         MessageLog.i(
             TAG,
-            "[TEST] Found ${anchors.size} races (${anchors.count { it.tier == PredictionTier.DOUBLE }} double-star, ${anchors.count { it.tier == PredictionTier.SINGLE }} single-star).",
+            "[TEST] Found ${anchors.size} races (${anchors.count { it.tier == PredictionTier.DOUBLE }} double-star, " +
+                "${anchors.count { it.tier == PredictionTier.SINGLE }} single-star, ${anchors.count { it.tier == PredictionTier.NONE }} starless).",
         )
 
         anchors.forEachIndexed { index, anchor ->
@@ -853,11 +887,19 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      *
      * @param includeSingles Whether to also detect single-star predictions.
      * @param sourceBitmap Optional bitmap to search instead of taking a screenshot.
-     * @param region Optional search region override.
+     * @param region Optional search region override (applies to the star templates only).
+     * @param includeStarless Whether rows WITHOUT any prediction icon should also be anchored,
+     *    via their fans icon projected onto the star column. Full-screen coordinates only — the
+     *    column filter assumes an uncropped frame, so do not combine with per-entry bitmaps.
      * @return Row-deduplicated anchors sorted top to bottom.
      */
-    private fun findPredictionAnchors(includeSingles: Boolean, sourceBitmap: Bitmap? = null, region: IntArray? = null): List<PredictionAnchor> {
-        // Reuse one bitmap for both template passes so the two searches see the same frame.
+    private fun findPredictionAnchors(
+        includeSingles: Boolean,
+        sourceBitmap: Bitmap? = null,
+        region: IntArray? = null,
+        includeStarless: Boolean = false,
+    ): List<PredictionAnchor> {
+        // Reuse one bitmap for all template passes so the searches see the same frame.
         val bitmap = sourceBitmap ?: game.imageUtils.getSourceBitmap()
         val doubles = IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = bitmap, region = region)
         val singles =
@@ -866,7 +908,20 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             } else {
                 arrayListOf()
             }
-        return mergePredictionAnchors(doubles, singles)
+        val starless =
+            if (includeStarless) {
+                // The fans glyph appears on every race row, so it anchors rows that show no
+                // prediction icon at all. The goal banner and the fans header carry the same
+                // glyph - only hits in the row column count. Each hit is projected onto the
+                // star column so downstream geometry (name OCR crop, taps) stays identical to
+                // star-anchored rows; rows that do have a star are dropped by the merge.
+                IconRaceListFansIcon.findAll(game.imageUtils, sourceBitmap = bitmap)
+                    .filter { abs(it.x - FANS_ICON_ROW_COLUMN_X) <= FANS_ICON_ROW_COLUMN_TOLERANCE }
+                    .map { Point(it.x + FANS_ICON_TO_STAR_OFFSET_X, it.y + FANS_ICON_TO_STAR_OFFSET_Y) }
+            } else {
+                emptyList()
+            }
+        return mergePredictionAnchors(doubles, singles, starless)
     }
 
     /**
@@ -874,9 +929,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      *
      * @param scrollDown If true, scroll down; if false, scroll up.
      * @param includeSingles Whether to also detect single-star predictions after the scroll.
+     * @param includeStarless Whether to also anchor icon-less rows via their fans icon.
      * @return The updated list of prediction anchors after scrolling, or null if scroll failed.
      */
-    private fun scrollRaceListAndRedetectAnchors(scrollDown: Boolean = true, includeSingles: Boolean = false): List<PredictionAnchor>? {
+    private fun scrollRaceListAndRedetectAnchors(scrollDown: Boolean = true, includeSingles: Boolean = false, includeStarless: Boolean = false): List<PredictionAnchor>? {
         val confirmButtonLocation = ButtonRace.find(game.imageUtils).first
         if (confirmButtonLocation == null) {
             MessageLog.i(TAG, "[RACE] Could not find \"Race\" button for scroll reference.")
@@ -894,7 +950,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
         game.wait(2.0)
 
-        return findPredictionAnchors(includeSingles)
+        return findPredictionAnchors(includeSingles, includeStarless = includeStarless)
     }
 
     /**
@@ -904,8 +960,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      * @param includeSingles Whether to also detect single-star predictions after the scroll.
      * @return The updated list of prediction locations after scrolling, or null if scroll failed.
      */
-    private fun scrollRaceListAndRedetect(scrollDown: Boolean = true, includeSingles: Boolean = false): ArrayList<Point>? {
-        return scrollRaceListAndRedetectAnchors(scrollDown, includeSingles)?.let { anchors -> ArrayList(anchors.map { it.location }) }
+    private fun scrollRaceListAndRedetect(scrollDown: Boolean = true, includeSingles: Boolean = false, includeStarless: Boolean = false): ArrayList<Point>? {
+        return scrollRaceListAndRedetectAnchors(scrollDown, includeSingles, includeStarless)?.let { anchors -> ArrayList(anchors.map { it.location }) }
     }
 
     /**
@@ -3305,23 +3361,29 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Update the current date and aptitudes for accurate scoring.
         campaign.updateDate()
 
-        // Detect all race predictions on screen. Singles participate as a scoring input only —
-        // without any double-star entry (or force racing), smart racing still skips the day, so
-        // singles cannot create a race day that the old double-only logic would have trained through.
-        val anchors = findPredictionAnchors(includeSingles = true)
+        // Detect all race predictions on screen. Singles are a scoring input only — without any
+        // double-star entry (or force racing), smart racing still skips the day, so singles can't
+        // create a race day the old double-only logic would have trained through. In mandatory mode,
+        // icon-less rows are anchored too (via their fans icon): a planned race is entered by name
+        // regardless of tier, and the game renders no icon on some rows, which previously made a
+        // scheduled race invisible. Starless anchors join only the by-name search set below; the
+        // scored path keeps seeing exactly the star anchors it always did.
+        val allAnchors = findPredictionAnchors(includeSingles = true, includeStarless = mandatoryExtraRaceData != null)
+        val anchors = allAnchors.filter { it.tier != PredictionTier.NONE }
         MessageLog.i(
             TAG,
-            "[RACE] Found ${anchors.count { it.tier == PredictionTier.DOUBLE }} double-star and ${anchors.count { it.tier == PredictionTier.SINGLE }} single-star prediction locations.",
+            "[RACE] Found ${allAnchors.count { it.tier == PredictionTier.DOUBLE }} double-star, ${allAnchors.count { it.tier == PredictionTier.SINGLE }} single-star " +
+                "and ${allAnchors.count { it.tier == PredictionTier.NONE }} starless prediction locations.",
         )
-        if (anchors.isEmpty()) {
+        if (allAnchors.isEmpty()) {
             MessageLog.i(TAG, "[RACE] No predictions found. Canceling racing process.")
             return false
         }
-        if (anchors.none { it.tier == PredictionTier.DOUBLE } && !enableForceRacing) {
+        if (mandatoryExtraRaceData == null && anchors.none { it.tier == PredictionTier.DOUBLE } && !enableForceRacing) {
             MessageLog.i(TAG, "[RACE] Only single-star predictions on screen. Skipping racing in smart mode.")
             return false
         }
-        val predictionPoints = ArrayList(anchors.map { it.location })
+        val predictionPoints = ArrayList(allAnchors.map { it.location })
 
         // Extract race names from the screen and match them with the in-game database.
         // Track the best prediction tier seen per race name so scoring can penalize single-star entries.
@@ -3374,7 +3436,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     if (hasMultipleFanVariants && scrollAttempt == 0) {
                         MessageLog.i(TAG, "[RACE] Found a match but database shows multiple fan variants. Scrolling to check for higher-fan version...")
 
-                        val newPredictions = scrollRaceListAndRedetect(scrollDown = true, includeSingles = true)
+                        val newPredictions = scrollRaceListAndRedetect(scrollDown = true, includeSingles = true, includeStarless = true)
                         if (newPredictions != null) {
                             currentPredictions = newPredictions
                             val higherFanLocation = findRaceLocationByName(currentPredictions, mandatoryExtraRaceData.name)
@@ -3386,7 +3448,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                             } else {
                                 // Not found after scroll, scroll back up and use the first found location.
                                 MessageLog.i(TAG, "[RACE] Higher-fan variant not found after scrolling. Scrolling back up...")
-                                val restoredPredictions = scrollRaceListAndRedetect(scrollDown = false, includeSingles = true)
+                                val restoredPredictions = scrollRaceListAndRedetect(scrollDown = false, includeSingles = true, includeStarless = true)
                                 if (restoredPredictions != null) {
                                     currentPredictions = restoredPredictions
                                     val relocatedLocation = findRaceLocationByName(currentPredictions, mandatoryExtraRaceData.name)
@@ -3415,7 +3477,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 if (scrollAttempt < maxScrollAttempts) {
                     MessageLog.i(TAG, "[RACE] Mandatory extra race \"${mandatoryExtraRaceData.name}\" not found on current screen. Scrolling down (attempt ${scrollAttempt + 1}/$maxScrollAttempts)...")
 
-                    val newPredictions = scrollRaceListAndRedetect(scrollDown = true, includeSingles = true)
+                    val newPredictions = scrollRaceListAndRedetect(scrollDown = true, includeSingles = true, includeStarless = true)
                     if (newPredictions == null) {
                         MessageLog.i(TAG, "[RACE] Stopping scroll attempts due to scroll failure.")
                         break
