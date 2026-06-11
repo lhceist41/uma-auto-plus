@@ -13,6 +13,7 @@ import com.steve1316.uma_android_automation.components.ButtonCareerEndSkills
 import com.steve1316.uma_android_automation.components.ButtonChangeRunningStyle
 import com.steve1316.uma_android_automation.components.ButtonClose
 import com.steve1316.uma_android_automation.components.ButtonCompleteCareer
+import com.steve1316.uma_android_automation.components.ButtonConfirm
 import com.steve1316.uma_android_automation.components.ButtonCraneGame
 import com.steve1316.uma_android_automation.components.ButtonCraneGameOk
 import com.steve1316.uma_android_automation.components.ButtonDetails
@@ -64,6 +65,7 @@ import com.steve1316.uma_android_automation.types.FanCountClass
 import com.steve1316.uma_android_automation.types.GameDate
 import com.steve1316.uma_android_automation.types.Mood
 import com.steve1316.uma_android_automation.types.RunningStyle
+import com.steve1316.uma_android_automation.types.SkillList
 import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.types.Trainee
 import com.steve1316.uma_android_automation.utils.ScrollList
@@ -109,6 +111,31 @@ abstract class Campaign(game: Game) : Task(game) {
 
     /** Required instance of the SkillPlan class. */
     protected val skillPlan: SkillPlan = SkillPlan(game, this)
+
+    /** Lazily-built [SkillList] used only for career-end screen detection in [process]. Lazy and
+     * shared because the constructor generates the full skill entries map from the database. */
+    private val careerEndScreenChecker: SkillList by lazy { SkillList(game, this) }
+
+    /** Set once the careerComplete skill plan has run this career, so the End-screen handler and
+     * the direct Learn-screen handler do not re-enter the list and run the full plan twice. */
+    private var bCareerEndSkillsHandled: Boolean = false
+
+    /** Attempts made to actively exit the career-end skill screen after the plan already ran. */
+    private var careerEndExitAttempts: Int = 0
+
+    /** Bound for [careerEndExitAttempts] before stopping with a diagnostic capture. */
+    private val maxCareerEndExitAttempts: Int = 5
+
+    /** Consecutive process() ticks resolved ONLY by the misc back-press. A long unbroken streak
+     * means the press is not changing the screen and the loop would otherwise spin forever (10+
+     * minutes of back-presses observed on a wedged career-end skill screen). */
+    private var consecutiveMiscBackPresses: Int = 0
+
+    /** Bound for [consecutiveMiscBackPresses] (~75s at the observed tick rate) before stopping. */
+    private val maxConsecutiveMiscBackPresses: Int = 25
+
+    /** Tick-local marker: this tick was handled by the misc back-press branch. */
+    private var bMiscBackPressedThisTick: Boolean = false
 
     /** Required instance of the Trainee class. */
     val trainee: Trainee = Trainee()
@@ -177,6 +204,19 @@ abstract class Campaign(game: Game) : Task(game) {
      * once per career run (not on every aptitude refresh).
      */
     private var bDeckValidationChecked: Boolean = false
+
+    /**
+     * Number of consecutive process() ticks that ended without detecting any known screen. Drives
+     * [recoverFromUnknownScreen]'s escalation instead of blind-tapping a fixed point forever. Reset
+     * to 0 whenever any known screen or dialog is handled.
+     */
+    private var consecutiveUnknownScreenCount: Int = 0
+
+    /**
+     * Upper bound on [consecutiveUnknownScreenCount] before the bot stops with a diagnostic rather
+     * than loop on an unrecognized screen forever. ~25 ticks is roughly a minute of being stuck.
+     */
+    private val maxUnknownScreenBeforeStop: Int = 25
 
     /** Whether the bot should attempt the crane game. */
     protected val enableCraneGameAttempt: Boolean = SettingsHelper.getBooleanSetting("general", "enableCraneGameAttempt")
@@ -945,40 +985,39 @@ abstract class Campaign(game: Game) : Task(game) {
                 "[DECK_VALIDATION] Deck OK — preferred distance ${distance.name} aptitude=$distAptitude, " +
                     "preferred style ${style.name} aptitude=$styleAptitude, floor=$deckValidationMinAptitude.",
             )
-            return
-        }
+        } else {
+            val shortfalls = buildList {
+                if (!distOk) add("distance ${distance.name}=$distAptitude (need ${deckValidationMinAptitude}+)")
+                if (!styleOk) add("style ${style.name}=$styleAptitude (need ${deckValidationMinAptitude}+)")
+            }.joinToString(", ")
 
-        val shortfalls = buildList {
-            if (!distOk) add("distance ${distance.name}=$distAptitude (need ${deckValidationMinAptitude}+)")
-            if (!styleOk) add("style ${style.name}=$styleAptitude (need ${deckValidationMinAptitude}+)")
-        }.joinToString(", ")
-
-        MessageLog.w(
-            TAG,
-            "[DECK_VALIDATION] [WARN] Deck below aptitude floor: $shortfalls. The bot will continue, " +
-                "but expect lower race-finishing positions and reduced fan/skill-point gains. " +
-                "Consider rebuilding the deck with stronger support cards for this distance/style, " +
-                "or pick a scenario that better matches the trainee's signature aptitudes.",
-        )
-
-        // Junior fan-farm viability check. The 3000-fan checkpoint at Junior Late Dec is
-        // a hard career-fail gate in URA Finale, Unity Cup, and Trackblazer. The bot's
-        // race finder requires double-star predictions (terrain+distance aptitude both
-        // ≥B). In Junior year, the only OP/Pre-OP races available are Sprint or Mile
-        // distance. If a trainee has no aptitude ≥B in either Sprint or Mile, the bot
-        // cannot enter Junior fan-farm races and the career WILL force-fail at Rank E.
-        val sprintApt = trainee.trackDistanceAptitudes[com.steve1316.uma_android_automation.types.TrackDistance.SPRINT] ?: Aptitude.G
-        val mileApt = trainee.trackDistanceAptitudes[com.steve1316.uma_android_automation.types.TrackDistance.MILE] ?: Aptitude.G
-        val canFarmJunior = sprintApt >= Aptitude.B || mileApt >= Aptitude.B
-        if (!canFarmJunior) {
             MessageLog.w(
                 TAG,
-                "[DECK_VALIDATION] [WARN] Junior fan-farm risk: Sprint=$sprintApt, Mile=$mileApt — both " +
-                    "below B. The bot's race finder needs ≥B aptitude on terrain AND distance to enter " +
-                    "Junior OP races, so it cannot farm fans this year. The 3000-fan checkpoint at Junior " +
-                    "Late Dec WILL FAIL and the career will force-end at Rank E. Either stop now and raise " +
-                    "Sprint or Mile aptitude to B via 7+ pink sparks before running, or pick a different " +
-                    "trainee whose Junior aptitudes match the OP race lineup.",
+                "[DECK_VALIDATION] [WARN] Deck below aptitude floor: $shortfalls. The bot will continue, " +
+                    "but expect lower race-finishing positions and reduced fan/skill-point gains. " +
+                    "Consider rebuilding the deck with stronger support cards for this distance/style, " +
+                    "or pick a scenario that better matches the trainee's signature aptitudes.",
+            )
+        }
+
+        // Prediction-visibility check. This replaces the old "Junior fan-farm impossible if
+        // Sprint+Mile both <B" warning, which was wrong on the mechanism twice over: Junior year
+        // has Medium/Long races too (a Medium=A trainee can clear the 3000-fan checkpoint off
+        // Kyoto Junior Stakes and Hopeful Stakes alone), and the race finder is not aptitude-gated
+        // but prediction-gated — the game computes prediction stars from stats AND aptitudes at
+        // runtime. The real risk: a trainee with no strong distance aptitude draws single-star
+        // predictions across its whole early pool. Those races are enterable via the fan-emergency
+        // policy near goal deadlines, but placements and fan payouts will be weak, so the
+        // checkpoint can still be missed. Runs for every trainee, not just decks below the floor.
+        val bestDistAptitude = trainee.trackDistanceAptitudes.values.maxOrNull() ?: Aptitude.G
+        if (bestDistAptitude < Aptitude.B) {
+            MessageLog.w(
+                TAG,
+                "[DECK_VALIDATION] [WARN] Prediction-visibility risk: best distance aptitude is " +
+                    "$bestDistAptitude (below B). Expect mostly single-star race predictions early on. " +
+                    "The bot will still enter the best available race when a fan goal deadline is near, " +
+                    "but placements and fan gains will be poor and the checkpoint may still be missed. " +
+                    "Consider stronger support cards or 7+ pink aptitude sparks before relying on this deck.",
             )
         }
     }
@@ -1090,6 +1129,21 @@ abstract class Campaign(game: Game) : Task(game) {
             MessageLog.i(TAG, "[INFO] Bot is not at the End screen and can keep going.")
             false
         }
+    }
+
+    /**
+     * Checks if the bot is on the career-end "Learn" skill purchase screen with the careerComplete
+     * plan enabled.
+     *
+     * Covers starting (or restarting) the bot directly on that screen, where [checkEndScreen]
+     * cannot match because the Complete Career button is not reliably visible from inside the
+     * list. The branch decides via [bCareerEndSkillsHandled] whether to run the plan (first time)
+     * or actively exit the screen (plan already ran but the bot is still here - a failed commit
+     * or a wedged screen).
+     */
+    private fun checkCareerEndSkillListScreen(): Boolean {
+        if (!(skillPlan.skillPlans["careerComplete"]?.bIsEnabled ?: false)) return false
+        return careerEndScreenChecker.checkCareerCompleteSkillListScreen()
     }
 
     /**
@@ -1453,8 +1507,10 @@ abstract class Campaign(game: Game) : Task(game) {
 
             MessageLog.v(TAG, "\n[RECREATION_DATE] Recreation has a possible date available.")
             game.wait(1.0)
-            // Check if all of the possible dates have been completed.
-            if (LabelRecreationDateComplete.check(game.imageUtils)) {
+            // Check if all of the possible dates have been completed. Multiple tries: a
+            // single-frame check against the popup's open animation can miss and send the flow
+            // down the dead Event Progress pill below.
+            if (LabelRecreationDateComplete.check(game.imageUtils, tries = 3)) {
                 MessageLog.v(TAG, "[RECREATION_DATE] Recreation date is already completed.")
                 recreationDateCompleted = true
                 if (recoverMoodIfCompleted) {
@@ -1503,8 +1559,28 @@ abstract class Campaign(game: Game) : Task(game) {
                 } else if (LabelEventProgress.click(game.imageUtils)) {
                     // Legacy support cards or situations where the dialog doesn't apply.
                     game.waitForLoading()
-                    MessageLog.v(TAG, "[RECREATION_DATE] Recreation date can be done.")
-                    true
+                    // A completed Pal row keeps its "Event Progress" pill but silently ignores
+                    // taps, so verify the popup actually closed before declaring success (the
+                    // complete-check can miss a frame, leaving this branch to click the dead pill,
+                    // report success, and loop the campaign on the open popup).
+                    if (LabelRecreationUmamusume.check(game.imageUtils)) {
+                        MessageLog.w(
+                            TAG,
+                            "[RECREATION_DATE] Popup still open after tapping Event Progress - the date row is not selectable. Treating the date as completed.",
+                        )
+                        recreationDateCompleted = true
+                        if (recoverMoodIfCompleted) {
+                            LabelRecreationUmamusume.click(game.imageUtils)
+                            game.waitForLoading()
+                            true
+                        } else {
+                            ButtonCancel.click(game.imageUtils)
+                            false
+                        }
+                    } else {
+                        MessageLog.v(TAG, "[RECREATION_DATE] Recreation date can be done.")
+                        true
+                    }
                 } else {
                     MessageLog.e(TAG, "[ERROR] handleRecreationDate:: Failed to find a way to start the recreation date.")
                     game.waitForLoading()
@@ -1766,7 +1842,16 @@ abstract class Campaign(game: Game) : Task(game) {
             game.wait(0.5)
             return true
         } else if (ButtonBack.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
-            MessageLog.i(TAG, "[MISC] Navigating back a screen since all the other misc checks have been completed.")
+            bMiscBackPressedThisTick = true
+            consecutiveMiscBackPresses++
+            if (consecutiveMiscBackPresses >= maxConsecutiveMiscBackPresses) {
+                game.imageUtils.saveBitmap(filename = "misc_backpress_stuck", fullRes = true)
+                throw InterruptedException(
+                    "Bot pressed Back $consecutiveMiscBackPresses consecutive times without reaching a known screen - the press is not changing anything. Stopping. " +
+                        "A screenshot was saved to the temp folder as misc_backpress_stuck.",
+                )
+            }
+            MessageLog.i(TAG, "[MISC] Navigating back a screen since all the other misc checks have been completed. (consecutive back-presses: $consecutiveMiscBackPresses)")
             // ButtonBack.click does NOT auto-wait (Component.click goes through Components.tap which
             // calls the accessibility service directly, not Game.tap). A back-navigation is almost
             // always a pure UI transition with no server round-trip, so 0.5s is enough to let the
@@ -2232,11 +2317,29 @@ abstract class Campaign(game: Game) : Task(game) {
         try {
             // We always check for dialogs first.
             if (tryHandleAllDialogs()) {
+                consecutiveUnknownScreenCount = 0
                 return null
             }
 
             if (handleMainScreen()) {
+                consecutiveUnknownScreenCount = 0
                 return null
+            }
+
+            // Tracks whether this tick resolved to a known screen. The unknown-screen counter is
+            // only reset below when something was actually handled, so a transient blip does not
+            // accumulate toward the stuck-screen stop.
+            var detectedKnownScreen = true
+            bMiscBackPressedThisTick = false
+
+            // The emulator can wipe the Accessibility grant mid-run (gestures silently die while
+            // screen reads keep working - every historical "stall" traced back to this). Detect
+            // and self-heal before acting on this tick.
+            if (!game.ensureAccessibilityService()) {
+                throw InterruptedException(
+                    "The Accessibility Service was disabled mid-run and could not be restored automatically. " +
+                        "Re-enable it in the Android settings or grant WRITE_SECURE_SETTINGS (see log).",
+                )
             }
 
             if (checkTrainingEventScreen()) {
@@ -2255,11 +2358,14 @@ abstract class Campaign(game: Game) : Task(game) {
                 racing.handleStandaloneRace()
             } else if (checkEndScreen()) {
                 // Stop when the bot has reached the screen where it details the overall result of the run.
-                if (skillPlan.skillPlans["careerComplete"]?.bIsEnabled ?: false) {
+                var bSkillsCommitFailed = false
+                if (!bCareerEndSkillsHandled && (skillPlan.skillPlans["careerComplete"]?.bIsEnabled ?: false)) {
+                    bCareerEndSkillsHandled = true
                     game.wait(0.5)
                     ButtonCareerEndSkills.click(game.imageUtils)
                     game.wait(1.0)
                     if (!handleSkillListScreen()) {
+                        bSkillsCommitFailed = true
                         MessageLog.w(TAG, "[WARN] process:: handleSkillList() failed.")
                     }
                 }
@@ -2303,10 +2409,48 @@ abstract class Campaign(game: Game) : Task(game) {
                 // Print the final Trainee information.
                 trainee.logInfo()
 
+                if (bSkillsCommitFailed) {
+                    // Do not report a clean completion when the purchases were never verified as
+                    // committed - the selections may still be pending on the Learn screen.
+                    return TaskResult.Error(
+                        TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
+                        "Career end reached but the skill purchases could not be committed (see log).",
+                    )
+                }
                 return TaskResult.Success(
                     TaskResultCode.TASK_RESULT_COMPLETE,
                     "Bot has reached end of run. Stopping bot...",
                 )
+            } else if (checkCareerEndSkillListScreen()) {
+                if (!bCareerEndSkillsHandled) {
+                    // Started or restarted directly on the career-end "Learn" skill purchase screen.
+                    // Buy per the careerComplete plan; once the plan confirms and exits the list,
+                    // the End screen branch above performs the final bookkeeping on a later tick.
+                    MessageLog.i(TAG, "[INFO] Bot is on the career-end skill purchase screen. Running the careerComplete skill plan...")
+                    bCareerEndSkillsHandled = true
+                    if (!handleSkillListScreen()) {
+                        MessageLog.w(TAG, "[WARN] process:: careerComplete skill plan failed on the career-end skill purchase screen.")
+                    }
+                } else {
+                    // The plan already ran but the bot is STILL on the Learn screen - the commit or
+                    // exit failed (or the screen was wedged). Previously this fell through to the
+                    // misc back-press forever (10+ minute livelock). Actively exit,
+                    // bounded: Confirm commits any pending selections; Back is the fallback.
+                    careerEndExitAttempts++
+                    if (careerEndExitAttempts >= maxCareerEndExitAttempts) {
+                        game.imageUtils.saveBitmap(filename = "career_end_exit_stuck", fullRes = true)
+                        throw InterruptedException(
+                            "Bot could not exit the career-end skill screen after $maxCareerEndExitAttempts attempts. Stopping. " +
+                                "A screenshot was saved to the temp folder as career_end_exit_stuck.",
+                        )
+                    }
+                    MessageLog.w(TAG, "[WARN] process:: Still on the career-end skill screen after the plan ran (exit attempt $careerEndExitAttempts/$maxCareerEndExitAttempts). Committing and exiting...")
+                    if (!ButtonConfirm.click(game.imageUtils)) {
+                        ButtonBack.click(game.imageUtils)
+                    }
+                    game.wait(1.0)
+                    handleDialogs()
+                }
             } else if (checkCampaignSpecificConditions()) {
                 MessageLog.i(TAG, "[INFO] Campaign-specific checks complete.")
             } else if (handleInheritanceEvent()) {
@@ -2314,9 +2458,20 @@ abstract class Campaign(game: Game) : Task(game) {
             } else if (performMiscChecks()) {
                 MessageLog.i(TAG, "[INFO] Misc checks complete.")
             } else {
-                MessageLog.i(TAG, "[INFO] Did not detect the bot being at the following screens: Main, Training Event, Inheritance, Mandatory Race Preparation, Racing and Career End.")
-                // Tap to progress any intermediate screens.
-                game.tap(350.0, 450.0, taps = 1)
+                detectedKnownScreen = false
+                consecutiveUnknownScreenCount++
+                MessageLog.i(
+                    TAG,
+                    "[INFO] Did not detect the bot being at the following screens: Main, Training Event, Inheritance, Mandatory Race Preparation, Racing and Career End. (unknown screen #$consecutiveUnknownScreenCount)",
+                )
+                recoverFromUnknownScreen(consecutiveUnknownScreenCount)
+            }
+
+            if (detectedKnownScreen) {
+                consecutiveUnknownScreenCount = 0
+            }
+            if (!bMiscBackPressedThisTick) {
+                consecutiveMiscBackPresses = 0
             }
         } catch (e: CampaignBreakpointException) {
             return TaskResult.Success(
@@ -2326,5 +2481,56 @@ abstract class Campaign(game: Game) : Task(game) {
         }
 
         return null
+    }
+
+    /**
+     * Recovers from a process() tick where no known screen was detected.
+     *
+     * The previous behavior was a single unconditional tap at (350, 450) every tick with no bound,
+     * so any persistent unrecognized overlay wedged the bot forever — most notably an open dialog
+     * whose title OCR returned empty (low-contrast banner), so [DialogUtils.getDialog] returned null,
+     * the dialog was never closed, and no screen matched underneath it. Escalate instead:
+     *
+     *  1. If a dialog title banner is present (the gradient match still succeeds even when the title
+     *     OCR fails), the bot is stuck on an unidentified dialog — close it.
+     *  2. Otherwise nudge with the legacy tap to clear transient/intermediate screens.
+     *  3. If still unrecovered after [maxUnknownScreenBeforeStop] consecutive ticks, stop with a
+     *     diagnostic capture rather than loop forever.
+     *
+     * @param count The current [consecutiveUnknownScreenCount] for this stuck streak.
+     */
+    private fun recoverFromUnknownScreen(count: Int) {
+        if (DialogUtils.check(game.imageUtils)) {
+            MessageLog.w(TAG, "[WARN] recoverFromUnknownScreen:: A dialog banner is present but could not be identified (tick $count). Closing it.")
+            if (ButtonClose.click(game.imageUtils)) {
+                game.wait(0.5)
+                return
+            }
+            MessageLog.w(TAG, "[WARN] recoverFromUnknownScreen:: No Close button found on the unidentified dialog; nudging instead.")
+        }
+
+        if (count >= maxUnknownScreenBeforeStop) {
+            game.imageUtils.saveBitmap(filename = "unknown_screen_stuck", fullRes = true)
+            throw InterruptedException(
+                "Bot stuck on an unrecognized screen for $count consecutive cycles. Stopping. " +
+                    "A screenshot was saved to the temp folder as unknown_screen_stuck.",
+            )
+        }
+
+        // Award/ceremony screens (the first-time trophy popup after a finals win, ending cards)
+        // have no dialog banner and ignore the legacy nudge spot - a finals trophy sat through 25
+        // nudges at (350, 450) and forced a stop. They do dismiss on a standard OK or a tap near
+        // the bottom-center, so try those too.
+        if (ButtonOk.click(game.imageUtils)) {
+            MessageLog.i(TAG, "[INFO] recoverFromUnknownScreen:: Dismissed an unrecognized screen via its OK button.")
+            game.wait(1.0)
+            return
+        }
+        if (count % 2 == 0) {
+            game.tap(540.0, 1300.0, taps = 1)
+        } else {
+            // Legacy nudge to progress transient/intermediate screens.
+            game.tap(350.0, 450.0, taps = 1)
+        }
     }
 }

@@ -3,6 +3,7 @@ package com.steve1316.uma_android_automation.bot
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.BotService
@@ -10,6 +11,11 @@ import com.steve1316.uma_android_automation.CareerLaunchNavigator
 import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.components.ButtonTraining
 import com.steve1316.uma_android_automation.components.ButtonRest
+import com.steve1316.uma_android_automation.components.ButtonCompleteCareer
+import com.steve1316.uma_android_automation.components.ButtonLog
+import com.steve1316.uma_android_automation.components.ButtonSkillListFullStats
+import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPoints
+import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPointsV2
 import com.steve1316.automation_library.utils.DiscordUtils
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
@@ -47,8 +53,10 @@ class Game(val myContext: Context) {
     /** The utility class for image processing and template matching. */
     val imageUtils: CustomImageUtils = CustomImageUtils(myContext, this)
 
-    /** The Accessibility Service for performing screen gestures. */
-    val gestureUtils: MyAccessibilityService = MyAccessibilityService.getInstance()
+    /** The Accessibility Service for performing screen gestures. Resolved per access so a service
+     * rebind (after the emulator wipes the accessibility grant) is picked up immediately instead of
+     * dispatching gestures through the dead instance. */
+    val gestureUtils: MyAccessibilityService get() = MyAccessibilityService.getInstance()
 
     /** The database for skill-related information. */
     val skillDatabase: SkillDatabase = SkillDatabase(this)
@@ -426,6 +434,70 @@ class Game(val myContext: Context) {
                ButtonRest.check(imageUtils, sourceBitmap = bitmap)
     }
 
+    /**
+     * Checks if the bot is sitting on one of the career-end screens: the End screen with the
+     * Complete Career button, or the career-end "Learn" skill purchase screen (the skill list
+     * without the in-career Log button).
+     *
+     * Startup auto-navigation must not run from these screens. The navigator's generic
+     * Confirm/Close handling closes the skill list and its CAREER_SUMMARY handler presses
+     * Complete Career, so a bot started here would complete the career with skill points unspent.
+     * The campaign loop handles both screens itself: it buys per the careerComplete plan and then
+     * finishes the career bookkeeping. Between-run queue navigation is unaffected - it runs from
+     * StartModule after a completed run, where the skill plan has already executed.
+     */
+    private fun isOnCareerEndScreen(): Boolean {
+        val bitmap = imageUtils.getSourceBitmap()
+        if (ButtonCompleteCareer.check(imageUtils, sourceBitmap = bitmap)) {
+            return true
+        }
+        val labelConfidence = 0.60
+        return ButtonSkillListFullStats.check(imageUtils, sourceBitmap = bitmap) &&
+            !ButtonLog.check(imageUtils, sourceBitmap = bitmap) &&
+            (
+                LabelSkillListScreenSkillPoints.check(imageUtils, sourceBitmap = bitmap, confidence = labelConfidence) ||
+                    LabelSkillListScreenSkillPointsV2.check(imageUtils, sourceBitmap = bitmap, confidence = labelConfidence)
+                )
+    }
+
+    /**
+     * Verifies the Accessibility Service grant is still present and restores it if the emulator
+     * wiped it.
+     *
+     * MuMu sporadically clears enabled_accessibility_services while the bot is running, which kills
+     * all gesture injection while screen capture keeps working - taps and swipes silently stop
+     * registering. With WRITE_SECURE_SETTINGS granted once over adb (pm grant <package>
+     * android.permission.WRITE_SECURE_SETTINGS), the bot can rewrite the setting and bring its own
+     * service back within a few seconds.
+     *
+     * @param waitForRebind Seconds to wait after restoring the setting for the service to rebind.
+     * @return True if the service grant is present (or was restored), false otherwise.
+     */
+    fun ensureAccessibilityService(waitForRebind: Double = 3.0): Boolean {
+        val expected = "${myContext.packageName}/com.steve1316.automation_library.utils.MyAccessibilityService"
+        val enabled: String = Settings.Secure.getString(myContext.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
+        if (enabled.split(':').any { it.equals(expected, ignoreCase = true) }) {
+            return true
+        }
+
+        MessageLog.e(TAG, "[ERROR] ensureAccessibilityService:: The Accessibility Service grant is gone (the emulator wiped it). Attempting to restore...")
+        return try {
+            val restored = if (enabled.isEmpty()) expected else "$enabled:$expected"
+            Settings.Secure.putString(myContext.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, restored)
+            Settings.Secure.putString(myContext.contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, "1")
+            wait(waitForRebind, skipWaitingForLoading = true)
+            MessageLog.w(TAG, "[WARN] ensureAccessibilityService:: Accessibility Service grant restored. Gestures should resume.")
+            true
+        } catch (e: SecurityException) {
+            MessageLog.e(
+                TAG,
+                "[ERROR] ensureAccessibilityService:: Cannot restore the Accessibility Service - WRITE_SECURE_SETTINGS is not granted. " +
+                    "Run once: adb shell pm grant ${myContext.packageName} android.permission.WRITE_SECURE_SETTINGS",
+            )
+            false
+        }
+    }
+
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -482,9 +554,25 @@ class Game(val myContext: Context) {
         val packageInfo = myContext.packageManager.getPackageInfo(myContext.packageName, 0)
         MessageLog.i(TAG, "[INFO] Bot version: ${packageInfo.versionName} (${packageInfo.versionCode})\n\n")
 
-        // Start debug tests here if enabled. Otherwise, proceed with regular bot operations.
+        // Start debug tests here if enabled, BEFORE any auto-navigation, so a test runs on the
+        // screen the user has open (e.g. the career-end "Learn" screen) instead of being clobbered
+        // by the CareerLaunchNavigator. If any test runs, the bot is done.
         // A small delay here to ensure any notifications are out of the way.
         wait(3.0)
+
+        // The emulator can wipe the Accessibility grant even while idle - without it no gesture
+        // lands. Verify (and restore if possible) before doing anything else.
+        if (!ensureAccessibilityService()) {
+            return TaskResult.Error(
+                TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
+                "The Accessibility Service is disabled and could not be restored automatically. Re-enable it in the Android settings or grant WRITE_SECURE_SETTINGS (see log).",
+            )
+        }
+
+        if (task.startTests()) {
+            MessageLog.i(TAG, "[INFO] Debug test(s) complete. Stopping bot...")
+            return TaskResult.Success(TaskResultCode.TASK_RESULT_COMPLETE, "Debug tests completed.")
+        }
 
         // Auto-navigate to the training menu if the bot is not already there.
         // This allows starting the bot from the home screen, scenario select, or any
@@ -495,49 +583,53 @@ class Game(val myContext: Context) {
         // there to their target mode. The user is expected to have the game open on
         // the Home Screen (or any screen with the bottom nav visible) when starting.
         if (!isMiscTask && !isOnTrainingMenu()) {
-            MessageLog.i(TAG, "[INFO] Bot is not on the training menu. Attempting auto-navigation...")
-            val navigator = CareerLaunchNavigator(myContext)
-            val reuseSetup = SettingsHelper.getBooleanSetting("runQueue", "reuseLastLaunchSetup", true)
-            val navResult = navigator.navigate(reuseSetup)
-            if (!navResult.success) {
-                MessageLog.e(TAG, "[INFO] Auto-navigation failed: ${navResult.failureReason}")
-                MessageLog.e(TAG, "[INFO] Last state: ${navResult.lastDetectedState}, transition: ${navResult.failedTransition}")
-                MessageLog.e(TAG, "[INFO] ${navResult.recommendedAction}")
-                return TaskResult.Error(
-                    TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED,
-                    "Auto-navigation to training menu failed: ${navResult.failureReason}",
-                )
+            if (isOnCareerEndScreen()) {
+                // Started on a career-end screen (End screen or the Learn skill list). The
+                // campaign loop buys skills and completes the career bookkeeping from here;
+                // the navigator would instead close the skill list and press Complete Career
+                // with the points unspent.
+                MessageLog.i(TAG, "[INFO] Bot started on a career-end screen. Skipping auto-navigation; the campaign will buy skills and finish the career.")
+            } else {
+                MessageLog.i(TAG, "[INFO] Bot is not on the training menu. Attempting auto-navigation...")
+                val navigator = CareerLaunchNavigator(myContext)
+                val reuseSetup = SettingsHelper.getBooleanSetting("runQueue", "reuseLastLaunchSetup", true)
+                val navResult = navigator.navigate(reuseSetup)
+                if (!navResult.success) {
+                    MessageLog.e(TAG, "[INFO] Auto-navigation failed: ${navResult.failureReason}")
+                    MessageLog.e(TAG, "[INFO] Last state: ${navResult.lastDetectedState}, transition: ${navResult.failedTransition}")
+                    MessageLog.e(TAG, "[INFO] ${navResult.recommendedAction}")
+                    return TaskResult.Error(
+                        TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED,
+                        "Auto-navigation to training menu failed: ${navResult.failureReason}",
+                    )
+                }
+                MessageLog.i(TAG, "[INFO] Auto-navigation complete. Bot is now on the training menu.")
+                wait(2.0)
             }
-            MessageLog.i(TAG, "[INFO] Auto-navigation complete. Bot is now on the training menu.")
-            wait(2.0)
         } else if (isMiscTask) {
             MessageLog.i(TAG, "[INFO] Misc task mode (\"$scenario\"). Starting from Home Screen - bot's state machine will navigate from there.")
         }
 
-        val taskResult: TaskResult
-        if (!task.startTests()) {
-            // Send Discord notification that the run has started.
-            if (DiscordUtils.enableDiscordNotifications) {
-                val enableRemoteLogViewer = SettingsHelper.getBooleanSetting("debug", "enableRemoteLogViewer", false)
-                var logViewerString = ""
-                if (enableRemoteLogViewer) {
-                    // Notify the user that the Remote Log Viewer is enabled and is viewable at the indicated address.
-                    val port = SettingsHelper.getIntSetting("debug", "remoteLogViewerPort", 9000)
-                    val ipAddress = com.steve1316.uma_android_automation.utils.LogStreamServer.getDeviceIpAddress(myContext)
-                    val finalIpAddress = if (ipAddress == "10.0.2.15") "localhost" else ipAddress
-                    logViewerString = "Remote Log Viewer is enabled at http://$finalIpAddress:$port"
-                }
-                DiscordUtils.queue.add("```diff\n+ ${MessageLog.getSystemTimeString()} Bot run started! Scenario: $scenario```$logViewerString")
+        // Debug tests (if any were enabled) already ran and returned above; this is a normal run.
+        // Send Discord notification that the run has started.
+        if (DiscordUtils.enableDiscordNotifications) {
+            val enableRemoteLogViewer = SettingsHelper.getBooleanSetting("debug", "enableRemoteLogViewer", false)
+            var logViewerString = ""
+            if (enableRemoteLogViewer) {
+                // Notify the user that the Remote Log Viewer is enabled and is viewable at the indicated address.
+                val port = SettingsHelper.getIntSetting("debug", "remoteLogViewerPort", 9000)
+                val ipAddress = com.steve1316.uma_android_automation.utils.LogStreamServer.getDeviceIpAddress(myContext)
+                val finalIpAddress = if (ipAddress == "10.0.2.15") "localhost" else ipAddress
+                logViewerString = "Remote Log Viewer is enabled at http://$finalIpAddress:$port"
             }
-            // Read the per-run safety timeout from the run queue settings. Defaults to 180 min
-            // (3 hours), matching the TS-side default. Single-run sessions (queue disabled)
-            // also use this same setting since they call Game.start() the same way.
-            val maxRuntimeMinutes = SettingsHelper.getIntSetting("runQueue", "maxRuntimePerRunMinutes", 180)
-            MessageLog.i(TAG, "[INFO] Per-run max runtime timeout: $maxRuntimeMinutes minutes.")
-            taskResult = task.start(maxRuntimeMinutes = maxRuntimeMinutes)
-        } else {
-            taskResult = TaskResult.Success(TaskResultCode.TASK_RESULT_COMPLETE, "Debug tests completed.")
+            DiscordUtils.queue.add("```diff\n+ ${MessageLog.getSystemTimeString()} Bot run started! Scenario: $scenario```$logViewerString")
         }
+        // Read the per-run safety timeout from the run queue settings. Defaults to 180 min
+        // (3 hours), matching the TS-side default. Single-run sessions (queue disabled)
+        // also use this same setting since they call Game.start() the same way.
+        val maxRuntimeMinutes = SettingsHelper.getIntSetting("runQueue", "maxRuntimePerRunMinutes", 180)
+        MessageLog.i(TAG, "[INFO] Per-run max runtime timeout: $maxRuntimeMinutes minutes.")
+        val taskResult: TaskResult = task.start(maxRuntimeMinutes = maxRuntimeMinutes)
 
         MessageLog.i(TAG, "[INFO] Total runtime of ${MessageLog.formatElapsedTime(startTime, System.currentTimeMillis())} and stopped at ${MessageLog.getSystemTimeString()}.")
 

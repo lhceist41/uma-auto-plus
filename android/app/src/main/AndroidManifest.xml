@@ -34,6 +34,14 @@
         and SIGKILL it under memory pressure. Paired with the FGS declarations below.-->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!--Self-heal for the Accessibility Service: MuMu sporadically wipes the accessibility grant
+        mid-run, killing all gesture injection while screen capture keeps working. With this
+        permission granted once over adb (pm grant <package> android.permission.WRITE_SECURE_SETTINGS),
+        the bot rewrites the secure setting to re-enable its own service and resumes.-->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+
     <application
         android:name=".MainApplication"
         android:allowBackup="false"

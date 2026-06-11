@@ -10,6 +10,7 @@ import com.steve1316.uma_android_automation.components.Checkbox
 import com.steve1316.uma_android_automation.components.DialogInterface
 import com.steve1316.uma_android_automation.components.DialogUtils
 import com.steve1316.uma_android_automation.components.IconHorseshoe
+import com.steve1316.uma_android_automation.components.LabelRecreationUmamusume
 import com.steve1316.uma_android_automation.components.RadioCareerQuickShortenAllEvents
 import com.steve1316.uma_android_automation.components.RadioPortrait
 import com.steve1316.uma_android_automation.types.BoundingBox
@@ -332,8 +333,21 @@ open class DialogHandler(val game: Game) {
             }
 
             "recreation" -> {
-                Checkbox.click(game.imageUtils)
-                dialog.ok(game.imageUtils)
+                // Two different dialogs share the "Recreation" title: the classic confirmation
+                // (OK/Cancel + skip checkbox) and the Pal-card partner picker, which has no OK
+                // button - on that one the clicks below are silent no-ops and the campaign loops
+                // on the open popup forever. If the partner rows are visible, take the trainee
+                // outing: always selectable, unlike the Pal row, which goes dark once its event
+                // chain completes.
+                if (LabelRecreationUmamusume.check(game.imageUtils)) {
+                    if (!LabelRecreationUmamusume.click(game.imageUtils)) {
+                        dialog.close(game.imageUtils)
+                    }
+                    game.waitForLoading()
+                } else {
+                    Checkbox.click(game.imageUtils)
+                    dialog.ok(game.imageUtils)
+                }
             }
 
             "rest" -> {

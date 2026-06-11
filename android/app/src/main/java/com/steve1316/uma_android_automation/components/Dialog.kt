@@ -162,7 +162,7 @@ object DialogUtils {
             )
 
         // Perform OCR on the identified title region.
-        val text: String =
+        var text: String =
             imageUtils.performOCROnRegion(
                 bitmap,
                 bbox.x,
@@ -175,6 +175,26 @@ object DialogUtils {
                 ocrEngine = "mlkit",
                 debugName = "dialogTitle",
             )
+
+        // Low-contrast banners blank out under thresholding: the green "Umamusume Details" header
+        // renders at ~222 gray, below the 230 ocrThreshold, so THRESH_BINARY blacks the whole region
+        // and OCR returns "" — wedging the bot in the "no known screen" fallback. On an empty read,
+        // retry without thresholding so the engine reads the grayscale banner directly.
+        if (text == "") {
+            text =
+                imageUtils.performOCROnRegion(
+                    bitmap,
+                    bbox.x,
+                    bbox.y,
+                    bbox.w,
+                    bbox.h,
+                    useThreshold = false,
+                    useGrayscale = true,
+                    scale = 1.0,
+                    ocrEngine = "mlkit",
+                    debugName = "dialogTitleNoThreshold",
+                )
+        }
 
         if (text == "") {
             return null
