@@ -1011,6 +1011,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
+     * Whether the racing plan is in mandatory mode and a planned race is scheduled for the
+     * current turn. Campaign-level overrides (pre-summer rest prep) consult this so an explicit
+     * plan entry is never consumed by a rest or mood-recovery turn.
+     */
+    fun hasMandatoryPlannedRaceToday(): Boolean = findMandatoryExtraRaceForCurrentTurn().first != null
+
+    /**
      * Checks if there are fan or trophy requirements that need to be satisfied.
      *
      * @param sourceBitmap Optional source bitmap to use for detection.
@@ -3539,8 +3546,16 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         // Filter both lists by user Racing Plan settings.
         // If trophy requirement is active, bypass min fan filtering but still apply other filters.
+        // A fan emergency bypasses the preference filters outright: the preferred-grades list can't
+        // even express OP races, so an OP-heavy pool (dirt runners) starves to a failed fan goal
+        // while perfectly raceable candidates sit on screen (the G1-G3 preference filtered every
+        // aptitude-perfect OP dirt race, force-ending the career). Fans are the point in an
+        // emergency — admit anything the trainee is competent in (terrain and distance aptitude B+)
+        // and let tier-aware scoring rank the rest.
         val filteredPlannedRaces =
-            if (hasTrophyRequirement) {
+            if (bFanEmergencyActive) {
+                plannedRaces.filter { checkRaceAptitudeMatch(it) }
+            } else if (hasTrophyRequirement) {
                 if (hasPreOpOrAboveRequirement || hasG3OrAboveRequirement) {
                     MessageLog.i(TAG, "[RACE] Trophy requirement active. Bypassing min fan threshold for all valid races.")
                 } else {
@@ -3551,11 +3566,19 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 filterRacesByCriteria(plannedRaces)
             }
         val filteredRegularRaces =
-            if (hasTrophyRequirement) {
+            if (bFanEmergencyActive) {
+                regularRaces.filter { checkRaceAptitudeMatch(it) }
+            } else if (hasTrophyRequirement) {
                 filterRacesByCriteria(regularRaces, bypassMinFans = true)
             } else {
                 filterRacesByCriteria(regularRaces)
             }
+        if (bFanEmergencyActive) {
+            MessageLog.i(
+                TAG,
+                "[RACE] Fan emergency: bypassing race preference filters and admitting aptitude-qualified races (${filteredPlannedRaces.size + filteredRegularRaces.size} candidates).",
+            )
+        }
         MessageLog.i(TAG, "[RACE] After filtering: ${filteredPlannedRaces.size} planned races and ${filteredRegularRaces.size} regular races remain.")
 
         // Combine all filtered races for Opportunity Cost analysis.

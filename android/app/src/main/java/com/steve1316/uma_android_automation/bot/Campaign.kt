@@ -2192,7 +2192,16 @@ abstract class Campaign(game: Game) : Task(game) {
         val sourceBitmap = game.imageUtils.getSourceBitmap()
 
         if (mustRestBeforeSummer && (date.year == DateYear.CLASSIC || date.year == DateYear.SENIOR) && date.month == DateMonth.JUNE && date.phase == DatePhase.LATE) {
-            if (trainee.energy < 70) {
+            // An explicit mandatory plan entry or a due fan goal outranks summer prep. This forced
+            // rest once consumed the exact turn of a mandatory planned race (Unicorn Stakes) while a
+            // 5000-fan goal was due, and the career force-ended. bFanEmergencyActive carries the
+            // previous turn's evaluation, which is current enough across a multi-turn emergency window.
+            if (racing.hasMandatoryPlannedRaceToday() || racing.bFanEmergencyActive) {
+                MessageLog.i(
+                    TAG,
+                    "[INFO] Skipping pre-summer prep: ${if (racing.bFanEmergencyActive) "a fan emergency is active" else "a mandatory planned race is scheduled for today"}.",
+                )
+            } else if (trainee.energy < 70) {
                 MessageLog.i(TAG, "[INFO] Energy is low (${trainee.energy}% < 70%). Forcing rest during $date in preparation for Summer Training.")
                 return MainScreenAction.REST
             } else if (trainee.mood < Mood.GREAT) {
