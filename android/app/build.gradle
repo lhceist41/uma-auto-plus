@@ -256,8 +256,15 @@ dependencies {
 
 // Fail early with a clear message if release signing inputs are missing.
 // Runs at task-graph-ready time, before any compilation or packaging starts.
+// Only this app's packaging tasks need the keystore. A broad /.*Release.*/ match
+// also caught testReleaseUnitTest, ktlintReleaseSourceSetFormat, library modules'
+// bundleReleaseAar, and RN's bundleReleaseJsAndAssets, which silently broke
+// `yarn test:kt` and `yarn format:kt` on machines without signing env vars.
 gradle.taskGraph.whenReady { graph ->
-    def hasReleaseTasks = graph.allTasks.any { it.name.matches(/.*Release.*/) && !it.name.contains("Debug") }
+    def hasReleaseTasks = graph.allTasks.any {
+        it.project.path == project.path &&
+            it.name.matches(/assembleRelease|packageRelease|packageReleaseBundle|bundleRelease|installRelease|validateSigningRelease/)
+    }
     if (hasReleaseTasks) {
         def storeFile = System.getenv("UMA_RELEASE_STORE_FILE") ?: findProperty("UMA_RELEASE_STORE_FILE")
         if (!storeFile) {
