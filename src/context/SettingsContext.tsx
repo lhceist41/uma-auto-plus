@@ -20,6 +20,12 @@ interface SettingsContextType {
     resetSettings: () => Promise<boolean>
     /** Opens the app's data directory in the device's file manager. */
     openDataDirectory: () => Promise<void>
+    /**
+     * Precomputes and persists the per-trainee settings snapshots for a rotation queue.
+     * Returns the entries whose preset could not be resolved (config errors to surface), an
+     * empty array when there is nothing to do, or null if persistence failed.
+     */
+    prepareTraineeRotation: () => Promise<{ index: number; presetKey: string; scenario: string }[] | null>
     /** Whether a save operation is currently in progress. */
     isSaving: boolean
 }

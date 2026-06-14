@@ -99,7 +99,7 @@ const Home = () => {
 
     const bsc = useContext(BotStateContext)
     const mlc = useContext(MessageLogContext)
-    const { saveSettings } = useSettings()
+    const { saveSettings, prepareTraineeRotation } = useSettings()
 
     const pulseAnim = useRef(new Animated.Value(1)).current
 
@@ -346,6 +346,37 @@ const Home = () => {
                 setSnackbarMessage(`Failed to save settings before starting: ${error}`)
                 setSnackbarOpen(true)
             }
+
+            // Precompute the per-trainee rotation snapshots from the just-saved settings. Block start
+            // on an unresolved preset or a persistence failure rather than let the queue hit a switch
+            // boundary it can't satisfy — match-or-stop applies at config time, not just in-game.
+            if (bsc.settings.runQueue.enableTraineeRotation) {
+                // Single scenario per rotation: the scenario-select screen is tapped through keeping the
+                // last scenario, so mixed-scenario entries would silently run the wrong campaign. Block
+                // until a scenario-select handler exists.
+                const scenarios = new Set(bsc.settings.runQueue.traineeRotation.map((e) => e.scenario))
+                if (scenarios.size > 1) {
+                    setSnackbarMessage("Trainee rotation supports one scenario at a time. Make every trainee use the same scenario.")
+                    setSnackbarOpen(true)
+                    return
+                }
+                const missing = await prepareTraineeRotation()
+                if (missing === null) {
+                    setSnackbarMessage("Failed to prepare trainee rotation snapshots. Not starting.")
+                    setSnackbarOpen(true)
+                    return
+                }
+                if (missing.length > 0) {
+                    const detail = missing.map((m) => `#${m.index + 1} ${m.presetKey} (${m.scenario})`).join(", ")
+                    setSnackbarMessage(`Rotation has unresolved presets: ${detail}. Fix the rotation list before starting.`)
+                    setSnackbarOpen(true)
+                    return
+                }
+            } else {
+                // Rotation off: still clear any stale snapshots so a later enable starts clean.
+                await prepareTraineeRotation()
+            }
+
             StartModule.start()
         } else {
             setShowNotReadyDialog(true)

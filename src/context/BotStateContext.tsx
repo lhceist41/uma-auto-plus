@@ -223,6 +223,18 @@ export interface Settings {
         // Doubles event rewards (and the TP cost) - only worth it while a TP event is live; turn
         // it off once the event ends. The Max TP restore above covers the doubled cost.
         enableEventBoost: boolean
+        // Trainee rotation: instead of repeating one trainee, cycle through a list, switching every
+        // switchEveryNRuns careers, each playing under HER own preset. Default off -> the validated
+        // same-trainee queue is byte-for-byte unchanged. When on, the frontend precomputes each
+        // trainee's full settings snapshot up front (separate runQueueRotation category rows) so the
+        // bot never reopens its own UI mid-session; the Kotlin queue swaps the active settings + selects
+        // the trainee in-game at each switch boundary, verifying the on-screen name matches or stopping.
+        enableTraineeRotation: boolean
+        switchEveryNRuns: number
+        // Ordered cycle. inGameName is the full "[Outfit] Name" the in-game trainee-select preview shows
+        // (what the navigator OCR-matches); presetKey is the characterPresets key ("Name" or
+        // "Name (Outfit)"); scenario picks which of that trainee's per-scenario presets to apply.
+        traineeRotation: { inGameName: string; presetKey: string; scenario: string }[]
     }
 
     // Scenario specific overrides
@@ -612,9 +624,12 @@ export const defaultSettings: Settings = {
         maxRuntimePerRunMinutes: 180,
         stopOnError: false,
         reuseLastLaunchSetup: true,
-        autoFillSupports: false,
+        autoFillSupports: true,
         enableTpRestoreWithItems: false,
         enableEventBoost: false,
+        enableTraineeRotation: false,
+        switchEveryNRuns: 3,
+        traineeRotation: [],
     },
     scenarioOverrides: {
         // Trackblazer guide: "After 3 consecutive races, you could gamble on a fourth,

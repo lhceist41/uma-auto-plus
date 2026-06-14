@@ -1013,6 +1013,23 @@ export class DatabaseManager {
             throw error
         }
     }
+
+    /**
+     * Delete every trainee-rotation snapshot row (categories namespaced `rot{i}_...`).
+     *
+     * Run before re-writing the snapshots so a shrunk rotation list leaves no orphaned `rot{i}_*`
+     * rows for indexes that no longer exist. GLOB `rot[0-9]*` matches only the synthetic snapshot
+     * namespace — no real settings category begins with `rot` + a digit.
+     */
+    async clearRotationSnapshots(): Promise<void> {
+        this.ensureInitialized()
+        try {
+            await this.db!.runAsync(`DELETE FROM ${this.TABLE_SETTINGS} WHERE category GLOB 'rot[0-9]*'`)
+        } catch (error) {
+            logErrorWithTimestamp("[DB] Failed to clear rotation snapshots:", error)
+            throw error
+        }
+    }
 }
 
 // Available as a singleton instance.

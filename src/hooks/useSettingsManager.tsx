@@ -7,6 +7,7 @@ import { databaseManager } from "../lib/database"
 import { startTiming } from "../lib/performanceLogger"
 import { logWithTimestamp, logErrorWithTimestamp } from "../lib/logger"
 import { deepMerge, convertSettingsToBatch, applyMigrations } from "../lib/settingsUtils"
+import { buildRotationSnapshotRows, BuildRotationResult } from "../lib/rotationSnapshots"
 
 export { deepMerge, convertSettingsToBatch, applyMigrations }
 
@@ -466,6 +467,38 @@ export const useSettingsManager = () => {
         }
     }
 
+    /**
+     * Precompute and persist the per-trainee settings snapshots for a rotation queue.
+     *
+     * Builds each trainee's full merged settings (Home preset-apply semantics) from the live
+     * settings, clears stale snapshots, then writes the `rot{i}_*` rows the Kotlin queue copies
+     * into active settings at each switch boundary. Idempotent: when rotation is disabled or the
+     * list is empty it just clears the snapshots and returns.
+     *
+     * @returns the entries whose preset could not be resolved (a config error to surface to the
+     *          user), or null if persistence itself failed.
+     */
+    const prepareTraineeRotation = async (): Promise<BuildRotationResult["missing"] | null> => {
+        try {
+            const live = settingsRef.current
+            const rq = live.runQueue
+            // Always clear stale snapshots first so a disabled or shrunk rotation leaves nothing behind.
+            await databaseManager.clearRotationSnapshots()
+            if (!rq?.enableTraineeRotation || !rq.traineeRotation?.length) {
+                return []
+            }
+            const { rows, missing } = buildRotationSnapshotRows(live, rq.traineeRotation)
+            if (rows.length > 0) {
+                await databaseManager.saveSettingsBatch(rows)
+            }
+            logWithTimestamp(`[SettingsManager] Prepared ${rq.traineeRotation.length} rotation snapshot(s): ${rows.length} rows, ${missing.length} unresolved.`)
+            return missing
+        } catch (error) {
+            logErrorWithTimestamp(`[SettingsManager] Failed to prepare trainee rotation: ${error}`)
+            return null
+        }
+    }
+
     return useMemo(
         () => ({
             saveSettings,
@@ -475,8 +508,9 @@ export const useSettingsManager = () => {
             exportSettings,
             resetSettings,
             openDataDirectory,
+            prepareTraineeRotation,
             isSaving: isSaving || isSQLiteSaving,
         }),
-        [saveSettings, saveSettingsImmediate, loadSettings, importSettings, exportSettings, resetSettings, openDataDirectory, isSaving, isSQLiteSaving]
+        [saveSettings, saveSettingsImmediate, loadSettings, importSettings, exportSettings, resetSettings, openDataDirectory, prepareTraineeRotation, isSaving, isSQLiteSaving]
     )
 }

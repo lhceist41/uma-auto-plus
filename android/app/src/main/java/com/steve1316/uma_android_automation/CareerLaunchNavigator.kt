@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation
 
 import android.content.Context
+import android.graphics.Bitmap
 import com.steve1316.automation_library.utils.BotService
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
@@ -8,6 +9,7 @@ import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.components.*
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
+import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -132,6 +134,14 @@ class CareerLaunchNavigator(private val context: Context) {
 
         /** Trainee/character selection or reuse. Requires template (not yet provided). */
         TRAINEE_SETUP,
+
+        /**
+         * Trainee Select roster (the grid of owned units). The game shows it on every launch with a
+         * green Next; the non-rotation path taps through it as POST_RUN_RESULTS (keeping the last
+         * trainee). Under rotation it is detected via header OCR and handled by selecting the target
+         * trainee and verifying her name (match-or-stop).
+         */
+        TRAINEE_SELECT_SCREEN,
 
         /** Inheritance selection popup. */
         INHERITANCE_SCREEN,
@@ -447,6 +457,14 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.HOME_SCREEN
         }
 
+        // Trainee Select roster (rotation switch only). MUST precede the generic POST_RUN_RESULTS
+        // Next check below: this screen's green "Next" template-matches but advancing it without
+        // first selecting + verifying the trainee would start the WRONG career. Gated on rotation
+        // being enabled so the non-rotation path pays zero OCR cost and stays byte-for-byte unchanged.
+        if (SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false) && isTraineeSelectScreen(bitmap)) {
+            return LaunchScreenState.TRAINEE_SELECT_SCREEN
+        }
+
         // Legacy Select screen - Auto-Select button (green pill, optionally under a pink
         // Racing Carnival Underway banner). Checked BEFORE the generic POST_RUN_RESULTS Next
         // check because Next on Legacy Select is greyed out / non-clickable until Auto-Select
@@ -633,6 +651,7 @@ class CareerLaunchNavigator(private val context: Context) {
             LaunchScreenState.COMPLETE_CAREER_CONFIRMATION -> handleCompleteCareerConfirmation()
             LaunchScreenState.POST_RUN_RESULTS -> handlePostRunResults()
             LaunchScreenState.CAREER_COMPLETE_DIALOG -> handleCareerCompleteDialog()
+            LaunchScreenState.TRAINEE_SELECT_SCREEN -> handleTraineeSelectScreen()
             LaunchScreenState.LEGACY_SELECT_SCREEN -> handleLegacySelectScreen()
             LaunchScreenState.PRE_RUN_CONFIRMATION -> handlePreRunConfirmation()
             LaunchScreenState.TP_RESTORE_DIALOG -> handleTpRestoreDialog()
@@ -1163,6 +1182,176 @@ class CareerLaunchNavigator(private val context: Context) {
      * Transition: ButtonStartCareer.click() (template-matched).
      */
 
+    // ---- Trainee Select grid (rotation) ----
+    // Tap targets are fractions of the captured bitmap so they hold across both supported configs.
+    // Measured from 1080x1920 Trainee Select captures; tune live if a tap misses.
+    // Only the top two rows are scanned per page (the third sits on the filter bar — a stray tap
+    // there would open the sort dropdown); the swipe overlaps by ~half a row so nothing is skipped.
+    private val traineeColFractions = floatArrayOf(0.13f, 0.315f, 0.50f, 0.685f, 0.87f)
+    private val traineeRow0Fraction = 0.585f
+    private val traineeRowStepFraction = 0.099f
+    private val traineeGridRows = 2
+    private val traineeMaxSwipes = 8
+    private val traineeMatchThreshold = 0.86
+    // Preview name banner: white "[Outfit] Name" text on a saturated character-colored pill. x,y,w,h.
+    private val traineePreviewRegion = floatArrayOf(0.02f, 0.295f, 0.74f, 0.05f)
+
+    /**
+     * Header OCR detector for the Trainee Select roster. The "Trainee Select" title sits top-left;
+     * we only need the word "Trainee" to discriminate it from every other launch screen.
+     */
+    private fun isTraineeSelectScreen(bitmap: Bitmap): Boolean {
+        return try {
+            val header =
+                iu.performOCROnRegion(
+                    bitmap,
+                    0,
+                    (bitmap.height * 0.125).toInt(),
+                    (bitmap.width * 0.45).toInt(),
+                    (bitmap.height * 0.05).toInt(),
+                    useThreshold = false,
+                    useGrayscale = true,
+                    scale = 2.0,
+                    debugName = "nav_trainee_select_header",
+                )
+            header.uppercase().contains("TRAINEE")
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * TRAINEE_SELECT_SCREEN (rotation only): pick the rotation trainee in-game and verify her name
+     * before advancing. Taps each roster thumbnail, reads the preview name banner, and Jaro-Winkler
+     * matches it against the target the queue recorded (queueState.currentTrainee). On a confident
+     * match the tap has already selected her, so we click Next; if the whole grid scans out with no
+     * match it STOPS rather than risk running the wrong trainee under this trainee's settings.
+     */
+    private fun handleTraineeSelectScreen(): TransitionResult {
+        val target = SettingsHelper.getStringSetting("queueState", "currentTrainee")
+        if (target.isBlank()) {
+            return TransitionResult.Failed(
+                reason = "On Trainee Select but no target trainee recorded (queueState.currentTrainee empty); cannot choose safely.",
+                transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
+                recommendedAction = "Configure trainee rotation, or manually select the trainee and restart the queue.",
+            )
+        }
+        MessageLog.i(TAG, "[ROTATION] Trainee Select: target '$target'.")
+
+        // We are handling the trainee switch now — disarm the missed-detection backstop. (A no-match
+        // STOP below never reaches Legacy Select, so the flag value is moot in that case.)
+        StartModule.setRotationSwitchPending(context, false)
+
+        // Fast path: the game pre-highlights the last trainee, so within a trainee's block (no
+        // switch) the target is already selected and the preview already reads her name. Confirm it
+        // and advance without disturbing the grid - no scan, no risk of changing the selection.
+        val current = readTraineePreviewName()
+        if (current.isNotBlank() && TraineeNameMatcher.score(target, current) >= traineeMatchThreshold) {
+            MessageLog.i(TAG, "[ROTATION] Target already selected ('$current'). Advancing.")
+            if (ButtonNext.click(iu)) {
+                waitSafe(2.0)
+                return TransitionResult.Continue
+            }
+            return TransitionResult.Failed(
+                reason = "Target trainee '$current' already selected but the Next click failed.",
+                transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
+                recommendedAction = "Manually press Next and restart the queue.",
+            )
+        }
+
+        var bestScore = 0.0
+        var bestLabel = ""
+        var scanned = 0
+
+        for (page in 0..traineeMaxSwipes) {
+            val bitmap = iu.getSourceBitmap()
+            for (row in 0 until traineeGridRows) {
+                for (col in traineeColFractions.indices) {
+                    if (!BotService.isRunning || StartModule.queueStopRequested) {
+                        return TransitionResult.Failed(
+                            reason = "Queue stopped during trainee selection.",
+                            transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
+                            isRecoverable = false,
+                        )
+                    }
+                    val tapX = bitmap.width * traineeColFractions[col]
+                    val tapY = bitmap.height * (traineeRow0Fraction + row * traineeRowStepFraction)
+                    gestureUtils.tap(tapX.toDouble(), tapY.toDouble(), "trainee_grid_c${col}_r$row")
+                    waitSafe(1.0)
+                    val preview = readTraineePreviewName()
+                    if (preview.isBlank()) continue
+                    scanned++
+                    val score = TraineeNameMatcher.score(target, preview)
+                    MessageLog.i(TAG, "[ROTATION] Cell ($col,$row): '$preview' score=${"%.3f".format(score)}")
+                    if (score > bestScore) {
+                        bestScore = score
+                        bestLabel = preview
+                    }
+                    if (score >= traineeMatchThreshold) {
+                        MessageLog.i(TAG, "[ROTATION] Match: '$preview' (${"%.3f".format(score)}). Selecting and advancing.")
+                        waitSafe(0.5)
+                        if (ButtonNext.click(iu)) {
+                            waitSafe(2.0)
+                            return TransitionResult.Continue
+                        }
+                        return TransitionResult.Failed(
+                            reason = "Matched trainee '$preview' but the Next click failed.",
+                            transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
+                            recommendedAction = "Manually press Next and restart the queue.",
+                        )
+                    }
+                }
+            }
+            if (page < traineeMaxSwipes) {
+                swipeTraineeGridUp(bitmap)
+                waitSafe(1.2)
+            }
+        }
+
+        return TransitionResult.Failed(
+            reason = "Trainee '$target' not found after scanning $scanned roster cells over ${traineeMaxSwipes + 1} page(s); best was '$bestLabel' @ ${"%.3f".format(bestScore)}. Stopping to avoid running the wrong trainee.",
+            transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
+            isRecoverable = true,
+            recommendedAction = "Check the rotation's inGameName matches the in-game name exactly, or select the trainee manually and restart.",
+        )
+    }
+
+    /** Reads the "[Outfit] Name" preview banner (white text on a colored pill) via color OCR. */
+    private fun readTraineePreviewName(): String {
+        val bitmap = iu.getSourceBitmap()
+        return try {
+            iu
+                .findTextByColor(
+                    bitmap,
+                    (bitmap.width * traineePreviewRegion[0]).toInt(),
+                    (bitmap.height * traineePreviewRegion[1]).toInt(),
+                    (bitmap.width * traineePreviewRegion[2]).toInt(),
+                    (bitmap.height * traineePreviewRegion[3]).toInt(),
+                    targetR = 255,
+                    targetG = 255,
+                    targetB = 255,
+                    tolerance = 90,
+                    scale = 2.0,
+                    debugName = "trainee_preview_name",
+                ).replace("\n", " ")
+                .trim()
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    /** Swipes the roster grid up roughly one row to reveal the next page of trainees. */
+    private fun swipeTraineeGridUp(bitmap: Bitmap) {
+        val x = bitmap.width * 0.5f
+        val yStart = bitmap.height * 0.74f
+        val yEnd = bitmap.height * 0.58f
+        gestureUtils.swipe(x, yStart, x, yEnd)
+    }
+
     /**
      * LEGACY_SELECT_SCREEN: Click Auto-Select to populate both legacy slots, tick all unchecked
      * options on the resulting Confirm Auto-Select dialog (Include Guests, plus Prioritize
@@ -1174,6 +1363,19 @@ class CareerLaunchNavigator(private val context: Context) {
      * Transition: ButtonAutoSelect.click() -> Checkbox.click() x N -> ButtonOk.click() -> ButtonNext (next iteration).
      */
     private fun handleLegacySelectScreen(): TransitionResult {
+        // Rotation backstop: a trainee switch was required this launch but we reached Legacy Select
+        // without handling Trainee Select (a missed detection tapped through it keeping the wrong
+        // trainee). Stop before the career starts rather than run the wrong trainee.
+        if (SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false) &&
+            SettingsHelper.getStringSetting("queueState", "rotationSwitchPending") == "true"
+        ) {
+            return TransitionResult.Failed(
+                reason = "Trainee rotation required a switch this launch but Trainee Select was not handled before Legacy Select — the wrong trainee may be selected.",
+                transition = "LEGACY_SELECT_SCREEN -> SUPPORT_DECK_SCREEN",
+                recommendedAction = "Verify the rotation Trainee Select OCR (header + name banner), or select the trainee manually and restart the queue.",
+            )
+        }
+
         if (legacyAutoSelectAlreadyDone) {
             MessageLog.i(TAG, "[NAV] Legacy Auto-Select already done this session. Clicking Next to advance...")
             if (ButtonNext.click(iu)) {

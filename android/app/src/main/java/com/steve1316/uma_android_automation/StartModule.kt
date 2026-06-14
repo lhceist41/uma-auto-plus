@@ -37,6 +37,7 @@ import kotlinx.coroutines.runBlocking
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.SubscriberExceptionEvent
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.time.LocalDateTime
@@ -173,10 +174,157 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 return null
             }
         }
+
+        /**
+         * Trainee-rotation config for a queue session, parsed from the runQueue settings.
+         *
+         * @property enabled True only when rotation is on AND at least one trainee is configured.
+         * @property switchEvery Number of consecutive runs each trainee plays before the next.
+         * @property inGameNames Ordered "[Outfit] Name" strings; the index is the rotation slot.
+         */
+        data class RotationConfig(
+            val enabled: Boolean,
+            val switchEvery: Int,
+            val inGameNames: List<String>,
+        ) {
+            val count: Int get() = inGameNames.size
+
+            /** 0-based rotation slot for a 1-based run number (blocks of [switchEvery], cycling). */
+            fun indexForRun(run: Int): Int {
+                if (count <= 0 || switchEvery <= 0) return 0
+                return ((run - 1) / switchEvery) % count
+            }
+        }
+
+        /**
+         * Reads the trainee-rotation config from settings. Returns a disabled config when rotation
+         * is off, the list is empty, or the JSON is malformed — the queue then runs as a normal
+         * single-trainee queue.
+         */
+        fun loadRotationConfig(): RotationConfig {
+            if (!SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false)) {
+                return RotationConfig(false, 1, emptyList())
+            }
+            val switchEvery = maxOf(1, SettingsHelper.getIntSetting("runQueue", "switchEveryNRuns", 3))
+            val names =
+                try {
+                    val arr = JSONArray(SettingsHelper.getStringSetting("runQueue", "traineeRotation"))
+                    (0 until arr.length()).map { arr.getJSONObject(it).optString("inGameName", "") }
+                } catch (e: Exception) {
+                    MessageLog.w(TAG, "[ROTATION] Could not parse traineeRotation list: ${e.message}")
+                    emptyList()
+                }
+            return RotationConfig(names.isNotEmpty(), switchEvery, names)
+        }
+
+        /**
+         * Copies the precomputed `rot{index}_*` snapshot rows into the live `settings` rows,
+         * swapping the active gameplay config to the rotation trainee. Returns false when no
+         * snapshot exists for the index — the caller must then stop the queue rather than run the
+         * wrong trainee under stale settings.
+         *
+         * GLOB (not LIKE) is used so `_` stays literal: `rot1_*` must not also match `rot10_*`.
+         */
+        fun applyRotationSnapshot(context: Context, index: Int): Boolean {
+            return try {
+                val dbFile = File(context.filesDir, "SQLite/settings.db")
+                if (!dbFile.exists()) return false
+                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
+                try {
+                    val prefix = "rot${index}_"
+                    val rows = mutableListOf<Triple<String, String, String>>()
+                    db.rawQuery(
+                        "SELECT category, key, value FROM settings WHERE category GLOB ?",
+                        arrayOf("rot${index}_*"),
+                    ).use { cursor ->
+                        while (cursor.moveToNext()) {
+                            rows.add(
+                                Triple(
+                                    cursor.getString(0).substring(prefix.length),
+                                    cursor.getString(1),
+                                    cursor.getString(2) ?: "",
+                                ),
+                            )
+                        }
+                    }
+                    if (rows.isEmpty()) {
+                        MessageLog.e(TAG, "[ROTATION] No snapshot rows for index $index (prefix '$prefix'). Cannot switch trainee.")
+                        return false
+                    }
+                    db.beginTransaction()
+                    try {
+                        for ((category, key, value) in rows) {
+                            db.execSQL(
+                                "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+                                arrayOf(category, key, value),
+                            )
+                        }
+                        db.setTransactionSuccessful()
+                    } finally {
+                        db.endTransaction()
+                    }
+                    MessageLog.i(TAG, "[ROTATION] Applied snapshot for trainee index $index ($prefix): ${rows.size} settings rows.")
+                    true
+                } finally {
+                    db.close()
+                }
+            } catch (e: Exception) {
+                MessageLog.e(TAG, "[ROTATION] Failed to apply snapshot for index $index: ${e.message}")
+                false
+            }
+        }
+
+        /**
+         * Records the target trainee's in-game name so the launch navigator's Trainee Select
+         * handler knows who to pick — and to verify against (match-or-stop).
+         */
+        fun setCurrentTrainee(context: Context, inGameName: String) {
+            try {
+                val dbFile = File(context.filesDir, "SQLite/settings.db")
+                if (!dbFile.exists()) return
+                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
+                db.execSQL(
+                    "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+                    arrayOf("queueState", "currentTrainee", inGameName),
+                )
+                db.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "[ROTATION] Failed to record current trainee: ${e.message}")
+            }
+        }
+
+        /**
+         * Marks whether the upcoming launch must switch the in-game trainee. The launch navigator
+         * clears this once its Trainee Select handler has selected + verified the target; if it is
+         * still set when the navigator reaches Legacy Select, the swap was missed (e.g. a Trainee
+         * Select detection miss tapped through the screen keeping the wrong trainee) and the queue
+         * stops before the career starts rather than run the wrong trainee.
+         */
+        fun setRotationSwitchPending(context: Context, pending: Boolean) {
+            try {
+                val dbFile = File(context.filesDir, "SQLite/settings.db")
+                if (!dbFile.exists()) return
+                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
+                db.execSQL(
+                    "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+                    arrayOf("queueState", "rotationSwitchPending", pending.toString()),
+                )
+                db.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "[ROTATION] Failed to set rotationSwitchPending: ${e.message}")
+            }
+        }
     }
 
     private val context: Context = reactContext.applicationContext
     private var messageId = 1
+
+    /**
+     * Rotation slot index of the previously launched run this session, or -1 before the first run.
+     * Drives switch-boundary detection in [applyRotationForRun]; reset at the top of onStartEvent so
+     * the first launched run of every session always (re)loads its trainee snapshot.
+     */
+    private var rotationPrevIndex: Int = -1
 
     /** Bounded hand-off between MessageLog's lock-held EventBus post and the bridge worker. */
     private val jsEventQueue = java.util.concurrent.ArrayBlockingQueue<JSEvent>(512)
@@ -720,6 +868,39 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     }
 
     /**
+     * Prepares the active settings for [upcomingRun] under trainee rotation.
+     *
+     * At a switch boundary (the rotation slot changes, including the first launched run of a
+     * session) it swaps in that trainee's settings snapshot. It always records the target name so
+     * the launch navigator's Trainee Select handler can pick + verify her: the game shows Trainee
+     * Select on every launch (the navigator otherwise taps through it via POST_RUN_RESULTS, keeping
+     * the last trainee), and the rotation-gated detector catches it and selects the target instead.
+     *
+     * The user's reuse preference is returned unchanged. Reuse must stay on: the deck handler fails
+     * fast without it, and the support deck persists across a trainee change, so it is still valid
+     * at a switch. The trainee swap rides on the Trainee Select handler, not the reuse flag.
+     *
+     * @return the reuse flag to pass to the navigator, or null to STOP the queue (snapshot missing —
+     *         must never run the wrong trainee under stale settings).
+     */
+    private fun applyRotationForRun(rotation: RotationConfig, upcomingRun: Int, userReuse: Boolean): Boolean? {
+        if (!rotation.enabled) return userReuse
+        val index = rotation.indexForRun(upcomingRun)
+        val target = rotation.inGameNames.getOrElse(index) { "" }
+        val switching = index != rotationPrevIndex
+        if (switching) {
+            if (!applyRotationSnapshot(context, index)) return null
+            MessageLog.i(TAG, "[ROTATION] Run $upcomingRun -> switching to trainee #${index + 1} '$target' (snapshot loaded).")
+        }
+        setCurrentTrainee(context, target)
+        // Arm the missed-detection backstop only on an actual switch; the navigator clears it when
+        // Trainee Select is handled, and fails at Legacy Select if it is still armed.
+        setRotationSwitchPending(context, switching)
+        rotationPrevIndex = index
+        return userReuse
+    }
+
+    /**
      * Runs one CareerLaunchNavigator.navigate() call under the navigation deadline.
      *
      * Navigation runs outside the per-run timeout in Task.start, and the 3-minute stall
@@ -850,6 +1031,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 queueStopRequested = false
                 queueSkipRequested = false
 
+                // Reset rotation boundary tracking so the first launched run of this session always
+                // (re)loads its trainee snapshot, even within the same app process as a prior queue.
+                rotationPrevIndex = -1
+                setRotationSwitchPending(context, false)
+
                 // Reset the session-scoped TP restore counter (companion-held so it survives
                 // the per-handoff navigator reconstruction).
                 CareerLaunchNavigator.resetTpRestoresForSession()
@@ -911,6 +1097,24 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
                 var completedRuns = 0
 
+                // Trainee rotation: parse the cycle once. When enabled, prepare the first launched
+                // run's trainee BEFORE the cold-start probe below reads the scenario, so a rotation
+                // that switches scenarios probes and launches the correct campaign.
+                val rotation = loadRotationConfig()
+                if (enableRunQueue && rotation.enabled) {
+                    MessageLog.i(TAG, "[ROTATION] Enabled: ${rotation.count} trainees, switching every ${rotation.switchEvery} run(s).")
+                }
+                var coldStartReuse = reuseLastLaunchSetup
+                if (enableRunQueue && rotation.enabled && startFromRun <= totalRuns && BotService.isRunning && !queueStopRequested) {
+                    val r = applyRotationForRun(rotation, startFromRun, reuseLastLaunchSetup)
+                    if (r == null) {
+                        sendQueueProgressEvent(startFromRun, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, "Missing rotation snapshot for the first trainee.")
+                        queueStopRequested = true
+                    } else {
+                        coldStartReuse = r
+                    }
+                }
+
                 // Cold start: the navigator otherwise only runs BETWEEN careers, so a queue
                 // started while the game is parked on the home screen (e.g. a previous queue
                 // failed out during navigation and ended there) used to burn run 1 on failed
@@ -926,7 +1130,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     if (coldStartNavigator != null && coldStartNavigator.isOnHomeScreen()) {
                         MessageLog.i(TAG, "[QUEUE] Game is on the home screen. Launching a career for run $startFromRun...")
                         sendQueueProgressEvent(startFromRun, totalRuns, "navigating")
-                        val navResult = navigateWithDeadline(reuseLastLaunchSetup, coldStartNavigator)
+                        val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator)
                         if (!navResult.success) {
                             logNavigationFailure(navResult)
                             sendQueueProgressEvent(startFromRun, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, navResult.failureReason)
@@ -1021,6 +1225,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             break
                         }
 
+                        // Trainee rotation: swap to the next run's trainee (settings + select mode)
+                        // before reading the scenario or navigating. Stop the queue if its snapshot
+                        // is missing rather than launch the wrong trainee under stale settings.
+                        val nextReuse = applyRotationForRun(rotation, i + 1, reuseLastLaunchSetup)
+                        if (nextReuse == null) {
+                            sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, "Missing rotation snapshot for the next trainee.")
+                            break
+                        }
+
                         // Between-run cleanup: hint GC and refresh the watchdog heartbeat so the
                         // next run starts with lower PSS. Every KB we save here reduces the chance
                         // of a TRIM_EMPTY kill at end-of-next-run.
@@ -1039,7 +1252,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         } else {
                             MessageLog.i(TAG, "[QUEUE] Navigating back to career start for next run...")
 
-                            val navResult = navigateWithDeadline(reuseLastLaunchSetup)
+                            val navResult = navigateWithDeadline(nextReuse)
 
                             if (!navResult.success) {
                                 logNavigationFailure(navResult)

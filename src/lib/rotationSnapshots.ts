@@ -1,0 +1,111 @@
+import { Settings } from "../context/BotStateContext"
+import { characterPresets } from "../data/characterPresets"
+import { convertSettingsToBatch } from "./settingsUtils"
+
+/**
+ * One trainee in a rotation cycle. Mirrors `Settings["runQueue"]["traineeRotation"]`.
+ *
+ * - `inGameName`   full "[Outfit] Name" the in-game Trainee Select preview shows. This is what
+ *                  the Kotlin navigator OCR-matches against, so it must read exactly as the game
+ *                  renders it (outfit prefix included — the same character can own several outfits).
+ * - `presetKey`    the `characterPresets` entry name ("Name" or "Name (Outfit)").
+ * - `scenario`     which of that trainee's per-scenario presets to apply, and the authoritative
+ *                  scenario the career runs under.
+ */
+export interface RotationEntry {
+    inGameName: string
+    presetKey: string
+    scenario: string
+}
+
+export interface RotationBatchRow {
+    category: string
+    key: string
+    value: unknown
+}
+
+export interface BuildRotationResult {
+    /** Namespaced rows to persist: `rot{i}_{category}` so the Kotlin queue can copy them verbatim. */
+    rows: RotationBatchRow[]
+    /** Entries whose (presetKey, scenario) did not resolve to a preset — a config error to surface. */
+    missing: { index: number; presetKey: string; scenario: string }[]
+}
+
+// Categories that must NEVER be swapped per-trainee: they hold the queue/rotation control state
+// itself (and the persisted run cursor). Swapping them mid-queue would clobber the very config
+// driving the rotation. Everything else is the trainee's active gameplay config.
+const SNAPSHOT_DENYLIST = new Set(["runQueue", "queueState"])
+
+/**
+ * Builds each rotation trainee's full settings snapshot as namespaced SQLite rows.
+ *
+ * The merge mirrors Home's `handlePresetChange` exactly — deep-merge the preset onto the current
+ * `base`, preserve the user's per-event override maps, force the entry's scenario, and stamp the
+ * racing-drift snapshot — so a rotation run behaves identically to the user having hand-applied
+ * that preset. Each resulting row is re-keyed `rot{i}_{category}`; at a switch boundary the Kotlin
+ * queue copies `rot{i}_*` straight into the live `settings` rows, so no serialization logic is
+ * duplicated on the Kotlin side.
+ *
+ * @param base     the settings to merge each preset onto (the user's live settings at queue start).
+ * @param rotation the ordered trainee cycle.
+ */
+export function buildRotationSnapshotRows(base: Settings, rotation: RotationEntry[]): BuildRotationResult {
+    const rows: RotationBatchRow[] = []
+    const missing: BuildRotationResult["missing"] = []
+
+    rotation.forEach((entry, i) => {
+        const preset = characterPresets.find((p) => p.name === entry.presetKey && p.scenario === entry.scenario)
+        if (!preset) {
+            missing.push({ index: i, presetKey: entry.presetKey, scenario: entry.scenario })
+            return
+        }
+
+        // Deep-merge preset onto a clone of the base (same shallow-per-category merge Home uses).
+        const merged: any = JSON.parse(JSON.stringify(base))
+        for (const [category, values] of Object.entries(preset.settings)) {
+            if (typeof values === "object" && values !== null && !Array.isArray(values)) {
+                merged[category] = { ...(merged[category] ?? {}), ...values }
+            } else {
+                merged[category] = values
+            }
+        }
+
+        // Preserve the user's per-event override maps: presets ship empty `{}` placeholders that a
+        // naive spread would clobber. (Identical to handlePresetChange — these maps are deck/scenario
+        // specific, not character specific.)
+        if (merged.trainingEvent) {
+            const presetSupport = (preset.settings as any)?.trainingEvent?.supportEventOverrides || {}
+            const presetScenario = (preset.settings as any)?.trainingEvent?.scenarioEventOverrides || {}
+            merged.trainingEvent.supportEventOverrides = { ...(base.trainingEvent?.supportEventOverrides || {}), ...presetSupport }
+            merged.trainingEvent.scenarioEventOverrides = { ...(base.trainingEvent?.scenarioEventOverrides || {}), ...presetScenario }
+        }
+
+        // The rotation entry's scenario is authoritative for which Campaign subclass runs.
+        if (merged.general) merged.general.scenario = entry.scenario
+
+        // Stamp the racing-drift snapshot so Game.warnOnRacingConfigDrift can flag a mismatch at
+        // career start, per trainee (a silently-off mandatory flag cost a career).
+        if (merged.racing) {
+            let plannedRaceCount = 0
+            try {
+                plannedRaceCount = merged.racing.racingPlan ? JSON.parse(merged.racing.racingPlan).length : 0
+            } catch {
+                plannedRaceCount = 0
+            }
+            merged.racing.appliedRacingSnapshot = JSON.stringify({
+                presetName: entry.presetKey,
+                scenario: entry.scenario,
+                enableRacingPlan: merged.racing.enableRacingPlan,
+                enableMandatoryRacingPlan: merged.racing.enableMandatoryRacingPlan,
+                plannedRaceCount,
+            })
+        }
+
+        const batch = convertSettingsToBatch(merged).filter((r) => !SNAPSHOT_DENYLIST.has(r.category))
+        for (const r of batch) {
+            rows.push({ category: `rot${i}_${r.category}`, key: r.key, value: r.value })
+        }
+    })
+
+    return { rows, missing }
+}

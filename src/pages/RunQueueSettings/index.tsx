@@ -1,12 +1,15 @@
 import { useMemo, useContext, useRef } from "react"
-import { View, ScrollView, StyleSheet } from "react-native"
+import { View, ScrollView, StyleSheet, TextInput, Text } from "react-native"
 import { useTheme } from "../../context/ThemeContext"
 import { BotStateContext, defaultSettings } from "../../context/BotStateContext"
 import CustomSlider from "../../components/CustomSlider"
 import CustomCheckbox from "../../components/CustomCheckbox"
+import CustomSelect from "../../components/CustomSelect"
+import CustomButton from "../../components/CustomButton"
 import CustomTitle from "../../components/CustomTitle"
 import PageHeader from "../../components/PageHeader"
 import WarningContainer from "../../components/WarningContainer"
+import { characterPresets } from "../../data/characterPresets"
 import { SearchPageProvider } from "../../context/SearchPageContext"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 
@@ -17,7 +20,7 @@ import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
  */
 const RunQueueSettings = () => {
     usePerformanceLogging("RunQueueSettings")
-    const { colors } = useTheme()
+    const { colors, isDark } = useTheme()
     const bsc = useContext(BotStateContext)
     const scrollViewRef = useRef<ScrollView>(null)
 
@@ -31,8 +34,38 @@ const RunQueueSettings = () => {
                     margin: 10,
                     backgroundColor: colors.background,
                 },
+                rotationCard: {
+                    borderWidth: 1,
+                    borderColor: isDark ? "#444" : "#ccc",
+                    borderRadius: 8,
+                    padding: 12,
+                    marginTop: 10,
+                    backgroundColor: isDark ? "#161616" : "#fafafa",
+                },
+                rotationHeader: {
+                    fontSize: 14,
+                    fontWeight: "700",
+                    color: colors.foreground,
+                    marginBottom: 8,
+                },
+                inputLabel: {
+                    fontSize: 13,
+                    fontWeight: "600",
+                    color: colors.foreground,
+                    marginTop: 10,
+                    marginBottom: 4,
+                },
+                textInput: {
+                    borderWidth: 1,
+                    borderColor: isDark ? "#444" : "#ccc",
+                    borderRadius: 8,
+                    padding: 10,
+                    fontSize: 14,
+                    color: colors.foreground,
+                    backgroundColor: isDark ? "#1a1a1a" : "#f9f9f9",
+                },
             }),
-        [colors]
+        [colors, isDark]
     )
 
     const runQueueSettings = { ...defaultSettings.runQueue, ...bsc.settings.runQueue }
@@ -42,6 +75,27 @@ const RunQueueSettings = () => {
             ...bsc.settings,
             runQueue: { ...bsc.settings.runQueue, [key]: value },
         })
+    }
+
+    // Preset options for the rotation rows. Each option encodes (name, scenario) so picking one
+    // sets both presetKey and scenario for the entry. The "@@" delimiter never occurs in a name.
+    const presetOptions = useMemo(() => characterPresets.map((p) => ({ value: `${p.name}@@${p.scenario}`, label: `${p.name} — ${p.scenario}` })).sort((a, b) => a.label.localeCompare(b.label)), [])
+
+    const rotation = runQueueSettings.traineeRotation
+    const updateRotationEntry = (index: number, patch: Partial<(typeof rotation)[number]>) => {
+        updateSetting(
+            "traineeRotation",
+            rotation.map((entry, i) => (i === index ? { ...entry, ...patch } : entry))
+        )
+    }
+    const addRotationEntry = () => {
+        updateSetting("traineeRotation", [...rotation, { inGameName: "", presetKey: "", scenario: bsc.settings.general.scenario }])
+    }
+    const removeRotationEntry = (index: number) => {
+        updateSetting(
+            "traineeRotation",
+            rotation.filter((_, i) => i !== index)
+        )
     }
 
     return (
@@ -158,6 +212,77 @@ const RunQueueSettings = () => {
                                     description="On the Start Career screen, tick 'Event Boost (TP Usage x2)' so each career earns double event rewards. The TP cost also doubles - the Restore TP with Items option above covers it. Only worth it while a TP event is running; turn this off once the event ends, or you spend double TP for no extra reward."
                                     className="mt-4"
                                 />
+
+                                <View style={styles.rotationCard}>
+                                    <CustomCheckbox
+                                        searchId="run-queue-trainee-rotation"
+                                        checked={runQueueSettings.enableTraineeRotation}
+                                        onCheckedChange={(checked) => updateSetting("enableTraineeRotation", checked)}
+                                        label="Rotate Trainees"
+                                        description="Instead of repeating one trainee, cycle through the list below, switching every N runs. Each trainee plays under HER own preset. The bot picks and verifies the trainee in-game at each switch; if the on-screen name does not match the target it stops rather than run the wrong career."
+                                    />
+
+                                    {runQueueSettings.enableTraineeRotation && (
+                                        <View style={{ marginTop: 8 }}>
+                                            <CustomSlider
+                                                searchId="run-queue-switch-every"
+                                                value={runQueueSettings.switchEveryNRuns}
+                                                placeholder={defaultSettings.runQueue.switchEveryNRuns}
+                                                onValueChange={(value) => updateSetting("switchEveryNRuns", value)}
+                                                onSlidingComplete={(value) => updateSetting("switchEveryNRuns", value)}
+                                                min={1}
+                                                max={10}
+                                                step={1}
+                                                label="Switch Every N Runs"
+                                                showValue={true}
+                                                showLabels={true}
+                                                description="How many consecutive careers each trainee plays before the queue switches to the next. With 3 trainees and a value of 3, a 9-run queue plays 3 careers each."
+                                            />
+
+                                            {rotation.map((entry, i) => (
+                                                <View key={i} style={styles.rotationCard}>
+                                                    <Text style={styles.rotationHeader}>Trainee #{i + 1}</Text>
+
+                                                    <CustomSelect
+                                                        placeholder="Pick a preset..."
+                                                        label="Preset (character + scenario)"
+                                                        options={presetOptions}
+                                                        value={entry.presetKey ? `${entry.presetKey}@@${entry.scenario}` : undefined}
+                                                        onValueChange={(v) => {
+                                                            if (!v) return
+                                                            const sep = v.lastIndexOf("@@")
+                                                            updateRotationEntry(i, { presetKey: v.slice(0, sep), scenario: v.slice(sep + 2) })
+                                                        }}
+                                                    />
+
+                                                    <Text style={styles.inputLabel}>In-Game Name</Text>
+                                                    <TextInput
+                                                        style={styles.textInput}
+                                                        value={entry.inGameName}
+                                                        onChangeText={(text) => updateRotationEntry(i, { inGameName: text })}
+                                                        placeholder="e.g. [Kukulkan Warrior] El Condor Pasa"
+                                                        placeholderTextColor={colors.foreground + "55"}
+                                                        autoCapitalize="none"
+                                                        autoCorrect={false}
+                                                    />
+
+                                                    <CustomButton variant="destructive" size="sm" style={{ marginTop: 10 }} onPress={() => removeRotationEntry(i)}>
+                                                        {`Remove Trainee #${i + 1}`}
+                                                    </CustomButton>
+                                                </View>
+                                            ))}
+
+                                            <CustomButton variant="outline" style={{ marginTop: 12 }} onPress={addRotationEntry}>
+                                                + Add Trainee
+                                            </CustomButton>
+
+                                            <WarningContainer style={{ marginTop: 12 }}>
+                                                The In-Game Name must match exactly what the Trainee Select preview shows, including the [Outfit] prefix — the bot reads that banner to confirm it
+                                                picked the right unit. All trainees must use the same scenario for now. Snapshots are rebuilt from your current settings each time you press Start.
+                                            </WarningContainer>
+                                        </View>
+                                    )}
+                                </View>
 
                                 <WarningContainer style={{ marginTop: 16 }}>
                                     The run queue navigates the game menus between runs automatically. If the bot encounters an unexpected screen it cannot handle, the queue will stop and report what
