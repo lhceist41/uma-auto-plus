@@ -230,6 +230,17 @@ object LabelRecoverRP : ComponentInterface {
     override val template = Template("components/label/recover_rp", region = Region.topHalf)
 }
 
+/**
+ * The "Event Boost (TP Usage x2)" bar on the Final Confirmation screen, used purely as a position
+ * anchor for the checkbox to its left. The template is the OFF (dim) capture, but template matching
+ * normalises out colour, so it matches the bright ON state too (~0.94) - it cannot tell ticked from
+ * un-ticked. The navigator decides that from the checkbox colour (green vs grey), not this match.
+ * confidence 0.8 keeps the anchor reliable in either state.
+ */
+object LabelEventBoostOff : ComponentInterface {
+    override val template = Template("components/label/event_boost_off", region = Region.bottomHalf, confidence = 0.8)
+}
+
 /** "Team Trials" text label at the top-left of all Team Trials screens. Used to detect we're still in-mode during post-match cascades. */
 object LabelTeamTrials : ComponentInterface {
     override val template = Template("components/label/team_trials_header", region = Region.topHalf)

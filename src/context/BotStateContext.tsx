@@ -215,10 +215,14 @@ export interface Settings {
         stopOnError: boolean
         reuseLastLaunchSetup: boolean
         autoFillSupports: boolean
-        // When the game asks "Restore TP?" between queued runs, spend one Toughness 30 item
-        // (30 TP = one career) and continue instead of ending the queue. Items only - the
+        // When the game asks "Restore TP?" between queued runs, refill TP to the cap with
+        // Toughness 30 items (Max) and continue instead of ending the queue. Items only - the
         // bot never spends carats; with no drinks left it declines and stops gracefully.
         enableTpRestoreWithItems: boolean
+        // Tick "Event Boost (TP Usage x2)" on the Final Confirmation screen before each career.
+        // Doubles event rewards (and the TP cost) - only worth it while a TP event is live; turn
+        // it off once the event ends. The Max TP restore above covers the doubled cost.
+        enableEventBoost: boolean
     }
 
     // Scenario specific overrides
@@ -610,6 +614,7 @@ export const defaultSettings: Settings = {
         reuseLastLaunchSetup: true,
         autoFillSupports: false,
         enableTpRestoreWithItems: false,
+        enableEventBoost: false,
     },
     scenarioOverrides: {
         // Trackblazer guide: "After 3 consecutive races, you could gamble on a fourth,

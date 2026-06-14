@@ -66,6 +66,20 @@ class CareerLaunchNavigator(private val context: Context) {
         private const val TP_PLUS_FROM_OK_DX = 7.0
         private const val TP_PLUS_FROM_OK_DY = -372.0
 
+        /** Event Boost checkbox offset from the matched bar center (1080-wide capture). The
+         * checkbox sits to the bar's left; anchoring off the template match keeps the tap
+         * correct on both supported resolutions. */
+        private const val EVENT_BOOST_CHECKBOX_DX = -245.0
+        private const val EVENT_BOOST_CHECKBOX_DY = -4.0
+
+        /** Event Boost checkbox state read by colour (template match can't tell OFF from ON - they
+         * differ only in colour, which it normalises away). Sample a box of this half-size around
+         * the checkbox center and count pixels where green dominates; the green (ticked) checkmark
+         * yields hundreds, the grey (un-ticked) one ~zero (measured 565 vs 0). */
+        private const val EVENT_BOOST_CHECKBOX_SAMPLE_HALF = 40
+        private const val EVENT_BOOST_GREEN_DOMINANCE = 40
+        private const val EVENT_BOOST_ON_GREEN_PIXELS = 50
+
         /** Hard cap on item-based TP restores per queue session - bounds item spend even if
          * something loops. One restore covers one career, so 10 outruns any queue length the
          * UI offers. */
@@ -250,6 +264,12 @@ class CareerLaunchNavigator(private val context: Context) {
             )
         }
 
+        // MuMu wipes the accessibility service at career-end transitions, which the between-run
+        // navigator crosses. The in-career loop self-heals every tick but this navigator does not,
+        // so a kill here would silently stop every tap from landing. Rebind once before we start
+        // driving the FSM; cheap when the service is alive.
+        tempGame?.ensureAccessibilityService()
+
         var currentState = LaunchScreenState.POST_RUN_RESULTS
         var consecutiveUnknowns = 0
         var stuckInStateCount = 0
@@ -336,6 +356,10 @@ class CareerLaunchNavigator(private val context: Context) {
                 }
                 // Wait and retry detection - do NOT tap blindly.
                 MessageLog.w(TAG, "[NAV] Unknown screen state ($consecutiveUnknowns/$MAX_CONSECUTIVE_UNKNOWNS). Waiting before retry...")
+                // An UNKNOWN screen is the exact signature of a dead accessibility service (taps stop
+                // landing, so the game never advances to a recognised screen). Rebind before retrying
+                // rather than burning all 5 attempts against a service that will never respond.
+                tempGame?.ensureAccessibilityService()
                 waitSafe(2.0)
                 continue
             }
@@ -742,8 +766,9 @@ class CareerLaunchNavigator(private val context: Context) {
      * Default: decline and end the queue gracefully - restoring spends resources, and that
      * decision belongs to the user. With the opt-in `runQueue.enableTpRestoreWithItems`
      * setting, the flow the user specified runs instead: Restore -> pick the Toughness 30 row
-     * (never Carats - if the drink template is absent the bot declines) -> plus once (exactly
-     * one drink = 30 TP = one career) -> OK -> Close -> resume the career start.
+     * (never Carats - if the drink template is absent the bot declines) -> Max (fill TP to the
+     * cap; an Event Boost career costs 60 TP, more than one drink covers) -> OK -> Close ->
+     * resume the career start.
      */
     private fun handleTpRestoreDialog(): TransitionResult {
         val restoreWithItems = SettingsHelper.getBooleanSetting("runQueue", "enableTpRestoreWithItems", false)
@@ -799,9 +824,16 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.w(TAG, "[NAV] Quantity dialog OK button not found after Use. Re-detecting...")
             return TransitionResult.Continue
         }
-        // The quantity dialog opens with zero drinks selected; one plus press selects exactly
-        // one drink (30 TP), which always covers the 30 TP career cost.
-        gestureUtils.tap(okLocation.x + TP_PLUS_FROM_OK_DX, okLocation.y + TP_PLUS_FROM_OK_DY, "tp_plus_one")
+        // Fill TP to the cap with Max rather than a single +30. A normal career costs 30 TP, but
+        // an Event Boost (TP Usage x2) career costs 60 - more than one drink covers - and
+        // Max-filling means fewer restore round-trips across a long unattended chain. Mirrors
+        // ResourceRechargeHelper's quantity-popup flow (Max -> OK).
+        if (!ButtonMax.click(iu)) {
+            // Max not found: fall back to a single +30. The quantity dialog opens with zero drinks
+            // selected, so one plus press selects exactly one drink, enough for a 30 TP career.
+            MessageLog.w(TAG, "[NAV] Max button not found on the TP quantity popup; falling back to a single +30 drink.")
+            gestureUtils.tap(okLocation.x + TP_PLUS_FROM_OK_DX, okLocation.y + TP_PLUS_FROM_OK_DY, "tp_plus_one")
+        }
         waitSafe(0.6)
         ButtonOk.click(iu)
         waitSafe(1.2)
@@ -811,7 +843,7 @@ class CareerLaunchNavigator(private val context: Context) {
         tpRestoresThisSession++
         MessageLog.i(
             TAG,
-            "[NAV] Restored 30 TP with one Toughness 30 (restore $tpRestoresThisSession/$MAX_TP_RESTORES_PER_SESSION this session). Resuming the career start.",
+            "[NAV] Restored TP to the cap with Toughness 30 (restore $tpRestoresThisSession/$MAX_TP_RESTORES_PER_SESSION this session). Resuming the career start.",
         )
         return TransitionResult.Continue
     }
@@ -1189,6 +1221,13 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     private fun handlePreRunConfirmation(): TransitionResult {
+        // Opt-in: tick "Event Boost (TP Usage x2)" before starting so careers earn double event
+        // rewards (worth it during the Trackblazer event; the TP cost doubles, which the Max TP
+        // restore covers). Runs before the Start Career tap so the boost is committed with the run.
+        if (SettingsHelper.getBooleanSetting("runQueue", "enableEventBoost", false)) {
+            tickEventBoostIfOff()
+        }
+
         MessageLog.i(TAG, "[NAV] Clicking 'Start Career!'...")
 
         if (ButtonStartCareer.click(iu) || ButtonStartCareerOffset.click(iu)) {
@@ -1213,6 +1252,65 @@ class CareerLaunchNavigator(private val context: Context) {
             transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
             recommendedAction = "Manually click 'Start Career!' and restart the queue.",
         )
+    }
+
+    /**
+     * Ticks the "Event Boost (TP Usage x2)" checkbox on the Final Confirmation screen if it is OFF.
+     * The dim OFF-state bar is the anchor; the checkbox sits a fixed offset to its left. A no-op when
+     * the bar isn't matched - already ticked, or the boost isn't offered (e.g. outside the event).
+     */
+    private fun tickEventBoostIfOff() {
+        val (barLocation, _) = LabelEventBoostOff.find(iu)
+        if (barLocation == null) {
+            MessageLog.i(TAG, "[NAV] Event Boost enabled but the bar was not found (not offered on this screen). Skipping.")
+            return
+        }
+        // The bar template matches BOTH states - OFF (dim maroon) and ON (bright pink) differ only
+        // in colour, which template matching normalises away. So read the checkbox colour to decide:
+        // the ticked checkmark is green, the un-ticked one is grey.
+        val cbX = (barLocation.x + EVENT_BOOST_CHECKBOX_DX).toInt()
+        val cbY = (barLocation.y + EVENT_BOOST_CHECKBOX_DY).toInt()
+        if (isCheckboxGreen(iu.getSourceBitmap(), cbX, cbY)) {
+            MessageLog.i(TAG, "[NAV] Event Boost is already ticked. Leaving it on.")
+            return
+        }
+        MessageLog.i(TAG, "[NAV] Event Boost is OFF. Ticking the checkbox to double event rewards (TP cost also doubles)...")
+        gestureUtils.tap(barLocation.x + EVENT_BOOST_CHECKBOX_DX, barLocation.y + EVENT_BOOST_CHECKBOX_DY, "event_boost_checkbox")
+        waitSafe(0.8)
+        // Verify the tick landed by re-reading the checkbox colour (a fresh capture - the state changed).
+        if (isCheckboxGreen(iu.getSourceBitmap(), cbX, cbY)) {
+            MessageLog.i(TAG, "[NAV] Event Boost ticked.")
+        } else {
+            MessageLog.w(TAG, "[NAV] Tapped the Event Boost checkbox but it still reads grey; the tap may have missed.")
+        }
+    }
+
+    /**
+     * Reads the Event Boost checkbox to tell ticked (green checkmark) from un-ticked (grey). Counts
+     * pixels in a small box around the checkbox center where green clearly dominates red and blue;
+     * the green checkmark yields hundreds, the grey checkmark yields ~zero (measured 565 vs 0).
+     */
+    private fun isCheckboxGreen(bitmap: android.graphics.Bitmap, cx: Int, cy: Int): Boolean {
+        val half = EVENT_BOOST_CHECKBOX_SAMPLE_HALF
+        val x0 = (cx - half).coerceAtLeast(0)
+        val y0 = (cy - half).coerceAtLeast(0)
+        val x1 = (cx + half).coerceAtMost(bitmap.width - 1)
+        val y1 = (cy + half).coerceAtMost(bitmap.height - 1)
+        var greenDominant = 0
+        var y = y0
+        while (y <= y1) {
+            var x = x0
+            while (x <= x1) {
+                val p = bitmap.getPixel(x, y)
+                val r = android.graphics.Color.red(p)
+                val g = android.graphics.Color.green(p)
+                val b = android.graphics.Color.blue(p)
+                if (g - maxOf(r, b) > EVENT_BOOST_GREEN_DOMINANCE) greenDominant++
+                x++
+            }
+            y++
+        }
+        return greenDominant >= EVENT_BOOST_ON_GREEN_PIXELS
     }
 
     /**

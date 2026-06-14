@@ -146,7 +146,16 @@ const RunQueueSettings = () => {
                                     checked={runQueueSettings.enableTpRestoreWithItems}
                                     onCheckedChange={(checked) => updateSetting("enableTpRestoreWithItems", checked)}
                                     label="Restore TP with Items"
-                                    description="When the game asks to restore TP between queued runs, use one Toughness 30 item (30 TP, one career) and continue. Items only - carats are never spent. With no drinks left, the queue declines and stops cleanly. Capped at 10 restores per session."
+                                    description="When the game asks to restore TP between queued runs, refill TP to the max with Toughness 30 items and continue. Items only - carats are never spent. With no drinks left, the queue declines and stops cleanly. Capped at 10 restores per session."
+                                    className="mt-4"
+                                />
+
+                                <CustomCheckbox
+                                    searchId="run-queue-event-boost"
+                                    checked={runQueueSettings.enableEventBoost}
+                                    onCheckedChange={(checked) => updateSetting("enableEventBoost", checked)}
+                                    label="Tick Event Boost (TP Usage x2)"
+                                    description="On the Start Career screen, tick 'Event Boost (TP Usage x2)' so each career earns double event rewards. The TP cost also doubles - the Restore TP with Items option above covers it. Only worth it while a TP event is running; turn this off once the event ends, or you spend double TP for no extra reward."
                                     className="mt-4"
                                 />
 
