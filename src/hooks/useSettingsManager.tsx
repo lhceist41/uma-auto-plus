@@ -247,6 +247,12 @@ export const useSettingsManager = () => {
             // Load settings and profiles from JSON file.
             const { settings: importedSettings, profiles } = await loadFromJSONFile(fileUri)
 
+            // Preserve the current Discord token: export strips it for privacy, so re-importing
+            // your own config would otherwise wipe it.
+            if (importedSettings.discord) {
+                importedSettings.discord.discordToken = settingsRef.current.discord?.discordToken ?? ""
+            }
+
             // Save settings to SQLite database.
             await databaseManager.saveSettingsBatch(convertSettingsToBatch(importedSettings))
             bsc.setSettings(importedSettings)
