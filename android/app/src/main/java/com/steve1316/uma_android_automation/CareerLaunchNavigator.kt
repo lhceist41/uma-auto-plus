@@ -1195,31 +1195,81 @@ class CareerLaunchNavigator(private val context: Context) {
     private val traineeMatchThreshold = 0.86
     // Preview name banner: white "[Outfit] Name" text on a saturated character-colored pill. x,y,w,h.
     private val traineePreviewRegion = floatArrayOf(0.02f, 0.295f, 0.74f, 0.05f)
+    // Header band carrying the "Trainee Select" title (top-left). x,y,w,h fractions.
+    private val traineeHeaderRegion = floatArrayOf(0.0f, 0.125f, 0.45f, 0.05f)
+
+    /** Raw OCR of the header band (carries the "Trainee Select" title). */
+    private fun readTraineeHeaderText(bitmap: Bitmap): String {
+        return try {
+            iu.performOCROnRegion(
+                bitmap,
+                (bitmap.width * traineeHeaderRegion[0]).toInt(),
+                (bitmap.height * traineeHeaderRegion[1]).toInt(),
+                (bitmap.width * traineeHeaderRegion[2]).toInt(),
+                (bitmap.height * traineeHeaderRegion[3]).toInt(),
+                useThreshold = false,
+                useGrayscale = true,
+                scale = 2.0,
+                debugName = "nav_trainee_select_header",
+            )
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (_: Exception) {
+            ""
+        }
+    }
 
     /**
      * Header OCR detector for the Trainee Select roster. The "Trainee Select" title sits top-left;
      * we only need the word "Trainee" to discriminate it from every other launch screen.
      */
     private fun isTraineeSelectScreen(bitmap: Bitmap): Boolean {
-        return try {
-            val header =
-                iu.performOCROnRegion(
-                    bitmap,
-                    0,
-                    (bitmap.height * 0.125).toInt(),
-                    (bitmap.width * 0.45).toInt(),
-                    (bitmap.height * 0.05).toInt(),
-                    useThreshold = false,
-                    useGrayscale = true,
-                    scale = 2.0,
-                    debugName = "nav_trainee_select_header",
-                )
-            header.uppercase().contains("TRAINEE")
-        } catch (e: InterruptedException) {
-            throw e
-        } catch (_: Exception) {
-            false
+        return readTraineeHeaderText(bitmap).uppercase().contains("TRAINEE")
+    }
+
+    /**
+     * Read-only diagnostic for calibrating the Trainee Select reads against a live device. Captures
+     * the current screen and logs what the header detector and the name-banner color OCR read, the
+     * match score against the recorded target (if any), and the computed grid tap targets — WITHOUT
+     * tapping anything. Driven by the `debugMode_startTraineeSelectTest` debug toggle: park the game
+     * on the Trainee Select screen, enable it, and start the bot.
+     *
+     * @param injectedUtils reuse the running bot's image utils instead of constructing a fresh Game.
+     */
+    fun debugTraineeSelectRead(injectedUtils: CustomImageUtils? = null) {
+        if (injectedUtils != null) {
+            imageUtils = injectedUtils
+        } else if (!ensureInitialised()) {
+            MessageLog.e(TAG, "[ROTATION-TEST] Failed to initialise image utils.")
+            return
         }
+        val bitmap = iu.getSourceBitmap()
+        MessageLog.i(TAG, "[ROTATION-TEST] ===== Trainee Select read-only diagnostic (${bitmap.width}x${bitmap.height}) =====")
+
+        val headerRaw = readTraineeHeaderText(bitmap).replace("\n", " ").trim()
+        MessageLog.i(TAG, "[ROTATION-TEST] Header OCR='$headerRaw' -> detectedTraineeSelect=${headerRaw.uppercase().contains("TRAINEE")}")
+
+        val banner = readTraineePreviewName()
+        MessageLog.i(TAG, "[ROTATION-TEST] Name banner OCR='$banner'")
+
+        val target = SettingsHelper.getStringSetting("queueState", "currentTrainee")
+        if (target.isNotBlank() && banner.isNotBlank()) {
+            val score = TraineeNameMatcher.score(target, banner)
+            MessageLog.i(TAG, "[ROTATION-TEST] target='$target' vs banner score=${"%.3f".format(score)} (accept >= $traineeMatchThreshold)")
+        } else {
+            MessageLog.i(TAG, "[ROTATION-TEST] No currentTrainee target set; check the raw banner read above by eye.")
+        }
+
+        val sb = StringBuilder("[ROTATION-TEST] Computed grid tap targets (NOT tapped): ")
+        for (row in 0 until traineeGridRows) {
+            for (col in traineeColFractions.indices) {
+                val x = (bitmap.width * traineeColFractions[col]).toInt()
+                val y = (bitmap.height * (traineeRow0Fraction + row * traineeRowStepFraction)).toInt()
+                sb.append("[$col,$row]=($x,$y) ")
+            }
+        }
+        MessageLog.i(TAG, sb.toString())
+        MessageLog.i(TAG, "[ROTATION-TEST] ===== end =====")
     }
 
     /**
@@ -1336,6 +1386,10 @@ class CareerLaunchNavigator(private val context: Context) {
                     scale = 2.0,
                     debugName = "trainee_preview_name",
                 ).replace("\n", " ")
+                // The "Career Info" / "Details" buttons sit to the right of the name at the same
+                // height; their white backgrounds get caught by the white-text mask, so truncate at
+                // the first button word (no trainee name contains "career" or "details").
+                .split(Regex("(?i)career|details"))[0]
                 .trim()
         } catch (e: InterruptedException) {
             throw e

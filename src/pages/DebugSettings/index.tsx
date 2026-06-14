@@ -37,6 +37,7 @@ const DebugSettings = () => {
         "debugMode_startTrackblazerRaceSelectionTest",
         "debugMode_startTrackblazerInventorySyncTest",
         "debugMode_startTrackblazerBuyItemsTest",
+        "debugMode_startTraineeSelectTest",
     ] as const
 
     /**
@@ -595,6 +596,15 @@ const DebugSettings = () => {
                                 onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startTrackblazerBuyItemsTest", checked)}
                                 label="Start Trackblazer Buy Items Test"
                                 description="Disables normal bot operations and starts the Trackblazer buy items test. Opens the Shop if on the Main Screen and logs shop contents and purchase intentions without actually buying anything."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-trainee-select-test"
+                                checked={bsc.settings.debug.debugMode_startTraineeSelectTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startTraineeSelectTest", checked)}
+                                label="Start Trainee Select Test"
+                                description="Read-only rotation calibration. Park the game on the Trainee Select screen, then start the bot: it logs what the header detector and the [Outfit] Name banner OCR read, the match score against the current rotation target, and the computed grid tap targets, without tapping anything. Tagged [ROTATION-TEST] in the log."
                                 style={{ marginTop: 10 }}
                             />
                         </View>

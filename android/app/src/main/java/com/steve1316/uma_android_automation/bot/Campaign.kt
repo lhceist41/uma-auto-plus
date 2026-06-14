@@ -9,6 +9,7 @@ import com.steve1316.automation_library.utils.DiscordUtils
 import com.steve1316.automation_library.utils.ImageUtils.ScaleConfidenceResult
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SettingsHelper
+import com.steve1316.uma_android_automation.CareerLaunchNavigator
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonCareerEndSkills
@@ -353,6 +354,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startMainScreenUpdateTest" to this::startMainScreenUpdateTest,
                 "debugMode_startScrollBarDetectionTest" to ::startScrollBarDetectionTest,
                 "debugMode_startSkillListBuyTest" to skillPlan::startSkillListBuyTest,
+                "debugMode_startTraineeSelectTest" to ::startTraineeSelectTest,
             )
 
         var bDidAnyTestsRun = false
@@ -364,6 +366,16 @@ abstract class Campaign(game: Game) : Task(game) {
         }
 
         return bDidAnyTestsRun
+    }
+
+    /**
+     * Read-only Trainee Select OCR diagnostic for rotation calibration. Reuses the running bot's
+     * image utils and logs what the header detector + name-banner color OCR read (plus the computed
+     * grid tap targets) without tapping anything. Park the game on Trainee Select before running.
+     */
+    open fun startTraineeSelectTest() {
+        MessageLog.i(TAG, "\n[TEST] Running read-only Trainee Select OCR diagnostic...")
+        CareerLaunchNavigator(game.myContext).debugTraineeSelectRead(game.imageUtils)
     }
 
     /**
