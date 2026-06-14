@@ -267,7 +267,14 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
             }
 
             if (y1 < y0 || x1 < x0) {
-                MessageLog.w(TAG, "[WARN] getListBoundingRegion:: Scroll list icons were detected out of order. Normalized bounding box: $bbox")
+                // Out-of-order anchors (bottom-right above/left of top-left) can't describe a real
+                // list - the abs()-normalized bbox is garbage (e.g. the post-purchase "Exchange
+                // Complete" item dialog yields a bbox running off-screen, then aborts on empty
+                // frames). Fail region detection so callers fall back to component-based reads
+                // (processWithFallback finds the row + buttons directly). Plain create() callers
+                // (skill/race list) already handle a null here.
+                MessageLog.w(TAG, "[WARN] getListBoundingRegion:: Scroll list anchors detected out of order (TL=($x0,$y0), BR=($x1,$y1)). Treating as a failed region detection so callers use the component fallback.")
+                return null
             }
 
             if (game.debugMode) {
@@ -781,6 +788,11 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
         // each time, before concluding we've reached the bottom.
         var consecutiveNoMove = 0
         val maxConsecutiveNoMove = 3
+        // Treat thumb movement within this many pixels as "no move". The scrollbar bbox comes from
+        // CV detection and jitters +-1-2px between frames; an exact-equality test let a stalled
+        // thumb read as "moved", resetting consecutiveNoMove forever so a wedged list never
+        // concluded end and ran to the maxTimeMs timeout. A real scroll step moves it far more.
+        val thumbMoveTolerancePx = 3
         // Content-based end detection for lists whose scrollbar is never detected (used by the
         // no-scrollbar branch in the loop below): consecutive scrolls that reveal no new entries.
         var consecutiveNoNew = 0
@@ -833,12 +845,34 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
                 }
             }
 
+            // Rectangle-based row detection (detectRectanglesGeneric) flood-fills the page background and
+            // keeps only high-contrast blobs; on the Trackblazer shop the white-on-white item cards blend
+            // into that background and intermittently yield ZERO rows on a fully-rendered screen. When that
+            // happens and the caller supplied a per-row landmark component, locate the rows by that
+            // component before counting an empty frame. Only the shop/inventory scans pass an
+            // entryComponent, so this is a no-op for the race-list and skill-list scans (they pass null).
+            if (currentFrameEntries.isEmpty() && entryComponent != null && !bForceComponentDetection) {
+                val byComponent = detectEntries(bitmap, entryComponent, bForceComponentDetection = true)
+                if (byComponent.isNotEmpty()) {
+                    MessageLog.i(
+                        TAG,
+                        "[INFO] process:: Rectangle detection found no rows; recovered ${byComponent.size} via ${entryComponent.template.basename} landmark detection.",
+                    )
+                    currentFrameEntries =
+                        if (bScrollBottomToTop) {
+                            byComponent.reversed().map { it.copy(index = index++) }
+                        } else {
+                            byComponent.map { it.copy(index = index++) }
+                        }
+                }
+            }
+
             if (currentFrameEntries.isEmpty()) {
                 consecutiveEmptyFrames++
                 MessageLog.w(TAG, "[WARN] process:: No entries detected in current frame after retries (empty frame $consecutiveEmptyFrames/$maxConsecutiveEmptyFrames).")
                 if (consecutiveEmptyFrames >= maxConsecutiveEmptyFrames) {
                     game.imageUtils.saveBitmap(filename = "scroll_list_empty_frames", fullRes = true)
-                    MessageLog.e(TAG, "[ERROR] process:: $consecutiveEmptyFrames consecutive frames with zero detected entries - the list is unreadable (occluded or input dead). Aborting the scroll pass.")
+                    MessageLog.e(TAG, "[ERROR] process:: $consecutiveEmptyFrames consecutive frames with zero detected entries - the list is empty or row detection failed (capture rendered but no rows matched). Aborting the scroll pass.")
                     return false
                 }
             } else {
@@ -918,16 +952,30 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
                     // them by counting consecutive no-moves and only concluding "end" after several;
                     // each no-move falls through and re-issues the scroll, and the per-frame dedup
                     // prevents double-processing.
-                    if (prevThumbY != null && bboxThumb.y == prevThumbY) {
+                    if (prevThumbY != null && abs(bboxThumb.y - prevThumbY!!) <= thumbMoveTolerancePx) {
                         consecutiveNoMove++
+                        // A thumb resting at the BOTTOM of its track is a genuine end of list; a thumb
+                        // pinned mid-track means the list stopped responding to swipes entirely (an
+                        // emulator input outage can pin it mid-track across many swipes) - treating
+                        // that as "end" silently dropped everything below.
+                        val trackBottom: Int? = bboxBar?.let { it.y + it.h }
+                        val bAtTrackBottom: Boolean = trackBottom == null || (bboxThumb.y + bboxThumb.h) >= trackBottom - 20
+                        // Fast end-of-list: a thumb already at the track bottom on a frame that revealed
+                        // NO new entries is unambiguous - we scrolled to the end and already processed
+                        // everything above it (new rows are handled at the top of the loop), so exit now
+                        // instead of burning two more no-move re-scroll cycles to re-confirm. A dropped
+                        // swipe can't fake "thumb at bottom", and the !foundNewEntries co-guard guarantees
+                        // nothing unread remains. Deliberately NOT gated on a "thumb fills track" heuristic:
+                        // a faint or partially-rendered scrollbar can collapse the track bbox down to the
+                        // thumb height and mis-fire at the TOP of a genuinely long list (would re-introduce
+                        // the career-end skill-list truncation).
+                        if (bAtTrackBottom && !foundNewEntries && currentFrameEntries.isNotEmpty()) {
+                            MessageLog.w(TAG, "[WARN] process:: Reached end of scroll list (thumb at track bottom, no new entries). Exiting loop.")
+                            return true
+                        }
                         if (consecutiveNoMove >= maxConsecutiveNoMove) {
-                            // Only a thumb resting at the BOTTOM of its track is a genuine end of
-                            // list. A thumb pinned mid-track means the list stopped responding to
-                            // swipes entirely (pinned at 33% of track across
-                            // 12+ swipes during an emulator input outage) - treating that as "end"
-                            // silently dropped everything below. Escalate once, then abort loudly.
-                            val trackBottom: Int? = bboxBar?.let { it.y + it.h }
-                            val bAtTrackBottom: Boolean = trackBottom == null || (bboxThumb.y + bboxThumb.h) >= trackBottom - 20
+                            // A thumb pinned mid-track means the list stopped responding to swipes
+                            // entirely. Escalate once, then abort loudly rather than treating it as "end".
                             if (bAtTrackBottom) {
                                 MessageLog.w(TAG, "[WARN] process:: Reached end of scroll list ($consecutiveNoMove consecutive no-move reads, thumb at track bottom). Exiting loop.")
                                 return true

@@ -699,10 +699,18 @@ class TrackblazerShopList(private val game: Game) {
             isShopOnSale = LabelOnSale.check(game.imageUtils)
         }
 
+        // No pre-scan settle wait here: empty-frame aborts aren't a mid-render race (failure frames show a
+        // fully-painted shop), they're detectRectanglesGeneric intermittently returning zero rows on a
+        // populated list, which no wait fixes. Fix belongs in the row detector.
+        // Per-row landmark for the fallback paths: shop rows carry a selection checkbox (CheckboxShopItem),
+        // Training Items dialog rows carry the "+" button (ButtonSkillUp). Passing ButtonSkillUp for both
+        // never matches a shop row, leaving nothing to fall back to when rectangle detection floods out the
+        // white-on-white shop cards.
+        val rowLandmark = if (isTrainingItems) ButtonSkillUp else CheckboxShopItem
         return ScrollList.processWithFallback(
             game,
             keyExtractor = keyExtractor,
-            fallbackComponent = ButtonSkillUp,
+            fallbackComponent = rowLandmark,
             listTopLeftComponent = topLeft,
             listBottomRightComponent = bottomRight,
         ) { _, entry: ScrollListEntry ->
