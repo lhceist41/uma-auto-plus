@@ -103,3 +103,11 @@ android/app/src/main/assets/fonts/
 
 # Gradle wrapper jar (download on first build)
 android/gradle/wrapper/gradle-wrapper.jar
+
+# Local scratch, diagnostics, and throwaway research artifacts (root-level, underscore-prefixed
+# convention). Anchored to the repo root with a leading slash so it never shadows the tracked
+# src/**/__tests__ directories.
+/_*
+/tmp_*
+__pycache__/
+*.pyc
