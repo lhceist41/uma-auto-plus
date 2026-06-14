@@ -141,6 +141,14 @@ class Trackblazer(game: Game) : Campaign(game) {
     /** Flag indicating if the bot has checked for Irregular Training during the current turn. */
     private var bHasCheckedIrregularTrainingThisTurn: Boolean = false
 
+    /**
+     * True once a training has executed this turn. The Summer and Finale branches of
+     * [decideNextAction] return TRAIN unconditionally; without this guard, re-landing on the main
+     * screen before the date advances re-enters training and double-trains, burning energy before
+     * the race. Cleared each turn in [resetDailyFlags].
+     */
+    private var bCompletedTrainingThisTurn: Boolean = false
+
     /** Mapping of energy-restoring items to their gain values. */
     private val energyGains =
         mapOf(
@@ -720,6 +728,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         bUsedHammerToday = false
         bIsIrregularTraining = false
         bHasCheckedIrregularTrainingThisTurn = false
+        bCompletedTrainingThisTurn = false
         training.clearAnalysisCache()
     }
 
@@ -773,12 +782,20 @@ class Trackblazer(game: Game) : Campaign(game) {
     override fun decideNextAction(): MainScreenAction {
         // Summer Training: Train during July and August in Classic/Senior.
         if (date.isSummer() && !(racing.skipSummerTrainingForAgenda && racing.enableUserInGameRaceAgenda)) {
+            if (bCompletedTrainingThisTurn) {
+                MessageLog.i(TAG, "[TRACKBLAZER] Summer training already completed this turn. Deferring to the race/rest flow.")
+                return super.decideNextAction()
+            }
             MessageLog.i(TAG, "[TRACKBLAZER] It is Summer. Prioritizing training.")
             return MainScreenAction.TRAIN
         }
 
         // Finale: Train during the final 3 turns (Qualifier, Semifinal, Finals).
         if (date.bIsFinaleSeason && date.day >= 73) {
+            if (bCompletedTrainingThisTurn) {
+                MessageLog.i(TAG, "[TRACKBLAZER] Finale training already completed this turn. Deferring to the race/rest flow.")
+                return super.decideNextAction()
+            }
             MessageLog.i(TAG, "[TRACKBLAZER] It is the Finale. Prioritizing training.")
             return MainScreenAction.TRAIN
         }
@@ -1355,6 +1372,7 @@ class Trackblazer(game: Game) : Campaign(game) {
 
             if (trainingSelected != null) {
                 training.executeTraining(trainingSelected)
+                bCompletedTrainingThisTurn = true
             } else {
                 MessageLog.w(TAG, "[WARN] handleTrackblazerTraining:: Irregular training unexpectedly became null. Backing out.")
                 ButtonBack.click(game.imageUtils)
@@ -1483,6 +1501,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         // Final Training Execution.
         if (trainingSelected != null) {
             training.executeTraining(trainingSelected)
+            bCompletedTrainingThisTurn = true
         } else {
             // No suitable training, so take the best recovery action to avoid a wasted turn.
             // Resting is 62.5% chance of +50 energy; Shrine (clears status conditions) is 30% in recreation.
@@ -1542,6 +1561,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                         "[TRACKBLAZER] Still no suitable training found. Energy (${trainee.energy}%) and Mood (${trainee.mood}) are sufficient. Forcing $forcedStat training.",
                     )
                     training.executeTraining(forcedStat)
+                    bCompletedTrainingThisTurn = true
                     training.firstTrainingCheck = false
                 }
             }

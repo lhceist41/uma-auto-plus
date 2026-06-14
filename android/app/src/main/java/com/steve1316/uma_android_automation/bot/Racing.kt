@@ -1773,6 +1773,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return false
         }
 
+        // A race definitively ran. Any non-maiden grade proves the in-game maiden requirement is
+        // cleared, so the maiden-race check stops re-firing every turn when the fan-tier OCR reads stale.
+        campaign.trainee.noteCompletedRaceGrade(lastRaceGrade)
+
         // Max time limit for the while loop to attempt to finalize race results.
         // It really shouldn't ever take this long.
         val startTime: Long = System.currentTimeMillis()
