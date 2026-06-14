@@ -62,6 +62,13 @@ object ButtonClose : ButtonInterface {
     override val template = Template("components/button/close", region = Region.bottomHalf)
 }
 
+// Compact bordered Close pill used by event popups (e.g. the Search! Solve! Summer!
+// "Rewards Collected" dialog). Visually distinct from the wide flat close.png style,
+// which only scores ~0.85 on it and flaps around the match threshold.
+object ButtonCloseDialog : ButtonInterface {
+    override val template = Template("components/button/close_dialog", region = Region.bottomHalf)
+}
+
 object ButtonCollectAll : ButtonInterface {
     override val template = Template("components/button/collect_all", region = Region.bottomHalf)
 }

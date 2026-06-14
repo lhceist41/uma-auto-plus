@@ -128,6 +128,16 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Bound for [careerEndExitAttempts] before stopping with a diagnostic capture. */
     private val maxCareerEndExitAttempts: Int = 5
 
+    /** Attempts made to open the career-end "Learn" skill screen from the result screen. The
+     * Learn screen can take several seconds to load after the click, so the buy is routed through
+     * the screen-confirmed checkCareerEndSkillListScreen branch rather than a single fixed wait in
+     * the End-screen branch (a slow career-end otherwise dropped 544 SP). Bounded so a
+     * missing/abnormal Learn button completes the career instead of looping. */
+    private var careerEndEntryAttempts: Int = 0
+
+    /** Bound for [careerEndEntryAttempts] before completing the career without the careerComplete plan. */
+    private val maxCareerEndEntryAttempts: Int = 6
+
     /** Consecutive process() ticks resolved ONLY by the misc back-press. A long unbroken streak
      * means the press is not changing the screen and the loop would otherwise spin forever (10+
      * minutes of back-presses observed on a wedged career-end skill screen). */
@@ -2415,16 +2425,33 @@ abstract class Campaign(game: Game) : Task(game) {
                 racing.handleStandaloneRace()
             } else if (checkEndScreen()) {
                 // Stop when the bot has reached the screen where it details the overall result of the run.
-                var bSkillsCommitFailed = false
                 if (!bCareerEndSkillsHandled && (skillPlan.skillPlans["careerComplete"]?.bIsEnabled ?: false)) {
-                    bCareerEndSkillsHandled = true
-                    game.wait(0.5)
-                    ButtonCareerEndSkills.click(game.imageUtils)
-                    game.wait(1.0)
-                    if (!handleSkillListScreen()) {
-                        bSkillsCommitFailed = true
-                        MessageLog.w(TAG, "[WARN] process:: handleSkillList() failed.")
+                    // Open the career-end "Learn" skill screen, then hand off: the next tick lands on
+                    // that screen and the checkCareerEndSkillListScreen branch below runs the plan once
+                    // the screen is actually present. The old path bought inline here after a single
+                    // fixed 1s wait and terminal-failed the whole career when the screen loaded slower
+                    // (a slow career-end dropped 544 SP and ended the run with an exception). Only mark
+                    // handled on a confirmed buy (done in that branch), so this stays retryable.
+                    careerEndEntryAttempts++
+                    if (careerEndEntryAttempts <= maxCareerEndEntryAttempts) {
+                        MessageLog.i(
+                            TAG,
+                            "[INFO] Career end reached. Opening the Learn skill screen for the careerComplete plan (attempt $careerEndEntryAttempts/$maxCareerEndEntryAttempts)...",
+                        )
+                        game.wait(0.5)
+                        ButtonCareerEndSkills.click(game.imageUtils)
+                        game.wait(1.0)
+                        // Let the next tick detect the Learn screen and buy. If the click did not
+                        // navigate (still on the result screen), this branch fires again and retries.
+                        return null
                     }
+                    // Out of attempts: the Learn button never took us to the skill screen. Complete the
+                    // career rather than hang; unspent skill points are a smaller loss than a wedged run.
+                    MessageLog.e(
+                        TAG,
+                        "[ERROR] process:: Could not open the career-end skill screen after $maxCareerEndEntryAttempts attempts. Completing the career without the careerComplete plan (skill points may remain unspent).",
+                    )
+                    bCareerEndSkillsHandled = true
                 }
 
                 // Perform a final update of the fan count.
@@ -2466,14 +2493,9 @@ abstract class Campaign(game: Game) : Task(game) {
                 // Print the final Trainee information.
                 trainee.logInfo()
 
-                if (bSkillsCommitFailed) {
-                    // Do not report a clean completion when the purchases were never verified as
-                    // committed - the selections may still be pending on the Learn screen.
-                    return TaskResult.Error(
-                        TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
-                        "Career end reached but the skill purchases could not be committed (see log).",
-                    )
-                }
+                // Reaching here means the careerComplete plan already committed (via the
+                // checkCareerEndSkillListScreen branch on an earlier tick), was disabled, or was
+                // skipped after exhausting the Learn-screen open attempts - all clean completions.
                 return TaskResult.Success(
                     TaskResultCode.TASK_RESULT_COMPLETE,
                     "Bot has reached end of run. Stopping bot...",

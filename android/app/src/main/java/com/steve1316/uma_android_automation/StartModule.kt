@@ -5,6 +5,8 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.database.DatabaseErrorHandler
+import android.database.sqlite.SQLiteDatabase
 import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityManager
@@ -35,8 +37,6 @@ import kotlinx.coroutines.runBlocking
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.SubscriberExceptionEvent
-import android.database.DatabaseErrorHandler
-import android.database.sqlite.SQLiteDatabase
 import org.json.JSONObject
 import java.io.File
 import java.time.LocalDateTime
@@ -390,10 +390,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 return
             }
             val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
-            val cursor = db.rawQuery(
-                "SELECT key, value FROM settings WHERE category = 'queueState'",
-                null,
-            )
+            val cursor =
+                db.rawQuery(
+                    "SELECT key, value FROM settings WHERE category = 'queueState'",
+                    null,
+                )
             val state = mutableMapOf<String, String>()
             while (cursor.moveToNext()) {
                 state[cursor.getString(0)] = cursor.getString(1)
@@ -634,6 +635,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      *
      * @param event The StartEvent object to parse its message.
      */
+
     /**
      * Sends a structured queue progress event to the JS frontend.
      *
@@ -644,13 +646,14 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      * @param message Optional descriptive message.
      */
     private fun sendQueueProgressEvent(currentRun: Int, totalRuns: Int, status: String, resultCode: String? = null, message: String? = null) {
-        val payload = JSONObject().apply {
-            put("currentRun", currentRun)
-            put("totalRuns", totalRuns)
-            put("status", status)
-            if (resultCode != null) put("resultCode", resultCode)
-            if (message != null) put("message", message)
-        }
+        val payload =
+            JSONObject().apply {
+                put("currentRun", currentRun)
+                put("totalRuns", totalRuns)
+                put("status", status)
+                if (resultCode != null) put("resultCode", resultCode)
+                if (message != null) put("message", message)
+            }
         sendEvent("RunQueueProgress", payload.toString())
     }
 
@@ -662,18 +665,20 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     private fun runSingleGame(): TaskResult {
         var taskResult: TaskResult? = null
 
-        val botThread = Thread {
-            try {
-                val entryPoint = Game(context)
-                taskResult = entryPoint.start()
-            } catch (e: Exception) {
-                EventBus.getDefault().postSticky(ExceptionEvent(e))
-                taskResult = TaskResult.Error(
-                    TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
-                    "Unhandled exception: ${e.message}",
-                )
+        val botThread =
+            Thread {
+                try {
+                    val entryPoint = Game(context)
+                    taskResult = entryPoint.start()
+                } catch (e: Exception) {
+                    EventBus.getDefault().postSticky(ExceptionEvent(e))
+                    taskResult =
+                        TaskResult.Error(
+                            TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
+                            "Unhandled exception: ${e.message}",
+                        )
+                }
             }
-        }
 
         botThread.start()
 
@@ -714,6 +719,105 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         return true
     }
 
+    /**
+     * Runs one CareerLaunchNavigator.navigate() call under the navigation deadline.
+     *
+     * Navigation runs outside the per-run timeout in Task.start, and the 3-minute stall
+     * watchdog stays calm as long as anything ticks the heartbeat - which the navigator's
+     * wait loops do. So a single wedged call below navigate() (e.g. MuMu killing the
+     * accessibility service mid-navigation) can hang the queue forever with zero log output.
+     * The deadline thread interrupts the queue thread if navigate() overruns; if the interrupt
+     * doesn't land within the grace window, it requests a queue stop so the session still ends
+     * with a saved log instead of an invisible hang.
+     */
+    private fun navigateWithDeadline(reuseLastLaunchSetup: Boolean, navigator: CareerLaunchNavigator = CareerLaunchNavigator(context)): NavigationResult {
+        val navDone = java.util.concurrent.atomic.AtomicBoolean(false)
+        val queueThread = Thread.currentThread()
+        val deadlineThread =
+            Thread {
+                val deadline = System.currentTimeMillis() + NAV_DEADLINE_MS
+                while (!navDone.get() && System.currentTimeMillis() < deadline) {
+                    try {
+                        Thread.sleep(2_000)
+                    } catch (_: InterruptedException) {
+                        return@Thread
+                    }
+                }
+                if (navDone.get()) return@Thread
+                // Act FIRST, log via logcat only. MessageLog must never appear on this thread:
+                // its global lock is the very thing the wedged queue thread may be holding, so a
+                // MessageLog.e here before the interrupt deadlocks and zombies the queue.
+                queueThread.interrupt()
+                Log.e(TAG, "[QUEUE] Career launch navigation exceeded ${NAV_DEADLINE_MS / 60000} minutes. Navigation thread interrupted.")
+                try {
+                    Thread.sleep(NAV_INTERRUPT_GRACE_MS)
+                } catch (_: InterruptedException) {
+                    return@Thread
+                }
+                if (!navDone.get()) {
+                    queueStopRequested = true
+                    Log.e(TAG, "[QUEUE] Navigation thread did not respond to the interrupt. Queue stop requested; the stall watchdog is the next net.")
+                }
+            }
+        deadlineThread.name = "NavDeadline"
+        deadlineThread.isDaemon = true
+        deadlineThread.start()
+
+        return try {
+            navigator.navigate(reuseLastLaunchSetup)
+        } catch (e: InterruptedException) {
+            // Clear the interrupt flag so queue teardown (log saving, events) is not poisoned.
+            Thread.interrupted()
+            // The same InterruptedException reaches here for BOTH a user Stop and the deadline
+            // watchdog actually firing: stop()/stopQueue() set queueStopRequested before interrupting
+            // the queue thread, while the NavDeadline thread interrupts FIRST and only sets
+            // queueStopRequested after its grace window. So at this point queueStopRequested==true means
+            // the user pressed Stop; ==false means the deadline genuinely expired. Reporting a clean Stop
+            // as "WEDGED / capture pipeline died" sent us chasing an emulator failure that never happened
+            // (a finished career's manual Stop logged the full 10-minute/emulator-died boilerplate).
+            if (queueStopRequested) {
+                NavigationResult(
+                    success = false,
+                    lastDetectedState = "STOPPED",
+                    failureReason = "Between-run navigation cancelled by user stop.",
+                    failedTransition = "career launch navigation",
+                    isRecoverable = true,
+                    recommendedAction = "No action needed - the bot was stopped by the user.",
+                )
+            } else {
+                NavigationResult(
+                    success = false,
+                    lastDetectedState = "WEDGED",
+                    failureReason = "Navigation did not return within ${NAV_DEADLINE_MS / 60000} minutes and was interrupted by the deadline watchdog.",
+                    failedTransition = "career launch navigation",
+                    isRecoverable = true,
+                    recommendedAction = "Check the emulator - the capture pipeline or accessibility service likely died mid-navigation. Restart the queue once the game is stable.",
+                )
+            }
+        } finally {
+            navDone.set(true)
+            deadlineThread.interrupt()
+        }
+    }
+
+    /** Logs a failed [NavigationResult] with its full diagnostics. */
+    private fun logNavigationFailure(navResult: NavigationResult) {
+        if (navResult.lastDetectedState == "STOPPED") {
+            // A user-requested Stop during between-run navigation is a clean cancellation, not a
+            // failure. Keep it out of the ERROR channel so it doesn't read as an emulator/capture
+            // crash during triage (the "Recommended action: check the emulator" boilerplate is wrong here).
+            MessageLog.i(TAG, "[QUEUE] ${navResult.failureReason}")
+            return
+        }
+        MessageLog.e(TAG, "[QUEUE] Navigation failed: ${navResult.failureReason}")
+        MessageLog.e(TAG, "[QUEUE] Last detected state: ${navResult.lastDetectedState}")
+        MessageLog.e(TAG, "[QUEUE] Failed transition: ${navResult.failedTransition}")
+        MessageLog.e(TAG, "[QUEUE] Recommended action: ${navResult.recommendedAction}")
+        if (navResult.screenshotPath.isNotEmpty()) {
+            MessageLog.e(TAG, "[QUEUE] Failure screenshot: ${navResult.screenshotPath}")
+        }
+    }
+
     @Subscribe
     fun onStartEvent(event: StartEvent) {
         if (event.message == "Entry Point ON") {
@@ -722,264 +826,227 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             // Released in the finally below regardless of how the session ends.
             Game.acquireWakeLock(context)
             try {
-            // Reset queue control flags at the start of every new session.
-            queueStopRequested = false
-            queueSkipRequested = false
-
-            // Reset the log stream mute to ensure logs for the new run are broadcasted.
-            LogStreamServer.resetMute()
-
-            // Read queue settings from SQLite.
-            val enableRunQueue = SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", false)
-            val totalRuns = if (enableRunQueue) SettingsHelper.getIntSetting("runQueue", "totalRuns", 2) else 1
-            val delayBetweenRuns = SettingsHelper.getIntSetting("runQueue", "delayBetweenRunsSeconds", 15)
-            val stopOnError = SettingsHelper.getBooleanSetting("runQueue", "stopOnError", false)
-            val reuseLastLaunchSetup = SettingsHelper.getBooleanSetting("runQueue", "reuseLastLaunchSetup", true)
-
-            if (enableRunQueue) {
-                MessageLog.i(TAG, "[QUEUE] Run queue enabled. Total runs: $totalRuns, delay: ${delayBetweenRuns}s, stopOnError: $stopOnError")
-            }
-
-            // --- Layer 4: auto-resume after process death ---
-            // If a queue was running when the previous process was killed (TRIM_EMPTY,
-            // watchdog self-restart, etc.), SQLite still has queueState.active=true with
-            // the run number that was in flight. Skip past that run and pick up the next
-            // one. Only applies when queueing is currently enabled AND the saved totalRuns
-            // matches the current setting. If the user changed queue config after the
-            // crash, the saved state is no longer applicable and we ignore it.
-            val startFromRun: Int = run {
-                if (!enableRunQueue) return@run 1
-                val saved = loadQueueState(context) ?: return@run 1
-                if (saved.totalRuns != totalRuns) {
-                    MessageLog.i(
-                        TAG,
-                        "[RESUME] Ignoring saved queue state (saved totalRuns=${saved.totalRuns} differs from current totalRuns=$totalRuns).",
-                    )
-                    clearQueueState(context)
-                    return@run 1
-                }
-                val next = saved.currentRun + 1
-                if (next > totalRuns) {
-                    MessageLog.i(
-                        TAG,
-                        "[RESUME] Saved queue was at its last run (${saved.currentRun}/${saved.totalRuns}); nothing to resume. Treating as complete.",
-                    )
-                    clearQueueState(context)
-                    return@run totalRuns + 1 // skips the for-loop entirely
-                }
-                MessageLog.w(
-                    TAG,
-                    "[RESUME] Detected interrupted queue from ${saved.ageMs / 60_000}m ago. Resuming at run $next of $totalRuns (run ${saved.currentRun} was in flight when the previous process died).",
-                )
-                sendQueueProgressEvent(
-                    next,
-                    totalRuns,
-                    "resuming",
-                    message = "Auto-resuming: starting at run $next of $totalRuns (previous run was interrupted)",
-                )
-                next
-            }
-
-            var completedRuns = 0
-
-            for (i in startFromRun..totalRuns) {
-                // Check stop flag before starting each run.
-                if (queueStopRequested || !BotService.isRunning) {
-                    MessageLog.i(TAG, "[QUEUE] Queue stop requested before run $i. Exiting queue.")
-                    break
-                }
-
-                // Reset the skip flag for this run.
+                // Reset queue control flags at the start of every new session.
+                queueStopRequested = false
                 queueSkipRequested = false
 
-                if (enableRunQueue) {
-                    // Reset log stream mute for each subsequent run.
-                    LogStreamServer.resetMute()
-                    // Persist queue state so it can survive crashes.
-                    saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns)
-                    sendQueueProgressEvent(i, totalRuns, "starting")
-                    MessageLog.i(TAG, "\n[QUEUE] ========================================")
-                    MessageLog.i(TAG, "[QUEUE] Starting run $i of $totalRuns")
-                    MessageLog.i(TAG, "[QUEUE] ========================================\n")
-                }
+                // Reset the session-scoped TP restore counter (companion-held so it survives
+                // the per-handoff navigator reconstruction).
+                CareerLaunchNavigator.resetTpRestoresForSession()
 
-                // Run the game.
-                val result = runSingleGame()
+                // Reset the log stream mute to ensure logs for the new run are broadcasted.
+                LogStreamServer.resetMute()
 
-                // Determine the effective result considering queue flags.
-                val effectiveResult = when {
-                    queueSkipRequested -> {
-                        MessageLog.i(TAG, "[QUEUE] Run $i was skipped by queue.")
-                        TaskResult.Success(TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE, "Run was skipped by queue.")
-                    }
-                    queueStopRequested -> {
-                        MessageLog.i(TAG, "[QUEUE] Run $i was stopped by user (queue stop).")
-                        result // Use original result
-                    }
-                    else -> result
-                }
+                // Read queue settings from SQLite.
+                val enableRunQueue = SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", false)
+                val totalRuns = if (enableRunQueue) SettingsHelper.getIntSetting("runQueue", "totalRuns", 2) else 1
+                val delayBetweenRuns = SettingsHelper.getIntSetting("runQueue", "delayBetweenRunsSeconds", 15)
+                val stopOnError = SettingsHelper.getBooleanSetting("runQueue", "stopOnError", false)
+                val reuseLastLaunchSetup = SettingsHelper.getBooleanSetting("runQueue", "reuseLastLaunchSetup", true)
 
                 if (enableRunQueue) {
-                    sendQueueProgressEvent(i, totalRuns, "completed", effectiveResult.code.name, effectiveResult.message)
+                    MessageLog.i(TAG, "[QUEUE] Run queue enabled. Total runs: $totalRuns, delay: ${delayBetweenRuns}s, stopOnError: $stopOnError")
                 }
 
-                // Evaluate the result.
-                when (effectiveResult.code) {
-                    TaskResultCode.TASK_RESULT_MANUALLY_STOPPED -> {
-                        // If user stopped and we didn't request skip, it's a full stop.
-                        if (!queueSkipRequested) {
-                            MessageLog.i(TAG, "[QUEUE] User stopped the bot. Exiting queue.")
-                            break
+                // --- Layer 4: auto-resume after process death ---
+                // If a queue was running when the previous process was killed (TRIM_EMPTY,
+                // watchdog self-restart, etc.), SQLite still has queueState.active=true with
+                // the run number that was in flight. Skip past that run and pick up the next
+                // one. Only applies when queueing is currently enabled AND the saved totalRuns
+                // matches the current setting. If the user changed queue config after the
+                // crash, the saved state is no longer applicable and we ignore it.
+                val startFromRun: Int =
+                    run {
+                        if (!enableRunQueue) return@run 1
+                        val saved = loadQueueState(context) ?: return@run 1
+                        if (saved.totalRuns != totalRuns) {
+                            MessageLog.i(
+                                TAG,
+                                "[RESUME] Ignoring saved queue state (saved totalRuns=${saved.totalRuns} differs from current totalRuns=$totalRuns).",
+                            )
+                            clearQueueState(context)
+                            return@run 1
                         }
-                        completedRuns++
-                    }
-                    TaskResultCode.TASK_RESULT_COMPLETE -> {
-                        completedRuns++
-                    }
-                    TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE -> {
-                        completedRuns++
-                    }
-                    TaskResultCode.TASK_RESULT_BREAKPOINT_REACHED -> {
-                        completedRuns++
-                        // Breakpoints stop the queue. The user set them for a reason.
-                        if (enableRunQueue) {
-                            MessageLog.i(TAG, "[QUEUE] Run $i hit a breakpoint. Stopping queue.")
+                        val next = saved.currentRun + 1
+                        if (next > totalRuns) {
+                            MessageLog.i(
+                                TAG,
+                                "[RESUME] Saved queue was at its last run (${saved.currentRun}/${saved.totalRuns}); nothing to resume. Treating as complete.",
+                            )
+                            clearQueueState(context)
+                            return@run totalRuns + 1 // skips the for-loop entirely
                         }
+                        MessageLog.w(
+                            TAG,
+                            "[RESUME] Detected interrupted queue from ${saved.ageMs / 60_000}m ago. Resuming at run $next of $totalRuns (run ${saved.currentRun} was in flight when the previous process died).",
+                        )
+                        sendQueueProgressEvent(
+                            next,
+                            totalRuns,
+                            "resuming",
+                            message = "Auto-resuming: starting at run $next of $totalRuns (previous run was interrupted)",
+                        )
+                        next
+                    }
+
+                var completedRuns = 0
+
+                // Cold start: the navigator otherwise only runs BETWEEN careers, so a queue
+                // started while the game is parked on the home screen (e.g. a previous queue
+                // failed out during navigation and ended there) used to burn run 1 on failed
+                // screen detection inside the career loop. Detect that one unambiguous case
+                // and drive a career launch first. Probe failures fall through to the old
+                // behavior of starting the run directly.
+                if (enableRunQueue && startFromRun <= totalRuns && BotService.isRunning && !queueStopRequested) {
+                    val scenarioSetting = SettingsHelper.getStringSetting("general", "scenario")
+                    val isMiscMode = scenarioSetting == "Daily Races" || scenarioSetting == "Team Trials"
+                    // Reuse the probe's navigator for the launch - its Game/CV initialisation is
+                    // the expensive part, and navigate() resets all session-scoped flags itself.
+                    val coldStartNavigator = if (isMiscMode) null else CareerLaunchNavigator(context)
+                    if (coldStartNavigator != null && coldStartNavigator.isOnHomeScreen()) {
+                        MessageLog.i(TAG, "[QUEUE] Game is on the home screen. Launching a career for run $startFromRun...")
+                        sendQueueProgressEvent(startFromRun, totalRuns, "navigating")
+                        val navResult = navigateWithDeadline(reuseLastLaunchSetup, coldStartNavigator)
+                        if (!navResult.success) {
+                            logNavigationFailure(navResult)
+                            sendQueueProgressEvent(startFromRun, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, navResult.failureReason)
+                            queueStopRequested = true
+                        }
+                    }
+                }
+
+                for (i in startFromRun..totalRuns) {
+                    // Check stop flag before starting each run.
+                    if (queueStopRequested || !BotService.isRunning) {
+                        MessageLog.i(TAG, "[QUEUE] Queue stop requested before run $i. Exiting queue.")
                         break
                     }
-                    else -> {
-                        // Error, timeout, connection error, etc.
-                        if (stopOnError) {
-                            MessageLog.e(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Stopping queue (stopOnError=true).")
-                            break
-                        } else {
-                            MessageLog.w(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Continuing queue (stopOnError=false).")
+
+                    // Reset the skip flag for this run.
+                    queueSkipRequested = false
+
+                    if (enableRunQueue) {
+                        // Reset log stream mute for each subsequent run.
+                        LogStreamServer.resetMute()
+                        // Persist queue state so it can survive crashes.
+                        saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns)
+                        sendQueueProgressEvent(i, totalRuns, "starting")
+                        MessageLog.i(TAG, "\n[QUEUE] ========================================")
+                        MessageLog.i(TAG, "[QUEUE] Starting run $i of $totalRuns")
+                        MessageLog.i(TAG, "[QUEUE] ========================================\n")
+                    }
+
+                    // Run the game.
+                    val result = runSingleGame()
+
+                    // Determine the effective result considering queue flags.
+                    val effectiveResult =
+                        when {
+                            queueSkipRequested -> {
+                                MessageLog.i(TAG, "[QUEUE] Run $i was skipped by queue.")
+                                TaskResult.Success(TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE, "Run was skipped by queue.")
+                            }
+                            queueStopRequested -> {
+                                MessageLog.i(TAG, "[QUEUE] Run $i was stopped by user (queue stop).")
+                                result // Use original result
+                            }
+                            else -> result
+                        }
+
+                    if (enableRunQueue) {
+                        sendQueueProgressEvent(i, totalRuns, "completed", effectiveResult.code.name, effectiveResult.message)
+                    }
+
+                    // Evaluate the result.
+                    when (effectiveResult.code) {
+                        TaskResultCode.TASK_RESULT_MANUALLY_STOPPED -> {
+                            // If user stopped and we didn't request skip, it's a full stop.
+                            if (!queueSkipRequested) {
+                                MessageLog.i(TAG, "[QUEUE] User stopped the bot. Exiting queue.")
+                                break
+                            }
                             completedRuns++
                         }
-                    }
-                }
-
-                // If this is not the last run, navigate back and wait.
-                if (i < totalRuns && enableRunQueue) {
-                    // Check stop again before navigation.
-                    if (queueStopRequested || !BotService.isRunning) {
-                        MessageLog.i(TAG, "[QUEUE] Queue stop requested. Exiting queue.")
-                        break
-                    }
-
-                    // Between-run cleanup: hint GC and refresh the watchdog heartbeat so the
-                    // next run starts with lower PSS. Every KB we save here reduces the chance
-                    // of a TRIM_EMPTY kill at end-of-next-run.
-                    Game.cleanupBetweenRuns()
-
-                    sendQueueProgressEvent(i, totalRuns, "navigating")
-
-                    // Misc task modes (Daily Races, Team Trials) skip the career
-                    // navigator entirely - their own state machines handle navigation
-                    // from whatever screen the previous run left the game on.
-                    val currentScenario = SettingsHelper.getStringSetting("general", "scenario")
-                    val isMiscQueue = currentScenario == "Daily Races" || currentScenario == "Team Trials"
-
-                    if (isMiscQueue) {
-                        MessageLog.i(TAG, "[QUEUE] Misc task queue - skipping career navigator for next run.")
-                    } else {
-                        MessageLog.i(TAG, "[QUEUE] Navigating back to career start for next run...")
-
-                        // Between-run navigation runs outside the per-run timeout in Task.start, and
-                        // the 3-minute stall watchdog stays calm as long as anything ticks the
-                        // heartbeat - which the navigator's wait loops do. A single wedged call below
-                        // navigate() therefore used to hang the queue forever with zero log output
-                        // (20+ minutes parked on the career summary after MuMu killed the
-                        // accessibility service mid-navigation). This deadline thread interrupts the
-                        // queue thread if navigate() overruns; if the interrupt doesn't land within
-                        // the grace window, it requests a queue stop so the session still ends with a
-                        // saved log instead of an invisible hang.
-                        val navigator = CareerLaunchNavigator(context)
-                        val navDone = java.util.concurrent.atomic.AtomicBoolean(false)
-                        val queueThread = Thread.currentThread()
-                        val deadlineThread =
-                            Thread {
-                                val deadline = System.currentTimeMillis() + NAV_DEADLINE_MS
-                                while (!navDone.get() && System.currentTimeMillis() < deadline) {
-                                    try {
-                                        Thread.sleep(2_000)
-                                    } catch (_: InterruptedException) {
-                                        return@Thread
-                                    }
-                                }
-                                if (navDone.get()) return@Thread
-                                // Act FIRST, log via logcat only. MessageLog must never appear on
-                                // this thread: its global lock is the very thing the wedged queue
-                                // thread may be holding (first live firing deadlocked
-                                // right here on a MessageLog.e placed before the interrupt, and the
-                                // queue zombied for another 20 minutes).
-                                queueThread.interrupt()
-                                Log.e(TAG, "[QUEUE] Between-run navigation exceeded ${NAV_DEADLINE_MS / 60000} minutes. Navigation thread interrupted.")
-                                try {
-                                    Thread.sleep(NAV_INTERRUPT_GRACE_MS)
-                                } catch (_: InterruptedException) {
-                                    return@Thread
-                                }
-                                if (!navDone.get()) {
-                                    queueStopRequested = true
-                                    Log.e(TAG, "[QUEUE] Navigation thread did not respond to the interrupt. Queue stop requested; the stall watchdog is the next net.")
-                                }
+                        TaskResultCode.TASK_RESULT_COMPLETE -> {
+                            completedRuns++
+                        }
+                        TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE -> {
+                            completedRuns++
+                        }
+                        TaskResultCode.TASK_RESULT_BREAKPOINT_REACHED -> {
+                            completedRuns++
+                            // Breakpoints stop the queue. The user set them for a reason.
+                            if (enableRunQueue) {
+                                MessageLog.i(TAG, "[QUEUE] Run $i hit a breakpoint. Stopping queue.")
                             }
-                        deadlineThread.name = "NavDeadline"
-                        deadlineThread.isDaemon = true
-                        deadlineThread.start()
-
-                        val navResult =
-                            try {
-                                navigator.navigate(reuseLastLaunchSetup)
-                            } catch (e: InterruptedException) {
-                                // Clear the interrupt flag so queue teardown (log saving, events) is not poisoned.
-                                Thread.interrupted()
-                                NavigationResult(
-                                    success = false,
-                                    lastDetectedState = "WEDGED",
-                                    failureReason = "Navigation did not return within ${NAV_DEADLINE_MS / 60000} minutes and was interrupted by the deadline watchdog.",
-                                    failedTransition = "between-run navigation",
-                                    isRecoverable = true,
-                                    recommendedAction = "Check the emulator - the capture pipeline or accessibility service likely died mid-navigation. Restart the queue once the game is stable.",
-                                )
-                            } finally {
-                                navDone.set(true)
-                                deadlineThread.interrupt()
-                            }
-
-                        if (!navResult.success) {
-                            MessageLog.e(TAG, "[QUEUE] Navigation failed: ${navResult.failureReason}")
-                            MessageLog.e(TAG, "[QUEUE] Last detected state: ${navResult.lastDetectedState}")
-                            MessageLog.e(TAG, "[QUEUE] Failed transition: ${navResult.failedTransition}")
-                            MessageLog.e(TAG, "[QUEUE] Recommended action: ${navResult.recommendedAction}")
-                            if (navResult.screenshotPath.isNotEmpty()) {
-                                MessageLog.e(TAG, "[QUEUE] Failure screenshot: ${navResult.screenshotPath}")
-                            }
-                            sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, navResult.failureReason)
                             break
+                        }
+                        else -> {
+                            // Error, timeout, connection error, etc.
+                            if (stopOnError) {
+                                MessageLog.e(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Stopping queue (stopOnError=true).")
+                                break
+                            } else {
+                                MessageLog.w(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Continuing queue (stopOnError=false).")
+                                completedRuns++
+                            }
                         }
                     }
 
-                    // Wait between runs.
-                    sendQueueProgressEvent(i, totalRuns, "waiting")
-                    MessageLog.i(TAG, "[QUEUE] Waiting ${delayBetweenRuns}s before next run...")
+                    // If this is not the last run, navigate back and wait.
+                    if (i < totalRuns && enableRunQueue) {
+                        // Check stop again before navigation.
+                        if (queueStopRequested || !BotService.isRunning) {
+                            MessageLog.i(TAG, "[QUEUE] Queue stop requested. Exiting queue.")
+                            break
+                        }
 
-                    if (!interruptibleWait(delayBetweenRuns)) {
-                        MessageLog.i(TAG, "[QUEUE] Queue stop requested during wait. Exiting queue.")
-                        break
+                        // Between-run cleanup: hint GC and refresh the watchdog heartbeat so the
+                        // next run starts with lower PSS. Every KB we save here reduces the chance
+                        // of a TRIM_EMPTY kill at end-of-next-run.
+                        Game.cleanupBetweenRuns()
+
+                        sendQueueProgressEvent(i, totalRuns, "navigating")
+
+                        // Misc task modes (Daily Races, Team Trials) skip the career
+                        // navigator entirely - their own state machines handle navigation
+                        // from whatever screen the previous run left the game on.
+                        val currentScenario = SettingsHelper.getStringSetting("general", "scenario")
+                        val isMiscQueue = currentScenario == "Daily Races" || currentScenario == "Team Trials"
+
+                        if (isMiscQueue) {
+                            MessageLog.i(TAG, "[QUEUE] Misc task queue - skipping career navigator for next run.")
+                        } else {
+                            MessageLog.i(TAG, "[QUEUE] Navigating back to career start for next run...")
+
+                            val navResult = navigateWithDeadline(reuseLastLaunchSetup)
+
+                            if (!navResult.success) {
+                                logNavigationFailure(navResult)
+                                sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, navResult.failureReason)
+                                break
+                            }
+                        }
+
+                        // Wait between runs.
+                        sendQueueProgressEvent(i, totalRuns, "waiting")
+                        MessageLog.i(TAG, "[QUEUE] Waiting ${delayBetweenRuns}s before next run...")
+
+                        if (!interruptibleWait(delayBetweenRuns)) {
+                            MessageLog.i(TAG, "[QUEUE] Queue stop requested during wait. Exiting queue.")
+                            break
+                        }
                     }
                 }
-            }
 
-            if (enableRunQueue) {
-                // Clear persisted queue state since queue finished normally.
-                clearQueueState(context)
-                sendQueueProgressEvent(totalRuns, totalRuns, "queueComplete", message = "Completed $completedRuns of $totalRuns runs.")
-                MessageLog.i(TAG, "\n[QUEUE] ========================================")
-                MessageLog.i(TAG, "[QUEUE] Queue finished. Completed $completedRuns of $totalRuns runs.")
-                MessageLog.i(TAG, "[QUEUE] ========================================\n")
-            }
+                if (enableRunQueue) {
+                    // Clear persisted queue state since queue finished normally.
+                    clearQueueState(context)
+                    sendQueueProgressEvent(totalRuns, totalRuns, "queueComplete", message = "Completed $completedRuns of $totalRuns runs.")
+                    MessageLog.i(TAG, "\n[QUEUE] ========================================")
+                    MessageLog.i(TAG, "[QUEUE] Queue finished. Completed $completedRuns of $totalRuns runs.")
+                    MessageLog.i(TAG, "[QUEUE] ========================================\n")
+                }
             } finally {
                 // Always release the wake lock, even on exception or break paths.
                 Game.releaseWakeLock()

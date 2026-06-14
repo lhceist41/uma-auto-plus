@@ -73,46 +73,76 @@ class CareerLaunchNavigator(private val context: Context) {
 
         /** Maximum consecutive iterations stuck in the same non-goal state before failing. */
         private const val MAX_STUCK_ITERATIONS = 15
+
+        /** Item-based TP restores performed this bot session. Lives on the companion because
+         * each between-run handoff constructs a fresh navigator - an instance field would reset
+         * every handoff, making the per-session cap really a per-handoff cap. Reset from
+         * StartModule at session start. */
+        @Volatile
+        private var tpRestoresThisSession = 0
+
+        /** Resets the session-scoped TP restore counter. Called when a new bot session starts. */
+        fun resetTpRestoresForSession() {
+            tpRestoresThisSession = 0
+        }
     }
 
     /** Screen states in the between-run navigation flow. */
     enum class LaunchScreenState {
         /** Career summary screen showing final stats, with "Complete Career" button. */
         CAREER_SUMMARY,
+
         /** Career-end "Learn" skill purchase screen - the skill list without the in-career Log button. */
         CAREER_END_SKILL_SCREEN,
+
         /** "Complete Career" confirmation dialog with "Cancel" and "Finish" buttons. */
         COMPLETE_CAREER_CONFIRMATION,
+
         /** Post-career result screens with Next/OK/Close/Confirm buttons. */
         POST_RUN_RESULTS,
+
         /** "Career Complete" dialog with "To Home" / "Edit Team" buttons. */
         CAREER_COMPLETE_DIALOG,
+
         /** "Continue Career" dialog with "Cancel" and "Resume" buttons. */
         CONTINUE_CAREER_DIALOG,
+
         /** Game main menu with the bottom menu bar. */
         HOME_SCREEN,
+
         /** Career entry / mode selection. Requires CAREER button template (not yet provided). */
         CAREER_ENTRY,
+
         /** Scenario selection screen. Requires template (not yet provided). */
         SCENARIO_SELECT,
+
         /** Trainee/character selection or reuse. Requires template (not yet provided). */
         TRAINEE_SETUP,
+
         /** Inheritance selection popup. */
         INHERITANCE_SCREEN,
+
         /** Legacy / Inheritance selection screen with Auto-Select button (and Carnival event banner during the Racing Carnival event). The Next button is disabled until Auto-Select fills both legacy slots. */
         LEGACY_SELECT_SCREEN,
+
         /** Support card deck with Auto-Select / Reset buttons. */
         SUPPORT_DECK_SCREEN,
+
         /** "Start Career!" button visible for final confirmation. */
         PRE_RUN_CONFIRMATION,
+
         /** Quick-mode / shorten-events prompt. Requires template (not yet provided). */
         QUICK_MODE_PROMPT,
+
         /** Opening cinematic / intro. Detected via Skip button or requires Pause template. */
         CINEMATIC_INTRO,
+
         /** Bot's normal start point - the in-career training menu. Navigation is complete. */
         ACTIVE_TRAINING_MENU,
+
         /** "Restore TP?" confirmation - the account lacks Training Points for another career. */
         TP_RESTORE_DIALOG,
+
         /** Screen could not be identified by any detector. */
         UNKNOWN,
     }
@@ -170,6 +200,26 @@ class CareerLaunchNavigator(private val context: Context) {
             throw e
         } catch (e: Exception) {
             MessageLog.e(TAG, "[NAV] Failed to create Game instance for image utils: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * One-shot probe: is the game parked on the main home screen?
+     *
+     * Used by the queue before run 1. The navigator otherwise only runs BETWEEN careers,
+     * so a queue started while the game sits at home (e.g. a previous queue failed out
+     * between runs) used to burn the first run on failed screen detection inside the
+     * career loop. Returns false on any initialisation or detection problem - the queue
+     * then behaves exactly as it did before this probe existed.
+     */
+    fun isOnHomeScreen(): Boolean {
+        if (!ensureInitialised()) return false
+        return try {
+            detectScreenState() == LaunchScreenState.HOME_SCREEN
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (_: Exception) {
             false
         }
     }
@@ -394,20 +444,21 @@ class CareerLaunchNavigator(private val context: Context) {
             (
                 LabelSkillListScreenSkillPoints.check(iu, sourceBitmap = bitmap, confidence = skillLabelConfidence) ||
                     LabelSkillListScreenSkillPointsV2.check(iu, sourceBitmap = bitmap, confidence = skillLabelConfidence)
-                )
+            )
         ) {
             return LaunchScreenState.CAREER_END_SKILL_SCREEN
         }
 
         // POST_RUN_RESULTS - generic post-run / between-screens dialog with Next, OK, Confirm,
-        // or Close as the primary advance button. This is the most common state during
-        // between-run navigation (10-20 iterations per career), so we check it early.
+        // or Close (wide or compact-pill style) as the primary advance button. This is the most
+        // common state during between-run navigation (10-20 iterations per career), so we check it early.
         // Consolidated into a single short-circuit `||` chain so a Next match avoids running
         // the other three template scans. Order within the chain is most-common-first.
         if (ButtonNext.check(iu, sourceBitmap = bitmap) ||
             ButtonOk.check(iu, sourceBitmap = bitmap) ||
             ButtonConfirm.check(iu, sourceBitmap = bitmap) ||
-            ButtonClose.check(iu, sourceBitmap = bitmap)
+            ButtonClose.check(iu, sourceBitmap = bitmap) ||
+            ButtonCloseDialog.check(iu, sourceBitmap = bitmap)
         ) {
             return LaunchScreenState.POST_RUN_RESULTS
         }
@@ -418,20 +469,26 @@ class CareerLaunchNavigator(private val context: Context) {
         // dialogs, so confirm via body OCR.
         if (ButtonNo.check(iu, sourceBitmap = bitmap)) {
             try {
-                val body = iu.performOCROnRegion(
-                    bitmap,
-                    (bitmap.width * 0.10).toInt(), (bitmap.height * 0.35).toInt(),
-                    (bitmap.width * 0.80).toInt(), (bitmap.height * 0.25).toInt(),
-                    useThreshold = false, useGrayscale = true, scale = 2.0,
-                    debugName = "nav_tp_dialog_ocr",
-                )
+                val body =
+                    iu.performOCROnRegion(
+                        bitmap,
+                        (bitmap.width * 0.10).toInt(),
+                        (bitmap.height * 0.35).toInt(),
+                        (bitmap.width * 0.80).toInt(),
+                        (bitmap.height * 0.25).toInt(),
+                        useThreshold = false,
+                        useGrayscale = true,
+                        scale = 2.0,
+                        debugName = "nav_tp_dialog_ocr",
+                    )
                 if (Regex("\\bTP\\b").containsMatchIn(body.uppercase())) {
                     MessageLog.i(TAG, "[NAV] Restore-TP confirmation detected: \"${body.replace("\n", " ").take(70)}\"")
                     return LaunchScreenState.TP_RESTORE_DIALOG
                 }
             } catch (e: InterruptedException) {
                 throw e
-            } catch (_: Exception) { }
+            } catch (_: Exception) {
+            }
         }
 
         // "Continue Career" dialog - Resume button takes us straight back into an active career.
@@ -462,13 +519,18 @@ class CareerLaunchNavigator(private val context: Context) {
         }
         try {
             // Scan 22%-53% width, 94%-98% height - centered on the Skip Off pill button.
-            val skipOcr = iu.performOCROnRegion(
-                bitmap,
-                (bitmap.width * 0.22).toInt(), (bitmap.height * 0.94).toInt(),
-                (bitmap.width * 0.31).toInt(), (bitmap.height * 0.04).toInt(),
-                useThreshold = false, useGrayscale = false, scale = 2.0,
-                debugName = "nav_skip_button_ocr",
-            )
+            val skipOcr =
+                iu.performOCROnRegion(
+                    bitmap,
+                    (bitmap.width * 0.22).toInt(),
+                    (bitmap.height * 0.94).toInt(),
+                    (bitmap.width * 0.31).toInt(),
+                    (bitmap.height * 0.04).toInt(),
+                    useThreshold = false,
+                    useGrayscale = false,
+                    scale = 2.0,
+                    debugName = "nav_skip_button_ocr",
+                )
             val skipUpper = skipOcr.uppercase()
             if (skipUpper.contains("SKIP")) {
                 MessageLog.i(TAG, "[NAV] Skip button OCR: '$skipOcr' → QUICK_MODE_PROMPT")
@@ -476,7 +538,8 @@ class CareerLaunchNavigator(private val context: Context) {
             }
         } catch (e: InterruptedException) {
             throw e
-        } catch (_: Exception) { }
+        } catch (_: Exception) {
+        }
 
         // Cinematic - Skip or fast-forward button visible.
         if (ButtonSkipCinematic.check(iu, sourceBitmap = bitmap) || ButtonSkip.check(iu, sourceBitmap = bitmap)) {
@@ -536,12 +599,13 @@ class CareerLaunchNavigator(private val context: Context) {
 
             LaunchScreenState.CONTINUE_CAREER_DIALOG -> handleContinueCareerDialog()
             LaunchScreenState.CAREER_SUMMARY -> handleCareerSummary()
-            LaunchScreenState.CAREER_END_SKILL_SCREEN -> TransitionResult.Failed(
-                reason = "Career-end skill purchase (Learn) screen detected - the careerComplete skill plan has not run for this career.",
-                transition = "CAREER_END_SKILL_SCREEN -> (refusing to navigate)",
-                isRecoverable = true,
-                recommendedAction = "Start the bot while on this screen - the startup career-end guard hands it to the campaign, which buys skills and then completes the career.",
-            )
+            LaunchScreenState.CAREER_END_SKILL_SCREEN ->
+                TransitionResult.Failed(
+                    reason = "Career-end skill purchase (Learn) screen detected - the careerComplete skill plan has not run for this career.",
+                    transition = "CAREER_END_SKILL_SCREEN -> (refusing to navigate)",
+                    isRecoverable = true,
+                    recommendedAction = "Start the bot while on this screen - the startup career-end guard hands it to the campaign, which buys skills and then completes the career.",
+                )
             LaunchScreenState.COMPLETE_CAREER_CONFIRMATION -> handleCompleteCareerConfirmation()
             LaunchScreenState.POST_RUN_RESULTS -> handlePostRunResults()
             LaunchScreenState.CAREER_COMPLETE_DIALOG -> handleCareerCompleteDialog()
@@ -555,33 +619,37 @@ class CareerLaunchNavigator(private val context: Context) {
 
             // --- States that require templates not yet provided ---
 
-            LaunchScreenState.CAREER_ENTRY -> TransitionResult.Failed(
-                reason = "Reached CAREER_ENTRY state but no template exists for the Career mode button. Cannot navigate further.",
-                transition = "CAREER_ENTRY -> SCENARIO_SELECT",
-                isRecoverable = true,
-                recommendedAction = "Provide the 'career_home' template image, or manually enter Career mode and restart the queue.",
-            )
+            LaunchScreenState.CAREER_ENTRY ->
+                TransitionResult.Failed(
+                    reason = "Reached CAREER_ENTRY state but no template exists for the Career mode button. Cannot navigate further.",
+                    transition = "CAREER_ENTRY -> SCENARIO_SELECT",
+                    isRecoverable = true,
+                    recommendedAction = "Provide the 'career_home' template image, or manually enter Career mode and restart the queue.",
+                )
 
-            LaunchScreenState.SCENARIO_SELECT -> TransitionResult.Failed(
-                reason = "Reached SCENARIO_SELECT state but no template exists for scenario selection UI. Cannot navigate further.",
-                transition = "SCENARIO_SELECT -> TRAINEE_SETUP",
-                isRecoverable = true,
-                recommendedAction = "Provide scenario select templates, or manually select the scenario and restart the queue.",
-            )
+            LaunchScreenState.SCENARIO_SELECT ->
+                TransitionResult.Failed(
+                    reason = "Reached SCENARIO_SELECT state but no template exists for scenario selection UI. Cannot navigate further.",
+                    transition = "SCENARIO_SELECT -> TRAINEE_SETUP",
+                    isRecoverable = true,
+                    recommendedAction = "Provide scenario select templates, or manually select the scenario and restart the queue.",
+                )
 
-            LaunchScreenState.TRAINEE_SETUP -> TransitionResult.Failed(
-                reason = "Reached TRAINEE_SETUP state. Trainee selection requires manual input or a reuse-setup template.",
-                transition = "TRAINEE_SETUP -> SUPPORT_DECK_SCREEN",
-                isRecoverable = true,
-                recommendedAction = "Manually select the trainee and restart the queue.",
-            )
+            LaunchScreenState.TRAINEE_SETUP ->
+                TransitionResult.Failed(
+                    reason = "Reached TRAINEE_SETUP state. Trainee selection requires manual input or a reuse-setup template.",
+                    transition = "TRAINEE_SETUP -> SUPPORT_DECK_SCREEN",
+                    isRecoverable = true,
+                    recommendedAction = "Manually select the trainee and restart the queue.",
+                )
 
-            LaunchScreenState.INHERITANCE_SCREEN -> TransitionResult.Failed(
-                reason = "Reached INHERITANCE_SCREEN state. Inheritance selection requires manual input.",
-                transition = "INHERITANCE_SCREEN -> next screen",
-                isRecoverable = true,
-                recommendedAction = "Manually handle the inheritance selection and restart the queue.",
-            )
+            LaunchScreenState.INHERITANCE_SCREEN ->
+                TransitionResult.Failed(
+                    reason = "Reached INHERITANCE_SCREEN state. Inheritance selection requires manual input.",
+                    transition = "INHERITANCE_SCREEN -> next screen",
+                    isRecoverable = true,
+                    recommendedAction = "Manually handle the inheritance selection and restart the queue.",
+                )
 
             LaunchScreenState.UNKNOWN -> {
                 // Handled in the main loop - should not be dispatched here.
@@ -667,8 +735,6 @@ class CareerLaunchNavigator(private val context: Context) {
      * Detection: template-matched (Next, OK, Confirm, Close, CompleteCareer).
      * Transition: template-matched button click.
      */
-    /** Item-based TP restores performed this queue session (bounded by [MAX_TP_RESTORES_PER_SESSION]). */
-    private var tpRestoresThisSession = 0
 
     /**
      * Handles the "Restore TP?" confirmation.
@@ -714,7 +780,8 @@ class CareerLaunchNavigator(private val context: Context) {
         val drinkLocation = IconTpDrink.find(iu).first
         if (drinkLocation == null) {
             MessageLog.w(TAG, "[NAV] Toughness 30 row not found in the Recover TP picker - likely out of drinks. Carats are never spent; closing and ending the queue.")
-            ButtonClose.click(iu)
+            // The picker's Close style is unverified - try both close variants.
+            if (!ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
             waitSafe(1.0)
             return TransitionResult.Failed(
                 reason = "TP restore was enabled but no Toughness 30 drinks were found in the Recover TP picker. Carats are never spent automatically.",
@@ -738,7 +805,7 @@ class CareerLaunchNavigator(private val context: Context) {
         waitSafe(0.6)
         ButtonOk.click(iu)
         waitSafe(1.2)
-        ButtonClose.click(iu)
+        if (!ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
         waitSafe(1.0)
 
         tpRestoresThisSession++
@@ -750,7 +817,6 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     private fun handlePostRunResults(): TransitionResult {
-        MessageLog.i(TAG, "[NAV] On post-run results screen. Clicking detected button...")
         val bitmap = iu.getSourceBitmap()
 
         // Defense: if the post-career SkillList screen lingered (e.g. SkillPlan failed to detect
@@ -766,15 +832,35 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.w(TAG, "[NAV] ButtonBack click failed on SkillList screen. Falling through to standard post-run handling.")
         }
 
-        val clicked = when {
-            ButtonNext.check(iu, sourceBitmap = bitmap) -> ButtonNext.click(iu, sourceBitmap = bitmap)
-            ButtonOk.check(iu, sourceBitmap = bitmap) -> ButtonOk.click(iu, sourceBitmap = bitmap)
-            ButtonConfirm.check(iu, sourceBitmap = bitmap) -> ButtonConfirm.click(iu, sourceBitmap = bitmap)
-            ButtonClose.check(iu, sourceBitmap = bitmap) -> ButtonClose.click(iu, sourceBitmap = bitmap)
-            ButtonCompleteCareer.check(iu, sourceBitmap = bitmap) -> ButtonCompleteCareer.click(iu, sourceBitmap = bitmap)
-            else -> false
-        }
-
+        var clickedButton = ""
+        val clicked =
+            when {
+                ButtonNext.check(iu, sourceBitmap = bitmap) -> {
+                    clickedButton = "Next"
+                    ButtonNext.click(iu, sourceBitmap = bitmap)
+                }
+                ButtonOk.check(iu, sourceBitmap = bitmap) -> {
+                    clickedButton = "OK"
+                    ButtonOk.click(iu, sourceBitmap = bitmap)
+                }
+                ButtonConfirm.check(iu, sourceBitmap = bitmap) -> {
+                    clickedButton = "Confirm"
+                    ButtonConfirm.click(iu, sourceBitmap = bitmap)
+                }
+                ButtonClose.check(iu, sourceBitmap = bitmap) -> {
+                    clickedButton = "Close"
+                    ButtonClose.click(iu, sourceBitmap = bitmap)
+                }
+                ButtonCloseDialog.check(iu, sourceBitmap = bitmap) -> {
+                    clickedButton = "Close (dialog pill)"
+                    ButtonCloseDialog.click(iu, sourceBitmap = bitmap)
+                }
+                ButtonCompleteCareer.check(iu, sourceBitmap = bitmap) -> {
+                    clickedButton = "Complete Career"
+                    ButtonCompleteCareer.click(iu, sourceBitmap = bitmap)
+                }
+                else -> false
+            }
         if (!clicked) {
             return TransitionResult.Failed(
                 reason = "POST_RUN_RESULTS state detected but could not click any advancement button.",
@@ -782,6 +868,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 recommendedAction = "Check if the post-run screen has an unexpected button layout.",
             )
         }
+        MessageLog.i(TAG, "[NAV] Post-run results screen: clicked '$clickedButton' to advance.")
         return TransitionResult.Continue
     }
 
@@ -871,13 +958,18 @@ class CareerLaunchNavigator(private val context: Context) {
             val ocrW = (screenWidth * 0.40).toInt()
             val ocrH = (screenHeight * 0.12).toInt()
 
-            val ocrText = iu.performOCROnRegion(
-                bitmap, ocrX, ocrY, ocrW, ocrH,
-                useThreshold = false,
-                useGrayscale = false,
-                scale = 2.0,
-                debugName = "nav_career_ocr",
-            )
+            val ocrText =
+                iu.performOCROnRegion(
+                    bitmap,
+                    ocrX,
+                    ocrY,
+                    ocrW,
+                    ocrH,
+                    useThreshold = false,
+                    useGrayscale = false,
+                    scale = 2.0,
+                    debugName = "nav_career_ocr",
+                )
             MessageLog.i(TAG, "[NAV] [HOME] OCR result: '$ocrText'")
 
             // The "CAREER" text uses a decorative gold font that Tesseract often can't read.
@@ -938,22 +1030,23 @@ class CareerLaunchNavigator(private val context: Context) {
         // The flag prevents infinite loops since Auto-Fill stays visible after clicking.
         if (autoFillSupports && !autoFillAlreadyDone) {
             MessageLog.i(TAG, "[NAV] Auto-Fill enabled. Looking for Auto-Fill button...")
-            val clicked = when {
-                ButtonAutoFill.check(iu) -> {
-                    MessageLog.i(TAG, "[NAV] ButtonAutoFill matched. Clicking...")
-                    ButtonAutoFill.click(iu)
+            val clicked =
+                when {
+                    ButtonAutoFill.check(iu) -> {
+                        MessageLog.i(TAG, "[NAV] ButtonAutoFill matched. Clicking...")
+                        ButtonAutoFill.click(iu)
+                    }
+                    ButtonAutoSelect.check(iu) -> {
+                        MessageLog.i(TAG, "[NAV] ButtonAutoSelect matched (fallback). Clicking...")
+                        ButtonAutoSelect.click(iu)
+                    }
+                    else -> {
+                        MessageLog.w(TAG, "[NAV] Auto-Fill enabled but neither ButtonAutoFill nor ButtonAutoSelect matched.")
+                        false
+                    }
                 }
-                ButtonAutoSelect.check(iu) -> {
-                    MessageLog.i(TAG, "[NAV] ButtonAutoSelect matched (fallback). Clicking...")
-                    ButtonAutoSelect.click(iu)
-                }
-                else -> {
-                    MessageLog.w(TAG, "[NAV] Auto-Fill enabled but neither ButtonAutoFill nor ButtonAutoSelect matched.")
-                    false
-                }
-            }
             if (clicked) {
-                autoFillAlreadyDone = true  // Mark as done even if the subsequent flow fails.
+                autoFillAlreadyDone = true // Mark as done even if the subsequent flow fails.
                 waitSafe(2.0)
                 if (ButtonOk.check(iu)) {
                     MessageLog.i(TAG, "[NAV] Clicking OK on Auto-Fill confirmation dialog...")
@@ -1037,6 +1130,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * Detection: ButtonStartCareer / ButtonStartCareerOffset template match.
      * Transition: ButtonStartCareer.click() (template-matched).
      */
+
     /**
      * LEGACY_SELECT_SCREEN: Click Auto-Select to populate both legacy slots, tick all unchecked
      * options on the resulting Confirm Auto-Select dialog (Include Guests, plus Prioritize
