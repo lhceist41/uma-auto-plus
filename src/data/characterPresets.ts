@@ -216,7 +216,7 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
             },
         ],
     },
-    "Matikanetannhauser": {
+    Matikanetannhauser: {
         // Research-derived (two-source synthesis); badges are only granted
         // after a live validated career, so no recommended entries yet.
         avoid: [
@@ -1551,8 +1551,8 @@ export const characterPresets: CharacterPreset[] = [
                     "Grass Wonder|Whimsical Encounter": 1,
                     "Grass Wonder|Everlasting Game": 0,
                     "Grass Wonder|Errands Have Perks": 1,
-                    "Grass Wonder|Beauteaful": 1,
-                    "Grass Wonder|Tracen Karuta Queen": 1,
+                    "Grass Wonder|Beauteaful": 0,
+                    "Grass Wonder|Tracen Karuta Queen": 0,
                     "Grass Wonder|In Search of Refreshment": 1,
                     "Grass Wonder|Together for Tea": 1,
                     "Grass Wonder|Yamato Nadeshiko": 1,
@@ -5101,8 +5101,8 @@ export const characterPresets: CharacterPreset[] = [
                     "Grass Wonder|Whimsical Encounter": 1,
                     "Grass Wonder|Everlasting Game": 0,
                     "Grass Wonder|Errands Have Perks": 1,
-                    "Grass Wonder|Beauteaful": 1,
-                    "Grass Wonder|Tracen Karuta Queen": 1,
+                    "Grass Wonder|Beauteaful": 0,
+                    "Grass Wonder|Tracen Karuta Queen": 0,
                     "Grass Wonder|In Search of Refreshment": 1,
                     "Grass Wonder|Together for Tea": 1,
                     "Grass Wonder|Yamato Nadeshiko": 1,
@@ -8628,8 +8628,8 @@ export const characterPresets: CharacterPreset[] = [
                     "Grass Wonder|Whimsical Encounter": 1,
                     "Grass Wonder|Everlasting Game": 0,
                     "Grass Wonder|Errands Have Perks": 1,
-                    "Grass Wonder|Beauteaful": 1,
-                    "Grass Wonder|Tracen Karuta Queen": 1,
+                    "Grass Wonder|Beauteaful": 0,
+                    "Grass Wonder|Tracen Karuta Queen": 0,
                     "Grass Wonder|In Search of Refreshment": 1,
                     "Grass Wonder|Together for Tea": 1,
                     "Grass Wonder|Yamato Nadeshiko": 1,
