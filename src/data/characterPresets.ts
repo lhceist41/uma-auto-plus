@@ -177,52 +177,55 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
         recommended: ["URA Finale", "Unity Cup", "Trackblazer"],
     },
     "Mihono Bourbon": {
-        // Research-derived (two-source synthesis); badges are only granted
-        // after a live validated career, so no recommended entries yet.
-        avoid: [
-            {
-                scenario: "Trackblazer",
-                reason: "Mihono Bourbon has Mile B and a front-runner profile in a Mile-heavy scenario race pool. Budget runs bleed value; URA or Unity Cup fit her chain better.",
-            },
-        ],
+        // Mi=B, Md=A, Front=A, Turf=A. No Trackblazer avoid: MANT race entry is gated by fan
+        // count, not aptitude, so the old "Mile-heavy pool starves her entries" reason was wrong.
+        // Mile B clears the C+ rival threshold and the Medium-A schedule is rich from Classic on,
+        // so a Mile-B/Medium-A runner is viable for MANT. Neutral (no banner); recommended badge
+        // pending a live run.
+        recommended: [],
     },
     "Mejiro Palmer": {
-        // Research-derived (two-source synthesis); badges are only granted
-        // after a live validated career, so no recommended entries yet.
+        // Md=A, Lg=A, Mile=F, Front=A, Turf=A. MANT entry is fan-gated, not aptitude-gated, so
+        // the "Mile-heavy pool starves entries" claim was wrong. The real liability is unattended
+        // Junior - kept as a caution, not a wall.
         avoid: [
             {
                 scenario: "Trackblazer",
-                reason: "Mejiro Palmer has Mile F. The scenario's Mile-heavy race pool starves her of entries on a budget account; run URA Finale where her plan covers the fan wall.",
+                reason: "Mile F makes her Junior year weak for unattended farming: Junior is Sprint/Mile-heavy with few Medium graded races, so she snowballs slowly and the no-rival Junior races stall her Akikawa bond. Strong from Classic on - run URA Finale, or give her a Mile spark (B/C) before Trackblazer. Worth a live test now that our Junior fan-emergency handling exists.",
             },
         ],
     },
     "Tosen Jordan": {
-        // Research-derived (two-source synthesis); badges are only granted
-        // after a live validated career, so no recommended entries yet.
+        // Md=A, Lg=B, Mile=F, Pace=A, Turf=A. MANT entry is fan-gated, not aptitude-gated, so
+        // the "starved of entries in the Mile-heavy pool" claim was wrong. The real liability is
+        // unattended Junior - kept as a caution.
         avoid: [
             {
                 scenario: "Trackblazer",
-                reason: "Tosen Jordan has Mile F, which starves her of entries in the scenario's Mile-heavy pool on a budget account. URA or Unity Cup suit her medium core.",
+                reason: "Mile F makes her Junior year weak for unattended farming: Junior is Sprint/Mile-heavy with few Medium graded races, so she snowballs slowly and the no-rival Junior races stall her Akikawa bond. Strong from Classic on - run URA Finale or Unity Cup, or give her a Mile spark (B/C) before Trackblazer. Worth a live test now that our Junior fan-emergency handling exists.",
             },
         ],
     },
     "Super Creek": {
-        // Research-derived (two-source synthesis); badges are only granted
-        // after a live validated career, so no recommended entries yet.
+        // Md=A, Lg=A, Mile=G, stayer. MANT entry is fan-gated, not aptitude-gated, so "starved
+        // for entries" was wrong. Mile G is the weakest of the batch, so her unattended Junior is
+        // the real risk - kept as a caution. She is also goal-sparse, so her curated racing plan
+        // does heavy lifting.
         avoid: [
             {
                 scenario: "Trackblazer",
-                reason: "Super Creek has Mile G - the Mile-heavy scenario pool leaves her starved for entries on a budget account despite her Medium/Long A.",
+                reason: "Mile G gives her the weakest Junior of the batch for unattended farming: Junior is Sprint/Mile-heavy and she can only place in the few Medium graded races, so her early snowball and Akikawa bond lag. Strong from Classic on her Medium/Long A - prefer URA Finale or Unity Cup, or give her a Mile spark before Trackblazer.",
             },
         ],
     },
     Matikanetannhauser: {
-        // Research-derived (two-source synthesis); badges are only granted
-        // after a live validated career, so no recommended entries yet.
+        // Lg=A, Mile=D, Front=F, stayer. MANT entry is fan-gated, not aptitude-gated. Mile D is
+        // less weak than the F/G profiles, but her stayer build still has a thin Junior - kept as
+        // a caution rather than a hard wall.
         avoid: [
             {
                 scenario: "Trackblazer",
-                reason: "Matikanetannhauser has Mile D and Front F, the worst fit in the batch for the scenario's Mile-heavy pool. Keep her stayer chain in URA or Unity Cup.",
+                reason: "Mile D and a stayer build give her a thin Junior for unattended farming: Junior has few Medium/Long graded races, so her early snowball lags. Stronger from Classic on - keep her stayer chain in URA or Unity Cup, or Mile-spark her before Trackblazer.",
             },
         ],
     },
