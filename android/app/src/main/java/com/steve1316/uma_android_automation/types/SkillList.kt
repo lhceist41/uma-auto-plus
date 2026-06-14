@@ -289,10 +289,16 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
 
         var point: Point? = null
         var templateBitmap: Bitmap? = null
-        for ((label, component, tmplBitmap) in listOf(
+        val variants = listOf(
             Triple("v1", LabelSkillListScreenSkillPoints, v1Bitmap),
             Triple("v2", LabelSkillListScreenSkillPointsV2, v2Bitmap),
-        )) {
+        )
+        // Pass 1: every variant at strict confidence before any relaxed match. The legacy v1
+        // template loosely matches the teal/mint v2 banner at the 0.60 relaxed threshold, so a
+        // per-variant strict-then-relaxed-then-break loop accepts v1's relaxed match and breaks
+        // before v2's strict match is tried, discarding the high-confidence anchor. Searching all
+        // strict first lets the variant that actually matches the banner win.
+        for ((_, component, tmplBitmap) in variants) {
             if (tmplBitmap == null) continue
             val strict = component.findImageWithBitmap(game.imageUtils, srcBitmap)
             if (strict != null) {
@@ -300,12 +306,18 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
                 templateBitmap = tmplBitmap
                 break
             }
-            val relaxed = component.findImageWithBitmap(game.imageUtils, srcBitmap, confidence = 0.60)
-            if (relaxed != null) {
-                MessageLog.w(TAG, "[WARN] detectSkillPoints:: SkillPoints label ($label) matched only at relaxed threshold; using fallback location.")
-                point = relaxed
-                templateBitmap = tmplBitmap
-                break
+        }
+        // Pass 2: only if NO variant matched strictly, fall back to the 0.60 relaxed threshold.
+        if (point == null) {
+            for ((label, component, tmplBitmap) in variants) {
+                if (tmplBitmap == null) continue
+                val relaxed = component.findImageWithBitmap(game.imageUtils, srcBitmap, confidence = 0.60)
+                if (relaxed != null) {
+                    MessageLog.w(TAG, "[WARN] detectSkillPoints:: SkillPoints label ($label) matched only at relaxed threshold (no variant matched strictly); using fallback location.")
+                    point = relaxed
+                    templateBitmap = tmplBitmap
+                    break
+                }
             }
         }
         if (point == null || templateBitmap == null) {
