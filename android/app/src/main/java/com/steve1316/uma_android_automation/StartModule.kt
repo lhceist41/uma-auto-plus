@@ -732,6 +732,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      */
     private fun navigateWithDeadline(reuseLastLaunchSetup: Boolean, navigator: CareerLaunchNavigator = CareerLaunchNavigator(context)): NavigationResult {
         val navDone = java.util.concurrent.atomic.AtomicBoolean(false)
+        // Set true ONLY when the deadline thread itself interrupts the queue thread. The catch
+        // below uses this to tell a genuine wedge from a stop/teardown interrupt: an
+        // InterruptedException with deadlineFired==false means navigation was cut short by
+        // something other than the 10-minute deadline (a user Stop, or the service teardown a
+        // Stop triggers), so reporting it as "exceeded 10 minutes / emulator died" would be a
+        // false alarm that sends us chasing emulator failures that never happened.
+        val deadlineFired = java.util.concurrent.atomic.AtomicBoolean(false)
         val queueThread = Thread.currentThread()
         val deadlineThread =
             Thread {
@@ -747,6 +754,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // Act FIRST, log via logcat only. MessageLog must never appear on this thread:
                 // its global lock is the very thing the wedged queue thread may be holding, so a
                 // MessageLog.e here before the interrupt deadlocks and zombies the queue.
+                deadlineFired.set(true)
                 queueThread.interrupt()
                 Log.e(TAG, "[QUEUE] Career launch navigation exceeded ${NAV_DEADLINE_MS / 60000} minutes. Navigation thread interrupted.")
                 try {
@@ -768,31 +776,43 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         } catch (e: InterruptedException) {
             // Clear the interrupt flag so queue teardown (log saving, events) is not poisoned.
             Thread.interrupted()
-            // The same InterruptedException reaches here for BOTH a user Stop and the deadline
-            // watchdog actually firing: stop()/stopQueue() set queueStopRequested before interrupting
-            // the queue thread, while the NavDeadline thread interrupts FIRST and only sets
-            // queueStopRequested after its grace window. So at this point queueStopRequested==true means
-            // the user pressed Stop; ==false means the deadline genuinely expired. Reporting a clean Stop
-            // as "WEDGED / capture pipeline died" sent us chasing an emulator failure that never happened
-            // (a finished career's manual Stop logged the full 10-minute/emulator-died boilerplate).
-            if (queueStopRequested) {
-                NavigationResult(
-                    success = false,
-                    lastDetectedState = "STOPPED",
-                    failureReason = "Between-run navigation cancelled by user stop.",
-                    failedTransition = "career launch navigation",
-                    isRecoverable = true,
-                    recommendedAction = "No action needed - the bot was stopped by the user.",
-                )
-            } else {
-                NavigationResult(
-                    success = false,
-                    lastDetectedState = "WEDGED",
-                    failureReason = "Navigation did not return within ${NAV_DEADLINE_MS / 60000} minutes and was interrupted by the deadline watchdog.",
-                    failedTransition = "career launch navigation",
-                    isRecoverable = true,
-                    recommendedAction = "Check the emulator - the capture pipeline or accessibility service likely died mid-navigation. Restart the queue once the game is stable.",
-                )
+            // Attribute the interrupt by its ACTUAL source, not by guessing from queueStopRequested.
+            // Three cases, in order of certainty:
+            //  - deadlineFired: the NavDeadline thread genuinely tripped the 10-minute budget. The
+            //    only case where the "wedged / capture-pipeline-died" boilerplate is true.
+            //  - a user Stop: queueStopRequested set, or the service torn down (BotService not running).
+            //    The interrupt rides in on the service teardown a Stop triggers; reading the absent flag
+            //    on this path as "deadline expired" cried emulator-death on every manual Stop.
+            //  - neither: an unexpected interrupt BEFORE the deadline. Not a wedge - report it plainly
+            //    instead of inventing a 10-minute timeout that did not occur.
+            when {
+                deadlineFired.get() ->
+                    NavigationResult(
+                        success = false,
+                        lastDetectedState = "WEDGED",
+                        failureReason = "Navigation did not return within ${NAV_DEADLINE_MS / 60000} minutes and was interrupted by the deadline watchdog.",
+                        failedTransition = "career launch navigation",
+                        isRecoverable = true,
+                        recommendedAction = "Check the emulator - the capture pipeline or accessibility service likely died mid-navigation. Restart the queue once the game is stable.",
+                    )
+                queueStopRequested || !BotService.isRunning ->
+                    NavigationResult(
+                        success = false,
+                        lastDetectedState = "STOPPED",
+                        failureReason = "Between-run navigation cancelled by user stop.",
+                        failedTransition = "career launch navigation",
+                        isRecoverable = true,
+                        recommendedAction = "No action needed - the bot was stopped by the user.",
+                    )
+                else ->
+                    NavigationResult(
+                        success = false,
+                        lastDetectedState = "INTERRUPTED",
+                        failureReason = "Between-run navigation was interrupted before the deadline (likely a stop or service teardown), not a wedge.",
+                        failedTransition = "career launch navigation",
+                        isRecoverable = true,
+                        recommendedAction = "If this was not a manual Stop, check the logs around the interrupt; the navigation did not actually time out.",
+                    )
             }
         } finally {
             navDone.set(true)
