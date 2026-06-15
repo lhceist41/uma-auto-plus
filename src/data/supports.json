@@ -347,6 +347,16 @@
         ],
         "(❯❯❯)\nLuchadora El!": [
             "Power +15\nKiller Tunes hint +2"
+        ],
+        "(❯)\nWhere My Courage Comes From": [
+            "Guts +15\nEl Condor Pasa bond +5"
+        ],
+        "(❯❯)\nA Mask with Many Faces": [
+            "Randomly either\n----------\nMood +1\nSkill points +30\nEl Condor Pasa bond +5\n----------\n\n----------\nEnergy -10\nSkill points +5",
+            "Speed +7\nPower +7\nGuts +7\nEl Condor Pasa bond +5"
+        ],
+        "(❯❯❯)\nWith All the Courage I Have": [
+            "Randomly either\n----------\nSpeed +5\nGuts +15\nSkill points +30\nSpeed Star hint +3\nEl Condor Pasa bond +5\n----------\n\n----------\nSpeed +5\nGuts +15\nSkill points +30\nSpeed Star hint +1\nEl Condor Pasa bond +5"
         ]
     },
     "Fine Motion": {
@@ -802,6 +812,15 @@
         ],
         "(❯❯❯)\nUnique Running?": [
             "Randomly either\n----------\nPower +10\nSkill points +15\nMatikanetannhauser bond +5\nUnruffled hint +3\n----------\n\n----------\nPower +5\nSkill points +10\nMatikanetannhauser bond +5\nCalm in a Crowd hint +3"
+        ],
+        "(❯)\nI'm Just Embarrassed": [
+            "Randomly either\n----------\nSkill points +25\nRamp Up hint +1\nMatikanetannhauser bond +5\n----------\n\n----------\nSkill points +15\nMatikanetannhauser bond +5"
+        ],
+        "(❯❯)\nI Just Need Practice": [
+            "Randomly either\n----------\nSkill points +25\nFlustered Late Surgers hint +1\nMatikanetannhauser bond +5\n----------\n\n----------\nSkill points +15\nMatikanetannhauser bond +5"
+        ],
+        "(❯❯❯)\nJust Another Way to Show Love": [
+            "Randomly either\n----------\nSpeed +7\nStamina +7\nPower +7\nGuts +7\nIt's On! hint +3\nMatikanetannhauser bond +10\n----------\n\n----------\nSpeed +7\nPower +7\nIt's On! hint +2\nMatikanetannhauser bond +5\n----------\n\n----------\nEnergy +10\nIt's On! hint +1\nMatikanetannhauser bond +5"
         ]
     },
     "Mayano Top Gun": {
@@ -2170,6 +2189,15 @@
         ],
         "(❯❯)\nSomeday, I'll Be the Main Character": [
             "Stamina +10\nWit +10\nSharp Gaze hint +1"
+        ],
+        "(❯)\nA Half-Remembered Book": [
+            "Stamina +10\nWit +10\nStudious hint +1\nZenno Rob Roy bond +5"
+        ],
+        "(❯❯)\nCooking Up a Rainbow": [
+            "Stamina +10\nSkill points +10\nTactical Tweak hint +1\nZenno Rob Roy bond +5"
+        ],
+        "(❯❯❯)\nHobbies Bring Us Together": [
+            "Stamina +10\nClairvoyance hint +1\nZenno Rob Roy bond +5"
         ]
     }
 }

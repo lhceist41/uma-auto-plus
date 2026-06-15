@@ -5198,6 +5198,18 @@
             "Randomly either\n----------\nMaximum Energy +12\nEnergy +40\nHeal all negative status effects\nor (~30%)\nor (~30%)\nEnergy -20\nMood -2\nGet Practice Poor status",
             "Randomly either\n----------\nEnergy +20\nMood +1\nGet Charming ○ status\nor (~15%)\nor (~15%)\nEnergy -10 / -20\nMood -1\n(random) Get Practice Poor status",
             "Energy +10"
+        ],
+        "Nostalgia, with a Side Of...": [
+            "Speed +20\n(random) Get Hot Topic status",
+            "Updrafters hint +2\n(random) Get Hot Topic status"
+        ],
+        "Dressed Up in Emotion": [
+            "Guts +20",
+            "Energy +20"
+        ],
+        "Overlapping Fragrances": [
+            "Power +30",
+            "Stamina +10\nDownhill Speedster hint +2"
         ]
     },
     "Mejiro McQueen": {
@@ -8886,6 +8898,18 @@
             "Randomly either\n----------\nMaximum Energy +12\nEnergy +40\nHeal all negative status effects\nor (~30%)\nor (~30%)\nEnergy -20\nMood -2\nGet Practice Poor status",
             "Randomly either\n----------\nEnergy +20\nMood +1\nGet Charming ○ status\nor (~15%)\nor (~15%)\nEnergy -10 / -20\nMood -1\n(random) Get Practice Poor status",
             "Energy +10"
+        ],
+        "Heart to Heart": [
+            "Light as a Feather hint +2\n(random) Get Charming ○ status",
+            "Power +20\n(random) Get Charming ○ status"
+        ],
+        "Beat for Beat": [
+            "Skill points +20",
+            "Wit +20"
+        ],
+        "Love and Love": [
+            "Speed +10\nShifting Gears hint +2",
+            "Wit +30"
         ]
     },
     "Tamamo Cross": {
