@@ -1202,15 +1202,17 @@ class CareerLaunchNavigator(private val context: Context) {
     // The deck-selection screen (PRE_RUN_CONFIRMATION) shows a row of support-type icons
     // (Speed, Stamina, Power, Guts, Wit, Friend, Group) each with an "xN" count badge; an absent
     // badge means zero of that type. We read the first five (the stat types) to judge how
-    // concentrated the deck is for the build. Column centres + the count-text row are fractions of
-    // the captured bitmap so they hold across both supported configs. ESTIMATES measured off a
-    // 1080x1920 deck-screen capture — calibrate live with debugMode_startDeckStatReadTest
-    // before relying on the warning.
+    // concentrated the deck is for the build. deckCountColFractions are the box-CENTRE x; the box top
+    // is deckCountRowYFraction and extends downward by deckCountBoxH, so it lands on the "xN" text row
+    // just under each icon (not the icon glyph). Calibrated against a 1080x1920 deck capture: the 5
+    // boxes sit on Speed/Stamina/Power/Guts/Wit (centres ~251/349/447/545/643px, evenly 98px apart), with
+    // Friend/Group correctly excluded. The badge row is a fixed legend — every type icon is always
+    // drawn in the same slot and just muted when its count is 0, so these fractions are deck-agnostic.
     private val deckStatLabels = arrayOf("Speed", "Stamina", "Power", "Guts", "Wit")
-    private val deckCountColFractions = floatArrayOf(0.13f, 0.235f, 0.34f, 0.445f, 0.55f)
-    private val deckCountRowYFraction = 0.635f
-    private val deckCountBoxW = 0.07f
-    private val deckCountBoxH = 0.028f
+    private val deckCountColFractions = floatArrayOf(0.232f, 0.323f, 0.414f, 0.505f, 0.596f)
+    private val deckCountRowYFraction = 0.677f
+    private val deckCountBoxW = 0.085f
+    private val deckCountBoxH = 0.02f
 
     /** Raw OCR of the header band (carries the "Trainee Select" title). */
     private fun readTraineeHeaderText(bitmap: Bitmap): String {
@@ -1303,6 +1305,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     iu.performOCROnRegion(
                         bitmap, x, y, boxW, boxH,
                         useThreshold = true, useGrayscale = true, scale = 3.0,
+                        ocrEngine = "tesseract_digits",
                         debugName = "deck_count_${deckStatLabels[i]}",
                     )
                 } catch (e: InterruptedException) {
@@ -1310,7 +1313,11 @@ class CareerLaunchNavigator(private val context: Context) {
                 } catch (_: Exception) {
                     ""
                 }
-            counts[i] = Regex("\\d+").find(raw)?.value?.toIntOrNull() ?: 0
+            // The badge reads "xN". tesseract_digits is non-deterministic on the leading "x" — it
+            // usually drops it ("x1" -> "1") but sometimes maps it to a digit ("x1" -> "11"). The
+            // count is always the TRAILING glyph and physically single-digit (0-6 cards of one type),
+            // so take the last digit, not the whole run, and clamp out any larger misread.
+            counts[i] = (raw.lastOrNull { it.isDigit() }?.digitToIntOrNull() ?: 0).coerceIn(0, 6)
         }
         return counts
     }
