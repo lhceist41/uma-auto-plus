@@ -1450,58 +1450,75 @@ class CareerLaunchNavigator(private val context: Context) {
 
         var bestScore = 0.0
         var bestLabel = ""
-        var scanned = 0
+        val seen = HashSet<String>()
 
-        for (page in 0..traineeMaxSwipes) {
-            val bitmap = iu.getSourceBitmap()
-            for (row in 0 until traineeGridRows) {
-                for (col in traineeColFractions.indices) {
-                    if (!BotService.isRunning || StartModule.queueStopRequested) {
-                        return TransitionResult.Failed(
-                            reason = "Queue stopped during trainee selection.",
-                            transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
-                            isRecoverable = false,
-                        )
-                    }
-                    val tapX = bitmap.width * traineeColFractions[col]
-                    val tapY = bitmap.height * (traineeRow0Fraction + row * traineeRowStepFraction)
-                    gestureUtils.tap(tapX.toDouble(), tapY.toDouble(), "trainee_grid_c${col}_r$row")
-                    waitSafe(1.0)
-                    val preview = readTraineePreviewName()
-                    if (preview.isBlank()) continue
-                    scanned++
-                    val score = TraineeNameMatcher.score(target, preview)
-                    MessageLog.i(TAG, "[ROTATION] Cell ($col,$row): '$preview' score=${"%.3f".format(score)}")
-                    if (score > bestScore) {
-                        bestScore = score
-                        bestLabel = preview
-                    }
-                    if (score >= traineeMatchThreshold) {
-                        MessageLog.i(TAG, "[ROTATION] Match: '$preview' (${"%.3f".format(score)}). Selecting and advancing.")
-                        waitSafe(0.5)
-                        if (ButtonNext.click(iu)) {
-                            waitSafe(2.0)
-                            return TransitionResult.Continue
+        // Scan outward in BOTH scroll directions so a target above OR below the entry point is
+        // reachable. The game opens the roster pre-scrolled to the last-used trainee (usually near the
+        // bottom), so we scan UP first (pageDown=false reveals earlier trainees), then DOWN. Each
+        // direction early-exits the moment a swipe reveals no new trainees, so the end nearest the
+        // entry point is dismissed in one extra page and the other direction walks the rest. Both
+        // passes always run — confirmed live that finger-down scrolls up and finger-up scrolls down.
+        for (pageDown in listOf(false, true)) {
+            val seenThisPass = HashSet<String>()
+            for (page in 0..traineeMaxSwipes) {
+                val bitmap = iu.getSourceBitmap()
+                var newThisPage = 0
+                for (row in 0 until traineeGridRows) {
+                    for (col in traineeColFractions.indices) {
+                        if (!BotService.isRunning || StartModule.queueStopRequested) {
+                            return TransitionResult.Failed(
+                                reason = "Queue stopped during trainee selection.",
+                                transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
+                                isRecoverable = false,
+                            )
                         }
-                        return TransitionResult.Failed(
-                            reason = "Matched trainee '$preview' but the Next click failed.",
-                            transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
-                            recommendedAction = "Manually press Next and restart the queue.",
-                        )
+                        val tapX = bitmap.width * traineeColFractions[col]
+                        val tapY = bitmap.height * (traineeRow0Fraction + row * traineeRowStepFraction)
+                        gestureUtils.tap(tapX.toDouble(), tapY.toDouble(), "trainee_grid_c${col}_r$row")
+                        waitSafe(1.0)
+                        val preview = readTraineePreviewName()
+                        if (preview.isBlank()) continue
+                        val norm = preview.lowercase().replace(Regex("[^a-z0-9]"), "")
+                        if (norm.isEmpty()) continue
+                        if (seenThisPass.add(norm)) newThisPage++
+                        if (!seen.add(norm)) continue // already scored this trainee on an earlier page.
+                        val score = TraineeNameMatcher.score(target, preview)
+                        MessageLog.i(TAG, "[ROTATION] Cell ($col,$row): '$preview' score=${"%.3f".format(score)}")
+                        if (score > bestScore) {
+                            bestScore = score
+                            bestLabel = preview
+                        }
+                        if (score >= traineeMatchThreshold) {
+                            MessageLog.i(TAG, "[ROTATION] Match: '$preview' (${"%.3f".format(score)}). Selecting and advancing.")
+                            waitSafe(0.5)
+                            if (ButtonNext.click(iu)) {
+                                waitSafe(2.0)
+                                return TransitionResult.Continue
+                            }
+                            return TransitionResult.Failed(
+                                reason = "Matched trainee '$preview' but the Next click failed.",
+                                transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
+                                recommendedAction = "Manually press Next and restart the queue.",
+                            )
+                        }
                     }
                 }
-            }
-            if (page < traineeMaxSwipes) {
-                swipeTraineeGridUp(bitmap)
-                waitSafe(1.2)
+                // A swipe that reveals no new trainees means we hit the end of the list (or it does not
+                // scroll at all) — stop paging this direction. The first such page proves the roster is
+                // single-screen, so the opposite-direction pass is skipped via listScrolls.
+                if (page > 0 && newThisPage == 0) break
+                if (page < traineeMaxSwipes) {
+                    swipeTraineeGrid(bitmap, pageDown = pageDown)
+                    waitSafe(1.2)
+                }
             }
         }
 
         return TransitionResult.Failed(
-            reason = "Trainee '$target' not found after scanning $scanned roster cells over ${traineeMaxSwipes + 1} page(s); best was '$bestLabel' @ ${"%.3f".format(bestScore)}. Stopping to avoid running the wrong trainee.",
+            reason = "Trainee '$target' not found after scanning ${seen.size} unique roster trainee(s); best was '$bestLabel' @ ${"%.3f".format(bestScore)}. Stopping to avoid running the wrong trainee.",
             transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
             isRecoverable = true,
-            recommendedAction = "Check the rotation's inGameName matches the in-game name exactly, or select the trainee manually and restart.",
+            recommendedAction = "Check that the rotation trainee is one you own and that its inGameName matches the in-game name, or select the trainee manually and restart.",
         )
     }
 
@@ -1535,12 +1552,27 @@ class CareerLaunchNavigator(private val context: Context) {
         }
     }
 
-    /** Swipes the roster grid up roughly one row to reveal the next page of trainees. */
-    private fun swipeTraineeGridUp(bitmap: Bitmap) {
+    /**
+     * Slow, fling-free vertical drag over the roster grid for paging through trainees. A fast flick
+     * (the old behaviour, no duration) triggers inertial scrolling that overshoots and skips rows;
+     * a long-duration drag moves the list ~1:1 with the finger (confirmed live: ~350px ≈ 1.8 rows).
+     * The span is ~1.7 rows — just under the 2-row scan band — so consecutive pages overlap slightly
+     * rather than skip; the caller dedupes by name, so the small re-scan is free.
+     *
+     * @param pageDown true pages DOWN the roster (finger up, later entries appear); false pages UP
+     *                 toward the top (finger down, earlier entries appear).
+     */
+    private fun swipeTraineeGrid(bitmap: Bitmap, pageDown: Boolean) {
         val x = bitmap.width * 0.5f
-        val yStart = bitmap.height * 0.74f
-        val yEnd = bitmap.height * 0.58f
-        gestureUtils.swipe(x, yStart, x, yEnd)
+        val half = bitmap.height * (traineeRowStepFraction * 1.7f) / 2f
+        val mid = bitmap.height * 0.64f
+        val top = mid - half
+        val bottom = mid + half
+        if (pageDown) {
+            gestureUtils.swipe(x, bottom, x, top, duration = 650L)
+        } else {
+            gestureUtils.swipe(x, top, x, bottom, duration = 650L)
+        }
     }
 
     /**
