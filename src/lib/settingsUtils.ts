@@ -27,6 +27,12 @@ export const convertSettingsToBatch = (settings: Record<string, any>) => {
     const batch: { category: string; key: string; value: any }[] = []
 
     Object.entries(settings).forEach(([category, categorySettings]) => {
+        // Never serialize trainee-rotation snapshot categories (`rot{i}_*`). They are produced only by
+        // buildRotationSnapshotRows (which re-prefixes this function's output) and consumed only by the
+        // Kotlin queue. If a polluted in-memory Settings object carried them in, re-emitting them here
+        // would let buildRotationSnapshotRows compound the prefix (`rot0_` -> `rot0_rot0_` ...) every
+        // run — the runaway that ballooned settings.db to 319 MB. Skip them at the serialization gate.
+        if (/^rot[0-9]/.test(category)) return
         Object.entries(categorySettings).forEach(([key, value]) => {
             batch.push({ category, key, value })
         })
