@@ -100,6 +100,16 @@ describe("convertSettingsToBatch", () => {
         const batch = convertSettingsToBatch(settings)
         expect(batch).toHaveLength(5)
     })
+
+    it("skips rotation-snapshot categories (rot*) so they can never be re-serialized and compound", () => {
+        const settings = {
+            general: { scenario: "URA" },
+            rot0_general: { scenario: "URA" },
+            rot0_rot0_trainingEvent: { characterEventData: "junk" },
+        } as any
+        const batch = convertSettingsToBatch(settings)
+        expect(batch).toEqual([{ category: "general", key: "scenario", value: "URA" }])
+    })
 })
 
 // ===========================================================================

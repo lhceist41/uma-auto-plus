@@ -36,6 +36,19 @@ export interface BuildRotationResult {
 // driving the rotation. Everything else is the trainee's active gameplay config.
 const SNAPSHOT_DENYLIST = new Set(["runQueue", "queueState"])
 
+// `category.key` rows that are static reference data, identical across every trainee: the bundled
+// event databases (written at bootstrap by useBootstrap.populateEventData) and the bulk race
+// database. Snapshotting them would replicate ~580 KB per rotation entry for no benefit. Safe to
+// omit because applyRotationSnapshot upserts (INSERT OR REPLACE) only the snapshot rows, so at a
+// switch the live rows for these keys are left in place — and they are the same for every trainee.
+// Mirrors the bulk-data fields the export path already strips in useSettingsManager.
+const SNAPSHOT_KEY_DENYLIST = new Set([
+    "trainingEvent.characterEventData",
+    "trainingEvent.supportEventData",
+    "trainingEvent.scenarioEventData",
+    "racing.racingPlanData",
+])
+
 /**
  * Builds each rotation trainee's full settings snapshot as namespaced SQLite rows.
  *
@@ -101,7 +114,7 @@ export function buildRotationSnapshotRows(base: Settings, rotation: RotationEntr
             })
         }
 
-        const batch = convertSettingsToBatch(merged).filter((r) => !SNAPSHOT_DENYLIST.has(r.category))
+        const batch = convertSettingsToBatch(merged).filter((r) => !SNAPSHOT_DENYLIST.has(r.category) && !SNAPSHOT_KEY_DENYLIST.has(`${r.category}.${r.key}`))
         for (const r of batch) {
             rows.push({ category: `rot${i}_${r.category}`, key: r.key, value: r.value })
         }
