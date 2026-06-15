@@ -10,6 +10,7 @@ import com.steve1316.automation_library.utils.ImageUtils.ScaleConfidenceResult
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.CareerLaunchNavigator
+import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonCareerEndSkills
@@ -72,6 +73,7 @@ import com.steve1316.uma_android_automation.types.SkillList
 import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.types.Trainee
 import com.steve1316.uma_android_automation.utils.ScrollList
+import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
 import org.opencv.core.Point
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -217,6 +219,21 @@ abstract class Campaign(game: Game) : Task(game) {
      * once per career run (not on every aptitude refresh).
      */
     private var bDeckValidationChecked: Boolean = false
+
+    /**
+     * Set once after the rotation trainee verify runs so it fires only once per career run.
+     * Independent of [bDeckValidationChecked]: the verify must run regardless of the deck-validation
+     * setting. A fresh Campaign is built per queue run, so this resets to false each career.
+     */
+    private var bRotationTraineeVerified: Boolean = false
+
+    /**
+     * Jaro-Winkler floor (over de-outfitted names) for the rotation trainee verify to treat two
+     * names as the same character. A clear read of the correct trainee scores ~1.0; a different
+     * character scores well under this. Deliberately near the navigator's select threshold (0.86)
+     * but slightly lenient, because a STOP halts the whole unattended queue.
+     */
+    private val rotationVerifyMatchThreshold: Double = 0.85
 
     /**
      * Number of consecutive process() ticks that ended without detecting any known screen. Drives
@@ -692,6 +709,16 @@ abstract class Campaign(game: Game) : Task(game) {
                     trainee.readName(game.imageUtils)
                 }
 
+                // Rotation backstop: confirm this career's trainee matches the preset the queue
+                // loaded for it. This is the ONLY trainee check on the resume path (a resume
+                // re-enters a career without going through Trainee Select), and it completes the
+                // match-or-stop guarantee for every rotation career. Once per career, independent
+                // of the deck-validation setting.
+                if (!bRotationTraineeVerified) {
+                    verifyRotationTrainee()
+                    bRotationTraineeVerified = true
+                }
+
                 if (trainee.runningStyle != prevRunningStyle) {
                     // Reset this flag since our preferred running style has changed.
                     trainee.bHasSetRunningStyle = false
@@ -1044,6 +1071,88 @@ abstract class Campaign(game: Game) : Task(game) {
                     "Consider stronger support cards or 7+ pink aptitude sparks before relying on this deck.",
             )
         }
+    }
+
+    /**
+     * Rotation backstop: confirm the trainee actually in this career matches the preset the queue
+     * loaded for it. The Trainee Select handler already verifies the trainee it picks, but a resume
+     * after a process death re-enters a career WITHOUT going through Trainee Select, so this is the
+     * only check on that path — and it completes the match-or-stop guarantee for every rotation
+     * career.
+     *
+     * The in-career name ([Trainee.readName]) is the bare character name (no "[Outfit]" prefix); the
+     * rotation target is stored as "[Outfit] Name". Matching de-outfits both sides so the comparison
+     * is character-level. Outfit-level discrimination is impossible from the in-career name and is
+     * left to the phase-aware resume that loads the correct snapshot index.
+     *
+     * Conservative by design, because a STOP halts the whole unattended queue:
+     *  - loaded preset's trainee matches the career     -> pass.
+     *  - career CONFIDENTLY matches a DIFFERENT roster
+     *    trainee than the one loaded                    -> STOP the queue (wrong preset loaded).
+     *  - nothing matches well (unreadable / off-roster) -> WARN and continue; never halt on noise.
+     */
+    private fun verifyRotationTrainee() {
+        if (!SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false)) return
+
+        val inCareer = trainee.name.trim()
+        if (inCareer.isEmpty() || inCareer.equals("null", ignoreCase = true)) {
+            MessageLog.w(TAG, "[ROTATION] Trainee verify skipped: in-career name unreadable. Continuing without the match check.")
+            return
+        }
+
+        val target = SettingsHelper.getStringSetting("queueState", "currentTrainee", "").trim()
+        if (target.isEmpty()) return // No rotation target recorded for this career; nothing to check against.
+
+        // De-outfit so the bare in-career name compares character-to-character; also score the full
+        // form in case a screen ever does include the outfit, and take the better of the two.
+        fun matchScore(candidate: String): Double =
+            maxOf(
+                TraineeNameMatcher.score(inCareer, candidate),
+                TraineeNameMatcher.score(inCareer, deOutfit(candidate)),
+            )
+
+        val targetScore = matchScore(target)
+        if (targetScore >= rotationVerifyMatchThreshold) {
+            MessageLog.i(TAG, "[ROTATION] Trainee verify OK: career '$inCareer' matches the loaded preset for '$target' (score=${"%.2f".format(targetScore)}).")
+            return
+        }
+
+        // The loaded preset doesn't clearly match. Only STOP if the career CONFIDENTLY matches some
+        // OTHER roster trainee — the unambiguous "wrong preset loaded" case. A name that matches its
+        // own (noisy) target best, or nothing well, is treated as OCR noise: warn, don't halt.
+        var best: String? = null
+        var bestScore = 0.0
+        for (candidate in StartModule.loadRotationConfig().inGameNames) {
+            val s = matchScore(candidate)
+            if (s > bestScore) {
+                bestScore = s
+                best = candidate
+            }
+        }
+
+        val matched = best
+        if (matched != null && bestScore >= rotationVerifyMatchThreshold && deOutfit(matched) != deOutfit(target)) {
+            MessageLog.e(
+                TAG,
+                "[ROTATION] Trainee MISMATCH: this career is '$inCareer' (best roster match '$matched', score=${"%.2f".format(bestScore)}) " +
+                    "but the queue loaded the preset for '$target'. Stopping the queue rather than play a career under the wrong trainee's settings. " +
+                    "This usually means an interrupted run resumed onto the wrong trainee — restart the queue from the game's home screen.",
+            )
+            StartModule.queueStopRequested = true
+            return
+        }
+
+        MessageLog.w(
+            TAG,
+            "[ROTATION] Trainee verify inconclusive: career '$inCareer' vs loaded target '$target' scored ${"%.2f".format(targetScore)} " +
+                "(best roster match ${"%.2f".format(bestScore)}). Likely an OCR misread of the name — continuing without stopping.",
+        )
+    }
+
+    /** Strips a leading "[Outfit]" prefix so a bare in-career name matches an outfit-tagged target. */
+    private fun deOutfit(name: String): String {
+        val stripped = name.replace(Regex("^\\s*\\[[^\\]]*\\]\\s*"), "").trim()
+        return stripped.ifEmpty { name.trim() }
     }
 
     /**

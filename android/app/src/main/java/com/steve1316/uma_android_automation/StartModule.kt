@@ -78,7 +78,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          * Persists the current queue state to SQLite so it can survive app crashes.
          * Writes directly to the settings database using INSERT OR REPLACE.
          */
-        fun saveQueueState(context: Context, active: Boolean, currentRun: Int = 0, totalRuns: Int = 0) {
+        fun saveQueueState(context: Context, active: Boolean, currentRun: Int = 0, totalRuns: Int = 0, phase: String = PHASE_CAREER) {
             try {
                 val dbFile = File(context.filesDir, "SQLite/settings.db")
                 if (!dbFile.exists()) return
@@ -94,6 +94,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 db.execSQL(
                     "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
                     arrayOf("queueState", "totalRuns", totalRuns.toString()),
+                )
+                db.execSQL(
+                    "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+                    arrayOf("queueState", "phase", phase),
                 )
                 db.execSQL(
                     "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
@@ -119,16 +123,31 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          * @property currentRun 1-indexed run number that was in flight when the process died.
          * @property totalRuns Total runs the user requested when the queue started.
          * @property ageMs Milliseconds between when the state was persisted and now.
+         * @property phase What was in flight: [PHASE_CAREER] (playing `currentRun`) or
+         *           [PHASE_LAUNCHING] (`currentRun` done, launching `currentRun + 1`).
          */
         data class QueueState(
             val active: Boolean,
             val currentRun: Int,
             val totalRuns: Int,
             val ageMs: Long,
+            val phase: String,
         )
 
         /** Stale queue state older than this is ignored. 6 hours matches the UI-side check. */
         private const val QUEUE_STATE_STALE_MS: Long = 6 * 60 * 60 * 1000L
+
+        /**
+         * Queue phase persisted next to the run number so a rotation resume can tell what the
+         * in-flight work actually was. CAREER = playing `currentRun`'s career; LAUNCHING =
+         * `currentRun`'s career finished and the launch of `currentRun + 1` was in progress.
+         *
+         * Without this, a rotation queue killed mid-career resumes at `currentRun + 1` (the
+         * single-trainee default) and finishes the running career under the NEXT trainee's preset.
+         * The phase lets the resume re-enter the interrupted career under its own trainee instead.
+         */
+        const val PHASE_CAREER = "career"
+        const val PHASE_LAUNCHING = "launching"
 
         /**
          * Load the persisted queue state, if any, and return it only if it represents a
@@ -168,7 +187,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 val ageMs = System.currentTimeMillis() - timestamp
                 if (ageMs < 0 || ageMs > QUEUE_STATE_STALE_MS) return null
 
-                return QueueState(active, currentRun, totalRuns, ageMs)
+                // Pre-phase states (and the conservative default) read as CAREER: re-enter rather
+                // than skip. A redundant re-run is harmless; skipping the wrong way is the bug.
+                val phase = raw["phase"] ?: PHASE_CAREER
+
+                return QueueState(active, currentRun, totalRuns, ageMs, phase)
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to load queue state: ${e.message}")
                 return null
@@ -1050,6 +1073,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 val stopOnError = SettingsHelper.getBooleanSetting("runQueue", "stopOnError", false)
                 val reuseLastLaunchSetup = SettingsHelper.getBooleanSetting("runQueue", "reuseLastLaunchSetup", true)
 
+                // Trainee rotation: parse the cycle once, up here so the auto-resume decision below
+                // can distinguish a rotation queue (which must re-enter an interrupted career, never
+                // skip to the next trainee's snapshot) from a normal single-trainee queue. Also used
+                // by the cold-start snapshot load and the between-run switch further down.
+                val rotation = loadRotationConfig()
+                if (enableRunQueue && rotation.enabled) {
+                    MessageLog.i(TAG, "[ROTATION] Enabled: ${rotation.count} trainees, switching every ${rotation.switchEvery} run(s).")
+                }
+
                 if (enableRunQueue) {
                     MessageLog.i(TAG, "[QUEUE] Run queue enabled. Total runs: $totalRuns, delay: ${delayBetweenRuns}s, stopOnError: $stopOnError")
                 }
@@ -1073,7 +1105,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             clearQueueState(context)
                             return@run 1
                         }
-                        val next = saved.currentRun + 1
+                        // Phase-aware resume for rotation. A rotation queue killed mid-career must
+                        // re-enter that SAME run so the in-flight trainee finishes under her own
+                        // preset — resuming at currentRun+1 would load the next trainee's snapshot
+                        // onto the running career. A kill at the launch boundary (career done,
+                        // launching the next) resumes at currentRun+1 as usual. Non-rotation queues
+                        // keep the original "skip the interrupted run" behavior: same trainee either
+                        // way, and not re-entering a possibly-wedged career is the safer default.
+                        val reEnter = rotation.enabled && saved.phase == PHASE_CAREER
+                        val next = if (reEnter) saved.currentRun else saved.currentRun + 1
                         if (next > totalRuns) {
                             MessageLog.i(
                                 TAG,
@@ -1084,7 +1124,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         }
                         MessageLog.w(
                             TAG,
-                            "[RESUME] Detected interrupted queue from ${saved.ageMs / 60_000}m ago. Resuming at run $next of $totalRuns (run ${saved.currentRun} was in flight when the previous process died).",
+                            if (reEnter) {
+                                "[RESUME] Detected interrupted queue from ${saved.ageMs / 60_000}m ago. Re-entering run $next of $totalRuns; its career was in flight and finishes under the same trainee's preset."
+                            } else {
+                                "[RESUME] Detected interrupted queue from ${saved.ageMs / 60_000}m ago. Resuming at run $next of $totalRuns (run ${saved.currentRun} was interrupted)."
+                            },
                         )
                         sendQueueProgressEvent(
                             next,
@@ -1097,13 +1141,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
                 var completedRuns = 0
 
-                // Trainee rotation: parse the cycle once. When enabled, prepare the first launched
-                // run's trainee BEFORE the cold-start probe below reads the scenario, so a rotation
-                // that switches scenarios probes and launches the correct campaign.
-                val rotation = loadRotationConfig()
-                if (enableRunQueue && rotation.enabled) {
-                    MessageLog.i(TAG, "[ROTATION] Enabled: ${rotation.count} trainees, switching every ${rotation.switchEvery} run(s).")
-                }
+                // Rotation cycle parsed above (before the resume block). The cold-start snapshot for
+                // the first launched run is applied just below, before the home-screen probe reads
+                // the scenario, so a rotation that switches scenarios launches the correct campaign.
                 var coldStartReuse = reuseLastLaunchSetup
                 if (enableRunQueue && rotation.enabled && startFromRun <= totalRuns && BotService.isRunning && !queueStopRequested) {
                     val r = applyRotationForRun(rotation, startFromRun, reuseLastLaunchSetup)
@@ -1152,8 +1192,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     if (enableRunQueue) {
                         // Reset log stream mute for each subsequent run.
                         LogStreamServer.resetMute()
-                        // Persist queue state so it can survive crashes.
-                        saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns)
+                        // Persist queue state so it can survive crashes. Phase CAREER: run i's
+                        // career is about to play, so a kill here resumes by re-entering run i.
+                        saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_CAREER)
                         sendQueueProgressEvent(i, totalRuns, "starting")
                         MessageLog.i(TAG, "\n[QUEUE] ========================================")
                         MessageLog.i(TAG, "[QUEUE] Starting run $i of $totalRuns")
@@ -1224,6 +1265,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             MessageLog.i(TAG, "[QUEUE] Queue stop requested. Exiting queue.")
                             break
                         }
+
+                        // Phase LAUNCHING: run i's career is done and the launch of run i+1 is
+                        // starting. A kill from here resumes at run i+1 — the finished career i is
+                        // not re-played, and (under rotation) i+1's snapshot is the correct one.
+                        saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_LAUNCHING)
 
                         // Trainee rotation: swap to the next run's trainee (settings + select mode)
                         // before reading the scenario or navigating. Stop the queue if its snapshot
