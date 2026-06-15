@@ -862,7 +862,6 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     private fun handleConsecutiveRaceWarning(dialog: DialogInterface, args: Map<String, Any>): DialogHandlerResult {
         val overrideIgnoreConsecutiveRaceWarning = args["overrideIgnoreConsecutiveRaceWarning"] as? Boolean ?: false
-        racing.raceRepeatWarningCheck = true
 
         // Pre-processing hook (e.g. Trackblazer OCR).
         onConsecutiveRaceWarningDetected(dialog, args)
@@ -872,6 +871,10 @@ abstract class Campaign(game: Game) : Task(game) {
         val shouldProceed = forceRace || shouldAllowConsecutiveRace(args)
 
         if (shouldProceed) {
+            // Proceeding (or deferring to re-check) is NOT a reason to suppress racing — clear the gate so a
+            // downstream race-entry abort that doesn't advance the day can still retry this turn. The old
+            // unconditional `= true` left it set and silently blocked the legitimate same-turn retry.
+            racing.raceRepeatWarningCheck = false
             // If the bot hasn't checked the date yet, it usually means it started on the prep screen or it is the Finale season.
             // If we are explicitly overriding the warning (mandatory race), we should proceed even if the date check hasn't finished.
             if (!bHasCheckedDateThisTurn && !overrideIgnoreConsecutiveRaceWarning && !date.bIsFinaleSeason) {
@@ -891,6 +894,8 @@ abstract class Campaign(game: Game) : Task(game) {
                 game.wait(2.0)
             }
         } else {
+            // Declined on the warning — suppress further extra-race attempts this turn.
+            racing.raceRepeatWarningCheck = true
             MessageLog.i(TAG, "[RACE] Consecutive race warning! Aborting racing...")
             racing.clearRacingRequirementFlags()
             dialog.close(game.imageUtils)
