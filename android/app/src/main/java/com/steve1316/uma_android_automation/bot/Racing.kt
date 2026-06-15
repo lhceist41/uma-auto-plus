@@ -2377,9 +2377,15 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      * @return Pair of the best suitable race's location and [RaceData], or null if none found.
      */
     fun findSuitableTrackblazerRace(consecutiveRaceCount: Int): Pair<Point, RaceData>? {
-        // Fan-emergency (or force racing) admits single-star prediction races as last-resort
-        // candidates; they always rank below every double-star candidate.
-        val allowSingles = bFanEmergencyActive || enableForceRacing
+        // Fan-emergency, force racing, OR a Trackblazer Grade-Point wall (the game's own
+        // insufficient_goal_race_result_pts dialog forced this race) admit single-star prediction
+        // races as last-resort candidates, always ranked below every double-star one. Without the
+        // goal-pts trigger, a slow trainee blocked at the 60/300/300 gate whose only remaining rows
+        // are single-star couldn't even see them (single-star rows aren't scanned unless allowSingles),
+        // leaving forced-race recovery with nothing to enter. The flag is per-episode — set only by
+        // that dialog, cleared by clearRacingRequirementFlags on race completion — so it can't
+        // over-admit single-star races outside a real Grade-Point block.
+        val allowSingles = bFanEmergencyActive || enableForceRacing || hasInsufficientGoalRacePtsRequirement
 
         val sb = StringBuilder()
         sb.appendLine("\n========== Trackblazer Race Analysis ==========")
