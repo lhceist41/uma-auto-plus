@@ -81,6 +81,16 @@ const RunQueueSettings = () => {
     // sets both presetKey and scenario for the entry. The "@@" delimiter never occurs in a name.
     const presetOptions = useMemo(() => characterPresets.map((p) => ({ value: `${p.name}@@${p.scenario}`, label: `${p.name} — ${p.scenario}` })).sort((a, b) => a.label.localeCompare(b.label)), [])
 
+    // Preset names are "Character (Outfit)" for outfit-specific presets, plain "Character" otherwise.
+    // The in-game Trainee Select banner the OCR reads is "[Outfit] Character", so derive that form to
+    // auto-fill the In-Game Name when a preset is picked. baseCharacter() strips the outfit so we can
+    // tell a genuine character change (reset the name) from a scenario-only change (keep the user's edit).
+    const baseCharacter = (presetName: string) => presetName.replace(/\s*\([^)]*\)\s*$/, "").trim()
+    const deriveInGameName = (presetName: string) => {
+        const m = presetName.match(/^(.*?)\s*\(([^)]*)\)\s*$/)
+        return m ? `[${m[2].trim()}] ${m[1].trim()}` : presetName.trim()
+    }
+
     const rotation = runQueueSettings.traineeRotation
     const updateRotationEntry = (index: number, patch: Partial<(typeof rotation)[number]>) => {
         updateSetting(
@@ -251,7 +261,15 @@ const RunQueueSettings = () => {
                                                         onValueChange={(v) => {
                                                             if (!v) return
                                                             const sep = v.lastIndexOf("@@")
-                                                            updateRotationEntry(i, { presetKey: v.slice(0, sep), scenario: v.slice(sep + 2) })
+                                                            const newKey = v.slice(0, sep)
+                                                            const patch: Partial<(typeof rotation)[number]> = { presetKey: newKey, scenario: v.slice(sep + 2) }
+                                                            // Auto-fill the In-Game Name to the selected character+outfit. Overwrite when the
+                                                            // character changes (kills the stale-name drift) or the field is empty; keep a
+                                                            // user-customized name when only the scenario changes for the same character.
+                                                            if (!entry.inGameName.trim() || baseCharacter(entry.presetKey) !== baseCharacter(newKey)) {
+                                                                patch.inGameName = deriveInGameName(newKey)
+                                                            }
+                                                            updateRotationEntry(i, patch)
                                                         }}
                                                     />
 
