@@ -95,7 +95,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
     private val scenario = game.scenario
 
     /** The current stat prioritization settings. */
-    private val statPrioritizationRaw: List<StatName> = SettingsHelper.getStringArraySetting("training", "statPrioritization").map { StatName.fromName(it)!! }
+    private val statPrioritizationRaw: List<StatName> = SettingsHelper.getStringArraySetting("training", "statPrioritization").mapNotNull { StatName.fromName(it) }
 
     /** The final stat prioritization list. */
     internal val statPrioritization: List<StatName> = statPrioritizationRaw.ifEmpty { StatName.entries }
@@ -107,7 +107,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
     private val disableTrainingOnMaxedStat: Boolean = SettingsHelper.getBooleanSetting("training", "disableTrainingOnMaxedStat")
 
     /** List of stats to prioritize for spark events. */
-    private val focusOnSparkStatTarget: List<StatName> = SettingsHelper.getStringArraySetting("training", "focusOnSparkStatTarget").map { StatName.fromName(it)!! }
+    private val focusOnSparkStatTarget: List<StatName> = SettingsHelper.getStringArraySetting("training", "focusOnSparkStatTarget").mapNotNull { StatName.fromName(it) }
 
     /** Whether the rainbow training bonus is active. */
     private val enableRainbowTrainingBonus: Boolean = SettingsHelper.getBooleanSetting("training", "enableRainbowTrainingBonus")

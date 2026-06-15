@@ -598,11 +598,11 @@ class Game(val myContext: Context) {
             )
         }
         if (debugMode) MessageLog.w(TAG, "[WARN] ⚠️ Debug Mode is enabled. All bot operations will be significantly slower as a result.")
-        if (SettingsHelper.getStringSetting("debug", "templateMatchCustomScale").toDouble() != 1.0) {
-            MessageLog.w(
-                TAG,
-                "[WARN] Manual scale has been set to ${SettingsHelper.getStringSetting("debug", "templateMatchCustomScale").toDouble()}",
-            )
+        // toDoubleOrNull (not toDouble) — an empty/unset manual-scale setting threw NumberFormatException
+        // and crashed the bot at startup. Mirrors the fix already in CustomImageUtils.
+        val templateMatchCustomScale = SettingsHelper.getStringSetting("debug", "templateMatchCustomScale").toDoubleOrNull() ?: 1.0
+        if (templateMatchCustomScale != 1.0) {
+            MessageLog.w(TAG, "[WARN] Manual scale has been set to $templateMatchCustomScale")
         }
         MessageLog.w(
             TAG,
