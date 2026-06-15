@@ -46,23 +46,29 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 val jsonObject = JSONObject(plansString)
                 val plansMap = mutableMapOf<String, SkillPlanSettings>()
                 jsonObject.keys().forEach { planName ->
-                    val planData = jsonObject.getJSONObject(planName)
-                    val strategyString: String = planData.getString("strategy")
-                    val skillIds: List<Int> =
-                        planData
-                            .getString("plan")
-                            .split(",")
-                            .map { it.trim() }
-                            .mapNotNull { it.toIntOrNull() }
-                    val skillNames: List<String> = skillIds.mapNotNull { game.skillDatabase.getSkillName(it) }
-                    plansMap[planName] =
-                        SkillPlanSettings(
-                            bIsEnabled = planData.getBoolean("enabled"),
-                            strategy = SpendingStrategy.fromName(strategyString) ?: SpendingStrategy.DEFAULT,
-                            bEnableBuyInheritedUniqueSkills = planData.getBoolean("enableBuyInheritedUniqueSkills"),
-                            bEnableBuyNegativeSkills = planData.getBoolean("enableBuyNegativeSkills"),
-                            skillNames = skillNames,
-                        )
+                    try {
+                        val planData = jsonObject.getJSONObject(planName)
+                        val strategyString: String = planData.optString("strategy", "")
+                        val skillIds: List<Int> =
+                            planData
+                                .optString("plan", "")
+                                .split(",")
+                                .map { it.trim() }
+                                .mapNotNull { it.toIntOrNull() }
+                        val skillNames: List<String> = skillIds.mapNotNull { game.skillDatabase.getSkillName(it) }
+                        plansMap[planName] =
+                            SkillPlanSettings(
+                                bIsEnabled = planData.optBoolean("enabled", false),
+                                strategy = SpendingStrategy.fromName(strategyString) ?: SpendingStrategy.DEFAULT,
+                                bEnableBuyInheritedUniqueSkills = planData.optBoolean("enableBuyInheritedUniqueSkills", false),
+                                bEnableBuyNegativeSkills = planData.optBoolean("enableBuyNegativeSkills", false),
+                                skillNames = skillNames,
+                            )
+                    } catch (e: Exception) {
+                        // Skip just this entry, not the whole map — a try/catch around the entire loop
+                        // would let one bad plan empty ALL plans.
+                        MessageLog.w(TAG, "[WARN] skillPlans:: Skipping unparseable plan '$planName': ${e.message}")
+                    }
                 }
                 plansMap
             } else {
@@ -97,8 +103,10 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             private val nameMap = entries.associateBy { it.name }
             private val ordinalMap = entries.associateBy { it.ordinal }
 
-            /** Retrieve the [SpendingStrategy] by its name. */
-            fun fromName(value: String): SpendingStrategy? = nameMap[value.uppercase()]
+            /** Look up by name, tolerating whitespace and hyphen/underscore drift from the persisted
+             *  form (e.g. "optimize-knapsack" -> OPTIMIZE_KNAPSACK) so a stray format doesn't silently
+             *  fall back to greedy DEFAULT. */
+            fun fromName(value: String): SpendingStrategy? = nameMap[value.trim().uppercase().replace('-', '_')]
 
             /** Retrieve the [SpendingStrategy] by its ordinal value. */
             fun fromOrdinal(ordinal: Int): SpendingStrategy? = ordinalMap[ordinal]
@@ -1198,11 +1206,15 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         // Determine which skill plan to execute based on the current context.
         val skillPlanSettings: SkillPlanSettings =
             if (skillPlanName == null) {
-                if (bIsCareerComplete) {
-                    skillPlans["careerComplete"]!!
-                } else {
-                    skillPlans["preFinals"]!!
+                val resolvedPlanName = if (bIsCareerComplete) "careerComplete" else "preFinals"
+                val resolvedPlan: SkillPlanSettings? = skillPlans[resolvedPlanName]
+                if (resolvedPlan == null) {
+                    // Was skillPlans[...]!! — a degraded/empty plans map (bad parse, unmigrated settings,
+                    // fresh install before a write) crashed skill buying instead of aborting. Abort gracefully.
+                    MessageLog.e(TAG, "[ERROR] start:: No '$resolvedPlanName' skill plan found (plans map empty or missing the key). Aborting skill purchase.")
+                    return false
                 }
+                resolvedPlan
             } else {
                 val tmpPlan: SkillPlanSettings? = skillPlans[skillPlanName]
                 if (tmpPlan == null) {
