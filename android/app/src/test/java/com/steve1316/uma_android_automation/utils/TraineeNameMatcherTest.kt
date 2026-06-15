@@ -63,6 +63,20 @@ class TraineeNameMatcherTest {
             val s = TraineeNameMatcher.score("[Kukulkan Warrior] El Condor Pasa", "[Wild Frontier] Taiki Shuttle")
             assertTrue(s < threshold, "different trainee should be rejected, got $s")
         }
+
+        @Test
+        fun `a plain character-name target matches an outfit-prefixed banner`() {
+            // Most presets are named without an outfit ("Sweep Tosho"), but the banner always shows
+            // one ("[Platanus Witch] Sweep Tosho"). The trailing name part must clear the threshold.
+            val s = TraineeNameMatcher.score("Sweep Tosho", "[Platanus Witch] Sweep Tosho")
+            assertTrue(s >= threshold, "expected >= $threshold, got $s")
+        }
+
+        @Test
+        fun `a plain-name target rejects a different trainee`() {
+            val s = TraineeNameMatcher.score("Sweep Tosho", "[Autumn Cosmos] Gold City")
+            assertTrue(s < threshold, "different trainee should be rejected, got $s")
+        }
     }
 
     @Nested
