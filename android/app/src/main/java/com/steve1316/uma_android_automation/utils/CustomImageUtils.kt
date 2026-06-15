@@ -162,6 +162,17 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]CustomImageUtils"
 
+        /**
+         * Serializes every Tesseract OCR call. TessBaseAPI / tessDigitsBaseAPI are NOT thread-safe,
+         * and the training-analysis pipeline runs OCR on parallel threads (Training.kt CountDownLatch
+         * blocks). Two threads hitting the shared engine race on the internal Leptonica Pix and
+         * double-free it -> native SIGABRT (Scudo "invalid chunk state when deallocating"). One
+         * process-wide lock around every Tesseract entry point removes the race; YOLO/template work
+         * stays parallel. Held only around a leaf OCR call (never across a wait/join), so it cannot
+         * deadlock.
+         */
+        private val ocrLock = Any()
+
         @Volatile
         private var yoloDetectorInstance: YoloDetector? = null
 
@@ -325,18 +336,18 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         // Convert the Mat directly to Bitmap and then pass it to the text reader.
         val resultBitmap = createBitmap(bwImage.cols(), bwImage.rows())
         Utils.matToBitmap(bwImage, resultBitmap)
-        tessBaseAPI.setImage(resultBitmap)
-
         var result = ""
-        try {
-            // Finally, detect text on the cropped region.
-            result = tessBaseAPI.utF8Text
-            MessageLog.i(TAG, "[INFO] Detected event title text with Tesseract: $result")
-        } catch (e: Exception) {
-            MessageLog.e(TAG, "[ERROR] Cannot perform OCR: ${e.stackTraceToString()}")
+        synchronized(ocrLock) {
+            tessBaseAPI.setImage(resultBitmap)
+            try {
+                // Finally, detect text on the cropped region.
+                result = tessBaseAPI.utF8Text
+                MessageLog.i(TAG, "[INFO] Detected event title text with Tesseract: $result")
+            } catch (e: Exception) {
+                MessageLog.e(TAG, "[ERROR] Cannot perform OCR: ${e.stackTraceToString()}")
+            }
+            tessBaseAPI.clear()
         }
-
-        tessBaseAPI.clear()
         tempImage.release()
         cvImage.release()
         bwImage.release()
@@ -1880,17 +1891,17 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
 
         resultBitmap = createBitmap(bwImage.cols(), bwImage.rows())
         Utils.matToBitmap(bwImage, resultBitmap)
-        tessDigitsBaseAPI.setImage(resultBitmap)
-
         var result = "empty!"
-        try {
-            // Finally, detect text on the cropped region.
-            result = tessDigitsBaseAPI.utF8Text
-        } catch (e: Exception) {
-            MessageLog.e(TAG, "[ERROR] getUmamusumeClassDialogFanCount:: Cannot perform OCR with Tesseract: ${e.stackTraceToString()}")
+        synchronized(ocrLock) {
+            tessDigitsBaseAPI.setImage(resultBitmap)
+            try {
+                // Finally, detect text on the cropped region.
+                result = tessDigitsBaseAPI.utF8Text
+            } catch (e: Exception) {
+                MessageLog.e(TAG, "[ERROR] getUmamusumeClassDialogFanCount:: Cannot perform OCR with Tesseract: ${e.stackTraceToString()}")
+            }
+            tessDigitsBaseAPI.clear()
         }
-
-        tessDigitsBaseAPI.clear()
         cvImage.release()
         bwImage.release()
 
@@ -2268,17 +2279,17 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
 
             resultBitmap = createBitmap(bwImage.cols(), bwImage.rows())
             Utils.matToBitmap(bwImage, resultBitmap)
-            tessDigitsBaseAPI.setImage(resultBitmap)
-
             var result = ""
-            try {
-                // Finally, detect text on the cropped region.
-                result = tessDigitsBaseAPI.utF8Text
-            } catch (e: Exception) {
-                MessageLog.e(TAG, "[ERROR] determineExtraRaceFans:: Cannot perform OCR with Tesseract: ${e.stackTraceToString()}")
+            synchronized(ocrLock) {
+                tessDigitsBaseAPI.setImage(resultBitmap)
+                try {
+                    // Finally, detect text on the cropped region.
+                    result = tessDigitsBaseAPI.utF8Text
+                } catch (e: Exception) {
+                    MessageLog.e(TAG, "[ERROR] determineExtraRaceFans:: Cannot perform OCR with Tesseract: ${e.stackTraceToString()}")
+                }
+                tessDigitsBaseAPI.clear()
             }
-
-            tessDigitsBaseAPI.clear()
             cvImage.release()
             bwImage.release()
 
@@ -2438,14 +2449,16 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         // Fallback to Tesseract if ML Kit failed.
         if (mlKitFailed || result.isEmpty()) {
             Log.d(TAG, "[DEBUG] findTextByColor:: Falling back to Tesseract.")
-            tessBaseAPI.setImage(finalBitmap)
-            try {
-                result = tessBaseAPI.utF8Text
-            } catch (e: Exception) {
-                MessageLog.e(TAG, "[ERROR] findTextByColor:: Tesseract OCR failed: ${e.message}")
+            synchronized(ocrLock) {
+                tessBaseAPI.setImage(finalBitmap)
+                try {
+                    result = tessBaseAPI.utF8Text
+                } catch (e: Exception) {
+                    MessageLog.e(TAG, "[ERROR] findTextByColor:: Tesseract OCR failed: ${e.message}")
+                }
+                tessBaseAPI.stop()
+                tessBaseAPI.clear()
             }
-            tessBaseAPI.stop()
-            tessBaseAPI.clear()
         }
 
         if (debugMode) {
@@ -2504,18 +2517,22 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
             return ""
         }
 
-        // Perform OCR using findText() from ImageUtils.
-        return findText(
-            cropRegion = intArrayOf(x, y, width, height),
-            grayscale = useGrayscale,
-            thresh = useThreshold,
-            threshold = threshold.toDouble(),
-            thresholdMax = 255.0,
-            scale = scale,
-            sourceBitmap = sourceBitmap,
-            detectDigitsOnly = ocrEngine == "tesseract_digits",
-            debugName = debugName,
-        )
+        // Perform OCR using findText() from ImageUtils. Serialized via ocrLock: findText drives the
+        // shared, non-thread-safe Tesseract engine and this runs from parallel training-analysis
+        // threads, so unsynchronized concurrent calls double-free the Leptonica Pix (native SIGABRT).
+        return synchronized(ocrLock) {
+            findText(
+                cropRegion = intArrayOf(x, y, width, height),
+                grayscale = useGrayscale,
+                thresh = useThreshold,
+                threshold = threshold.toDouble(),
+                thresholdMax = 255.0,
+                scale = scale,
+                sourceBitmap = sourceBitmap,
+                detectDigitsOnly = ocrEngine == "tesseract_digits",
+                debugName = debugName,
+            )
+        }
     }
 
     /**
