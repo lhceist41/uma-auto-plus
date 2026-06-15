@@ -142,6 +142,15 @@ export interface Settings {
         // Aptitude letter floor for deck validation. "B" matches the in-game soft
         // requirement for race-bonus uplift; "A" is the strict meta-deck floor.
         deckValidationMinAptitude: string
+        // Deck concentration check ([DECK] advisory): at career start, read the support-deck
+        // composition off the deck screen and warn if the build's core stat type has too few cards
+        // (a spread deck generates few rainbows -> weak training). Informational only. URA Finale uses
+        // the floor; Unity Cup uses floor-1; Trackblazer is exempt (decks are intentionally spread and
+        // run on Race Bonus, checked separately).
+        enableDeckConcentrationCheck: boolean
+        // Minimum same-type support cards wanted on the build's core stat before warning. 4 matches
+        // the meta "4-5 of the build type" shell for URA/Unity rainbow stacking.
+        deckConcentrationCardFloor: number
     }
 
     // Training Stat Target settings
@@ -192,6 +201,7 @@ export interface Settings {
         debugMode_startTrackblazerInventorySyncTest: boolean
         debugMode_startTrackblazerBuyItemsTest: boolean
         debugMode_startTraineeSelectTest: boolean
+        debugMode_startDeckStatReadTest: boolean
         enableScreenRecording: boolean
         recordingBitRate: number
         recordingFrameRate: number
@@ -568,6 +578,11 @@ export const defaultSettings: Settings = {
         // "B" matches the in-game soft floor for race-bonus uplift. Tighten to "A"
         // for meta-deck runs where any sub-A aptitude indicates a build mistake.
         deckValidationMinAptitude: "B",
+        // Off by default until the deck-screen count read is live-calibrated; enable once the
+        // debugMode_startDeckStatReadTest diagnostic confirms the counts read correctly.
+        enableDeckConcentrationCheck: false,
+        // 4 = the meta "4-5 of the build type" shell for URA/Unity. Unity Cup is checked at floor-1.
+        deckConcentrationCardFloor: 4,
     },
     trainingStatTarget: {
         trainingSprintStatTarget_speedStatTarget: 1200,
@@ -607,6 +622,7 @@ export const defaultSettings: Settings = {
         debugMode_startTrackblazerInventorySyncTest: false,
         debugMode_startTrackblazerBuyItemsTest: false,
         debugMode_startTraineeSelectTest: false,
+        debugMode_startDeckStatReadTest: false,
         enableScreenRecording: false,
         recordingBitRate: 6,
         recordingFrameRate: 30,

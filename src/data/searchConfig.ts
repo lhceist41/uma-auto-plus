@@ -145,6 +145,20 @@ const searchConfig: SearchOption[] = [
         page: "TrainingSettings",
     },
     {
+        id: "enable-deck-concentration-check",
+        title: "Warn on Spread Support Deck",
+        description:
+            "At career start the bot reads your support-deck composition and logs a [DECK] warning if your build's core stat type has too few cards. Advisory only; the run continues. URA uses the floor, Unity Cup floor-1, Trackblazer skipped.",
+        page: "TrainingSettings",
+    },
+    {
+        id: "deck-concentration-card-floor",
+        title: "Minimum Core-Type Support Cards",
+        description: "Warn if the build's core stat type has fewer than this many support cards. 4 matches the meta 4-5 build-type rainbow-stacking shell.",
+        page: "TrainingSettings",
+        parentId: "enable-deck-concentration-check",
+    },
+    {
         id: "must-rest-before-summer",
         title: "Must Rest before Summer",
         description: "Forces the bot to rest during June Late Phase in Classic and Senior Years to ensure enough energy for Summer Training in July.",

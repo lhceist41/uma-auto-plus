@@ -38,6 +38,7 @@ const DebugSettings = () => {
         "debugMode_startTrackblazerInventorySyncTest",
         "debugMode_startTrackblazerBuyItemsTest",
         "debugMode_startTraineeSelectTest",
+        "debugMode_startDeckStatReadTest",
     ] as const
 
     /**
@@ -605,6 +606,15 @@ const DebugSettings = () => {
                                 onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startTraineeSelectTest", checked)}
                                 label="Start Trainee Select Test"
                                 description="Read-only rotation calibration. Park the game on the Trainee Select screen, then start the bot: it logs what the header detector and the [Outfit] Name banner OCR read, the match score against the current rotation target, and the computed grid tap targets, without tapping anything. Tagged [ROTATION-TEST] in the log."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-deck-stat-read-test"
+                                checked={bsc.settings.debug.debugMode_startDeckStatReadTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startDeckStatReadTest", checked)}
+                                label="Start Deck Stat Read Test"
+                                description="Read-only [DECK] calibration. Park the game on the deck-selection screen (the one with Start Career! and Perks), then start the bot: it logs the support-card count it reads for each stat type and the build's core stat, without tapping anything, so the count-row OCR regions can be tuned. Tagged [DECK-TEST] in the log."
                                 style={{ marginTop: 10 }}
                             />
                         </View>

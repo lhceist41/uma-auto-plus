@@ -1198,6 +1198,20 @@ class CareerLaunchNavigator(private val context: Context) {
     // Header band carrying the "Trainee Select" title (top-left). x,y,w,h fractions.
     private val traineeHeaderRegion = floatArrayOf(0.0f, 0.125f, 0.45f, 0.05f)
 
+    // ---- Support-deck composition (the [DECK] concentration advisory) ----
+    // The deck-selection screen (PRE_RUN_CONFIRMATION) shows a row of support-type icons
+    // (Speed, Stamina, Power, Guts, Wit, Friend, Group) each with an "xN" count badge; an absent
+    // badge means zero of that type. We read the first five (the stat types) to judge how
+    // concentrated the deck is for the build. Column centres + the count-text row are fractions of
+    // the captured bitmap so they hold across both supported configs. ESTIMATES measured off a
+    // 1080x1920 deck-screen capture — calibrate live with debugMode_startDeckStatReadTest
+    // before relying on the warning.
+    private val deckStatLabels = arrayOf("Speed", "Stamina", "Power", "Guts", "Wit")
+    private val deckCountColFractions = floatArrayOf(0.13f, 0.235f, 0.34f, 0.445f, 0.55f)
+    private val deckCountRowYFraction = 0.635f
+    private val deckCountBoxW = 0.07f
+    private val deckCountBoxH = 0.028f
+
     /** Raw OCR of the header band (carries the "Trainee Select" title). */
     private fun readTraineeHeaderText(bitmap: Bitmap): String {
         return try {
@@ -1270,6 +1284,122 @@ class CareerLaunchNavigator(private val context: Context) {
         }
         MessageLog.i(TAG, sb.toString())
         MessageLog.i(TAG, "[ROTATION-TEST] ===== end =====")
+    }
+
+    /**
+     * Reads the five stat-type "xN" count badges off the deck-selection screen. An absent badge
+     * (zero of that type) reads as empty, which parses to 0. Returns counts indexed to
+     * [deckStatLabels] (Speed, Stamina, Power, Guts, Wit). Never throws except on interrupt.
+     */
+    private fun readDeckTypeCounts(bitmap: Bitmap): IntArray {
+        val counts = IntArray(deckCountColFractions.size)
+        val boxW = (bitmap.width * deckCountBoxW).toInt()
+        val boxH = (bitmap.height * deckCountBoxH).toInt()
+        val y = (bitmap.height * deckCountRowYFraction).toInt()
+        for (i in deckCountColFractions.indices) {
+            val x = (bitmap.width * deckCountColFractions[i]).toInt() - boxW / 2
+            val raw =
+                try {
+                    iu.performOCROnRegion(
+                        bitmap, x, y, boxW, boxH,
+                        useThreshold = true, useGrayscale = true, scale = 3.0,
+                        debugName = "deck_count_${deckStatLabels[i]}",
+                    )
+                } catch (e: InterruptedException) {
+                    throw e
+                } catch (_: Exception) {
+                    ""
+                }
+            counts[i] = Regex("\\d+").find(raw)?.value?.toIntOrNull() ?: 0
+        }
+        return counts
+    }
+
+    /**
+     * Reads the support-deck composition off the deck screen and warns when it looks too spread for
+     * the build. A spread deck (few same-type cards on the build facility) cannot generate the
+     * friendship/rainbow trainings a stacked deck does, so its careers under-perform — this flags
+     * that at turn 0 instead of after a wasted hour. Advisory only: every failure path is swallowed
+     * so the career launch is never blocked by a bad read.
+     *
+     * Scenario-aware: Trackblazer decks are intentionally spread and run on Race Bonus, not rainbow
+     * concentration, so the count is informational there (the Race-Bonus gate is a separate check).
+     * Unity Cup gets extra non-rainbow growth from team mechanics, so its floor is one lower.
+     */
+    private fun checkDeckConcentration() {
+        try {
+            if (!SettingsHelper.getBooleanSetting("training", "enableDeckConcentrationCheck", false)) return
+            val scenario = SettingsHelper.getStringSetting("general", "scenario")
+            if (scenario == "Daily Races" || scenario == "Team Trials") return // No support deck in misc modes.
+
+            val counts = readDeckTypeCounts(iu.getSourceBitmap())
+            val breakdown = deckStatLabels.indices.joinToString(", ") { "${deckStatLabels[it]}=${counts[it]}" }
+
+            if (scenario == "Trackblazer") {
+                MessageLog.i(
+                    TAG,
+                    "[DECK] Support deck: $breakdown. Trackblazer is Race-Bonus-driven, not rainbow-concentration-driven, so the count is informational here (the Race Bonus check is separate).",
+                )
+                return
+            }
+
+            // Resolve the build's core stat from the preset (spark focus first, then top priority).
+            val core =
+                SettingsHelper.getStringArraySetting("training", "focusOnSparkStatTarget").firstOrNull()
+                    ?: SettingsHelper.getStringArraySetting("training", "statPrioritization").firstOrNull()
+            val coreIndex = core?.let { c -> deckStatLabels.indexOfFirst { it.equals(c, ignoreCase = true) } } ?: -1
+            if (coreIndex < 0) {
+                MessageLog.i(TAG, "[DECK] Support deck: $breakdown. Build core stat unresolved (no focusOnSparkStatTarget/statPrioritization); skipping the concentration warning.")
+                return
+            }
+
+            val baseFloor = SettingsHelper.getIntSetting("training", "deckConcentrationCardFloor", 4)
+            val floor = if (scenario == "Unity Cup") maxOf(1, baseFloor - 1) else baseFloor
+            val coreCount = counts[coreIndex]
+            val coreLabel = deckStatLabels[coreIndex]
+
+            if (coreCount < floor) {
+                MessageLog.w(
+                    TAG,
+                    "[DECK] Likely rainbow-starved deck for a $coreLabel build: only $coreCount $coreLabel support card(s), want >= $floor for $scenario. Full deck: $breakdown. " +
+                        "A spread deck makes few $coreLabel rainbows, which the training scorer needs for big stat turns. Consider 4-5 $coreLabel cards. (Advisory only — the run continues.)",
+                )
+            } else {
+                MessageLog.i(TAG, "[DECK] Deck concentration OK for a $coreLabel build: $coreCount $coreLabel card(s) (floor $floor for $scenario). Full deck: $breakdown.")
+            }
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: Exception) {
+            MessageLog.w(TAG, "[DECK] Concentration check skipped (read failed: ${e.message}). The run continues normally.")
+        }
+    }
+
+    /**
+     * Read-only diagnostic for calibrating the deck-composition count read against a live device.
+     * Park the game on the deck-selection screen (the one with Start Career! / Perks), enable
+     * `debugMode_startDeckStatReadTest`, and start the bot. Logs every stat count and its OCR box so
+     * the [deckCountColFractions] / [deckCountRowYFraction] / box-size estimates can be tuned.
+     */
+    fun debugDeckStatRead(injectedUtils: CustomImageUtils? = null) {
+        if (injectedUtils != null) {
+            imageUtils = injectedUtils
+        } else if (!ensureInitialised()) {
+            MessageLog.e(TAG, "[DECK-TEST] Failed to initialise image utils.")
+            return
+        }
+        val bitmap = iu.getSourceBitmap()
+        MessageLog.i(TAG, "[DECK-TEST] ===== Deck composition read-only diagnostic (${bitmap.width}x${bitmap.height}) =====")
+        val counts = readDeckTypeCounts(bitmap)
+        val y = (bitmap.height * deckCountRowYFraction).toInt()
+        deckStatLabels.forEachIndexed { i, label ->
+            val cx = (bitmap.width * deckCountColFractions[i]).toInt()
+            MessageLog.i(TAG, "[DECK-TEST] $label: count=${counts[i]} (box centre x=$cx, y=$y)")
+        }
+        val core =
+            SettingsHelper.getStringArraySetting("training", "focusOnSparkStatTarget").firstOrNull()
+                ?: SettingsHelper.getStringArraySetting("training", "statPrioritization").firstOrNull()
+        MessageLog.i(TAG, "[DECK-TEST] Build core stat (from preset) = ${core ?: "unresolved"}")
+        MessageLog.i(TAG, "[DECK-TEST] If any count is wrong, tune deckCountColFractions / deckCountRowYFraction / deckCountBox*. ===== end =====")
     }
 
     /**
@@ -1483,6 +1613,10 @@ class CareerLaunchNavigator(private val context: Context) {
         if (SettingsHelper.getBooleanSetting("runQueue", "enableEventBoost", false)) {
             tickEventBoostIfOff()
         }
+
+        // Read the support-deck composition off this screen and warn if it looks too spread for the
+        // build. Read-only and fully guarded — it never blocks the Start Career tap below.
+        checkDeckConcentration()
 
         MessageLog.i(TAG, "[NAV] Clicking 'Start Career!'...")
 

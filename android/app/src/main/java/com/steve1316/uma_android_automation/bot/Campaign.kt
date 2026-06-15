@@ -372,6 +372,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startScrollBarDetectionTest" to ::startScrollBarDetectionTest,
                 "debugMode_startSkillListBuyTest" to skillPlan::startSkillListBuyTest,
                 "debugMode_startTraineeSelectTest" to ::startTraineeSelectTest,
+                "debugMode_startDeckStatReadTest" to ::startDeckStatReadTest,
             )
 
         var bDidAnyTestsRun = false
@@ -393,6 +394,16 @@ abstract class Campaign(game: Game) : Task(game) {
     open fun startTraineeSelectTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only Trainee Select OCR diagnostic...")
         CareerLaunchNavigator(game.myContext).debugTraineeSelectRead(game.imageUtils)
+    }
+
+    /**
+     * Read-only support-deck composition diagnostic for calibrating the [DECK] concentration read.
+     * Reuses the running bot's image utils and logs each stat-type count off the deck screen without
+     * tapping anything. Park the game on the deck-selection screen (Start Career! / Perks) first.
+     */
+    open fun startDeckStatReadTest() {
+        MessageLog.i(TAG, "\n[TEST] Running read-only deck composition OCR diagnostic...")
+        CareerLaunchNavigator(game.myContext).debugDeckStatRead(game.imageUtils)
     }
 
     /**

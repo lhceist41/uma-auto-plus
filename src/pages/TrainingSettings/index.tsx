@@ -88,6 +88,8 @@ const TrainingSettings = () => {
         enableTrainingLevelWeighting,
         enableTrainingAnalysisValidation,
         enableYoloStatDetection,
+        enableDeckConcentrationCheck,
+        deckConcentrationCardFloor,
     } = trainingSettings
 
     // Push local state to global settings on change, skipping the initial mount and no-op diffs.
@@ -591,6 +593,33 @@ const TrainingSettings = () => {
                                 description="When enabled (Year 2+), the bot reads each training's level (1-5) via OCR and boosts the score for trainings whose stat sits in the top 3 of your Stat Prioritization list. Helps the bot stick with stats you've invested in. OCR is skipped during Pre-Debut, Junior, and Summer."
                                 className="my-2"
                                 searchId="enable-training-level-weighting"
+                            />
+                        </View>
+
+                        <View style={styles.section}>
+                            <CustomCheckbox
+                                checked={enableDeckConcentrationCheck}
+                                onCheckedChange={(checked) => updateTrainingSetting("enableDeckConcentrationCheck", checked)}
+                                label="Warn on Spread Support Deck"
+                                description="At career start the bot reads your support-deck composition and logs a [DECK] warning if your build's core stat type has too few cards — a spread deck makes few rainbows, which weakens training. Advisory only; the run always continues. URA Finale uses the floor below, Unity Cup uses one less, and Trackblazer is skipped (its decks run on Race Bonus instead). Calibrate with the Deck Stat Read Test in Debug Settings before relying on it."
+                                className="my-2"
+                                searchId="enable-deck-concentration-check"
+                            />
+                            <CustomSlider
+                                value={deckConcentrationCardFloor || defaultSettings.training.deckConcentrationCardFloor}
+                                placeholder={defaultSettings.training.deckConcentrationCardFloor}
+                                onValueChange={(value) => updateTrainingSetting("deckConcentrationCardFloor", value)}
+                                min={2}
+                                max={6}
+                                step={1}
+                                label="Minimum Core-Type Support Cards"
+                                labelUnit=""
+                                showValue={true}
+                                showLabels={true}
+                                description="Warn if the build's core stat type has fewer than this many support cards. 4 matches the meta '4-5 of the build type' rainbow-stacking shell."
+                                searchId="deck-concentration-card-floor"
+                                searchCondition={enableDeckConcentrationCheck}
+                                parentId="enable-deck-concentration-check"
                             />
                         </View>
 
