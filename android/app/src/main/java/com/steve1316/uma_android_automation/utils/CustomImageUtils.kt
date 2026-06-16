@@ -381,6 +381,9 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 }
 
             if (trainingSelectionLocation == null) {
+                // Distinguish this "bubble not located" miss (template/region) from the OCR-garbage
+                // miss logged below, so a failure can be root-caused.
+                Log.w(TAG, "[WARN] findTrainingFailureChance:: LabelTrainingFailureChance not found - the failure-% bubble could not be located on this screen.")
                 return -1
             }
 
@@ -438,6 +441,18 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
 
             if (result == -1) {
                 MessageLog.w(TAG, "[WARN] findTrainingFailureChance:: Failed to detect training failure chance (attempt $i of $tries)")
+            }
+        }
+
+        if (result == -1) {
+            // When every detection attempt fails, save the actual Training screen so a failure-chance
+            // miss (Trackblazer overlays / shifted bubble / OCR garbage) can be root-caused from the
+            // real frame. Best-effort and non-fatal; never blocks the caller.
+            try {
+                val missName = "training_failurechance_miss_${System.currentTimeMillis()}"
+                saveBitmap(filename = missName, fullRes = true)
+                MessageLog.w(TAG, "[WARN] findTrainingFailureChance:: All $tries detection attempt(s) failed; saved the Training screen as $missName.png for diagnosis.")
+            } catch (_: Exception) {
             }
         }
 
