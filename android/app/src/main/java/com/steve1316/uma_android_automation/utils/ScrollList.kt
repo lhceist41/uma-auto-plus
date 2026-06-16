@@ -787,7 +787,10 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
         // mid-list), not the end of the list - so require several in a row, re-issuing the scroll
         // each time, before concluding we've reached the bottom.
         var consecutiveNoMove = 0
-        val maxConsecutiveNoMove = 3
+        // A genuine end with the thumb at track bottom exits via the fast path below, so this only
+        // governs the ambiguous "thumb not at bottom, not moving" case; 2 still tolerates a single
+        // dropped swipe while cutting one confirmation scroll per list-end.
+        val maxConsecutiveNoMove = 2
         // Treat thumb movement within this many pixels as "no move". The scrollbar bbox comes from
         // CV detection and jitters +-1-2px between frames; an exact-equality test let a stalled
         // thumb read as "moved", resetting consecutiveNoMove forever so a wedged list never
@@ -796,7 +799,9 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
         // Content-based end detection for lists whose scrollbar is never detected (used by the
         // no-scrollbar branch in the loop below): consecutive scrolls that reveal no new entries.
         var consecutiveNoNew = 0
-        val maxConsecutiveNoNew = 3
+        // Two no-new reads in a row still tolerates a single dropped swipe / detection miss while
+        // cutting one confirmation scroll per list-end on the no-scrollbar path.
+        val maxConsecutiveNoNew = 2
         // Consecutive frames in which detection found ZERO entries despite retries. Distinct from
         // "no NEW entries": zero detections means the list is unreadable (occluded by a popup or a
         // stale capture), and riding the end-of-list paths from that state silently drops the rest
