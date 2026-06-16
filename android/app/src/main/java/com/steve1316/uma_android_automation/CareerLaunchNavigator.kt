@@ -1240,7 +1240,16 @@ class CareerLaunchNavigator(private val context: Context) {
      * we only need the word "Trainee" to discriminate it from every other launch screen.
      */
     private fun isTraineeSelectScreen(bitmap: Bitmap): Boolean {
-        return readTraineeHeaderText(bitmap).uppercase().contains("TRAINEE")
+        if (!readTraineeHeaderText(bitmap).uppercase().contains("TRAINEE")) return false
+        // Disambiguate the in-career "Umamusume Details" dialog, which shares the [Outfit] Name + stats
+        // + Track/Distance/Style layout and whose character PORTRAIT sits in this header-OCR band — the
+        // portrait makes Tesseract hallucinate "Trainee", false-detecting the dialog as the roster
+        // screen (the rotation scan ran on the dialog, read the aptitude row
+        // "Track Turf Dirt" as a name, and match-or-stop killed the queue). The Details dialog carries a
+        // Close button; the real roster screen has Back/Next and never a Close. Reject on Close so the
+        // dialog falls through to the POST_RUN_RESULTS Close handler and dismisses into the career.
+        if (ButtonClose.check(iu, sourceBitmap = bitmap) || ButtonCloseDialog.check(iu, sourceBitmap = bitmap)) return false
+        return true
     }
 
     /**
