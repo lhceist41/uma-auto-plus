@@ -742,7 +742,17 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
             }
         } else {
             if (!specialEventHandled) {
-                MessageLog.w(TAG, "[WARN] handleTrainingEvent:: First option will be selected since OCR failed to match the event title and no event rewards were found.")
+                // Record why no match was accepted so an intermittent miss can be root-caused. A
+                // best-confidence just under threshold is a near-miss (minor OCR garble); a low one means
+                // bad OCR or an unknown event. Raw OCR'd title is on the recognizer's line above.
+                MessageLog.w(
+                    TAG,
+                    "[WARN] handleTrainingEvent:: No event match accepted; selecting first option. Best candidate was " +
+                        "\"$eventTitle\" (${characterOrSupportName.ifEmpty { "?" }}) at confidence " +
+                        "${game.decimalFormat.format(confidence)} vs threshold " +
+                        "${game.decimalFormat.format(trainingEventRecognizer.minimumConfidence)}. " +
+                        "Raw OCR title is on the recognizer's \"Now starting process to find most similar string to:\" line above.",
+                )
                 optionSelected = 0
             }
         }
