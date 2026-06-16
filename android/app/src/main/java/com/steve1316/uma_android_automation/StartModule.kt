@@ -59,6 +59,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         @Volatile
         var queueStopRequested: Boolean = false
 
+        /**
+         * Human-readable reason for an internal/deliberate queue stop (e.g. the trainee-mismatch guard),
+         * or null when the stop is a genuine user Stop. Lets the result and queue logs say WHY the queue
+         * stopped instead of always blaming the user (a trainee-mismatch guard stop reported as "manually
+         * stopped by the user" masks the real cause).
+         */
+        @Volatile
+        var queueStopReason: String? = null
+
         /** When true, the current run should be skipped and the queue should advance. */
         @Volatile
         var queueSkipRequested: Boolean = false
@@ -1052,6 +1061,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             try {
                 // Reset queue control flags at the start of every new session.
                 queueStopRequested = false
+                queueStopReason = null
                 queueSkipRequested = false
 
                 // Reset rotation boundary tracking so the first launched run of this session always
@@ -1212,7 +1222,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 TaskResult.Success(TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE, "Run was skipped by queue.")
                             }
                             queueStopRequested -> {
-                                MessageLog.i(TAG, "[QUEUE] Run $i was stopped by user (queue stop).")
+                                MessageLog.i(TAG, "[QUEUE] Run $i stopped: ${queueStopReason ?: "user stop"}.")
                                 result // Use original result
                             }
                             else -> result
@@ -1225,9 +1235,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     // Evaluate the result.
                     when (effectiveResult.code) {
                         TaskResultCode.TASK_RESULT_MANUALLY_STOPPED -> {
-                            // If user stopped and we didn't request skip, it's a full stop.
+                            // A genuine user Stop OR a deliberate internal queue-stop (e.g. the
+                            // trainee-mismatch guard, which sets queueStopReason). Either way we exit the
+                            // queue; the reason makes the log honest about which one it actually was.
                             if (!queueSkipRequested) {
-                                MessageLog.i(TAG, "[QUEUE] User stopped the bot. Exiting queue.")
+                                MessageLog.i(TAG, "[QUEUE] ${queueStopReason ?: "User stopped the bot"}. Exiting queue.")
                                 break
                             }
                             completedRuns++

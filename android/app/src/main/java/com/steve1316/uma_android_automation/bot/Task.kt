@@ -1,8 +1,10 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.automation_library.utils.BotService
 import com.steve1316.automation_library.utils.DiscordUtils
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.uma_android_automation.MainActivity
+import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.bot.DialogHandler
 import com.steve1316.uma_android_automation.bot.DialogHandlerResult
 import com.steve1316.uma_android_automation.bot.Game
@@ -183,11 +185,7 @@ abstract class Task(game: Game) : DialogHandler(game) {
                     break
                 }
             } catch (e: InterruptedException) {
-                result =
-                    TaskResult.Success(
-                        TaskResultCode.TASK_RESULT_MANUALLY_STOPPED,
-                        "Bot was manually stopped by the user.",
-                    )
+                result = interruptResult(e)
                 break
             } catch (e: IllegalStateException) {
                 // Most often this is `tryHandleAllDialogs` reporting an unrecognized dialog. The
@@ -214,12 +212,8 @@ abstract class Task(game: Game) : DialogHandler(game) {
                 // Brief breather so we don't tightloop on the same screen if the dialog persists.
                 try {
                     game.wait(1.0, skipWaitingForLoading = true)
-                } catch (_: InterruptedException) {
-                    result =
-                        TaskResult.Success(
-                            TaskResultCode.TASK_RESULT_MANUALLY_STOPPED,
-                            "Bot was manually stopped by the user.",
-                        )
+                } catch (ie: InterruptedException) {
+                    result = interruptResult(ie)
                     break
                 }
             }
@@ -227,5 +221,32 @@ abstract class Task(game: Game) : DialogHandler(game) {
 
         handleTaskEnd(result)
         return result
+    }
+
+    /**
+     * Builds the [TaskResult] for an [InterruptedException] caught in the main loop, attributed to
+     * its ACTUAL source instead of always claiming a user stop. A real Stop sets
+     * [StartModule.queueStopRequested] or tears the service down ([BotService.isRunning] == false);
+     * any other interrupt is an internal give-up or watchdog (e.g. the career-end exit safety-net's
+     * throw) and is reported as an error carrying the real reason, so the queue's stopOnError logic
+     * decides continue-vs-abort. Reporting these as MANUALLY_STOPPED made the queue treat an internal
+     * give-up as a user quit and discard every remaining run.
+     */
+    private fun interruptResult(e: InterruptedException): TaskResult {
+        // Clear the interrupt flag so task teardown (log save, events) is not poisoned by it.
+        Thread.interrupted()
+        return if (StartModule.queueStopRequested || !BotService.isRunning) {
+            // queueStopReason is set by a deliberate internal stop (e.g. the trainee-mismatch guard);
+            // null means a genuine user Stop. Report whichever it actually was instead of always "user".
+            TaskResult.Success(
+                TaskResultCode.TASK_RESULT_MANUALLY_STOPPED,
+                StartModule.queueStopReason ?: "Bot was manually stopped by the user.",
+            )
+        } else {
+            TaskResult.Error(
+                TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
+                e.message ?: "Bot was interrupted by an internal watchdog or safety-net, not by the user.",
+            )
+        }
     }
 }
