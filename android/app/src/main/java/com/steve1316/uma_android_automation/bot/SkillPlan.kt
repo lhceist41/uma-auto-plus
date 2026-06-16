@@ -159,6 +159,39 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         }
 
         /**
+         * Whether a skill is compatible with the resolved Style preference on every axis. A skill passes when, for each axis with a
+         * preference, it either has no commitment on that axis (generic / aptitude-independent) or its value matches. Running style
+         * matches on the explicit style or any inferred style, mirroring the Optimize Skills include-pass.
+         *
+         * @param skillDistance The skill's track distance, or null.
+         * @param skillStyle The skill's explicit running style, or null.
+         * @param skillInferredStyles The skill's inferred running styles (may be empty).
+         * @param skillSurface The skill's track surface, or null.
+         * @param prefDistance The preferred track distance, or null for no restriction.
+         * @param prefStyle The preferred running style, or null for no restriction.
+         * @param prefSurface The preferred track surface, or null for no restriction.
+         * @return True if the skill is buyable under the preference.
+         */
+        fun matchesPreference(
+            skillDistance: TrackDistance?,
+            skillStyle: RunningStyle?,
+            skillInferredStyles: List<RunningStyle>,
+            skillSurface: TrackSurface?,
+            prefDistance: TrackDistance?,
+            prefStyle: RunningStyle?,
+            prefSurface: TrackSurface?,
+        ): Boolean {
+            val distanceOk = prefDistance == null || skillDistance == null || skillDistance == prefDistance
+            val surfaceOk = prefSurface == null || skillSurface == null || skillSurface == prefSurface
+            val styleOk =
+                prefStyle == null ||
+                    (skillStyle == null && skillInferredStyles.isEmpty()) ||
+                    skillStyle == prefStyle ||
+                    prefStyle in skillInferredStyles
+            return distanceOk && surfaceOk && styleOk
+        }
+
+        /**
          * Pure calculation function that determines which skills to buy using the Optimize Rank strategy.
          *
          * Greedily selects skills with the highest evaluation-point-to-price ratio within
@@ -789,6 +822,44 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         return emptyMap()
     }
 
+    /** The resolved Style preference for each axis (null = no restriction). */
+    private data class PreferredAxes(
+        /** The resolved preferred running style, or null for no restriction. */
+        val runningStyle: RunningStyle?,
+        /** The resolved preferred track distance, or null for no restriction. */
+        val trackDistance: TrackDistance?,
+        /** The resolved preferred track surface, or null for no restriction. */
+        val trackSurface: TrackSurface?,
+    )
+
+    /**
+     * Resolve the global Style preference settings into concrete enum values, applying the no_preference / inherit rules.
+     * Shared by Optimize Skills, Optimize Rank, and the knapsack candidate filter so the Style preference is applied
+     * identically across every spending strategy.
+     *
+     * @return The resolved running style, track distance, and track surface (any of which may be null for no restriction).
+     */
+    private fun resolvePreferredAxes(): PreferredAxes {
+        val runningStyle: RunningStyle? =
+            when (skillSettingRunningStyleString.lowercase()) {
+                "no_preference" -> null
+                "inherit" -> RunningStyle.fromShortName(racingSettingRunningStyleString) ?: campaign.trainee.runningStyle
+                else -> RunningStyle.fromName(skillSettingRunningStyleString)
+            }
+        val trackDistance: TrackDistance? =
+            when (skillSettingTrackDistanceString.lowercase()) {
+                "no_preference" -> null
+                "inherit" -> TrackDistance.fromName(trainingSettingTrackDistanceString) ?: campaign.trainee.trackDistance
+                else -> TrackDistance.fromName(skillSettingTrackDistanceString)
+            }
+        val trackSurface: TrackSurface? =
+            when (skillSettingTrackSurfaceString.lowercase()) {
+                "no_preference" -> null
+                else -> TrackSurface.fromName(skillSettingTrackSurfaceString)
+            }
+        return PreferredAxes(runningStyle, trackDistance, trackSurface)
+    }
+
     /**
      * Retrieve all available skills following the OptimizeSkills strategy.
      *
@@ -805,28 +876,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         val result: MutableMap<String, Int> = mutableMapOf()
         var remainingSkillPoints = availableSkillPoints
 
-        // Determine the user-specified preferred running style.
-        val preferredRunningStyle: RunningStyle? =
-            when (skillSettingRunningStyleString.lowercase()) {
-                "no_preference" -> null
-                "inherit" -> RunningStyle.fromShortName(racingSettingRunningStyleString) ?: campaign.trainee.runningStyle
-                else -> RunningStyle.fromName(skillSettingRunningStyleString)
-            }
-
-        // Determine the user-specified preferred track distance.
-        val preferredTrackDistance: TrackDistance? =
-            when (skillSettingTrackDistanceString.lowercase()) {
-                "no_preference" -> null
-                "inherit" -> TrackDistance.fromName(trainingSettingTrackDistanceString) ?: campaign.trainee.trackDistance
-                else -> TrackDistance.fromName(skillSettingTrackDistanceString)
-            }
-
-        // Determine the user-specified preferred track surface.
-        val preferredTrackSurface: TrackSurface? =
-            when (skillSettingTrackSurfaceString.lowercase()) {
-                "no_preference" -> null
-                else -> TrackSurface.fromName(skillSettingTrackSurfaceString)
-            }
+        val (preferredRunningStyle, preferredTrackDistance, preferredTrackSurface) = resolvePreferredAxes()
 
         MessageLog.d(TAG, "[DEBUG] getSkillsToBuyOptimizeSkillsStrategy:: Using preferred running style: $preferredRunningStyle")
         MessageLog.d(TAG, "[DEBUG] getSkillsToBuyOptimizeSkillsStrategy:: Using preferred track distance: $preferredTrackDistance")
@@ -921,6 +971,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     private fun getSkillsToBuyOptimizeRankStrategy(skillPlanSettings: SkillPlanSettings, skillList: SkillList, skillsToBuy: List<String>, availableSkillPoints: Int): Map<String, Int> {
         val result: MutableMap<String, Int> = mutableMapOf()
         var remainingSkillPoints = availableSkillPoints
+        val (preferredRunningStyle, preferredTrackDistance, preferredTrackSurface) = resolvePreferredAxes()
 
         // Iterate until no more affordable skills are found, as purchasing can unlock new options.
         val maxIterations = 10
@@ -934,6 +985,14 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             for (entry in sortedByPointRatio) {
                 // Don't add duplicate entries.
                 if (entry.name in result || entry.name in skillsToBuy) {
+                    continue
+                }
+
+                // Strictly respect the Style preference: skip off-style/distance/surface skills when a
+                // preference is set (a no_preference axis resolves to null and never restricts). Without
+                // this, OPTIMIZE_RANK bought purely by ratio, and off-preference skills also leaked in via
+                // the OPTIMIZE_SKILLS leftover-budget tail that spends through this strategy.
+                if (!matchesPreference(entry.trackDistance, entry.runningStyle, entry.inferredRunningStyles, entry.trackSurface, preferredTrackDistance, preferredRunningStyle, preferredTrackSurface)) {
                     continue
                 }
 
@@ -985,8 +1044,21 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         val result: MutableMap<String, Int> = mutableMapOf()
         if (availableSkillPoints <= 0) return result.toMap()
 
+        // Apply the Style preference to the knapsack candidate set too. Upstream's gate only covered
+        // Optimize Skills/Rank; the knapsack is our addition, so extend the same gate here for
+        // consistency. A no_preference axis resolves to null and never restricts (default presets unaffected).
+        val (preferredRunningStyle, preferredTrackDistance, preferredTrackSurface) = resolvePreferredAxes()
         val available = skillList.getAvailableSkills().filterValues { entry ->
-            entry.bIsAvailable && entry.name !in skillsToBuy && entry.screenPrice > 0
+            entry.bIsAvailable && entry.name !in skillsToBuy && entry.screenPrice > 0 &&
+                matchesPreference(
+                    entry.trackDistance,
+                    entry.runningStyle,
+                    entry.inferredRunningStyles,
+                    entry.trackSurface,
+                    preferredTrackDistance,
+                    preferredRunningStyle,
+                    preferredTrackSurface,
+                )
         }
         if (available.isEmpty()) {
             MessageLog.i(TAG, "[KNAPSACK] No available skills to plan against. Budget remaining: $availableSkillPoints.")
