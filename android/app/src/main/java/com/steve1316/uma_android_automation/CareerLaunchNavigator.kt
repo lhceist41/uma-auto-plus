@@ -1198,6 +1198,11 @@ class CareerLaunchNavigator(private val context: Context) {
     // Header band carrying the "Trainee Select" title (top-left). x,y,w,h fractions.
     private val traineeHeaderRegion = floatArrayOf(0.0f, 0.125f, 0.45f, 0.05f)
 
+    // Centered title bar of the "Umamusume Details" dialog (top-center, above the portrait band that
+    // fools traineeHeaderRegion into reading "Trainee"). Read for "DETAILS" to reject that dialog
+    // reliably: the real roster header never carries "Details", so this rejects only the dialog. x,y,w,h.
+    private val detailsTitleRegion = floatArrayOf(0.18f, 0.02f, 0.64f, 0.07f)
+
     // ---- Support-deck composition (the [DECK] concentration advisory) ----
     // The deck-selection screen (PRE_RUN_CONFIRMATION) shows a row of support-type icons
     // (Speed, Stamina, Power, Guts, Wit, Friend, Group) each with an "xN" count badge; an absent
@@ -1241,13 +1246,36 @@ class CareerLaunchNavigator(private val context: Context) {
      */
     private fun isTraineeSelectScreen(bitmap: Bitmap): Boolean {
         if (!readTraineeHeaderText(bitmap).uppercase().contains("TRAINEE")) return false
-        // Disambiguate the in-career "Umamusume Details" dialog, which shares the [Outfit] Name + stats
-        // + Track/Distance/Style layout and whose character PORTRAIT sits in this header-OCR band — the
+        // Disambiguate the "Umamusume Details" dialog, which shares the [Outfit] Name + stats + Track/
+        // Distance/Style layout and whose character PORTRAIT sits in the traineeHeaderRegion band — the
         // portrait makes Tesseract hallucinate "Trainee", false-detecting the dialog as the roster
-        // screen (the rotation scan ran on the dialog, read the aptitude row
-        // "Track Turf Dirt" as a name, and match-or-stop killed the queue). The Details dialog carries a
-        // Close button; the real roster screen has Back/Next and never a Close. Reject on Close so the
-        // dialog falls through to the POST_RUN_RESULTS Close handler and dismisses into the career.
+        // screen. The Close-button template does NOT always match the dialog's big "Close" button, so
+        // the Close reject below can sail past it and the scan reads the aptitude row "Track Turf Dirt"
+        // as a name, killing the queue under match-or-stop. The reliable positive signal is the
+        // dialog's own centered "Umamusume Details" title, which the real roster header never carries;
+        // read it first, and keep the Close reject as a secondary net.
+        val detailsTitle =
+            try {
+                iu.performOCROnRegion(
+                    bitmap,
+                    (bitmap.width * detailsTitleRegion[0]).toInt(),
+                    (bitmap.height * detailsTitleRegion[1]).toInt(),
+                    (bitmap.width * detailsTitleRegion[2]).toInt(),
+                    (bitmap.height * detailsTitleRegion[3]).toInt(),
+                    useThreshold = false,
+                    useGrayscale = true,
+                    scale = 2.0,
+                    debugName = "nav_details_title",
+                )
+            } catch (e: InterruptedException) {
+                throw e
+            } catch (_: Exception) {
+                ""
+            }
+        if (detailsTitle.uppercase().contains("DETAIL")) {
+            MessageLog.i(TAG, "[NAV] Rejected Trainee Select detection: read the \"Umamusume Details\" dialog title (\"${detailsTitle.replace("\n", " ").trim()}\").")
+            return false
+        }
         if (ButtonClose.check(iu, sourceBitmap = bitmap) || ButtonCloseDialog.check(iu, sourceBitmap = bitmap)) return false
         return true
     }
