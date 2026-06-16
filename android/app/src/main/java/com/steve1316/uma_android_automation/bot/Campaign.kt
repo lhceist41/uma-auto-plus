@@ -1154,6 +1154,8 @@ abstract class Campaign(game: Game) : Task(game) {
                     "but the queue loaded the preset for '$target'. Stopping the queue rather than play a career under the wrong trainee's settings. " +
                     "This usually means an interrupted run resumed onto the wrong trainee — restart the queue from the game's home screen.",
             )
+            StartModule.queueStopReason =
+                "Stopped on trainee mismatch - career was '$inCareer' but the queue loaded the preset for '$target'. Restart from the home screen."
             StartModule.queueStopRequested = true
             return
         }
@@ -2648,10 +2650,15 @@ abstract class Campaign(game: Game) : Task(game) {
                         MessageLog.w(TAG, "[WARN] process:: careerComplete skill plan failed on the career-end skill purchase screen.")
                     }
                 } else {
-                    // The plan already ran but the bot is STILL on the Learn screen - the commit or
-                    // exit failed (or the screen was wedged). Previously this fell through to the
-                    // misc back-press forever (10+ minute livelock). Actively exit,
-                    // bounded: Confirm commits any pending selections; Back is the fallback.
+                    // The plan already ran but the bot is STILL on the Learn screen - confirmAndExit
+                    // reported success without actually leaving (e.g. a transient gone-read). This used
+                    // to fall through to the misc back-press forever (10+ minute livelock). Actively
+                    // exit, bounded. The plan's purchases are already committed, so Confirm here was
+                    // WRONG: with nothing selected it is a no-op that never leaves, and because its
+                    // click "succeeds" the Back fallback never fired - an infinite loop to the throw that
+                    // wedged the career end and aborted the whole queue. cancelAndExit resets any stray
+                    // selection, presses Back, and drains the "unused skill points - exit anyway?" dialog
+                    // - the real way off this screen.
                     careerEndExitAttempts++
                     if (careerEndExitAttempts >= maxCareerEndExitAttempts) {
                         game.imageUtils.saveBitmap(filename = "career_end_exit_stuck", fullRes = true)
@@ -2660,12 +2667,8 @@ abstract class Campaign(game: Game) : Task(game) {
                                 "A screenshot was saved to the temp folder as career_end_exit_stuck.",
                         )
                     }
-                    MessageLog.w(TAG, "[WARN] process:: Still on the career-end skill screen after the plan ran (exit attempt $careerEndExitAttempts/$maxCareerEndExitAttempts). Committing and exiting...")
-                    if (!ButtonConfirm.click(game.imageUtils)) {
-                        ButtonBack.click(game.imageUtils)
-                    }
-                    game.wait(1.0)
-                    handleDialogs()
+                    MessageLog.w(TAG, "[WARN] process:: Still on the career-end skill screen after the plan ran (exit attempt $careerEndExitAttempts/$maxCareerEndExitAttempts). Resetting and backing out...")
+                    careerEndScreenChecker.cancelAndExit()
                 }
             } else if (checkCampaignSpecificConditions()) {
                 MessageLog.i(TAG, "[INFO] Campaign-specific checks complete.")

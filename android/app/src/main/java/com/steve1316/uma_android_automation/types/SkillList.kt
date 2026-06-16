@@ -381,12 +381,28 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
             ButtonBack.click(game.imageUtils)
             game.wait(1.0, skipWaitingForLoading = true)
 
-            // Verify the exit: success means the skill list screen is no longer present.
+            // The final Back can summon an "unused skill points - exit anyway?" confirmation
+            // (skill_list_confirm_exit) whenever SP remain unspent. Drain dialogs again here after the
+            // Back - the earlier drain only covers the post-purchase dialogs. Then settle before
+            // verifying: a single checkSkillListScreen() taken in the dialog/animation frame reads the
+            // occluded list as "gone" and false-positives an exit while still on the Learn screen.
+            var postBackRounds = 0
+            while (postBackRounds < 4 && campaign.handleDialogs() is DialogHandlerResult.Handled) {
+                postBackRounds++
+                game.wait(game.dialogWaitDelay, skipWaitingForLoading = true)
+            }
+            game.wait(0.5, skipWaitingForLoading = true)
+
+            // Verify the exit: the screen must be gone AND stay gone after settling, so a transient
+            // gone-read during the exit animation cannot masquerade as a successful exit.
             if (!checkSkillListScreen()) {
-                if (attempt > 1) {
-                    MessageLog.i(TAG, "[SKILLS] confirmAndExit:: Purchases committed and screen exited on attempt $attempt.")
+                game.wait(0.5, skipWaitingForLoading = true)
+                if (!checkSkillListScreen()) {
+                    if (attempt > 1) {
+                        MessageLog.i(TAG, "[SKILLS] confirmAndExit:: Purchases committed and screen exited on attempt $attempt.")
+                    }
+                    return true
                 }
-                return true
             }
             MessageLog.w(TAG, "[WARN] confirmAndExit:: Still on the skill list screen after attempt $attempt; retrying...")
         }
