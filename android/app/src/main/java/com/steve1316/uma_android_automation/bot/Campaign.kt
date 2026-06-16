@@ -29,6 +29,7 @@ import com.steve1316.uma_android_automation.components.ButtonInheritance
 import com.steve1316.uma_android_automation.components.ButtonNext
 import com.steve1316.uma_android_automation.components.ButtonNextRaceEnd
 import com.steve1316.uma_android_automation.components.ButtonOk
+import com.steve1316.uma_android_automation.components.ButtonShop
 import com.steve1316.uma_android_automation.components.ButtonRaceStrategyEnd
 import com.steve1316.uma_android_automation.components.ButtonRaceStrategyFront
 import com.steve1316.uma_android_automation.components.ButtonRaceStrategyLate
@@ -2750,7 +2751,18 @@ abstract class Campaign(game: Game) : Task(game) {
                 game.wait(0.5)
                 return
             }
-            MessageLog.w(TAG, "[WARN] recoverFromUnknownScreen:: No Close button found on the unidentified dialog; nudging instead.")
+            // The Trackblazer Shop "lineup has been refreshed" dialog has Cancel/Shop buttons (no Close or
+            // OK) and its title-bar OCR is flaky, so getDialog frequently fails to name it and it lands
+            // here unclosable - it killed the queue after 25 stuck cycles. ButtonShop is the dialog's
+            // reliable green button and renders only on shop dialogs, so tapping it enters the shop and
+            // the campaign's shop handling takes over on the next tick. Safe: it no-ops (returns false)
+            // on any non-shop dialog, so it cannot mis-fire on other unidentified popups.
+            if (ButtonShop.click(game.imageUtils)) {
+                MessageLog.i(TAG, "[INFO] recoverFromUnknownScreen:: Entered the Shop via its button on an unidentified shop dialog.")
+                game.wait(1.0)
+                return
+            }
+            MessageLog.w(TAG, "[WARN] recoverFromUnknownScreen:: No Close or Shop button found on the unidentified dialog; nudging instead.")
         }
 
         if (count >= maxUnknownScreenBeforeStop) {
