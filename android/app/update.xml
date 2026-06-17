@@ -1,18 +1,17 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.0.2</latestVersion>
+    <latestVersion>1.2.5</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.0.2 - Release hardening
+v1.2.5 - Stability and speed
 
-- Release APK is now properly signed and minified (~20% smaller)
-- Cleartext traffic scoped to localhost only
-- targetSdk raised to 34
-- Storage permissions scoped to legacy API levels
-- Distinct package identity for side-by-side install with upstream
-- Crash resilience: queue state persists across app restarts
-- Throttled message log to reduce Hermes crashes
-- Fixed icon crash on startup
+- Recreation dates are re-checked every turn (a bad icon read no longer disables them for the rest of a career).
+- Miracle Cure / Rich Hand Cream now stockpile up to 5 as intended.
+- Trophy-goal G1 selection reads the correct race's grade and fan count.
+- No more 10-second per-turn stalls on a flaky stat-table read; worst-case stall ceiling halved.
+- Mood recovery bails cleanly instead of looping on a missing screenshot.
+- Switching character presets no longer wipes your custom support/scenario event picks.
+- Faster hot path: lazy screenshots in the decision loop and trimmed waits.
 
     </releaseNotes>
   </update>
