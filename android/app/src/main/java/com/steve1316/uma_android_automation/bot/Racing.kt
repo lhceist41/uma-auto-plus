@@ -1875,16 +1875,24 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             // Collect all exact matches (may have different fan counts).
             if (exactCursor.moveToFirst()) {
                 do {
+                    // Per-row guard: a DB row whose grade/surface/distance string doesn't map to its
+                    // enum throws from the RaceData ctor's fromName(...)!! and the outer catch would
+                    // drop ALL candidates for this turn. Skip just the bad row (continue -> moveToNext).
                     val race =
-                        RaceData(
-                            name = exactCursor.getString(0),
-                            grade = exactCursor.getString(1),
-                            fans = exactCursor.getInt(2),
-                            nameFormatted = exactCursor.getString(3),
-                            trackSurface = exactCursor.getString(4),
-                            trackDistance = exactCursor.getString(5),
-                            turnNumber = exactCursor.getInt(6),
-                        )
+                        try {
+                            RaceData(
+                                name = exactCursor.getString(0),
+                                grade = exactCursor.getString(1),
+                                fans = exactCursor.getInt(2),
+                                nameFormatted = exactCursor.getString(3),
+                                trackSurface = exactCursor.getString(4),
+                                trackDistance = exactCursor.getString(5),
+                                turnNumber = exactCursor.getInt(6),
+                            )
+                        } catch (e: Exception) {
+                            MessageLog.w(TAG, "[WARN] lookupRaceInDatabase:: Skipping exact-match row with unmappable fields: ${e.message}")
+                            continue
+                        }
                     matches.add(race)
                 } while (exactCursor.moveToNext())
 
@@ -1937,16 +1945,23 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 val similarity = similarityService.score(detectedName, nameFormatted)
 
                 if (similarity >= SIMILARITY_THRESHOLD) {
+                    // Per-row guard, same as the exact loop above: skip an unmappable row instead of
+                    // letting its ctor throw and the outer catch drop every candidate for this turn.
                     val race =
-                        RaceData(
-                            name = fuzzyCursor.getString(0),
-                            grade = fuzzyCursor.getString(1),
-                            fans = fuzzyCursor.getInt(2),
-                            nameFormatted = nameFormatted,
-                            trackSurface = fuzzyCursor.getString(4),
-                            trackDistance = fuzzyCursor.getString(5),
-                            turnNumber = fuzzyCursor.getInt(6),
-                        )
+                        try {
+                            RaceData(
+                                name = fuzzyCursor.getString(0),
+                                grade = fuzzyCursor.getString(1),
+                                fans = fuzzyCursor.getInt(2),
+                                nameFormatted = nameFormatted,
+                                trackSurface = fuzzyCursor.getString(4),
+                                trackDistance = fuzzyCursor.getString(5),
+                                turnNumber = fuzzyCursor.getInt(6),
+                            )
+                        } catch (e: Exception) {
+                            MessageLog.w(TAG, "[WARN] lookupRaceInDatabase:: Skipping fuzzy-match row with unmappable fields: ${e.message}")
+                            continue
+                        }
                     fuzzyMatches.add(Pair(race, similarity))
                     if (similarity > bestScore) bestScore = similarity
                     if (game.debugMode) {

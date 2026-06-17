@@ -483,9 +483,11 @@ class Trackblazer(game: Game) : Campaign(game) {
 
             Log.d(TAG, "[DEBUG] onConsecutiveRaceWarningDetected:: OCR text from consecutive warning: \"$ocrText\"")
 
-            // Regex: This will put you at ([0-9]+) consecutive races.
+            // Matches the count in "This will put you at N consecutive races."
+            // toIntOrNull (not toInt): a >10-digit OCR misread overflows Int and toInt() throws;
+            // toIntOrNull returns null on overflow too, so garbage falls through to -1 ("no count").
             val match = Regex("""([0-9]+)""").find(ocrText)
-            val ocrCount = match?.groups?.get(1)?.value?.toInt() ?: -1
+            val ocrCount = match?.groups?.get(1)?.value?.toIntOrNull() ?: -1
 
             if (ocrCount != -1) {
                 Log.d(TAG, "[DEBUG] onConsecutiveRaceWarningDetected:: OCR detected a count of $ocrCount consecutive races.")
