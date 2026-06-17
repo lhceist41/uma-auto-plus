@@ -30,6 +30,10 @@ describe("buildRotationSnapshotRows", () => {
         },
         runQueue: { enableRunQueue: true, enableTraineeRotation: true },
         queueState: { currentRun: 2 },
+        // discord holds the bot token (global config, must NOT be snapshotted per-trainee); misc holds
+        // two transient/UI-state keys that must be excluded, plus an ordinary key that must be retained.
+        discord: { discordToken: "secret-token-123", enableDiscordNotifications: false },
+        misc: { currentProfileName: "MyProfile", formattedSettingsString: "cached dump", enableSettingsDisplay: true },
     } as any
 
     const { rows, missing } = buildRotationSnapshotRows(baseSettings, [{ inGameName: "Test", presetKey: preset.name, scenario: preset.scenario }])
@@ -56,6 +60,17 @@ describe("buildRotationSnapshotRows", () => {
 
     it("excludes the queue/rotation control categories", () => {
         expect(rows.find((r) => r.category === "rot0_runQueue" || r.category === "rot0_queueState")).toBeUndefined()
+    })
+
+    it("excludes the discord category and the transient misc keys (no secret/stale-state leak into snapshots)", () => {
+        expect(rows.find((r) => r.category === "rot0_discord")).toBeUndefined()
+        expect(rows.find((r) => r.value === "secret-token-123")).toBeUndefined()
+        expect(rows.find((r) => r.category === "rot0_misc" && r.key === "currentProfileName")).toBeUndefined()
+        expect(rows.find((r) => r.category === "rot0_misc" && r.key === "formattedSettingsString")).toBeUndefined()
+    })
+
+    it("retains ordinary (non-denylisted) misc keys", () => {
+        expect(rows.find((r) => r.category === "rot0_misc" && r.key === "enableSettingsDisplay")).toBeDefined()
     })
 
     it("forces the entry's scenario into general.scenario", () => {
