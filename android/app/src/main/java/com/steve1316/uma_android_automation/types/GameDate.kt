@@ -200,9 +200,12 @@ class GameDate {
             val months: List<String> = DateMonth.entries.map { it.shortName }
             val phases: List<String> = DatePhase.entries.map { it.name }
 
-            // Split the input string by whitespace (e.g., "Classic Year Early Feb").
+            // Split by whitespace, e.g. "Classic Year Early Feb". Pre-debut/finale already returned,
+            // so this must be the 4-token "<Year> Year <Phase> <Month>" format. Require 4 tokens: the
+            // month is read at index 3, so fewer tokens defaults monthPart to JANUARY and fabricates a
+            // wrong date that mis-keys mandatory-race/summer/finale turns.
             val parts = dayString.trim().split(" ")
-            if (parts.size < 3) {
+            if (parts.size < 4) {
                 MessageLog.w(TAG, "[WARN] fromDateString:: Invalid date string format: $dayString")
                 return null
             }

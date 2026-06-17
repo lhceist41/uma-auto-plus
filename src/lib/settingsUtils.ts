@@ -54,6 +54,16 @@ export const applyMigrations = (settings: any): { settings: any; anyMigrated: bo
     const ocr = (migratedSettings as any).ocr
     const debug = (migratedSettings as any).debug
 
+    // Ensure the migration DESTINATION categories exist before assigning into them. A legacy or
+    // partial imported settings file can carry an `ocr` (or `debug`) block without the newer
+    // `trainingEvent` category, in which case the assignments below threw "Cannot set property of
+    // undefined" - an uncaught crash on the bootstrap settings-load path. Only created when there is
+    // something to migrate, so a clean settings object is untouched.
+    if (ocr || debug) {
+        ;(migratedSettings as any).trainingEvent ??= {}
+        ;(migratedSettings as any).debug ??= {}
+    }
+
     if (ocr?.ocrConfidence !== undefined) {
         migratedSettings.trainingEvent.ocrConfidence = ocr.ocrConfidence
         delete ocr.ocrConfidence

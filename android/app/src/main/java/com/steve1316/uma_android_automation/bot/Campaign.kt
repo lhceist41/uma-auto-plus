@@ -2623,12 +2623,14 @@ abstract class Campaign(game: Game) : Task(game) {
                             debugName = "final_fan_count",
                         )
 
+                    // toIntOrNull (not toInt): isNotEmpty() does not bound the digit count, so OCR
+                    // noise (>10 digits) overflowed Int and threw NumberFormatException - which unwinds
+                    // past Task.start()'s InterruptedException/IllegalStateException-only catch and ends
+                    // the whole run (aborting a stopOnError queue) at career end. Keep the last value on a
+                    // bad read instead of crashing.
                     val cleanedFans = fansText.replace(Regex("[^0-9]"), "")
-                    if (cleanedFans.isNotEmpty()) {
-                        trainee.fans = cleanedFans.toInt()
-                    } else {
-                        MessageLog.w(TAG, "[WARN] process:: Could not detect final fan count for the end of the Career from OCR: $fansText")
-                    }
+                    cleanedFans.toIntOrNull()?.let { trainee.fans = it }
+                        ?: MessageLog.w(TAG, "[WARN] process:: Could not detect final fan count for the end of the Career from OCR: $fansText")
 
                     // Now click the button to open the details dialog for aptitude and stat updates.
                     game.gestureUtils.tap(buttonLocation.x, buttonLocation.y, ButtonDetails.template.path)

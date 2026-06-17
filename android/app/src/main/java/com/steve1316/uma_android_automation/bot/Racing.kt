@@ -76,7 +76,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     val ignoreLowEnergyRacingBlock = SettingsHelper.getBooleanSetting("racing", "ignoreLowEnergyRacingBlock")
 
     /** The number of days to wait between running extra races. */
-    private val daysToRunExtraRaces: Int = SettingsHelper.getIntSetting("racing", "daysToRunExtraRaces")
+    // coerceAtLeast(1): used as a modulo divisor below; a 0 from a cleared field or imported DB throws ArithmeticException.
+    private val daysToRunExtraRaces: Int = SettingsHelper.getIntSetting("racing", "daysToRunExtraRaces").coerceAtLeast(1)
 
     /** Whether to disable race retries. */
     internal val disableRaceRetries: Boolean = SettingsHelper.getBooleanSetting("racing", "disableRaceRetries")
@@ -97,7 +98,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     private val lookAheadDays = SettingsHelper.getIntSetting("racing", "lookAheadDays")
 
     /** The frequency (in turns) to perform a smart racing evaluation. */
-    private val smartRacingCheckInterval = SettingsHelper.getIntSetting("racing", "smartRacingCheckInterval")
+    // coerceAtLeast(1): used as a modulo divisor; a cleared UI field or imported DB persists 0, which throws ArithmeticException.
+    private val smartRacingCheckInterval = SettingsHelper.getIntSetting("racing", "smartRacingCheckInterval").coerceAtLeast(1)
 
     /** The minimum fan count required for a race to be considered. */
     private val minFansThreshold = SettingsHelper.getIntSetting("racing", "minFansThreshold")
