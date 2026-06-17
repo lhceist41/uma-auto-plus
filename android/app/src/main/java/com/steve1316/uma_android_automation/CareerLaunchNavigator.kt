@@ -190,6 +190,16 @@ class CareerLaunchNavigator(private val context: Context) {
     // Session-scoped flag: Skip toggle has already been maxed (Skip >>) in this session.
     private var skipToggleAlreadyDone: Boolean = false
 
+    // Session-scoped latch: the launch has provably advanced PAST Start Career (we have reached
+    // the final confirmation / cinematic / quick-mode prompt). Once set, Trainee Select is no longer
+    // a legal screen, so the rotation detector is disarmed. The game shows an in-career "Umamusume
+    // Details" card on turn 1 of every freshly started career, and its character portrait makes the
+    // header-region OCR hallucinate "TRAINEE", which made isTraineeSelectScreen classify the card as
+    // the roster and stop the queue on the wrong trainee every launch. The card is left to the
+    // campaign's umamusume_details handler, which reads the real in-career name and runs
+    // verifyRotationTrainee.
+    private var careerLaunchInitiated: Boolean = false
+
     // Session-scoped counters for the support deck screen. The borrowed friend card never
     // persists between careers, and the game silently ignores Start Career while that slot
     // is empty, so both paths need bounded retries instead of an open-ended click loop.
@@ -262,6 +272,7 @@ class CareerLaunchNavigator(private val context: Context) {
         autoFillAlreadyDone = false
         skipToggleAlreadyDone = false
         legacyAutoSelectAlreadyDone = false
+        careerLaunchInitiated = false
 
         if (!ensureInitialised()) {
             return NavigationResult(
@@ -350,6 +361,15 @@ class CareerLaunchNavigator(private val context: Context) {
                 }
                 currentState = detectedState
                 consecutiveUnknowns = 0
+                // Latch once the launch has provably passed Start Career. These three states only
+                // occur after the Start Career click succeeds, and the in-career "Umamusume Details"
+                // card the game shows right after them must NOT be tested for Trainee Select.
+                if (detectedState == LaunchScreenState.PRE_RUN_CONFIRMATION ||
+                    detectedState == LaunchScreenState.CINEMATIC_INTRO ||
+                    detectedState == LaunchScreenState.QUICK_MODE_PROMPT
+                ) {
+                    careerLaunchInitiated = true
+                }
             } else {
                 consecutiveUnknowns++
                 if (consecutiveUnknowns >= MAX_CONSECUTIVE_UNKNOWNS) {
@@ -468,7 +488,13 @@ class CareerLaunchNavigator(private val context: Context) {
         // Next check below: this screen's green "Next" template-matches but advancing it without
         // first selecting + verifying the trainee would start the WRONG career. Gated on rotation
         // being enabled so the non-rotation path pays zero OCR cost and stays byte-for-byte unchanged.
-        if (SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false) && isTraineeSelectScreen(bitmap)) {
+        // Also gated on NOT having passed Start Career yet: the roster only appears pre-deck, so once
+        // the launch has advanced past Start Career this fragile header-OCR check is skipped entirely,
+        // which is what stops the in-career "Umamusume Details" card from being misread as the roster.
+        if (SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false) &&
+            !careerLaunchInitiated &&
+            isTraineeSelectScreen(bitmap)
+        ) {
             return LaunchScreenState.TRAINEE_SELECT_SCREEN
         }
 
@@ -611,6 +637,17 @@ class CareerLaunchNavigator(private val context: Context) {
         // with the CAREER button obscured by decorative banners.
         if (ButtonMenuBarHomeSelected.check(iu, sourceBitmap = bitmap)) {
             return LaunchScreenState.HOME_SCREEN
+        }
+
+        // Career has started (we are past Start Career) and an unrecognised game DIALOG is up, after
+        // every specific launch dialog (TP restore, etc.) has already been ruled out above. This is the
+        // in-career "Umamusume Details" card the game shows on turn 1 - NOT a launch screen. Treat it as
+        // the success/exit state and hand off: the campaign's process loop reads the card via its
+        // umamusume_details handler (real in-career name + verifyRotationTrainee) and closes it. The
+        // DialogUtils gradient-banner match is OCR-free, so it cannot repeat the header-OCR false read.
+        if (careerLaunchInitiated && DialogUtils.check(iu, sourceBitmap = bitmap)) {
+            MessageLog.i(TAG, "[NAV] Post-Start-Career dialog detected (the career has started); handing off to the campaign to read and close it.")
+            return LaunchScreenState.ACTIVE_TRAINING_MENU
         }
 
         return LaunchScreenState.UNKNOWN
@@ -1253,6 +1290,15 @@ class CareerLaunchNavigator(private val context: Context) {
      */
     private fun isTraineeSelectScreen(bitmap: Bitmap): Boolean {
         if (!readTraineeHeaderText(bitmap).uppercase().contains("TRAINEE")) return false
+        // Primary, OCR-free discriminator: any open game dialog (incl. the "Umamusume Details" card)
+        // renders the title-gradient banner that DialogUtils template-matches; the full-screen Trainee
+        // Select roster never does. This rejects the dialog before the brittle title/Close OCR below
+        // can false-positive. The latch in detectScreenState already prevents this method from being
+        // called once the career has started, so this is belt-and-suspenders for the pre-deck window.
+        if (DialogUtils.check(iu, sourceBitmap = bitmap)) {
+            MessageLog.i(TAG, "[NAV] Rejected Trainee Select detection: a dialog title-gradient banner is present (not the full-screen roster).")
+            return false
+        }
         // Disambiguate the "Umamusume Details" dialog, which shares the [Outfit] Name + stats + Track/
         // Distance/Style layout and whose character PORTRAIT sits in the traineeHeaderRegion band — the
         // portrait makes Tesseract hallucinate "Trainee", false-detecting the dialog as the roster
