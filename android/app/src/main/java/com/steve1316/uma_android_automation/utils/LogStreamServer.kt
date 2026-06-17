@@ -880,6 +880,15 @@ object LogStreamServer {
 
                         // Handle WebSocket connections on root path (matches the HTML client).
                         webSocket("/") {
+                            // Loopback blocks the LAN, but a page in the user's browser can still open a
+                            // WebSocket to localhost (WS isn't same-origin gated), so a malicious site could
+                            // read the log + screenshots via CSRF/DNS-rebinding. Allow only a missing Origin
+                            // (bundled viewer / non-browser clients) or a localhost Origin; drop the rest.
+                            val origin = call.request.headers["Origin"]
+                            if (origin != null && !Regex("^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?$").matches(origin)) {
+                                Log.w(TAG, "[WARN] LogStreamServer:: Rejected WebSocket connection from disallowed Origin: $origin")
+                                return@webSocket
+                            }
                             handleWebSocketSession(this)
                         }
                     }

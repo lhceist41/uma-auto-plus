@@ -311,51 +311,24 @@ const DebugSettings = () => {
 
                                 <InfoContainer>
                                     <View>
-                                        <Text style={styles.infoDescription}>📡 When the bot is running, open this URL in a browser:</Text>
+                                        <Text style={styles.infoDescription}>
+                                            📡 The Remote Log Viewer is bound to the device&apos;s loopback interface for safety — the log and screenshots are
+                                            served with no authentication, so it is not exposed on the network. Reach it from your computer over adb:
+                                        </Text>
+                                        <Text style={[styles.infoLabel, { marginTop: 8 }]}>
+                                            adb forward tcp:{bsc.settings.debug.remoteLogViewerPort} tcp:{bsc.settings.debug.remoteLogViewerPort}
+                                        </Text>
+                                        <Text style={[styles.infoDescription, { marginTop: 8 }]}>Then open this URL in your computer&apos;s browser:</Text>
                                         <Text
                                             style={[styles.infoLabel, { marginTop: 8, textDecorationLine: "underline" }]}
-                                            onPress={() => Linking.openURL(`http://${deviceIp === "10.0.2.15" ? "localhost" : deviceIp}:${bsc.settings.debug.remoteLogViewerPort}`)}
+                                            onPress={() => Linking.openURL(`http://localhost:${bsc.settings.debug.remoteLogViewerPort}`)}
                                         >
-                                            http://{deviceIp === "10.0.2.15" ? "localhost" : deviceIp}:{bsc.settings.debug.remoteLogViewerPort}
+                                            http://localhost:{bsc.settings.debug.remoteLogViewerPort}
                                         </Text>
-                                        <Text style={[styles.infoDescription, { marginTop: 8 }]}>Both devices must be on the same WiFi network.</Text>
                                         <Text style={[styles.infoDescription, { marginTop: 8 }]}>
-                                            Note that connecting to the remote log viewer may take a minute or two to establish the connection for the first time.
+                                            The device&apos;s own IP ({deviceIp}) is no longer used to reach the viewer directly. For a physical device,
+                                            connect it over USB (or adb over the same network) first; the first connection may take a moment to establish.
                                         </Text>
-
-                                        <View style={styles.infoBlock}>
-                                            {deviceIp === "10.0.2.15" ? (
-                                                <>
-                                                    <Text style={styles.infoLabel}>⚠️ Emulator detected!</Text>
-                                                    <Text style={styles.infoDescription}>Direct connection to the virtual IP {deviceIp} will fail.</Text>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Text style={styles.infoLabel}>✅ Real device detected or Network Bridge enabled!</Text>
-                                                    <Text style={styles.infoDescription}>Direct connection to the IP {deviceIp} should work.</Text>
-                                                </>
-                                            )}
-                                        </View>
-
-                                        <Separator style={{ marginTop: 16, backgroundColor: "white" }} />
-
-                                        <Text style={[styles.infoLabel, { marginTop: 16 }]}>If using an Emulator, you have two connection options:</Text>
-
-                                        <View style={styles.infoBlock}>
-                                            <Text style={styles.infoLabel}>Option 1:</Text>
-                                            <Text style={styles.infoDescription}>
-                                                In your Emulator settings, enable &quot;Network Bridging&quot; or the equivalent, and restart the emulator to get a real IP.
-                                            </Text>
-                                        </View>
-
-                                        <View style={styles.infoBlock}>
-                                            <Text style={styles.infoLabel}>Option 2 (Access on Computer only):</Text>
-                                            <Text style={styles.infoDescription}>Run these commands on your computer (port may vary) to use your emulator&apos;s localhost URL:</Text>
-                                            <Text style={[styles.infoLabel, { marginTop: 8 }]}>
-                                                adb connect localhost:5555{"\n"}
-                                                adb forward tcp:{bsc.settings.debug.remoteLogViewerPort} tcp:{bsc.settings.debug.remoteLogViewerPort}
-                                            </Text>
-                                        </View>
                                     </View>
                                 </InfoContainer>
                             </View>

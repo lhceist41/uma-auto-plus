@@ -721,9 +721,9 @@ class Game(val myContext: Context) {
             if (enableRemoteLogViewer) {
                 // Notify the user that the Remote Log Viewer is enabled and is viewable at the indicated address.
                 val port = SettingsHelper.getIntSetting("debug", "remoteLogViewerPort", 9000)
-                val ipAddress = com.steve1316.uma_android_automation.utils.LogStreamServer.getDeviceIpAddress(myContext)
-                val finalIpAddress = if (ipAddress == "10.0.2.15") "localhost" else ipAddress
-                logViewerString = "Remote Log Viewer is enabled at http://$finalIpAddress:$port"
+                // The viewer now binds to loopback (127.0.0.1) for safety, so the device's LAN IP is no
+                // longer reachable - advertise the adb-forward path instead of a dead LAN URL.
+                logViewerString = "\nRemote Log Viewer enabled (loopback). From a computer: adb forward tcp:$port tcp:$port then open http://localhost:$port"
             }
             DiscordUtils.queue.add("```diff\n+ ${MessageLog.getSystemTimeString()} Bot run started! Scenario: $scenario```$logViewerString")
         }
