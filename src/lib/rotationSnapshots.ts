@@ -34,7 +34,10 @@ export interface BuildRotationResult {
 // Categories that must NEVER be swapped per-trainee: they hold the queue/rotation control state
 // itself (and the persisted run cursor). Swapping them mid-queue would clobber the very config
 // driving the rotation. Everything else is the trainee's active gameplay config.
-const SNAPSHOT_DENYLIST = new Set(["runQueue", "queueState"])
+// `discord` is global config (one webhook for the user, not per-trainee) and holds the bot token -
+// snapshotting it duplicated the secret into a rot{i}_discord row for every trainee. Excluded so the
+// live discord rows are left untouched at a switch (same as runQueue/queueState).
+const SNAPSHOT_DENYLIST = new Set(["runQueue", "queueState", "discord"])
 
 // `category.key` rows that are static reference data, identical across every trainee: the bundled
 // event databases (written at bootstrap by useBootstrap.populateEventData) and the bulk race
@@ -42,12 +45,11 @@ const SNAPSHOT_DENYLIST = new Set(["runQueue", "queueState"])
 // omit because applyRotationSnapshot upserts (INSERT OR REPLACE) only the snapshot rows, so at a
 // switch the live rows for these keys are left in place — and they are the same for every trainee.
 // Mirrors the bulk-data fields the export path already strips in useSettingsManager.
-const SNAPSHOT_KEY_DENYLIST = new Set([
-    "trainingEvent.characterEventData",
-    "trainingEvent.supportEventData",
-    "trainingEvent.scenarioEventData",
-    "racing.racingPlanData",
-])
+// The bulk reference databases (above) plus two transient/UI-state misc keys: currentProfileName is
+// the active profile label and formattedSettingsString is a cached human-readable dump - both are
+// stale snapshots of the moment the rotation was built and reapplying them per-switch would clobber
+// the live profile label / settings echo. Mirrors the fields the export path already strips.
+const SNAPSHOT_KEY_DENYLIST = new Set(["trainingEvent.characterEventData", "trainingEvent.supportEventData", "trainingEvent.scenarioEventData", "racing.racingPlanData", "misc.currentProfileName", "misc.formattedSettingsString"])
 
 /**
  * Builds each rotation trainee's full settings snapshot as namespaced SQLite rows.

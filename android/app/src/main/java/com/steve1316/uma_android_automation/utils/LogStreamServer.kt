@@ -829,9 +829,11 @@ object LogStreamServer {
                 }
             }
 
-            // Bind to all interfaces so devices on the local network can connect.
+            // Bind to loopback only: the viewer serves the full log + on-demand screenshots with no
+            // auth, so binding 0.0.0.0 exposed them to the whole LAN. Reach it from a dev machine
+            // with: adb forward tcp:<port> tcp:<port>, then open http://localhost:<port>.
             server =
-                embeddedServer(CIO, host = "0.0.0.0", port = port) {
+                embeddedServer(CIO, host = "127.0.0.1", port = port) {
                     // Install the WebSockets plugin with default configuration.
                     install(WebSockets)
 

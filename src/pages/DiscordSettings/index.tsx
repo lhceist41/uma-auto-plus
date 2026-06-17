@@ -171,6 +171,8 @@ const DiscordSettings = () => {
                                 editable={enableDiscordNotifications}
                                 autoCapitalize="none"
                                 autoCorrect={false}
+                                // Bearer credential - mask it so it isn't shown in plaintext (shoulder-surf / screenshots). Paste still works.
+                                secureTextEntry
                             />
                         </SearchableItem>
 

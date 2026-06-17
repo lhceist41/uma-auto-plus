@@ -75,8 +75,10 @@ jobs:
         run: |
           APK_ARM64=$(find android/app/build/outputs/apk/release -name "*arm64*" -type f | head -1)
           APK_ARM32=$(find android/app/build/outputs/apk/release -name "*armeabi*" -type f | head -1)
+          APK_X86=$(find android/app/build/outputs/apk/release -name "*x86_64*" -type f | head -1)
           echo "apk_arm64=$APK_ARM64" >> $GITHUB_OUTPUT
           echo "apk_arm32=$APK_ARM32" >> $GITHUB_OUTPUT
+          echo "apk_x86=$APK_X86" >> $GITHUB_OUTPUT
 
       - name: Extract version from tag
         id: version
@@ -104,7 +106,8 @@ jobs:
                 echo ""
                 echo "### Install"
                 echo "Download the APK that matches your device architecture:"
-                echo "- **arm64-v8a** — most modern devices and emulators (recommended)"
+                echo "- **arm64-v8a** — most modern physical devices (recommended)"
+                echo "- **x86_64** — Intel/AMD Android emulators (MuMu, LDPlayer, BlueStacks)"
                 echo "- **armeabi-v7a** — older 32-bit devices"
                 echo ""
                 echo "Can be installed alongside the upstream steve1316 app without conflicts."
@@ -119,7 +122,8 @@ jobs:
               echo "## UMA Auto+ ${GITHUB_REF#refs/tags/}"
               echo ""
               echo "Download the APK for your device architecture:"
-              echo "- **arm64-v8a** (recommended for most modern devices and emulators)"
+              echo "- **arm64-v8a** (recommended for most modern physical devices)"
+              echo "- **x86_64** (Intel/AMD Android emulators: MuMu, LDPlayer, BlueStacks)"
               echo "- **armeabi-v7a** (for older 32-bit devices)"
               echo ""
               echo "### Install"
@@ -137,6 +141,7 @@ jobs:
           files: |
             ${{ steps.find_apks.outputs.apk_arm64 }}
             ${{ steps.find_apks.outputs.apk_arm32 }}
+            ${{ steps.find_apks.outputs.apk_x86 }}
           draft: false
           prerelease: false
         env:
