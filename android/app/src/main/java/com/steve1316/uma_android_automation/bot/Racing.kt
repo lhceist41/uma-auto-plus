@@ -1158,6 +1158,23 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             MessageLog.i(TAG, "[RACE] Fan emergency: unmet fan goal due in $turnsRemaining turn(s). Forcing racing; single-star prediction races are acceptable entries.")
         }
 
+        // Result-Points emergency (Trackblazer checkpoints). The game only pops the "insufficient
+        // Result Pts" dialog one turn from the deadline (where Campaign sets this flag) — too late
+        // for a weak-prediction trainee (Medium/Long aptitude drawing single-star on Junior's
+        // Mile-heavy pool) to bank the 60-pt Junior goal. Mirror the fan emergency: raise the
+        // requirement PROACTIVELY when a Result-Pts goal is unmet near its deadline so single-star
+        // races become enterable. The admission site gates these to good-aptitude races so we enter
+        // winnable ones (the Junior-Dec G1, Medium/Long OPs) not unwinnable Mile/Sprint single-stars
+        // that bank ~nothing. Stand down if the goal reads met.
+        if (bGoalDeadlineNear && !campaign.date.isSummer() && !hasInsufficientGoalRacePtsRequirement &&
+            goalTextNearDeadline.contains("Result Pt", ignoreCase = true) &&
+            !goalTextNearDeadline.contains("Achieved", ignoreCase = true) &&
+            !goalTextNearDeadline.contains("MAX", ignoreCase = true)
+        ) {
+            hasInsufficientGoalRacePtsRequirement = true
+            MessageLog.i(TAG, "[RACE] Result-Pts goal unmet near deadline ($turnsRemaining turn(s) left): \"$goalTextNearDeadline\". Proactively allowing good-aptitude single-star races to bank points.")
+        }
+
         // Don't bother looking for races on Junior Year Early July (Turn 13) since they only start showing up on Turn 14.
         if (campaign.date.day == 13) {
             MessageLog.i(TAG, "[RACE] Junior Year Early July (Turn 13) detected. No races available until Turn 14. Skipping extra race check.")
@@ -2541,12 +2558,17 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         // Set Rival status on the race object.
                         race.isRival = rivalFound
 
-                        if (bFanEmergencyActive || sm.tier == PredictionTier.SINGLE) {
-                            // Fan emergency admits any race regardless of grade — fans are the
-                            // point. Single-star matches only exist when the emergency (or force
-                            // racing) admitted them, and tier-aware sorting keeps them strictly
-                            // below every double-star candidate.
+                        if (bFanEmergencyActive) {
+                            // Fan emergency admits any race regardless of grade — fans are the point.
                             isSuitable = true
+                        } else if (sm.tier == PredictionTier.SINGLE) {
+                            // Single-star matches only exist when allowSingles admitted them (fan
+                            // emergency, force-racing, or a Result-Pts shortfall); tier-aware sorting
+                            // keeps them below every double-star candidate. For the Result-Pts case
+                            // (not force-racing), require good aptitude so we enter winnable races
+                            // (the Junior G1, Medium/Long OPs) and skip poor-aptitude single-stars
+                            // that bank ~nothing while burning energy/fatigue.
+                            isSuitable = if (hasInsufficientGoalRacePtsRequirement && !enableForceRacing) checkRaceAptitudeMatch(race) else true
                         } else if (campaign.date.year == DateYear.JUNIOR) {
                             // Junior Year: G1, G2, or G3 with double predictions.
                             if (listOf(RaceGrade.G1, RaceGrade.G2, RaceGrade.G3).contains(race.grade)) {
@@ -2616,9 +2638,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     // Set Rival status on the race object.
                     race.isRival = rivalFound
 
-                    if (bFanEmergencyActive || fallbackAnchor.tier == PredictionTier.SINGLE) {
-                        // Same admission rule as the scroll-scan path above.
+                    if (bFanEmergencyActive) {
                         isSuitable = true
+                    } else if (fallbackAnchor.tier == PredictionTier.SINGLE) {
+                        // Same aptitude-gated admission as the scroll-scan path above: a Result-Pts
+                        // shortfall admits single-stars only if the trainee has the aptitude to place.
+                        isSuitable = if (hasInsufficientGoalRacePtsRequirement && !enableForceRacing) checkRaceAptitudeMatch(race) else true
                     } else if (campaign.date.year == DateYear.JUNIOR) {
                         if (listOf(RaceGrade.G1, RaceGrade.G2, RaceGrade.G3).contains(race.grade)) {
                             isSuitable = true
