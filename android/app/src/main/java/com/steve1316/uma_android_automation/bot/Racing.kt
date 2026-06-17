@@ -602,22 +602,33 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             val raceDataMap = mutableMapOf<String, RaceData>()
 
             val keys = jsonObject.keys()
+            var skippedRows = 0
             while (keys.hasNext()) {
                 val key = keys.next()
-                val raceObj = jsonObject.getJSONObject(key)
-
-                val raceData =
-                    RaceData(
-                        name = raceObj.getString(RACES_COLUMN_NAME),
-                        grade = raceObj.getString(RACES_COLUMN_GRADE),
-                        trackSurface = raceObj.getString(RACES_COLUMN_TRACK_SURFACE),
-                        trackDistance = raceObj.getString(RACES_COLUMN_TRACK_DISTANCE),
-                        fans = raceObj.getInt(RACES_COLUMN_FANS),
-                        turnNumber = raceObj.getInt(RACES_COLUMN_TURN_NUMBER),
-                        nameFormatted = raceObj.getString(RACES_COLUMN_NAME_FORMATTED),
-                    )
-
-                raceDataMap[raceData.name] = raceData
+                // Per-row guard: one unparseable entry (a new/renamed grade-surface-distance label
+                // the enums don't know yet, or a malformed row) throws from the RaceData ctor's
+                // fromName(...)!!, and the outer catch then discarded the ENTIRE race database. Skip
+                // only the bad row.
+                try {
+                    val raceObj = jsonObject.getJSONObject(key)
+                    val raceData =
+                        RaceData(
+                            name = raceObj.getString(RACES_COLUMN_NAME),
+                            grade = raceObj.getString(RACES_COLUMN_GRADE),
+                            trackSurface = raceObj.getString(RACES_COLUMN_TRACK_SURFACE),
+                            trackDistance = raceObj.getString(RACES_COLUMN_TRACK_DISTANCE),
+                            fans = raceObj.getInt(RACES_COLUMN_FANS),
+                            turnNumber = raceObj.getInt(RACES_COLUMN_TURN_NUMBER),
+                            nameFormatted = raceObj.getString(RACES_COLUMN_NAME_FORMATTED),
+                        )
+                    raceDataMap[raceData.name] = raceData
+                } catch (e: Exception) {
+                    skippedRows++
+                    MessageLog.w(TAG, "[WARN] loadRaceData:: Skipping unparseable race row \"$key\": ${e.message}")
+                }
+            }
+            if (skippedRows > 0) {
+                MessageLog.w(TAG, "[WARN] loadRaceData:: Skipped $skippedRows unparseable race row(s); loaded ${raceDataMap.size}.")
             }
 
             MessageLog.i(TAG, "[RACE] Successfully loaded ${raceDataMap.size} race entries from racing plan data.")
