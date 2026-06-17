@@ -225,7 +225,7 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
         avoid: [
             {
                 scenario: "Trackblazer",
-                reason: "Mile D and a stayer build give her a thin Junior for unattended farming: Junior has few Medium/Long graded races, so her early snowball lags. Stronger from Classic on - keep her stayer chain in URA or Unity Cup, or Mile-spark her before Trackblazer.",
+                reason: "Stayer build gives her a thin Junior: few Medium/Long graded races means weak early predictions, so the 60-pt Junior Result-Pts checkpoint is tight. The bot now proactively enters her good-aptitude single-star Junior races near the deadline (Hopeful Stakes etc.) to fight for it, but clearing still depends on placing well - she's far stronger from Classic on. Best with a Mile spark, or keep her stayer chain in URA/Unity Cup.",
             },
         ],
     },
@@ -17800,11 +17800,12 @@ export const characterPresets: CharacterPreset[] = [
     },
     {
         name: "Matikanetannhauser",
-        // Junior Late Dec demands top-5 in ANY one G1 - the shipped Hopeful Stakes entry at
-        // that exact turn is the goal solver (self-directed gates are how careers die
-        // unattended). Then the longest wall in the game: Kikuka 3000m, Diamond Stakes 3400m,
-        // Tenno Spring 3200m. Sta+20% growth carries it; push Speed hardest (no growth there).
-        // Her Senior Japan Cup goal self-cancels via the nosebleed event - expected, not a bug.
+        // Trackblazer (MANT): a stayer build has a thin Junior - few Medium/Long graded races means
+        // weak early predictions, so the 60-pt Junior Result-Pts checkpoint is the danger (a Medium/Long
+        // trainee draws single-star on Junior's Mile-heavy pool). The bot now proactively enters her
+        // good-aptitude single-star Junior races near the deadline to bank points; she's far stronger
+        // from Classic on. No racingPlan here on purpose: Trackblazer selects races by on-screen
+        // prediction (findSuitableTrackblazerRace), not by the user plan, so a plan would be a no-op.
         scenario: "Trackblazer",
         settings: {
             general: {
