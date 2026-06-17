@@ -249,6 +249,17 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     private val maxUnknownScreenBeforeStop: Int = 25
 
+    /**
+     * Stuck-cycle counts at which [recoverFromUnknownScreen] force-rebinds the Accessibility Service.
+     * MuMu can silently kill gesture dispatch while leaving the service "enabled" in secure settings,
+     * so the per-tick [Game.ensureAccessibilityService] string check passes and every blind tap
+     * no-ops - the bot then loops to [maxUnknownScreenBeforeStop] and stops. These thresholds sit
+     * above the observed healthy-transition max (~12 unknown cycles for a long event animation) so
+     * a normal transition never triggers an unnecessary rebind, but a real gesture-death self-heals
+     * well before the stop.
+     */
+    private val gestureRebindThresholds: Set<Int> = setOf(13, 19)
+
     /** Whether the bot should attempt the crane game. */
     protected val enableCraneGameAttempt: Boolean = SettingsHelper.getBooleanSetting("general", "enableCraneGameAttempt")
 
@@ -2743,6 +2754,21 @@ abstract class Campaign(game: Game) : Task(game) {
             // First unrecognized tick: clear the notification shade in case it is covering the
             // top-region anchors (free no-op when closed).
             dismissNotificationShade("unknown screen")
+        }
+
+        // MuMu can leave the Accessibility Service "enabled" in secure settings while its gesture
+        // dispatch silently dies, so the per-tick ensureAccessibilityService() string check passes
+        // and every blind tap below no-ops - which can wedge a recognizable screen (e.g. a post-race
+        // scenario event) to the stop cap. Once we have been stuck longer than a normal transition,
+        // force a hard off->on rebind to revive dispatch; the next blind tap then lands and advances
+        // the screen, resetting the counter. Falls through to the stop below if it cannot help (e.g.
+        // WRITE_SECURE_SETTINGS missing), so there is no new dead-end.
+        if (count in gestureRebindThresholds) {
+            MessageLog.w(
+                TAG,
+                "[WARN] recoverFromUnknownScreen:: Stuck for $count cycles - forcing an Accessibility Service rebind in case gesture dispatch died silently.",
+            )
+            game.forceRebindAccessibilityService()
         }
 
         if (DialogUtils.check(game.imageUtils)) {

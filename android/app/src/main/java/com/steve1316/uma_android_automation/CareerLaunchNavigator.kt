@@ -368,8 +368,15 @@ class CareerLaunchNavigator(private val context: Context) {
                 MessageLog.w(TAG, "[NAV] Unknown screen state ($consecutiveUnknowns/$MAX_CONSECUTIVE_UNKNOWNS). Waiting before retry...")
                 // An UNKNOWN screen is the exact signature of a dead accessibility service (taps stop
                 // landing, so the game never advances to a recognised screen). Rebind before retrying
-                // rather than burning all 5 attempts against a service that will never respond.
-                tempGame?.ensureAccessibilityService()
+                // rather than burning all attempts against a service that will never respond. The
+                // first unknown does the cheap string check (catches the grant being wiped); from the
+                // second on, MuMu's nastier "enabled-but-dispatch-dead" mode is likely, so force a
+                // hard off->on rebind that the string check can't see.
+                if (consecutiveUnknowns >= 2) {
+                    tempGame?.forceRebindAccessibilityService()
+                } else {
+                    tempGame?.ensureAccessibilityService()
+                }
                 waitSafe(2.0)
                 continue
             }

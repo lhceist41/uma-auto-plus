@@ -555,6 +555,50 @@ class Game(val myContext: Context) {
         }
     }
 
+    /**
+     * Forces the Accessibility Service to unbind and rebind by toggling its entry in the secure
+     * ENABLED_ACCESSIBILITY_SERVICES setting off, then back on.
+     *
+     * [ensureAccessibilityService] only rewrites the setting when our service string is MISSING, but
+     * MuMu has a nastier failure mode: it leaves the string intact (the service still reports as
+     * bound in `dumpsys accessibility`) while silently killing gesture dispatch, so every tap/swipe
+     * no-ops even though screen capture keeps working - an adb InputManager tap at the same
+     * coordinate still lands, so only dispatchGesture is dead, not the OS input path. The string-only
+     * check cannot see this, and re-writing the same value is ignored by the framework, so the entry
+     * must actually be removed (letting the framework tear the dead instance down) and then re-added
+     * to bind a fresh one. [gestureUtils] resolves via MyAccessibilityService.getInstance() on every
+     * access, so it picks up the new instance automatically once it connects.
+     *
+     * @param waitForRebind Seconds to wait after re-adding the service for it to rebind.
+     * @return True if the toggle was issued, false if WRITE_SECURE_SETTINGS is missing.
+     */
+    fun forceRebindAccessibilityService(waitForRebind: Double = 3.0): Boolean {
+        val expected = "${myContext.packageName}/com.steve1316.automation_library.utils.MyAccessibilityService"
+        return try {
+            val current: String = Settings.Secure.getString(myContext.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
+            val others: List<String> = current.split(':').filter { it.isNotEmpty() && !it.equals(expected, ignoreCase = true) }
+
+            // Off: drop our service so the framework destroys the (dead-gesture) instance. Keep any
+            // other enabled services intact.
+            Settings.Secure.putString(myContext.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, others.joinToString(":"))
+            wait(1.0, skipWaitingForLoading = true)
+
+            // On: re-add ours so the framework binds a fresh instance with a working gesture dispatcher.
+            Settings.Secure.putString(myContext.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, (others + expected).joinToString(":"))
+            Settings.Secure.putString(myContext.contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, "1")
+            wait(waitForRebind, skipWaitingForLoading = true)
+            MessageLog.w(TAG, "[WARN] forceRebindAccessibilityService:: Toggled the Accessibility Service off->on to recover silently-dead gesture dispatch.")
+            true
+        } catch (e: SecurityException) {
+            MessageLog.e(
+                TAG,
+                "[ERROR] forceRebindAccessibilityService:: Cannot toggle the Accessibility Service - WRITE_SECURE_SETTINGS is not granted. " +
+                    "Run once: adb shell pm grant ${myContext.packageName} android.permission.WRITE_SECURE_SETTINGS",
+            )
+            false
+        }
+    }
+
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
