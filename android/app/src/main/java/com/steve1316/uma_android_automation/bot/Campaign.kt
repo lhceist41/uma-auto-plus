@@ -39,6 +39,8 @@ import com.steve1316.uma_android_automation.components.ButtonRest
 import com.steve1316.uma_android_automation.components.ButtonRestAndRecreation
 import com.steve1316.uma_android_automation.components.ButtonSkills
 import com.steve1316.uma_android_automation.components.ButtonSkip
+import com.steve1316.uma_android_automation.components.ButtonSkipOff
+import com.steve1316.uma_android_automation.components.ButtonSkipOn
 import com.steve1316.uma_android_automation.components.ButtonTraining
 import com.steve1316.uma_android_automation.components.ButtonTryAgain
 import com.steve1316.uma_android_automation.components.ButtonUnityCupRace
@@ -259,6 +261,23 @@ abstract class Campaign(game: Game) : Task(game) {
      * well before the stop.
      */
     private val gestureRebindThresholds: Set<Int> = setOf(13, 19)
+
+    /**
+     * Cap on [consecutiveUnknownScreenCount] while a story-event intro cutscene is being tapped
+     * through (Skip pill present). Higher than [maxUnknownScreenBeforeStop] because a support-card
+     * chain event (e.g. "Both High and Low") can run 20+ dialogue bubbles before its choices render;
+     * the choices end the cutscene well before this, so reaching it means the cutscene is genuinely
+     * frozen. Without this path the generic cap fired mid-intro and stopped the run before the
+     * choices ever appeared.
+     */
+    private val maxCutsceneAdvanceBeforeStop: Int = 50
+
+    /**
+     * Counts at which the cutscene-advance path force-rebinds the Accessibility Service once, in case
+     * gesture dispatch silently died (taps no-op so the dialogue never moves). Two attempts leave room
+     * for a revived dispatch to clear the intro before [maxCutsceneAdvanceBeforeStop].
+     */
+    private val cutsceneRebindThresholds: Set<Int> = setOf(15, 30)
 
     /** Whether the bot should attempt the crane game. */
     protected val enableCraneGameAttempt: Boolean = SettingsHelper.getBooleanSetting("general", "enableCraneGameAttempt")
@@ -2751,11 +2770,74 @@ abstract class Campaign(game: Game) : Task(game) {
      *
      * @param count The current [consecutiveUnknownScreenCount] for this stuck streak.
      */
+    /**
+     * Whether the bottom-left in-career Skip pill (Skip Off / Skip On) is on screen. It renders only
+     * during story / event cutscenes that must be tapped through to reach their choice options.
+     * Template match first, then an OCR fallback over the pill band - the same detection the launch
+     * navigator uses, so the in-career loop recognizes exactly the cutscenes the navigator does.
+     */
+    private fun isEventCutsceneSkipPillVisible(): Boolean {
+        val sourceBitmap = game.imageUtils.getSourceBitmap()
+        if (ButtonSkipOff.check(game.imageUtils, sourceBitmap = sourceBitmap) ||
+            ButtonSkipOn.check(game.imageUtils, sourceBitmap = sourceBitmap)
+        ) {
+            return true
+        }
+        return try {
+            // Scan 22%-53% width, 94%-98% height - centered on the Skip pill button.
+            val skipOcr =
+                game.imageUtils.performOCROnRegion(
+                    sourceBitmap,
+                    (sourceBitmap.width * 0.22).toInt(),
+                    (sourceBitmap.height * 0.94).toInt(),
+                    (sourceBitmap.width * 0.31).toInt(),
+                    (sourceBitmap.height * 0.04).toInt(),
+                    useThreshold = false,
+                    useGrayscale = false,
+                    scale = 2.0,
+                    debugName = "unknown_skip_pill_ocr",
+                )
+            skipOcr.uppercase().contains("SKIP")
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private fun recoverFromUnknownScreen(count: Int) {
         if (count == 1) {
             // First unrecognized tick: clear the notification shade in case it is covering the
             // top-region anchors (free no-op when closed).
             dismissNotificationShade("unknown screen")
+        }
+
+        // Story / chain support-card events (e.g. Air Shakur's "Both High and Low") open with an
+        // intro cutscene that must be tapped through before the choices render. During the intro
+        // there is no event-choice horseshoe, so checkTrainingEventScreen() is false and every other
+        // screen check misses too - the tick lands here. The bottom-left Skip pill (Skip Off / Skip
+        // On) renders only during these cutscenes; use it as the signal to body-tap the dialogue
+        // toward the choices rather than treating it as stuck. The misc skip handler only knows the
+        // distinct `skip` template and misses this pill. Bounded by maxCutsceneAdvanceBeforeStop so a
+        // truly frozen cutscene still stops, with defensive rebinds in case dispatch silently died.
+        if (isEventCutsceneSkipPillVisible()) {
+            if (count >= maxCutsceneAdvanceBeforeStop) {
+                game.imageUtils.saveBitmap(filename = "event_cutscene_stuck", fullRes = true)
+                throw InterruptedException(
+                    "Bot stuck advancing an event cutscene for $count consecutive cycles. Stopping. " +
+                        "A screenshot was saved to the temp folder as event_cutscene_stuck.",
+                )
+            }
+            if (count in cutsceneRebindThresholds) {
+                MessageLog.w(
+                    TAG,
+                    "[WARN] recoverFromUnknownScreen:: Event cutscene not advancing after $count taps - forcing an Accessibility Service rebind in case gesture dispatch died.",
+                )
+                game.forceRebindAccessibilityService()
+            }
+            MessageLog.i(TAG, "[MISC] Event cutscene intro detected (Skip pill present); tapping to advance the dialogue toward the choices (tap $count).")
+            game.tap(540.0, 1300.0, taps = 1)
+            return
         }
 
         // MuMu can leave the Accessibility Service "enabled" in secure settings while its gesture
