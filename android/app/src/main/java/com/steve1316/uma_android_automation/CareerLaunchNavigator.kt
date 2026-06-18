@@ -1924,14 +1924,12 @@ class CareerLaunchNavigator(private val context: Context) {
                 waitSafe(2.0)
                 return TransitionResult.Continue
             }
-            // No Confirm present with skip already maxed means this is NOT the career-launch Quick
-            // Mode dialog - it's an in-career scenario-event cutscene that also shows a Skip pill
-            // (e.g. "Yukino's Wintry Wonder"). The old code returned Continue here and no-op'd,
-            // looping until the stuck-limit killed the queue at the finish line. Tap the Skip pill
-            // to engage fast-forward so the cutscene advances and the screen moves on.
-            MessageLog.i(TAG, "[NAV] No Confirm present - treating as a cutscene Skip pill; tapping to fast-forward.")
-            val cutsceneBitmap = iu.getSourceBitmap()
-            gestureUtils.tap((cutsceneBitmap.width * 0.357).toDouble(), (cutsceneBitmap.height * 0.962).toDouble(), "cutscene_skip_advance")
+            // No Confirm = an in-career "tap to continue" screen with a Skip pill (cutscene or
+            // race-intro), not the launch dialog. Verified live: these advance on a body tap, not
+            // the pill (tapping the pill only toggled it Off->Skip>). Tap centre instead of looping.
+            MessageLog.i(TAG, "[NAV] No Confirm - in-career tap-to-continue screen; tapping centre to advance.")
+            val advanceBitmap = iu.getSourceBitmap()
+            gestureUtils.tap((advanceBitmap.width * 0.5).toDouble(), (advanceBitmap.height * 0.5).toDouble(), "nav_tap_to_continue")
             waitSafe(0.8)
             return TransitionResult.Continue
         }
