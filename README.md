@@ -93,6 +93,13 @@ This project is purely for educational purposes to learn about Android automatio
 > [!NOTE]
 > On newer Android versions, you're required to enable `Allow restricted settings` in the app's `App Info` settings.
 
+> [!TIP]
+> **Emulator users (especially MuMu): grant this permission once** so the bot can recover when the emulator silently kills the Accessibility service mid-run. Without it, unattended runs stop the first time that happens:
+> ```
+> adb shell pm grant com.lhceist41.uma_auto_plus android.permission.WRITE_SECURE_SETTINGS
+> ```
+> Run it from a PC with `adb`, or on-device with aShell You + Shizuku (the same tools as the resolution steps below).
+
 5. Once enabled, tapping `Start` will ask for screen-capture access (select `Entire screen` if prompted). A floating overlay button will appear that you can drag around the screen.
 6. Follow the guidance overlay when you drag the overlay button for the places on the screen to safely leave the button at to avoid covering important UI elements.
 
@@ -107,6 +114,9 @@ This project is purely for educational purposes to learn about Android automatio
 
 > [!TIP]
 > Use minimal or deactivated notifications so nothing covers the top of the screen while the bot reads it.
+
+> [!TIP]
+> Hitting stops, stuck screens, or "trainee not found"? See **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**.
 
 ## To view Logs in Real-time
 
