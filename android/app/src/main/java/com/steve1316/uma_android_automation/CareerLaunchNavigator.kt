@@ -90,6 +90,12 @@ class CareerLaunchNavigator(private val context: Context) {
         /** Maximum consecutive iterations stuck in the same non-goal state before failing. */
         private const val MAX_STUCK_ITERATIONS = 15
 
+        /** TAP_TO_CONTINUE is exempt from MAX_STUCK_ITERATIONS (a scenario-event cutscene legitimately
+         * spans many body-tap frames under one state label). It gets its own higher cap, with a
+         * force-rebind partway since a no-op body tap is the dispatch-death signature. */
+        private const val MAX_TAP_TO_CONTINUE_ITERATIONS = 30
+        private const val TAP_TO_CONTINUE_REBIND_AT = 18
+
         /** Item-based TP restores performed this bot session. Lives on the companion because
          * each between-run handoff constructs a fresh navigator - an instance field would reset
          * every handoff, making the per-session cap really a per-handoff cap. Reset from
@@ -157,6 +163,12 @@ class CareerLaunchNavigator(private val context: Context) {
 
         /** Quick-mode / shorten-events prompt. Requires template (not yet provided). */
         QUICK_MODE_PROMPT,
+
+        /** In-career "tap to continue" screen that shows a Skip pill (scenario-event cutscene, goal
+         * intro, race intro). Distinct from QUICK_MODE_PROMPT: advances on a body tap (not the Skip
+         * pill), does not run the skip-maxing handler, and is exempt from the per-state stuck-limit
+         * because a cutscene legitimately spans many frames under one state label. */
+        TAP_TO_CONTINUE,
 
         /** Opening cinematic / intro. Detected via Skip button or requires Pause template. */
         CINEMATIC_INTRO,
@@ -294,6 +306,8 @@ class CareerLaunchNavigator(private val context: Context) {
         var currentState = LaunchScreenState.POST_RUN_RESULTS
         var consecutiveUnknowns = 0
         var stuckInStateCount = 0
+        // TAP_TO_CONTINUE's own counter (it is exempt from stuckInStateCount). Resets on any other state.
+        var tapToContinueCount = 0
         // Secondary bail-out: total iterations since the last time we made meaningful progress
         // (i.e. reached a state we hadn't seen yet OR actually advanced to a new state). The
         // per-state `stuckInStateCount` resets whenever the detected state changes, so a screen
@@ -323,7 +337,10 @@ class CareerLaunchNavigator(private val context: Context) {
             if (detectedState != LaunchScreenState.UNKNOWN) {
                 // Track if we're stuck in the same state (e.g. POST_RUN_RESULTS clicking but not advancing).
                 // This is different from normal progress where POST_RUN_RESULTS may repeat across many screens.
-                if (detectedState == currentState && detectedState != LaunchScreenState.ACTIVE_TRAINING_MENU) {
+                if (detectedState == currentState &&
+                    detectedState != LaunchScreenState.ACTIVE_TRAINING_MENU &&
+                    detectedState != LaunchScreenState.TAP_TO_CONTINUE
+                ) {
                     stuckInStateCount++
                     if (stuckInStateCount >= MAX_STUCK_ITERATIONS) {
                         val screenshotPath = captureFailureScreenshot("stuck_in_${detectedState.name}")
@@ -340,11 +357,38 @@ class CareerLaunchNavigator(private val context: Context) {
                 } else {
                     stuckInStateCount = 0
                 }
+                // TAP_TO_CONTINUE legitimately repeats across many cutscene frames under one state
+                // label, so it is exempt from stuckInStateCount above. Track it on its own higher cap
+                // so a genuinely wedged screen still fails, with a force-rebind partway (a no-op body
+                // tap is the dead-gesture-dispatch signature).
+                if (detectedState == LaunchScreenState.TAP_TO_CONTINUE) {
+                    tapToContinueCount++
+                    if (tapToContinueCount == TAP_TO_CONTINUE_REBIND_AT) {
+                        MessageLog.w(TAG, "[NAV] TAP_TO_CONTINUE not advancing after $TAP_TO_CONTINUE_REBIND_AT taps; force-rebinding accessibility service.")
+                        tempGame?.forceRebindAccessibilityService()
+                    }
+                    if (tapToContinueCount >= MAX_TAP_TO_CONTINUE_ITERATIONS) {
+                        val screenshotPath = captureFailureScreenshot("stuck_in_TAP_TO_CONTINUE")
+                        return NavigationResult(
+                            success = false,
+                            lastDetectedState = detectedState.name,
+                            failureReason = "Stuck on a tap-to-continue screen for $MAX_TAP_TO_CONTINUE_ITERATIONS taps without advancing.",
+                            failedTransition = "TAP_TO_CONTINUE -> next screen",
+                            isRecoverable = true,
+                            recommendedAction = "Manually advance past the current screen and restart the queue.",
+                            screenshotPath = screenshotPath,
+                        )
+                    }
+                } else {
+                    tapToContinueCount = 0
+                }
                 // Progress counter: resets only when we enter a state we haven't seen this
                 // navigation session yet. Just oscillating between known states does NOT reset.
                 if (seenStates.add(detectedState)) {
                     iterationsWithoutProgress = 0
-                } else if (detectedState != LaunchScreenState.ACTIVE_TRAINING_MENU) {
+                } else if (detectedState != LaunchScreenState.ACTIVE_TRAINING_MENU &&
+                    detectedState != LaunchScreenState.TAP_TO_CONTINUE
+                ) {
                     iterationsWithoutProgress++
                     if (iterationsWithoutProgress >= progressBailThreshold) {
                         val screenshotPath = captureFailureScreenshot("no_progress_${detectedState.name}")
@@ -366,7 +410,8 @@ class CareerLaunchNavigator(private val context: Context) {
                 // card the game shows right after them must NOT be tested for Trainee Select.
                 if (detectedState == LaunchScreenState.PRE_RUN_CONFIRMATION ||
                     detectedState == LaunchScreenState.CINEMATIC_INTRO ||
-                    detectedState == LaunchScreenState.QUICK_MODE_PROMPT
+                    detectedState == LaunchScreenState.QUICK_MODE_PROMPT ||
+                    detectedState == LaunchScreenState.TAP_TO_CONTINUE
                 ) {
                     careerLaunchInitiated = true
                 }
@@ -585,40 +630,51 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.PRE_RUN_CONFIRMATION
         }
 
-        // Quick Mode / Skip toggle - Skip Off, Skip >, or Skip >> button visible at the
-        // bottom-left. Detection uses template match first, then falls back to OCR for
-        // "Skip" text in the bottom-left area (handles template variations across game
-        // versions and event cinematics).
-        if (ButtonSkipOff.check(iu, sourceBitmap = bitmap) || ButtonSkipOn.check(iu, sourceBitmap = bitmap)) {
-            return LaunchScreenState.QUICK_MODE_PROMPT
-        }
-        try {
-            // Scan 22%-53% width, 94%-98% height - centered on the Skip Off pill button.
-            val skipOcr =
-                iu.performOCROnRegion(
-                    bitmap,
-                    (bitmap.width * 0.22).toInt(),
-                    (bitmap.height * 0.94).toInt(),
-                    (bitmap.width * 0.31).toInt(),
-                    (bitmap.height * 0.04).toInt(),
-                    useThreshold = false,
-                    useGrayscale = false,
-                    scale = 2.0,
-                    debugName = "nav_skip_button_ocr",
-                )
-            val skipUpper = skipOcr.uppercase()
-            if (skipUpper.contains("SKIP")) {
-                MessageLog.i(TAG, "[NAV] Skip button OCR: '$skipOcr' → QUICK_MODE_PROMPT")
-                return LaunchScreenState.QUICK_MODE_PROMPT
-            }
-        } catch (e: InterruptedException) {
-            throw e
-        } catch (_: Exception) {
-        }
-
-        // Cinematic - Skip or fast-forward button visible.
+        // Opening cinematic - the >> fast-forward / Skip button. Checked BEFORE the in-career Skip
+        // pill below so the opening movie is fast-forwarded by its own dedicated button rather than
+        // body-tapped as a tap-to-continue screen (its skip_cinematic/skip templates are distinct
+        // from the skip_off/skip_on pill).
         if (ButtonSkipCinematic.check(iu, sourceBitmap = bitmap) || ButtonSkip.check(iu, sourceBitmap = bitmap)) {
             return LaunchScreenState.CINEMATIC_INTRO
+        }
+
+        // Bottom-left Skip pill (Skip Off / Skip > / Skip >>): template match, then an OCR fallback
+        // for "SKIP" in the pill band. This pill is shared by the career-launch Quick Mode prompt AND
+        // every in-career "tap to continue" screen (scenario cutscenes, goal/race intros). The launch
+        // prompt is ALWAYS the FIRST skip-pill screen of a launch (it precedes any cutscene), so
+        // skipToggleAlreadyDone separates them safely: not-yet-maxed -> the real prompt
+        // (QUICK_MODE_PROMPT, which maxes skip + confirms); already-maxed -> an in-career screen
+        // (TAP_TO_CONTINUE, body-tapped to advance). This avoids a fragile UI discriminator: the
+        // prompt is not a registered titled dialog (no DialogUtils gradient) and reaches this block
+        // precisely because POST_RUN_RESULTS above found no matchable Confirm on it.
+        var hasSkipPill = ButtonSkipOff.check(iu, sourceBitmap = bitmap) || ButtonSkipOn.check(iu, sourceBitmap = bitmap)
+        if (!hasSkipPill) {
+            try {
+                // Scan 22%-53% width, 94%-98% height - centered on the Skip pill button.
+                val skipOcr =
+                    iu.performOCROnRegion(
+                        bitmap,
+                        (bitmap.width * 0.22).toInt(),
+                        (bitmap.height * 0.94).toInt(),
+                        (bitmap.width * 0.31).toInt(),
+                        (bitmap.height * 0.04).toInt(),
+                        useThreshold = false,
+                        useGrayscale = false,
+                        scale = 2.0,
+                        debugName = "nav_skip_button_ocr",
+                    )
+                if (skipOcr.uppercase().contains("SKIP")) hasSkipPill = true
+            } catch (e: InterruptedException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
+        if (hasSkipPill) {
+            if (!skipToggleAlreadyDone) {
+                return LaunchScreenState.QUICK_MODE_PROMPT
+            }
+            MessageLog.i(TAG, "[NAV] Skip pill with skip already maxed -> TAP_TO_CONTINUE (in-career tap-to-continue screen).")
+            return LaunchScreenState.TAP_TO_CONTINUE
         }
 
         // Career summary screen - "Complete Career" button visible (the button to initiate completion).
@@ -703,6 +759,7 @@ class CareerLaunchNavigator(private val context: Context) {
             LaunchScreenState.CINEMATIC_INTRO -> handleCinematicIntro()
             LaunchScreenState.HOME_SCREEN -> handleHomeScreen()
             LaunchScreenState.QUICK_MODE_PROMPT -> handleQuickModePrompt()
+            LaunchScreenState.TAP_TO_CONTINUE -> handleTapToContinue()
 
             // --- States that require templates not yet provided ---
 
@@ -1906,6 +1963,22 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
+     * TAP_TO_CONTINUE: an in-career screen that shows a Skip pill but is NOT the launch Quick Mode
+     * prompt - a scenario-event cutscene, goal intro, or race intro ("Start!/TAP"). These advance on
+     * a tap to the screen BODY, not the Skip pill (tapping the pill only toggles it).
+     * Uses the proven (0.5, 0.677) = (540,1300 on 1080x1920) coordinate from Campaign's in-career
+     * recovery. navigate() exempts this state from the per-state stuck-limit and gives it a bounded
+     * counter + force-rebind, so a multi-line cutscene advances frame by frame without bailing.
+     */
+    private fun handleTapToContinue(): TransitionResult {
+        val bitmap = iu.getSourceBitmap()
+        MessageLog.i(TAG, "[NAV] TAP_TO_CONTINUE: body-tapping to advance the in-career screen.")
+        gestureUtils.tap((bitmap.width * 0.5).toDouble(), (bitmap.height * 0.677).toDouble(), "tap_to_continue_advance")
+        waitSafe(0.8)
+        return TransitionResult.Continue
+    }
+
+    /**
      * QUICK_MODE_PROMPT: The Quick Mode Settings dialog appears after starting a career.
      * Handles two things:
      * 1. Click Confirm on the Quick Mode Settings dialog (if visible).
@@ -1917,22 +1990,10 @@ class CareerLaunchNavigator(private val context: Context) {
     private fun handleQuickModePrompt(): TransitionResult {
         MessageLog.i(TAG, "[NAV] Quick Mode / Skip toggle screen detected.")
 
-        if (skipToggleAlreadyDone) {
-            if (ButtonConfirm.check(iu)) {
-                MessageLog.i(TAG, "[NAV] Skip toggle already maxed this session. Confirming the Quick Mode dialog...")
-                ButtonConfirm.click(iu)
-                waitSafe(2.0)
-                return TransitionResult.Continue
-            }
-            // No Confirm = an in-career "tap to continue" screen with a Skip pill (cutscene or
-            // race-intro), not the launch dialog. Verified live: these advance on a body tap, not
-            // the pill (tapping the pill only toggled it Off->Skip>). Tap centre instead of looping.
-            MessageLog.i(TAG, "[NAV] No Confirm - in-career tap-to-continue screen; tapping centre to advance.")
-            val advanceBitmap = iu.getSourceBitmap()
-            gestureUtils.tap((advanceBitmap.width * 0.5).toDouble(), (advanceBitmap.height * 0.5).toDouble(), "nav_tap_to_continue")
-            waitSafe(0.8)
-            return TransitionResult.Continue
-        }
+        // Reached only while skip has NOT been maxed yet this session: detectScreenState routes a
+        // skip pill to QUICK_MODE_PROMPT only while !skipToggleAlreadyDone (once maxed, later skip
+        // pills become TAP_TO_CONTINUE). So this is the genuine launch Quick Mode prompt - max skip,
+        // then confirm.
 
         // Tap the Skip button position twice to cycle Skip Off → Skip > → Skip >>.
         // Position calibrated from actual game screen: white pill button center at
