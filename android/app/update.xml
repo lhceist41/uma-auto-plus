@@ -1,17 +1,16 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.2.5</latestVersion>
+    <latestVersion>1.3.0</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.2.5 - Stability and speed
+v1.3.0 - Trainee rotation, preset overhaul, two months of reliability work
 
-- Recreation dates are re-checked every turn (a bad icon read no longer disables them for the rest of a career).
-- Miracle Cure / Rich Hand Cream now stockpile up to 5 as intended.
-- Trophy-goal G1 selection reads the correct race's grade and fan count.
-- No more 10-second per-turn stalls on a flaky stat-table read; worst-case stall ceiling halved.
-- Mood recovery bails cleanly instead of looping on a missing screenshot.
-- Switching character presets no longer wipes your custom support/scenario event picks.
-- Faster hot path: lazy screenshots in the decision loop and trimmed waits.
+- Trainee rotation: queue several different trainees and the bot trains each under her own preset, switching automatically between careers (off by default).
+- 81 character presets across 27 characters - added Symboli Rudolf and the June banner trainees, with rebuilt stat priorities, sparks, caps, and event picks.
+- New knapsack skill-buying strategy, and the buy pass now verifies each purchase actually commits.
+- Junior fan-gate fixed: reads single-star predictions and forces fan-goal races so Medium/Long trainees clear the wall.
+- Major stability pass: serialized OCR (no more native crashes), accessibility self-heal, settings-DB hardening, watchdog deadlock fix, career-end exit fixes.
+- x86_64 APK for native-speed emulator runs.
 
     </releaseNotes>
   </update>

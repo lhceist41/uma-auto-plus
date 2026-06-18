@@ -8,6 +8,47 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [1.3.0] - 2026-06-18
+
+The headline feature: the bot can now grind a whole **rotation of different trainees** unattended -- queue several, and it cycles through them, training each under her own preset. Set it before bed, wake up to a stack of finished careers. On top of that, a near-complete preset overhaul (now 81 builds across 27 characters), a smarter skill-buying strategy, and two solid months of reliability work hardening every loop that was quietly killing overnight runs.
+
+### Highlights
+
+- **Trainee rotation.** Point the run queue at several different trainees and it plays each one in turn under her own settings, switching automatically between careers. The selector finds the right trainee on your roster by name, survives a mid-career app restart without resuming the wrong one, and refuses to start the wrong umamusume rather than guess. Off by default.
+- **81 presets across 27 characters** (was 51 across 17). Added the June banner trainees -- Sweep Tosho, Mihono Bourbon, Mejiro Palmer, El Condor Pasa (Kukulkan Warrior), Tosen Jordan, Super Creek, Matikanetannhauser -- and Symboli Rudolf (Emperor's Path), then rebuilt stat priorities, spark targets, stat caps, and character event picks across every preset. Goal-sparse trainees now ship curated racing plans so they don't starve between objectives.
+- **Smarter skill buying.** The new Optimize Knapsack strategy works out the best combination of skills your points can buy -- including how upgrade chains exclude each other -- instead of just grabbing the best-looking skill first, and the buy pass now verifies each purchase actually went through instead of trusting the on-screen point counter.
+- **Junior fan-gate breakthrough.** The bot reads single-star race predictions and forces fan-goal races when a checkpoint is at risk, so Medium/Long trainees that used to force-end at the 3,000-fan Junior wall now clear it. Trackblazer fights for its Result-Points checkpoints the same way.
+- **The unglamorous half: reliability.** Two months of fixes for everything that was quietly killing overnight runs: crashes while reading the screen, emulators silently disabling the bot's taps mid-run (it now heals itself), settings corruption, a rare freeze that disabled the bot's own recovery, career-end screens it could wedge on, and a pre-release audit that closed a batch of rare crashes.
+- **x86_64 build.** Added an x86_64 APK split so it runs at native speed on emulators like MuMu instead of under ARM translation.
+
+### Added
+
+- Trainee rotation in the run queue (off by default): per-trainee presets, roster name-matching, and resume-safe career boundaries.
+- Symboli Rudolf (Emperor's Path) and seven June-banner trainees, bringing the preset library to 81.
+- The Optimize Knapsack skill-buying strategy: the best combination of skills for your points, not just the best-looking skill first.
+- An x86_64 version of the APK, so emulators like MuMu run the bot at native speed.
+- Single-star race-prediction reading and fan-goal / Result-Point race forcing for at-risk checkpoints.
+- Per-career warning when live racing settings drift from the applied preset.
+- Support-deck advisory that warns at career start when the deck is spread too thin.
+
+### Fixed
+
+- Crashes when the bot tried to read two parts of the screen at once.
+- Emulators silently disabling the bot's taps mid-run -- the bot now notices and re-enables its own accessibility service.
+- Saved settings ballooning in size or getting corrupted during long rotation queues.
+- A rare freeze that also disabled the very recovery meant to fix freezes.
+- Getting stuck leaving the skill screen at career end, and queue stops being reported with the wrong reason.
+- A batch of rare crashes found in a pre-release audit.
+- Consecutive-race warnings no longer suppress or wrongly abort a race the bot actually wants to enter.
+
+### Changed
+
+- Replaced the binary alarm-clock toggle with a four-way carat-spending policy (Never / G1 only / G1 + Finale / Always).
+- The log viewer now only accepts connections from your own computer.
+- Updated the underlying engine and refreshed the bundled game data.
+
+---
+
 ## [1.2.5] - 2026-04-22
 
 A pile of stability fixes for stuff that was silently sabotaging runs, plus some real speed wins. Fourteen bugs squashed across the bot loop, settings, and UI, and the bot is noticeably faster on the hot path.
@@ -206,7 +247,7 @@ The fork already differed substantially from upstream v5.4.8 on day one. The lis
 - Configurable `stopOnError` (default: continue past errors), reuse-last-launch-setup, auto-fill support deck.
 
 ### Character presets (entirely new)
-- 51 built-in character profile presets (17 characters × 3 scenarios: Trackblazer, Unity Cup, URA Finale).
+- 81 built-in character profile presets (27 characters × 3 scenarios: Trackblazer, Unity Cup, URA Finale).
 - Scenario-filtered preset picker on the Home page that deep-merges preset settings into the active profile.
 
 ### Bot behaviour improvements

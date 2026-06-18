@@ -16,8 +16,9 @@
 These are the features I've added on top of the original:
 
 - **Multi-run queue** -- Queue multiple consecutive career runs so the bot can grind unattended. Configurable run count, delay between runs, and error handling.
+- **Trainee rotation** -- Queue several different trainees and the bot cycles through them, training each under her own preset and switching automatically between careers. Off by default.
 - **Between-run navigation** -- After a career completes, the bot automatically navigates back through the game menus (career summary, home screen, scenario select, deck setup, cinematic skip) and starts the next run.
-- **Built-in character presets** -- 51 pre-configured character builds (17 per scenario) selectable from the Home page. Pick a scenario, pick a character, and all settings are applied instantly.
+- **Built-in character presets** -- 81 pre-configured character builds (27 per scenario) selectable from the Home page. Pick a scenario, pick a character, and all settings are applied instantly.
 - **Run Queue Settings page** -- Dedicated settings for queue behavior: run count, delay, stop-on-error, reuse-last-setup, auto-fill supports.
 - **Queue progress UI** -- Home page shows current run progress and a skip-run button during queued sessions.
 - **In-app update notifications** -- The app checks for new releases from this fork and notifies the user when an update is available.
