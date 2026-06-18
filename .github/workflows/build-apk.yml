@@ -5,6 +5,12 @@ on:
     tags:
       - 'v*'
 
+# The release step (softprops/action-gh-release) needs write access to create the
+# release and upload the APKs. Declared explicitly so it works regardless of the
+# repository's default workflow-token permission.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
