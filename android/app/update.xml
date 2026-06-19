@@ -1,16 +1,12 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.3.0</latestVersion>
+    <latestVersion>1.3.1</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.3.0 - Trainee rotation, preset overhaul, two months of reliability work
+v1.3.1 - Stall fix for in-career event cutscenes
 
-- Trainee rotation: queue several different trainees and the bot trains each under her own preset, switching automatically between careers (off by default).
-- 81 character presets across 27 characters - added Symboli Rudolf and the June banner trainees, with rebuilt stat priorities, sparks, caps, and event picks.
-- New knapsack skill-buying strategy, and the buy pass now verifies each purchase actually commits.
-- Junior fan-gate fixed: reads single-star predictions and forces fan-goal races so Medium/Long trainees clear the wall.
-- Major stability pass: serialized OCR (no more native crashes), accessibility self-heal, settings-DB hardening, watchdog deadlock fix, career-end exit fixes.
-- x86_64 APK for native-speed emulator runs.
+- Fixed the bot stalling on in-career story and support-card event "tap to continue" cutscenes (the Skip-pill screens that play before an event's choices appear). Both the between-run launcher and the in-career loop now tap through them to the choices, so events that used to stop an unattended run just resolve and the career keeps going.
+- Validated with a full 6-career unattended overnight queue that completed end to end.
 
     </releaseNotes>
   </update>

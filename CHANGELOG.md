@@ -8,6 +8,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [1.3.1] - 2026-06-20
+
+A focused stability patch. The bot was stalling on in-career story and support-card event cutscenes -- the "tap to continue" screens with a Skip pill that play before an event's choices appear. Both the between-run launcher and the in-career loop mistook these for other screens and gave up, ending the run (sometimes seconds after Start). They are now recognized and tapped through to the choices, so events that used to stop an unattended queue just resolve and the career continues.
+
+Validated with a 6-career unattended overnight queue that completed end to end.
+
+### Fixed
+
+- In-career story and support-card event intro cutscenes are now tapped through to their choices instead of being misread as an unknown screen and stalling the run until the bot gave up.
+- The between-run launcher no longer mistakes an in-career "tap to continue" cutscene for the Quick Mode prompt and loops on it until it times out; these screens are simply tapped through, while the real Quick Mode prompt is still handled as before.
+
+---
+
 ## [1.3.0] - 2026-06-18
 
 The headline feature: the bot can now grind a whole **rotation of different trainees** unattended -- queue several, and it cycles through them, training each under her own preset. Set it before bed, wake up to a stack of finished careers. On top of that, a near-complete preset overhaul (now 81 builds across 27 characters), a smarter skill-buying strategy, and two solid months of reliability work hardening every loop that was quietly killing overnight runs.
