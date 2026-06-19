@@ -176,9 +176,17 @@ abstract class Task(game: Game) : DialogHandler(game) {
 
         val timeoutMs = (maxRuntimeMinutes * (60 * 1000)).toLong()
         val startTime = System.currentTimeMillis()
+        // Bound the unhandled-dialog recover net below. A dialog the net can never clear (it taps
+        // nothing) otherwise retries forever and only dies when the 3-min watchdog kills the whole
+        // process - taking the rest of the queue with it.
+        var consecutiveUnhandledDialogs = 0
+        var lastUnhandledDialogMessage: String? = null
+        val maxIdenticalUnhandledDialogs = 5
         while (System.currentTimeMillis() - startTime < timeoutMs) {
             try {
                 val tmpResult: TaskResult? = process()
+                // process() returned without throwing - forward progress, so reset the recover counter.
+                consecutiveUnhandledDialogs = 0
                 // Stop the task if a non-null result is received.
                 if (tmpResult != null) {
                     result = tmpResult
@@ -195,6 +203,25 @@ abstract class Task(game: Game) : DialogHandler(game) {
                 // wrong tradeoff. (An `Unhandled dialog: shop` once bubbled to Game.start and
                 // ended a career 24 turns early.) Save a screenshot so we know which dialog the
                 // bot didn't recognize next time this fires.
+                //
+                // But a dialog the net can never clear would retry forever, so bail after a bounded
+                // run of the SAME unhandled dialog: end the run cleanly with a saved log instead of
+                // spinning to the process-killing watchdog. The queue's stopOnError logic then
+                // decides continue-vs-abort. (The midnight date_changed rollover used to die here.)
+                if (e.message == lastUnhandledDialogMessage) {
+                    consecutiveUnhandledDialogs++
+                } else {
+                    consecutiveUnhandledDialogs = 1
+                    lastUnhandledDialogMessage = e.message
+                }
+                if (consecutiveUnhandledDialogs >= maxIdenticalUnhandledDialogs) {
+                    result =
+                        TaskResult.Error(
+                            TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
+                            "Persistent unhandled dialog after $consecutiveUnhandledDialogs recoveries: ${e.message}",
+                        )
+                    break
+                }
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
                 val filename = "unhandled_dialog_$timestamp"
                 try {

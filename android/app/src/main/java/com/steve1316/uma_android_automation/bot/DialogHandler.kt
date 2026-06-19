@@ -133,6 +133,12 @@ open class DialogHandler(val game: Game) {
                 dialog.close(game.imageUtils)
             }
 
+            "date_changed" -> {
+                // Real-world midnight date-rollover popup; its only control is OK. Left unhandled it
+                // spun the recover loop until the watchdog killed any overnight run that crossed midnight.
+                dialog.ok(game.imageUtils)
+            }
+
             "session_error" -> {
                 throw InterruptedException("Session error. Stopping bot...")
             }
