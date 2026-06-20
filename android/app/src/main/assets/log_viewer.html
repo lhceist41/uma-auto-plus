@@ -2152,13 +2152,36 @@
             function toggleCondensing() {
                 isCondensing = !isCondensing
                 const btn = document.getElementById("compactBtn")
-                if (isCondensing) {
-                    btn.classList.add("active")
-                } else {
-                    btn.classList.remove("active")
-                    // Clear buffer when turning off so it doesn't resume from old state
-                    condensationBuffer = []
+                btn.classList.toggle("active", isCondensing)
+                // Bug: flipping the flag alone left already-rendered lines untouched, so
+                // toggling appeared to do nothing. Replay the stored history through the
+                // normal render path so the visible log reflects the new mode.
+                rebuildLogDisplay()
+            }
+
+            /**
+             * Re-renders the entire visible log from stored history, honoring the current
+             * condensation mode. Leaves allMessages and the dashboard intact.
+             */
+            function rebuildLogDisplay() {
+                // Tear down the rendered entries and per-entry caches; appendBatchMessages
+                // rebuilds them and re-pushes into allMessages, so snapshot and reset it first.
+                var history = allMessages.map(function (m) { return m.parsed })
+                logContainer.querySelectorAll(".log-entry").forEach(function (entry) {
+                    entry.remove()
+                })
+                allMessages = []
+                messageCache = []
+                messageCount = 0
+                visibleMessageCount = 0
+                condensationBuffer = []
+
+                appendBatchMessages(history)
+
+                if (messageCount > 0 && emptyState) {
+                    emptyState.style.display = "none"
                 }
+                updateMessageCountDisplay()
             }
 
             /**
