@@ -147,12 +147,25 @@ abstract class Task(game: Game) : DialogHandler(game) {
             }
         }
 
+        // One greppable outcome line per career run; campaigns emit it, non-career tasks return null.
+        careerEndLedgerLine(result)?.let { MessageLog.i(TAG, it) }
+
         if (DiscordUtils.enableDiscordNotifications) {
             DiscordUtils.queue.add("```diff\n$diffChar ${MessageLog.getSystemTimeString()} $discordMessage.\n```")
             // Wait to ensure the Discord message queue is processed.
             game.wait(1.0, skipWaitingForLoading = true)
         }
     }
+
+    // //////////////////////////////////////////////////////////////////////////////////////////////////
+    // //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /**
+     * Optional one-line career-outcome summary, logged by [handleTaskEnd] at the end of every run.
+     * Base tasks (Daily Races, Team Trials) have no career to summarize and return null; [Campaign]
+     * overrides this to emit the `[CAREER_END]` ledger line.
+     */
+    protected open fun careerEndLedgerLine(result: TaskResult): String? = null
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////

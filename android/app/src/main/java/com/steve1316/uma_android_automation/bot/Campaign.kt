@@ -2546,6 +2546,44 @@ abstract class Campaign(game: Game) : Task(game) {
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
+     * One structured outcome line per career run, logged when any run ends.
+     *
+     * Greppable as `[CAREER_END]` to build a per-preset completion ledger across runs. The game shows
+     * the SAME end screen for a clean finish and an early force-end (a missed fan/goal deadline ends
+     * the career on the spot), and there is no win/lose template to read - so [result] is COMPLETE for
+     * both, and `turn` is the real discriminator: a full arc ends near the scenario's last turn (URA
+     * finals = 75), a force-end ends early (a Junior fan-checkpoint death lands around turn 24). Every
+     * field comes from memory or already-OCR'd state, so building the line triggers no extra capture.
+     */
+    override fun careerEndLedgerLine(result: TaskResult): String {
+        val resolvedName =
+            trainee.name.ifEmpty {
+                SettingsHelper.getStringSetting("misc", "currentProfileName").ifEmpty { "unknown" }
+            }.replace(" ", "_")
+        val scenarioToken = game.scenario.ifEmpty { "unknown" }.replace(" ", "_")
+        val st = trainee.stats
+        return buildString {
+            append("[CAREER_END] result=").append(result.code.name.removePrefix("TASK_RESULT_"))
+            append(" trainee=").append(resolvedName)
+            append(" scenario=").append(scenarioToken)
+            append(" turn=").append(date.day)
+            append(" fans=").append(trainee.fans)
+            append(" spd=").append(st.speed)
+            append(" sta=").append(st.stamina)
+            append(" pwr=").append(st.power)
+            append(" grt=").append(st.guts)
+            append(" wit=").append(st.wit)
+            append(" skillPts=").append(trainee.skillPoints)
+            if (result.code == TaskResultCode.TASK_RESULT_MANUALLY_STOPPED) {
+                StartModule.queueStopReason?.let { append(" stopReason=\"").append(it).append('"') }
+            }
+        }
+    }
+
+    // //////////////////////////////////////////////////////////////////////////////////////////////////
+    // //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    /**
      * Executes the main processing loop for the campaign task.
      *
      * @return The result of the task execution, or null if the loop should continue.
