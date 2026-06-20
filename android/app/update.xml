@@ -1,12 +1,16 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.3.1</latestVersion>
+    <latestVersion>1.3.2</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.3.1 - Stall fix for in-career event cutscenes
+v1.3.2 - Reliability, shop/scroll hardening, and a career-outcome log line
 
-- Fixed the bot stalling on in-career story and support-card event "tap to continue" cutscenes (the Skip-pill screens that play before an event's choices appear). Both the between-run launcher and the in-career loop now tap through them to the choices, so events that used to stop an unattended run just resolve and the career keeps going.
-- Validated with a full 6-career unattended overnight queue that completed end to end.
+- New: a [CAREER_END] line written at the end of every career, recording the result, scenario, the turn it ended on, fans, final stats and skill points -- so a run's outcome is legible at a glance and easy to share in a bug report. The game shows the same screen for a clean finish and an early force-end, so the turn it ended on is the tell.
+- New: an option to skip double-circle (◎) skill upgrades and spread points across more single-circle skills instead (off by default).
+- Fixed: overnight runs that cross midnight no longer stall on the real-world date-rollover popup.
+- Fixed: the shop is confirmed open before buying, a scrollbar edge case no longer truncates long lists, and a dialog the recovery net can't clear now ends the run cleanly instead of spinning until the watchdog.
+- Fixed: the Remote Log Viewer's Compact toggle now re-renders the lines already on screen.
+- Validated with a 3-career unattended Trackblazer queue that completed end to end.
 
     </releaseNotes>
   </update>

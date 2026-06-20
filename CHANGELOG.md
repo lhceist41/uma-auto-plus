@@ -8,6 +8,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [1.3.2] - 2026-06-20
+
+A reliability and diagnostics patch on top of 1.3.1. Overnight queues that crossed midnight could stall on the real-world date-rollover popup; the shop and long scrollable lists each had an edge case that could mislead the bot; and the end of a career now writes a single structured outcome line so a run's result is legible at a glance. Plus a new skill-buying option and a log-viewer fix.
+
+Validated with a 3-career unattended Trackblazer queue that completed end to end.
+
+### Added
+
+- A single summary line written to the log at the end of every career, recording the result, scenario, the turn it ended on, fans, final stats, and skill points. The game shows the same end screen for a clean finish and an early force-end, so the turn number is the tell -- a full career ends near the scenario's last turn, a force-end ends early. Makes a run's outcome readable at a glance and easy to share in a bug report.
+- An option to skip double-circle (◎) skill upgrades, spreading skill points across more single-circle (○) skills instead of spending them topping a few up to ◎. Off by default.
+
+### Fixed
+
+- Overnight runs that cross midnight no longer stall on the real-world date-rollover popup; its OK button is now dismissed and the run continues.
+- The shop is no longer reported open until the items screen is confirmed visible, so an intercepting unlock or discount dialog can't make the bot buy against the wrong screen.
+- An edge case in list scrolling that could cut off part of a long list (shop, skills, races) is handled cleanly now.
+- A popup the bot can't clear now ends the run cleanly after a few retries instead of spinning until the whole queue gets killed.
+- The Remote Log Viewer's Compact toggle now re-renders the lines already on screen instead of only affecting new ones.
+
+---
+
 ## [1.3.1] - 2026-06-20
 
 A focused stability patch. The bot was stalling on in-career story and support-card event cutscenes -- the "tap to continue" screens with a Skip pill that play before an event's choices appear. Both the between-run launcher and the in-career loop mistook these for other screens and gave up, ending the run (sometimes seconds after Start). They are now recognized and tapped through to the choices, so events that used to stop an unattended queue just resolve and the career continues.
