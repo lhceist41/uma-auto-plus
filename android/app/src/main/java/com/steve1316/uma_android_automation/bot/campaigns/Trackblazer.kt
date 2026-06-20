@@ -979,9 +979,30 @@ class Trackblazer(game: Game) : Campaign(game) {
      * @return True if the shop was opened successfully, false otherwise.
      */
     fun openShop(tries: Int = 5): Boolean {
+        // Already on the Training Items screen; nothing to open.
+        if (ButtonTrainingItems.check(game.imageUtils)) {
+            return true
+        }
+
         if (ButtonShopTrackblazer.click(game.imageUtils, tries = tries)) {
             game.wait(game.dialogWaitDelay)
-            return true
+
+            // An unlock/discount dialog can intercept the tap, so the click "succeeds" but the items
+            // screen never opened. Dismiss any shop dialog and re-verify before reporting success.
+            val detectedDialog = DialogUtils.getDialog(game.imageUtils)
+            if (detectedDialog != null && detectedDialog.name == "shop") {
+                MessageLog.i(TAG, "[TRACKBLAZER] Shop dialog intercepted the shop button. Entering via dialog...")
+                if (detectedDialog.ok(game.imageUtils)) {
+                    game.wait(game.dialogWaitDelay)
+                }
+            }
+
+            if (ButtonTrainingItems.check(game.imageUtils, tries = 5)) {
+                return true
+            }
+
+            MessageLog.e(TAG, "[ERROR] openShop:: Clicked the shop button but the Training Items screen never opened.")
+            return false
         }
 
         val detectedDialog = DialogUtils.getDialog(game.imageUtils)
@@ -989,7 +1010,7 @@ class Trackblazer(game: Game) : Campaign(game) {
             MessageLog.i(TAG, "[TRACKBLAZER] Shop dialog detected while trying to open the shop. Entering via dialog...")
             if (detectedDialog.ok(game.imageUtils)) {
                 game.wait(game.dialogWaitDelay)
-                return ButtonTrainingItems.check(game.imageUtils)
+                return ButtonTrainingItems.check(game.imageUtils, tries = 5)
             }
         }
 
