@@ -3202,7 +3202,9 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                     "detectScrollBar",
                 )!!
             } else {
-                createSafeBitmap(bitmap, region, "detectScrollBar") ?: getSourceBitmap()
+                // Crop failure must bail, not fall back to the full frame: the caller re-adds the region
+                // origin onto our result, so a full-frame bbox would get double-offset into garbage coords.
+                createSafeBitmap(bitmap, region, "detectScrollBar") ?: return Pair(null, null)
             }
 
         // Input sanitization
