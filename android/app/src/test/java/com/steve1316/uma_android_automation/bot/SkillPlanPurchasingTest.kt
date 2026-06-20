@@ -4,6 +4,7 @@ import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.SkillCandida
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.calculateCommonPurchases
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.calculateOptimizeRankPurchases
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.calculateSkillPurchases
+import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.isDoubleCircleUpgrade
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.matchesPreference
 import com.steve1316.uma_android_automation.bot.SkillPlan.SkillPlanSettings
 import com.steve1316.uma_android_automation.bot.SkillPlan.SpendingStrategy
@@ -533,6 +534,70 @@ class SkillPlanPurchasingTest {
         @Test
         fun `explicit style match passes despite non-matching inferred styles`() {
             assertTrue(matchesPreference(null, RunningStyle.FRONT_RUNNER, listOf(RunningStyle.LATE_SURGER), null, null, RunningStyle.FRONT_RUNNER, null))
+        }
+    }
+
+    // //////////////////////////////////////////////////////////////////////////////////////////////////
+    // //////////////////////////////////////////////////////////////////////////////////////////////////
+    // Skip ◎ upgrades toggle
+
+    @Nested
+    @DisplayName("skip double-circle upgrades")
+    inner class SkipDoubleCircleTests {
+        @Test
+        fun `isDoubleCircleUpgrade detects the marker and ignores other forms`() {
+            assertTrue(isDoubleCircleUpgrade("Hanshin Racecourse ◎"))
+            assertTrue(isDoubleCircleUpgrade("Corner Recovery ◎ "))
+            assertFalse(isDoubleCircleUpgrade("Hanshin Racecourse ○"))
+            assertFalse(isDoubleCircleUpgrade("Swinging Maestro"))
+        }
+
+        @Test
+        fun `OPTIMIZE_KNAPSACK with toggle on excludes the ◎ upgrade and keeps the ○ form`() {
+            val settings =
+                SkillPlanSettings(
+                    bIsEnabled = true,
+                    strategy = SpendingStrategy.OPTIMIZE_KNAPSACK,
+                    bEnableBuyInheritedUniqueSkills = false,
+                    bEnableBuyNegativeSkills = false,
+                    skillNames = emptyList(),
+                )
+            // The ◎ has the better raw ratio, so without the toggle the DP would prefer it.
+            val candidates =
+                listOf(
+                    SkillCandidate("Corner Recovery ○", price = 100, evaluationPoints = 120), // 1.2
+                    SkillCandidate("Corner Recovery ◎", price = 150, evaluationPoints = 220), // 1.47
+                    SkillCandidate("Straightaway Acceleration", price = 80, evaluationPoints = 90),
+                )
+
+            val withUpgrade = calculateSkillPurchases(candidates, 1000, settings, skipDoubleCircle = false)
+            assertTrue(withUpgrade.any { it.first == "Corner Recovery ◎" }, "Without the toggle the DP should be free to buy the ◎.")
+
+            val withoutUpgrade = calculateSkillPurchases(candidates, 1000, settings, skipDoubleCircle = true)
+            assertTrue(withoutUpgrade.none { it.first == "Corner Recovery ◎" }, "Toggle on must drop the ◎ from the knapsack candidate set.")
+            assertTrue(withoutUpgrade.any { it.first == "Corner Recovery ○" }, "The ○ form should still be bought.")
+            assertTrue(withoutUpgrade.any { it.first == "Straightaway Acceleration" })
+        }
+
+        @Test
+        fun `OPTIMIZE_RANK with toggle on excludes the ◎ upgrade`() {
+            val settings =
+                SkillPlanSettings(
+                    bIsEnabled = true,
+                    strategy = SpendingStrategy.OPTIMIZE_RANK,
+                    bEnableBuyInheritedUniqueSkills = false,
+                    bEnableBuyNegativeSkills = false,
+                    skillNames = emptyList(),
+                )
+            val candidates =
+                listOf(
+                    SkillCandidate("Standard Distance ○", price = 60, evaluationPoints = 70),
+                    SkillCandidate("Standard Distance ◎", price = 120, evaluationPoints = 160),
+                )
+
+            val result = calculateSkillPurchases(candidates, 1000, settings, skipDoubleCircle = true)
+            assertTrue(result.none { it.first == "Standard Distance ◎" })
+            assertTrue(result.any { it.first == "Standard Distance ○" })
         }
     }
 }

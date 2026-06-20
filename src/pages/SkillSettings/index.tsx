@@ -304,6 +304,15 @@ const SkillSettings = () => {
                                 </Text>
                             </InfoContainer>
                         </View>
+                        <View style={styles.inputContainer}>
+                            <CustomCheckbox
+                                searchId="skip-double-circle-upgrades"
+                                checked={skillSettings.skipDoubleCircleUpgrades}
+                                onCheckedChange={(checked) => updateSkillsSetting("skipDoubleCircleUpgrades", checked)}
+                                label="Skip ◎ Skill Upgrades"
+                                description="Buy only the ○ version of a skill and skip its ◎ upgrade. The ◎ costs far more for a small extra gain, so skipping it spreads the same skill points across more distinct skills."
+                            />
+                        </View>
                     </View>
                     <Divider style={{ marginBottom: 24 }} />
                     <View style={styles.section}>

@@ -82,6 +82,8 @@ export interface Settings {
         preferredRunningStyle: string
         preferredTrackDistance: string
         preferredTrackSurface: string
+        // When true, the purchaser buys only the ○ version of a skill and skips its ◎ upgrade, spreading the SP budget across more distinct skills.
+        skipDoubleCircleUpgrades: boolean
         plans: Record<string, SkillPlanSettingsConfig>
     }
 
@@ -351,6 +353,7 @@ export const defaultSettings: Settings = {
         preferredRunningStyle: "inherit",
         preferredTrackDistance: "inherit",
         preferredTrackSurface: "no_preference",
+        skipDoubleCircleUpgrades: false,
         plans: Object.keys(skillPlanSettingsPages).reduce(
             (acc, curr) => {
                 acc[curr] = {

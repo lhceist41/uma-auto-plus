@@ -32,6 +32,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     /** The preferred track surface from settings. */
     val skillSettingTrackSurfaceString = SettingsHelper.getStringSetting("skills", "preferredTrackSurface")
 
+    /** When true, skip the ◎ upgrade of a skill and buy only its ○ form, stretching the budget across more distinct skills. */
+    private val skipDoubleCircleUpgrades = SettingsHelper.getBooleanSetting("skills", "skipDoubleCircleUpgrades", false)
+
     /** The preferred track distance override for training. */
     private val trainingSettingTrackDistanceString = SettingsHelper.getStringSetting("training", "preferredDistanceOverride")
 
@@ -159,6 +162,16 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         }
 
         /**
+         * Whether a skill is the ◎ (double-circle) upgrade of an ○ skill, identified by the name suffix the
+         * OCR pass appends ([SkillList.getSkillListEntryTitle]). The "skip double-circle upgrades" toggle drops
+         * these so the budget spreads across more distinct ○ skills instead of paying up for one ◎.
+         *
+         * @param name The skill name to test.
+         * @return True if the name ends with the ◎ marker.
+         */
+        fun isDoubleCircleUpgrade(name: String): Boolean = name.trimEnd().endsWith("◎")
+
+        /**
          * Whether a skill is compatible with the resolved Style preference on every axis. A skill passes when, for each axis with a
          * preference, it either has no commitment on that axis (generic / aptitude-independent) or its value matches. Running style
          * matches on the explicit style or any inferred style, mirroring the Optimize Skills include-pass.
@@ -200,19 +213,21 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
          * @param candidates List of available skills for purchase.
          * @param budget Available skill points to spend.
          * @param alreadyPlanned Skills already planned for purchase (to avoid duplicates).
+         * @param skipDoubleCircle When true, exclude ◎ upgrades so the budget spreads across more ○ skills.
          * @return Ordered list of (name, price) pairs representing skills to buy.
          */
         fun calculateOptimizeRankPurchases(
             candidates: List<SkillCandidate>,
             budget: Int,
             alreadyPlanned: List<String> = emptyList(),
+            skipDoubleCircle: Boolean = false,
         ): List<Pair<String, Int>> {
             val result = mutableListOf<Pair<String, Int>>()
             var remaining = budget
 
             val sorted =
                 candidates
-                    .filter { it.name !in alreadyPlanned && it.price > 0 }
+                    .filter { it.name !in alreadyPlanned && it.price > 0 && (!skipDoubleCircle || !isDoubleCircleUpgrade(it.name)) }
                     .sortedByDescending { it.evaluationPointRatio }
 
             for (skill in sorted) {
@@ -509,12 +524,16 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
          * @param candidates All available skill candidates.
          * @param budget Available skill points to spend.
          * @param settings Configuration for the skill plan.
+         * @param skipDoubleCircle When true, exclude ◎ upgrades from the strategy-specific phase so the
+         *   budget spreads across more ○ skills. The common phase (negative/inherited/user-planned) is
+         *   intentionally unaffected — those are explicit picks, not opportunistic ratio fill.
          * @return Ordered list of (name, price) pairs representing all skills to buy.
          */
         fun calculateSkillPurchases(
             candidates: List<SkillCandidate>,
             budget: Int,
             settings: SkillPlanSettings,
+            skipDoubleCircle: Boolean = false,
         ): List<Pair<String, Int>> {
             if (!settings.bIsEnabled) return emptyList()
 
@@ -526,8 +545,12 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             val spent = common.sumOf { it.second }
             val alreadyBought = common.map { it.first }
 
-            // Strategy-specific purchases
-            val remainingCandidates = candidates.filter { it.name !in alreadyBought }
+            // Strategy-specific purchases. Drop ◎ upgrades up front when the toggle is on so every
+            // strategy below — including the knapsack DP that models the ○ -> ◎ chain as a group — only
+            // ever sees the ○ form.
+            val remainingCandidates = candidates.filter {
+                it.name !in alreadyBought && (!skipDoubleCircle || !isDoubleCircleUpgrade(it.name))
+            }
             val strategyPurchases =
                 when (settings.strategy) {
                     SpendingStrategy.DEFAULT, SpendingStrategy.OPTIMIZE_RANK -> {
@@ -929,6 +952,11 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                         continue
                     }
 
+                    // Skip ◎ upgrades when the toggle is on so the budget buys more distinct ○ skills.
+                    if (skipDoubleCircleUpgrades && isDoubleCircleUpgrade(entry.name)) {
+                        continue
+                    }
+
                     if (!entry.bIsAvailable || entry.screenPrice > remainingSkillPoints) {
                         continue
                     }
@@ -985,6 +1013,11 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             for (entry in sortedByPointRatio) {
                 // Don't add duplicate entries.
                 if (entry.name in result || entry.name in skillsToBuy) {
+                    continue
+                }
+
+                // Skip ◎ upgrades when the toggle is on so the budget buys more distinct ○ skills.
+                if (skipDoubleCircleUpgrades && isDoubleCircleUpgrade(entry.name)) {
                     continue
                 }
 
@@ -1050,6 +1083,10 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         val (preferredRunningStyle, preferredTrackDistance, preferredTrackSurface) = resolvePreferredAxes()
         val available = skillList.getAvailableSkills().filterValues { entry ->
             entry.bIsAvailable && entry.name !in skillsToBuy && entry.screenPrice > 0 &&
+                // Drop ◎ upgrades before buildKnapsackGroups runs, otherwise the ○ -> ◎ chain group still
+                // offers the [○, ◎] combo and the DP buys the ◎ — the toggle would no-op on the one
+                // strategy every preset uses at careerComplete.
+                (!skipDoubleCircleUpgrades || !isDoubleCircleUpgrade(entry.name)) &&
                 matchesPreference(
                     entry.trackDistance,
                     entry.runningStyle,

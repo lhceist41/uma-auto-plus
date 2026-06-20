@@ -494,6 +494,12 @@ const searchConfig: SearchOption[] = [
         description: "Dictates which skills are considered for purchase based on the terrain.",
         page: "SkillSettings",
     },
+    {
+        id: "skip-double-circle-upgrades",
+        title: "Skip ◎ Skill Upgrades",
+        description: "Buy only the ○ version of a skill and skip its ◎ upgrade, spreading the same skill points across more distinct skills.",
+        page: "SkillSettings",
+    },
 
     // ============================================================
     // Skill Plan Settings - Skill Point Check
