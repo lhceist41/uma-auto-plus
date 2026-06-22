@@ -6,9 +6,9 @@ This document explains how built-in character presets work in UMA Auto+, how the
 
 ## Overview
 
-UMA Auto+ ships with **81 built-in character presets** (27 character entries x 3 scenarios). When a user selects a scenario on the Home page, a dropdown appears showing only the characters available for that scenario. Picking a character instantly applies all of its optimized settings.
+UMA Auto+ ships with **87 built-in character presets** (29 character entries x 3 scenarios). When a user selects a scenario on the Home page, a dropdown appears showing only the characters available for that scenario. Picking a character instantly applies all of its optimized settings.
 
-The 2026-06-11 batch added seven entries from the June banner research pass: Sweep Tosho, Mihono Bourbon, Mejiro Palmer, El Condor Pasa (Kukulkan Warrior), Tosen Jordan, Super Creek, and Matikanetannhauser. Their URA presets ship curated racing plans (see "Curated racing plans in presets" below); Tosen Jordan's presets enable negative-skill buying so the buy pass clears her 3D Nail Art speed debuff. Symboli Rudolf (Emperor's Path) was added 2026-06-18 — a Late Surger Medium built around her late-overtake unique; URA and Trackblazer are her recommended scenarios.
+The 2026-06-11 batch added seven entries from the June banner research pass: Sweep Tosho, Mihono Bourbon, Mejiro Palmer, El Condor Pasa (Kukulkan Warrior), Tosen Jordan, Super Creek, and Matikanetannhauser. Their URA presets ship curated racing plans (see "Curated racing plans in presets" below); Tosen Jordan's presets enable negative-skill buying so the buy pass clears her 3D Nail Art speed debuff. Symboli Rudolf (Emperor's Path) was added 2026-06-18 — a Late Surger Medium built around her late-overtake unique; URA and Trackblazer are her recommended scenarios. Biwa Hayahide (Pace Chaser, built as a Long stayer) and Mejiro Ryan (Late Surger Medium) were added 2026-06-21 to make two owned-but-unpresetted Medium/Long-A turf bodies farmable hands-off; both fill the Medium/Long Team-Trials slots and are URA + Trackblazer recommended.
 
 ### Currently included characters
 
@@ -16,6 +16,7 @@ The 2026-06-11 batch added seven entries from the June banner research pass: Swe
 |-----------|:-----------:|:---------:|:----------:|
 | Agnes Tachyon | Yes | Yes | Yes |
 | Air Groove | Yes | Yes | Yes |
+| Biwa Hayahide | Yes | Yes | Yes |
 | Daiwa Scarlet | Yes | Yes | Yes |
 | El Condor Pasa | Yes | Yes | Yes |
 | El Condor Pasa (Kukulkan Warrior) | Yes | Yes | Yes |
@@ -31,6 +32,7 @@ The 2026-06-11 batch added seven entries from the June banner research pass: Swe
 | Mayano Top Gun | Yes | Yes | Yes |
 | Mejiro McQueen (Frontline Elegance) | Yes | Yes | Yes |
 | Mejiro Palmer | Yes | Yes | Yes |
+| Mejiro Ryan | Yes | Yes | Yes |
 | Mihono Bourbon | Yes | Yes | Yes |
 | Nice Nature | Yes | Yes | Yes |
 | Sakura Bakushin O | Yes | Yes | Yes |
@@ -49,7 +51,7 @@ The 2026-06-11 batch added seven entries from the June banner research pass: Swe
 ### User flow
 
 1. User opens UMA Auto+ and selects a **scenario** (e.g., "Trackblazer") on the Home page.
-2. A **character preset dropdown** appears below the scenario selector, filtered to show only presets for that scenario (27 characters).
+2. A **character preset dropdown** appears below the scenario selector, filtered to show only presets for that scenario (29 characters).
 3. User picks a character (e.g., "El Condor Pasa").
 4. The preset's full settings are **deep-merged** into the current app configuration, overwriting every settings category.
 5. Settings are **saved to SQLite immediately** so the Kotlin backend reads the correct values.
