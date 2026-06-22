@@ -2156,6 +2156,22 @@ abstract class Campaign(game: Game) : Task(game) {
                 // Perform parallel turn-start updates (stats, mood, energy, fans, etc.).
                 performTurnStartUpdates(sourceBitmap)
 
+                // Debug-only: one labeled positive fixture per new turn for the offline replay corpus.
+                if (com.steve1316.uma_android_automation.BuildConfig.DEBUG && dateChanged) {
+                    game.imageUtils.saveFixture(
+                        "turn_t${date.day}",
+                        sourceBitmap,
+                        mapOf(
+                            "scenario" to game.scenario, "trainee" to trainee.name,
+                            "turn" to date.day, "date" to date.toString(),
+                            "spd" to trainee.stats.speed, "sta" to trainee.stats.stamina,
+                            "pwr" to trainee.stats.power, "grt" to trainee.stats.guts, "wit" to trainee.stats.wit,
+                            "energy" to trainee.energy, "mood" to trainee.mood.name,
+                            "fans" to trainee.fans, "skillPts" to trainee.skillPoints,
+                        ),
+                    )
+                }
+
                 // Scenario-specific post-update hook.
                 onAfterTurnStartUpdates()
             }
@@ -2750,6 +2766,23 @@ abstract class Campaign(game: Game) : Task(game) {
             } else {
                 detectedKnownScreen = false
                 consecutiveUnknownScreenCount++
+                // Debug-only: capture genuinely-stuck unknown screens (skip short benign animations).
+                if (com.steve1316.uma_android_automation.BuildConfig.DEBUG &&
+                    (consecutiveUnknownScreenCount == 6 || consecutiveUnknownScreenCount == 13 || consecutiveUnknownScreenCount == 22)
+                ) {
+                    game.imageUtils.saveFixture(
+                        "unknown_t${date.day}_n$consecutiveUnknownScreenCount",
+                        null,
+                        mapOf(
+                            "scenario" to game.scenario, "trainee" to trainee.name,
+                            "turn" to date.day, "date" to date.toString(),
+                            "stuckCount" to consecutiveUnknownScreenCount,
+                            "spd" to trainee.stats.speed, "sta" to trainee.stats.stamina,
+                            "pwr" to trainee.stats.power, "grt" to trainee.stats.guts, "wit" to trainee.stats.wit,
+                            "energy" to trainee.energy, "mood" to trainee.mood.name, "fans" to trainee.fans,
+                        ),
+                    )
+                }
                 MessageLog.i(
                     TAG,
                     "[INFO] Did not detect the bot being at the following screens: Main, Training Event, Inheritance, Mandatory Race Preparation, Racing and Career End. (unknown screen #$consecutiveUnknownScreenCount)",
@@ -2822,8 +2855,8 @@ abstract class Campaign(game: Game) : Task(game) {
             return true
         }
         return try {
-            // Scan 22%-53% width, 94%-98% height - centered on the Skip pill button.
-            val skipOcr =
+            // Scan 22%-53% width, 94%-98% height - centered on the event-INTRO Skip pill.
+            val skipPillOcr =
                 game.imageUtils.performOCROnRegion(
                     sourceBitmap,
                     (sourceBitmap.width * 0.22).toInt(),
@@ -2835,7 +2868,27 @@ abstract class Campaign(game: Game) : Task(game) {
                     scale = 2.0,
                     debugName = "unknown_skip_pill_ocr",
                 )
-            skipOcr.uppercase().contains("SKIP")
+            if (skipPillOcr.uppercase().contains("SKIP")) {
+                true
+            } else {
+                // Day-end event / result screens (support-card & scenario event dialogue, hint-level-up,
+                // goal-result) render the green "Skip >>" button lower and further left than the intro
+                // pill, so the band above missed it and the screen churned to the unknown-screen stop.
+                // A wider bottom-left scan catches them; they advance with the same body-tap.
+                val skipButtonOcr =
+                    game.imageUtils.performOCROnRegion(
+                        sourceBitmap,
+                        (sourceBitmap.width * 0.03).toInt(),
+                        (sourceBitmap.height * 0.86).toInt(),
+                        (sourceBitmap.width * 0.52).toInt(),
+                        (sourceBitmap.height * 0.13).toInt(),
+                        useThreshold = false,
+                        useGrayscale = false,
+                        scale = 2.0,
+                        debugName = "unknown_skip_button_ocr",
+                    )
+                skipButtonOcr.uppercase().contains("SKIP")
+            }
         } catch (e: InterruptedException) {
             throw e
         } catch (_: Exception) {
@@ -2934,6 +2987,25 @@ abstract class Campaign(game: Game) : Task(game) {
         // trophy sat through OK attempts and both nudges, which land just above its button).
         if (ButtonClose.click(game.imageUtils)) {
             MessageLog.i(TAG, "[INFO] recoverFromUnknownScreen:: Dismissed an unrecognized screen via its Close button.")
+            game.wait(1.0)
+            return
+        }
+        // Post-turn result / event screens (GOAL COMPLETE!, race results, achievement & hint popups,
+        // day-end event results) advance via a Next or Skip button, not OK/Close - without these the
+        // loop blind-nudges them for several cycles before stumbling past. Tap the affordance directly
+        // when present; each no-ops when absent, and the screen is already unknown so advancing is safe.
+        if (ButtonNext.click(game.imageUtils)) {
+            MessageLog.i(TAG, "[INFO] recoverFromUnknownScreen:: Advanced a result/continue screen via its Next button.")
+            game.wait(1.0)
+            return
+        }
+        if (ButtonNextRaceEnd.click(game.imageUtils)) {
+            MessageLog.i(TAG, "[INFO] recoverFromUnknownScreen:: Advanced a race-result screen via its Next button.")
+            game.wait(1.0)
+            return
+        }
+        if (ButtonSkip.click(game.imageUtils)) {
+            MessageLog.i(TAG, "[INFO] recoverFromUnknownScreen:: Skipped through a result/event screen via its Skip button.")
             game.wait(1.0)
             return
         }

@@ -398,6 +398,23 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
             }
         }
 
+        // Debug-only: capture event screens the matcher could not confidently place, for the replay corpus.
+        if (com.steve1316.uma_android_automation.BuildConfig.DEBUG && bestResult.confidence < minimumConfidence) {
+            imageUtils.saveFixture(
+                "event_lowconf",
+                null,
+                mapOf(
+                    "scenario" to game.scenario,
+                    "bestMatch" to bestResult.eventTitle,
+                    "category" to bestResult.category,
+                    "score" to bestResult.confidence,
+                    "threshold" to minimumConfidence,
+                    "character" to bestResult.character,
+                    "support" to bestResult.supportCardTitle,
+                ),
+            )
+        }
+
         val endTime: Long = System.currentTimeMillis()
         Log.d(TAG, "[DEBUG] recognizeTrainingEvent:: Total Runtime for recognizing training event: ${endTime - startTime}ms")
 

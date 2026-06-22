@@ -2655,6 +2655,37 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
     }
 
     /**
+     * Debug-only fixture capture: saves the current frame plus a JSON sidecar describing what the bot
+     * read or decided, under matchFilePath/fixtures, to build an offline replay-test corpus. No-ops in
+     * release and swallows every error - a capture must never interrupt an unattended run. Uses
+     * android.util.Log (not MessageLog) so a failure here can never touch the logging lock.
+     *
+     * @param trigger Short label for the capture point; also the filename prefix (e.g. "unknown_t42").
+     * @param bitmap The frame to save. If null, a fresh screenshot is taken.
+     * @param sidecar Key/value state to record alongside the frame (turn, stats, what was read, etc.).
+     */
+    fun saveFixture(trigger: String, bitmap: Bitmap?, sidecar: Map<String, Any?>) {
+        if (!com.steve1316.uma_android_automation.BuildConfig.DEBUG) return
+        try {
+            val frame = bitmap ?: getSourceBitmap()
+            val dir = java.io.File("$matchFilePath/fixtures")
+            dir.mkdirs()
+            val base = "${trigger}_${System.currentTimeMillis()}_${Random.nextInt(1000)}"
+            java.io.FileOutputStream(java.io.File(dir, "$base.png")).use { out ->
+                frame.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            val json = org.json.JSONObject()
+            json.put("trigger", trigger)
+            for ((key, value) in sidecar) {
+                json.put(key, value ?: org.json.JSONObject.NULL)
+            }
+            java.io.File(dir, "$base.json").writeText(json.toString(2))
+        } catch (t: Throwable) {
+            Log.w("FixtureCapture", "fixture capture failed (non-fatal): ${t.message}")
+        }
+    }
+
+    /**
      * Draws bounding boxes on a bitmap and saves it as a debug image.
      *
      * @param bitmap The source bitmap to draw on.
