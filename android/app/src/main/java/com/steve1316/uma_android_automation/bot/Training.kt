@@ -2012,8 +2012,32 @@ class Training(private val game: Game, private val campaign: Campaign) {
         val finalScoringMode = if (isIrregularEvaluation) "Trackblazer (Irregular Training)" else scoringMode
         logSelectionReasoning(trainingConfig, finalScoringMode, trainingScores, skippedScores, best)
 
+        // DecisionTracer: capture the per-stat scoring contest (scored + skipped trainings) for this
+        // turn's Decision Report. Built once here; the picked training is filtered out at each branch.
+        val tracerRunnerUps: List<DecisionTracer.TrainingRunnerUp> =
+            (trainingScores.entries.map { it.key to false } + skippedScores.entries.map { it.key to true })
+                .map { (option, wasSkipped) ->
+                    val scoreMap = if (wasSkipped) skippedScores else trainingScores
+                    DecisionTracer.TrainingRunnerUp(
+                        stat = option.name,
+                        rejected = wasSkipped,
+                        reason = option.skipReason?.takeIf { it.isNotBlank() } ?: if (wasSkipped) "filtered out" else "outscored",
+                        score = scoreMap[option],
+                        failureChance = option.failureChance.takeIf { it >= 0 },
+                        statGains = option.statGains,
+                    )
+                }
+
         if (best != null) {
             lastSelectionSource = SelectionSource.ANALYSIS
+            campaign.decisionTracer?.recordTrainingSelection(
+                selected = best.name,
+                source = SelectionSource.ANALYSIS,
+                reason = "won analysis ($finalScoringMode) with score ${trainingScores[best]?.let { String.format("%.2f", it) } ?: "?"}",
+                runnerUps = tracerRunnerUps.filter { it.stat != best.name },
+                pickedFailureChance = best.failureChance.takeIf { it >= 0 },
+                pickedStatGains = best.statGains,
+            )
             return best.name
         }
 
@@ -2031,6 +2055,14 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         "This selection will execute despite analysis rejection.",
                 )
                 lastSelectionSource = SelectionSource.FORCED_FROM_SKIPPED
+                campaign.decisionTracer?.recordTrainingSelection(
+                    selected = pick.name,
+                    source = SelectionSource.FORCED_FROM_SKIPPED,
+                    reason = "analysis rejected all trainings; forced highest-scored skipped training (score=${String.format("%.2f", topSkipped.value)})",
+                    runnerUps = tracerRunnerUps.filter { it.stat != pick.name },
+                    pickedFailureChance = pick.failureChance.takeIf { it >= 0 },
+                    pickedStatGains = pick.statGains,
+                )
                 return pick.name
             }
             val defaulted = trainingMap.keys.firstOrNull { it !in blacklist }
@@ -2039,6 +2071,12 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 "[TRAINING] Analysis produced no scored entries. forceSelection=true → defaulting to first non-blacklisted training: ${defaulted ?: "none available"}.",
             )
             lastSelectionSource = SelectionSource.FORCED_DEFAULT
+            campaign.decisionTracer?.recordTrainingSelection(
+                selected = defaulted,
+                source = SelectionSource.FORCED_DEFAULT,
+                reason = "analysis produced no scored entries; forced first non-blacklisted training",
+                runnerUps = tracerRunnerUps,
+            )
             return defaulted
         }
 
@@ -2048,6 +2086,12 @@ class Training(private val game: Game, private val campaign: Campaign) {
             "[TRAINING] Analysis returned no winning training. forceSelection=false → returning first non-blacklisted training: ${unforced ?: "none available"}. Caller decides whether to execute.",
         )
         lastSelectionSource = SelectionSource.UNFORCED_DEFAULT
+        campaign.decisionTracer?.recordTrainingSelection(
+            selected = unforced,
+            source = SelectionSource.UNFORCED_DEFAULT,
+            reason = "analysis returned no winner; returning first non-blacklisted training for caller to handle",
+            runnerUps = tracerRunnerUps,
+        )
         return unforced
     }
 

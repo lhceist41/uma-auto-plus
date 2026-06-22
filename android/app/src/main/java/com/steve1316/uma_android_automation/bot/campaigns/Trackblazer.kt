@@ -794,6 +794,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                 return super.decideNextAction()
             }
             MessageLog.i(TAG, "[TRACKBLAZER] It is Summer. Prioritizing training.")
+            decisionTracer?.recordActionChoice(MainScreenAction.TRAIN, "Trackblazer: Summer training (July/August)")
             return MainScreenAction.TRAIN
         }
 
@@ -804,6 +805,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                 return super.decideNextAction()
             }
             MessageLog.i(TAG, "[TRACKBLAZER] It is the Finale. Prioritizing training.")
+            decisionTracer?.recordActionChoice(MainScreenAction.TRAIN, "Trackblazer: Finale training (turns 73-75)")
             return MainScreenAction.TRAIN
         }
 
@@ -815,6 +817,7 @@ class Trackblazer(game: Game) : Campaign(game) {
             date.year == DateYear.JUNIOR && date.month == DateMonth.JULY
         if (isPostDebutBondWindow && !LabelScheduledRace.check(game.imageUtils)) {
             MessageLog.i(TAG, "[TRACKBLAZER] Post-debut bond-building window (Junior July, no rival races yet). Prioritizing training.")
+            decisionTracer?.recordActionChoice(MainScreenAction.TRAIN, "Trackblazer: post-debut bond-building window (Junior July)")
             return MainScreenAction.TRAIN
         }
 
@@ -855,12 +858,17 @@ class Trackblazer(game: Game) : Campaign(game) {
                     // Fall through to normal racing/training logic below.
                 } else {
                     MessageLog.w(TAG, "[WARN] decideNextAction:: Energy still low (${trainee.energy}%) after emergency recovery. Resting.")
+                    decisionTracer?.recordActionChoice(MainScreenAction.REST, "Trackblazer: energy still low (${trainee.energy}%) after emergency recovery")
                     return MainScreenAction.REST
                 }
             } else {
                 MessageLog.w(
                     TAG,
                     "[WARN] decideNextAction:: Energy is low (${trainee.energy}%) with $consecutiveRaceCount consecutive races and no energy items available. Resting to avoid -30 stat penalty.",
+                )
+                decisionTracer?.recordActionChoice(
+                    MainScreenAction.REST,
+                    "Trackblazer: energy ${trainee.energy}% with $consecutiveRaceCount consecutive races, no energy items",
                 )
                 return MainScreenAction.REST
             }
@@ -892,6 +900,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                         MessageLog.i(TAG, "[TRACKBLAZER] Valid Irregular Training found ($bestTraining). Hijacking turn.")
 
                         bIsIrregularTraining = true
+                        decisionTracer?.recordActionChoice(MainScreenAction.TRAIN, "Trackblazer: irregular training hijack ($bestTraining)")
                         return MainScreenAction.TRAIN
                     } else {
                         MessageLog.i(TAG, "[TRACKBLAZER] No valid Irregular Training found. Backing out to resume racing logic.")

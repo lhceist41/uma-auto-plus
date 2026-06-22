@@ -1139,6 +1139,11 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             TAG,
             "[KNAPSACK] DP plan: ${plan.size} skills for $planTotal SP. Skills: ${plan.joinToString { "${it.first}(${it.second})" }}",
         )
+        // Surface the buy in this turn's Decision Report when the purchase runs inside a turn window
+        // (skillPointCheck / preFinals). No-ops at careerComplete, where no turn block is open.
+        campaign.decisionTracer?.recordNote(
+            "Skills (knapsack): ${plan.size} for $planTotal SP — ${plan.joinToString { "${it.first}(${it.second})" }}",
+        )
 
         // Execute the plan: buy each chosen skill via the live SkillListEntry. We iterate the plan
         // in DP order (base before upgrade within an upgrade chain) so the in-game purchase chain

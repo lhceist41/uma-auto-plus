@@ -167,6 +167,16 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Required instance of the GameDate class. */
     var date: GameDate = GameDate(day = 1)
 
+    /**
+     * Per-turn structured decision logger. Records WHY each turn's action / training / race / skill
+     * decision was made and emits one consolidated Decision Report block at turn end. Debug-only: it
+     * is null in release builds so every `decisionTracer?.…` call compiles to a null-safe no-op. The
+     * block is a heavy diagnostic (one multi-line MessageLog write per turn), gated off in release for
+     * performance and log size, mirroring the existing BuildConfig.DEBUG fixture-capture gate.
+     */
+    val decisionTracer: DecisionTracer? =
+        if (com.steve1316.uma_android_automation.BuildConfig.DEBUG) DecisionTracer() else null
+
     /** Flag to track whether the bot should force Wit training during the pre-summer turn. */
     var bForcedWitTraining: Boolean = false
 
@@ -2156,6 +2166,16 @@ abstract class Campaign(game: Game) : Task(game) {
                 // Perform parallel turn-start updates (stats, mood, energy, fans, etc.).
                 performTurnStartUpdates(sourceBitmap)
 
+                // Open this turn's Decision Report window now that trainee/date state is fresh. Any
+                // record* calls during decideNextAction/executeAction (and skill buys in
+                // performGlobalChecks, which run in the same turn before the action) append here, and
+                // emit() flushes the block after the action executes.
+                decisionTracer?.startTurn(
+                    date = date,
+                    trainee = trainee,
+                    settings = DecisionTracer.SettingsSnapshot().add("Mood Floor", moodFloor),
+                )
+
                 // Debug-only: one labeled positive fixture per new turn for the offline replay corpus.
                 if (com.steve1316.uma_android_automation.BuildConfig.DEBUG && dateChanged) {
                     game.imageUtils.saveFixture(
@@ -2219,7 +2239,11 @@ abstract class Campaign(game: Game) : Task(game) {
         // Reuse the cached value populated above instead of re-running LabelScheduledRace.check -
         // nothing between performTurnStartUpdates() and here would have changed scheduled-race
         // status (no game-advancing actions occurred), and the third scan was redundant.
-        return executeAction(action, cachedScheduledRaceDay)
+        val actionExecuted = executeAction(action, cachedScheduledRaceDay)
+        // Flush the consolidated Decision Report after the action ran, so training/race selections
+        // recorded inside executeAction land in the block. emit() is idempotent per turn.
+        decisionTracer?.emit()
+        return actionExecuted
     }
 
     /**
@@ -2405,12 +2429,20 @@ abstract class Campaign(game: Game) : Task(game) {
      * @return The decided [MainScreenAction].
      */
     open fun decideNextAction(): MainScreenAction {
+        // DecisionTracer: accumulate the alternatives ruled out as the priority cascade descends, and
+        // record the chosen action plus its reason at the point it wins. Null-safe no-op in release.
+        val tracerRejected = mutableListOf<DecisionTracer.RejectedAlternative>()
+        fun choose(action: MainScreenAction, reason: String): MainScreenAction {
+            decisionTracer?.recordActionChoice(action, reason, tracerRejected.toList())
+            return action
+        }
+
         // Use cached race-day flags populated in handleMainScreen rather than re-running the
         // same two template scans. The bitmap is captured lazily - only the late branches
         // (checkInjury, shouldRecoverMood) actually use it, so race/popup/maiden/etc. fast
         // paths can return before paying the MediaProjection screenshot cost (~50-150 ms).
         if (cachedMandatoryRaceDay || cachedScheduledRaceDay) {
-            return MainScreenAction.RACE
+            return choose(MainScreenAction.RACE, if (cachedMandatoryRaceDay) "mandatory race day" else "scheduled race day")
         }
 
         if (racing.encounteredRacingPopup) {
@@ -2419,17 +2451,17 @@ abstract class Campaign(game: Game) : Task(game) {
             // race, we don't want to spin on RACE decisions turn after turn just because a popup
             // appeared two turns ago. A fresh popup on a future turn will simply set the flag again.
             racing.encounteredRacingPopup = false
-            return MainScreenAction.RACE
+            return choose(MainScreenAction.RACE, "a racing popup was encountered")
         }
 
         if (racing.enableForceRacing) {
             MessageLog.i(TAG, "[INFO] Force racing enabled - skipping all other activities and going straight to racing.")
-            return MainScreenAction.RACE
+            return choose(MainScreenAction.RACE, "force racing is enabled")
         }
 
         if (!bHasCheckedForMaidenRaceToday && !date.bIsPreDebut && !trainee.bHasCompletedMaidenRace) {
             MessageLog.i(TAG, "[INFO] Bot has not yet completed maiden race. Checking for valid maiden race...")
-            return MainScreenAction.RACE
+            return choose(MainScreenAction.RACE, "maiden race not yet completed")
         }
 
         // From here on the downstream branches need a screenshot - capture it now.
@@ -2447,28 +2479,28 @@ abstract class Campaign(game: Game) : Task(game) {
                 )
             } else if (trainee.energy < 70) {
                 MessageLog.i(TAG, "[INFO] Energy is low (${trainee.energy}% < 70%). Forcing rest during $date in preparation for Summer Training.")
-                return MainScreenAction.REST
+                return choose(MainScreenAction.REST, "pre-summer prep: energy ${trainee.energy}% < 70%")
             } else if (trainee.mood < Mood.GREAT) {
                 // If firstTrainingCheck is active, mood recovery will be refused. Do a
                 // training first to clear the flag, then the next turn can recover mood.
                 if (training.firstTrainingCheck) {
                     MessageLog.i(TAG, "[INFO] Mood is ${trainee.mood} but firstTrainingCheck is active. Doing a training first to clear the flag before mood recovery can proceed.")
-                    return MainScreenAction.TRAIN
+                    return choose(MainScreenAction.TRAIN, "pre-summer prep: train first to clear firstTrainingCheck before mood recovery")
                 }
                 MessageLog.i(TAG, "[INFO] Energy is sufficient (>= 70%) but Mood is not Great (${trainee.mood}). Forcing mood recovery during $date in preparation for Summer Training.")
                 forcedTargetMood = Mood.GREAT
-                return MainScreenAction.RECOVER_MOOD
+                return choose(MainScreenAction.RECOVER_MOOD, "pre-summer prep: mood ${trainee.mood} below Great")
             } else {
                 MessageLog.i(TAG, "[INFO] Energy is sufficient (>= 70%) and mood is Great. Performing Wit training during $date in preparation for Summer Training.")
                 bForcedWitTraining = true
-                return MainScreenAction.TRAIN
+                return choose(MainScreenAction.TRAIN, "pre-summer prep: forced Wit training (energy and mood sufficient)")
             }
         }
 
         val isRacingRequirementActive = racing.hasFanRequirement || racing.hasTrophyRequirement
         if (isRacingRequirementActive) {
             MessageLog.i(TAG, "[INFO] Racing requirement is active. Bypassing health and mood checks.")
-            return MainScreenAction.RACE
+            return choose(MainScreenAction.RACE, "racing requirement active (fan/trophy goal)")
         }
 
         val isFinals = checkFinals()
@@ -2482,19 +2514,21 @@ abstract class Campaign(game: Game) : Task(game) {
 
         if (hasInjury) {
             // Injury handled internally in checkInjury, but returning NONE as turn is likely over or needs re-evaluation.
-            return MainScreenAction.NONE
+            return choose(MainScreenAction.NONE, "injury handled; re-evaluating next tick")
         }
 
         if (shouldRecoverMood(sourceBitmap)) {
-            return MainScreenAction.RECOVER_MOOD
+            return choose(MainScreenAction.RECOVER_MOOD, "mood ${trainee.mood} below floor $moodFloor")
         }
+        tracerRejected.add(DecisionTracer.RejectedAlternative("RECOVER_MOOD", "mood ${trainee.mood} at/above floor $moodFloor"))
 
         if (racing.checkEligibilityToStartExtraRacingProcess()) {
             MessageLog.i(TAG, "[INFO] Bot has no injuries, mood is sufficient and extra races can be run today. Setting the action to RACE.")
-            return MainScreenAction.RACE
+            return choose(MainScreenAction.RACE, "extra races can be run today")
         }
+        tracerRejected.add(DecisionTracer.RejectedAlternative("RACE", "extra-race eligibility gate not met (see Race eligibility)"))
 
-        return MainScreenAction.TRAIN
+        return choose(MainScreenAction.TRAIN, "default action: no race required, no recovery needed, no extra race eligible")
     }
 
     /**
