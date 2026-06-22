@@ -219,6 +219,15 @@ open class DialogHandler(val game: Game) {
                 dialog.close(game.imageUtils)
             }
 
+            "follow_trainer" -> {
+                // Appears after a run when Auto-Fill borrowed a support card from a trainer you hadn't
+                // used before, asking whether to follow them. There's no rule to when it shows. The
+                // DialogFollowTrainer object existed but had no handler case here, so it fell through to
+                // the else branch (Unhandled) and the bot wedged on the open popup. Default to Cancel
+                // (close() clicks the first button, ButtonCancel) so the run continues to a known screen.
+                dialog.close(game.imageUtils)
+            }
+
             "give_up" -> {
                 dialog.close(game.imageUtils)
             }

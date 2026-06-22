@@ -706,6 +706,30 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.ACTIVE_TRAINING_MENU
         }
 
+        // The "Follow Trainer" prompt (Auto-Fill borrowed a support card from a trainer you hadn't used
+        // before) can pop anywhere in the post-run / launch flow with no rule to its timing, and it
+        // matches none of the discriminators above. Before careerLaunchInitiated is set it would otherwise
+        // fall straight to UNKNOWN and, after MAX_CONSECUTIVE_UNKNOWNS, stall the queue. It is a pure
+        // nuisance dialog with no navigational meaning: dismiss it with Cancel (close() clicks the first
+        // button, ButtonCancel) and re-detect — the next detection lands on the real underlying screen.
+        // (When careerLaunchInitiated is true the block above already hands it to the campaign's
+        // DialogHandler, which Cancels it the same way.)
+        if (DialogUtils.check(iu, sourceBitmap = bitmap)) {
+            val dialogTitle =
+                try {
+                    DialogUtils.getTitle(iu, bitmap)
+                } catch (e: InterruptedException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                }
+            if (dialogTitle == DialogFollowTrainer.title) {
+                MessageLog.i(TAG, "[NAV] Follow Trainer prompt detected; tapping Cancel to dismiss and continue.")
+                DialogFollowTrainer.close(iu)
+                return LaunchScreenState.UNKNOWN
+            }
+        }
+
         return LaunchScreenState.UNKNOWN
     }
 
