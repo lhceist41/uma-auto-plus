@@ -312,8 +312,8 @@ const DebugSettings = () => {
                                 <InfoContainer>
                                     <View>
                                         <Text style={styles.infoDescription}>
-                                            📡 The Remote Log Viewer is bound to the device&apos;s loopback interface for safety — the log and screenshots are
-                                            served with no authentication, so it is not exposed on the network. Reach it from your computer over adb:
+                                            📡 The Remote Log Viewer is bound to the device&apos;s loopback interface for safety — the log and screenshots are served with no authentication, so it is
+                                            not exposed on the network. Reach it from your computer over adb:
                                         </Text>
                                         <Text style={[styles.infoLabel, { marginTop: 8 }]}>
                                             adb forward tcp:{bsc.settings.debug.remoteLogViewerPort} tcp:{bsc.settings.debug.remoteLogViewerPort}
@@ -326,8 +326,8 @@ const DebugSettings = () => {
                                             http://localhost:{bsc.settings.debug.remoteLogViewerPort}
                                         </Text>
                                         <Text style={[styles.infoDescription, { marginTop: 8 }]}>
-                                            The device&apos;s own IP ({deviceIp}) is no longer used to reach the viewer directly. For a physical device,
-                                            connect it over USB (or adb over the same network) first; the first connection may take a moment to establish.
+                                            The device&apos;s own IP ({deviceIp}) is no longer used to reach the viewer directly. For a physical device, connect it over USB (or adb over the same
+                                            network) first; the first connection may take a moment to establish.
                                         </Text>
                                     </View>
                                 </InfoContainer>

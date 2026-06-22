@@ -49,7 +49,14 @@ const SNAPSHOT_DENYLIST = new Set(["runQueue", "queueState", "discord"])
 // the active profile label and formattedSettingsString is a cached human-readable dump - both are
 // stale snapshots of the moment the rotation was built and reapplying them per-switch would clobber
 // the live profile label / settings echo. Mirrors the fields the export path already strips.
-const SNAPSHOT_KEY_DENYLIST = new Set(["trainingEvent.characterEventData", "trainingEvent.supportEventData", "trainingEvent.scenarioEventData", "racing.racingPlanData", "misc.currentProfileName", "misc.formattedSettingsString"])
+const SNAPSHOT_KEY_DENYLIST = new Set([
+    "trainingEvent.characterEventData",
+    "trainingEvent.supportEventData",
+    "trainingEvent.scenarioEventData",
+    "racing.racingPlanData",
+    "misc.currentProfileName",
+    "misc.formattedSettingsString",
+])
 
 /**
  * Builds each rotation trainee's full settings snapshot as namespaced SQLite rows.
