@@ -576,9 +576,11 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
         val y0: Int = game.imageUtils.relY(bboxSafeZone.y.toDouble(), 0)
         val y1: Int = game.imageUtils.relY(bboxSafeZone.y.toDouble(), bboxSafeZone.h)
 
-        // Select random tap point.
-        val x: Double = (x0..x1).random().toDouble()
-        val y: Double = (y0..y1).random().toDouble()
+        // Select random tap point. Order the bounds with minOf/maxOf first: a short list (e.g. the
+        // post-purchase "choose how many to use" screen) can invert the computed range by a few px,
+        // and IntRange.random() throws NoSuchElementException on an empty (start > end) range.
+        val x: Double = (minOf(x0, x1)..maxOf(x0, x1)).random().toDouble()
+        val y: Double = (minOf(y0, y1)..maxOf(y0, y1)).random().toDouble()
 
         // Execute tap.
         game.tap(x, y, taps = 1, ignoreWaiting = true)
