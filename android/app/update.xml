@@ -1,16 +1,15 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.3.2</latestVersion>
+    <latestVersion>1.3.3</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.3.2 - Reliability, shop/scroll hardening, and a career-outcome log line
+v1.3.3 - Result-screen recovery, the Follow Trainer stall, a scroll crash, and two new trainees
 
-- New: a [CAREER_END] line written at the end of every career, recording the result, scenario, the turn it ended on, fans, final stats and skill points -- so a run's outcome is legible at a glance and easy to share in a bug report. The game shows the same screen for a clean finish and an early force-end, so the turn it ended on is the tell.
-- New: an option to skip double-circle (◎) skill upgrades and spread points across more single-circle skills instead (off by default).
-- Fixed: overnight runs that cross midnight no longer stall on the real-world date-rollover popup.
-- Fixed: the shop is confirmed open before buying, a scrollbar edge case no longer truncates long lists, and a dialog the recovery net can't clear now ends the run cleanly instead of spinning until the watchdog.
-- Fixed: the Remote Log Viewer's Compact toggle now re-renders the lines already on screen.
-- Validated with a 3-career unattended Trackblazer queue that completed end to end.
+- New: presets for Biwa Hayahide and Mejiro Ryan (the roster is now 29 trainees across 87 presets).
+- Fixed: the bot now advances result and event screens -- goal-complete, race results, hint and achievement popups, and day-end event dialogue -- by pressing their Skip or Next button, instead of churning through several unknown-screen recovery cycles first.
+- Fixed: the "Follow Trainer" prompt that Auto-Fill can raise no longer stalls a queued run; it is dismissed by default.
+- Fixed: a short scrollable list (such as the post-purchase "choose how many to use" screen) could crash the random tap picker; the tap bounds are now ordered so it cannot.
+- Fixed: "Prioritize Skill Hints" now respects the failure-chance, energy, and blacklist limits like every other training, and applies in every year.
 
     </releaseNotes>
   </update>

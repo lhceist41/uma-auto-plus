@@ -8,6 +8,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [1.3.3] - 2026-06-22
+
+A reliability patch plus two new trainees. The bot now skips through the result and event screens it used to churn on, the post-Auto-Fill "Follow Trainer" prompt no longer stalls a queue, a short scrollable list can no longer crash the tap picker, and "Prioritize Skill Hints" now plays by the same rules as every other training.
+
+### New
+
+- Presets for Biwa Hayahide and Mejiro Ryan (the roster is now 29 trainees across 87 presets).
+
+### Fixed
+
+- The bot now advances result and event screens -- goal-complete, race results, hint and achievement popups, and day-end event dialogue -- by pressing their Skip or Next button, instead of churning through several unknown-screen recovery cycles before stumbling past.
+- The "Follow Trainer" prompt that appears when Auto-Fill borrows a card from someone you have not raced is dismissed by default, so it no longer stalls a queued run.
+- A short scrollable list (such as the post-purchase "choose how many to use" screen) could crash the bot; it cannot any more.
+- "Prioritize Skill Hints" no longer trains a hinted stat at any failure chance or with no energy, and no longer overrides the training blacklist. A skill hint now only wins among trainings that already pass the same failure-rate, energy, and blacklist gates as every other training, and that prioritization now applies in every year.
+
+---
+
 ## [1.3.2] - 2026-06-20
 
 A reliability and diagnostics patch on top of 1.3.1. Overnight queues that crossed midnight could stall on the real-world date-rollover popup; the shop and long scrollable lists each had an edge case that could mislead the bot; and the end of a career now writes a single structured outcome line so a run's result is legible at a glance. Plus a new skill-buying option and a log-viewer fix.
