@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Network security config for UMA Auto+.
-    Cleartext is allowed ONLY for localhost (Metro dev server and local log viewer).
-    All other traffic requires HTTPS.
+    Default network security config for UMA Auto+.
+    Cleartext is allowed ONLY for localhost (Metro dev server and local log viewer);
+    all other traffic requires HTTPS. This is the base config that the debug and
+    debugOptimized variants use. The release source set overrides it with a stricter
+    config that forbids cleartext entirely.
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="false" />
