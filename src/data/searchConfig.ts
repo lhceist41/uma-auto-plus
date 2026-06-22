@@ -134,7 +134,8 @@ const searchConfig: SearchOption[] = [
     {
         id: "enable-prioritize-skill-hints",
         title: "Prioritize Skill Hints",
-        description: "When enabled, the bot will prioritize acquiring skill hints, bypassing stat prioritization and blacklist, while still being constrained by the failure chance thresholds.",
+        description:
+            "When enabled, the bot prioritizes trainings that show a skill hint (overriding your stat prioritization), in every year. Hints still respect the failure-chance and energy limits and your training blacklist — a blacklisted stat is never trained even when it shows a hint.",
         page: "TrainingSettings",
     },
     {

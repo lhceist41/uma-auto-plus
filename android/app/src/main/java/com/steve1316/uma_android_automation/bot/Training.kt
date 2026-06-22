@@ -760,6 +760,33 @@ class Training(private val game: Game, private val campaign: Campaign) {
         }
 
         /**
+         * Select the winning training from a set of scored options, applying skill-hint priority.
+         *
+         * When [enablePrioritizeSkillHints] is true and at least one option carries a skill hint, the
+         * highest-scoring hinted option is returned; otherwise the highest-scoring option overall wins.
+         *
+         * This is the single, mode-agnostic place skill-hint priority is applied (issue #372). The
+         * caller must pass only gate-passing trainings (failure-rate, energy, and blacklist already
+         * filtered into trainingMap), so prioritizing a hint here never bypasses those gates. Doing the
+         * priority here — rather than only inside calculateMiscScore's 10000+ boost, which solely the
+         * Year-2+ stat-efficiency scorer consults — makes hints prioritized in every scoring mode
+         * (Friendship in Junior/Pre-Debut and Spirit-Gauge in Unity Cup ignore the misc score).
+         *
+         * @param trainingScores Map of gate-passing [TrainingOption]s to their computed mode score.
+         * @param enablePrioritizeSkillHints Whether skill-hint prioritization is enabled.
+         * @return The selected [TrainingOption], or null if [trainingScores] is empty.
+         */
+        fun selectBestTrainingWithHintPriority(trainingScores: Map<TrainingOption, Double>, enablePrioritizeSkillHints: Boolean): TrainingOption? {
+            if (enablePrioritizeSkillHints) {
+                val bestHinted = trainingScores.filterKeys { it.numSkillHints > 0 }.maxByOrNull { it.value }?.key
+                if (bestHinted != null) {
+                    return bestHinted
+                }
+            }
+            return trainingScores.maxByOrNull { it.value }?.key
+        }
+
+        /**
          * Calculate the raw training score without normalization.
          *
          * This method calculates raw high-level scores that will later be normalized based on the actual maximum score in the current training session.
@@ -1216,24 +1243,16 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 }
             }
 
-            // Early skill hint detection: If prioritization is enabled, scan for skill hints before analyzing trainings.
-            // This ensures skill hints are detected even if some trainings are blacklisted.
-            if (!test && enablePrioritizeSkillHints) {
-                MessageLog.v(TAG, "[TRAINING] Skill hint prioritization is enabled. Scanning for skill hints before training analysis...")
-                val skillHintLocations: ArrayList<Point> = IconStatSkillHint.findAll(game.imageUtils, region = game.imageUtils.regionBottomHalf)
-                if (skillHintLocations.isNotEmpty()) {
-                    MessageLog.i(TAG, "[TRAINING] Found ${skillHintLocations.size} skill hint(s) on the training screen. Tapping on the first skill hint location and skipping training analysis.")
-                    val firstHint = skillHintLocations.first()
-
-                    // game.tap() already runs wait(0.20) + waitForLoading() internally (ignoreWaiting
-                    // defaults to false), so no extra fixed wait here — the next caller's screen check re-polls.
-                    game.tap(firstHint.x, firstHint.y, IconStatSkillHint.template.path, taps = 3)
-                    MessageLog.v(TAG, "[TRAINING] Process to execute skill hint training completed.")
-                    return
-                } else {
-                    MessageLog.i(TAG, "[TRAINING] No skill hints found. Proceeding with normal training analysis.")
-                }
-            }
+            // Skill-hint prioritization is handled entirely by the gated per-stat path below — there is
+            // deliberately NO early tap-and-return here. The old early block scanned the bottom half for any
+            // hint and immediately tapped the first one, which bypassed the failure-rate, energy, and
+            // blacklist gates every other training respects (it could train a hinted stat at up to 100%
+            // failure, on a blacklisted stat, or with no energy). Instead: the per-stat loop detects hints
+            // for each non-blacklisted training (Thread 4 -> result.numSkillHints), processAnalysisResults()
+            // drops any training over the effective failure threshold before it reaches trainingMap, and
+            // calculateMiscScore() gives the surviving hinted trainings a dominating 10000+ score in
+            // recommendTraining(). executeTraining() then taps the winner the same way it taps any
+            // recommendation, so hints stay prioritized while obeying every gate.
 
             // Now analyze each stat.
             for (statName in StatName.entries) {
@@ -1965,27 +1984,29 @@ class Training(private val game: Game, private val campaign: Campaign) {
         val scoringMode: String
         val trainingScores: Map<TrainingOption, Double>
         val skippedScores: Map<TrainingOption, Double>
-        val best: TrainingOption?
-
         if (game.scenario == "Unity Cup" && campaign.date.year < DateYear.SENIOR) {
             // Unity Cup (Year < 3): Use Spirit Explosion Gauge priority system.
             scoringMode = "Unity Cup (Spirit Gauge)"
             trainingScores = trainingMap.values.associateWith { scoreUnityCupTraining(trainingConfig, it) }
             skippedScores = skippedTrainingMap.values.associateWith { scoreUnityCupTraining(trainingConfig, it) }
-            best = trainingScores.maxByOrNull { it.value }?.key
         } else if (campaign.date.bIsPreDebut || campaign.date.year == DateYear.JUNIOR) {
             // Junior Year: Focus on building relationship bars.
             scoringMode = "Friendship (Pre-Debut/Junior)"
             trainingScores = trainingMap.values.associateWith { scoreFriendshipTraining(it) }
             skippedScores = skippedTrainingMap.values.associateWith { scoreFriendshipTraining(it) }
-            best = trainingScores.maxByOrNull { it.value }?.key
         } else {
             // For Year 2+ as a fallback, use ratio-based stat efficiency scoring.
             scoringMode = "Stat Efficiency (Year 2+)"
             trainingScores = trainingMap.values.associateWith { calculateRawTrainingScore(trainingConfig, it) }
             skippedScores = skippedTrainingMap.values.associateWith { calculateRawTrainingScore(trainingConfig, it) }
-            best = trainingScores.maxByOrNull { it.value }?.key
         }
+
+        // Skill-hint priority is applied here, after mode scoring, so it works in EVERY mode (the
+        // Friendship and Unity Cup scorers above don't read hints — only the Year-2+ scorer does, via
+        // calculateMiscScore). trainingScores already contains only gate-passing trainings (failure
+        // rate, energy, and blacklist were applied when trainingMap was built), so a hinted winner here
+        // never bypasses those gates. See issue #372.
+        val best: TrainingOption? = selectBestTrainingWithHintPriority(trainingScores, enablePrioritizeSkillHints)
 
         // Build and log training analysis results and selection reasoning.
         val finalScoringMode = if (isIrregularEvaluation) "Trackblazer (Irregular Training)" else scoringMode

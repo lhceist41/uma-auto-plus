@@ -8,6 +8,7 @@ import com.steve1316.uma_android_automation.bot.Training.Companion.getFinaleStat
 import com.steve1316.uma_android_automation.bot.Training.Companion.getRemainingFinaleRaces
 import com.steve1316.uma_android_automation.bot.Training.Companion.scoreFriendshipTraining
 import com.steve1316.uma_android_automation.bot.Training.Companion.scoreUnityCupTraining
+import com.steve1316.uma_android_automation.bot.Training.Companion.selectBestTrainingWithHintPriority
 import com.steve1316.uma_android_automation.bot.Training.TrainingConfig
 import com.steve1316.uma_android_automation.bot.Training.TrainingOption
 import com.steve1316.uma_android_automation.types.DateMonth
@@ -100,6 +101,7 @@ class TrainingScoringTest {
         numRainbow: Int = 0,
         numSpiritGaugesCanFill: Int = 0,
         numSpiritGaugesReadyToBurst: Int = 0,
+        numSkillHints: Int = 0,
     ): TrainingOption {
         return TrainingOption(
             name = name,
@@ -109,6 +111,7 @@ class TrainingScoringTest {
             numRainbow = numRainbow,
             numSpiritGaugesCanFill = numSpiritGaugesCanFill,
             numSpiritGaugesReadyToBurst = numSpiritGaugesReadyToBurst,
+            numSkillHints = numSkillHints,
         )
     }
 
@@ -501,6 +504,89 @@ class TrainingScoringTest {
         val normalScore = calculateMiscScore(configWithoutPriority, training)
 
         assertTrue(priorityScore > normalScore, "Prioritized skill hints should return higher score than normal skill hints")
+    }
+
+    @Test
+    @DisplayName("Prioritization does not boost a training that carries zero skill hints (issue #372 gate)")
+    fun testPrioritizationDoesNotBoostHintlessTraining() {
+        // Regression guard for the issue #372 fix. A hinted training that fails the failure-rate/energy
+        // gate is dropped from trainingMap, so recommendTraining() reads 0 hints for it. With zero hints
+        // the priority boost must NOT apply even when prioritization is enabled — otherwise a gated-out
+        // high-failure hint could still dominate the recommendation. This verifies the 10000+ boost is
+        // conditional on numSkillHints > 0, keeping a hintless training in the normal 0..100 score band.
+        val training = createDefaultTrainingOption(name = StatName.SPEED)
+
+        val config =
+            createDefaultConfig(
+                trainingOptions = listOf(training),
+                skillHintsPerLocation =
+                    mapOf(
+                        StatName.SPEED to 0,
+                        StatName.STAMINA to 0,
+                        StatName.POWER to 0,
+                        StatName.GUTS to 0,
+                        StatName.WIT to 0,
+                    ),
+                enablePrioritizeSkillHints = true,
+            )
+
+        val score = calculateMiscScore(config, training)
+
+        assertTrue(score <= 100.0, "A training with zero skill hints must not receive the 10000+ priority boost even when prioritization is enabled")
+    }
+
+    // ============================================================================
+    // selectBestTrainingWithHintPriority Tests (issue #372 — all-years gated hint priority)
+    // ============================================================================
+
+    @Test
+    @DisplayName("Hint priority picks a hinted training over a higher-scored non-hinted one")
+    fun testHintPriorityPrefersHintedOverHigherScore() {
+        val hinted = createDefaultTrainingOption(name = StatName.SPEED, numSkillHints = 1)
+        val plain = createDefaultTrainingOption(name = StatName.STAMINA, numSkillHints = 0)
+        // The non-hinted training has the higher mode score, but prioritization must still pick the hinted one.
+        val scores = mapOf(hinted to 10.0, plain to 99.0)
+
+        val best = selectBestTrainingWithHintPriority(scores, enablePrioritizeSkillHints = true)
+
+        assertEquals(StatName.SPEED, best?.name, "With prioritization on, a hinted training should win even with a lower mode score")
+    }
+
+    @Test
+    @DisplayName("Hint priority is ignored when prioritization is disabled")
+    fun testHintPriorityIgnoredWhenDisabled() {
+        val hinted = createDefaultTrainingOption(name = StatName.SPEED, numSkillHints = 1)
+        val plain = createDefaultTrainingOption(name = StatName.STAMINA, numSkillHints = 0)
+        val scores = mapOf(hinted to 10.0, plain to 99.0)
+
+        val best = selectBestTrainingWithHintPriority(scores, enablePrioritizeSkillHints = false)
+
+        assertEquals(StatName.STAMINA, best?.name, "With prioritization off, the highest-scored training should win regardless of hints")
+    }
+
+    @Test
+    @DisplayName("Hint priority falls back to the top score when no training has a hint")
+    fun testHintPriorityFallsBackWhenNoHints() {
+        val a = createDefaultTrainingOption(name = StatName.SPEED, numSkillHints = 0)
+        val b = createDefaultTrainingOption(name = StatName.POWER, numSkillHints = 0)
+        val scores = mapOf(a to 30.0, b to 80.0)
+
+        val best = selectBestTrainingWithHintPriority(scores, enablePrioritizeSkillHints = true)
+
+        assertEquals(StatName.POWER, best?.name, "When no training carries a hint, the highest-scored training should win")
+    }
+
+    @Test
+    @DisplayName("Hint priority picks the highest-scored training among the hinted ones")
+    fun testHintPriorityPicksBestAmongHinted() {
+        val lowHinted = createDefaultTrainingOption(name = StatName.SPEED, numSkillHints = 1)
+        val highHinted = createDefaultTrainingOption(name = StatName.POWER, numSkillHints = 2)
+        val plain = createDefaultTrainingOption(name = StatName.STAMINA, numSkillHints = 0)
+        val scores = mapOf(lowHinted to 20.0, highHinted to 40.0, plain to 99.0)
+
+        val best = selectBestTrainingWithHintPriority(scores, enablePrioritizeSkillHints = true)
+
+        assertEquals(StatName.POWER, best?.name, "Among hinted trainings the highest-scored one should win")
     }
 
     // ============================================================================
