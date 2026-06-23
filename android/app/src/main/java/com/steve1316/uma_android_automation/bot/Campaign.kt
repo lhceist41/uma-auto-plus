@@ -2613,6 +2613,14 @@ abstract class Campaign(game: Game) : Task(game) {
      * both, and `turn` is the real discriminator: a full arc ends near the scenario's last turn (URA
      * finals = 75), a force-end ends early (a Junior fan-checkpoint death lands around turn 24). Every
      * field comes from memory or already-OCR'd state, so building the line triggers no extra capture.
+     *
+     * CAUTION: `spd/sta/pwr/grt/wit/fans` are the last in-career OCR, captured BEFORE the scenario's
+     * finale races resolve (Trackblazer's Twinkle Star Climax, URA's Finale). The game injects the
+     * finale stat/fan rewards afterward (~+40 per stat and +140k fans observed on a full Trackblazer
+     * arc) and the bot never re-reads them, so these fields UNDERSTATE the true career-complete screen
+     * by a run-dependent amount. Treat them as relative/early-death signal only; `turn` and `result`
+     * are the reliable fields. Reading the real finals would need OCR on the career-result screen,
+     * whose layout the in-career stat readers are not calibrated for.
      */
     override fun careerEndLedgerLine(result: TaskResult): String {
         val resolvedName =
