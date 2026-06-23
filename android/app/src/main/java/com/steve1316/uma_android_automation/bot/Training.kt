@@ -2018,11 +2018,20 @@ class Training(private val game: Game, private val campaign: Campaign) {
             (trainingScores.entries.map { it.key to false } + skippedScores.entries.map { it.key to true })
                 .map { (option, wasSkipped) ->
                     val scoreMap = if (wasSkipped) skippedScores else trainingScores
+                    val rawScore = scoreMap[option]
+                    // A non-finite score (-Infinity) is a hard exclusion from the scorer, not a real
+                    // number - surface it as an exclusion and drop the ugly "score=-Infinity" render.
+                    val excluded = rawScore != null && !rawScore.isFinite()
                     DecisionTracer.TrainingRunnerUp(
                         stat = option.name,
-                        rejected = wasSkipped,
-                        reason = option.skipReason?.takeIf { it.isNotBlank() } ?: if (wasSkipped) "filtered out" else "outscored",
-                        score = scoreMap[option],
+                        rejected = wasSkipped || excluded,
+                        reason = option.skipReason?.takeIf { it.isNotBlank() }
+                            ?: when {
+                                excluded -> "excluded (hard penalty)"
+                                wasSkipped -> "filtered out"
+                                else -> "outscored"
+                            },
+                        score = rawScore?.takeIf { it.isFinite() },
                         failureChance = option.failureChance.takeIf { it >= 0 },
                         statGains = option.statGains,
                     )
