@@ -1408,12 +1408,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         "turn $turnsRemaining is not on the racing interval (every $daysToRunExtraRaces turns)"
                 }
             MessageLog.i(TAG, "[RACE] Extra racing skipped this turn: $reason.")
-            campaign.decisionTracer?.recordRaceEligibility(false, reason)
-        } else {
-            campaign.decisionTracer?.recordRaceEligibility(
-                true,
-                "fan farming on and turn $turnsRemaining is on the racing interval (every $daysToRunExtraRaces turns)",
-            )
         }
         return eligibleForStandardRacing
     }
@@ -1594,7 +1588,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         return if (distanceKey != null) {
             val strategy = strategyMap[distanceKey] ?: "Default"
             MessageLog.i(TAG, "[RACE] Per-distance strategy for $distanceKey: $strategy")
-            campaign.decisionTracer?.recordNote("Race strategy: $strategy (per-distance, $distanceKey)")
             strategy
         } else {
             MessageLog.w(TAG, "[RACE] Per-distance strategy enabled but race distance unknown. Falling back to blanket strategy.")

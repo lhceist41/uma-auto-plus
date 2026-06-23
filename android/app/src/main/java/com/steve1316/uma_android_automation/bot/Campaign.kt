@@ -2522,7 +2522,16 @@ abstract class Campaign(game: Game) : Task(game) {
         }
         tracerRejected.add(DecisionTracer.RejectedAlternative("RECOVER_MOOD", "mood ${trainee.mood} at/above floor $moodFloor"))
 
-        if (racing.checkEligibilityToStartExtraRacingProcess()) {
+        val extraRaceEligible = racing.checkEligibilityToStartExtraRacingProcess()
+        // Record eligibility from the caller so it fires on every turn an extra race is considered,
+        // across all scenarios. checkEligibility has many early returns (Trackblazer interval, fan
+        // emergency, mandatory plan) that bypass its standard-racing block, so recording inside it
+        // missed Trackblazer entirely. The rich decline reason stays in the [RACE] log one line up.
+        decisionTracer?.recordRaceEligibility(
+            extraRaceEligible,
+            if (extraRaceEligible) "extra races can be run today" else "not eligible for an extra race this turn (see [RACE] log for the gate)",
+        )
+        if (extraRaceEligible) {
             MessageLog.i(TAG, "[INFO] Bot has no injuries, mood is sufficient and extra races can be run today. Setting the action to RACE.")
             return choose(MainScreenAction.RACE, "extra races can be run today")
         }
