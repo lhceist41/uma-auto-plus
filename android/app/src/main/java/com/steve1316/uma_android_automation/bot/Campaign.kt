@@ -393,6 +393,18 @@ abstract class Campaign(game: Game) : Task(game) {
     protected var cachedScheduledRaceDay: Boolean = false
     protected var cachedMandatoryRaceDay: Boolean = false
 
+    /**
+     * Per-turn cache of the goal-ribbon ([IconGoalRibbon]) detection. Kept separate from
+     * [cachedMandatoryRaceDay] on purpose: the goal ribbon stays visible on the Main screen for an
+     * active objective (see [checkMandatoryRacePrepScreen]), so it is NOT safe to feed into the
+     * forced-RACE branch of [decideNextAction]. This flag exists solely as a cache backup for the
+     * Trackblazer irregular-training gate, whose live mandatory check is `IconRaceDayRibbon ||
+     * IconGoalRibbon` — so a single missed goal-ribbon read on a real goal day cannot let irregular
+     * training hijack the turn. Over-blocking the gate is conservative; only the gate reads it.
+     * Lifetime: same as [cachedMandatoryRaceDay].
+     */
+    protected var cachedGoalRibbonDay: Boolean = false
+
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // Debug Tests
@@ -2212,6 +2224,10 @@ abstract class Campaign(game: Game) : Task(game) {
             // don't re-run the same template scans 2-3 more times per turn.
             cachedScheduledRaceDay = bIsScheduledRaceDayInitial
             cachedMandatoryRaceDay = bIsMandatoryRaceDayInitial
+            // Separate goal-ribbon cache for the Trackblazer irregular-training gate only. Deliberately
+            // NOT folded into cachedMandatoryRaceDay: the goal ribbon persists on the Main screen for an
+            // active objective and must never reach decideNextAction's forced-RACE branch.
+            cachedGoalRibbonDay = IconGoalRibbon.check(game.imageUtils, sourceBitmap = sourceBitmap)
 
             if (!date.bIsFinaleSeason && !bIsMandatoryRaceDayInitial && !bIsScheduledRaceDayInitial && bNeedToCheckFans && !bHasTriedCheckingFansToday) {
                 openFansDialog()
