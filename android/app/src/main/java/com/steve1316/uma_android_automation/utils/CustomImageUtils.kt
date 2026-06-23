@@ -899,8 +899,12 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 Log.d(TAG, "[DEBUG] determineSingleStatValue:: Converting $text to integer for $statName stat value")
                 val cleanedText = text.replace(Regex("[^0-9]"), "")
                 val parsed = cleanedText.toInt()
-                if (manualStatCap > 0 && parsed > manualStatCap) {
-                    Log.d(TAG, "[DEBUG] determineSingleStatValue:: Parsed value $parsed for $statName exceeds stat cap $manualStatCap, likely an OCR misread. Rejecting.")
+                // Reject implausible reads even when the cap setting is unset (0) on a fresh install,
+                // matching determineStatValues' 1200 fallback so the threaded path cannot leak an
+                // over-cap misread into the stat mismatch-recovery logic.
+                val effectiveCap = if (manualStatCap > 0) manualStatCap else 1200
+                if (parsed > effectiveCap) {
+                    Log.d(TAG, "[DEBUG] determineSingleStatValue:: Parsed value $parsed for $statName exceeds stat cap $effectiveCap, likely an OCR misread. Rejecting.")
                     return -1
                 }
                 return parsed.coerceAtLeast(0)

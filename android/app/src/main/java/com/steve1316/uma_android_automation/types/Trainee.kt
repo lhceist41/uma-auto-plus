@@ -751,8 +751,10 @@ class Trainee {
                         mismatchCounts[statName] = newCount
 
                         // If the "incorrect" value is detected multiple times, assume the previous
-                        // recorded value was the actual misread and update to the new one.
-                        if (newCount >= 2) {
+                        // recorded value was the actual misread and update to the new one. Never trust a
+                        // non-positive value: a -1 OCR-rejection sentinel read twice would otherwise lock
+                        // a negative stat in (real stats are always >= 1).
+                        if (newCount >= 2 && newValue >= 1) {
                             MessageLog.d(TAG, "[DEBUG] updateStats:: New $statName stat value has been consistent for $newCount updates. Trusting the new value: $newValue (was $oldValue)")
                             stats.setStat(statName, newValue)
                             bHasUpdatedStats = true
@@ -804,7 +806,8 @@ class Trainee {
                             val newCount = currentCount + 1
                             mismatchCounts[statName] = newCount
 
-                            if (newCount >= 2) {
+                            // Never trust a non-positive value (a -1 OCR-rejection sentinel read twice).
+                            if (newCount >= 2 && newValue >= 1) {
                                 MessageLog.d(
                                     TAG,
                                     "[DEBUG] updateStats:: New $statName stat value has been consistent for $newCount updates via sequential processing. Trusting the new value: $newValue (was $oldValue)",
