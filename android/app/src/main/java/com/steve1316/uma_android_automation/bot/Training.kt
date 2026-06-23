@@ -787,6 +787,52 @@ class Training(private val game: Game, private val campaign: Campaign) {
         }
 
         /**
+         * Build the per-stat runner-up list for a turn's [DecisionTracer] training contest.
+         *
+         * Combines the scored ([trainingScores]) and gate-filtered ([skippedScores]) trainings into one
+         * ordered list (scored entries first). [picked] — the stat that won or was forced this turn — is
+         * omitted so the report shows only the alternatives; pass null to keep every entry (the
+         * default-fallback branches, where the "pick" is just the first non-blacklisted training rather
+         * than a contest winner).
+         *
+         * A non-finite (-Infinity) score is the scorer's hard-exclusion sentinel, not a real number: such
+         * entries are marked rejected with reason "excluded (hard penalty)" and carry no numeric score, so
+         * the report reads cleanly instead of printing "score=-Infinity".
+         *
+         * @param trainingScores Gate-passing trainings mapped to their computed score.
+         * @param skippedScores Gate-filtered trainings mapped to their (often non-finite) score.
+         * @param picked The winning/forced stat to exclude, or null to keep all entries.
+         * @return Ordered runner-up entries for the Decision Report.
+         */
+        fun buildTracerRunnerUps(
+            trainingScores: Map<TrainingOption, Double>,
+            skippedScores: Map<TrainingOption, Double>,
+            picked: StatName?,
+        ): List<DecisionTracer.TrainingRunnerUp> =
+            (trainingScores.entries.map { it.key to false } + skippedScores.entries.map { it.key to true })
+                .mapNotNull { (option, wasSkipped) ->
+                    if (option.name == picked) return@mapNotNull null
+                    val scoreMap = if (wasSkipped) skippedScores else trainingScores
+                    val rawScore = scoreMap[option]
+                    // A non-finite score (-Infinity) is a hard exclusion from the scorer, not a real
+                    // number - surface it as an exclusion and drop the ugly "score=-Infinity" render.
+                    val excluded = rawScore != null && !rawScore.isFinite()
+                    DecisionTracer.TrainingRunnerUp(
+                        stat = option.name,
+                        rejected = wasSkipped || excluded,
+                        reason = option.skipReason?.takeIf { it.isNotBlank() }
+                            ?: when {
+                                excluded -> "excluded (hard penalty)"
+                                wasSkipped -> "filtered out"
+                                else -> "outscored"
+                            },
+                        score = rawScore?.takeIf { it.isFinite() },
+                        failureChance = option.failureChance.takeIf { it >= 0 },
+                        statGains = option.statGains,
+                    )
+                }
+
+        /**
          * Calculate the raw training score without normalization.
          *
          * This method calculates raw high-level scores that will later be normalized based on the actual maximum score in the current training session.
@@ -2012,38 +2058,18 @@ class Training(private val game: Game, private val campaign: Campaign) {
         val finalScoringMode = if (isIrregularEvaluation) "Trackblazer (Irregular Training)" else scoringMode
         logSelectionReasoning(trainingConfig, finalScoringMode, trainingScores, skippedScores, best)
 
-        // DecisionTracer: capture the per-stat scoring contest (scored + skipped trainings) for this
-        // turn's Decision Report. Built once here; the picked training is filtered out at each branch.
-        val tracerRunnerUps: List<DecisionTracer.TrainingRunnerUp> =
-            (trainingScores.entries.map { it.key to false } + skippedScores.entries.map { it.key to true })
-                .map { (option, wasSkipped) ->
-                    val scoreMap = if (wasSkipped) skippedScores else trainingScores
-                    val rawScore = scoreMap[option]
-                    // A non-finite score (-Infinity) is a hard exclusion from the scorer, not a real
-                    // number - surface it as an exclusion and drop the ugly "score=-Infinity" render.
-                    val excluded = rawScore != null && !rawScore.isFinite()
-                    DecisionTracer.TrainingRunnerUp(
-                        stat = option.name,
-                        rejected = wasSkipped || excluded,
-                        reason = option.skipReason?.takeIf { it.isNotBlank() }
-                            ?: when {
-                                excluded -> "excluded (hard penalty)"
-                                wasSkipped -> "filtered out"
-                                else -> "outscored"
-                            },
-                        score = rawScore?.takeIf { it.isFinite() },
-                        failureChance = option.failureChance.takeIf { it >= 0 },
-                        statGains = option.statGains,
-                    )
-                }
+        // DecisionTracer: capture the per-stat scoring contest for the turn's Decision Report. The
+        // runner-up list is only built when a tracer is attached (debug builds) - the null-safe call
+        // short-circuits its arguments, so release builds (tracer == null) skip the allocation entirely.
+        val tracer = campaign.decisionTracer
 
         if (best != null) {
             lastSelectionSource = SelectionSource.ANALYSIS
-            campaign.decisionTracer?.recordTrainingSelection(
+            tracer?.recordTrainingSelection(
                 selected = best.name,
                 source = SelectionSource.ANALYSIS,
                 reason = "won analysis ($finalScoringMode) with score ${trainingScores[best]?.let { String.format("%.2f", it) } ?: "?"}",
-                runnerUps = tracerRunnerUps.filter { it.stat != best.name },
+                runnerUps = buildTracerRunnerUps(trainingScores, skippedScores, picked = best.name),
                 pickedFailureChance = best.failureChance.takeIf { it >= 0 },
                 pickedStatGains = best.statGains,
             )
@@ -2064,11 +2090,11 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         "This selection will execute despite analysis rejection.",
                 )
                 lastSelectionSource = SelectionSource.FORCED_FROM_SKIPPED
-                campaign.decisionTracer?.recordTrainingSelection(
+                tracer?.recordTrainingSelection(
                     selected = pick.name,
                     source = SelectionSource.FORCED_FROM_SKIPPED,
                     reason = "analysis rejected all trainings; forced highest-scored skipped training (score=${String.format("%.2f", topSkipped.value)})",
-                    runnerUps = tracerRunnerUps.filter { it.stat != pick.name },
+                    runnerUps = buildTracerRunnerUps(trainingScores, skippedScores, picked = pick.name),
                     pickedFailureChance = pick.failureChance.takeIf { it >= 0 },
                     pickedStatGains = pick.statGains,
                 )
@@ -2080,11 +2106,11 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 "[TRAINING] Analysis produced no scored entries. forceSelection=true → defaulting to first non-blacklisted training: ${defaulted ?: "none available"}.",
             )
             lastSelectionSource = SelectionSource.FORCED_DEFAULT
-            campaign.decisionTracer?.recordTrainingSelection(
+            tracer?.recordTrainingSelection(
                 selected = defaulted,
                 source = SelectionSource.FORCED_DEFAULT,
                 reason = "analysis produced no scored entries; forced first non-blacklisted training",
-                runnerUps = tracerRunnerUps,
+                runnerUps = buildTracerRunnerUps(trainingScores, skippedScores, picked = null),
             )
             return defaulted
         }
@@ -2095,11 +2121,11 @@ class Training(private val game: Game, private val campaign: Campaign) {
             "[TRAINING] Analysis returned no winning training. forceSelection=false → returning first non-blacklisted training: ${unforced ?: "none available"}. Caller decides whether to execute.",
         )
         lastSelectionSource = SelectionSource.UNFORCED_DEFAULT
-        campaign.decisionTracer?.recordTrainingSelection(
+        tracer?.recordTrainingSelection(
             selected = unforced,
             source = SelectionSource.UNFORCED_DEFAULT,
             reason = "analysis returned no winner; returning first non-blacklisted training for caller to handle",
-            runnerUps = tracerRunnerUps,
+            runnerUps = buildTracerRunnerUps(trainingScores, skippedScores, picked = null),
         )
         return unforced
     }
