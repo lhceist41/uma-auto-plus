@@ -878,7 +878,10 @@ class Trackblazer(game: Game) : Campaign(game) {
             val isScheduledRace = LabelScheduledRace.check(game.imageUtils)
             val isMandatoryRace = IconRaceDayRibbon.check(game.imageUtils) || IconGoalRibbon.check(game.imageUtils)
 
-            if (!isScheduledRace && !isMandatoryRace) {
+            // Also gate on the turn-start cached flags: the live template checks above can miss, and an
+            // irregular-training hijack must never override a mandatory/scheduled race. Requiring both
+            // the live AND cached detections to be clear means a single missed read cannot skip a race.
+            if (!isScheduledRace && !isMandatoryRace && !cachedMandatoryRaceDay && !cachedScheduledRaceDay) {
                 // Skip irregular training evaluation when energy is depleted and no charm can offset the failure chance.
                 if (trainee.energy <= 0 && !hasCharmAvailable) {
                     MessageLog.i(TAG, "[TRACKBLAZER] Skipping Irregular Training evaluation as energy is ${trainee.energy}% with no Good-Luck Charm available.")

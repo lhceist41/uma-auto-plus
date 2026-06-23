@@ -352,6 +352,74 @@ class Training(private val game: Game, private val campaign: Campaign) {
         private val TAG: String = "[${MainActivity.loggerTag}]Training"
 
         /**
+         * Decide whether a training is admissible as a Trackblazer irregular-training hijack (skip a
+         * voluntary race to train this turn instead). Pure so it is directly unit-testable. Three paths:
+         *  - C1: main-stat gain >= the phase-curved baseline threshold (a strong training stands alone).
+         *  - C2: main-stat gain >= baseline-5 AND strong secondary value (a rainbow, a skill hint, a bond
+         *    bar still building toward a rainbow, an Akikawa bond, or a large side-stat carry).
+         *  - C3: critical-stat rescue - a below-floor Stamina/Power the training meaningfully raises.
+         *
+         * @param name The stat this training trains (its main stat).
+         * @param statGains Detected stat gains for this training (main + side).
+         * @param relationshipBars Relationship bars on this facility (bond/rainbow build state).
+         * @param numRainbow Rainbow count detected on this training.
+         * @param numSkillHints Skill hints detected on this training.
+         * @param baseline The slider value (`trackblazerIrregularTrainingMinStatGain`) used as the curve anchor.
+         * @param year Current career year (Classic/Senior; Junior never reaches the gate).
+         * @param day Current turn number, for the phase curve.
+         * @param currentMainStat The trainee's current value of [name], for the critical-stat rescue.
+         * @return A short admission reason, or null if the training is not admissible.
+         */
+        fun admitIrregularTraining(
+            name: StatName,
+            statGains: Map<StatName, Int>,
+            relationshipBars: List<CustomImageUtils.BarFillResult>,
+            numRainbow: Int,
+            numSkillHints: Int,
+            baseline: Int,
+            year: DateYear,
+            day: Int,
+            currentMainStat: Int,
+        ): String? {
+            val mainGain = statGains[name] ?: 0
+            // Phase-curved threshold: lower early-Classic (favour training/bond building), higher into
+            // Senior (favour racing for fans/coins/Grade Points). Offsets are applied here rather than on
+            // the slider so they can dip below the slider's min-20 clamp.
+            val tBase =
+                when {
+                    year == DateYear.CLASSIC && day < 43 -> baseline - 3
+                    year == DateYear.CLASSIC -> baseline
+                    year == DateYear.SENIOR && day < 67 -> baseline + 3
+                    year == DateYear.SENIOR -> baseline + 5
+                    else -> baseline
+                }
+
+            val sideGains = statGains.filterKeys { it != name }.values
+            val sideSum = sideGains.sum()
+            val sideMax = sideGains.maxOrNull() ?: 0
+            // Bar-color semantics verified in calculateRelationshipScore: blue = furthest from rainbow
+            // (highest build value), green = nearly there, orange = rainbow already. A bond worth building
+            // toward a future rainbow is a blue/green bar with headroom (<80%).
+            val buildableBond = relationshipBars.any { (it.dominantColor == "blue" || it.dominantColor == "green") && it.fillPercent < 80.0 }
+            val akikawaBond = relationshipBars.any { it.isTrainerSupport && it.trainerName == "Yayoi Akikawa" }
+            val strongSecondary = numRainbow >= 1 || numSkillHints >= 1 || buildableBond || akikawaBond || sideSum >= 25 || sideMax >= 15
+
+            val criticalFloor =
+                when (name) {
+                    StatName.STAMINA, StatName.POWER -> 600
+                    else -> 0
+                }
+            val criticalRescue = criticalFloor > 0 && currentMainStat < criticalFloor && mainGain >= 12
+
+            return when {
+                mainGain >= tBase -> "C1 strong gain ($mainGain >= $tBase)"
+                mainGain >= tBase - 5 && strongSecondary -> "C2 gain + secondary value ($mainGain >= ${tBase - 5}, secondary)"
+                criticalRescue -> "C3 critical-stat rescue ($name=$currentMainStat < $criticalFloor, gain=$mainGain)"
+                else -> null
+            }
+        }
+
+        /**
          * Retrieve the scenario-specific cap for a given stat.
          *
          * @param scenario The current training scenario.
@@ -1735,9 +1803,26 @@ class Training(private val game: Game, private val campaign: Campaign) {
             }
 
             if (!test && isIrregularEvaluation) {
-                val minIrregularGain = SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerIrregularTrainingMinStatGain", 30)
-                if (mainStatGain < minIrregularGain) {
-                    MessageLog.i(TAG, "[TRAINING] Skipping ${result.name} training due to irregular training threshold ($mainStatGain < $minIrregularGain).")
+                // Irregular-training admission: on a free Classic/Senior turn the bot may skip a
+                // voluntary race only for a training genuinely worth more than the race. The decision
+                // is the pure companion function admitIrregularTraining (so it is unit-tested directly);
+                // here we just feed it the live phase, baseline, and current stat.
+                val baseline = SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerIrregularTrainingMinStatGain", 30)
+                val admitReason =
+                    admitIrregularTraining(
+                        name = result.name,
+                        statGains = result.statGains,
+                        relationshipBars = result.relationshipBars,
+                        numRainbow = result.numRainbow,
+                        numSkillHints = result.numSkillHints,
+                        baseline = baseline,
+                        year = campaign.date.year,
+                        day = campaign.date.day,
+                        currentMainStat = campaign.trainee.stats.asMap()[result.name] ?: 0,
+                    )
+
+                if (admitReason == null) {
+                    MessageLog.i(TAG, "[TRAINING] Skipping ${result.name} for irregular training: not admitted (gain=$mainStatGain, baseline=$baseline).")
 
                     // Store the skipped training for logging purposes.
                     val skippedTraining =
@@ -1752,11 +1837,12 @@ class Training(private val game: Game, private val campaign: Campaign) {
                             numSpiritGaugesReadyToBurst = result.numSpiritGaugesReadyToBurst,
                             numSkillHints = result.numSkillHints,
                             trainingLevel = result.trainingLevel,
-                            skipReason = "low irregular gain",
+                            skipReason = "irregular: not admitted",
                         )
                     skippedTrainingMap[result.name] = skippedTraining
                     continue
                 }
+                MessageLog.i(TAG, "[TRAINING] ${result.name} admitted for irregular training: $admitReason.")
             }
 
             val newTraining =

@@ -3,6 +3,7 @@ package com.steve1316.uma_android_automation.bot
 import com.steve1316.uma_android_automation.bot.Training.Companion.calculateMiscScore
 import com.steve1316.uma_android_automation.bot.Training.Companion.calculateRawTrainingScore
 import com.steve1316.uma_android_automation.bot.Training.Companion.calculateRelationshipScore
+import com.steve1316.uma_android_automation.bot.Training.Companion.admitIrregularTraining
 import com.steve1316.uma_android_automation.bot.Training.Companion.calculateStatEfficiencyScore
 import com.steve1316.uma_android_automation.bot.Training.Companion.getFinaleStatBonus
 import com.steve1316.uma_android_automation.bot.Training.Companion.getRemainingFinaleRaces
@@ -153,6 +154,81 @@ class TrainingScoringTest {
             enablePrioritizeSkillHints = enablePrioritizeSkillHints,
             statsTrainedOverBuffer = statsTrainedOverBuffer,
         )
+    }
+
+    // Helper: a relationship bar of a given color and fill level (statName/segments irrelevant to admission).
+    private fun bar(color: String, fill: Double): BarFillResult = BarFillResult(StatName.SPEED, fill, 2, color)
+
+    @Test
+    @DisplayName("Irregular C1: a strong main-stat gain is admitted on its own")
+    fun testIrregularC1AdmitsStrongGain() {
+        val r = admitIrregularTraining(StatName.SPEED, statGainsToMap(intArrayOf(21, 0, 9, 0, 0)), emptyList(), 0, 0, baseline = 20, year = DateYear.CLASSIC, day = 26, currentMainStat = 400)
+        assertNotNull(r)
+        assertTrue(r!!.startsWith("C1"))
+    }
+
+    @Test
+    @DisplayName("Irregular: a weak gain with no secondary value is not admitted")
+    fun testIrregularRejectsWeakGain() {
+        assertNull(admitIrregularTraining(StatName.SPEED, statGainsToMap(intArrayOf(12, 0, 0, 0, 0)), emptyList(), 0, 0, baseline = 20, year = DateYear.CLASSIC, day = 26, currentMainStat = 400))
+    }
+
+    @Test
+    @DisplayName("Irregular C2: a mid gain plus a rainbow is admitted")
+    fun testIrregularC2AdmitsWithRainbow() {
+        val r = admitIrregularTraining(StatName.SPEED, statGainsToMap(intArrayOf(14, 0, 0, 0, 0)), emptyList(), 1, 0, baseline = 20, year = DateYear.CLASSIC, day = 26, currentMainStat = 400)
+        assertNotNull(r)
+        assertTrue(r!!.startsWith("C2"))
+    }
+
+    @Test
+    @DisplayName("Irregular C2: a mid gain with no secondary value is rejected")
+    fun testIrregularC2RejectsNoSecondary() {
+        assertNull(admitIrregularTraining(StatName.SPEED, statGainsToMap(intArrayOf(14, 0, 0, 0, 0)), emptyList(), 0, 0, baseline = 20, year = DateYear.CLASSIC, day = 26, currentMainStat = 400))
+    }
+
+    @Test
+    @DisplayName("Irregular C2: a blue bond bar below 80% counts as secondary value")
+    fun testIrregularC2AdmitsBuildableBond() {
+        val r = admitIrregularTraining(StatName.SPEED, statGainsToMap(intArrayOf(13, 0, 0, 0, 0)), listOf(bar("blue", 50.0)), 0, 0, baseline = 20, year = DateYear.CLASSIC, day = 26, currentMainStat = 400)
+        assertNotNull(r)
+        assertTrue(r!!.startsWith("C2"))
+    }
+
+    @Test
+    @DisplayName("Irregular: a bond bar at/above 80% does not count (near-rainbow, low build value)")
+    fun testIrregularBondAtCapNotSecondary() {
+        assertNull(admitIrregularTraining(StatName.SPEED, statGainsToMap(intArrayOf(13, 0, 0, 0, 0)), listOf(bar("blue", 85.0)), 0, 0, baseline = 20, year = DateYear.CLASSIC, day = 26, currentMainStat = 400))
+    }
+
+    @Test
+    @DisplayName("Irregular: an orange (rainbow-achieved) bar does not count as buildable")
+    fun testIrregularOrangeBarNotBuildable() {
+        assertNull(admitIrregularTraining(StatName.SPEED, statGainsToMap(intArrayOf(13, 0, 0, 0, 0)), listOf(bar("orange", 50.0)), 0, 0, baseline = 20, year = DateYear.CLASSIC, day = 26, currentMainStat = 400))
+    }
+
+    @Test
+    @DisplayName("Irregular C3: a below-floor Stamina is rescued by a real gain")
+    fun testIrregularC3RescuesLowStamina() {
+        val r = admitIrregularTraining(StatName.STAMINA, statGainsToMap(intArrayOf(0, 13, 0, 0, 0)), emptyList(), 0, 0, baseline = 20, year = DateYear.SENIOR, day = 70, currentMainStat = 500)
+        assertNotNull(r)
+        assertTrue(r!!.startsWith("C3"))
+    }
+
+    @Test
+    @DisplayName("Irregular C3: a Stamina above the floor is not rescued")
+    fun testIrregularC3NoRescueAboveFloor() {
+        assertNull(admitIrregularTraining(StatName.STAMINA, statGainsToMap(intArrayOf(0, 13, 0, 0, 0)), emptyList(), 0, 0, baseline = 20, year = DateYear.SENIOR, day = 70, currentMainStat = 700))
+    }
+
+    @Test
+    @DisplayName("Irregular phase curve: the same gain admits in early Classic but not late Senior")
+    fun testIrregularPhaseCurve() {
+        val gains = statGainsToMap(intArrayOf(22, 0, 0, 0, 0))
+        // Early Classic T_base = 20-3 = 17, so 22 is admitted (C1).
+        assertNotNull(admitIrregularTraining(StatName.SPEED, gains, emptyList(), 0, 0, baseline = 20, year = DateYear.CLASSIC, day = 26, currentMainStat = 400))
+        // Late Senior T_base = 20+5 = 25, so 22 is rejected (no secondary, no rescue).
+        assertNull(admitIrregularTraining(StatName.SPEED, gains, emptyList(), 0, 0, baseline = 20, year = DateYear.SENIOR, day = 70, currentMainStat = 400))
     }
 
     @Test
