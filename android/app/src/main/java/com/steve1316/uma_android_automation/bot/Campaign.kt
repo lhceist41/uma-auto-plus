@@ -2746,8 +2746,13 @@ abstract class Campaign(game: Game) : Task(game) {
                 }
 
                 // Perform a final update of the fan count.
+                // ButtonDetails carries a lowered match confidence (see Button.kt): on the career-end
+                // screen it renders just under the default 0.8 threshold, which silently skipped this
+                // whole post-finale fan+stat re-read every career and left [CAREER_END] on the stale
+                // pre-finale values (~+40/stat short of the real result screen). A few retries also
+                // cover a mid-render capture.
                 game.wait(1.0)
-                val buttonLocation = ButtonDetails.find(game.imageUtils).first
+                val buttonLocation = ButtonDetails.find(game.imageUtils, tries = 5).first
                 if (buttonLocation != null) {
                     val fansText =
                         game.imageUtils.performOCROnRegion(

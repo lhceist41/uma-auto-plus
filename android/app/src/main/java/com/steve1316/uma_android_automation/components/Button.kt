@@ -541,7 +541,11 @@ object ButtonRaceAgendaLoadList : ButtonInterface {
 }
 
 object ButtonDetails : ButtonInterface {
-    override val template = Template("components/button/details", region = Region.middle)
+    // Lowered from the 0.8 engine default: on the career-end Complete Career screen the Details
+    // button renders at ~0.95x scale, so the color match peaks at ~0.70 (verified via cv2 on a live
+    // capture). At 0.8 the find silently failed every career, skipping the post-finale stat/fan
+    // re-read and leaving [CAREER_END] ~40/stat short of the true result screen. Only used there.
+    override val template = Template("components/button/details", region = Region.middle, confidence = 0.65)
 }
 
 object ButtonShopTrackblazer : ButtonInterface {
