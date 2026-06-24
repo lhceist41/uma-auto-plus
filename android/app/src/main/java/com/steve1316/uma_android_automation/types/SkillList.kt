@@ -612,7 +612,11 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
                 }
             }.apply { isDaemon = true }.start()
         } else {
-            skillName = cachedTitle
+            // The cached title is the raw OCR text (the caller skips re-OCR for speed); run it through
+            // the same fuzzy DB correction the non-cached path uses above. Without it, a unique skill
+            // whose name ends in the star (the OCR drops the ☆ glyph) never matches its "<name> ☆"
+            // entries key - e.g. an inherited "Victoria por plancha ☆" was silently skipped at buy time.
+            skillName = game.skillDatabase.checkSkillName(cachedTitle, fuzzySearch = true)
         }
 
         // Start thread for price extraction.
