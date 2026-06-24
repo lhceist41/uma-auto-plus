@@ -200,6 +200,60 @@ const ScenarioOverridesSettings = () => {
                         </View>
 
                         <View style={styles.section}>
+                            <CustomSlider
+                                searchId="trackblazer-skip-empowering-megaphone-below-gain"
+                                value={scenarioOverrides.trackblazerSkipEmpoweringMegaphoneBelowGain}
+                                placeholder={bsc.defaultSettings.scenarioOverrides.trackblazerSkipEmpoweringMegaphoneBelowGain}
+                                onValueChange={(value) => updateOverrideSetting("trackblazerSkipEmpoweringMegaphoneBelowGain", value)}
+                                onSlidingComplete={(value) => updateOverrideSetting("trackblazerSkipEmpoweringMegaphoneBelowGain", value)}
+                                min={0}
+                                max={100}
+                                step={5}
+                                label="Skip Empowering Megaphone Below Main Stat Gain"
+                                labelUnit=""
+                                showValue={true}
+                                showLabels={true}
+                                description="Hold the Empowering Megaphone (+60% for 2 turns) unless the selected training's main-stat gain is at least this value. 0 = always allowed. This is the strongest tier — set it high to reserve it for high-gain turns like Classic/Senior summer camp."
+                            />
+                        </View>
+
+                        <View style={styles.section}>
+                            <CustomSlider
+                                searchId="trackblazer-skip-motivating-megaphone-below-gain"
+                                value={scenarioOverrides.trackblazerSkipMotivatingMegaphoneBelowGain}
+                                placeholder={bsc.defaultSettings.scenarioOverrides.trackblazerSkipMotivatingMegaphoneBelowGain}
+                                onValueChange={(value) => updateOverrideSetting("trackblazerSkipMotivatingMegaphoneBelowGain", value)}
+                                onSlidingComplete={(value) => updateOverrideSetting("trackblazerSkipMotivatingMegaphoneBelowGain", value)}
+                                min={0}
+                                max={100}
+                                step={5}
+                                label="Skip Motivating Megaphone Below Main Stat Gain"
+                                labelUnit=""
+                                showValue={true}
+                                showLabels={true}
+                                description="Hold the Motivating Megaphone (+40% for 3 turns) unless the selected training's main-stat gain is at least this value. 0 = always allowed. A blocked higher tier falls through to a lower one this turn."
+                            />
+                        </View>
+
+                        <View style={styles.section}>
+                            <CustomSlider
+                                searchId="trackblazer-skip-coaching-megaphone-below-gain"
+                                value={scenarioOverrides.trackblazerSkipCoachingMegaphoneBelowGain}
+                                placeholder={bsc.defaultSettings.scenarioOverrides.trackblazerSkipCoachingMegaphoneBelowGain}
+                                onValueChange={(value) => updateOverrideSetting("trackblazerSkipCoachingMegaphoneBelowGain", value)}
+                                onSlidingComplete={(value) => updateOverrideSetting("trackblazerSkipCoachingMegaphoneBelowGain", value)}
+                                min={0}
+                                max={100}
+                                step={5}
+                                label="Skip Coaching Megaphone Below Main Stat Gain"
+                                labelUnit=""
+                                showValue={true}
+                                showLabels={true}
+                                description="Hold the Coaching Megaphone (+20% for 4 turns) unless the selected training's main-stat gain is at least this value. 0 = always allowed. The weakest tier — leave it at 0 to let the bot spend it freely (e.g. an opening-burst style), or raise it to conserve coins for the summer shop."
+                            />
+                        </View>
+
+                        <View style={styles.section}>
                             <CustomCheckbox
                                 searchId="trackblazer-enable-irregular-training"
                                 checked={scenarioOverrides.trackblazerEnableIrregularTraining}

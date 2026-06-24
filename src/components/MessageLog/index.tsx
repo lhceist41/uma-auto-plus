@@ -365,6 +365,9 @@ ${longTargetsString}
 🛍️ Trackblazer Excluded Items: ${settings.scenarioOverrides?.trackblazerExcludedItems?.length === 0 ? "None" : settings.scenarioOverrides?.trackblazerExcludedItems?.join(", ")}
 ✨ Trackblazer Min Stat Gain for Charm: ${settings.scenarioOverrides?.trackblazerMinStatGainForCharm}
 ✨ Trackblazer Low Main Stat Gain Item Floor: ${settings.scenarioOverrides?.trackblazerLowMainStatGainItemFloor}
+✨ Trackblazer Skip Empowering Megaphone Below Gain: ${settings.scenarioOverrides?.trackblazerSkipEmpoweringMegaphoneBelowGain}
+✨ Trackblazer Skip Motivating Megaphone Below Gain: ${settings.scenarioOverrides?.trackblazerSkipMotivatingMegaphoneBelowGain}
+✨ Trackblazer Skip Coaching Megaphone Below Gain: ${settings.scenarioOverrides?.trackblazerSkipCoachingMegaphoneBelowGain}
 🔄 Trackblazer Max Retries per Race: ${settings.scenarioOverrides?.trackblazerMaxRetriesPerRace}
 🔄 Trackblazer Whistle Forces Training: ${settings.scenarioOverrides?.trackblazerWhistleForcesTraining ? "✅" : "❌"}
 🔄 Trackblazer Retry Grades: ${settings.scenarioOverrides?.trackblazerRetryRacesBeforeFinalGrades?.join(", ")}

@@ -609,6 +609,27 @@ const searchConfig: SearchOption[] = [
         page: "ScenarioOverridesSettings",
     },
     {
+        id: "trackblazer-skip-empowering-megaphone-below-gain",
+        title: "Trackblazer Skip Empowering Megaphone Below Main Stat Gain",
+        description:
+            "Hold the Empowering Megaphone (+60% for 2 turns) unless the selected training's main-stat gain meets this threshold. 0 = always allowed. Reserve the strongest tier for high-gain turns like summer camp.",
+        page: "ScenarioOverridesSettings",
+    },
+    {
+        id: "trackblazer-skip-motivating-megaphone-below-gain",
+        title: "Trackblazer Skip Motivating Megaphone Below Main Stat Gain",
+        description:
+            "Hold the Motivating Megaphone (+40% for 3 turns) unless the selected training's main-stat gain meets this threshold. 0 = always allowed. A blocked higher tier falls through to a lower one.",
+        page: "ScenarioOverridesSettings",
+    },
+    {
+        id: "trackblazer-skip-coaching-megaphone-below-gain",
+        title: "Trackblazer Skip Coaching Megaphone Below Main Stat Gain",
+        description:
+            "Hold the Coaching Megaphone (+20% for 4 turns) unless the selected training's main-stat gain meets this threshold. 0 = always allowed. Leave low for an opening-burst style, or raise it to conserve coins for the summer shop.",
+        page: "ScenarioOverridesSettings",
+    },
+    {
         id: "trackblazer-max-retries-per-race",
         title: "Trackblazer Max Retries per Race",
         description: "Sets the maximum number of retries allowed for a single race in the Trackblazer scenario.",

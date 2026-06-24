@@ -257,6 +257,9 @@ export interface Settings {
         trackblazerShopCheckGrades: string[]
         trackblazerMinStatGainForCharm: number
         trackblazerLowMainStatGainItemFloor: number
+        trackblazerSkipEmpoweringMegaphoneBelowGain: number
+        trackblazerSkipMotivatingMegaphoneBelowGain: number
+        trackblazerSkipCoachingMegaphoneBelowGain: number
         trackblazerMaxRetriesPerRace: number
         trackblazerWhistleForcesTraining: boolean
         trackblazerRetryRacesBeforeFinalGrades: string[]
@@ -669,6 +672,12 @@ export const defaultSettings: Settings = {
         // if main-stat gain is below this floor. Prevents wasting items on structurally low-return
         // turns where the mood multiplier caps the stat gain. Default 15 matches upstream.
         trackblazerLowMainStatGainItemFloor: 15,
+        // Per-tier minimum selected-training main-stat gain before each megaphone is spent (mood-independent,
+        // stacks on the floor above). 0 = always allowed. Raise Empowering/Motivating to reserve the strong
+        // tiers for high-gain turns like Classic/Senior summer camp; leave Coaching low for an opening-burst style.
+        trackblazerSkipEmpoweringMegaphoneBelowGain: 0,
+        trackblazerSkipMotivatingMegaphoneBelowGain: 0,
+        trackblazerSkipCoachingMegaphoneBelowGain: 0,
         trackblazerMaxRetriesPerRace: 1,
         trackblazerWhistleForcesTraining: true,
         trackblazerRetryRacesBeforeFinalGrades: ["G1", "G2", "G3"],
