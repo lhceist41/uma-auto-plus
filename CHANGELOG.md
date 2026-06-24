@@ -8,6 +8,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [1.3.4] - 2026-06-24
+
+Two accuracy fixes plus an opt-in Trackblazer training mode. The end-of-career summary now records the real final stats, a corrupted stat reading can no longer stick, and an experimental irregular-training option is available for Trackblazer (off by default).
+
+### Added
+
+- An opt-in irregular-training mode for Trackblazer (off by default, under Scenario Overrides). On a free Classic or Senior turn it can train instead of running a voluntary race when the training is clearly strong, when its gain also feeds a secondary goal (a rainbow, a skill hint, an unfinished bond, or a side-stat breakpoint), or when a critical stat needs rescuing. It never touches mandatory or scheduled races. Experimental: its benefit over plain racing is not yet proven, so it stays off by default.
+
+### Fixed
+
+- The end-of-career summary now records the true final stats and fan count. The bot was silently failing to open the post-finale Details screen on every run, so it had been logging the pre-finale values -- roughly 40 per stat and tens of thousands of fans short of the real result.
+- A garbled stat reading can no longer lock a bad value in -- the bot keeps the last good value instead -- and impossible stat values are rejected even on a fresh install.
+
+---
+
 ## [1.3.3] - 2026-06-22
 
 A reliability patch plus two new trainees. The bot now skips through the result and event screens it used to churn on, the post-Auto-Fill "Follow Trainer" prompt no longer stalls a queue, a short scrollable list can no longer crash the tap picker, and "Prioritize Skill Hints" now plays by the same rules as every other training.

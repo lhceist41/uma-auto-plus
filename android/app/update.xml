@@ -1,15 +1,13 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.3.3</latestVersion>
+    <latestVersion>1.3.4</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.3.3 - Result-screen recovery, the Follow Trainer stall, a scroll crash, and two new trainees
+v1.3.4 - Accurate end-of-career stats, a stat-OCR fix, and an opt-in Trackblazer training mode
 
-- New: presets for Biwa Hayahide and Mejiro Ryan (the roster is now 29 trainees across 87 presets).
-- Fixed: the bot now advances result and event screens -- goal-complete, race results, hint and achievement popups, and day-end event dialogue -- by pressing their Skip or Next button, instead of churning through several unknown-screen recovery cycles first.
-- Fixed: the "Follow Trainer" prompt that Auto-Fill can raise no longer stalls a queued run; it is dismissed by default.
-- Fixed: a short scrollable list (such as the post-purchase "choose how many to use" screen) could crash the random tap picker; the tap bounds are now ordered so it cannot.
-- Fixed: "Prioritize Skill Hints" now respects the failure-chance, energy, and blacklist limits like every other training, and applies in every year.
+- Fixed: the end-of-career summary now logs the true final stats and fan count; the post-finale read was sitting just under the detection threshold and silently failing, so it had been recording the pre-finale values.
+- Fixed: a stat corrupted by two consecutive failed OCR reads can no longer lock in -- the last good value is kept -- and the plausibility cap holds even on a fresh install before the first settings save.
+- New: an opt-in irregular-training mode for Trackblazer (off by default, experimental). On a free turn it trains instead of racing when the training is clearly worth more; it never touches mandatory or scheduled races.
 
     </releaseNotes>
   </update>
