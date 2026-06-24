@@ -8,6 +8,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [1.3.5] - 2026-06-24
+
+A Trackblazer tuning knob plus a skill-matching fix. Megaphone use can now be gated per tier so the strong megaphones are saved for high-gain turns, and inherited unique skills are no longer skipped at the end-of-career buy.
+
+### Added
+
+- Per-tier megaphone thresholds for Trackblazer (under Scenario Overrides). Each megaphone tier -- Empowering (+60%), Motivating (+40%), Coaching (+20%) -- now has its own minimum main-stat gain below which the bot holds it, and a blocked tier falls through to a weaker one. Off by default (all thresholds 0), so existing runs are unchanged; raise the Empowering and Motivating floors to reserve those tiers for the highest-value turns such as summer camp.
+
+### Fixed
+
+- Inherited unique skills are no longer skipped when buying at career end. Skill names ending in the ★ marker sometimes failed to match their database entry on a shortcut path, so the bot never bought them; the shortcut now matches names the same way as everywhere else.
+
+---
+
 ## [1.3.4] - 2026-06-24
 
 Two accuracy fixes plus an opt-in Trackblazer training mode. The end-of-career summary now records the real final stats, a corrupted stat reading can no longer stick, and an experimental irregular-training option is available for Trackblazer (off by default).
