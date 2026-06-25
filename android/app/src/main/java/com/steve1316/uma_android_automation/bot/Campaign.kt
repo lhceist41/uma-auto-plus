@@ -2630,13 +2630,12 @@ abstract class Campaign(game: Game) : Task(game) {
      * finals = 75), a force-end ends early (a Junior fan-checkpoint death lands around turn 24). Every
      * field comes from memory or already-OCR'd state, so building the line triggers no extra capture.
      *
-     * CAUTION: `spd/sta/pwr/grt/wit/fans` are the last in-career OCR, captured BEFORE the scenario's
-     * finale races resolve (Trackblazer's Twinkle Star Climax, URA's Finale). The game injects the
-     * finale stat/fan rewards afterward (~+40 per stat and +140k fans observed on a full Trackblazer
-     * arc) and the bot never re-reads them, so these fields UNDERSTATE the true career-complete screen
-     * by a run-dependent amount. Treat them as relative/early-death signal only; `turn` and `result`
-     * are the reliable fields. Reading the real finals would need OCR on the career-result screen,
-     * whose layout the in-career stat readers are not calibrated for.
+     * `spd/sta/pwr/grt/wit/fans` reflect the post-finale career-complete screen: after the finale the
+     * bot re-opens the Umamusume Details dialog (`ButtonDetails`, confidence lowered to 0.65 so the
+     * match lands) and re-reads stats + fans, so the line carries the true final values rather than the
+     * pre-finale in-career snapshot it logged before that fix. If the Details re-read fails (logged
+     * `[WARN] Could not find ButtonDetails`), the fields fall back to the last in-career OCR and will
+     * understate the finale rewards (~+40 per stat, large fan injection) — trust `turn`/`result` then.
      */
     override fun careerEndLedgerLine(result: TaskResult): String {
         val resolvedName =

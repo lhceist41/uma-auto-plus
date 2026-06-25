@@ -115,7 +115,7 @@ import { Settings } from "../context/BotStateContext"
 export interface CharacterPreset {
     name: string              // Display name (e.g., "El Condor Pasa")
     scenario: string          // Scenario (e.g., "Trackblazer")
-    settings: Partial<Settings>  // Full settings object
+    settings: DeepPartial<Settings>  // Full settings object
 }
 
 export const characterPresets: CharacterPreset[] = [
@@ -319,7 +319,7 @@ output = 'import { Settings } from "../context/BotStateContext"\n\n'
 output += 'export interface CharacterPreset {\n'
 output += '    name: string\n'
 output += '    scenario: string\n'
-output += '    settings: Partial<Settings>\n'
+output += '    settings: DeepPartial<Settings>\n'
 output += '}\n\n'
 output += 'export const characterPresets: CharacterPreset[] = \n'
 output += json.dumps(presets, indent=4, ensure_ascii=False)
@@ -375,7 +375,7 @@ cd android && ./gradlew assembleDebug
 
 The output APK will be at:
 ```
-android/app/build/outputs/apk/debug/v5.4.8-UmaAndroidAutomation-arm64-v8a-debug.apk
+android/app/build/outputs/apk/debug/UMA-Auto-Plus-v1.3.5-arm64-v8a-debug.apk
 ```
 
 ---

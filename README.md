@@ -7,25 +7,57 @@
 > **This is a personal fork of [steve1316/uma-android-automation](https://github.com/steve1316/uma-android-automation).**
 > All original credit goes to **steve1316** and the contributors of the upstream project. The core bot engine -- the screen reading, the training/racing/event logic, and the app itself -- is entirely their work.
 >
-> I did not create the original bot. I only maintain this fork to add features that I personally want and feel the bot should have. If you're looking for the original project, please visit the upstream repository linked above.
+> I did not create the original bot. The core engine is steve1316's; this fork adds features and decision-logic on top of it (see the honest breakdown below). If you're looking for the original project, please visit the upstream repository linked above.
 
 ---
 
 ## What this fork adds
 
-These are the features I've added on top of the original:
+steve1316 built the bot engine. This fork is a substantial body of work on top of it -- roughly 200 commits past the v5.4.8 fork point -- turning that engine into a hands-off, meta-aligned distribution. Here is an honest split of what I added versus what is steve1316's.
 
-- **Multi-run queue** -- Queue multiple consecutive career runs so the bot can grind unattended. Configurable run count, delay between runs, and error handling.
-- **Trainee rotation** -- Queue several different trainees and the bot cycles through them, training each under her own preset and switching automatically between careers. Off by default.
-- **Between-run navigation** -- After a career completes, the bot automatically navigates back through the game menus (career summary, home screen, scenario select, deck setup, cinematic skip) and starts the next run.
-- **Built-in character presets** -- 81 pre-configured character builds (27 per scenario) selectable from the Home page. Pick a scenario, pick a character, and all settings are applied instantly.
-- **Run Queue Settings page** -- Dedicated settings for queue behavior: run count, delay, stop-on-error, reuse-last-setup, auto-fill supports.
-- **Queue progress UI** -- Home page shows current run progress and a skip-run button during queued sessions.
-- **In-app update notifications** -- The app checks for new releases from this fork and notifies the user when an update is available.
-- **Custom branding** -- Renamed to "UMA Auto+" with a distinct gold icon so it can be installed alongside the original without confusion.
-- **Switched to Lucide icons** -- Replaced Ionicons (which had font-loading issues in offline builds) with Lucide SVG icons throughout the UI.
+### What I added
 
-Everything else -- the bot logic, OpenCV template matching, YOLOv8 stat detection, Tesseract OCR, accessibility service integration, the entire decision engine -- is from the original project.
+**Hands-off, multi-run grinding**
+
+- **Multi-run queue** -- queue 2-20 consecutive careers so the bot grinds unattended, with configurable run count, inter-run delay, and stop-on-error.
+- **Trainee rotation** -- queue several different trainees and the bot cycles through them, each run under her own preset, switching automatically between careers (off by default).
+- **Between-run navigation** -- the bot walks back through the post-career menus and launches the next run by itself, and stops with a clear message instead of looping when it hits a screen it can't handle.
+- **Overnight resilience** -- wake-lock, a stall watchdog, queue auto-resume on cold start, ML Kit init-race retry, a configurable per-run timeout, and self-healing for the Accessibility service that MuMu silently kills mid-run. Each fix came from a real overnight queue that died early.
+
+**Pick-and-go presets**
+
+- **87 hand-tuned character presets** -- 29 trainees across 3 scenarios (URA Finale / Unity Cup / Trackblazer), each pre-filling stat priorities, race plan, skill plan, event picks, and training thresholds. Pick a scenario, pick a character, hit Start -- no manual tuning required.
+- **Scenario advisories** -- the Home page shows a green "good pick" or yellow "mismatch" banner (with the reason) for the selected trainee and scenario.
+
+**Decision-engine extensions** (built on top of steve1316's scoring)
+
+- **Optimize Knapsack skill buying** -- works out the best combination of skills your end-of-career points can buy, including how upgrade chains exclude each other, instead of just grabbing the best-looking skill first.
+- **Deck validation at career start** -- warns immediately if the trainee's aptitudes are too low or her race predictions won't be visible to the bot, instead of letting a doomed run waste half an hour.
+- **Single-star prediction detection** -- the bot can see single-star races on the race list (the original only sees double-star ones), and forces a fan-earning race when a Junior fan goal is about to fail.
+- **Trackblazer tuning** -- Akikawa-bonding training priority (a proxy for MotY points), climax energy-item reservation, an Alarm Clock retry policy, and an opt-in irregular-training gate. Trackblazer is the fork's most-tuned scenario.
+- **Mood-floor guard** -- an optional stricter mood floor for trainees with single-option mood-trap events.
+- **Run diagnostics** -- a one-line per-career outcome ledger, greppable across runs, for tracking which presets actually complete.
+
+**New modes (experimental)** -- Daily Races and Team Trials task modes -- fully implemented and selectable, but not yet verified end-to-end on a live run (upstream is career-only).
+
+**UI and quality of life** -- a settings search across every page, a named-profile manager, queue progress with a skip-run button, and an icon overhaul that fixed a first-launch crash.
+
+**Distribution** -- rebranded to "UMA Auto+" with a distinct dark-navy "U+" icon (white "U", orange "+") and its own `applicationId` so it installs alongside the original; a GitHub Actions pipeline that builds and publishes signed APKs on every release tag; and an in-app update checker.
+
+### What's steve1316's
+
+The core engine -- the part that makes any of this possible -- is steve1316's, built on his [`android-cv-automation-library`](https://github.com/steve1316/android-cv-automation-library):
+
+- The `Game`/`Campaign` orchestration and the URA Finale / Unity Cup / Trackblazer scenario framework.
+- The screen-recognition system and its full image library.
+- The text reading (Google ML Kit + Tesseract) and the optional YOLOv8 stat-gain detector.
+- The base training, racing, and training-event scoring logic.
+- The training-event recognizer that matches on-screen event names against the game database.
+- The app itself -- its architecture and the whole Settings UI.
+
+I also continuously merge steve1316's ongoing improvements (energy-item conservation, per-distance race strategies, megaphone stat thresholds, game-data updates, and more) -- those are his work that I cherry-pick in.
+
+My work extends that engine's *decisions* and wraps it in a hands-off distribution; it does not replace it. For the full version-by-version list of changes, see the [CHANGELOG](CHANGELOG.md).
 
 ---
 
@@ -70,12 +102,12 @@ This project is purely for educational purposes to learn about Android automatio
 # Features
 
 - [x] Completes a full run from start/midway to its conclusion.
-- [x] Supports multiple scenarios including **URA Finale**, **Unity Cup**, and those in the future to come.
+- [x] Supports multiple scenarios including **URA Finale**, **Unity Cup**, **Trackblazer**, and those in the future to come.
 - [x] Recognizes the game's screens and buttons in real time.
 - [x] Reads training stat gains with an on-device vision model for improved accuracy.
 - [x] Reads on-screen text and matches it against the game's event database.
 - [x] Modern user interface built using React Native, Typescript and Expo for full configurability.
-- [x] Remote Log Viewer to monitor real-time automation progress from any browser on the same network.
+- [x] Remote Log Viewer to watch the bot's progress live from a browser on your PC.
 - [x] Screen recording for debugging to easily capture and review issues.
 - [x] Import/export settings as JSON, alongside customizable skill point buying plans and training configurations.
 - [x] Smart racing plan that dynamically schedules extra races based on current stats and fan requirements.
@@ -130,7 +162,7 @@ This project is purely for educational purposes to learn about Android automatio
 > You may need to type `adb disconnect` to disconnect all ADB connections beforehand for a fresh slate.
 
 3. In Android Studio's Logcat console at the bottom of the window, select your connected device from the device dropdown menu.
-4. Filter the logs by typing `package:com.steve1316.uma_android_automation [UAA]` or just `[UAA]` in the search box to see only the logs from this app.
+4. Filter the logs by typing `package:com.lhceist41.uma_auto_plus [UAA]` or just `[UAA]` in the search box to see only the logs from this app.
 5. Run the app - you'll now see all of its logs appear in real-time as it runs.
 
 ## To set the phone's resolution to 1080p (faster and more accurate)

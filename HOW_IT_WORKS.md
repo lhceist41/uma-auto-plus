@@ -400,7 +400,7 @@ When the bot decides to race:
 
 1. **Open the race list** and scan available races.
 2. **Database lookup:** Each detected race name is matched against an internal race database keyed by turn number. The database contains grade, fan reward, surface, and distance information.
-3. **Grade priority:** G1 > G2 > G3 > OP > Pre-OP. Higher-grade races are always preferred.
+3. **Grade priority:** G1 > G2 > G3 > OP > Pre-OP. Higher-grade races are always preferred. The race path also reads each row's **prediction-icon tier** (`PredictionTier`: NONE / SINGLE / DOUBLE); double-star rows are preferred and single-star rows are admitted only as last-resort candidates (see [Section 11.7](#117-race-selection) for the Trackblazer tier gating).
 4. **Filtering:** Races can be filtered by minimum fan threshold, preferred terrain, preferred grades, and preferred distances.
 5. **Selection:** The highest-priority race that passes all filters is selected.
 
@@ -1027,7 +1027,7 @@ Trackblazer tracks how many races the trainee has performed consecutively:
 - **Warning at 3+:** After 3 consecutive races, the game shows a warning about potential stat penalties.
 - **Energy guard at 3+:** When the counter is ≥ 3 and energy is critically low (0–1%), racing is **blocked** regardless of the configured limit to avoid compounding the -30 stat penalty at zero energy.
 - **Grade filtering at 3+:** When the counter is ≥ 3, the bot only accepts **G1, G2, or G3** races. Lower-grade races (OP, Pre-OP) are skipped to avoid wasting the consecutive race penalty on low-value races.
-- **Hard limit (default 5):** The bot stops racing entirely when the consecutive count reaches the configured limit (plus 1), unless it's the final turn.
+- **Hard limit (default 2):** The bot stops racing entirely when the consecutive count reaches the configured limit (plus 1), unless it's the final turn. With a limit of 2, the bot permits counts 0/1/2 (three races) and aborts at limit+1.
 - **OCR tracking:** The bot reads the consecutive race count from the warning dialog via OCR to stay synchronized with the game.
 
 > [!IMPORTANT]
@@ -1054,7 +1054,7 @@ Irregular Training is an optional feature that evaluates whether a high-value tr
 Trackblazer uses a specialized race selection algorithm (`findSuitableTrackblazerRace()`) that scans the entire race list:
 
 1. **Scan the full list:** Uses `ScrollList` to paginate through all available races across multiple pages.
-2. **Identify candidates:** For each race, the bot looks for **double-star prediction icons** (`IconRaceListPredictionDoubleStar`) indicating favorable matchups.
+2. **Identify candidates:** For each race, the bot reads the **prediction-icon tier** (`PredictionTier`: NONE / SINGLE / DOUBLE) via `findPredictionAnchors`/`mergePredictionAnchors`. Double-star rows (`IconRaceListPredictionDoubleStar`) are the primary candidates; single-star rows (`IconRaceListPredictionSingleStar`) are also detected but admitted only as last-resort candidates ranked below all double-star ones, gated by: (1) the fan-emergency policy (an unmet fan goal due within 6 turns sets `bFanEmergencyActive`, which forces racing and admits singles), (2) force-racing, (3) a Result-Pts / insufficient-goal shortfall (admits good-aptitude singles only), or (4) a tiered-maiden fallback in `selectMaidenRace` (a single-star maiden is entered only when the goal deadline is near and energy/slack permit). Outside those gates, single-star rows are detected for scoring and logging only and take a 0.5x penalty; the double-star-only entry gate stands. Rows with no prediction icon are not entered.
 3. **For each double-star race:**
    - Extract the race name via OCR
    - Look up the race in the database by turn number
