@@ -896,9 +896,10 @@ abstract class Campaign(game: Game) : Task(game) {
      * @return True if the retry was initiated (button clicked), false to close the dialog without retrying.
      */
     open fun shouldRetryRace(dialog: DialogInterface, args: Map<String, Any>): Boolean {
-        if (racing.raceRetries >= 0) {
+        if (racing.raceRetries > 0 && racing.retriesThisRace < racing.maxRetriesPerRace) {
             MessageLog.i(TAG, "[RACE] Retrying the race. Retries remaining: ${racing.raceRetries}")
             racing.raceRetries--
+            racing.retriesThisRace++
             game.wait(0.5)
             ButtonTryAgain.click(game.imageUtils)
             return true

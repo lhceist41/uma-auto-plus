@@ -589,7 +589,11 @@ class Trackblazer(game: Game) : Campaign(game) {
             MessageLog.i(TAG, "[TRACKBLAZER] Alarm clock policy already declined the carat-retry option this race. Skipping further retry attempts and proceeding to race results.")
             return false
         }
-        if (racing.lastRaceGrade != null && racing.trackblazerRetryGrades.contains(racing.lastRaceGrade) && racing.raceRetries >= 0) {
+        if (racing.lastRaceGrade != null &&
+            racing.trackblazerRetryGrades.contains(racing.lastRaceGrade) &&
+            racing.raceRetries > 0 &&
+            racing.retriesThisRace < racing.maxRetriesPerRace
+        ) {
             if (racing.lastRaceIsRival && !racing.bRetriedCurrentRace) {
                 MessageLog.i(TAG, "[TRACKBLAZER] ${racing.lastRaceGrade} Rival Race retry button is available. Retrying once.")
                 racing.bRetriedCurrentRace = true
@@ -598,6 +602,7 @@ class Trackblazer(game: Game) : Campaign(game) {
             }
 
             racing.raceRetries--
+            racing.retriesThisRace++
             if (dialog.ok(game.imageUtils)) {
                 game.wait(1.0)
             }

@@ -216,6 +216,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Tracks if the current race has already been retried. */
     var bRetriedCurrentRace: Boolean = false
 
+    /** Retries used on the current race. Shared by the button-based and dialog-based retry paths so both honor the per-race limit. */
+    var retriesThisRace: Int = 0
+
     /** Whether to stop the bot when a mandatory race is detected. */
     internal val enableStopOnMandatoryRace: Boolean = SettingsHelper.getBooleanSetting("racing", "enableStopOnMandatoryRaces")
 
@@ -252,8 +255,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** The user's defined planned races loaded at initialization. */
     private val userPlannedRaces: List<PlannedRace> = loadUserPlannedRaces()
 
-    /** The maximum number of retries allowed per race. */
-    private val maxRetriesPerRace = if (game.scenario == "Trackblazer") SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerMaxRetriesPerRace", 1) else 1
+    /** The maximum number of retries allowed per race. Internal so the dialog-based retry path (shouldRetryRace overrides) can honor it too. */
+    internal val maxRetriesPerRace = if (game.scenario == "Trackblazer") SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerMaxRetriesPerRace", 1) else 1
 
     /** The list of race grades that are eligible for retries in Trackblazer. */
     internal val trackblazerRetryGrades: List<RaceGrade> =
@@ -1605,7 +1608,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         // Flag used to prevent us from attempting to select a running style after we've already successfully selected a running style once.
         var bDidSelectRaceStrategy = false
-        var retriesThisRace = 0
+        // Reset the shared per-race retry counter at the start of the button-based loop (covers direct callers like UnityCup that bypass handleRaceEvents' gate).
+        retriesThisRace = 0
 
         // Safety counter to prevent infinite loop.
         var loopCount = 0
@@ -2745,6 +2749,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             lastRaceIsRival = false
             bRetriedCurrentRace = false
             bAlarmClockPolicySkippedThisRace = false
+            retriesThisRace = 0
         }
         MessageLog.v(TAG, "\n********************")
         MessageLog.v(TAG, "[RACE] Starting Racing process on ${campaign.date}.")
