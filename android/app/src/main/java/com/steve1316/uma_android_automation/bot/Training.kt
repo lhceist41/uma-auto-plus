@@ -445,6 +445,14 @@ class Training(private val game: Game, private val campaign: Campaign) {
         private const val FINALE_RACE_STAT_BONUS = 15
 
         /**
+         * Bonding-phase energy-economy tiebreaker. Wit training costs no energy (it restores some) while Guts
+         * costs the most, so on an equal bond score we prefer Wit and avoid Guts. Held below 0.5 — the smallest
+         * gap between two distinct relationship-bar sums (bars are worth 1.0/2.5) — so it can only break a tie,
+         * never overturn a genuine bonding advantage.
+         */
+        private const val BONDING_ENERGY_TIEBREAK = 0.2
+
+        /**
          * Calculate the number of remaining finale races based on the current turn.
          *
          * Finale races occur on turns 73, 74, and 75. Before the finale (turn <= 72), all 3 races remain.
@@ -491,6 +499,15 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         else -> 0.0
                     }
                 score += contribution
+            }
+
+            // Energy-economy tiebreaker (see BONDING_ENERGY_TIEBREAK): on an equal bond score prefer the
+            // free-energy Wit facility and avoid the costly Guts one. The magnitude stays under the 0.5
+            // minimum gap between distinct bar sums, so this only ever decides a tie.
+            score += when (training.name) {
+                StatName.WIT -> BONDING_ENERGY_TIEBREAK
+                StatName.GUTS -> -BONDING_ENERGY_TIEBREAK
+                else -> 0.0
             }
 
             val scoreString: String = String.format("%.2f", score)

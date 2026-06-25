@@ -358,6 +358,31 @@ class TrainingScoringTest {
         assertEquals(0.0, score, "A zero score should be given with only orange bars for the training")
     }
 
+    @Test
+    @DisplayName("On an equal bond score, Wit is preferred (free-energy tiebreak)")
+    fun testWitPreferredOnBondTie() {
+        val witScore = scoreFriendshipTraining(createDefaultTrainingOption(name = StatName.WIT, relationshipBars = arrayListOf(BarFillResult(StatName.SPEED, 50.0, 2, "blue"))))
+        val speedScore = scoreFriendshipTraining(createDefaultTrainingOption(name = StatName.SPEED, relationshipBars = arrayListOf(BarFillResult(StatName.SPEED, 50.0, 2, "blue"))))
+        assertTrue(witScore > speedScore, "Wit should edge out Speed on an equal bond score since it costs no energy")
+    }
+
+    @Test
+    @DisplayName("On an equal bond score, Guts is avoided (costly-energy penalty)")
+    fun testGutsAvoidedOnBondTie() {
+        val gutsScore = scoreFriendshipTraining(createDefaultTrainingOption(name = StatName.GUTS, relationshipBars = arrayListOf(BarFillResult(StatName.SPEED, 50.0, 2, "blue"))))
+        val speedScore = scoreFriendshipTraining(createDefaultTrainingOption(name = StatName.SPEED, relationshipBars = arrayListOf(BarFillResult(StatName.SPEED, 50.0, 2, "blue"))))
+        assertTrue(speedScore > gutsScore, "Guts should fall below Speed on an equal bond score since it costs the most energy")
+    }
+
+    @Test
+    @DisplayName("The energy tiebreak never overrides a genuine bond advantage")
+    fun testEnergyTiebreakDoesNotOverrideBond() {
+        // Speed carries an extra green bar (>= 0.5 more bond); Wit's small free-energy tiebreak must not flip it.
+        val speedScore = scoreFriendshipTraining(createDefaultTrainingOption(name = StatName.SPEED, relationshipBars = arrayListOf(BarFillResult(StatName.SPEED, 50.0, 2, "blue"), BarFillResult(StatName.SPEED, 50.0, 2, "green"))))
+        val witScore = scoreFriendshipTraining(createDefaultTrainingOption(name = StatName.WIT, relationshipBars = arrayListOf(BarFillResult(StatName.SPEED, 50.0, 2, "blue"))))
+        assertTrue(speedScore > witScore, "A genuinely better bond (extra green bar) must beat Wit's tiebreak")
+    }
+
     // ============================================================================
     // calculateStatEfficiencyScore Tests
     // ============================================================================
