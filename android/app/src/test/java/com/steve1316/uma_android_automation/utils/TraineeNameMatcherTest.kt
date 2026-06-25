@@ -77,6 +77,40 @@ class TraineeNameMatcherTest {
             val s = TraineeNameMatcher.score("Sweep Tosho", "[Autumn Cosmos] Gold City")
             assertTrue(s < threshold, "different trainee should be rejected, got $s")
         }
+
+        @Test
+        fun `shared-prefix different trainee is rejected (Gold Ship vs Gold City)`() {
+            // The live bug: rotation target "Gold Ship" must NOT match a pre-selected
+            // "[Autumn Cosmos] Gold City" banner just because both start with "Gold".
+            val s = TraineeNameMatcher.score("Gold Ship", "[Autumn Cosmos] Gold City")
+            assertTrue(s < threshold, "Gold City should be rejected for target Gold Ship, got $s")
+        }
+
+        @Test
+        fun `plain-name target matches its own outfit banner`() {
+            val s = TraineeNameMatcher.score("Gold Ship", "[Run! Golshi-chan!] Gold Ship")
+            assertTrue(s >= threshold, "expected >= $threshold, got $s")
+        }
+
+        @Test
+        fun `single-character OCR slip in the name still matches`() {
+            // "Ship" misread as "Shlp" (i -> l) is noise, not a different word.
+            val s = TraineeNameMatcher.score("Gold Ship", "[Autumn Cosmos] Gold Shlp")
+            assertTrue(s >= threshold, "OCR-noisy name should still match, got $s")
+        }
+
+        @Test
+        fun `same outfit but different name is rejected`() {
+            // Even with a matching outfit prefix, the differing name word must gate the match.
+            val s = TraineeNameMatcher.score("[Autumn Cosmos] Gold City", "[Autumn Cosmos] Gold Ship")
+            assertTrue(s < threshold, "different name under same outfit should be rejected, got $s")
+        }
+
+        @Test
+        fun `shared first name different surname is rejected (Mejiro)`() {
+            val s = TraineeNameMatcher.score("Mejiro McQueen", "Mejiro Ryan")
+            assertTrue(s < threshold, "Mejiro Ryan should be rejected for target Mejiro McQueen, got $s")
+        }
     }
 
     @Nested

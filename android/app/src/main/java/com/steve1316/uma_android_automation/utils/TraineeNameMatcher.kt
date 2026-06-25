@@ -29,31 +29,44 @@ object TraineeNameMatcher {
     }
 
     /**
-     * Jaro-Winkler similarity (0..1) where [target] is the wanted name and [read] is the OCR'd
-     * Trainee Select banner ("[Outfit] Name").
+     * Per-aligned-word Jaro-Winkler match (0..1) where [target] is the wanted name and [read] is the
+     * OCR'd Trainee Select banner ("[Outfit] Name").
      *
-     * When [target] specifies an outfit (it has a leading bracket), the match is outfit-sensitive:
-     * the full normalized strings are compared so the wrong outfit of the same character stays below
-     * the threshold. When [target] is a bare character name (no outfit — the common case, since most
-     * presets are named without one), the name sits at the END of the banner while Jaro-Winkler
-     * weights the START, so the outfit prefix would tank an otherwise perfect match. There we also
-     * score [target] against the trailing words of [read] (the name part) and take the better, so a
-     * plain "Sweep Tosho" matches "[Platanus Witch] Sweep Tosho".
+     * The character name sits at the END of the banner, so target words are aligned to the TRAILING
+     * read words: a bare-name target ("Sweep Tosho") aligns to just the name part and ignores the
+     * outfit prefix, while an outfit-prefixed target aligns outfit + name and so stays outfit-sensitive.
+     *
+     * Crucially this is per-word, NOT whole-string. Every target word must match its aligned read word
+     * and the WEAKEST word gates the result. Whole-string Jaro-Winkler over-weights a shared prefix, so
+     * two distinct trainees that share a leading word ("Gold Ship" vs "Gold City") would otherwise ride
+     * that prefix over the threshold. A merely OCR-noisy word still scores high per-word ([TOKEN_FLOOR]);
+     * a genuinely different word (Ship vs City) scores far below it and fails the match. Once every word
+     * clears the floor, the joined name region is scored whole-string so ordinary fuzziness is tolerated.
      */
     fun score(target: String, read: String): Double {
-        val targetNorm = normalize(target)
-        val readNorm = normalize(read)
-        val full = service.score(targetNorm, readNorm)
-        if (hasOutfitPrefix(target)) return full
-        val readWords = readNorm.split(" ").filter { it.isNotEmpty() }
-        val targetWords = targetNorm.split(" ").filter { it.isNotEmpty() }.size.coerceAtLeast(1)
-        if (readWords.size <= targetWords) return full
-        val tail = readWords.takeLast(targetWords).joinToString(" ")
-        return maxOf(full, service.score(targetNorm, tail))
+        val targetTokens = normalize(target).split(" ").filter { it.isNotEmpty() }
+        val readTokens = normalize(read).split(" ").filter { it.isNotEmpty() }
+        if (targetTokens.isEmpty() || readTokens.isEmpty()) {
+            return service.score(normalize(target), normalize(read))
+        }
+        // The banner can't be the target if it has fewer words than the target name itself.
+        if (readTokens.size < targetTokens.size) return 0.0
+
+        val window = readTokens.takeLast(targetTokens.size)
+        val perToken = targetTokens.indices.map { service.score(targetTokens[it], window[it]) }
+        // A clearly-different aligned word means a different trainee — fail hard so a shared prefix word
+        // can't carry the match (Gold Ship vs Gold City). Returning the min keeps bestMatch ranking sane.
+        if (perToken.any { it < TOKEN_FLOOR }) return perToken.minOrNull() ?: 0.0
+        // Every word is at least OCR-plausible; score the joined name region whole-string.
+        return service.score(targetTokens.joinToString(" "), window.joinToString(" "))
     }
 
-    /** True when [raw] carries a leading "[Outfit]" / "(Outfit)" prefix (vs a bare character name). */
-    private fun hasOutfitPrefix(raw: String): Boolean = Regex("^\\s*[\\[(【]").containsMatchIn(raw)
+    /**
+     * Per-word floor below which an aligned word is treated as a DIFFERENT word rather than OCR noise.
+     * Sits between "Ship" vs "City" (~0.50, reject) and a single-character OCR slip like "Ship" vs
+     * "Shlp" (~0.87, accept).
+     */
+    private const val TOKEN_FLOOR = 0.75
 
     /**
      * Best candidate for [target] among [candidates] by [score] (same outfit-aware logic).
