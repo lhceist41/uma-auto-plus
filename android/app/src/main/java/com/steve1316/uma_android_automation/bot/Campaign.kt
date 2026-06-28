@@ -128,6 +128,26 @@ abstract class Campaign(game: Game) : Task(game) {
      * the direct Learn-screen handler do not re-enter the list and run the full plan twice. */
     private var bCareerEndSkillsHandled: Boolean = false
 
+    /** Set true the moment the bot confirms a force-end it can actually observe at its source: a lost
+     * mandatory race the game will not let us retry past. Read by [careerEndLedgerLine] to emit
+     * outcome=FORCE_END. Most force-ends (fan / Result-Pts checkpoint misses) are NOT observable at
+     * their trigger and stay outcome=COMPLETED (only `turn` distinguishes those from a win); this
+     * flag only catches the mandatory-race-loss class. A fresh Campaign instance runs each career, so
+     * the false default is the per-career reset. */
+    private var careerForceEnded: Boolean = false
+
+    /** Reason paired with [careerForceEnded] (e.g. "MANDATORY_RACE_LOST"), emitted in the ledger. */
+    private var forceEndReason: String? = null
+
+    /** Record a confirmed career force-end once. Idempotent - keeps the first reason so a later
+     * dialog redraw on the same failure cannot overwrite it. */
+    private fun markCareerForceEnded(reason: String) {
+        if (!careerForceEnded) {
+            careerForceEnded = true
+            forceEndReason = reason
+        }
+    }
+
     /** Attempts made to actively exit the career-end skill screen after the plan already ran. */
     private var careerEndExitAttempts: Int = 0
 
@@ -982,6 +1002,7 @@ abstract class Campaign(game: Game) : Task(game) {
             }
             if (racing.enableCompleteCareerOnFailure) {
                 MessageLog.i(TAG, "[RACE] Failed a mandatory race and no retries remaining. Completing career...")
+                markCareerForceEnded("MANDATORY_RACE_LOST")
                 // Manually set retries to -1 to break the race retry loop.
                 racing.raceRetries = -1
                 dialog.close(game.imageUtils)
@@ -991,6 +1012,7 @@ abstract class Campaign(game: Game) : Task(game) {
             MessageLog.v(TAG, "\n[END] Stopping the bot due to failing a mandatory race.")
             MessageLog.v(TAG, "********************")
             game.notificationMessage = "Stopping the bot due to failing a mandatory race."
+            markCareerForceEnded("MANDATORY_RACE_LOST")
             if (DiscordUtils.enableDiscordNotifications) {
                 DiscordUtils.queue.add("```diff\n- ${MessageLog.getSystemTimeString()} Stopping the bot due to failing a mandatory race.\n```")
             }
@@ -2628,8 +2650,12 @@ abstract class Campaign(game: Game) : Task(game) {
      * the SAME end screen for a clean finish and an early force-end (a missed fan/goal deadline ends
      * the career on the spot), and there is no win/lose template to read - so [result] is COMPLETE for
      * both, and `turn` is the real discriminator: a full arc ends near the scenario's last turn (URA
-     * finals = 75), a force-end ends early (a Junior fan-checkpoint death lands around turn 24). Every
-     * field comes from memory or already-OCR'd state, so building the line triggers no extra capture.
+     * finals = 75), a force-end ends early (a Junior fan-checkpoint death lands around turn 24). The
+     * `outcome=` field interprets the run: INCOMPLETE for a non-COMPLETE result (a user stop or bot
+     * failure - never a force-end), FORCE_END for a force-end confirmed at its source
+     * ([careerForceEnded], currently only a lost mandatory race), and COMPLETED for the still-ambiguous
+     * rest - a true win OR an unflagged early force-end, which `turn` must split. Every field comes
+     * from memory or already-OCR'd state, so building the line triggers no extra capture.
      *
      * `spd/sta/pwr/grt/wit/fans` reflect the post-finale career-complete screen: after the finale the
      * bot re-opens the Umamusume Details dialog (`ButtonDetails`, confidence lowered to 0.65 so the
@@ -2645,8 +2671,11 @@ abstract class Campaign(game: Game) : Task(game) {
             }.replace(" ", "_")
         val scenarioToken = game.scenario.ifEmpty { "unknown" }.replace(" ", "_")
         val st = trainee.stats
+        val outcome = classifyCareerOutcome(result.code, careerForceEnded)
         return buildString {
             append("[CAREER_END] result=").append(result.code.name.removePrefix("TASK_RESULT_"))
+            append(" outcome=").append(outcome)
+            forceEndReason?.let { append(" forceEndReason=\"").append(it).append('"') }
             append(" trainee=").append(resolvedName)
             append(" scenario=").append(scenarioToken)
             append(" turn=").append(date.day)
