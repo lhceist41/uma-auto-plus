@@ -90,6 +90,20 @@ const RunQueueSettings = () => {
         const m = presetName.match(/^(.*?)\s*\(([^)]*)\)\s*$/)
         return m ? `[${m[2].trim()}] ${m[1].trim()}` : presetName.trim()
     }
+    // A bare base-name target ("El Condor Pasa") is outfit-INSENSITIVE in the in-game OCR matcher, so
+    // if you own the same character in another outfit ("[Kukulkan Warrior] El Condor Pasa") the bot can
+    // grab the wrong banner. Collect this character's other outfit names so the navigator skips them.
+    // Outfit-specific entries already disambiguate via their full "[Outfit] Name", so they get none.
+    const deriveExcludeOutfits = (presetName: string): string[] => {
+        if (/\([^)]*\)\s*$/.test(presetName)) return []
+        const base = baseCharacter(presetName)
+        const outfits = new Set<string>()
+        for (const p of characterPresets) {
+            const m = p.name.match(/^(.*?)\s*\(([^)]*)\)\s*$/)
+            if (m && m[1].trim() === base) outfits.add(m[2].trim())
+        }
+        return [...outfits]
+    }
 
     const rotation = runQueueSettings.traineeRotation
     const updateRotationEntry = (index: number, patch: Partial<(typeof rotation)[number]>) => {
@@ -223,6 +237,15 @@ const RunQueueSettings = () => {
                                     className="mt-4"
                                 />
 
+                                <CustomCheckbox
+                                    searchId="run-queue-legacy-include-guests"
+                                    checked={runQueueSettings.enableLegacyIncludeGuests}
+                                    onCheckedChange={(checked) => updateSetting("enableLegacyIncludeGuests", checked)}
+                                    label="Include Guests in Legacy Auto-Select"
+                                    description="On the Confirm Auto-Select legacy screen, tick 'Include Guests' so Auto-Select may borrow a guest (rental) parent. Borrowing a guest costs monies. OFF by default - Auto-Select then uses only your owned umas (free), which suits farming your own spark parents; turn it on if your owned parents are weak and you would rather inherit stronger borrowed 3-star parents. Note: during the rare Racing Carnival event this also leaves the free Carnival spark-bonus tick off, so enable it then if you want that bonus."
+                                    className="mt-4"
+                                />
+
                                 <View style={styles.rotationCard}>
                                     <CustomCheckbox
                                         searchId="run-queue-trainee-rotation"
@@ -262,7 +285,11 @@ const RunQueueSettings = () => {
                                                             if (!v) return
                                                             const sep = v.lastIndexOf("@@")
                                                             const newKey = v.slice(0, sep)
-                                                            const patch: Partial<(typeof rotation)[number]> = { presetKey: newKey, scenario: v.slice(sep + 2) }
+                                                            const patch: Partial<(typeof rotation)[number]> = {
+                                                                presetKey: newKey,
+                                                                scenario: v.slice(sep + 2),
+                                                                excludeOutfits: deriveExcludeOutfits(newKey),
+                                                            }
                                                             // Auto-fill the In-Game Name to the selected character+outfit. Overwrite when the
                                                             // character changes (kills the stale-name drift) or the field is empty; keep a
                                                             // user-customized name when only the scenario changes for the same character.

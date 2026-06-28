@@ -236,6 +236,11 @@ export interface Settings {
         // Doubles event rewards (and the TP cost) - only worth it while a TP event is live; turn
         // it off once the event ends. The Max TP restore above covers the doubled cost.
         enableEventBoost: boolean
+        // Tick "Include Guests" on the Confirm Auto-Select legacy dialog so Auto-Select may borrow a
+        // guest (rental) parent. Borrowing a guest costs in-game monies. OFF by default -> Auto-Select
+        // uses only OWNED umas (free), which suits farming your own spark parents. New players with weak
+        // owned umas may prefer it ON to inherit stronger borrowed 3-star parents.
+        enableLegacyIncludeGuests: boolean
         // Trainee rotation: instead of repeating one trainee, cycle through a list, switching every
         // switchEveryNRuns careers, each playing under HER own preset. Default off -> the validated
         // same-trainee queue is byte-for-byte unchanged. When on, the frontend precomputes each
@@ -247,7 +252,11 @@ export interface Settings {
         // Ordered cycle. inGameName is the full "[Outfit] Name" the in-game trainee-select preview shows
         // (what the navigator OCR-matches); presetKey is the characterPresets key ("Name" or
         // "Name (Outfit)"); scenario picks which of that trainee's per-scenario presets to apply.
-        traineeRotation: { inGameName: string; presetKey: string; scenario: string }[]
+        // excludeOutfits: sibling-outfit names (the "(Outfit)" suffixes of this character's other
+        // presets) the in-game Trainee Select matcher must skip. A bare base-name target is
+        // outfit-insensitive, so without this the bot can pick the wrong owned outfit. Derived on
+        // preset pick; empty/absent for outfit-specific entries and pre-existing configs.
+        traineeRotation: { inGameName: string; presetKey: string; scenario: string; excludeOutfits?: string[] }[]
     }
 
     // Scenario specific overrides
@@ -651,6 +660,7 @@ export const defaultSettings: Settings = {
         autoFillSupports: true,
         enableTpRestoreWithItems: false,
         enableEventBoost: false,
+        enableLegacyIncludeGuests: false,
         enableTraineeRotation: false,
         switchEveryNRuns: 3,
         traineeRotation: [],

@@ -21,8 +21,9 @@ class TraineeNameMatcherTest {
     @DisplayName("normalize()")
     inner class NormalizeTests {
         @Test
-        fun `strips brackets and keeps the outfit words`() {
-            assertEquals("kukulkan warrior el condor pasa", TraineeNameMatcher.normalize("[Kukulkan Warrior] El Condor Pasa"))
+        fun `strips brackets and folds OCR-identical i-l-I in the outfit words`() {
+            // i/l/I fold together (warrior -> warrlor) so "El" <-> "EI" OCR slips canonicalize the same.
+            assertEquals("kukulkan warrlor el condor pasa", TraineeNameMatcher.normalize("[Kukulkan Warrior] El Condor Pasa"))
         }
 
         @Test
@@ -32,7 +33,7 @@ class TraineeNameMatcherTest {
 
         @Test
         fun `collapses whitespace and lowercases`() {
-            assertEquals("blossom in learning sakura bakushin o", TraineeNameMatcher.normalize("  [Blossom in Learning]   Sakura Bakushin O  "))
+            assertEquals("blossom ln learnlng sakura bakushln o", TraineeNameMatcher.normalize("  [Blossom in Learning]   Sakura Bakushin O  "))
         }
     }
 
@@ -62,6 +63,21 @@ class TraineeNameMatcherTest {
         fun `a different trainee scores below the threshold`() {
             val s = TraineeNameMatcher.score("[Kukulkan Warrior] El Condor Pasa", "[Wild Frontier] Taiki Shuttle")
             assertTrue(s < threshold, "different trainee should be rejected, got $s")
+        }
+
+        @Test
+        fun `El misread as EI still matches the full outfit target`() {
+            // Live OCR (run 2 stop): "[Kukulkan Warrior] El Condor Pasa" read as "... EI Condor Pasa".
+            // The 2-char "el"/"ei" glyph slip must not gate the match below the threshold.
+            val s = TraineeNameMatcher.score("[Kukulkan Warrior] El Condor Pasa", "[Kukulkan Warrior] EI Condor Pasa")
+            assertTrue(s >= threshold, "El/EI OCR slip should still match, got $s")
+        }
+
+        @Test
+        fun `still rejects a genuinely different short word despite the i-l fold`() {
+            // The fold must not collapse distinct trainees: "Gold Ship" vs "Gold City" stays rejected.
+            val s = TraineeNameMatcher.score("Gold Ship", "[Autumn Cosmos] Gold City")
+            assertTrue(s < threshold, "Gold City should still be rejected for Gold Ship, got $s")
         }
 
         @Test
@@ -134,6 +150,50 @@ class TraineeNameMatcherTest {
         @Test
         fun `returns null for an empty roster`() {
             assertNull(TraineeNameMatcher.bestMatch("[Kukulkan Warrior] El Condor Pasa", emptyList()))
+        }
+    }
+
+    @Nested
+    @DisplayName("hasOutfit()")
+    inner class HasOutfitTests {
+        @Test
+        fun `true when the banner carries the outfit`() {
+            assertTrue(TraineeNameMatcher.hasOutfit("[Kukulkan Warrior] El Condor Pasa", "Kukulkan Warrior"))
+        }
+
+        @Test
+        fun `false for a different outfit of the same character`() {
+            // The fix must not over-reach: excluding "Kukulkan Warrior" must NOT skip the base banner.
+            assertFalse(TraineeNameMatcher.hasOutfit("[E☆Número 1] El Condor Pasa", "Kukulkan Warrior"))
+        }
+
+        @Test
+        fun `matches the bracket-stripped OCR variant`() {
+            assertTrue(TraineeNameMatcher.hasOutfit("Kukulkan Warrior El Condor Pasa", "Kukulkan Warrior"))
+        }
+
+        @Test
+        fun `de-accents the outfit`() {
+            assertTrue(TraineeNameMatcher.hasOutfit("[E☆Número 1] El Condor Pasa", "E Numero 1"))
+        }
+
+        @Test
+        fun `a partial word does not false-match`() {
+            assertFalse(TraineeNameMatcher.hasOutfit("[Kukulkan Warrior] El Condor Pasa", "Kukul"))
+        }
+
+        @Test
+        fun `an empty outfit never matches`() {
+            assertFalse(TraineeNameMatcher.hasOutfit("[Kukulkan Warrior] El Condor Pasa", ""))
+        }
+
+        @Test
+        fun `excluding the sibling outfit skips only the wrong banner`() {
+            // The reported bug: bare target "El Condor Pasa" matched the Kukulkan banner. With the
+            // sibling outfit excluded, the navigator skips the Kukulkan banner and keeps the base one.
+            val excludes = listOf("Kukulkan Warrior")
+            assertTrue(excludes.any { TraineeNameMatcher.hasOutfit("[Kukulkan Warrior] El Condor Pasa", it) }, "Kukulkan banner should be skipped")
+            assertFalse(excludes.any { TraineeNameMatcher.hasOutfit("[E☆Número 1] El Condor Pasa", it) }, "base banner should be kept")
         }
     }
 }

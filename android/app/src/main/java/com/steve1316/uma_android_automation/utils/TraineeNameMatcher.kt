@@ -15,7 +15,7 @@ import java.text.Normalizer
 object TraineeNameMatcher {
     private val service = StringSimilarityServiceImpl(JaroWinklerStrategy())
 
-    /** Lowercase, de-accent, drop bracket/star/punctuation noise, collapse whitespace. */
+    /** Lowercase, de-accent, drop bracket/star/punctuation noise, fold OCR-identical i/l/I, collapse whitespace. */
     fun normalize(raw: String): String {
         val deaccented =
             Normalizer.normalize(raw, Normalizer.Form.NFD)
@@ -24,6 +24,11 @@ object TraineeNameMatcher {
             .lowercase()
             .replace(Regex("[\\[\\](){}【】]"), " ") // bracket variants around the outfit
             .replace(Regex("[^a-z0-9 ]"), " ") // stars, colons, and other symbol noise
+            // Capital-I, lowercase-l and lowercase-i are the same glyph in the game font, so OCR swaps
+            // them freely ("El Condor Pasa" reads as "EI Condor Pasa"). On a 2-char token like "el" that
+            // single-glyph slip drops Jaro-Winkler below TOKEN_FLOOR and fails the whole match. Fold the
+            // three together so the comparison is blind to the confusion (applied to both sides equally).
+            .replace(Regex("[il]"), "l")
             .replace(Regex("\\s+"), " ")
             .trim()
     }
@@ -84,5 +89,19 @@ object TraineeNameMatcher {
             }
         }
         return best?.let { it to bestScore }
+    }
+
+    /**
+     * True when [banner] (a "[Outfit] Name" preview) carries the given [outfit] words.
+     *
+     * Used to skip a sibling-outfit banner: a bare base-name rotation target ("El Condor Pasa") is
+     * outfit-insensitive and would otherwise match an owned outfit's banner ("[Kukulkan Warrior] El
+     * Condor Pasa"). Word-boundary substring over the normalized text, so "Kukulkan Warrior" matches
+     * that banner but a partial word cannot false-match.
+     */
+    fun hasOutfit(banner: String, outfit: String): Boolean {
+        val n = normalize(outfit)
+        if (n.isEmpty()) return false
+        return (" " + normalize(banner) + " ").contains(" $n ")
     }
 }

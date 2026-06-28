@@ -1589,6 +1589,11 @@ class CareerLaunchNavigator(private val context: Context) {
      */
     private fun handleTraineeSelectScreen(): TransitionResult {
         val target = SettingsHelper.getStringSetting("queueState", "currentTrainee")
+        // Sibling outfits to skip: a bare base-name target ("El Condor Pasa") is outfit-insensitive and
+        // would otherwise match an owned outfit's banner ("[Kukulkan Warrior] El Condor Pasa"). The
+        // frontend supplies the names; empty for outfit-specific or pre-existing entries (old behavior).
+        val excludeOutfits = SettingsHelper.getStringSetting("queueState", "currentTraineeExcludes")
+            .split("\n").map { it.trim() }.filter { it.isNotEmpty() }
         if (target.isBlank()) {
             return TransitionResult.Failed(
                 reason = "On Trainee Select but no target trainee recorded (queueState.currentTrainee empty); cannot choose safely.",
@@ -1606,7 +1611,8 @@ class CareerLaunchNavigator(private val context: Context) {
         // switch) the target is already selected and the preview already reads her name. Confirm it
         // and advance without disturbing the grid - no scan, no risk of changing the selection.
         val current = readTraineePreviewName()
-        if (current.isNotBlank() && TraineeNameMatcher.score(target, current) >= traineeMatchThreshold) {
+        val currentExcluded = excludeOutfits.any { TraineeNameMatcher.hasOutfit(current, it) }
+        if (!currentExcluded && current.isNotBlank() && TraineeNameMatcher.score(target, current) >= traineeMatchThreshold) {
             MessageLog.i(TAG, "[ROTATION] Target already selected ('$current'). Advancing.")
             if (ButtonNext.click(iu)) {
                 waitSafe(2.0)
@@ -1677,6 +1683,12 @@ class CareerLaunchNavigator(private val context: Context) {
                     val norm = preview.lowercase().replace(Regex("[^a-z0-9]"), "")
                     if (norm.isEmpty()) continue
                     if (!seen.add(norm)) continue // already scored on an earlier (overlapping) page.
+                    // Skip a sibling-outfit banner: a bare base-name target is outfit-insensitive and
+                    // would otherwise match an owned outfit ("[Kukulkan Warrior] El Condor Pasa").
+                    if (excludeOutfits.any { TraineeNameMatcher.hasOutfit(preview, it) }) {
+                        MessageLog.i(TAG, "[ROTATION] Cell ($col,$row): '$preview' is an excluded sibling outfit; skipping.")
+                        continue
+                    }
                     newThisPage++
                     val score = TraineeNameMatcher.score(target, preview)
                     MessageLog.i(TAG, "[ROTATION] Cell ($col,$row): '$preview' score=${"%.3f".format(score)}")
@@ -1773,14 +1785,15 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
-     * LEGACY_SELECT_SCREEN: Click Auto-Select to populate both legacy slots, tick all unchecked
-     * options on the resulting Confirm Auto-Select dialog (Include Guests, plus Prioritize
-     * Carnival Bonus Sparks during the Racing Carnival event), then click OK. After the legacies
-     * are populated the Next button becomes active and the regular POST_RUN_RESULTS handler
-     * advances the flow on the next iteration.
+     * LEGACY_SELECT_SCREEN: Click Auto-Select to populate both legacy slots, then click OK. By
+     * default the Confirm Auto-Select dialog's checkboxes are left UNticked, so Auto-Select uses
+     * only OWNED umas (free). Opt-in (runQueue.enableLegacyIncludeGuests) first ticks all unchecked
+     * options - Include Guests (borrowing a guest parent costs monies) plus the Racing Carnival
+     * spark bonus when that event is live. After the legacies are populated the Next button becomes
+     * active and the regular POST_RUN_RESULTS handler advances the flow on the next iteration.
      *
      * Detection: ButtonAutoSelect template match.
-     * Transition: ButtonAutoSelect.click() -> Checkbox.click() x N -> ButtonOk.click() -> ButtonNext (next iteration).
+     * Transition: ButtonAutoSelect.click() -> [opt-in: Checkbox.click() x N] -> ButtonOk.click() -> ButtonNext (next iteration).
      */
     private fun handleLegacySelectScreen(): TransitionResult {
         // Rotation backstop: a trainee switch was required this launch but we reached Legacy Select
@@ -1822,12 +1835,18 @@ class CareerLaunchNavigator(private val context: Context) {
         legacyAutoSelectAlreadyDone = true
         waitSafe(2.0)
 
-        // Tick all unchecked checkboxes on the Confirm Auto-Select dialog. The dialog has 1 or
-        // 2 checkboxes depending on whether the Racing Carnival event is active. Iterate while
-        // an unchecked Checkbox can be clicked, with a safety cap of 3 iterations.
-        for (i in 0 until 3) {
-            if (!Checkbox.click(iu, tries = 1)) break
-            waitSafe(0.4)
+        // The Confirm Auto-Select dialog has 1-2 checkboxes: "Include Guests" (always; borrowing a
+        // guest parent costs monies) and, during the Racing Carnival event, a free spark-bonus tick.
+        // Default OFF: leave them unticked so Auto-Select uses only owned umas (free) - which suits
+        // farming your own spark parents. Opt-in restores the tick-all behavior for players who'd
+        // rather inherit stronger borrowed guests. A single generic Checkbox match can't tell the two
+        // boxes apart, so the opt-in also re-enables the Carnival tick.
+        if (SettingsHelper.getBooleanSetting("runQueue", "enableLegacyIncludeGuests", false)) {
+            // Tick all unchecked checkboxes on the dialog. Safety cap of 3 iterations.
+            for (i in 0 until 3) {
+                if (!Checkbox.click(iu, tries = 1)) break
+                waitSafe(0.4)
+            }
         }
 
         if (ButtonOk.click(iu)) {

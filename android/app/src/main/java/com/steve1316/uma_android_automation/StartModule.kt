@@ -218,8 +218,16 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             val enabled: Boolean,
             val switchEvery: Int,
             val inGameNames: List<String>,
+            // Per-slot sibling-outfit names to skip at Trainee Select. A bare base-name target is
+            // outfit-insensitive in the matcher, so when the user owns the same character in another
+            // outfit the navigator must skip that outfit's banner. Parallel to inGameNames; empty for
+            // outfit-specific entries and for configs saved before this field existed.
+            val excludeOutfitsByIndex: List<List<String>> = emptyList(),
         ) {
             val count: Int get() = inGameNames.size
+
+            /** Sibling outfits to exclude for rotation slot [index], or empty if none / out of range. */
+            fun excludesForIndex(index: Int): List<String> = excludeOutfitsByIndex.getOrElse(index) { emptyList() }
 
             /** 0-based rotation slot for a 1-based run number (blocks of [switchEvery], cycling). */
             fun indexForRun(run: Int): Int {
@@ -238,15 +246,25 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 return RotationConfig(false, 1, emptyList())
             }
             val switchEvery = maxOf(1, SettingsHelper.getIntSetting("runQueue", "switchEveryNRuns", 3))
-            val names =
-                try {
-                    val arr = JSONArray(SettingsHelper.getStringSetting("runQueue", "traineeRotation"))
-                    (0 until arr.length()).map { arr.getJSONObject(it).optString("inGameName", "") }
-                } catch (e: Exception) {
-                    MessageLog.w(TAG, "[ROTATION] Could not parse traineeRotation list: ${e.message}")
-                    emptyList()
+            var names: List<String> = emptyList()
+            var excludes: List<List<String>> = emptyList()
+            try {
+                val arr = JSONArray(SettingsHelper.getStringSetting("runQueue", "traineeRotation"))
+                names = (0 until arr.length()).map { arr.getJSONObject(it).optString("inGameName", "") }
+                excludes = (0 until arr.length()).map { i ->
+                    val ex = arr.getJSONObject(i).optJSONArray("excludeOutfits")
+                    if (ex == null) {
+                        emptyList()
+                    } else {
+                        (0 until ex.length()).mapNotNull { j -> ex.optString(j, "").trim().takeIf { it.isNotEmpty() } }
+                    }
                 }
-            return RotationConfig(names.isNotEmpty(), switchEvery, names)
+            } catch (e: Exception) {
+                MessageLog.w(TAG, "[ROTATION] Could not parse traineeRotation list: ${e.message}")
+                names = emptyList()
+                excludes = emptyList()
+            }
+            return RotationConfig(names.isNotEmpty(), switchEvery, names, excludes)
         }
 
         /**
@@ -322,6 +340,26 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 db.close()
             } catch (e: Exception) {
                 Log.w(TAG, "[ROTATION] Failed to record current trainee: ${e.message}")
+            }
+        }
+
+        /**
+         * Records the sibling-outfit names the launch navigator must skip at Trainee Select for the
+         * current rotation target. A bare base-name target would otherwise match an owned outfit's
+         * banner. Newline-joined (outfit names never contain newlines); an empty list clears it.
+         */
+        fun setCurrentTraineeExcludes(context: Context, excludes: List<String>) {
+            try {
+                val dbFile = File(context.filesDir, "SQLite/settings.db")
+                if (!dbFile.exists()) return
+                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
+                db.execSQL(
+                    "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+                    arrayOf("queueState", "currentTraineeExcludes", excludes.joinToString("\n")),
+                )
+                db.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "[ROTATION] Failed to record current trainee excludes: ${e.message}")
             }
         }
 
@@ -925,6 +963,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             MessageLog.i(TAG, "[ROTATION] Run $upcomingRun -> switching to trainee #${index + 1} '$target' (snapshot loaded).")
         }
         setCurrentTrainee(context, target)
+        setCurrentTraineeExcludes(context, rotation.excludesForIndex(index))
         // Arm the missed-detection backstop only on an actual switch; the navigator clears it when
         // Trainee Select is handled, and fails at Legacy Select if it is still armed.
         setRotationSwitchPending(context, switching)

@@ -16,6 +16,8 @@ export interface RotationEntry {
     inGameName: string
     presetKey: string
     scenario: string
+    /** Sibling-outfit names the in-game matcher must skip for a bare base-name target (see BotStateContext). */
+    excludeOutfits?: string[]
 }
 
 export interface RotationBatchRow {
