@@ -181,8 +181,11 @@ interface ComponentInterface : BaseComponentInterface {
     override fun findImageWithBitmap(imageUtils: CustomImageUtils, sourceBitmap: Bitmap, region: IntArray?, confidence: Double?): Point? {
         // If we are searching within a cropped bitmap (like an entry bitmap), we should default to searching the entire bitmap
         // if no specific region is provided. This prevents out-of-bounds errors from default regions intended for full-screen use.
+        // Width is `<` not `!=`: some devices' ImageReader appends row-stride padding columns on the right, making a genuine
+        // full-screen capture slightly WIDER than displayWidth. Dropping the region for that case lost the half-screen
+        // restriction and let corner templates cross-match into the wrong half. Only a narrower bitmap is a real crop.
         val searchRegion =
-            if (region == null && (sourceBitmap.width != SharedData.displayWidth || sourceBitmap.height != SharedData.displayHeight)) {
+            if (region == null && (sourceBitmap.width < SharedData.displayWidth || sourceBitmap.height != SharedData.displayHeight)) {
                 intArrayOf(0, 0, 0, 0)
             } else {
                 region ?: template.region
@@ -210,9 +213,10 @@ interface ComponentInterface : BaseComponentInterface {
         val bitmap: Bitmap = sourceBitmap ?: imageUtils.getSourceBitmap()
 
         // If we are searching within a cropped bitmap (like an entry bitmap), we should default to searching the entire bitmap
-        // if no specific region is provided.
+        // if no specific region is provided. Width is `<` not `!=` so a row-stride-padded (wider-than-displayWidth)
+        // full-screen capture keeps its region instead of being mistaken for a crop. See findImageWithBitmap above.
         val searchRegion =
-            if (region == null && (bitmap.width != SharedData.displayWidth || bitmap.height != SharedData.displayHeight)) {
+            if (region == null && (bitmap.width < SharedData.displayWidth || bitmap.height != SharedData.displayHeight)) {
                 intArrayOf(0, 0, 0, 0)
             } else {
                 region ?: template.region
@@ -382,8 +386,10 @@ interface ComplexComponentInterface : BaseComponentInterface {
     }
 
     override fun findImageWithBitmap(imageUtils: CustomImageUtils, sourceBitmap: Bitmap, region: IntArray?, confidence: Double?): Point? {
+        // Width is `<` not `!=`: a row-stride-padded full-screen capture is wider than displayWidth but still genuine,
+        // so it must keep its region. See the matching note in ComponentInterface.findImageWithBitmap.
         val searchRegion =
-            if (region == null && (sourceBitmap.width != SharedData.displayWidth || sourceBitmap.height != SharedData.displayHeight)) {
+            if (region == null && (sourceBitmap.width < SharedData.displayWidth || sourceBitmap.height != SharedData.displayHeight)) {
                 intArrayOf(0, 0, 0, 0)
             } else {
                 region
