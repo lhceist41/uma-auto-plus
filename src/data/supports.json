@@ -84,6 +84,16 @@
         ],
         "(❯❯)\nBloom by the Oak": [
             "Randomly either\n----------\nEnergy -20\nPower +5\nStraightaway Acceleration hint +1\n----------\n\n----------\nEnergy -20\nPower +5\nGuts +5\nStraightaway Acceleration hint +1\nAir Groove bond +5\n----------\n\n----------\nEnergy -10\nStamina +5\nPower +5\nGuts +10\nStraightaway Acceleration hint +3\nAir Groove bond +5"
+        ],
+        "(❯)\nMy Source of Admiration": [
+            "Mood +1\nPower +10\nFearless hint +1\nAir Groove bond +5"
+        ],
+        "(❯❯)\nYou Make Me Who I Am": [
+            "Power +7\nWit +7\nTake the Chance hint +1\nAir Groove bond +5",
+            "Skill points +10\nUpdrafters hint +1\nAir Groove bond +5"
+        ],
+        "(❯❯❯)\nDynamic Duo": [
+            "Power +10\nWit +10\nLie in Wait hint +1\nAir Groove bond +5"
         ]
     },
     "Air Shakur": {
@@ -357,6 +367,13 @@
         ],
         "(❯❯❯)\nWith All the Courage I Have": [
             "Randomly either\n----------\nSpeed +5\nGuts +15\nSkill points +30\nSpeed Star hint +3\nEl Condor Pasa bond +5\n----------\n\n----------\nSpeed +5\nGuts +15\nSkill points +30\nSpeed Star hint +1\nEl Condor Pasa bond +5"
+        ],
+        "(❯)\nWith Passion and Joy!": [
+            "Energy +10\nSpeed +5\nPower +5\nEl Condor Pasa bond +5",
+            "Energy -10\nSpeed +15\nPower +10\nEl Condor Pasa bond +5"
+        ],
+        "(❯❯)\nMuddy Heroes": [
+            "Energy -10\nSpeed +15\nPower +15\nPace Chaser Corners ○ hint +1\nEl Condor Pasa bond +7"
         ]
     },
     "Fine Motion": {
@@ -419,6 +436,13 @@
         ],
         "(❯❯❯)\nOne Step": [
             "Energy +10\nSpeed +10\nStamina +10\nKeen Eye hint +2\nGold City bond +5"
+        ],
+        "(❯)\nI Can Do It Myself": [
+            "Skill points +30\nGold City bond +5"
+        ],
+        "(❯❯)\nRelying On Others": [
+            "Speed +10\nSkill points +10\nStraightaway Recovery hint +2\nGold City bond +5",
+            "Wit +10\nSkill points +10\nSnowy Days ○ hint +2\nGold City bond +5"
         ]
     },
     "Gold Ship": {
@@ -498,6 +522,71 @@
         ],
         "(❯❯❯)\nThe Gift of Excitement": [
             "Energy +50\nHard Worker hint +1\nHaru Urara bond +5"
+        ]
+    },
+    "Heirs to the Throne": {
+        "My Way, Or...": [
+            "Mood +1\nSkill points +18\nTokai Teio bond +5",
+            "Guts +18\nTokai Teio bond +5"
+        ],
+        "My Weapon": [
+            "Mood +1\nGuts +12\nTokai Teio bond +5",
+            "Pace Chaser Straightaways ○ hint +1\nTokai Teio bond +5"
+        ],
+        "The Emperor's Encouragement": [
+            "Speed +12\nSymboli Rudolf bond +5",
+            "Energy -13\nSkill points +36\nSymboli Rudolf bond +5"
+        ],
+        "The Student Council President's Thoughtfulness": [
+            "Rainy Days ○ hint +1\nSymboli Rudolf bond +5",
+            "Stamina +18\nSymboli Rudolf bond +5"
+        ],
+        "Preparing to the MAX!": [
+            "Energy +13\nMood +1\nTsurumaru Tsuyoshi bond +5",
+            "Speed +18\nTsurumaru Tsuyoshi bond +5"
+        ],
+        "Helping Out to the MAX!": [
+            "Fighter hint +1\nTsurumaru Tsuyoshi bond +5",
+            "Guts +18\nTsurumaru Tsuyoshi bond +5"
+        ],
+        "Emulation Is the Sincerest Form of Flattery\nDating starts": [
+            "Speed +6\nWit +18\nSkill points +6\nGet Pure Passion: Heirs to the Throne status\nHeirs to the Throne bond +5\nCan start dating"
+        ],
+        "The Bright Future Ahead": [
+            "Wit +18\nHeirs to the Throne bond +5",
+            "Speed +18\nHeirs to the Throne bond +5"
+        ],
+        "Diamonds in the Rough\nAfter first training": [
+            "Wit +18\nHeirs to the Throne bond +5"
+        ],
+        "We'll Get Stronger, Together\nRandomly after training (repeatable)": [
+            "Wit +4\n(random) Skill points +4\nHeirs to the Throne bond +5",
+            "Speed +4\n(random) Skill points +4\nHeirs to the Throne bond +5",
+            "(random) Energy +3\nSkill points +4\nHeirs to the Throne bond +5"
+        ],
+        "The Heroic Trio Running Side by Side\nAfter Finals (bond maxed)": [
+            "Speed +24\nWit +24\nSkill points +24"
+        ],
+        "With Our Powers Combined\nAfter Finals (bond not maxed)": [
+            "Speed +18\nWit +18\nSkill points +18"
+        ],
+        "Dreaming the Same Dream\nDating before the first New Year's": [
+            "Speed +12\nWit +24\nSkill points +12\nMedium Corners ○ hint +1\nHeirs to the Throne bond +5"
+        ],
+        "#Studenting\nSymboli Rudolf": [
+            "Energy +13\nWit +36\nFighting Spirit hint +1\nHeirs to the Throne bond +5"
+        ],
+        "The Monarch's Pride\nTokai Teio": [
+            "Energy +13\nMood +1\nSpeed +24\nPrudent Positioning hint +1\nHeirs to the Throne bond +5"
+        ],
+        "A Leisurely Stroll for Two\nTsurumaru Tsuyoshi": [
+            "Energy +39\nSkill points +18\nFull Throttle hint +1\nHeirs to the Throne bond +5"
+        ],
+        "I Wanna Be Just Like Prez!": [
+            "Energy +26\nSpeed +12\nWit +30\nSkill points +18\nNakayama Racecourse ○ hint +1\nHeirs to the Throne bond +5"
+        ],
+        "I Want to Be Just Like President Rudolf!": [
+            "Energy +26\nMood +1\nSpeed +18\nWit +36\nSkill points +24\nRefraction Arc hint +1\nGet Pure Passion: Heirs to the Throne status\nHeirs to the Throne bond +5"
         ]
     },
     "Hishi Akebono": {
@@ -1667,6 +1756,16 @@
         ],
         "(❯❯❯)\nOur Audience": [
             "Randomly either\n----------\nEnergy -10\nSpeed +5\nStamina +5\nGuts +5\nHomestretch Haste hint +1\nSpecial Week bond +5\n----------\n\n----------\nEnergy -10\nSpeed +15\nStamina +15\nGuts +15\nIn Body and Mind hint +3\nSpecial Week bond +5"
+        ],
+        "(❯)\nI'm Gonna Buckle Down 'n' Work Hard!": [
+            "All stats +3\nSpecial Week bond +5"
+        ],
+        "(❯❯)\nI'm Gonna Run with Everyone!": [
+            "Speed +10\nFeature Act hint +2\nSpecial Week bond +5",
+            "Stamina +10\nStraightaway Recovery hint +2\nSpecial Week bond +5"
+        ],
+        "(❯❯❯)\nI'm Gonna Visit Home!": [
+            "Energy -10\nAll stats +7\nOverwhelming Pressure hint +1\nSpecial Week bond +7"
         ]
     },
     "Super Creek": {
@@ -2017,6 +2116,16 @@
         "(❯❯)\nNot Just for Show": [
             "Randomly either\n----------\nEnergy +10\nRamp Up hint +3\nTosen Jordan bond +5\n----------\n\n----------\nRamp Up hint +1",
             "Energy -5\nStamina +20\nTosen Jordan bond +5"
+        ]
+    },
+    "Tsurumaru Tsuyoshi": {
+        "Preparing to the MAX!": [
+            "Energy +10\nMood +1\nTsurumaru Tsuyoshi bond +5",
+            "Speed +15\nTsurumaru Tsuyoshi bond +5"
+        ],
+        "Helping Out to the MAX!": [
+            "Fighter hint +1\nTsurumaru Tsuyoshi bond +5",
+            "Guts +15\nTsurumaru Tsuyoshi bond +5"
         ]
     },
     "Twin Turbo": {
