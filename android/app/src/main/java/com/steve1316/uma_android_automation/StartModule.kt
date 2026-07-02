@@ -1015,6 +1015,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     return@Thread
                 }
                 if (!navDone.get()) {
+                    // Volatile writes only on this thread (no MessageLog - see above). Setting the
+                    // reason first keeps the eventual stop from rendering as "user stop" in the log.
+                    queueStopReason = "Between-run navigation did not respond to the interrupt within the grace period."
                     queueStopRequested = true
                     Log.e(TAG, "[QUEUE] Navigation thread did not respond to the interrupt. Queue stop requested; the stall watchdog is the next net.")
                 }

@@ -275,18 +275,39 @@ abstract class Task(game: Game) : DialogHandler(game) {
     private fun interruptResult(e: InterruptedException): TaskResult {
         // Clear the interrupt flag so task teardown (log save, events) is not poisoned by it.
         Thread.interrupted()
-        return if (StartModule.queueStopRequested || !BotService.isRunning) {
-            // queueStopReason is set by a deliberate internal stop (e.g. the trainee-mismatch guard);
-            // null means a genuine user Stop. Report whichever it actually was instead of always "user".
-            TaskResult.Success(
-                TaskResultCode.TASK_RESULT_MANUALLY_STOPPED,
-                StartModule.queueStopReason ?: "Bot was manually stopped by the user.",
-            )
-        } else {
-            TaskResult.Error(
-                TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
-                e.message ?: "Bot was interrupted by an internal watchdog or safety-net, not by the user.",
-            )
+        // A user Stop (app button or the projection overlay) interrupts this thread and flips its
+        // flags from ANOTHER thread, and the interrupt routinely lands first - a live run was
+        // attributed to "an internal watchdog" and the queue kept going after a real Stop. Settle
+        // briefly before attributing. Watchdog interrupts never set these flags, so they only pay
+        // this wait once at task end.
+        val settleDeadline = System.currentTimeMillis() + 1500
+        while (System.currentTimeMillis() < settleDeadline &&
+            !StartModule.queueStopRequested && !StartModule.queueSkipRequested && BotService.isRunning
+        ) {
+            try {
+                Thread.sleep(100)
+            } catch (_: InterruptedException) {
+                // A second interrupt while settling changes nothing about attribution.
+            }
+        }
+        return when {
+            StartModule.queueSkipRequested ->
+                TaskResult.Success(
+                    TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE,
+                    "Run was skipped from the queue controls.",
+                )
+            StartModule.queueStopRequested || !BotService.isRunning ->
+                // queueStopReason is set by a deliberate internal stop (e.g. the trainee-mismatch guard);
+                // null means a genuine user Stop. Report whichever it actually was instead of always "user".
+                TaskResult.Success(
+                    TaskResultCode.TASK_RESULT_MANUALLY_STOPPED,
+                    StartModule.queueStopReason ?: "Bot was manually stopped by the user.",
+                )
+            else ->
+                TaskResult.Error(
+                    TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
+                    e.message ?: "Bot was interrupted by an internal watchdog or safety-net, not by the user.",
+                )
         }
     }
 }
