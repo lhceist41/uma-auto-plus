@@ -173,6 +173,28 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
          */
         private val ocrLock = Any()
 
+        /**
+         * Pure retry-ladder logic behind [retryOcrOnMisread], extracted here so JUnit can exercise the
+         * bounds without a Context. Runs [attempt] once at increment 0, then re-runs with +5 increments
+         * while the NEXT effective threshold (baseThreshold + increment) stays below 255 - a 255
+         * THRESH_BINARY pass blacks out every pixel, so such an attempt is guaranteed garbage - and
+         * [maxSteps] is not exhausted. Returns the first acceptable result; on exhaustion returns the
+         * FIRST attempt's result, which used the least-degraded binarization.
+         */
+        fun <T> runOcrRetryLadder(baseThreshold: Int, maxSteps: Int, isAcceptable: (T) -> Boolean, attempt: (thresholdIncrement: Double) -> T): T {
+            val first = attempt(0.0)
+            if (isAcceptable(first)) return first
+            var increment = 0.0
+            var steps = 0
+            while (steps < maxSteps && (255.0 - baseThreshold - (increment + 5.0)) > 0.0) {
+                increment += 5.0
+                steps++
+                val result = attempt(increment)
+                if (isAcceptable(result)) return result
+            }
+            return first
+        }
+
         @Volatile
         private var yoloDetectorInstance: YoloDetector? = null
 
@@ -1711,20 +1733,29 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                     listOf(-246, -100, relWidth(140), relHeight(95))
                 }
 
-            // Perform OCR with 2x scaling.
+            // Perform OCR with 2x scaling; retry with a relaxed threshold when the read has neither a
+            // digit nor Race Day text. A silent misread here returns -1, which stands down the
+            // fan-emergency and goal-deadline logic for the whole turn - the emergency window is only a
+            // few turns wide, so each recovered read matters.
             val detectedText =
-                performOCROnRegion(
-                    sourceBitmap,
-                    relX(energyTextLocation.x, offsetX),
-                    relY(energyTextLocation.y, offsetY),
-                    width,
-                    height,
-                    useThreshold = true,
-                    useGrayscale = true,
-                    scale = 2.0,
-                    ocrEngine = "tesseract_digits",
-                    debugName = "DayForExtraRace",
-                )
+                retryOcrOnMisread(isAcceptable = { text ->
+                    val lower = text.lowercase()
+                    text.any(Char::isDigit) || lower.contains("ace") || lower.contains("da")
+                }) { thresholdIncrement ->
+                    performOCROnRegion(
+                        sourceBitmap,
+                        relX(energyTextLocation.x, offsetX),
+                        relY(energyTextLocation.y, offsetY),
+                        width,
+                        height,
+                        useThreshold = true,
+                        useGrayscale = true,
+                        scale = 2.0,
+                        ocrEngine = "tesseract_digits",
+                        debugName = "DayForExtraRace",
+                        thresholdIncrement = thresholdIncrement,
+                    )
+                }
 
             // Parse the result.
             val result =
@@ -1864,7 +1895,11 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         // Determine crop region.
         val (offsetX, offsetY, width, height) = listOf(-70, 28, relWidth(135), relHeight(70))
 
-        // Perform OCR with thresholding.
+        // Deliberately NOT wired into retryOcrOnMisread: a missed read returns -1, which
+        // updateSkillPoints maps to keep-last-known-good and the next turn's read self-heals - but a
+        // harsher binarization can fragment digits into a partial read ("45" from a true 450) that no
+        // cheap predicate can tell from a real value, and a wrong SP value mis-arms the skill-point
+        // buy wave (or trips the skill-point-check stop in the plan-disabled configuration).
         val detectedText =
             performOCROnRegion(
                 sourceBitmap,
@@ -2116,19 +2151,27 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      */
     fun extractRaceName(extraRaceLocation: Point): String {
         try {
+            // One capture shared across all retry attempts: the anchor point was located on THIS frame,
+            // and race-list rows can still settle between attempts - a fresh capture per retry could OCR
+            // a different row's name under the stale coordinates and pass the non-blank check.
+            val sourceBitmap = getSourceBitmap()
             val detectedText =
-                performOCRFromReference(
-                    referencePoint = extraRaceLocation,
-                    offsetX = -455,
-                    offsetY = -105,
-                    width = relWidth(585),
-                    height = relHeight(45),
-                    useThreshold = true,
-                    useGrayscale = true,
-                    scale = 2.0,
-                    ocrEngine = "mlkit",
-                    debugName = "extractRaceName",
-                )
+                retryOcrOnMisread(isAcceptable = { it.isNotBlank() }) { thresholdIncrement ->
+                    performOCRFromReference(
+                        referencePoint = extraRaceLocation,
+                        offsetX = -455,
+                        offsetY = -105,
+                        width = relWidth(585),
+                        height = relHeight(45),
+                        useThreshold = true,
+                        useGrayscale = true,
+                        scale = 2.0,
+                        ocrEngine = "mlkit",
+                        debugName = "extractRaceName",
+                        thresholdIncrement = thresholdIncrement,
+                        sourceBitmap = sourceBitmap,
+                    )
+                }
 
             // Ensure forward slashes are surrounded by spaces.
             val refinedResult = detectedText.replace(Regex("""\s*/\s*"""), " / ").trim()
@@ -2511,6 +2554,8 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @param scale Scaling factor to apply to the region. Defaults to 1.0.
      * @param ocrEngine The OCR engine to use ("tesseract", "mlkit", "tesseract_digits").
      * @param debugName Optional name for debug image logging.
+     * @param thresholdIncrement Amount added to the base binarization threshold; used by the
+     *   retryOcrOnMisread ladder. Defaults to 0.
      * @return The detected text, or an empty string if OCR fails.
      */
     fun performOCROnRegion(
@@ -2524,6 +2569,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         scale: Double = 1.0,
         ocrEngine: String = "tesseract",
         debugName: String = "",
+        thresholdIncrement: Double = 0.0,
     ): String {
         // Bitmap.createBitmap throws IllegalArgumentException when the crop is out of bounds, which
         // happens when the caller is on the wrong screen (e.g. shop screen while assuming main, so
@@ -2549,7 +2595,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 cropRegion = intArrayOf(x, y, width, height),
                 grayscale = useGrayscale,
                 thresh = useThreshold,
-                threshold = threshold.toDouble(),
+                threshold = threshold.toDouble() + thresholdIncrement,
                 thresholdMax = 255.0,
                 scale = scale,
                 sourceBitmap = sourceBitmap,
@@ -2572,6 +2618,10 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @param scale The scaling factor to apply. Defaults to 1.0.
      * @param ocrEngine The OCR engine to use. Defaults to "tesseract".
      * @param debugName Optional name for debug image logging.
+     * @param thresholdIncrement Amount added to the base binarization threshold; used by the
+     *   retryOcrOnMisread ladder. Defaults to 0.
+     * @param sourceBitmap Optional pre-captured frame; when null a fresh screenshot is taken. Pass one
+     *   when retrying against a reference point located on an earlier frame.
      * @return The detected text, or an empty string if OCR fails.
      */
     fun performOCRFromReference(
@@ -2585,13 +2635,15 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         scale: Double = 1.0,
         ocrEngine: String = "tesseract",
         debugName: String = "",
+        thresholdIncrement: Double = 0.0,
+        sourceBitmap: Bitmap? = null,
     ): String {
-        val sourceBitmap = getSourceBitmap()
+        val bitmap = sourceBitmap ?: getSourceBitmap()
         val finalX = relX(referencePoint.x, offsetX)
         val finalY = relY(referencePoint.y, offsetY)
 
         return performOCROnRegion(
-            sourceBitmap,
+            bitmap,
             finalX,
             finalY,
             width,
@@ -2601,8 +2653,30 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
             scale,
             ocrEngine,
             debugName,
+            thresholdIncrement,
         )
     }
+
+    /** Cap on threshold-relaxation steps for [retryOcrOnMisread] - bounds the extra OCR passes a
+     * genuinely blank region (e.g. the bot OCR'ing mid screen-transition) can trigger before giving up. */
+    private val maxOcrRetrySteps: Int = 8
+
+    /**
+     * Re-runs an OCR [attempt] with a progressively relaxed binarization threshold when the first read
+     * is unacceptable (e.g. blank, or no digit where one is expected), recovering threshold-sensitive
+     * misreads. Each retry adds 5 to the base threshold, capped by [maxOcrRetrySteps] and stopping
+     * before the effective threshold reaches 255 (an all-black binarization). Zero extra cost when the
+     * first read is already good. Returns the first acceptable result, otherwise the FIRST attempt's
+     * result - later attempts use progressively blacker binarizations, so on total failure the earliest
+     * read carries the most information.
+     *
+     * @param isAcceptable predicate deciding whether a result is a good read.
+     * @param attempt one OCR pass given the threshold increment to add on top of the base. Only matters
+     *   for callers passing useThreshold=true; for colour / no-threshold reads the increment is inert
+     *   unless the caller maps it onto another knob (see extractTrainingLevel's colour tolerance).
+     */
+    fun <T> retryOcrOnMisread(isAcceptable: (T) -> Boolean, attempt: (thresholdIncrement: Double) -> T): T =
+        runOcrRetryLadder(threshold, maxOcrRetrySteps, isAcceptable, attempt)
 
     /**
      * Extract the displayed training level (1-5) from the currently selected training panel.
@@ -2619,22 +2693,28 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         val y = relY(energyAnchor.y, 65)
         val width = relWidth(240)
         val height = relHeight(40)
+        val levelPattern = Regex("""Lvl\s*([1-5])""", RegexOption.IGNORE_CASE)
+        // Colour read, so the ladder's threshold increment maps onto the colour tolerance instead:
+        // each retry widens the white-match window. A missed read here silently drops the Year-2+
+        // training-level weighting for the facility.
         val rawText =
-            findTextByColor(
-                sourceBitmap = sourceBitmap,
-                x = x,
-                y = y,
-                width = width,
-                height = height,
-                targetR = 255,
-                targetG = 255,
-                targetB = 255,
-                tolerance = 30,
-                scale = 2.0,
-                debugName = "trainingLevel",
-            )
+            retryOcrOnMisread(isAcceptable = { levelPattern.containsMatchIn(it) }) { thresholdIncrement ->
+                findTextByColor(
+                    sourceBitmap = sourceBitmap,
+                    x = x,
+                    y = y,
+                    width = width,
+                    height = height,
+                    targetR = 255,
+                    targetG = 255,
+                    targetB = 255,
+                    tolerance = 30 + thresholdIncrement.toInt(),
+                    scale = 2.0,
+                    debugName = "trainingLevel",
+                )
+            }
         if (rawText.isEmpty()) return null
-        val match = Regex("""Lvl\s*([1-5])""", RegexOption.IGNORE_CASE).find(rawText) ?: return null
+        val match = levelPattern.find(rawText) ?: return null
         return match.groupValues.getOrNull(1)?.toIntOrNull()
     }
 
