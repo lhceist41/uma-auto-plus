@@ -422,12 +422,27 @@ class Training(private val game: Game, private val campaign: Campaign) {
         /**
          * Retrieve the scenario-specific cap for a given stat.
          *
+         * Base caps per the July 2026 rebalance (URA 1400 across the board; Unity Cup 1300 with Wit
+         * 1800; Trackblazer keeps 1200 except Stamina 1900 and Wit 1500). These are the BASE caps:
+         * inherited blue-spark bonuses raise the in-game cap a further +4/+9/+16 per star, so OCR
+         * plausibility checks need headroom above these values.
+         *
          * @param scenario The current training scenario.
          * @param statName The stat name.
-         * @return The maximum value for the specified stat.
+         * @return The maximum base value for the specified stat.
          */
         fun getScenarioStatCap(scenario: String, statName: StatName): Int {
-            return 1200
+            return when {
+                scenario.startsWith("URA") -> 1400
+                scenario == "Unity Cup" -> if (statName == StatName.WIT) 1800 else 1300
+                scenario == "Trackblazer" ->
+                    when (statName) {
+                        StatName.STAMINA -> 1900
+                        StatName.WIT -> 1500
+                        else -> 1200
+                    }
+                else -> 1200
+            }
         }
 
         /**

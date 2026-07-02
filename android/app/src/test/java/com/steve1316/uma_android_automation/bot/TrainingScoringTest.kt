@@ -7,6 +7,7 @@ import com.steve1316.uma_android_automation.bot.Training.Companion.admitIrregula
 import com.steve1316.uma_android_automation.bot.Training.Companion.calculateStatEfficiencyScore
 import com.steve1316.uma_android_automation.bot.Training.Companion.getFinaleStatBonus
 import com.steve1316.uma_android_automation.bot.Training.Companion.getRemainingFinaleRaces
+import com.steve1316.uma_android_automation.bot.Training.Companion.getScenarioStatCap
 import com.steve1316.uma_android_automation.bot.Training.Companion.scoreFriendshipTraining
 import com.steve1316.uma_android_automation.bot.Training.Companion.scoreUnityCupTraining
 import com.steve1316.uma_android_automation.bot.Training.Companion.selectBestTrainingWithHintPriority
@@ -732,6 +733,9 @@ class TrainingScoringTest {
             createDefaultConfig(
                 trainingOptions = listOf(training),
                 currentStats = currentStats,
+                // Pinned like the finale tests: at scenario="Unknown" the cap stays 1200, so a
+                // 1200 stat exercises the at-cap branch this test is named for.
+                scenario = "Unknown",
             )
 
         val score = calculateRawTrainingScore(config, training)
@@ -1313,6 +1317,9 @@ class TrainingScoringTest {
                 currentStats = currentStats,
                 disableTrainingOnMaxedStat = true,
                 currentDate = GameDate(day = 60),
+                // Pinned to the flat-1200 fallback scenario so these tests isolate the finale
+                // adjustment math from the per-scenario cap table (URA is 1400 now).
+                scenario = "Unknown",
             )
 
         val score = calculateRawTrainingScore(config, training)
@@ -1346,6 +1353,7 @@ class TrainingScoringTest {
                 currentStats = currentStats,
                 disableTrainingOnMaxedStat = true,
                 currentDate = GameDate(day = 74),
+                scenario = "Unknown",
             )
 
         val score = calculateRawTrainingScore(config, training)
@@ -1379,10 +1387,32 @@ class TrainingScoringTest {
                 currentStats = currentStats,
                 disableTrainingOnMaxedStat = true,
                 currentDate = GameDate(day = 75),
+                scenario = "Unknown",
             )
 
         val score = calculateRawTrainingScore(config, training)
 
         assertTrue(score > 0.0, "Stat at 1060 should be allowed on turn 75 with no finale adjustment (effective cap = 1100)")
+    }
+
+    @Test
+    @DisplayName("Per-scenario stat cap table matches the July 2026 rebalance values")
+    fun testScenarioStatCapTable() {
+        // URA Finale: 1400 across the board.
+        for (stat in StatName.entries) {
+            assertEquals(1400, getScenarioStatCap("URA Finale", stat), "URA cap for $stat")
+        }
+        // Unity Cup: 1300 with Wit 1800.
+        assertEquals(1800, getScenarioStatCap("Unity Cup", StatName.WIT), "Unity Cup Wit cap")
+        assertEquals(1300, getScenarioStatCap("Unity Cup", StatName.SPEED), "Unity Cup Speed cap")
+        assertEquals(1300, getScenarioStatCap("Unity Cup", StatName.GUTS), "Unity Cup Guts cap")
+        // Trackblazer: 1200 except Stamina 1900 and Wit 1500.
+        assertEquals(1900, getScenarioStatCap("Trackblazer", StatName.STAMINA), "Trackblazer Stamina cap")
+        assertEquals(1500, getScenarioStatCap("Trackblazer", StatName.WIT), "Trackblazer Wit cap")
+        assertEquals(1200, getScenarioStatCap("Trackblazer", StatName.SPEED), "Trackblazer Speed cap")
+        // Unknown scenarios keep the conservative flat 1200.
+        for (stat in StatName.entries) {
+            assertEquals(1200, getScenarioStatCap("Unknown", stat), "Fallback cap for $stat")
+        }
     }
 }

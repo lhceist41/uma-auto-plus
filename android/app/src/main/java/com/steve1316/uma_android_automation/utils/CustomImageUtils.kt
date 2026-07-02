@@ -79,6 +79,16 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
     /** Maximum allowed value for a single stat. */
     private val manualStatCap: Int = SettingsHelper.getIntSetting("training", "manualStatCap")
 
+    /**
+     * Plausibility ceiling for a stat OCR read: the scenario's base cap for the stat plus headroom
+     * for inherited blue-spark cap bonuses (the in-game cap renders above the base, e.g. 1448 on a
+     * 1400-cap URA run), or the manual cap when the user set it higher. Reads above this are OCR
+     * misreads, not real values - but a flat 1200 here froze every stat reading past 1200 once the
+     * July 2026 rebalance raised the caps.
+     */
+    private fun statReadCeiling(statName: StatName): Int =
+        maxOf(com.steve1316.uma_android_automation.bot.Training.getScenarioStatCap(game.scenario, statName), manualStatCap) + 100
+
     /** Whether to use YOLOv8 for stat detection. */
     private val useYolo: Boolean get() = SettingsHelper.getBooleanSetting("training", "enableYoloStatDetection")
 
@@ -913,23 +923,25 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         // Parse the text.
         Log.d(TAG, "[DEBUG] determineSingleStatValue:: Detected number of stats for $statName from Tesseract before formatting: $text")
         if (text.lowercase().contains("max") || text.lowercase().contains("ax")) {
-            Log.d(TAG, "[DEBUG] determineSingleStatValue:: $statName seems to be maxed out. Setting it to $manualStatCap.")
+            // MAX means at-cap, so no misread headroom here - but clamp to the LARGER of the caps:
+            // clamping to the 1200 manual default would record a maxed 1400-cap URA stat as 1200.
+            val maxedCap = maxOf(com.steve1316.uma_android_automation.bot.Training.getScenarioStatCap(game.scenario, statName), manualStatCap)
+            Log.d(TAG, "[DEBUG] determineSingleStatValue:: $statName seems to be maxed out. Setting it to $maxedCap.")
             val cleanedText = text.replace(Regex("[^0-9]"), "")
             return try {
-                val parsed = cleanedText.toInt()
-                if (manualStatCap > 0) parsed.coerceIn(0, manualStatCap) else parsed.coerceAtLeast(0)
+                cleanedText.toInt().coerceIn(0, maxedCap)
             } catch (_: NumberFormatException) {
-                if (manualStatCap > 0) manualStatCap else 1200
+                maxedCap
             }
         } else {
             try {
                 Log.d(TAG, "[DEBUG] determineSingleStatValue:: Converting $text to integer for $statName stat value")
                 val cleanedText = text.replace(Regex("[^0-9]"), "")
                 val parsed = cleanedText.toInt()
-                // Reject implausible reads even when the cap setting is unset (0) on a fresh install,
-                // matching determineStatValues' 1200 fallback so the threaded path cannot leak an
-                // over-cap misread into the stat mismatch-recovery logic.
-                val effectiveCap = if (manualStatCap > 0) manualStatCap else 1200
+                // Reject implausible reads so the threaded path cannot leak an over-cap misread into
+                // the stat mismatch-recovery logic. Scenario-aware: rejecting at a flat 1200 would
+                // freeze every legitimate reading past 1200 under the raised caps.
+                val effectiveCap = statReadCeiling(statName)
                 if (parsed > effectiveCap) {
                     Log.d(TAG, "[DEBUG] determineSingleStatValue:: Parsed value $parsed for $statName exceeds stat cap $effectiveCap, likely an OCR misread. Rejecting.")
                     return -1
@@ -1014,13 +1026,16 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 Log.d(TAG, "[DEBUG] determineStatValues:: Raw OCR text for $statName: '$text' (length: ${text.length})")
 
                 if (text.lowercase().contains("max") || text.lowercase().contains("ax")) {
-                    Log.d(TAG, "[DEBUG] determineStatValues:: $statName seems to be maxed out. Setting it to $manualStatCap.")
-                    result[statName] = if (manualStatCap > 0) manualStatCap else 1200
+                    // Same maxOf semantics as determineSingleStatValue's MAX branch: the 1200 manual
+                    // default must not mask a higher scenario cap.
+                    val maxedCap = maxOf(com.steve1316.uma_android_automation.bot.Training.getScenarioStatCap(game.scenario, statName), manualStatCap)
+                    Log.d(TAG, "[DEBUG] determineStatValues:: $statName seems to be maxed out. Setting it to $maxedCap.")
+                    result[statName] = maxedCap
                 } else {
                     try {
                         // Extract all numbers from the text
                         val numbers = Regex("\\d+").findAll(text).map { it.value.toInt() }.toList()
-                        val cap = if (manualStatCap > 0) manualStatCap else 1200
+                        val cap = statReadCeiling(statName)
 
                         if (numbers.isEmpty()) {
                             MessageLog.w(TAG, "[WARN] determineStatValues:: No numbers found in '$text' for $statName")
