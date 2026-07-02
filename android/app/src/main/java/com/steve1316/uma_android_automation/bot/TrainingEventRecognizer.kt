@@ -398,8 +398,8 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
             }
         }
 
-        // Debug-only: capture event screens the matcher could not confidently place, for the replay corpus.
-        if (com.steve1316.uma_android_automation.BuildConfig.DEBUG && bestResult.confidence < minimumConfidence) {
+        // Debug build or Debug Mode: capture event screens the matcher could not confidently place, for the replay corpus.
+        if ((com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode) && bestResult.confidence < minimumConfidence) {
             imageUtils.saveFixture(
                 "event_lowconf",
                 null,

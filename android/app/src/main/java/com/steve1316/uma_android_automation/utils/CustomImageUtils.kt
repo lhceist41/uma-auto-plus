@@ -2664,21 +2664,25 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
     }
 
     /**
-     * Debug-only fixture capture: saves the current frame plus a JSON sidecar describing what the bot
-     * read or decided, under matchFilePath/fixtures, to build an offline replay-test corpus. No-ops in
-     * release and swallows every error - a capture must never interrupt an unattended run. Uses
-     * android.util.Log (not MessageLog) so a failure here can never touch the logging lock.
+     * Fixture capture: saves the current frame plus a JSON sidecar describing what the bot
+     * read or decided, under matchFilePath/fixtures, to build an offline replay-test corpus. No-ops
+     * unless this is a debug build or the Debug Mode setting is on, and swallows every error - a
+     * capture must never interrupt an unattended run. Uses android.util.Log (not MessageLog) so a
+     * failure here can never touch the logging lock.
      *
      * @param trigger Short label for the capture point; also the filename prefix (e.g. "unknown_t42").
      * @param bitmap The frame to save. If null, a fresh screenshot is taken.
      * @param sidecar Key/value state to record alongside the frame (turn, stats, what was read, etc.).
      */
     fun saveFixture(trigger: String, bitmap: Bitmap?, sidecar: Map<String, Any?>) {
-        if (!com.steve1316.uma_android_automation.BuildConfig.DEBUG) return
+        if (!com.steve1316.uma_android_automation.BuildConfig.DEBUG && !debugMode) return
         try {
             val frame = bitmap ?: getSourceBitmap()
             val dir = java.io.File("$matchFilePath/fixtures")
             dir.mkdirs()
+            // Cap the corpus: every capture is a full-frame PNG, and with Debug Mode reachable in
+            // release a long queue session would otherwise fill the device.
+            if ((dir.listFiles()?.size ?: 0) >= 500) return
             val base = "${trigger}_${System.currentTimeMillis()}_${Random.nextInt(1000)}"
             java.io.FileOutputStream(java.io.File(dir, "$base.png")).use { out ->
                 frame.compress(Bitmap.CompressFormat.PNG, 100, out)

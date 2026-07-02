@@ -189,13 +189,13 @@ abstract class Campaign(game: Game) : Task(game) {
 
     /**
      * Per-turn structured decision logger. Records WHY each turn's action / training / race / skill
-     * decision was made and emits one consolidated Decision Report block at turn end. Debug-only: it
-     * is null in release builds so every `decisionTracer?.…` call compiles to a null-safe no-op. The
-     * block is a heavy diagnostic (one multi-line MessageLog write per turn), gated off in release for
-     * performance and log size, mirroring the existing BuildConfig.DEBUG fixture-capture gate.
+     * decision was made and emits one consolidated Decision Report block at turn end. Null unless this
+     * is a debug build or Debug Mode is enabled, so every `decisionTracer?.…` call compiles to a
+     * null-safe no-op. The block is a heavy diagnostic (one multi-line MessageLog write per turn),
+     * gated off by default in release for performance and log size, mirroring the fixture-capture gate.
      */
     val decisionTracer: DecisionTracer? =
-        if (com.steve1316.uma_android_automation.BuildConfig.DEBUG) DecisionTracer() else null
+        if (com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode) DecisionTracer() else null
 
     /** Flag to track whether the bot should force Wit training during the pre-summer turn. */
     var bForcedWitTraining: Boolean = false
@@ -2211,8 +2211,8 @@ abstract class Campaign(game: Game) : Task(game) {
                     settings = DecisionTracer.SettingsSnapshot().add("Mood Floor", moodFloor),
                 )
 
-                // Debug-only: one labeled positive fixture per new turn for the offline replay corpus.
-                if (com.steve1316.uma_android_automation.BuildConfig.DEBUG && dateChanged) {
+                // Debug build or Debug Mode: one labeled positive fixture per new turn for the offline replay corpus.
+                if ((com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode) && dateChanged) {
                     game.imageUtils.saveFixture(
                         "turn_t${date.day}",
                         sourceBitmap,
@@ -2867,8 +2867,8 @@ abstract class Campaign(game: Game) : Task(game) {
             } else {
                 detectedKnownScreen = false
                 consecutiveUnknownScreenCount++
-                // Debug-only: capture genuinely-stuck unknown screens (skip short benign animations).
-                if (com.steve1316.uma_android_automation.BuildConfig.DEBUG &&
+                // Debug build or Debug Mode: capture genuinely-stuck unknown screens (skip short benign animations).
+                if ((com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode) &&
                     (consecutiveUnknownScreenCount == 6 || consecutiveUnknownScreenCount == 13 || consecutiveUnknownScreenCount == 22)
                 ) {
                     game.imageUtils.saveFixture(
