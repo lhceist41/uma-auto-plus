@@ -2619,7 +2619,11 @@ abstract class Campaign(game: Game) : Task(game) {
             }
 
             MainScreenAction.RECOVER_MOOD -> {
-                val target = forcedTargetMood ?: Mood.GOOD
+                // Target the configured floor, not a hardcoded GOOD: with moodFloor=GREAT the
+                // decision gate keeps choosing RECOVER_MOOD while a GOOD-targeted recovery no-ops
+                // (mood GOOD < GOOD is false), a livelock that burned the full runtime cap doing
+                // nothing on every moodFloor=GREAT preset.
+                val target = forcedTargetMood ?: moodFloor
                 val recovered = performMoodRecovery(game.imageUtils.getSourceBitmap(), targetMood = target)
                 // Always clear bHasCheckedDateThisTurn so the next main-screen pass re-runs updateDate/stats
                 // and can pick a different action based on fresh state. Previously this only reset on success,
@@ -2630,6 +2634,13 @@ abstract class Campaign(game: Game) : Task(game) {
                 bHasCheckedDateThisTurn = false
                 if (recovered) {
                     forcedTargetMood = null
+                } else if (trainee.mood >= Mood.GOOD) {
+                    // Recovery made no progress while only a high floor (GREAT) is unmet. The floor
+                    // is a preference; training is progress. Train this turn rather than letting any
+                    // future target/floor mismatch degrade back into the RECOVER_MOOD spin. Re-dispatch
+                    // through executeAction so a scenario override's TRAIN handling stays in effect.
+                    MessageLog.w(TAG, "[WARN] Mood recovery made no progress toward the $target floor. Training this turn instead.")
+                    return executeAction(MainScreenAction.TRAIN, bIsScheduledRaceDay)
                 }
             }
 
