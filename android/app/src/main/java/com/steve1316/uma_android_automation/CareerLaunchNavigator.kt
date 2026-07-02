@@ -547,8 +547,11 @@ class CareerLaunchNavigator(private val context: Context) {
         // Racing Carnival Underway banner). Checked BEFORE the generic POST_RUN_RESULTS Next
         // check because Next on Legacy Select is greyed out / non-clickable until Auto-Select
         // populates both legacy slots; clicking Next there is a no-op and would trap the
-        // navigator in a 15-iteration stuck loop.
-        if (ButtonAutoSelect.check(iu, sourceBitmap = bitmap)) {
+        // navigator in a 15-iteration stuck loop. The title banner is a second signal because the
+        // July 2026 patch restyled Auto-Select below the match threshold: a lone Auto-Select miss
+        // used to fall through here to the greyed Next and either wedge (stuck loop) or, when the
+        // patch's pre-filled selection enables Next, silently skip legacy selection entirely.
+        if (ButtonAutoSelect.check(iu, sourceBitmap = bitmap) || LabelLegacySelectTitle.check(iu, sourceBitmap = bitmap)) {
             return LaunchScreenState.LEGACY_SELECT_SCREEN
         }
 
@@ -1830,11 +1833,12 @@ class CareerLaunchNavigator(private val context: Context) {
 
         MessageLog.i(TAG, "[NAV] On Legacy Select screen. Clicking Auto-Select...")
         if (!ButtonAutoSelect.click(iu)) {
-            return TransitionResult.Failed(
-                reason = "LEGACY_SELECT_SCREEN detected (ButtonAutoSelect matched) but click failed.",
-                transition = "LEGACY_SELECT_SCREEN -> Confirm Auto-Select dialog",
-                recommendedAction = "Manually click Auto-Select and restart the queue.",
-            )
+            // Reached here via the title co-signal on a frame where Auto-Select has not rendered yet
+            // (mid-transition). Wait and let the loop re-detect rather than failing the whole launch;
+            // the stuck-iteration counter is the backstop if the button genuinely never appears.
+            MessageLog.i(TAG, "[NAV] Legacy Select title matched but Auto-Select not clickable yet. Waiting...")
+            waitSafe(2.0)
+            return TransitionResult.Continue
         }
         // Mark as done even if subsequent steps fail - the button stays visible after click,
         // so without this guard the next iteration would re-enter this handler.

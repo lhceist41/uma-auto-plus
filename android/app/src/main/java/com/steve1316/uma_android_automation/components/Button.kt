@@ -297,6 +297,15 @@ object ButtonSelectLegacy : ButtonInterface {
     override val template = Template("components/button/select_legacy")
 }
 
+object LabelLegacySelectTitle : ButtonInterface {
+    // The "Legacy Select" title banner, top-left. A stable co-signal for the Legacy Select screen:
+    // the July 2026 patch restyled the Auto-Select button enough to drop it under the match
+    // threshold (0.78), so detection fell through to the greyed Next and the screen was mistaken for
+    // a generic results screen. The title text is unaffected by the button restyle and by whether
+    // the legacy slots are filled.
+    override val template = Template("components/button/legacy_select_title", region = Region.topHalf)
+}
+
 object ButtonShop : ButtonInterface {
     override val template = Template("components/button/shop")
 }
