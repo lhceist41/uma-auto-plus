@@ -205,6 +205,15 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
             return first
         }
 
+        /**
+         * Parses the unmet-fan shortfall from a goal-criteria line ("Criteria: 1,223 fan(s) to go").
+         * Null when no number precedes a "fan" token - "Entry criteria met!" and unrelated text
+         * parse to null. OCR regularly mangles the "(s)" suffix, so only the "fan" stem is required.
+         */
+        fun parseFanShortfall(text: String): Int? =
+            Regex("([0-9][0-9,]*)\\s*fan", RegexOption.IGNORE_CASE)
+                .find(text)?.groupValues?.get(1)?.replace(",", "")?.toIntOrNull()
+
         @Volatile
         private var yoloDetectorInstance: YoloDetector? = null
 
@@ -2152,6 +2161,42 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         }
 
         return result
+    }
+
+    /**
+     * Reads the goal bar's criteria line (directly under the goal title) and returns the unmet fan
+     * shortfall it shows, or null when the line is absent, unreadable, or reads as criteria-met.
+     *
+     * Race goals gated on a fan count show e.g. "Criteria: 1,223 fan(s) to go" here while the goal
+     * title itself never mentions fans - the goal class the title-based fan-emergency arm cannot
+     * see (a King Halo career trained through every turn and force-ended 1,223 fans short of the
+     * Satsuki Sho entry gate).
+     */
+    fun getGoalCriteriaFanShortfall(): Int? {
+        val sourceBitmap = getSourceBitmap()
+        val text =
+            performOCROnRegion(
+                sourceBitmap,
+                relX(0.0, 365),
+                relY(0.0, 150),
+                relWidth(550),
+                relHeight(45),
+                useThreshold = false,
+                useGrayscale = true,
+                scale = 1.0,
+                ocrEngine = "mlkit",
+                debugName = "GoalCriteria",
+            )
+        Log.d(TAG, "[DEBUG] getGoalCriteriaFanShortfall:: Detected text: $text")
+        // Require the read to look like a criteria line ("Criteria: ... to go") before parsing:
+        // count-based goals render their own progress on this line, and a number there must not
+        // arm the emergency when a mangled title read let this arm run for a non-criteria goal.
+        if (!text.contains("criteria", ignoreCase = true) &&
+            !Regex("""to\s*go""", RegexOption.IGNORE_CASE).containsMatchIn(text)
+        ) {
+            return null
+        }
+        return parseFanShortfall(text)
     }
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////

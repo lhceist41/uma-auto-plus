@@ -1149,11 +1149,31 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         if (bFanGoalAlreadyMet) {
             MessageLog.i(TAG, "[RACE] Fan goal already met (${campaign.trainee.fans}/$goalFanTarget). Fan emergency stands down.")
         }
+        // Race goals gated on a fan ENTRY criteria show the shortfall on the criteria line under
+        // the goal title ("Criteria: 1,223 fan(s) to go") while the title itself never says "fans",
+        // so the title arm below is blind to them - King Halo trained through 24 straight turns of
+        // "fan farming is disabled" and force-ended 1,223 fans short of the Satsuki Sho gate. Read
+        // that line whenever the deadline is near and the title arm did not already match; the line
+        // only shows a number while the criteria is unmet, so no separate already-met check needed.
+        val criteriaFanShortfall: Int? =
+            if (bGoalDeadlineNear && !campaign.date.isSummer() &&
+                !goalTextNearDeadline.contains("fans", ignoreCase = true)
+            ) {
+                game.imageUtils.getGoalCriteriaFanShortfall()
+            } else {
+                null
+            }
+        // A parsed 0 means the criteria just flipped to met (or a stray zero) - never arm on it.
+        val criteriaFanShortfallUnmet = (criteriaFanShortfall ?: 0) > 0
+        if (criteriaFanShortfallUnmet) {
+            MessageLog.i(TAG, "[RACE] Goal entry criteria unmet: $criteriaFanShortfall fan(s) to go with $turnsRemaining turn(s) left.")
+        }
         val fanGoalUnmet =
             bGoalDeadlineNear && !campaign.date.isSummer() && !bFanGoalAlreadyMet &&
                 (
                     hasFanRequirement ||
                         goalTextNearDeadline.contains("fans", ignoreCase = true) ||
+                        criteriaFanShortfallUnmet ||
                         LabelRaceCriteriaFans.check(game.imageUtils, confidence = 0.9)
                     )
         bFanEmergencyActive = isFanEmergency(fanGoalUnmet, turnsRemaining)
@@ -3846,9 +3866,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // If no enterable race was found and a fans/Pre-OP/G3/GoalPts requirement is active, scroll to
         // find more. Originally this never ran in Junior year; the fan emergency extends it there
         // because the Junior fan checkpoint is exactly when weak trainees need below-the-fold races.
+        // bFanEmergencyActive is a member of the disjunction in its own right: the OCR-driven
+        // emergency arms without hasFanRequirement (that flag's template family is dead), and the
+        // weak-prediction trainee it exists for is exactly the one whose visible rows draw no icon.
         if (enterable(anchors).isEmpty() &&
             (campaign.date.year != DateYear.JUNIOR || bFanEmergencyActive) &&
-            (hasFanRequirement || hasPreOpOrAboveRequirement || hasG3OrAboveRequirement || hasInsufficientGoalRacePtsRequirement)
+            (hasFanRequirement || bFanEmergencyActive || hasPreOpOrAboveRequirement || hasG3OrAboveRequirement || hasInsufficientGoalRacePtsRequirement)
         ) {
             val maxScrollAttempts = 5
             MessageLog.i(TAG, "[RACE] No enterable predictions found on initial screen. Scrolling to find races to satisfy requirements...")
