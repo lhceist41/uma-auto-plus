@@ -626,7 +626,9 @@ class CareerLaunchNavigator(private val context: Context) {
 
         // Pre-run confirmation - "Start Career!" button visible without the Support
         // Formation banner. This is the Final Confirmation popup.
-        if (ButtonStartCareer.check(iu, sourceBitmap = bitmap) || ButtonStartCareerOffset.check(iu, sourceBitmap = bitmap)) {
+        if (ButtonStartCareer.check(iu, sourceBitmap = bitmap) || ButtonStartCareerOffset.check(iu, sourceBitmap = bitmap) ||
+            ButtonStartCareerRight.check(iu, sourceBitmap = bitmap)
+        ) {
             return LaunchScreenState.PRE_RUN_CONFIRMATION
         }
 
@@ -1277,8 +1279,12 @@ class CareerLaunchNavigator(private val context: Context) {
             return TransitionResult.Continue
         }
 
-        // Deck is already complete OR autoFillSupports is off. Click Start Career.
-        if (ButtonStartCareer.check(iu, sourceBitmap = bitmap) || ButtonStartCareerOffset.check(iu, sourceBitmap = bitmap)) {
+        // Deck is already complete OR autoFillSupports is off. Click Start Career. The right-crop
+        // variant matches when the trainee chibi is idling over the button's left edge, which held
+        // the full-button templates below threshold for 15 straight checks on a live run.
+        if (ButtonStartCareer.check(iu, sourceBitmap = bitmap) || ButtonStartCareerOffset.check(iu, sourceBitmap = bitmap) ||
+            ButtonStartCareerRight.check(iu, sourceBitmap = bitmap)
+        ) {
             if (startCareerClickAttempts >= 5) {
                 return TransitionResult.Failed(
                     reason = "Start Career was clicked $startCareerClickAttempts times with no screen transition. An empty or invalid deck slot is the usual cause.",
@@ -1288,8 +1294,8 @@ class CareerLaunchNavigator(private val context: Context) {
             }
             startCareerClickAttempts++
             MessageLog.i(TAG, "[NAV] Deck complete or auto-fill off. Clicking Start Career! (attempt $startCareerClickAttempts)...")
-            if (!ButtonStartCareer.click(iu, sourceBitmap = bitmap)) {
-                ButtonStartCareerOffset.click(iu, sourceBitmap = bitmap)
+            if (!ButtonStartCareer.click(iu, sourceBitmap = bitmap) && !ButtonStartCareerOffset.click(iu, sourceBitmap = bitmap)) {
+                ButtonStartCareerRight.click(iu, sourceBitmap = bitmap)
             }
             waitSafe(3.0)
             return TransitionResult.Continue
@@ -1875,17 +1881,17 @@ class CareerLaunchNavigator(private val context: Context) {
 
         MessageLog.i(TAG, "[NAV] Clicking 'Start Career!'...")
 
-        if (ButtonStartCareer.click(iu) || ButtonStartCareerOffset.click(iu)) {
+        if (ButtonStartCareer.click(iu) || ButtonStartCareerOffset.click(iu) || ButtonStartCareerRight.click(iu)) {
             waitSafe(3.0)
             // Check for a second "Start Career!" confirmation screen.
-            if (ButtonStartCareer.check(iu) || ButtonStartCareerOffset.check(iu)) {
+            if (ButtonStartCareer.check(iu) || ButtonStartCareerOffset.check(iu) || ButtonStartCareerRight.check(iu)) {
                 MessageLog.i(TAG, "[NAV] Second 'Start Career!' confirmation detected. Clicking...")
                 // Short-circuit: if the primary template clicks the button successfully, do NOT
                 // also fire the offset variant. Without this guard, the offset click lands on
                 // whatever screen appeared after the first click (cinematic, dialog) and produces
-                // an unintended early tap.
-                if (!ButtonStartCareer.click(iu)) {
-                    ButtonStartCareerOffset.click(iu)
+                // an unintended early tap. Same rule down the chain: at most ONE click fires.
+                if (!ButtonStartCareer.click(iu) && !ButtonStartCareerOffset.click(iu)) {
+                    ButtonStartCareerRight.click(iu)
                 }
                 waitSafe(3.0)
             }

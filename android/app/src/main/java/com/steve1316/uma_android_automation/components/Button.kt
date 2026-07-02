@@ -329,6 +329,13 @@ object ButtonStartCareerOffset : ButtonInterface {
     override val template = Template("components/button/start_career_offset", region = Region.bottomHalf)
 }
 
+object ButtonStartCareerRight : ButtonInterface {
+    // Right-side crop of the button: the trainee chibi idles over its LEFT edge on the deck screen
+    // and can pin full-button matches below threshold for a whole session (0.60 observed live while
+    // this crop scored 0.89 on the same frame). Chibis never cover the right side.
+    override val template = Template("components/button/start_career_right", region = Region.bottomHalf)
+}
+
 object ButtonTeamRace : ButtonInterface {
     override val template = Template("components/button/team_race")
 }
