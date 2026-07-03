@@ -234,6 +234,18 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 if (count <= 0 || switchEvery <= 0) return 0
                 return ((run - 1) / switchEvery) % count
             }
+
+            /** 0-based rotation slot for run [run] with a resync [offset] folded in (cycling). */
+            fun indexForRun(run: Int, offset: Int): Int {
+                if (count <= 0) return 0
+                return (indexForRun(run) + offset).mod(count)
+            }
+
+            /** Offset that makes [indexForRun] map [run] onto [targetIndex] (a mid-career resync). */
+            fun resyncOffsetFor(run: Int, targetIndex: Int): Int {
+                if (count <= 0) return 0
+                return (targetIndex - indexForRun(run)).mod(count)
+            }
         }
 
         /**
@@ -388,6 +400,82 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             } catch (e: Exception) {
                 Log.w(TAG, "[ROTATION] Failed to set rotationSwitchPending: ${e.message}")
             }
+        }
+
+        /**
+         * Cursor shift folded into every rotation slot lookup this session. Normally 0; set by
+         * [resyncRotationOntoCareer] so the run the mismatch guard resynced counts as the
+         * on-screen trainee's slot and later runs continue the cycle from her entry.
+         */
+        @Volatile
+        private var rotationCursorOffset: Int = 0
+
+        /**
+         * Rotation slot the mismatch guard resynced the in-flight run onto, or -1. Consumed (and
+         * cleared) by the next [applyRotationForRun] so its switch-boundary check compares against
+         * the entry actually live in settings — the resynced one — instead of the entry the cursor
+         * had loaded before the resync (which would skip the snapshot swap when the next slot
+         * happens to equal the pre-resync one, e.g. a 2-trainee rotation).
+         */
+        @Volatile
+        private var rotationResyncPrevIndex: Int = -1
+
+        /**
+         * 1-based run number currently in flight, mirrored from the queue loop for
+         * [resyncRotationOntoCareer]'s cursor math (the mismatch guard lives in Campaign, which
+         * doesn't know the loop counter).
+         */
+        @Volatile
+        private var queueCurrentRun: Int = 1
+
+        /**
+         * Mid-career rotation resync, called by the Campaign trainee-mismatch guard when the career
+         * on screen confidently belongs to rotation entry [index] instead of the entry the queue
+         * loaded. This is the signature of an externally interrupted queue (game update, kill
+         * without resumable state) restarted from entry 0 while the game resumes the old in-flight
+         * career.
+         *
+         * Swaps the live settings to [index]'s snapshot, retargets the match-or-stop bookkeeping,
+         * and fast-forwards the cursor so this run counts as [index]'s slot and later runs continue
+         * the cycle from it. The in-flight Campaign keeps whatever values it already read at
+         * startup until this career ends; every later read (and every later run) sees the resynced
+         * trainee's settings. The offset is session-scoped by design: if the process dies after a
+         * resync, the next session's guard simply resyncs again.
+         *
+         * Refused when [index]'s snapshot runs a different scenario than the career in flight: the
+         * running Game/Campaign were constructed for the current scenario and cannot switch
+         * mid-career, so applying the snapshot would put the wrong campaign class in charge of the
+         * rest of the run.
+         *
+         * @return false when [index] is out of range, has no snapshot rows, or runs a different
+         *         scenario — nothing was changed and the caller must fall back to stopping the queue.
+         */
+        fun resyncRotationOntoCareer(context: Context, index: Int): Boolean {
+            val rotation = loadRotationConfig()
+            val target = rotation.inGameNames.getOrNull(index) ?: return false
+            val currentScenario = SettingsHelper.getStringSetting("general", "scenario")
+            val snapshotScenario = SettingsHelper.getStringSetting("rot${index}_general", "scenario", "")
+            if (snapshotScenario.isNotEmpty() && currentScenario.isNotEmpty() && snapshotScenario != currentScenario) {
+                MessageLog.e(
+                    TAG,
+                    "[ROTATION] Resync refused: entry #${index + 1} '$target' runs scenario '$snapshotScenario' but this career " +
+                        "is running '$currentScenario', and the campaign cannot switch scenarios mid-career.",
+                )
+                return false
+            }
+            if (!applyRotationSnapshot(context, index)) return false
+            setCurrentTrainee(context, target)
+            setCurrentTraineeExcludes(context, rotation.excludesForIndex(index))
+            // Already in-career: no trainee switch can happen for this run, so disarm the backstop.
+            setRotationSwitchPending(context, false)
+            rotationCursorOffset = rotation.resyncOffsetFor(queueCurrentRun, index)
+            rotationResyncPrevIndex = index
+            MessageLog.i(
+                TAG,
+                "[ROTATION] Cursor fast-forwarded: run $queueCurrentRun now maps to trainee #${index + 1} '$target' " +
+                    "(offset=$rotationCursorOffset); subsequent runs continue the rotation from her entry.",
+            )
+            return true
         }
     }
 
@@ -960,7 +1048,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      */
     private fun applyRotationForRun(rotation: RotationConfig, upcomingRun: Int, userReuse: Boolean): Boolean? {
         if (!rotation.enabled) return userReuse
-        val index = rotation.indexForRun(upcomingRun)
+        // Fold in a mid-career resync: the boundary check must compare against the entry actually
+        // live in settings (the resynced one), not the entry the cursor loaded before the resync.
+        if (rotationResyncPrevIndex >= 0) {
+            rotationPrevIndex = rotationResyncPrevIndex
+            rotationResyncPrevIndex = -1
+        }
+        val index = rotation.indexForRun(upcomingRun, rotationCursorOffset)
         val target = rotation.inGameNames.getOrElse(index) { "" }
         val switching = index != rotationPrevIndex
         if (switching) {
@@ -1114,6 +1208,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // Reset rotation boundary tracking so the first launched run of this session always
                 // (re)loads its trainee snapshot, even within the same app process as a prior queue.
                 rotationPrevIndex = -1
+                rotationCursorOffset = 0
+                rotationResyncPrevIndex = -1
+                queueCurrentRun = 1
                 setRotationSwitchPending(context, false)
 
                 // Reset the session-scoped TP restore counter (companion-held so it survives
@@ -1245,6 +1342,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
                     // Reset the skip flag for this run.
                     queueSkipRequested = false
+
+                    // Mirror the in-flight run number for the mismatch guard's resync cursor math.
+                    queueCurrentRun = i
 
                     if (enableRunQueue) {
                         // Reset log stream mute for each subsequent run.

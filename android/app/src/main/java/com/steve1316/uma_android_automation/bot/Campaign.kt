@@ -1180,8 +1180,14 @@ abstract class Campaign(game: Game) : Task(game) {
      * Conservative by design, because a STOP halts the whole unattended queue:
      *  - loaded preset's trainee matches the career     -> pass.
      *  - career CONFIDENTLY matches a DIFFERENT roster
-     *    trainee than the one loaded                    -> STOP the queue (wrong preset loaded).
+     *    trainee than the one loaded                    -> RESYNC the rotation onto her entry and
+     *    continue (an externally interrupted queue restarted from entry 0 while the game resumed
+     *    the old in-flight career); STOP only when the resync itself fails (snapshot missing).
      *  - nothing matches well (unreadable / off-roster) -> WARN and continue; never halt on noise.
+     *
+     * When the same character appears at multiple rotation slots (different outfits), the resync
+     * is refused and the queue stops: outfit-level discrimination is impossible from the bare
+     * in-career name, and guessing the wrong slot would apply the wrong preset.
      */
     private fun verifyRotationTrainee() {
         if (!SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false)) return
@@ -1209,29 +1215,57 @@ abstract class Campaign(game: Game) : Task(game) {
             return
         }
 
-        // The loaded preset doesn't clearly match. Only STOP if the career CONFIDENTLY matches some
+        // The loaded preset doesn't clearly match. Act only if the career CONFIDENTLY matches some
         // OTHER roster trainee — the unambiguous "wrong preset loaded" case. A name that matches its
         // own (noisy) target best, or nothing well, is treated as OCR noise: warn, don't halt.
         var best: String? = null
         var bestScore = 0.0
-        for (candidate in StartModule.loadRotationConfig().inGameNames) {
+        var bestIndex = -1
+        val rotationNames = StartModule.loadRotationConfig().inGameNames
+        for ((i, candidate) in rotationNames.withIndex()) {
             val s = matchScore(candidate)
             if (s > bestScore) {
                 bestScore = s
                 best = candidate
+                bestIndex = i
             }
         }
 
         val matched = best
         if (matched != null && bestScore >= rotationVerifyMatchThreshold && deOutfit(matched) != deOutfit(target)) {
+            // The career on screen IS a rotation trainee — the signature of an externally
+            // interrupted queue restarted from entry 0 while the game resumed the old in-flight
+            // career. Resync the queue onto her entry (swap in her snapshot, fast-forward the
+            // cursor) and keep playing instead of killing the whole unattended queue. Refused when
+            // the character occupies multiple rotation slots: the bare in-career name cannot tell
+            // the outfits apart, and guessing the wrong slot would apply the wrong preset.
+            val duplicateSlots = rotationNames.count { deOutfit(it) == deOutfit(matched) }
+            if (duplicateSlots == 1 && StartModule.resyncRotationOntoCareer(game.myContext, bestIndex)) {
+                MessageLog.w(
+                    TAG,
+                    "[ROTATION] Resynced onto interrupted career: this career is '$inCareer' (rotation entry #${bestIndex + 1} '$matched', " +
+                        "score=${"%.2f".format(bestScore)}) but the queue had loaded the preset for '$target'. Applied the snapshot for " +
+                        "'$matched' and fast-forwarded the rotation cursor; the queue continues from her entry. Settings this career already " +
+                        "read at startup keep the old preset's values until it ends.",
+                )
+                return
+            }
+            if (duplicateSlots > 1) {
+                MessageLog.e(
+                    TAG,
+                    "[ROTATION] Resync refused: '${deOutfit(matched)}' occupies $duplicateSlots rotation slots and the in-career name " +
+                        "cannot tell their outfits apart, so the queue cannot know which entry this career belongs to.",
+                )
+            }
             MessageLog.e(
                 TAG,
                 "[ROTATION] Trainee MISMATCH: this career is '$inCareer' (best roster match '$matched', score=${"%.2f".format(bestScore)}) " +
-                    "but the queue loaded the preset for '$target'. Stopping the queue rather than play a career under the wrong trainee's settings. " +
-                    "This usually means an interrupted run resumed onto the wrong trainee — restart the queue from the game's home screen.",
+                    "but the queue loaded the preset for '$target', and the rotation could not be resynced onto '$matched' " +
+                    "(missing snapshot, different scenario, or duplicate rotation slots). " +
+                    "Stopping the queue rather than play a career under the wrong trainee's settings — restart the queue from the game's home screen.",
             )
             StartModule.queueStopReason =
-                "Stopped on trainee mismatch - career was '$inCareer' but the queue loaded the preset for '$target'. Restart from the home screen."
+                "Stopped on trainee mismatch - career was '$inCareer' but the queue loaded the preset for '$target' and the resync onto '$matched' failed. Restart from the home screen."
             StartModule.queueStopRequested = true
             return
         }
