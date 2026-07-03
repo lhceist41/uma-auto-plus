@@ -547,11 +547,11 @@ export const defaultSettings: Settings = {
         // for build prioritization on non-tied turns.
         statPrioritization: ["Wit", "Speed", "Power", "Stamina", "Guts"],
         maximumFailureChance: 20,
-        // OCR sanity ceiling per stat. The Global EN hard stat cap is 1200 unless raised
-        // by Trackblazer shop items (Speed Shoes, etc.). CustomImageUtils.kt uses this to
-        // reject OCR misreads above the ceiling. 1200 is the safe fleet-wide value;
-        // per-character overrides (e.g. 1300 for cap-raising-item builds) can be applied
-        // via character presets.
+        // Floor for the per-stat cap and OCR sanity ceiling. Since the July 2026 patch the caps
+        // are per-scenario (URA 1400; UC 1300/Wit 1800; TB 1200/Sta 1900/Wit 1500 — see
+        // Training.getScenarioStatCap); Kotlin uses maxOf(scenarioCap, manualStatCap) for the
+        // maxed-stat check and rejection ceiling, so 1200 keeps scenario caps authoritative while
+        // letting presets raise the floor for cap-raising-item builds.
         manualStatCap: 1200,
         disableTrainingOnMaxedStat: true,
         focusOnSparkStatTarget: ["Speed", "Stamina", "Power"],

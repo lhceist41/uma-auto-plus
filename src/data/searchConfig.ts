@@ -95,7 +95,8 @@ const searchConfig: SearchOption[] = [
     {
         id: "manual-stat-cap",
         title: "Manual Stat Cap",
-        description: "Set a custom stat cap for all stats. Training will be skipped when any stat reaches this value (if 'Disable Training on Maxed Stats' is enabled).",
+        description:
+            "Floor for the per-stat cap and OCR sanity ceiling. The bot uses the higher of this value and the scenario's own cap (URA 1400; Unity Cup 1300, Wit 1800; Trackblazer 1200, Stamina 1900, Wit 1500) to decide when a stat is maxed and to reject impossible stat reads.",
         page: "TrainingSettings",
         parentId: "disable-training-on-maxed-stats",
     },

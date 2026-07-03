@@ -238,6 +238,10 @@ const Home = () => {
         // Deep merge preset settings with current settings
         const merged = { ...bsc.settings }
         for (const [category, values] of Object.entries(preset.settings)) {
+            // Device/user-level categories are never per-trainee tuning; skip them so a preset
+            // can't clobber the user's Debug Mode or Discord webhook (mirrors the rotation
+            // snapshot denylist). Presets no longer ship these, but guard against regressions.
+            if (category === "debug" || category === "discord") continue
             if (typeof values === "object" && values !== null && !Array.isArray(values)) {
                 ;(merged as any)[category] = { ...(merged as any)[category], ...values }
             } else {
@@ -272,7 +276,9 @@ const Home = () => {
         })
 
         bsc.setSettings(merged)
-        await saveSettings()
+        // Pass merged explicitly: settingsRef only syncs after the state update re-renders, so a
+        // no-arg save here read the STALE pre-preset settings and persisted those instead.
+        await saveSettings(merged)
         logWithTimestamp(`[Home] Applied preset: ${presetName} (${bsc.settings.general.scenario})`)
         setSnackbarMessage(`Preset "${presetName}" applied`)
         setSnackbarOpen(true)
