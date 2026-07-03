@@ -914,10 +914,12 @@ class CareerLaunchNavigator(private val context: Context) {
      *
      * Default: decline and end the queue gracefully - restoring spends resources, and that
      * decision belongs to the user. With the opt-in `runQueue.enableTpRestoreWithItems`
-     * setting, the flow the user specified runs instead: Restore -> pick the Toughness 30 row
-     * (never Carats - if the drink template is absent the bot declines) -> Max (fill TP to the
-     * cap; an Event Boost career costs 60 TP, more than one drink covers) -> OK -> Close ->
-     * resume the career start.
+     * setting, the flow the user specified runs instead: Restore -> pick a row off the item
+     * ladder (Toughness 30, then Star Fruit, then Carats as the last resort) -> quantity ->
+     * OK -> Close -> resume the career start. Items are Max-filled to the cap (an Event Boost
+     * career costs 60 TP, more than one drink covers); Carats buy a single 30 TP use per
+     * restore so premium spend stays minimal - if that's short, the game re-prompts and the
+     * ladder runs again under the same session cap.
      */
     private fun handleTpRestoreDialog(): TransitionResult {
         val restoreWithItems = SettingsHelper.getBooleanSetting("runQueue", "enableTpRestoreWithItems", false)
@@ -947,25 +949,40 @@ class CareerLaunchNavigator(private val context: Context) {
             return TransitionResult.Continue
         }
 
-        MessageLog.i(TAG, "[NAV] Out of TP. Restoring with one Toughness 30 per the enabled setting...")
+        MessageLog.i(TAG, "[NAV] Out of TP. Restoring with items per the enabled setting...")
         gestureUtils.tap(noLocation.x + TP_RESTORE_FROM_NO_DX, noLocation.y, "tp_restore_button")
         waitSafe(1.5)
 
+        // Item ladder: Toughness 30 (farmed) -> Star Fruit (event stock) -> Carats (premium,
+        // last resort). Rows shift up as stocks empty - the game hides depleted item rows
+        // outright - so each rung is anchored by its own template, never by row position.
         val drinkLocation = IconTpDrink.find(iu).first
-        if (drinkLocation == null) {
-            MessageLog.w(TAG, "[NAV] Toughness 30 row not found in the Recover TP picker - likely out of drinks. Carats are never spent; closing and ending the queue.")
+        val starFruitLocation = if (drinkLocation == null) IconTpStarFruit.find(iu).first else null
+        val caratsLocation = if (drinkLocation == null && starFruitLocation == null) IconTpCarats.find(iu).first else null
+        val rowLocation = drinkLocation ?: starFruitLocation ?: caratsLocation
+        if (rowLocation == null) {
+            MessageLog.w(TAG, "[NAV] No restore row found in the Recover TP picker (Toughness 30, Star Fruit, or Carats). Closing and ending the queue.")
             // The picker's Close style is unverified - try both close variants.
             if (!ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
             waitSafe(1.0)
             return TransitionResult.Failed(
-                reason = "TP restore was enabled but no Toughness 30 drinks were found in the Recover TP picker. Carats are never spent automatically.",
+                reason = "TP restore was enabled but no usable row (Toughness 30, Star Fruit, or Carats) was found in the Recover TP picker.",
                 transition = "TP_RESTORE_DIALOG -> RECOVER_TP_PICKER",
                 isRecoverable = false,
-                recommendedAction = "Stock Toughness 30 drinks or restore TP manually, then restart the queue. All completed runs are saved.",
+                recommendedAction = "Restore TP manually, then restart the queue. All completed runs are saved.",
             )
         }
+        val useCarats = caratsLocation != null
+        val itemName = when {
+            drinkLocation != null -> "Toughness 30"
+            starFruitLocation != null -> "Star Fruit"
+            else -> "Carats"
+        }
+        if (useCarats) {
+            MessageLog.w(TAG, "[NAV] No Toughness 30 or Star Fruit stock left. Spending Carats on a single 30 TP restore (last resort per the enabled setting).")
+        }
 
-        gestureUtils.tap(drinkLocation.x + TP_USE_FROM_DRINK_DX, drinkLocation.y + TP_USE_FROM_DRINK_DY, "tp_use_button")
+        gestureUtils.tap(rowLocation.x + TP_USE_FROM_DRINK_DX, rowLocation.y + TP_USE_FROM_DRINK_DY, "tp_use_button")
         waitSafe(1.2)
 
         val okLocation = ButtonOk.find(iu).first
@@ -973,14 +990,17 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.w(TAG, "[NAV] Quantity dialog OK button not found after Use. Re-detecting...")
             return TransitionResult.Continue
         }
-        // Fill TP to the cap with Max rather than a single +30. A normal career costs 30 TP, but
-        // an Event Boost (TP Usage x2) career costs 60 - more than one drink covers - and
-        // Max-filling means fewer restore round-trips across a long unattended chain. Mirrors
-        // ResourceRechargeHelper's quantity-popup flow (Max -> OK).
-        if (!ButtonMax.click(iu)) {
-            // Max not found: fall back to a single +30. The quantity dialog opens with zero drinks
-            // selected, so one plus press selects exactly one drink, enough for a 30 TP career.
-            MessageLog.w(TAG, "[NAV] Max button not found on the TP quantity popup; falling back to a single +30 drink.")
+        if (useCarats) {
+            // Carats are premium currency: never Max-fill. The quantity dialog opens with zero
+            // selected, so one plus press buys exactly one 30 TP use - enough for a normal
+            // career. An Event Boost career (60 TP) just re-prompts and spends a second 30.
+            gestureUtils.tap(okLocation.x + TP_PLUS_FROM_OK_DX, okLocation.y + TP_PLUS_FROM_OK_DY, "tp_plus_one")
+        } else if (!ButtonMax.click(iu)) {
+            // Fill TP to the cap with Max rather than a single +30. A normal career costs 30 TP,
+            // but an Event Boost (TP Usage x2) career costs 60 - more than one drink covers - and
+            // Max-filling means fewer restore round-trips across a long unattended chain.
+            // Max not found: fall back to a single +30 via the plus button above OK.
+            MessageLog.w(TAG, "[NAV] Max button not found on the TP quantity popup; falling back to a single +30 use.")
             gestureUtils.tap(okLocation.x + TP_PLUS_FROM_OK_DX, okLocation.y + TP_PLUS_FROM_OK_DY, "tp_plus_one")
         }
         waitSafe(0.6)
@@ -992,7 +1012,7 @@ class CareerLaunchNavigator(private val context: Context) {
         tpRestoresThisSession++
         MessageLog.i(
             TAG,
-            "[NAV] Restored TP to the cap with Toughness 30 (restore $tpRestoresThisSession/$MAX_TP_RESTORES_PER_SESSION this session). Resuming the career start.",
+            "[NAV] Restored TP with $itemName (restore $tpRestoresThisSession/$MAX_TP_RESTORES_PER_SESSION this session). Resuming the career start.",
         )
         return TransitionResult.Continue
     }

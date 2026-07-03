@@ -228,9 +228,9 @@ export interface Settings {
         stopOnError: boolean
         reuseLastLaunchSetup: boolean
         autoFillSupports: boolean
-        // When the game asks "Restore TP?" between queued runs, refill TP to the cap with
-        // Toughness 30 items (Max) and continue instead of ending the queue. Items only - the
-        // bot never spends carats; with no drinks left it declines and stops gracefully.
+        // When the game asks "Restore TP?" between queued runs, refill TP and continue instead
+        // of ending the queue. Ladder: Toughness 30, then Star Fruit (both Max-filled to the
+        // cap), then Carats as the last resort - one 30 TP purchase per restore, never Max.
         enableTpRestoreWithItems: boolean
         // Tick "Event Boost (TP Usage x2)" on the Final Confirmation screen before each career.
         // Doubles event rewards (and the TP cost) - only worth it while a TP event is live; turn

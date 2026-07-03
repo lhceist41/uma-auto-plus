@@ -89,9 +89,21 @@ object IconRaceListFansIcon : ComponentInterface {
 
 object IconTpDrink : ComponentInterface {
     // The Toughness 30 row in the "Recover TP" picker: the bottle tile plus the static label
-    // edge. Anchors the item-based TP restore so the flow can never tap the Carats row above
-    // it - if this template is absent, the bot is out of drinks and declines instead.
+    // edge. First rung of the item-based TP restore ladder (see handleTpRestoreDialog).
     override val template = Template("components/icon/tp_drink", region = Region.leftHalf)
+}
+
+object IconTpStarFruit : ComponentInterface {
+    // The Star Fruit row in the "Recover TP" picker - second rung of the restore ladder, used
+    // when Toughness 30 stock is empty. Same crop geometry as IconTpDrink so the Use-button
+    // tap offsets hold unchanged.
+    override val template = Template("components/icon/tp_star_fruit", region = Region.leftHalf)
+}
+
+object IconTpCarats : ComponentInterface {
+    // The Carats row in the "Recover TP" picker - last rung of the restore ladder. Rows shift
+    // up as item stocks empty, so each rung is matched by its own anchor, never by position.
+    override val template = Template("components/icon/tp_carats", region = Region.leftHalf)
 }
 
 object IconFriendSlotEmpty : ComponentInterface {
