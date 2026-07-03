@@ -153,11 +153,18 @@ object DialogUtils {
         val x = titleLocation.x - (templateBitmap.width / 2.0)
         val y = titleLocation.y - (templateBitmap.height / 2.0)
 
+        // The title bar's gradient pattern repeats, so a template match can land anywhere along
+        // the bar rather than strictly at its left edge. The bar is horizontally centered, so
+        // reflect the detected edge around the screen center to recover the true (smaller) left
+        // edge. Keeps the already-correct case unchanged while preventing the negative width
+        // (clamped to a useless 1px OCR region) when the match lands right of center.
+        val leftEdgeX = minOf(x, SharedData.displayWidth - x)
+
         val bbox =
             BoundingBox(
-                imageUtils.relX(x, 0),
+                imageUtils.relX(leftEdgeX, 0),
                 imageUtils.relY(y, 0),
-                imageUtils.relWidth((SharedData.displayWidth - (x * 2)).toInt()),
+                imageUtils.relWidth((SharedData.displayWidth - (leftEdgeX * 2)).toInt()),
                 imageUtils.relHeight(templateBitmap.height),
             )
 

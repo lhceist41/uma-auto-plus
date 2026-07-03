@@ -20,6 +20,7 @@ import com.steve1316.uma_android_automation.components.ButtonRaces
 import com.steve1316.uma_android_automation.components.ButtonShopTrackblazer
 import com.steve1316.uma_android_automation.components.ButtonSkillUp
 import com.steve1316.uma_android_automation.components.ButtonTraining
+import com.steve1316.uma_android_automation.components.ButtonHomeFullStats
 import com.steve1316.uma_android_automation.components.ButtonTrainingItems
 import com.steve1316.uma_android_automation.components.ButtonUseTrainingItems
 import com.steve1316.uma_android_automation.components.DialogConfirmUse
@@ -1039,8 +1040,11 @@ class Trackblazer(game: Game) : Campaign(game) {
      * @return True if the shop was opened successfully, false otherwise.
      */
     fun openShop(tries: Int = 5): Boolean {
-        // Already on the Training Items screen; nothing to open.
-        if (ButtonTrainingItems.check(game.imageUtils)) {
+        // Already on the Training Items screen; nothing to open. ButtonTrainingItems also matches
+        // the Main screen's round quick-access button on some devices (99%+ confidence in a device
+        // capture), and the false "already open" made updateShopCoins read the Main screen's stat
+        // HUD. ButtonHomeFullStats only appears on the Main screen, so its absence disambiguates.
+        if (ButtonTrainingItems.check(game.imageUtils) && !ButtonHomeFullStats.check(game.imageUtils)) {
             return true
         }
 
@@ -1057,7 +1061,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                 }
             }
 
-            if (ButtonTrainingItems.check(game.imageUtils, tries = 5)) {
+            if (ButtonTrainingItems.check(game.imageUtils, tries = 5) && !ButtonHomeFullStats.check(game.imageUtils)) {
                 return true
             }
 
@@ -1070,7 +1074,7 @@ class Trackblazer(game: Game) : Campaign(game) {
             MessageLog.i(TAG, "[TRACKBLAZER] Shop dialog detected while trying to open the shop. Entering via dialog...")
             if (detectedDialog.ok(game.imageUtils)) {
                 game.wait(game.dialogWaitDelay)
-                return ButtonTrainingItems.check(game.imageUtils, tries = 5)
+                return ButtonTrainingItems.check(game.imageUtils, tries = 5) && !ButtonHomeFullStats.check(game.imageUtils)
             }
         }
 
