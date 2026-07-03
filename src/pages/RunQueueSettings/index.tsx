@@ -224,7 +224,7 @@ const RunQueueSettings = () => {
                                     checked={runQueueSettings.enableTpRestoreWithItems}
                                     onCheckedChange={(checked) => updateSetting("enableTpRestoreWithItems", checked)}
                                     label="Restore TP with Items"
-                                    description="When the game asks to restore TP between queued runs, refill and continue. Priority: Toughness 30, then Star Fruit (both fill TP to the max), then Carats as the last resort - a single 30 TP purchase per restore, never more. Capped at 10 restores per session."
+                                    description="When the game asks to restore TP between queued runs, refill TP to the max and continue. Priority: Toughness 30, then Star Fruit, then Carats as the last resort. Capped at 10 restores per session."
                                     className="mt-4"
                                 />
 

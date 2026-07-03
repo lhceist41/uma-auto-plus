@@ -1142,10 +1142,10 @@ class CareerLaunchNavigator(private val context: Context) {
      * decision belongs to the user. With the opt-in `runQueue.enableTpRestoreWithItems`
      * setting, the flow the user specified runs instead: Restore -> pick a row off the item
      * ladder (Toughness 30, then Star Fruit, then Carats as the last resort) -> quantity ->
-     * OK -> Close -> resume the career start. Items are Max-filled to the cap (an Event Boost
-     * career costs 60 TP, more than one drink covers); Carats buy a single 30 TP use per
-     * restore so premium spend stays minimal - if that's short, the game re-prompts and the
-     * ladder runs again under the same session cap.
+     * OK -> Close -> resume the career start. Every rung Max-fills to the cap (an Event Boost
+     * career costs 60 TP, more than one use covers, and fewer restore round-trips means fewer
+     * chances for the flow to break). Total Carat spend tracks TP consumed either way; Max
+     * just batches it - per the maintainer's explicit request 2026-07-03.
      */
     private fun handleTpRestoreDialog(): TransitionResult {
         val restoreWithItems = SettingsHelper.getBooleanSetting("runQueue", "enableTpRestoreWithItems", false)
@@ -1206,7 +1206,7 @@ class CareerLaunchNavigator(private val context: Context) {
             else -> "Carats"
         }
         if (useCarats) {
-            MessageLog.w(TAG, "[NAV] No Toughness 30 or Star Fruit stock left. Spending Carats on a single 30 TP restore (last resort per the enabled setting).")
+            MessageLog.w(TAG, "[NAV] No Toughness 30 or Star Fruit stock left. Max-filling TP with Carats (last resort per the enabled setting).")
         }
 
         gestureUtils.tap(rowLocation.x + TP_USE_FROM_DRINK_DX, rowLocation.y + TP_USE_FROM_DRINK_DY, "tp_use_button")
@@ -1217,16 +1217,11 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.w(TAG, "[NAV] Quantity dialog OK button not found after Use. Re-detecting...")
             return TransitionResult.Continue
         }
-        if (useCarats) {
-            // Carats are premium currency: never Max-fill. The quantity dialog opens with zero
-            // selected, so one plus press buys exactly one 30 TP use - enough for a normal
-            // career. An Event Boost career (60 TP) just re-prompts and spends a second 30.
-            gestureUtils.tap(okLocation.x + TP_PLUS_FROM_OK_DX, okLocation.y + TP_PLUS_FROM_OK_DY, "tp_plus_one")
-        } else if (!ButtonMax.click(iu)) {
-            // Fill TP to the cap with Max rather than a single +30. A normal career costs 30 TP,
-            // but an Event Boost (TP Usage x2) career costs 60 - more than one drink covers - and
-            // Max-filling means fewer restore round-trips across a long unattended chain.
-            // Max not found: fall back to a single +30 via the plus button above OK.
+        // Fill TP to the cap with Max rather than a single +30. A normal career costs 30 TP,
+        // but an Event Boost (TP Usage x2) career costs 60 - more than one use covers - and
+        // Max-filling means fewer restore round-trips across a long unattended chain.
+        // Max not found: fall back to a single +30 via the plus button above OK.
+        if (!ButtonMax.click(iu)) {
             MessageLog.w(TAG, "[NAV] Max button not found on the TP quantity popup; falling back to a single +30 use.")
             gestureUtils.tap(okLocation.x + TP_PLUS_FROM_OK_DX, okLocation.y + TP_PLUS_FROM_OK_DY, "tp_plus_one")
         }
