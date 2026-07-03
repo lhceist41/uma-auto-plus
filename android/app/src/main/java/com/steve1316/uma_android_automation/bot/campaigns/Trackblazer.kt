@@ -805,11 +805,27 @@ class Trackblazer(game: Game) : Campaign(game) {
         return recoverMood(sourceBitmap, targetMood = targetMood)
     }
 
+    /** True when this turn carries a scheduled agenda race or a mandatory/goal race. Live template
+     * checks OR the turn-start cached flags count - a single missed read must not skip a race
+     * (same belt-and-braces rationale as the irregular-training gate). */
+    private fun isRaceCommitmentTurn(): Boolean {
+        return cachedMandatoryRaceDay || cachedScheduledRaceDay || cachedGoalRibbonDay ||
+            LabelScheduledRace.check(game.imageUtils) ||
+            IconRaceDayRibbon.check(game.imageUtils) ||
+            IconGoalRibbon.check(game.imageUtils)
+    }
+
     override fun decideNextAction(): MainScreenAction {
         // Summer Training: Train during July and August in Classic/Senior.
         if (date.isSummer() && !(racing.skipSummerTrainingForAgenda && racing.enableUserInGameRaceAgenda)) {
             if (bCompletedTrainingThisTurn) {
                 MessageLog.i(TAG, "[TRACKBLAZER] Summer training already completed this turn. Deferring to the race/rest flow.")
+                return super.decideNextAction()
+            }
+            // A scheduled or mandatory race this turn outranks the summer-training hijack -
+            // a skipped agenda race costs more than one camp training.
+            if (isRaceCommitmentTurn()) {
+                MessageLog.i(TAG, "[TRACKBLAZER] Scheduled/mandatory race this summer turn. Deferring to the race flow instead of camp training.")
                 return super.decideNextAction()
             }
             MessageLog.i(TAG, "[TRACKBLAZER] It is Summer. Prioritizing training.")
@@ -846,6 +862,13 @@ class Trackblazer(game: Game) : Campaign(game) {
         // can bypass high failure chances that come with low energy.
         val hasCharmAvailable = !bUsedCharmToday && (currentInventory["Good-Luck Charm"] ?: 0) > 0
         if (trainee.energy <= 10 && consecutiveRaceCount >= 3 && !hasCharmAvailable) {
+            // Scheduled and mandatory races always run - a skipped agenda race costs more than
+            // the -30 low-energy penalty this guard exists to avoid.
+            if (isRaceCommitmentTurn()) {
+                MessageLog.i(TAG, "[TRACKBLAZER] Scheduled/mandatory race detected at low energy. Racing anyway - the race outranks the consecutive-race energy guard.")
+                decisionTracer?.recordActionChoice(MainScreenAction.RACE, "Trackblazer: scheduled/mandatory race overrides the low-energy rest guard")
+                return MainScreenAction.RACE
+            }
             // Before resting, attempt to use a conserved energy item for emergency race recovery.
             val conserveItem = energyItemConservationOrder.firstOrNull { (currentInventory[it] ?: 0) > 0 }
             if (conserveItem != null) {
