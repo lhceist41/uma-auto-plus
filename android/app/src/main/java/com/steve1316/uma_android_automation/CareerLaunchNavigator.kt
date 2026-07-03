@@ -7,6 +7,7 @@ import com.steve1316.automation_library.utils.BotService
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.SettingsHelper
+import com.steve1316.automation_library.utils.TextUtils
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.components.*
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
@@ -1002,9 +1003,13 @@ class CareerLaunchNavigator(private val context: Context) {
      * Transition: template-matched button click.
      */
 
-    /** One-shot flag: the reroll ran (or was declined at the dialog) this handoff. The second
-     * SPARKS_SCREEN entry after a reroll must Confirm, never reroll again. */
+    /** One-shot flag: the reroll flow ran (spent or declined at the dialog) this handoff. The
+     * second SPARKS_SCREEN entry must Confirm, never reroll again. */
     private var sparksRerollAttempted = false
+
+    /** True only when the 30 TP spend actually clicked - distinguishes "keeping the redrawn set"
+     * from "the dialog declined the spend and the original set is still up" in the exit logs. */
+    private var sparksRerollExecuted = false
 
     /**
      * Handles the career-end SPARKS screen.
@@ -1023,12 +1028,16 @@ class CareerLaunchNavigator(private val context: Context) {
         val enableReroll = SettingsHelper.getBooleanSetting("runQueue", "enableSparkReroll", false)
 
         if (sparksRerollAttempted) {
-            // Post-reroll: log + archive what the redraw produced, then Confirm to keep it.
-            runCatching {
-                iu.saveBitmap(filename = "reroll_result_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}", fullRes = true)
+            if (sparksRerollExecuted) {
+                // Post-reroll: log + archive what the redraw produced, then Confirm to keep it.
+                runCatching {
+                    iu.saveBitmap(filename = "reroll_result_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}", fullRes = true)
+                }
+                val rerolled = readSparkStatRow(bitmap)
+                MessageLog.i(TAG, "[REROLL] Rerolled stat spark: ${rerolled?.let { "${it.first} ${it.second}-star" } ?: "unreadable"}. Keeping the redrawn set.")
+            } else {
+                MessageLog.i(TAG, "[REROLL] The spend was declined earlier - the original set is still up. Confirming it.")
             }
-            val rerolled = readSparkStatRow(bitmap)
-            MessageLog.i(TAG, "[REROLL] Rerolled stat spark: ${rerolled?.let { "${it.first} ${it.second}-star" } ?: "unreadable"}. Keeping the redrawn set.")
             return confirmSparks(bitmap)
         }
         if (!enableReroll) {
@@ -1066,8 +1075,9 @@ class CareerLaunchNavigator(private val context: Context) {
         }
         waitSafe(1.5)
         // The dialog's GREEN button is the SPEND action - the one career-end screen where green
-        // is not a safe advance. This click is the deliberate 30 TP spend.
-        if (!ButtonRerollSparksConfirm.click(iu)) {
+        // is not a safe advance. This click is the deliberate 30 TP spend. tries=3 rides out a
+        // slow dialog-open animation with fresh captures per attempt.
+        if (!ButtonRerollSparksConfirm.click(iu, tries = 3)) {
             MessageLog.w(TAG, "[REROLL] Confirm Reroll dialog did not offer the spend (out of TP, or the dialog never opened). Keeping the original set.")
             ButtonCancel.click(iu)
             sparksRerollAttempted = true
@@ -1076,6 +1086,7 @@ class CareerLaunchNavigator(private val context: Context) {
         }
         MessageLog.i(TAG, "[REROLL] Spent 30 TP to reroll sparks: $targetStat=$targetValue with a ${statRow.second}-star ${statRow.first} spark cleared the gate.")
         sparksRerollAttempted = true
+        sparksRerollExecuted = true
         waitSafe(4.0)
         return TransitionResult.Continue
     }
@@ -1117,7 +1128,11 @@ class CareerLaunchNavigator(private val context: Context) {
                 useThreshold = false, useGrayscale = true, ocrEngine = "mlkit", debugName = "sparkStatRow",
             ).trim()
         if (name.isEmpty()) return null
-        return Pair(name, goldStars)
+        // Canonicalize OCR fuzz to a stat name where possible ("Spccd" -> "Speed") so the gate's
+        // name comparison is not at the mercy of a single misread glyph; keep the raw read for
+        // non-stat rows so the log stays informative.
+        val canonical = TextUtils.matchStringInList(name, listOf("Speed", "Stamina", "Power", "Guts", "Wit")) ?: name
+        return Pair(canonical, goldStars)
     }
 
     /**

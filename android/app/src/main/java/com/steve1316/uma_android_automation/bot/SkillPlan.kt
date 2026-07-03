@@ -1265,33 +1265,31 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
      * @return True if all planned skills have been purchased, triggering an early exit; false otherwise.
      */
     private fun onSkillListEntryDetected(entry: SkillListEntry, point: Point, skillsToBuy: List<String>, skillList: SkillList): Boolean {
-        // Evaluate the exit conditions on EVERY detected entry, not only after a buy. The
+        // Evaluate the exit conditions on every NON-candidate entry, not only after a buy. The
         // post-buy check below never re-runs once the last buyable skill is bought (non-planned
         // entries used to return before reaching it), so a single unbuyable leftover made every
         // pass walk the full list. With no refunds, the scroll has nothing left to accomplish
-        // once each planned skill is either owned or priced beyond the remaining budget.
-        val outstandingSkills: List<String> = skillsToBuy.filter { it !in skillList.getObtainedSkills() }
-        if (outstandingSkills.isEmpty()) {
-            MessageLog.i(TAG, "[SKILLS] All skills purchased. Exiting loop early...")
-            return true
-        }
-        val bAnyStillBuyable =
-            outstandingSkills.any { name ->
-                // An unknown price means the row has not been seen this scan - it may appear
-                // further down the list, so the scroll must continue.
-                val livePrice: Int? = skillList.getAllSkills()[name]?.screenPrice
-                livePrice == null || livePrice <= skillList.skillPoints
+        // once each planned skill is either owned or priced beyond the remaining budget. A
+        // candidate entry skips these checks entirely: it must always get its buy attempt first
+        // (its recorded price may run stale-high while the live row is buyable).
+        val bIsBuyCandidate = !entry.bIsObtained && !entry.bIsVirtual && entry.name in skillsToBuy
+        if (!bIsBuyCandidate) {
+            val outstandingSkills: List<String> = skillsToBuy.filter { it !in skillList.getObtainedSkills() }
+            if (outstandingSkills.isEmpty()) {
+                MessageLog.i(TAG, "[SKILLS] All skills purchased. Exiting loop early...")
+                return true
             }
-        if (!bAnyStillBuyable) {
-            MessageLog.i(TAG, "[SKILLS] No remaining planned skill fits the ${skillList.skillPoints} SP budget (outstanding: ${outstandingSkills.joinToString(", ")}). Exiting the pass early...")
-            return true
-        }
-
-        if (entry.bIsObtained || entry.bIsVirtual) {
-            return false
-        }
-
-        if (entry.name !in skillsToBuy) {
+            val bAnyStillBuyable =
+                outstandingSkills.any { name ->
+                    // An unknown price means the row has not been seen this scan - it may appear
+                    // further down the list, so the scroll must continue.
+                    val livePrice: Int? = skillList.getAllSkills()[name]?.screenPrice
+                    livePrice == null || livePrice <= skillList.skillPoints
+                }
+            if (!bAnyStillBuyable) {
+                MessageLog.i(TAG, "[SKILLS] No remaining planned skill fits the ${skillList.skillPoints} SP budget (outstanding: ${outstandingSkills.joinToString(", ")}). Exiting the pass early...")
+                return true
+            }
             return false
         }
 
