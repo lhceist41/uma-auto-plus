@@ -778,15 +778,6 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         // Translate the local bitmap point back to global screen space coordinates.
         val point = Point(localPoint.x + entry.bbox.x, localPoint.y + entry.bbox.y)
 
-        // TEMP TAPDIAG: per-entry geometry to pinpoint the career-end (+) tap miss, and reveal which
-        // entries the buy pass visits. Remove after diagnosis. Warn level on purpose: MessageLog.d is
-        // gated behind Debug Mode, which silences this in exactly the failing runs that need it.
-        MessageLog.w(
-            TAG,
-            "[TAPDIAG] \"${skillListEntry.name}\": bbox=(${entry.bbox.x},${entry.bbox.y} ${entry.bbox.w}x${entry.bbox.h}) " +
-                "localPoint=(${localPoint.x.toInt()},${localPoint.y.toInt()}) -> tap=(${point.x.toInt()},${point.y.toInt()})",
-        )
-
         return Pair(skillListEntry, point)
     }
 

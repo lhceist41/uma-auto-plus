@@ -174,7 +174,10 @@ class SkillDatabase(private val game: Game) {
             val versionResults: MutableList<String> = mutableListOf()
 
             while (currentId != null) {
-                val name: String = getSkillName(currentId) ?: break
+                // Direct lookup instead of getSkillName(): a chain whose next version is not yet
+                // released on Global has no entry, and that is an expected end-of-chain, not a
+                // data error worth a warning per skill per scan.
+                val name: String = skillIdToName[currentId] ?: break
                 val tmpData: SkillData? = getSkillData(name)
                 if (tmpData == null) {
                     MessageLog.e(TAG, "[ERROR] loadSkillStructure::getVersionNames:: \"$name\" not in skillData.")

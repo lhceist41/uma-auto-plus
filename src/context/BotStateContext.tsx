@@ -406,7 +406,7 @@ export const defaultSettings: Settings = {
                 requiresConfirmation: false,
             },
             "Victory!": {
-                selectedOption: "Option 2: Energy -5 and random stat gain",
+                selectedOption: "Option 2: Energy -5/-20 and random stat gain",
                 requiresConfirmation: false,
             },
             "Solid Showing": {
