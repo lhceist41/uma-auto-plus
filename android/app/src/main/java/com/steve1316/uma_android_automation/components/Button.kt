@@ -369,6 +369,12 @@ object ButtonViewResults : ButtonInterface {
     override val template = Template("components/button/view_results", region = Region.bottomHalf)
 }
 
+/** Wide white "Close" on full-height list dialogs (Notices, the Recover TP picker). Styled
+ * differently from the standard dialog Close - the standard template scores ~0.36 on it. */
+object ButtonCloseWide : ButtonInterface {
+    override val template = Template("components/button/close_wide", region = Region.bottomHalf)
+}
+
 object ButtonWatchConcert : ButtonInterface {
     override val template = Template("components/button/watch_concert", region = Region.bottomHalf)
 }

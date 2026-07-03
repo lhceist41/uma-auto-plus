@@ -133,6 +133,12 @@ open class DialogHandler(val game: Game) {
                 dialog.close(game.imageUtils)
             }
 
+            "notices" -> {
+                // Daily-reset announcements (00:00 JST = 17:00 CEST) - pops mid-career on whatever
+                // screen is up. Left unrouted it burned 5 recovery cycles and ended the run.
+                dialog.close(game.imageUtils)
+            }
+
             "date_changed" -> {
                 // Real-world midnight date-rollover popup; its only control is OK. Left unhandled it
                 // spun the recover loop until the watchdog killed any overnight run that crossed midnight.

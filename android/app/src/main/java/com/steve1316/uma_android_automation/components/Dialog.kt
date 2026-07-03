@@ -1078,7 +1078,7 @@ object DialogNoRetries : DialogInterface {
         )
 }
 
-/** Main Screen */
+/** Main Screen - also pops mid-career at the daily reset (00:00 JST) with the day's announcements. */
 object DialogNotices : DialogInterface {
     override val name: String = "notices"
     override val title: String = "Notices"
@@ -1086,8 +1086,18 @@ object DialogNotices : DialogInterface {
     override val okButton = null
     override val buttons: List<BaseComponentInterface> =
         listOf(
+            ButtonCloseWide,
             ButtonClose,
         )
+
+    // The dialog uses the wide list-dialog Close that the standard template does not match.
+    override fun close(imageUtils: CustomImageUtils, tries: Int): Boolean {
+        if (ButtonCloseWide.click(imageUtils = imageUtils, tries = tries)) {
+            return true
+        }
+
+        return ButtonClose.click(imageUtils = imageUtils, tries = tries)
+    }
 }
 
 /** Shop (only when clicking inactive daily sales button). */

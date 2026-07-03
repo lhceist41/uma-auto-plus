@@ -1043,8 +1043,9 @@ class CareerLaunchNavigator(private val context: Context) {
         val rowLocation = drinkLocation ?: starFruitLocation ?: caratsLocation
         if (rowLocation == null) {
             MessageLog.w(TAG, "[NAV] No restore row found in the Recover TP picker (Toughness 30, Star Fruit, or Carats). Closing and ending the queue.")
-            // The picker's Close style is unverified - try both close variants.
-            if (!ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
+            // The picker uses the wide list-dialog Close - the standard variants left it open on
+            // screen when this branch fired live (2026-07-03).
+            if (!ButtonCloseWide.click(iu) && !ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
             waitSafe(1.0)
             return TransitionResult.Failed(
                 reason = "TP restore was enabled but no usable row (Toughness 30, Star Fruit, or Carats) was found in the Recover TP picker.",
