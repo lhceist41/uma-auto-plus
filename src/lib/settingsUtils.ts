@@ -32,7 +32,10 @@ export const convertSettingsToBatch = (settings: Record<string, any>) => {
         // Kotlin queue. If a polluted in-memory Settings object carried them in, re-emitting them here
         // would let buildRotationSnapshotRows compound the prefix (`rot0_` -> `rot0_rot0_` ...) every
         // run — the runaway that ballooned settings.db to 319 MB. Skip them at the serialization gate.
-        if (/^rot[0-9]/.test(category)) return
+        // `queueState` is likewise Kotlin-owned live state (active/currentRun/phase/...) written raw by
+        // StartModule mid-run; re-emitting a bootstrap-time snapshot of it here clobbered rotation
+        // switches and resurrected dead queues whenever a background save fired during a run.
+        if (/^rot[0-9]/.test(category) || category === "queueState") return
         Object.entries(categorySettings).forEach(([key, value]) => {
             batch.push({ category, key, value })
         })

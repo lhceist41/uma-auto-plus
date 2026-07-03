@@ -611,8 +611,11 @@ export class DatabaseManager {
             // only by the Kotlin queue. Loading them into the typed Settings object pollutes it with
             // synthetic `rot*` categories that buildRotationSnapshotRows then re-prefixes
             // (`rot0_` -> `rot0_rot0_` ...) — the runaway that ballooned settings.db to 319 MB / 72k
-            // rows. Same GLOB as clearRotationSnapshots.
-            const results = await this.db!.getAllAsync<DatabaseSettings>(`SELECT * FROM ${this.TABLE_SETTINGS} WHERE category NOT GLOB 'rot[0-9]*' ORDER BY category, key`)
+            // rows. Same GLOB as clearRotationSnapshots. `queueState` is excluded for the same
+            // ownership reason: it is Kotlin-owned live queue state, and loading a bootstrap-time
+            // snapshot into Settings let later RN saves clobber it mid-run (convertSettingsToBatch
+            // carries the matching serialization gate).
+            const results = await this.db!.getAllAsync<DatabaseSettings>(`SELECT * FROM ${this.TABLE_SETTINGS} WHERE category NOT GLOB 'rot[0-9]*' AND category != 'queueState' ORDER BY category, key`)
 
             const settings: Record<string, Record<string, any>> = {}
             for (const result of results) {
