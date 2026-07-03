@@ -246,7 +246,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
          * For an upgrade-chain group like base ○ → upgrade ◎, choices look like:
          *   - empty list (skip the group)
          *   - [base only] (cost = base.price, score = base.evalPt)
-         *   - [base, upgrade] (cost = base.price + upgrade.price, score = upgrade.evalPt;
+         *   - [base, upgrade] (cost = upgrade.price, score = upgrade.evalPt;
          *     only the upgraded form activates so we don't sum the scores)
          *
          * @property items Skill candidates picked together by this choice. Empty = "skip this group".
@@ -254,8 +254,12 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         data class KnapsackChoice(
             val items: List<SkillCandidate>,
         ) {
-            /** Combined SP cost of all skills in this choice. */
-            val cost: Int = items.sumOf { it.price }
+            /** SP cost of this choice: the LAST item's price, not the sum. A chain member's screen
+             * price already includes its unpurchased prerequisites (SkillListEntry), so summing
+             * charged the base twice per combo and made the DP under-buy gold/◎ upgrades. Chain
+             * choices are prefixes (base first), so the last item carries the combined price;
+             * for singletons the two are the same. */
+            val cost: Int = items.lastOrNull()?.price ?: 0
 
             /** Score for this choice: the max [SkillCandidate.evaluationPoints] across the items, not
              * the sum — owning both base ○ and upgrade ◎ activates only the upgrade, so the base's
@@ -384,8 +388,17 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             // Groups were walked backwards above, so reverse to emit in selection order with
             // base-before-upgrade within each chain.
             for (choice in pickedGroups.asReversed()) {
+                var previousChainPrice = 0
                 for (item in choice.items) {
-                    result.add(item.name to item.price)
+                    // Chain members carry cumulative screen prices, so emit each link's increment
+                    // over the previous one - that is what the screen will charge once the earlier
+                    // links are owned, and it is what the execution loop's affordability gate
+                    // compares against its live remaining budget. Pair prices now sum to the
+                    // choice's DP cost. Singletons emit their full price (previous = 0). Clamped:
+                    // prices come from OCR, and a misread that breaks the cumulative invariant
+                    // must not emit a negative price into the affordability gate.
+                    result.add(item.name to (item.price - previousChainPrice).coerceAtLeast(0))
+                    previousChainPrice = item.price
                 }
             }
             return result

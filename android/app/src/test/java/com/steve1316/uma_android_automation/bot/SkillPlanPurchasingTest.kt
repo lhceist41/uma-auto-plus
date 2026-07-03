@@ -1,7 +1,10 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.KnapsackChoice
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.SkillCandidate
+import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.buildKnapsackGroups
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.calculateCommonPurchases
+import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.calculateOptimizeKnapsackPurchases
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.calculateOptimizeRankPurchases
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.calculateSkillPurchases
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.isDoubleCircleUpgrade
@@ -54,6 +57,48 @@ class SkillPlanPurchasingTest {
         fun `high eval points with low price gives high ratio`() {
             val skill = SkillCandidate(name = "Bargain", price = 50, evaluationPoints = 200)
             assertEquals(4.0, skill.evaluationPointRatio, 0.001)
+        }
+    }
+
+    // =========================================================================
+    // Knapsack chain costing
+    // =========================================================================
+
+    @Nested
+    @DisplayName("Knapsack chain costing")
+    inner class KnapsackChainCostingTests {
+        // A chain member's screen price includes its unpurchased prerequisites, so the gold's
+        // 360 already contains the base's 200 (160 top-up).
+        private val base = SkillCandidate(name = "Corner Recovery", price = 200, evaluationPoints = 180)
+        private val gold = SkillCandidate(name = "Swinging Maestro", price = 360, evaluationPoints = 450)
+        private val chains =
+            mapOf(
+                "Corner Recovery" to listOf("Corner Recovery", "Swinging Maestro"),
+                "Swinging Maestro" to listOf("Corner Recovery", "Swinging Maestro"),
+            )
+
+        @Test
+        fun `chain combo cost equals the on-screen combined price`() {
+            assertEquals(360, KnapsackChoice(listOf(base, gold)).cost)
+        }
+
+        @Test
+        fun `singleton choice cost is its own price`() {
+            assertEquals(200, KnapsackChoice(listOf(base)).cost)
+        }
+
+        @Test
+        fun `DP affords a chain combo at its on-screen price and emits incremental prices`() {
+            val groups = buildKnapsackGroups(listOf(base, gold), chains)
+            val plan = calculateOptimizeKnapsackPurchases(groups, budget = 360)
+            assertEquals(listOf("Corner Recovery" to 200, "Swinging Maestro" to 160), plan)
+        }
+
+        @Test
+        fun `combo is skipped when budget only covers the base`() {
+            val groups = buildKnapsackGroups(listOf(base, gold), chains)
+            val plan = calculateOptimizeKnapsackPurchases(groups, budget = 250)
+            assertEquals(listOf("Corner Recovery" to 200), plan)
         }
     }
 
