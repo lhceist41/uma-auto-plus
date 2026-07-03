@@ -275,6 +275,12 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     private var consecutiveUnknownScreenCount: Int = 0
 
+    /** Consecutive process() ticks that resolved as "a dialog was handled". A dialog normally
+     * clears in a tick or two; a long streak means the taps are not landing (MuMu's
+     * enabled-but-dispatch-dead mode) while the dialog stays up. Mirrors the
+     * recoverFromUnknownScreen 13/19/25 ladder. Reset on any non-dialog tick. */
+    private var consecutiveDialogTicks: Int = 0
+
     /**
      * Upper bound on [consecutiveUnknownScreenCount] before the bot stops with a diagnostic rather
      * than loop on an unrecognized screen forever. ~25 ticks is roughly a minute of being stuck.
@@ -2756,11 +2762,36 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     override fun process(): TaskResult? {
         try {
+            // The emulator can wipe the Accessibility grant mid-run (gestures silently die while
+            // screen reads keep working - every historical "stall" traced back to this). Detect
+            // and self-heal BEFORE the dialog and main-screen ticks: both early-return, so a
+            // gesture-death while a dialog was up previously looped unbounded (taps no-op, the
+            // dialog never closes) all the way to the runtime cap.
+            if (!game.ensureAccessibilityService()) {
+                throw InterruptedException(
+                    "The Accessibility Service was disabled mid-run and could not be restored automatically. " +
+                        "Re-enable it in the Android settings or grant WRITE_SECURE_SETTINGS (see log).",
+                )
+            }
+
             // We always check for dialogs first.
             if (tryHandleAllDialogs()) {
                 consecutiveUnknownScreenCount = 0
+                consecutiveDialogTicks++
+                // The string-only ensure above cannot see MuMu's enabled-but-dispatch-dead mode.
+                // A long dialog streak is that mode's signature here: hard-rebind at the ladder
+                // points, and stop cleanly rather than spin to the runtime cap.
+                if (consecutiveDialogTicks == 13 || consecutiveDialogTicks == 19) {
+                    MessageLog.w(TAG, "[WARN] process:: $consecutiveDialogTicks consecutive dialog ticks without progress - forcing an accessibility service rebind.")
+                    game.forceRebindAccessibilityService()
+                } else if (consecutiveDialogTicks >= 25) {
+                    throw InterruptedException(
+                        "Dialog handling made no progress for $consecutiveDialogTicks ticks - gestures are likely dead and could not be revived.",
+                    )
+                }
                 return null
             }
+            consecutiveDialogTicks = 0
 
             if (handleMainScreen()) {
                 consecutiveUnknownScreenCount = 0
@@ -2772,16 +2803,6 @@ abstract class Campaign(game: Game) : Task(game) {
             // accumulate toward the stuck-screen stop.
             var detectedKnownScreen = true
             bMiscBackPressedThisTick = false
-
-            // The emulator can wipe the Accessibility grant mid-run (gestures silently die while
-            // screen reads keep working - every historical "stall" traced back to this). Detect
-            // and self-heal before acting on this tick.
-            if (!game.ensureAccessibilityService()) {
-                throw InterruptedException(
-                    "The Accessibility Service was disabled mid-run and could not be restored automatically. " +
-                        "Re-enable it in the Android settings or grant WRITE_SECURE_SETTINGS (see log).",
-                )
-            }
 
             if (checkTrainingEventScreen()) {
                 // If the bot is at the Training Event screen, that means there are selectable options for rewards.

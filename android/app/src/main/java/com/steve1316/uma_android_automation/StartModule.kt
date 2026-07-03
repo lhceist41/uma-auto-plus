@@ -1352,6 +1352,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     // Mirror the in-flight run number for the mismatch guard's resync cursor math.
                     queueCurrentRun = i
 
+                    // Re-arm the wake lock's safety timeout at every run boundary - the session
+                    // acquire's 6h cap otherwise expires silently partway through a long queue.
+                    Game.acquireWakeLock(context)
+
                     if (enableRunQueue) {
                         // Reset log stream mute for each subsequent run.
                         LogStreamServer.resetMute()

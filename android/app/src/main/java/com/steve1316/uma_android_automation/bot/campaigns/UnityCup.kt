@@ -89,8 +89,15 @@ class UnityCup(game: Game) : Campaign(game) {
                     // If the tutorial is detected, select the second option to close it.
                     MessageLog.i(TAG, "\n[UNITY_CUP] Detected tutorial for Unity Cup. Closing it now...")
                     val trainingOptionLocations: ArrayList<Point> = IconTrainingEventHorseshoe.findAll(game.imageUtils)
-                    game.gestureUtils.tap(trainingOptionLocations[1].x, trainingOptionLocations[1].y, IconTrainingEventHorseshoe.template.path)
-                    true
+                    if (trainingOptionLocations.size >= 2) {
+                        game.gestureUtils.tap(trainingOptionLocations[1].x, trainingOptionLocations[1].y, IconTrainingEventHorseshoe.template.path)
+                        true
+                    } else {
+                        // A partial render or capture can match fewer than 2 horseshoes; indexing
+                        // [1] crashed the run. Stay un-dismissed and retry on the next tick.
+                        MessageLog.w(TAG, "[WARN] handleTrainingEvent:: Tutorial header detected but only ${trainingOptionLocations.size} option(s) found. Retrying next tick.")
+                        false
+                    }
                 } else {
                     MessageLog.i(TAG, "\n[UNITY_CUP] Tutorial must have already been dismissed.")
                     super.handleTrainingEvent()

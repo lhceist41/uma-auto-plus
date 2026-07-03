@@ -504,7 +504,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
          * @param training The [TrainingOption] to score.
          * @return A score representing the relationship-building value.
          */
-        fun scoreFriendshipTraining(training: TrainingOption): Double {
+        fun scoreFriendshipTraining(training: TrainingOption, scenario: String = ""): Double {
             // Ignore the blacklist in favor of making sure we build up the relationship bars as fast as possible.
             MessageLog.v(TAG, "\n[TRAINING] Starting process to score ${training.name} Training with a focus on building relationship bars.")
 
@@ -520,7 +520,13 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         "blue" -> 2.5
                         else -> 0.0
                     }
-                score += contribution
+                // Mirror calculateRelationshipScore's trainer-support weighting. Without these the
+                // Akikawa 1.25x / trainer 1.15x bonuses were structurally inert during the Junior
+                // bonding phase - the one window where bond-building choices matter most.
+                val trainerSupportBonus = if (bar.isTrainerSupport) 1.15 else 1.0
+                val akikawaBondingBonus =
+                    if (scenario == "Trackblazer" && bar.isTrainerSupport && bar.trainerName == "Yayoi Akikawa") 1.25 else 1.0
+                score += contribution * trainerSupportBonus * akikawaBondingBonus
             }
 
             // Energy-economy tiebreaker (see BONDING_ENERGY_TIEBREAK): on an equal bond score prefer the
@@ -2198,8 +2204,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
         } else if (campaign.date.bIsPreDebut || campaign.date.year == DateYear.JUNIOR) {
             // Junior Year: Focus on building relationship bars.
             scoringMode = "Friendship (Pre-Debut/Junior)"
-            trainingScores = trainingMap.values.associateWith { scoreFriendshipTraining(it) }
-            skippedScores = skippedTrainingMap.values.associateWith { scoreFriendshipTraining(it) }
+            trainingScores = trainingMap.values.associateWith { scoreFriendshipTraining(it, trainingConfig.scenario) }
+            skippedScores = skippedTrainingMap.values.associateWith { scoreFriendshipTraining(it, trainingConfig.scenario) }
         } else {
             // For Year 2+ as a fallback, use ratio-based stat efficiency scoring.
             scoringMode = "Stat Efficiency (Year 2+)"

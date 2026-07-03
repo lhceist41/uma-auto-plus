@@ -217,7 +217,14 @@ class Game(val myContext: Context) {
         fun acquireWakeLock(context: Context) {
             try {
                 val existing = wakeLock
-                if (existing != null && existing.isHeld) return
+                if (existing != null && existing.isHeld) {
+                    // Non-reference-counted: re-acquiring only re-arms the safety timeout. Called
+                    // at every run boundary so a queue longer than one timeout window never
+                    // silently loses its OOM protection mid-session.
+                    existing.acquire(WAKE_LOCK_TIMEOUT_MS)
+                    Log.i(TAG, "[WAKELOCK] Re-armed the ${WAKE_LOCK_TIMEOUT_MS / 1000 / 60}m safety timeout.")
+                    return
+                }
                 val pm = context.applicationContext.getSystemService(Context.POWER_SERVICE) as? PowerManager
                 if (pm == null) {
                     Log.w(TAG, "[WAKELOCK] PowerManager unavailable; cannot acquire wake lock.")
