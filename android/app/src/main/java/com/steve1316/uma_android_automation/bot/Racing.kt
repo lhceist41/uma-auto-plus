@@ -1750,11 +1750,18 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     retriesThisRace < maxRetriesPerRace &&
                     !LabelCongratulations.check(game.imageUtils, sourceBitmap = bitmap) &&
                     ButtonTryAgainAlt.checkDisabled(game.imageUtils, sourceBitmap = bitmap) == false -> {
-                    MessageLog.i(TAG, "[RACE] Mandatory race finished below 1st place. Retrying for the win...")
-                    if (ButtonTryAgainAlt.click(game.imageUtils, sourceBitmap = bitmap)) {
-                        game.wait(3.0)
-                        retriesThisRace++
-                        raceRetries--
+                    // The banner can lag the captured frame; a stale miss here burns an alarm
+                    // clock retrying a race that was already won, so re-check a fresh capture.
+                    game.wait(0.5)
+                    if (LabelCongratulations.check(game.imageUtils)) {
+                        MessageLog.i(TAG, "[RACE] Congratulations banner appeared on re-check. Not retrying a won mandatory race.")
+                    } else {
+                        MessageLog.i(TAG, "[RACE] Mandatory race finished below 1st place. Retrying for the win...")
+                        if (ButtonTryAgainAlt.click(game.imageUtils)) {
+                            game.wait(3.0)
+                            retriesThisRace++
+                            raceRetries--
+                        }
                     }
                 }
 
@@ -2911,6 +2918,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     lastRaceGrade = raceData.grade
                     if (lastRaceFans == 0) lastRaceFans = raceData.fans
                     MessageLog.i(TAG, "[RACE] Detected mandatory race \"${raceData.name}\" (Grade: ${raceData.grade}).")
+                } else {
+                    MessageLog.w(TAG, "[RACE] Prediction icon found but race lookup failed (OCR read \"$raceName\"). Race grade stays unknown.")
                 }
             } else {
                 MessageLog.i(TAG, "[RACE] No prediction icon found on mandatory race screen. Race grade stays unknown.")

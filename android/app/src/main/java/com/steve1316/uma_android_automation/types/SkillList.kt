@@ -545,6 +545,14 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
                 }
             if (candidateGlyph.isNotEmpty() && baseName.isNotEmpty() && game.skillDatabase.checkSkillName("$baseName $candidateGlyph") != null) {
                 iconChar = candidateGlyph
+            } else if (baseName != skillName && baseName.isNotEmpty() &&
+                game.skillDatabase.checkSkillName(skillName) == null &&
+                game.skillDatabase.checkSkillName(baseName) != null
+            ) {
+                // Recovery failed but the stripped base is a real skill while the raw read is
+                // not: the trailing letter was OCR noise, so return the base name as documented
+                // instead of the noisy read.
+                skillName = baseName
             }
         }
 

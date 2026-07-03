@@ -1417,13 +1417,19 @@ class Trackblazer(game: Game) : Campaign(game) {
     private fun clickItemPlusButton(itemName: String, entry: ScrollListEntry, logMessage: String, nextInventory: MutableMap<String, Int>, recheck: Boolean = false, reason: String? = null): Boolean {
         val bitmapToUse: Bitmap =
             if (recheck) {
+                // Let the dialog finish updating button states (e.g. cupcakes enabling right
+                // after Royal Kale Juice is queued) before capturing the fresh crop.
+                game.wait(0.3)
                 val source = game.imageUtils.getSourceBitmap()
                 game.imageUtils.createSafeBitmap(source, entry.bbox.x, entry.bbox.y, entry.bbox.w, entry.bbox.h, "recheck item")
             } else {
                 entry.bitmap
             } ?: return false
 
-        if (ButtonSkillUp.checkDisabled(game.imageUtils, bitmapToUse) == true) return false
+        if (ButtonSkillUp.checkDisabled(game.imageUtils, bitmapToUse) == true) {
+            if (recheck) MessageLog.w(TAG, "[TRACKBLAZER] \"$itemName\" still reads disabled on recheck. Skipping it.")
+            return false
+        }
 
         val plusPoint = ButtonSkillUp.findImageWithBitmap(game.imageUtils, bitmapToUse)
         if (plusPoint != null) {
