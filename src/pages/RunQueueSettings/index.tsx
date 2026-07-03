@@ -229,6 +229,15 @@ const RunQueueSettings = () => {
                                 />
 
                                 <CustomCheckbox
+                                    searchId="run-queue-spark-reroll"
+                                    checked={runQueueSettings.enableSparkReroll}
+                                    onCheckedChange={(checked) => updateSetting("enableSparkReroll", checked)}
+                                    label="Auto-Reroll Sparks (30 TP)"
+                                    description="On the career-end Sparks screen, spend 30 TP to reroll once when the build's core stat finished at 1100+ and the stat spark is not already a 3-star of that stat (3-star odds plateau around 10% at 1100+). Keeps the redrawn set. Watch the first firing - this spends TP."
+                                    className="mt-4"
+                                />
+
+                                <CustomCheckbox
                                     searchId="run-queue-event-boost"
                                     checked={runQueueSettings.enableEventBoost}
                                     onCheckedChange={(checked) => updateSetting("enableEventBoost", checked)}

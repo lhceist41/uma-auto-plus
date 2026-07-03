@@ -2,6 +2,7 @@ package com.steve1316.uma_android_automation
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Color
 import com.steve1316.automation_library.utils.BotService
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
@@ -122,6 +123,9 @@ class CareerLaunchNavigator(private val context: Context) {
 
         /** Post-career result screens with Next/OK/Close/Confirm buttons. */
         POST_RUN_RESULTS,
+
+        /** Career-end SPARKS screen: the generated spark set with "Reroll Sparks" + Confirm. */
+        SPARKS_SCREEN,
 
         /** "Career Complete" dialog with "To Home" / "Edit Team" buttons. */
         CAREER_COMPLETE_DIALOG,
@@ -602,6 +606,13 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.CAREER_COMPLETE_DIALOG
         }
 
+        // Career-end SPARKS screen - the Reroll Sparks button is unique to it. Must precede the
+        // generic POST_RUN_RESULTS match: this screen also shows a green Confirm, and the reroll
+        // decision has to happen before anything clicks it.
+        if (ButtonRerollSparks.check(iu, sourceBitmap = bitmap)) {
+            return LaunchScreenState.SPARKS_SCREEN
+        }
+
         // Home screen - CAREER button visible (the strongest home-screen signal).
         // We do NOT use ButtonMenuBarHomeSelected alone because that menu bar appears on
         // many intermediate screens (Scenario Select, Trainee Select, etc.) that are reached
@@ -859,6 +870,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     recommendedAction = "Start the bot while on this screen - the startup career-end guard hands it to the campaign, which buys skills and then completes the career.",
                 )
             LaunchScreenState.COMPLETE_CAREER_CONFIRMATION -> handleCompleteCareerConfirmation()
+            LaunchScreenState.SPARKS_SCREEN -> handleSparksScreen()
             LaunchScreenState.POST_RUN_RESULTS -> handlePostRunResults()
             LaunchScreenState.CAREER_COMPLETE_DIALOG -> handleCareerCompleteDialog()
             LaunchScreenState.TRAINEE_SELECT_SCREEN -> handleTraineeSelectScreen()
@@ -989,6 +1001,124 @@ class CareerLaunchNavigator(private val context: Context) {
      * Detection: template-matched (Next, OK, Confirm, Close, CompleteCareer).
      * Transition: template-matched button click.
      */
+
+    /** One-shot flag: the reroll ran (or was declined at the dialog) this handoff. The second
+     * SPARKS_SCREEN entry after a reroll must Confirm, never reroll again. */
+    private var sparksRerollAttempted = false
+
+    /**
+     * Handles the career-end SPARKS screen.
+     *
+     * Default (setting off): click Confirm and keep the generated set - the pre-reroll behavior.
+     * With the opt-in `runQueue.enableSparkReroll`, the reroll gate runs: reroll once iff the
+     * build's core stat finished >= 1100 (spark star odds plateau there) AND the stat spark
+     * (row 1, the blue bar) is not already a 3-star of that stat, AND the Confirm Reroll dialog
+     * offers the spend (it does not when TP < 30). The reroll is a pure independent redraw; the
+     * bot keeps the redrawn set (it only rerolls sets that failed the gate) and saves a
+     * screenshot of the post-reroll state - the keep-original toggle is uncaptured, so choosing
+     * the better of the two sets is a follow-up once those pixels exist.
+     */
+    private fun handleSparksScreen(): TransitionResult {
+        val bitmap = iu.getSourceBitmap()
+        val enableReroll = SettingsHelper.getBooleanSetting("runQueue", "enableSparkReroll", false)
+
+        if (sparksRerollAttempted) {
+            // Post-reroll: log + archive what the redraw produced, then Confirm to keep it.
+            runCatching {
+                iu.saveBitmap(filename = "reroll_result_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}", fullRes = true)
+            }
+            val rerolled = readSparkStatRow(bitmap)
+            MessageLog.i(TAG, "[REROLL] Rerolled stat spark: ${rerolled?.let { "${it.first} ${it.second}-star" } ?: "unreadable"}. Keeping the redrawn set.")
+            return confirmSparks(bitmap)
+        }
+        if (!enableReroll) {
+            return confirmSparks(bitmap)
+        }
+
+        // The build's core stat, same resolution the deck checks use; its final value comes from
+        // the ledger-time snapshot (the Campaign instance is gone by the time the navigator runs).
+        val targetStat =
+            SettingsHelper.getStringArraySetting("training", "focusOnSparkStatTarget").firstOrNull()
+                ?: SettingsHelper.getStringArraySetting("training", "statPrioritization").firstOrNull()
+        val targetValue = targetStat?.let { StartModule.lastCareerEndStats?.get(it) }
+        val statRow = readSparkStatRow(bitmap)
+        MessageLog.i(
+            TAG,
+            "[REROLL] Gate: core stat ${targetStat ?: "unresolved"}=${targetValue ?: "unknown"}, stat spark = ${statRow?.let { "${it.first} ${it.second}-star" } ?: "unreadable"}.",
+        )
+
+        if (targetStat == null || targetValue == null || targetValue < 1100) {
+            MessageLog.i(TAG, "[REROLL] Core stat below 1100 or unknown - 3-star odds too low to spend 30 TP. Keeping the original sparks.")
+            return confirmSparks(bitmap)
+        }
+        if (statRow == null) {
+            MessageLog.w(TAG, "[REROLL] Stat spark row unreadable. Keeping the original sparks rather than reroll blind.")
+            return confirmSparks(bitmap)
+        }
+        if (statRow.second >= 3 && statRow.first.contains(targetStat, ignoreCase = true)) {
+            MessageLog.i(TAG, "[REROLL] Original set already has a 3-star $targetStat spark. Keeping it.")
+            return confirmSparks(bitmap)
+        }
+
+        if (!ButtonRerollSparks.click(iu, sourceBitmap = bitmap)) {
+            MessageLog.w(TAG, "[REROLL] Failed to click Reroll Sparks. Keeping the original set.")
+            return confirmSparks(bitmap)
+        }
+        waitSafe(1.5)
+        // The dialog's GREEN button is the SPEND action - the one career-end screen where green
+        // is not a safe advance. This click is the deliberate 30 TP spend.
+        if (!ButtonRerollSparksConfirm.click(iu)) {
+            MessageLog.w(TAG, "[REROLL] Confirm Reroll dialog did not offer the spend (out of TP, or the dialog never opened). Keeping the original set.")
+            ButtonCancel.click(iu)
+            sparksRerollAttempted = true
+            waitSafe(1.0)
+            return TransitionResult.Continue
+        }
+        MessageLog.i(TAG, "[REROLL] Spent 30 TP to reroll sparks: $targetStat=$targetValue with a ${statRow.second}-star ${statRow.first} spark cleared the gate.")
+        sparksRerollAttempted = true
+        waitSafe(4.0)
+        return TransitionResult.Continue
+    }
+
+    /** Clicks Confirm on the SPARKS screen; falls back to re-detection when the click misses. */
+    private fun confirmSparks(bitmap: Bitmap): TransitionResult {
+        if (!ButtonConfirm.click(iu, sourceBitmap = bitmap)) {
+            MessageLog.w(TAG, "[NAV] Confirm not clickable on the SPARKS screen. Re-detecting...")
+        }
+        waitSafe(1.5)
+        return TransitionResult.Continue
+    }
+
+    /**
+     * Reads the stat spark (row 1 of the SPARKS list, the blue bar): OCR'd name + gold star
+     * count. Fixed top-anchored geometry measured on 1080-wide captures; the star slots sit at
+     * known x offsets and classify by color (gold vs grey). Returns null when row 1 is not the
+     * expected blue bar (layout drift, wrong screen) so callers keep the original set.
+     */
+    private fun readSparkStatRow(bitmap: Bitmap): Pair<String, Int>? {
+        fun meanChannel(cx: Int, cy: Int, extract: (Int) -> Int): Int {
+            var sum = 0
+            for (dy in -2..2) for (dx in -2..2) sum += extract(bitmap.getPixel(cx + dx, cy + dy))
+            return sum / 25
+        }
+        if (bitmap.width < 1000 || bitmap.height < 400) return null
+        // Row-1 bar sample right of the name, left of the stars: blue-dominant on the stat row.
+        val barB = meanChannel(770, 307, Color::blue)
+        val barR = meanChannel(770, 307, Color::red)
+        if (barB <= 180 || barR >= 140) return null
+
+        val goldStars =
+            listOf(846, 894, 941).count { x ->
+                meanChannel(x, 307, Color::red) > 200 && meanChannel(x, 307, Color::blue) < 120
+            }
+        val name =
+            iu.performOCROnRegion(
+                bitmap, 110, 265, 650, 84,
+                useThreshold = false, useGrayscale = true, ocrEngine = "mlkit", debugName = "sparkStatRow",
+            ).trim()
+        if (name.isEmpty()) return null
+        return Pair(name, goldStars)
+    }
 
     /**
      * Handles the "Restore TP?" confirmation.

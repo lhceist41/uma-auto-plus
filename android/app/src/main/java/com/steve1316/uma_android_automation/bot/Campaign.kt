@@ -2716,6 +2716,15 @@ abstract class Campaign(game: Game) : Task(game) {
             }.replace(" ", "_")
         val scenarioToken = game.scenario.ifEmpty { "unknown" }.replace(" ", "_")
         val st = trainee.stats
+        // Snapshot for the career-end SPARKS screen: the reroll gate reads the final stat values
+        // after this Campaign instance is gone. Keyed by the statPrioritization display names.
+        StartModule.lastCareerEndStats = mapOf(
+            "Speed" to st.speed,
+            "Stamina" to st.stamina,
+            "Power" to st.power,
+            "Guts" to st.guts,
+            "Wit" to st.wit,
+        )
         val outcome = classifyCareerOutcome(result.code, careerForceEnded)
         return buildString {
             append("[CAREER_END] result=").append(result.code.name.removePrefix("TASK_RESULT_"))

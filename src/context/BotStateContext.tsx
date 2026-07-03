@@ -236,6 +236,10 @@ export interface Settings {
         // Doubles event rewards (and the TP cost) - only worth it while a TP event is live; turn
         // it off once the event ends. The Max TP restore above covers the doubled cost.
         enableEventBoost: boolean
+        // On the career-end SPARKS screen, spend 30 TP to reroll once when the build's core stat
+        // finished >= 1100 and the stat spark is not already a 3-star of that stat. The redrawn
+        // set is kept. OFF by default - it spends TP and should be watched on its first firing.
+        enableSparkReroll: boolean
         // Tick "Include Guests" on the Confirm Auto-Select legacy dialog so Auto-Select may borrow a
         // guest (rental) parent. Borrowing a guest costs in-game monies. OFF by default -> Auto-Select
         // uses only OWNED umas (free), which suits farming your own spark parents. New players with weak
@@ -660,6 +664,7 @@ export const defaultSettings: Settings = {
         autoFillSupports: true,
         enableTpRestoreWithItems: false,
         enableEventBoost: false,
+        enableSparkReroll: false,
         enableLegacyIncludeGuests: false,
         enableTraineeRotation: false,
         switchEveryNRuns: 3,

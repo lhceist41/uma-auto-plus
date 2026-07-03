@@ -68,6 +68,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         @Volatile
         var queueStopReason: String? = null
 
+        /** Final stat values of the last completed career, snapshotted when the [CAREER_END]
+         * ledger line is emitted. The sparks reroll gate reads them after the Campaign instance
+         * is gone (the navigator owns the career-end SPARKS screen). */
+        @Volatile
+        var lastCareerEndStats: Map<String, Int>? = null
+
         /** When true, the current run should be skipped and the queue should advance. */
         @Volatile
         var queueSkipRequested: Boolean = false

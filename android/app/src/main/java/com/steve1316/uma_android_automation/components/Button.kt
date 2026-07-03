@@ -375,6 +375,20 @@ object ButtonCloseWide : ButtonInterface {
     override val template = Template("components/button/close_wide", region = Region.bottomHalf)
 }
 
+/** "Reroll Sparks / Consumes 30 TP" on the career-end SPARKS screen - unique to that screen,
+ * so it doubles as the screen's detection anchor. Dimmed under the Confirm Reroll dialog
+ * (scores ~0.69 there), so a fresh match implies the dialog is NOT up. */
+object ButtonRerollSparks : ButtonInterface {
+    override val template = Template("components/button/reroll_sparks", region = Region.bottomHalf)
+}
+
+/** The GREEN "Reroll Sparks" on the Confirm Reroll dialog. This is the SPEND action - the one
+ * career-end screen where green does not mean safe-advance. Only the explicit reroll flow may
+ * click it; it must never join a generic green-button policy. */
+object ButtonRerollSparksConfirm : ButtonInterface {
+    override val template = Template("components/button/reroll_sparks_confirm", region = Region.bottomHalf)
+}
+
 object ButtonWatchConcert : ButtonInterface {
     override val template = Template("components/button/watch_concert", region = Region.bottomHalf)
 }
