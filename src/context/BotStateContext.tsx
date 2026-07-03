@@ -118,6 +118,10 @@ export interface Settings {
         disableTrainingOnMaxedStat: boolean
         focusOnSparkStatTarget: string[]
         enableRainbowTrainingBonus: boolean
+        // Year 2+: multiply a rainbow-less training's score by up to 1.6x when it has near-max
+        // (green/blue) friendship bars, anticipating the rainbow they are about to become.
+        // Capped below the real 2.0x rainbow multiplier so anticipation never outranks one.
+        enablePrioritizeNearMaxFriendship: boolean
         preferredDistanceOverride: string
         mustRestBeforeSummer: boolean
         enableRiskyTraining: boolean
@@ -565,6 +569,9 @@ export const defaultSettings: Settings = {
         // gains compound with Megaphones + Ankle Weights. Only applies Classic year
         // onward (Junior has no rainbows).
         enableRainbowTrainingBonus: true,
+        // Anticipatory rainbow multiplier (Year 2+): favor trainings whose friendship bars are
+        // about to turn rainbow-capable, up to 1.6x. Ported from upstream with its default ON.
+        enablePrioritizeNearMaxFriendship: true,
         preferredDistanceOverride: "Auto",
         // Force a rest the turn before summer camp begins so the trainee enters camp at full
         // energy and gets the camp's high-value rainbow turns at peak return. Without this the

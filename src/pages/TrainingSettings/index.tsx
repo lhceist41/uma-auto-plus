@@ -78,6 +78,7 @@ const TrainingSettings = () => {
         maximumFailureChance,
         disableTrainingOnMaxedStat,
         enableRainbowTrainingBonus,
+        enablePrioritizeNearMaxFriendship,
         preferredDistanceOverride,
         mustRestBeforeSummer,
         enableRiskyTraining,
@@ -653,6 +654,17 @@ const TrainingSettings = () => {
                                 description="When enabled (Year 2+), rainbow trainings receive a significant bonus to their score, making them more likely to be selected. This is highly dependent on device configuration and may result in false positives."
                                 className="my-2"
                                 searchId="enable-rainbow-training-bonus"
+                            />
+                        </View>
+
+                        <View style={styles.section}>
+                            <CustomCheckbox
+                                checked={enablePrioritizeNearMaxFriendship}
+                                onCheckedChange={(checked) => updateTrainingSetting("enablePrioritizeNearMaxFriendship", checked)}
+                                label="Prioritize Near-Max Friendship Bars"
+                                description="When enabled (Year 2+), trainings without a rainbow get up to a 1.6x score boost based on how full their friendship bars are, anticipating the rainbow they are about to unlock. Always stays below the real rainbow bonus so an actual rainbow wins."
+                                className="my-2"
+                                searchId="prioritize-near-max-friendship"
                             />
                         </View>
 

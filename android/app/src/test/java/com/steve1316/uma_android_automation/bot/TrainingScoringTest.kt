@@ -161,6 +161,37 @@ class TrainingScoringTest {
     private fun bar(color: String, fill: Double): BarFillResult = BarFillResult(StatName.SPEED, fill, 2, color)
 
     @Test
+    @DisplayName("Anticipatory rainbow multiplier applies in Year 2+ with near-max bars and no real rainbow")
+    fun testAnticipatoryRainbowMultiplier() {
+        val classicDate = GameDate(year = DateYear.CLASSIC, month = DateMonth.JANUARY, phase = DatePhase.EARLY)
+        val training = createDefaultTrainingOption(relationshipBars = arrayListOf(bar("green", 80.0), bar("blue", 50.0)))
+        val configOn = createDefaultConfig(currentDate = classicDate)
+        val configOff = configOn.copy(enablePrioritizeNearMaxFriendship = false)
+
+        // contributions = 0.8 + 0.5 = 1.3 -> multiplier = 1.0 + min(0.6, 0.2 * 1.3) = 1.26.
+        val scoreOn = calculateRawTrainingScore(configOn, training)
+        val scoreOff = calculateRawTrainingScore(configOff, training)
+        assertTrue(scoreOff > 0.0)
+        assertEquals(scoreOff * 1.26, scoreOn, 0.01)
+
+        // Junior year: never applies even when enabled.
+        val juniorConfig = createDefaultConfig()
+        assertEquals(
+            calculateRawTrainingScore(juniorConfig.copy(enablePrioritizeNearMaxFriendship = false), training),
+            calculateRawTrainingScore(juniorConfig, training),
+            0.001,
+        )
+
+        // A real rainbow suppresses anticipation - the 2.0x real multiplier owns that case.
+        val rainbowTraining = createDefaultTrainingOption(relationshipBars = arrayListOf(bar("green", 80.0)), numRainbow = 1)
+        assertEquals(
+            calculateRawTrainingScore(configOn.copy(enablePrioritizeNearMaxFriendship = false), rainbowTraining),
+            calculateRawTrainingScore(configOn, rainbowTraining),
+            0.001,
+        )
+    }
+
+    @Test
     @DisplayName("Irregular C1: a strong main-stat gain is admitted on its own")
     fun testIrregularC1AdmitsStrongGain() {
         val r = admitIrregularTraining(StatName.SPEED, statGainsToMap(intArrayOf(21, 0, 9, 0, 0)), emptyList(), 0, 0, baseline = 20, year = DateYear.CLASSIC, day = 26, currentMainStat = 400)
