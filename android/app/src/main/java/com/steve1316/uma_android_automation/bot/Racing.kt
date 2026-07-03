@@ -24,6 +24,7 @@ import com.steve1316.uma_android_automation.components.ButtonRaceManual
 import com.steve1316.uma_android_automation.components.ButtonRaces
 import com.steve1316.uma_android_automation.components.ButtonSkip
 import com.steve1316.uma_android_automation.components.ButtonTryAgainAlt
+import com.steve1316.uma_android_automation.components.LabelCongratulations
 import com.steve1316.uma_android_automation.components.ButtonViewResults
 import com.steve1316.uma_android_automation.components.IconRaceAgendaEmpty
 import com.steve1316.uma_android_automation.components.IconRaceDayRibbon
@@ -1623,7 +1624,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      *
      * @return True if the bot completed the race; otherwise false.
      */
-    fun runRaceWithRetries(): Boolean {
+    fun runRaceWithRetries(isMandatory: Boolean = false): Boolean {
         MessageLog.i(TAG, "[RACE] Proceeding to handle the race...")
 
         // Flag used to prevent us from attempting to select a running style after we've already successfully selected a running style once.
@@ -1787,6 +1788,26 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     // Trackblazer Rival Race retry logic even if no popup appeared.
                     MessageLog.i(TAG, "[TRACKBLAZER] Rival Race retry button is available. Retrying once...")
                     bRetriedCurrentRace = true
+                    if (ButtonTryAgainAlt.click(game.imageUtils, sourceBitmap = bitmap)) {
+                        game.wait(3.0)
+                        retriesThisRace++
+                        raceRetries--
+                    }
+                }
+
+                // Mandatory races retry toward 1st place whenever a retry is available (upstream
+                // 0c288332), threaded through our retry accounting: bounded by the per-race cap,
+                // the free alarm-clock count, and the user's alarm-clock policy skip flag - an
+                // unbounded retry on a hopeless race would loop into the purchase dialog forever.
+                // The Congratulations banner means 1st place: never retry a win.
+                isMandatory &&
+                    !disableRaceRetries &&
+                    !bAlarmClockPolicySkippedThisRace &&
+                    raceRetries > 0 &&
+                    retriesThisRace < maxRetriesPerRace &&
+                    !LabelCongratulations.check(game.imageUtils, sourceBitmap = bitmap) &&
+                    ButtonTryAgainAlt.checkDisabled(game.imageUtils, sourceBitmap = bitmap) == false -> {
+                    MessageLog.i(TAG, "[RACE] Mandatory race finished below 1st place. Retrying for the win...")
                     if (ButtonTryAgainAlt.click(game.imageUtils, sourceBitmap = bitmap)) {
                         game.wait(3.0)
                         retriesThisRace++
@@ -2974,8 +2995,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         game.waitForLoading()
 
-        // Skip the race if possible, otherwise run it manually.
-        val raceCompleted = runRaceWithRetries()
+        // Skip the race if possible, otherwise run it manually. Mandatory races retry toward 1st.
+        val raceCompleted = runRaceWithRetries(isMandatory = true)
         val resultsFinalized = finalizeRaceResults()
         val succeeded = raceCompleted && resultsFinalized
 

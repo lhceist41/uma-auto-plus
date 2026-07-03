@@ -220,6 +220,12 @@ object LabelDailySale : ComponentInterface {
     override val template = Template("components/label/daily_sale", region = Region.middle)
 }
 
+/** "Congratulations!" banner shown on a 1st-place race result. Guards the mandatory-race
+ * retry so a win is never retried. */
+object LabelCongratulations : ComponentInterface {
+    override val template = Template("components/label/congratulations", region = Region.topHalf)
+}
+
 /** "Recover TP" header on the TP recharge popup. */
 object LabelRecoverTP : ComponentInterface {
     override val template = Template("components/label/recover_tp", region = Region.topHalf)
