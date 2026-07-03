@@ -62,7 +62,7 @@
             android:launchMode="singleTask"
             android:resizeableActivity="true"
             android:supportsPictureInPicture="true"
-            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|uiMode"
             android:theme="@style/Theme.SplashTheme"
             android:taskAffinity="">
             <intent-filter>

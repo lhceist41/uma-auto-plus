@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { useColorScheme } from "react-native"
+import { colorScheme } from "nativewind"
 import { THEME } from "../lib/theme"
 
 type Theme = "light" | "dark"
@@ -49,14 +50,16 @@ interface ThemeProviderProps {
  */
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     const systemColorScheme = useColorScheme()
-    const [theme, setTheme] = useState<Theme>("light")
+    // Seed the theme from the OS scheme once. An OS scheme flip at runtime no longer re-runs this
+    // (configChanges now includes uiMode so the Activity survives), keeping the in-app toggle
+    // authoritative after launch.
+    const [theme, setTheme] = useState<Theme>(() => (systemColorScheme === "dark" ? "dark" : "light"))
 
-    // Initialize theme based on system preference.
+    // Keep NativeWind's color scheme in lockstep with the in-app theme so className surfaces
+    // (dark: variants) match the JS color tokens instead of fighting over the OS scheme.
     useEffect(() => {
-        if (systemColorScheme) {
-            setTheme(systemColorScheme)
-        }
-    }, [systemColorScheme])
+        colorScheme.set(theme)
+    }, [theme])
 
     /**
      * Toggles between light and dark themes.

@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext, useMemo, useRef } from "react"
+import * as Application from "expo-application"
 import * as FileSystem from "expo-file-system"
 import * as Sharing from "expo-sharing"
 import { startActivityAsync } from "expo-intent-launcher"
@@ -107,6 +108,13 @@ export const useSettingsManager = () => {
      * @returns A promise that resolves when the settings are saved.
      */
     const saveSettingsImmediate = async (newSettings?: Settings) => {
+        // Skip auto/background saves until the initial load completes. Without this guard,
+        // backgrounding the app during bootstrap (a multi-second window on every cold start)
+        // batch-wrote settingsRef's still-default values over the user's entire database.
+        if (!hasLoadedRef.current && !newSettings) {
+            return
+        }
+
         const endTiming = startTiming("settings_manager_save_settings_immediate", "settings")
 
         setIsSaving(true)
@@ -114,6 +122,8 @@ export const useSettingsManager = () => {
         try {
             // Read from the ref to always get the latest settings.
             const localSettings: Settings = newSettings ? newSettings : settingsRef.current
+            // Ensure the DB is open before writing. initialize() is idempotent and awaits any in-flight init.
+            await databaseManager.initialize()
             await databaseManager.saveSettingsBatch(convertSettingsToBatch(localSettings))
             endTiming({ status: "success", hasNewSettings: !!newSettings, immediate: true })
         } catch (error) {
@@ -373,8 +383,9 @@ export const useSettingsManager = () => {
      */
     const openDataDirectory = async () => {
         const endTiming = startTiming("settings_manager_open_data_dir", "settings")
-        // Get the app's package name from the document directory path.
-        const packageName = "com.steve1316.uma_android_automation"
+        // The applicationId (com.lhceist41.uma_auto_plus) differs from the Kotlin namespace, and
+        // the hardcoded namespace here pointed every intent at a nonexistent data directory.
+        const packageName = Application.applicationId ?? "com.lhceist41.uma_auto_plus"
 
         try {
             // Try Storage Access Framework first (recommended for Android 11+).
