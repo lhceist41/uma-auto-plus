@@ -304,6 +304,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     db.beginTransaction()
                     try {
                         for ((category, key, value) in rows) {
+                            // Device-level categories must never ride a per-trainee snapshot: stale
+                            // debug rows silently reverted the user's Debug Mode toggle (and OCR
+                            // tuning) at every run start while the UI kept showing it enabled.
+                            // Skipped on apply as well as build so old snapshots stay harmless.
+                            if (category == "debug") continue
                             db.execSQL(
                                 "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
                                 arrayOf(category, key, value),

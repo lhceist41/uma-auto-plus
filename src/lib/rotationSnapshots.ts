@@ -39,7 +39,9 @@ export interface BuildRotationResult {
 // `discord` is global config (one webhook for the user, not per-trainee) and holds the bot token -
 // snapshotting it duplicated the secret into a rot{i}_discord row for every trainee. Excluded so the
 // live discord rows are left untouched at a switch (same as runQueue/queueState).
-const SNAPSHOT_DENYLIST = new Set(["runQueue", "queueState", "discord"])
+// `debug` is device/session-level (Debug Mode, OCR tuning, test flags): stale snapshot rows kept
+// reverting the user's Debug Mode toggle at every run start while the UI still showed it enabled.
+const SNAPSHOT_DENYLIST = new Set(["runQueue", "queueState", "discord", "debug"])
 
 // `category.key` rows that are static reference data, identical across every trainee: the bundled
 // event databases (written at bootstrap by useBootstrap.populateEventData) and the bulk race
