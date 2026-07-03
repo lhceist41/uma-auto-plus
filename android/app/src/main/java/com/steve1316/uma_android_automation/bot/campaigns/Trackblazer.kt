@@ -713,7 +713,6 @@ class Trackblazer(game: Game) : Campaign(game) {
                 }
 
                 racing.lastRaceGrade = raceData.grade
-                racing.lastRaceDistance = raceData.trackDistance
                 racing.lastRaceIsRival = raceData.isRival
                 game.tap(suitableRaceLocation.x, suitableRaceLocation.y, IconRaceListPredictionDoubleStar.template.path, ignoreWaiting = true)
                 game.wait(0.5)

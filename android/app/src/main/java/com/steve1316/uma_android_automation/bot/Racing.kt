@@ -200,9 +200,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     var lastRaceGrade: RaceGrade? = null
     var lastRaceFans: Int = 0
 
-    /** Tracks the distance of the last race that was selected. */
-    var lastRaceDistance: TrackDistance? = null
-
     /** Tracks if the last race selected was a Rival Race. */
     var lastRaceIsRival: Boolean = false
 
@@ -231,15 +228,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
     /** The user's originally selected race strategy. */
     internal val userSelectedOriginalStrategy = SettingsHelper.getStringSetting("racing", "originalRaceStrategy")
-
-    /** Whether per-distance strategy mode is enabled. */
-    private val enablePerDistanceStrategy = SettingsHelper.getBooleanSetting("racing", "enablePerDistanceStrategy")
-
-    /** Per-distance Junior Year strategies, keyed by distance name (Short, Mile, Medium, Long). */
-    private val juniorYearPerDistanceStrategies: Map<String, String> = loadPerDistanceStrategies("juniorYearPerDistanceStrategies")
-
-    /** Per-distance Original strategies, keyed by distance name (Short, Mile, Medium, Long). */
-    private val originalPerDistanceStrategies: Map<String, String> = loadPerDistanceStrategies("originalPerDistanceStrategies")
 
     /** Whether the Junior Year strategy override has been applied. */
     private var bHasSetStrategyJunior: Boolean = false
@@ -1518,8 +1506,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val bShouldSetStrategyOriginal = isPastJuniorYear && bHasSetStrategyJunior && !bHasSetStrategyOriginal
 
         when {
-            // Per-distance mode requires setting strategy before every race since different distances may have different strategies.
-            enablePerDistanceStrategy -> MessageLog.i(TAG, "[RACE] Per-distance strategy enabled. Setting strategy for current race.")
             bShouldSetStrategyJunior -> MessageLog.i(TAG, "[RACE] Junior Year detected. Applying Junior race strategy override: $juniorYearRaceStrategy")
             bShouldSetStrategyOriginal -> MessageLog.i(TAG, "[RACE] Past Junior Year detected. Reverting to original race strategy: $userSelectedOriginalStrategy")
             !campaign.trainee.bHasSetRunningStyle -> MessageLog.i(TAG, "[RACE] Setting initial race strategy for unknown date.")
@@ -1567,56 +1553,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
-     * Loads per-distance strategy settings from a JSON object stored in SharedPreferences.
-     *
-     * @param settingKey The key for the per-distance strategies setting.
-     * @return A map of distance name to strategy string.
-     */
-    private fun loadPerDistanceStrategies(settingKey: String): Map<String, String> {
-        return try {
-            val jsonStr = SettingsHelper.getStringSetting("racing", settingKey)
-            if (jsonStr.isBlank()) return mapOf("Short" to "Default", "Mile" to "Default", "Medium" to "Default", "Long" to "Default")
-            val jsonObj = JSONObject(jsonStr)
-            val map = mutableMapOf<String, String>()
-            jsonObj.keys().forEach { key -> map[key] = jsonObj.getString(key) }
-            map
-        } catch (e: Exception) {
-            mapOf("Short" to "Default", "Mile" to "Default", "Medium" to "Default", "Long" to "Default")
-        }
-    }
-
-    /**
-     * Maps a [TrackDistance] enum to the per-distance settings key used in the frontend.
-     */
-    private fun TrackDistance.toSettingsKey(): String = when (this) {
-        TrackDistance.SPRINT -> "Short"
-        TrackDistance.MILE -> "Mile"
-        TrackDistance.MEDIUM -> "Medium"
-        TrackDistance.LONG -> "Long"
-    }
-
-    /**
-     * Resolves the strategy string to use based on current mode (blanket vs per-distance) and race context.
+     * Resolves the strategy string to use for the current race context.
      *
      * @param isJuniorYear Whether the current year is Junior Year.
      * @return The strategy string (e.g. "Default", "Auto", "Front", "Pace", "Late", "End").
      */
     internal fun resolveStrategyForCurrentRace(isJuniorYear: Boolean): String {
-        if (!enablePerDistanceStrategy) {
-            return if (isJuniorYear) juniorYearRaceStrategy else userSelectedOriginalStrategy
-        }
-
-        val distanceKey = lastRaceDistance?.toSettingsKey()
-        val strategyMap = if (isJuniorYear) juniorYearPerDistanceStrategies else originalPerDistanceStrategies
-
-        return if (distanceKey != null) {
-            val strategy = strategyMap[distanceKey] ?: "Default"
-            MessageLog.i(TAG, "[RACE] Per-distance strategy for $distanceKey: $strategy")
-            strategy
-        } else {
-            MessageLog.w(TAG, "[RACE] Per-distance strategy enabled but race distance unknown. Falling back to blanket strategy.")
-            if (isJuniorYear) juniorYearRaceStrategy else userSelectedOriginalStrategy
-        }
+        return if (isJuniorYear) juniorYearRaceStrategy else userSelectedOriginalStrategy
     }
 
     /**
@@ -2786,7 +2729,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         if (!ButtonRace.check(game.imageUtils)) {
             lastRaceGrade = null
             lastRaceFans = 0
-            lastRaceDistance = null
             lastRaceIsRival = false
             bRetriedCurrentRace = false
             bAlarmClockPolicySkippedThisRace = false
@@ -2951,14 +2893,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         if (campaign.date.bIsFinaleSeason && (campaign.date.day == 73 || campaign.date.day == 74 || campaign.date.day == 75)) {
             lastRaceGrade = RaceGrade.FINALE
             lastRaceFans = if (campaign.date.day == 75) 30000 else 10000
-            // Distance is unknown for Finale races; per-distance strategy will fall back to blanket.
         }
 
-        // OCR the mandatory race name via the on-screen prediction icon so per-distance strategy
-        // uses the actual race distance. Without this, lastRaceDistance stays null and per-distance
-        // strategy falls back to the blanket strategy for every mandatory race. Gated on
-        // enablePerDistanceStrategy so users without it don't pay the OCR + DB lookup overhead.
-        if (enablePerDistanceStrategy && lastRaceDistance == null) {
+        // OCR the mandatory race name so lastRaceGrade is known. Without it the alarm-clock
+        // purchase policies (G1Only / G1AndFinale) silently decline on the races where they
+        // matter most - this was gated behind a per-distance-strategy flag no frontend ever
+        // wrote, leaving mandatory races gradeless on every scenario.
+        if (lastRaceGrade == null) {
             // Anchor on any prediction tier — a mandatory race can show a single-star prediction
             // when the trainee is weak, and we are racing it regardless.
             val predictionAnchors = findPredictionAnchors(includeSingles = true)
@@ -2967,14 +2908,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
                 if (raceDataList.isNotEmpty()) {
                     val raceData = raceDataList[0]
-                    lastRaceDistance = raceData.trackDistance
-                    // Preserve any grade/fans already set above (e.g. by the Finale block).
-                    if (lastRaceGrade == null) lastRaceGrade = raceData.grade
+                    lastRaceGrade = raceData.grade
                     if (lastRaceFans == 0) lastRaceFans = raceData.fans
-                    MessageLog.i(TAG, "[RACE] Detected mandatory race \"${raceData.name}\" (Grade: ${raceData.grade}, Distance: ${raceData.trackDistance}).")
+                    MessageLog.i(TAG, "[RACE] Detected mandatory race \"${raceData.name}\" (Grade: ${raceData.grade}).")
                 }
             } else {
-                MessageLog.i(TAG, "[RACE] No prediction icon found on mandatory race screen. Per-distance strategy will fall back to blanket.")
+                MessageLog.i(TAG, "[RACE] No prediction icon found on mandatory race screen. Race grade stays unknown.")
             }
         }
 
@@ -3439,8 +3378,11 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 campaign.updateDate(isOnMainScreen = false)
             }
 
-            // For scheduled races, we still want to detect the grade to determine when to check the Shop during Trackblazer.
-            if (game.scenario == "Trackblazer") {
+            // Detect the scheduled race's grade on every scenario: the alarm-clock purchase
+            // policies (G1Only / G1AndFinale) need it, and Trackblazer additionally times its
+            // shop checks off it. Was Trackblazer-only, leaving URA/Unity scheduled races
+            // gradeless and those policies silently declining.
+            run {
                 val predictionAnchors = findPredictionAnchors(includeSingles = true)
                 if (predictionAnchors.isNotEmpty()) {
                     val raceName = game.imageUtils.extractRaceName(predictionAnchors[0].location)
@@ -3448,8 +3390,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     if (raceDataList.isNotEmpty()) {
                         lastRaceGrade = raceDataList[0].grade
                         lastRaceFans = raceDataList[0].fans
-                        lastRaceDistance = raceDataList[0].trackDistance
-                        MessageLog.i(TAG, "[RACE] Detected scheduled race grade: $lastRaceGrade for Trackblazer Shop logic.")
+                        MessageLog.i(TAG, "[RACE] Detected scheduled race grade: $lastRaceGrade.")
                     }
                 }
             }
@@ -3860,7 +3801,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         game.tap(targetRaceLocation.x, targetRaceLocation.y, winnerTemplatePath, ignoreWaiting = true)
         lastRaceGrade = bestRace.raceData.grade
         lastRaceFans = bestRace.raceData.fans
-        lastRaceDistance = bestRace.raceData.trackDistance
         lastRaceIsRival = bestRace.raceData.isRival
 
         return true
@@ -4063,7 +4003,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val raceDataList = lookupRaceInDatabase(campaign.date.day, selectedRaceName)
         lastRaceGrade = raceDataList.firstOrNull()?.grade
         lastRaceFans = raceDataList.firstOrNull()?.fans ?: 0
-        lastRaceDistance = raceDataList.firstOrNull()?.trackDistance
         lastRaceIsRival = filteredRaces[index].isRival
 
         // Selects the determined race on screen.
