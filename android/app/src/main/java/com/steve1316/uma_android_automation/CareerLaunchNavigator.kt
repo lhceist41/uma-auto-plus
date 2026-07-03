@@ -318,6 +318,8 @@ class CareerLaunchNavigator(private val context: Context) {
         var iterationsWithoutProgress = 0
         val seenStates = mutableSetOf<LaunchScreenState>()
         val progressBailThreshold = MAX_STUCK_ITERATIONS * 2
+        // One-shot recovery for exceptions crossing the FSM boundary (see the catch blocks below).
+        var exceptionRecoveryUsed = false
 
         for (attempt in 0 until MAX_DETECTION_ATTEMPTS) {
             if (!BotService.isRunning || StartModule.queueStopRequested) {
@@ -330,8 +332,50 @@ class CareerLaunchNavigator(private val context: Context) {
                 )
             }
 
-            // Detect current screen state.
-            val detectedState = detectScreenState()
+            // Detect current screen state. The FSM previously caught only InterruptedException, so
+            // capture death (getSourceBitmap throws IllegalStateException after failed captures) or
+            // a BotService stop/teardown race escaped navigate() unstructured: no NavigationResult,
+            // no queueFailed event, stale queueState. Rebind once and retry; recurrence fails
+            // structured. InterruptedException must keep propagating - the nav deadline thread
+            // relies on it to kill a wedged queue thread.
+            val detectedState = try {
+                detectScreenState()
+            } catch (e: InterruptedException) {
+                throw e
+            } catch (e: Exception) {
+                if (!BotService.isRunning || StartModule.queueStopRequested) {
+                    // A stop/teardown race makes capture and service calls throw; report the stop
+                    // itself, not an infrastructure failure (stop attribution feeds the queue ledger).
+                    return NavigationResult(
+                        success = false,
+                        lastDetectedState = currentState.name,
+                        failureReason = "Queue was stopped during navigation.",
+                        isRecoverable = false,
+                        recommendedAction = "Restart the queue when ready.",
+                    )
+                }
+                if (!exceptionRecoveryUsed) {
+                    exceptionRecoveryUsed = true
+                    MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} during screen detection: ${e.message}. Force-rebinding the accessibility service and retrying once.")
+                    tempGame?.forceRebindAccessibilityService()
+                    // The rebind may have fixed whatever wedged the FSM, so grant fresh attempts -
+                    // carrying stale stuck/progress counters into recovery would fail it early.
+                    stuckInStateCount = 0
+                    tapToContinueCount = 0
+                    iterationsWithoutProgress = 0
+                    consecutiveUnknowns = 0
+                    waitSafe(2.0)
+                    continue
+                }
+                return NavigationResult(
+                    success = false,
+                    lastDetectedState = currentState.name,
+                    failureReason = "Screen detection threw ${e.javaClass.simpleName}: ${e.message}",
+                    isRecoverable = false,
+                    recommendedAction = "Check that screen capture and the accessibility service are alive, then restart the queue. All completed runs are saved.",
+                    screenshotPath = captureFailureScreenshot("exception_detect"),
+                )
+            }
             MessageLog.i(TAG, "[NAV] Attempt $attempt: Detected state = $detectedState (previous = $currentState)")
 
             if (detectedState != LaunchScreenState.UNKNOWN) {
@@ -446,8 +490,45 @@ class CareerLaunchNavigator(private val context: Context) {
                 continue
             }
 
-            // Handle the detected state.
-            val transitionResult = handleState(currentState, reuseLastLaunchSetup, autoFillSupports)
+            // Handle the detected state. Same exception boundary as detection above: handlers
+            // drive taps and captures, so they share the same throwers.
+            val transitionResult = try {
+                handleState(currentState, reuseLastLaunchSetup, autoFillSupports)
+            } catch (e: InterruptedException) {
+                throw e
+            } catch (e: Exception) {
+                if (!BotService.isRunning || StartModule.queueStopRequested) {
+                    // Same stop/teardown mislabel guard as the detection catch above.
+                    return NavigationResult(
+                        success = false,
+                        lastDetectedState = currentState.name,
+                        failureReason = "Queue was stopped during navigation.",
+                        isRecoverable = false,
+                        recommendedAction = "Restart the queue when ready.",
+                    )
+                }
+                if (!exceptionRecoveryUsed) {
+                    exceptionRecoveryUsed = true
+                    MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} while handling $currentState: ${e.message}. Force-rebinding the accessibility service and retrying once.")
+                    tempGame?.forceRebindAccessibilityService()
+                    // Fresh attempts post-rebind, mirroring the detection catch.
+                    stuckInStateCount = 0
+                    tapToContinueCount = 0
+                    iterationsWithoutProgress = 0
+                    consecutiveUnknowns = 0
+                    waitSafe(2.0)
+                    continue
+                }
+                return NavigationResult(
+                    success = false,
+                    lastDetectedState = currentState.name,
+                    failureReason = "Handling $currentState threw ${e.javaClass.simpleName}: ${e.message}",
+                    failedTransition = "${currentState.name} -> next screen",
+                    isRecoverable = false,
+                    recommendedAction = "Check that screen capture and the accessibility service are alive, then restart the queue. All completed runs are saved.",
+                    screenshotPath = captureFailureScreenshot("exception_handle"),
+                )
+            }
 
             when (transitionResult) {
                 is TransitionResult.Success -> {
