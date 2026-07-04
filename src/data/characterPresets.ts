@@ -93,6 +93,9 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
         // URA-viable: clears a full career arc on the tuned preset. The Classic Arima Kinen
         // top-3 gate at turn 48 is her career-killer when the roll goes wrong; alarm-clock
         // stock converts those into retries.
+        // 2026-07-05: a URA run force-ended at Hanshin Daishoten (turn 53) with Sta=305 while
+        // Guts drifted to 594 on a Guts-heavy deck. Her whole goal chain is Long (Kikuka, Arima,
+        // Hanshin Daishoten, Tenno Spring), so the URA/UC presets now train Stamina first.
         recommended: ["URA Finale", "Unity Cup", "Trackblazer"],
     },
     "Nice Nature": {
@@ -152,7 +155,17 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
     "Winning Ticket (Get to Winning!)": {
         // Md=A, Lg=B, Late=A. Power+20%/Stamina+10% growth. 15 char events covered.
         // Sprint=G, Mile=F, Dirt=G — bot avoids those distances/surfaces by preset.
-        recommended: ["URA Finale", "Unity Cup", "Trackblazer"],
+        // Trackblazer demoted 2026-07-05: the Junior Result-Pts checkpoint is a coin flip for
+        // her (1 of 2 live runs force-ended at turn 24). The Mile-heavy Junior pool gives her
+        // weak predictions, and rows without a star icon are invisible to the bot, so the
+        // Result-Pts emergency can arm with nothing enterable. Needs name-based list entry.
+        recommended: ["URA Finale", "Unity Cup"],
+        avoid: [
+            {
+                scenario: "Trackblazer",
+                reason: "Junior Result-Pts checkpoint is unreliable for her: Sprint=G/Mile=F draws weak race predictions in the Mile-heavy Junior pool, and one of two live runs force-ended at turn 24.",
+            },
+        ],
     },
     "Air Groove": {
         // Mi=A, Md=A, Lg=B, Pc=A, Ls=A, Turf=A. Style was changed Pace Chaser -> Late Surger
@@ -5692,7 +5705,7 @@ export const characterPresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
+                statPrioritization: ["Stamina", "Speed", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
                 focusOnSparkStatTarget: ["Speed", "Stamina"],
@@ -8841,7 +8854,7 @@ export const characterPresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
+                statPrioritization: ["Stamina", "Speed", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
                 focusOnSparkStatTarget: ["Speed", "Stamina"],
