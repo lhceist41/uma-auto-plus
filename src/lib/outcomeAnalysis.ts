@@ -214,8 +214,7 @@ function armOf(record: OutcomeRecord): string {
  * from the same in-memory state on both paths, so an exact match identifies the same career.
  */
 export function dedupe(records: OutcomeRecord[]): OutcomeRecord[] {
-    const keyOf = (r: OutcomeRecord) =>
-        [r.trainee, r.scenario, r.turn, r.fans, r.spd, r.sta, r.pwr, r.grt, r.wit, r.skillPts].join(" ")
+    const keyOf = (r: OutcomeRecord) => [r.trainee, r.scenario, r.turn, r.fans, r.spd, r.sta, r.pwr, r.grt, r.wit, r.skillPts].join(" ")
     const jsonlKeys = new Set(records.filter((r) => r.source === "jsonl").map(keyOf))
     return records.filter((r) => r.source === "jsonl" || !jsonlKeys.has(keyOf(r)))
 }
@@ -289,7 +288,7 @@ export function renderMarkdown(summaries: ArmSummary[]): string {
         const died = s.forceEndTurns.length > 0 ? s.forceEndTurns.join(", ") : "-"
         const nCell = s.lowN ? `${s.n}*` : `${s.n}`
         lines.push(
-            `| ${s.trainee} | ${s.scenario} | ${s.arm} | ${nCell} | ${s.buckets.full} | ${s.buckets.late} | ${s.buckets.mid} | ${s.buckets.early} | ${s.buckets.incomplete} | ${fans} | ${s.medianStats.sta} | ${s.medianStats.spd} | ${died} |`,
+            `| ${s.trainee} | ${s.scenario} | ${s.arm} | ${nCell} | ${s.buckets.full} | ${s.buckets.late} | ${s.buckets.mid} | ${s.buckets.early} | ${s.buckets.incomplete} | ${fans} | ${s.medianStats.sta} | ${s.medianStats.spd} | ${died} |`
         )
     }
     lines.push("")

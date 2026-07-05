@@ -4,8 +4,7 @@ import type { OutcomeRecord } from "../outcomeAnalysis"
 const MODERN_LINE =
     "00:45:49.128 [INFO] [CAREER_END] result=COMPLETE outcome=COMPLETED trainee=Matikanetannhauser scenario=URA_Finale turn=75 fans=277728 spd=880 sta=775 pwr=673 grt=779 wit=404 skillPts=3"
 
-const LEGACY_LINE =
-    "05:08:39.225 [INFO] [CAREER_END] result=COMPLETE trainee=Gold_Ship scenario=Trackblazer turn=75 fans=540278 spd=839 sta=761 pwr=600 grt=519 wit=575 skillPts=1"
+const LEGACY_LINE = "05:08:39.225 [INFO] [CAREER_END] result=COMPLETE trainee=Gold_Ship scenario=Trackblazer turn=75 fans=540278 spd=839 sta=761 pwr=600 grt=519 wit=575 skillPts=1"
 
 const STOPPED_LINE =
     '00:01:00.000 [INFO] [CAREER_END] result=MANUALLY_STOPPED outcome=INCOMPLETE trainee=Daiwa_Scarlet scenario=URA_Finale turn=1 fans=1 spd=1 sta=153 pwr=84 grt=175 wit=131 skillPts=120 stopReason="Stopped on trainee mismatch - restart from the home screen."'
