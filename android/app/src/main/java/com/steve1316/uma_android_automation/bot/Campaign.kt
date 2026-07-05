@@ -9,6 +9,7 @@ import com.steve1316.automation_library.utils.DiscordUtils
 import com.steve1316.automation_library.utils.ImageUtils.ScaleConfidenceResult
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SettingsHelper
+import com.steve1316.uma_android_automation.BuildConfig
 import com.steve1316.uma_android_automation.CareerLaunchNavigator
 import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.components.ButtonBack
@@ -75,8 +76,10 @@ import com.steve1316.uma_android_automation.types.RunningStyle
 import com.steve1316.uma_android_automation.types.SkillList
 import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.types.Trainee
+import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.ScrollList
 import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
+import org.json.JSONObject
 import org.opencv.core.Point
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -236,6 +239,45 @@ abstract class Campaign(game: Game) : Task(game) {
      * pick a better deck if they care, or let it ride.
      */
     protected val enableDeckValidation: Boolean = SettingsHelper.getBooleanSetting("training", "enableDeckValidation", true)
+
+    /**
+     * Config snapshot for the outcome corpus (see PLAN_OUTCOME_MEASUREMENT.md Stage 3), captured
+     * at construction while THIS run's settings are live - a rotation switch rewrites the active
+     * settings between runs, so reading them at task end could tag the record with the NEXT
+     * trainee's config. The set is enumerated deliberately: the tunables that shape play quality.
+     * A field added here changes every fingerprint, deliberately starting new arms.
+     */
+    private val outcomeConfigSnapshot: Map<String, String> = buildOutcomeConfigSnapshot()
+
+    private fun buildOutcomeConfigSnapshot(): Map<String, String> {
+        val cfg = linkedMapOf(
+            "statPrioritization" to SettingsHelper.getStringArraySetting("training", "statPrioritization").joinToString(","),
+            "preferredDistanceOverride" to SettingsHelper.getStringSetting("training", "preferredDistanceOverride"),
+            "maximumFailureChance" to SettingsHelper.getIntSetting("training", "maximumFailureChance").toString(),
+            "focusOnSparkStatTarget" to SettingsHelper.getStringArraySetting("training", "focusOnSparkStatTarget").joinToString(","),
+            "enableRainbowTrainingBonus" to SettingsHelper.getBooleanSetting("training", "enableRainbowTrainingBonus").toString(),
+            "enablePrioritizeNearMaxFriendship" to SettingsHelper.getBooleanSetting("training", "enablePrioritizeNearMaxFriendship", true).toString(),
+            "enableRiskyTraining" to SettingsHelper.getBooleanSetting("training", "enableRiskyTraining").toString(),
+            "moodFloor" to SettingsHelper.getStringSetting("training", "moodFloor", "Good"),
+            "enableFarmingFans" to SettingsHelper.getBooleanSetting("racing", "enableFarmingFans").toString(),
+            "daysToRunExtraRaces" to SettingsHelper.getIntSetting("racing", "daysToRunExtraRaces").toString(),
+            "minFansThreshold" to SettingsHelper.getIntSetting("racing", "minFansThreshold").toString(),
+            "enableRacingPlan" to SettingsHelper.getBooleanSetting("racing", "enableRacingPlan").toString(),
+            "enableMandatoryRacingPlan" to SettingsHelper.getBooleanSetting("racing", "enableMandatoryRacingPlan").toString(),
+            "disableRaceRetries" to SettingsHelper.getBooleanSetting("racing", "disableRaceRetries").toString(),
+            "skillPointCheck" to SettingsHelper.getIntSetting("skills", "skillPointCheck").toString(),
+        )
+        // The plan CONTENT matters, not just the flag: editing a curated racing plan changes how
+        // the career races, so it must split arms. A digest keeps the record small.
+        val racingPlan = SettingsHelper.getStringSetting("racing", "racingPlan")
+        cfg["racingPlanDigest"] = if (racingPlan.isEmpty()) "none" else shortSha1(racingPlan)
+        if (game.scenario == "Trackblazer") {
+            cfg["trackblazerEnergyThreshold"] = SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerEnergyThreshold", 40).toString()
+            cfg["trackblazerConsecutiveRacesLimit"] = SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerConsecutiveRacesLimit", 2).toString()
+            cfg["trackblazerEnableIrregularTraining"] = SettingsHelper.getBooleanSetting("scenarioOverrides", "trackblazerEnableIrregularTraining", false).toString()
+        }
+        return cfg
+    }
 
     /**
      * Minimum aptitude letter required for the trainee's preferred distance and running
@@ -2732,6 +2774,34 @@ abstract class Campaign(game: Game) : Task(game) {
             "Wit" to st.wit,
         )
         val outcome = classifyCareerOutcome(result.code, careerForceEnded)
+
+        // Stage 3 of the outcome-measurement plan: the same fields as the ledger line, appended
+        // as one JSON record to the on-device corpus with the app version and the config-arm
+        // fingerprint. The write swallows its own failures, so the ledger line below always logs.
+        val record = JSONObject().apply {
+            put("ts", System.currentTimeMillis())
+            put("app", BuildConfig.VERSION_NAME)
+            put("fp", outcomeConfigFingerprint(BuildConfig.VERSION_NAME, outcomeConfigSnapshot))
+            put("result", result.code.name.removePrefix("TASK_RESULT_"))
+            put("outcome", outcome)
+            forceEndReason?.let { put("forceEndReason", it) }
+            put("trainee", resolvedName)
+            put("scenario", scenarioToken)
+            put("turn", date.day)
+            put("fans", trainee.fans)
+            put("spd", st.speed)
+            put("sta", st.stamina)
+            put("pwr", st.power)
+            put("grt", st.guts)
+            put("wit", st.wit)
+            put("skillPts", trainee.skillPoints)
+            if (result.code == TaskResultCode.TASK_RESULT_MANUALLY_STOPPED) {
+                StartModule.queueStopReason?.let { put("stopReason", it) }
+            }
+            put("cfg", JSONObject(outcomeConfigSnapshot as Map<*, *>))
+        }
+        OutcomeCorpus.append(game.myContext, record)
+
         return buildString {
             append("[CAREER_END] result=").append(result.code.name.removePrefix("TASK_RESULT_"))
             append(" outcome=").append(outcome)

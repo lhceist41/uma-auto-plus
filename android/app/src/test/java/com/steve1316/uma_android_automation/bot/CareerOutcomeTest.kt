@@ -38,4 +38,22 @@ class CareerOutcomeTest {
             assertEquals("INCOMPLETE", classifyCareerOutcome(code, careerForceEnded = true), "expected INCOMPLETE for $code even when flagged")
         }
     }
+
+    @Test
+    @DisplayName("Fingerprint is key-order independent and 10 hex chars")
+    fun `fingerprint ignores map order`() {
+        val a = outcomeConfigFingerprint("1.0.0", linkedMapOf("x" to "1", "y" to "2"))
+        val b = outcomeConfigFingerprint("1.0.0", linkedMapOf("y" to "2", "x" to "1"))
+        assertEquals(a, b)
+        assertEquals(10, a.length)
+        assertEquals(true, a.all { it in "0123456789abcdef" })
+    }
+
+    @Test
+    @DisplayName("Fingerprint changes when a tunable or the app version changes")
+    fun `fingerprint is sensitive to value and version`() {
+        val base = outcomeConfigFingerprint("1.0.0", mapOf("x" to "1"))
+        assertEquals(false, base == outcomeConfigFingerprint("1.0.0", mapOf("x" to "2")))
+        assertEquals(false, base == outcomeConfigFingerprint("1.0.1", mapOf("x" to "1")))
+    }
 }
