@@ -15040,7 +15040,7 @@ export const characterPresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
+                statPrioritization: ["Stamina", "Speed", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
                 focusOnSparkStatTarget: ["Speed", "Stamina"],
@@ -15097,6 +15097,9 @@ export const characterPresets: CharacterPreset[] = [
         // After Satsuki Sho she carries the 3D Nail Art speed debuff; negative-skill buying
         // is enabled so the buy pass clears it before Copa Republica Argentina. The wall is
         // Tenno Sho (Spring) 3200m on Long B - stamina is spark for a reason.
+        // 2026-07-05: both overnight runs died at that wall (Sta 466/354 at turn 55) while the
+        // maxed stamina targets sat unreached - targets do not order early training, priority
+        // does, so Stamina now leads in the UC and URA presets (same fix that carried Mayano).
         scenario: "URA Finale",
         settings: {
             general: {
@@ -15244,7 +15247,7 @@ export const characterPresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Stamina", "Power", "Wit", "Guts"],
+                statPrioritization: ["Stamina", "Speed", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
                 focusOnSparkStatTarget: ["Speed", "Stamina"],
@@ -16902,7 +16905,7 @@ export const characterPresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
+                statPrioritization: ["Stamina", "Speed", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
                 focusOnSparkStatTarget: ["Speed", "Power"],
@@ -16917,6 +16920,9 @@ export const characterPresets: CharacterPreset[] = [
                 enableTrainingAnalysisValidation: false,
                 enableYoloStatDetection: false,
             },
+            // 2026-07-05: Stamina leads (was Speed/Power first) - her first two live URA runs died
+            // at Kikuka Sho (Sta 240) and Tenno Sho Spring (Sta 389); the goal chain is Long even
+            // though her build is Medium. Same fix that carried Mayano overnight.
             // Unity Cup build per Game8: Speed 1200, Stamina 800, Power 800, Guts 400, Wit 400.
             // Spirit Bursts push stats higher than URA, so Speed targets the cap region.
             trainingStatTarget: {
@@ -17126,7 +17132,7 @@ export const characterPresets: CharacterPreset[] = [
             },
             training: {
                 trainingBlacklist: [],
-                statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
+                statPrioritization: ["Stamina", "Speed", "Power", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
                 focusOnSparkStatTarget: ["Speed", "Power"],
@@ -17143,6 +17149,8 @@ export const characterPresets: CharacterPreset[] = [
             },
             // URA Finale build per Game8: Speed 1000, Stamina 800, Power 800, Guts 400, Wit 400.
             // Clears all 7 goal G1s incl. the 3200m Tenno Sho (Spring) Long wall (needs ≥600 Sta).
+            // 2026-07-05: Stamina now leads (was Speed/Power first) - her first two live runs died
+            // at exactly those Long gates with Sta 240 and 389, nowhere near the documented 600.
             trainingStatTarget: {
                 trainingSprintStatTarget_speedStatTarget: 1000,
                 trainingSprintStatTarget_staminaStatTarget: 800,
