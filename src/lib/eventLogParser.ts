@@ -122,6 +122,20 @@ const REGEX = {
     traineeName: /\[TRAINEE\][^\n]*(?:Detected trainee name|Name):\s*(.+)$/i,
 }
 
+/**
+ * Extracts the turn/day number from a genuine `[DATE]` progression line, or undefined.
+ *
+ * The turn number is only a day marker on a `[DATE]` line. Other lines mention a turn for
+ * unrelated reasons — a race lookahead ("Looking up race for turn 14"), a countdown
+ * ("turn 5 is not on the racing interval"), or the stop-at-date target ("[END] ... (Turn 60)") —
+ * and matching those would fabricate phantom days (and spurious gaps) out of the bot's own log.
+ */
+function matchDateTurn(line: string): number | undefined {
+    if (!line.includes("[DATE]")) return undefined
+    const m = line.match(REGEX.dateTurn)
+    return m ? parseInt(m[1], 10) : undefined
+}
+
 /** Generic matcher that supports substring contains checks only. */
 type LineMatcher = {
     /** The substrings to match. */
@@ -319,9 +333,9 @@ export function parseLogs(files: LogFileInput[]): ParseResult {
         // First pass: detect if this file starts at a day earlier than lastDaySeen.
         let firstDayInThisFile: number | undefined
         for (const line of lines) {
-            const match = line.match(REGEX.dateTurn)
-            if (match) {
-                firstDayInThisFile = parseInt(match[1], 10)
+            const day = matchDateTurn(line)
+            if (day !== undefined) {
+                firstDayInThisFile = day
                 break
             }
         }
@@ -358,9 +372,8 @@ export function parseLogs(files: LogFileInput[]): ParseResult {
                 pendingDateText = dateFormatted[1].trim()
             }
 
-            const match = line.match(REGEX.dateTurn)
-            if (match) {
-                const detectedDay = parseInt(match[1], 10)
+            const detectedDay = matchDateTurn(line)
+            if (detectedDay !== undefined) {
                 foundAnyDay = true
                 if (firstDaySeen === undefined) firstDaySeen = detectedDay
                 if (lastDaySeen === undefined || detectedDay > lastDaySeen) lastDaySeen = detectedDay

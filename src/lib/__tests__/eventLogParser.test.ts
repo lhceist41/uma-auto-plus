@@ -557,6 +557,42 @@ describe("parseLogs", () => {
         expect(days[0].dayNumber).toBe(1)
         expect(days[0].fileName).toBe("a.txt")
     })
+
+    // -----------------------------------------------------------------------
+    // Phantom-day guard: only [DATE] lines advance the day
+    // -----------------------------------------------------------------------
+
+    it("does not create phantom days from non-[DATE] lines that mention a turn number", () => {
+        // Real progression is turns 10 and 11. The interleaved [RACE] and [END] lines
+        // each mention other turn numbers (a race lookahead, a racing-interval countdown,
+        // the stop-at-date target) that must NOT become their own days.
+        const content = [
+            dateLineNew(10, "JUNIOR YEAR LATE APRIL"),
+            '[INFO] [RACE] Looking up race for turn 14 with detected name: "Chukyo Turf 1600m (Mile) Left".',
+            '[INFO] [RACE] No match found for turn 14 with name "Chukyo Turf 1600m (Mile) Left".',
+            "[INFO] [RACE] turn 5 is not on the racing interval (every 3 turns)",
+            dateLineNew(11, "JUNIOR YEAR EARLY MAY"),
+            "[END] Reached target date: Senior Year Early January (Turn 60). Stopping bot.",
+        ].join("\n")
+
+        const result = parseLogs([file("a.txt", content)])
+        expect(dayRecords(result).map((d) => d.dayNumber)).toEqual([10, 11])
+        expect(gapRecords(result)).toHaveLength(0)
+    })
+
+    it("attributes an action after a turn-lookahead line to the real current day", () => {
+        // The "for turn 40" lookahead used to open a phantom day 40 that stole the training.
+        const content = [
+            dateLineNew(20, "CLASSIC YEAR EARLY JANUARY"),
+            '[INFO] [RACE] Looking up race for turn 40 with detected name: "Arima Kinen".',
+            "[TRAINING] Executing the Stamina Training.",
+        ].join("\n")
+
+        const result = parseLogs([file("a.txt", content)])
+        const days = dayRecords(result)
+        expect(days.map((d) => d.dayNumber)).toEqual([20])
+        expect(days[0].trainingType).toBe("Stamina")
+    })
 })
 
 // ===========================================================================
