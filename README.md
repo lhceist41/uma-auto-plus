@@ -22,7 +22,8 @@ steve1316 built the bot engine. This fork is a substantial body of work on top o
 - **Multi-run queue** -- queue 2-20 consecutive careers so the bot grinds unattended, with configurable run count, inter-run delay, and stop-on-error.
 - **Trainee rotation** -- queue several different trainees and the bot cycles through them, each run under her own preset, switching automatically between careers (off by default).
 - **Between-run navigation** -- the bot walks back through the post-career menus and launches the next run by itself, and stops with a clear message instead of looping when it hits a screen it can't handle.
-- **Overnight resilience** -- wake-lock, a stall watchdog, queue auto-resume on cold start, ML Kit init-race retry, a configurable per-run timeout, and self-healing for the Accessibility service that MuMu silently kills mid-run. Each fix came from a real overnight queue that died early.
+- **Overnight resilience** -- the bot keeps the screen awake, restarts itself if it freezes, resumes the queue after a crash, gives up on a stuck run after a time limit you set, restores TP from whatever is available (Toughness, then Star Fruit, then a Carats refill), and repairs its own Accessibility service when an emulator like MuMu silently kills it mid-run. Each of these came from a real overnight queue that died early.
+- **Career-end spark reroll** -- opt-in, off by default: spends 30 TP once to redraw a career's sparks when the odds are good and no target 3-star spark is already present, keeping the better of the two. Supervise the first use.
 
 **Pick-and-go presets**
 
@@ -34,9 +35,11 @@ steve1316 built the bot engine. This fork is a substantial body of work on top o
 - **Optimize Knapsack skill buying** -- works out the best combination of skills your end-of-career points can buy, including how upgrade chains exclude each other, instead of just grabbing the best-looking skill first.
 - **Deck validation at career start** -- warns immediately if the trainee's aptitudes are too low or her race predictions won't be visible to the bot, instead of letting a doomed run waste half an hour.
 - **Single-star prediction detection** -- the bot can see single-star races on the race list (the original only sees double-star ones), and forces a fan-earning race when a Junior fan goal is about to fail.
+- **July 2026 rebalance adaptation** -- per-scenario stat caps (URA 1400 / Unity Cup 1300 with Wit 1800 / Trackblazer 1200 with Stamina 1900 and Wit 1500) and a scenario-aware stat-reading ceiling, so a legitimate high stat past the old flat 1200 limit is no longer discarded as a misread.
+- **Race and training refinements** -- mandatory races retry toward 1st place when a free retry is available, and training anticipates rainbows from bars close to maximum friendship.
 - **Trackblazer tuning** -- Akikawa-bonding training priority (a proxy for MotY points), climax energy-item reservation, an Alarm Clock retry policy, and an opt-in irregular-training gate. Trackblazer is the fork's most-tuned scenario.
 - **Mood-floor guard** -- an optional stricter mood floor for trainees with single-option mood-trap events.
-- **Run diagnostics** -- a one-line per-career outcome ledger, greppable across runs, for tracking which presets actually complete.
+- **Results history** -- every career saves a record of how it ended (completed / force-ended / cut short) together with the settings it ran under, and a bundled tool turns a batch of them into a per-trainee results table, so preset tuning can be measured across many runs instead of judged one at a time. Extra diagnostics for bug reports sit behind the Debug Mode setting.
 
 **New modes (experimental)** -- Daily Races and Team Trials task modes -- fully implemented and selectable, but not yet verified end-to-end on a live run (upstream is career-only).
 

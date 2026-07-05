@@ -8,6 +8,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [1.3.6] - 2026-07-05
+
+The July 2026 game update (the Global 2nd-anniversary rebalance) raised stat caps, added new screens, and changed the training math. This release adapts to all of it and ships a large reliability pass on top: sturdier unattended queues, a run of screen-reading fixes, stamina tuning for the long-distance trainees, and a new results history that records how every career actually ended.
+
+### Added
+
+- Per-scenario stat caps matching the July rebalance: URA 1400, Unity Cup 1300 (Wit 1800), Trackblazer 1200 (Stamina 1900, Wit 1500). The bot now believes legitimate stat values past the old flat 1200 limit, so a real high stat is no longer thrown away as a misread.
+- A results history. Every career now saves a compact record of how it ended -- completed, force-ended, or cut short -- together with which settings it ran under, and a bundled tool turns a batch of them into a per-trainee results table: how many full careers versus early exits, and where each preset tends to fail. Preset tuning can now be judged across many runs instead of one run at a time.
+- Career-end spark reroll, opt-in and off by default (under Run Queue). When enabled, the bot spends 30 TP once to redraw a career's sparks if the trainee's core stat is high enough for good odds and no 3-star target spark rolled, keeping the better result. Keep an eye on the first use.
+- Star Fruit and Carats fallbacks for the TP restore step. When a queue runs out of TP and the primary restore item is gone, it now falls through to Star Fruit, then to a max Carats refill, so a long unattended queue no longer stops on the first depleted item.
+- Mandatory races now retry toward 1st place (bounded by the free retry count), and training anticipates rainbows from bars close to maximum friendship, favouring a room that is about to turn rainbow.
+- Extra diagnostics behind the Debug Mode setting: the bot can save what it saw and explain each turn's decision in the log, which makes misreads and questionable choices much easier to report and fix.
+
+### Changed
+
+- Stamina-first tuning for the long-distance trainees. Mayano Top Gun, Tosen Jordan, and Symboli Rudolf were reaching their Kikuka Sho and Tenno Sho (Spring) goal races short on stamina and force-ending; their URA and Unity Cup presets now train Stamina first. Winning Ticket is no longer recommended for Trackblazer -- her Junior-year aptitudes make the Result-Points checkpoint unreliable.
+- Trackblazer no longer rests or camp-trains through a race commitment, and the skill buy pass now stops as soon as its plan is spent instead of scrolling the full list a second time.
+- Mood recovery now targets the mood floor configured in settings instead of a fixed one.
+- Character, support, and skill event data synced with upstream, and the "Victory!" event text updated for the patch.
+
+### Fixed
+
+- Your settings could be wiped back to defaults if the app was backgrounded during a slow launch; saving now waits until they have finished loading. Presets and internal queue state no longer leak into each other's saves.
+- A queued rotation interrupted by a game update or restart now resyncs onto whoever is actually on screen instead of stopping, and rotation name-matching no longer confuses trainees that share a first name or an alternate outfit.
+- The Notices dialog that appears at the in-game daily reset (which had killed an overnight run) is now closed with its wide list-style close button.
+- When screen capture or the accessibility service dies mid-run, the bot now says so clearly instead of wedging silently -- and it repairs the accessibility service itself and keeps the device awake per run, so long queues survive this far more often.
+- The bot now reads race grades in every scenario -- a leftover internal switch had turned that off outside Trackblazer, which left the alarm-clock race policies blind on URA and Unity Cup.
+- A run of screen-reading fixes: misread rank letters are recovered, the View Results button, the restyled Legacy Select screen, and a chibi Start Career variant are recognized again, skill upgrade chains are priced at what the screen actually shows, and stubborn reads get a few retries instead of one attempt.
+- The per-race retry limit now applies on every retry path, and manual stops and skipped runs are labelled correctly in the end-of-run summary.
+
+---
+
 ## [1.3.5] - 2026-06-24
 
 A Trackblazer tuning knob plus a skill-matching fix. Megaphone use can now be gated per tier so the strong megaphones are saved for high-gain turns, and inherited unique skills are no longer skipped at the end-of-career buy.

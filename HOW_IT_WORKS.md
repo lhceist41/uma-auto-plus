@@ -1,6 +1,6 @@
 # How It Works
 
-*Last updated: 2026-04-11*
+*Last updated: 2026-07-05*
 
 A comprehensive guide to the inner workings of the app. This document explains what the bot does at each step of a campaign, how it makes decisions, and how each scenario differs.
 
@@ -276,6 +276,12 @@ flowchart TD
 > [!NOTE]
 > **Trackblazer override:** Before calling the base decision logic, Trackblazer's `decideNextAction()` first checks for **Irregular Training** — evaluating whether a high-value training opportunity exists that's worth skipping a race for. See [Section 11.6](#116-irregular-training) for details.
 
+### 5.1 Outcome Measurement
+
+Every career ends with a structured `[CAREER_END]` log line carrying an `outcome=` label — `COMPLETED` (reached the career-end screen with no confirmed force-end), `FORCE_END` (a lost mandatory race the bot could not retry past), or `INCOMPLETE` (a non-completion result: user stop, watchdog timeout, or unhandled exception). The game shows the same end screen for a win and an early force-end, so within `COMPLETED` the end turn is the tell: a full arc ends near the scenario's last turn, a force-end ends early.
+
+Alongside the log line, each career appends one JSON record to an on-device corpus (`files/outcomes/careers.jsonl`) carrying those fields plus the app version and a **config fingerprint** — a stable hash of the tunables that shape play (stat priorities and targets, racing flags, the racing-plan content, skill threshold, mood floor, and the Trackblazer overrides), snapshotted when the campaign is constructed so a rotation switch between runs cannot mislabel the record. A dev-side tool (`scripts/analyze-outcomes.mjs`, backed by `src/lib/outcomeAnalysis.ts`) reads the corpus — and harvests the older ledger lines out of pulled message logs — and reports per-trainee outcome distributions per config arm: how many full arcs versus early exits, fan and stat percentiles, and the turns each arm tends to die at. This is what lets a tuning change be measured across many runs instead of judged one at a time.
+
 ---
 
 ## 6. Training System
@@ -316,6 +322,8 @@ $$\text{Score} = \bigl(\text{StatEfficiency} \times w_{\text{stat}} + \text{Rela
 - No rainbows: **1.0x**
 
 Rainbow training is heavily favored because it improves overall stat ratio balance. Applied only from Classic Year onward.
+
+**Anticipatory rainbow bonus:** From Year 2 onward, a training that has no rainbow yet but shows multiple support bars close to maximum friendship (blue or green, about to turn rainbow) receives a smaller rainbow-style multiplier, scaled by how close those bars are and capped well below a real rainbow. It nudges the bot toward a room that is one turn away from rainbowing instead of spending that turn elsewhere. Gated on the `enablePrioritizeNearMaxFriendship` setting (on by default).
 
 > [!IMPORTANT]
 > **Stat Cap Awareness:** If a stat is at or above the effective cap (absolute cap - 100 buffer), training for that stat scores **0** and is skipped. The one exception is a **one-time rainbow allowance** — a stat can be trained past the buffer if it's a rainbow training and that stat hasn't used this allowance yet.
@@ -410,7 +418,7 @@ Once a race is selected:
 
 1. **Strategy Selection:** The bot selects a running strategy (Front Runner, Stalker, Betweener, or Chaser) based on the trainee's aptitudes.
 2. **Skip or Manual:** If the "skip" button is available, the bot skips the race animation. Otherwise, it watches and fast-forwards.
-3. **Retries:** If a race is lost and retries are enabled, the bot can retry the race (free retry available once per campaign if enabled).
+3. **Retries:** If a race is lost and retries are enabled, the bot can retry the race (free retry available once per campaign if enabled). Mandatory races additionally retry toward 1st place while a retry is available — bounded by the free-retry count and re-checking the Congratulations banner on a fresh capture first, so a race that was already won is never retried.
 4. **Complete Career on Failure:** If a mandatory race is lost and this setting is enabled, the bot continues the campaign anyway rather than stopping.
 
 > [!CAUTION]

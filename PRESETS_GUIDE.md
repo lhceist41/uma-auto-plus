@@ -10,6 +10,8 @@ UMA Auto+ ships with **87 built-in character presets** (29 character entries x 3
 
 The 2026-06-11 batch added seven entries from the June banner research pass: Sweep Tosho, Mihono Bourbon, Mejiro Palmer, El Condor Pasa (Kukulkan Warrior), Tosen Jordan, Super Creek, and Matikanetannhauser. Their URA presets ship curated racing plans (see "Curated racing plans in presets" below); Tosen Jordan's presets enable negative-skill buying so the buy pass clears her 3D Nail Art speed debuff. Symboli Rudolf (Emperor's Path) was added 2026-06-18 — a Late Surger Medium built around her late-overtake unique; URA and Trackblazer are her recommended scenarios. Biwa Hayahide (Pace Chaser, built as a Long stayer) and Mejiro Ryan (Late Surger Medium) were added 2026-06-21 to make two owned-but-unpresetted Medium/Long-A turf bodies farmable hands-off; both fill the Medium/Long Team-Trials slots and are URA + Trackblazer recommended.
 
+The 2026-07-05 tuning pass put Stamina first in the URA Finale and Unity Cup presets for Mayano Top Gun, Tosen Jordan, and Symboli Rudolf: all three were reaching their Long goal races (Kikuka Sho, Tenno Sho Spring) short on stamina and force-ending, and the training-priority order — not the stat targets — is what governs early training. Their Trackblazer presets are unchanged (its goals are result-point-based, not a Long chain). Winning Ticket (Get to Winning!) kept her Trackblazer preset but picked up an avoid advisory for it: her Sprint=G/Mile=F aptitudes make the Junior Result-Points checkpoint unreliable, so the "Yes" below means the preset ships, not that it is recommended — the Home advisory flags it.
+
 ### Currently included characters
 
 | Character | Trackblazer | Unity Cup | URA Finale |
@@ -375,7 +377,7 @@ cd android && ./gradlew assembleDebug
 
 The output APK will be at:
 ```
-android/app/build/outputs/apk/debug/UMA-Auto-Plus-v1.3.5-arm64-v8a-debug.apk
+android/app/build/outputs/apk/debug/UMA-Auto-Plus-v1.3.6-arm64-v8a-debug.apk
 ```
 
 ---
