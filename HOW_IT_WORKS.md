@@ -596,6 +596,8 @@ flowchart TD
 
 **Race fallback behavior:** If a non-mandatory race attempt fails (e.g. the consecutive race limit is reached after selecting a race), Trackblazer backs out of the race dialogs and falls back to training for the turn instead of erroring out. Mandatory races are not affected — those always proceed normally.
 
+**Race-commitment override:** A scheduled, mandatory, or goal-ribbon race this turn (checked by `isRaceCommitmentTurn()`, from the turn-start cached flags or a live ribbon read) outranks both the summer-training hijack and the low-energy rest guard shown above. On such a turn the summer branch defers to the base race flow instead of camp-training, and the low-energy guard returns RACE instead of REST — a skipped agenda race costs more than one camp training or the -30 low-energy penalty those branches exist to protect. (The flowchart is simplified and does not draw these two override edges.)
+
 ### 11.2 Shop System
 
 The Trackblazer shop allows purchasing items with coins earned from races. The bot visits the shop periodically and buys items according to a priority list.
