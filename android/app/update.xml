@@ -1,12 +1,14 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.3.5</latestVersion>
+    <latestVersion>1.3.6</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.3.5 - Per-tier Trackblazer megaphone thresholds and an inherited-skill buy fix
+v1.3.6 - July 2026 patch adaptation, queue hardening, and outcome measurement
 
-- New: per-tier megaphone thresholds for Trackblazer (Scenario Overrides). Set a minimum training stat gain for each megaphone tier so the strong ones (Empowering +60%, Motivating +40%) are saved for high-value turns; off by default.
-- Fixed: inherited unique skills are no longer skipped at the end-of-career buy -- the cached skill-name path now runs the same fuzzy match as the live path, so a unique whose name ends in the star marker resolves correctly.
+- New: per-scenario stat caps matching the July rebalance (URA 1400, Unity Cup 1300 with Wit 1800, Trackblazer 1200 with Sta 1900 and Wit 1500), so legitimate high stat reads past the old flat 1200 ceiling are no longer discarded.
+- New: per-career outcome records with a bundled analysis tool that turns a batch of runs into a per-trainee outcome table, plus an opt-in career-end spark reroll and a TP restore ladder (Star Fruit, then a max Carats refill) for unattended queues.
+- Changed: Mayano Top Gun, Tosen Jordan, and Symboli Rudolf now train Stamina first in their URA and Unity Cup presets -- all three were force-ending at their Long goal races short on stamina, and all completed full careers after the change. Winning Ticket is no longer recommended for Trackblazer.
+- Fixed: a large reliability pass -- the daily-reset Notices dialog no longer kills overnight runs, rotations resync onto an interrupted career instead of stopping, settings can no longer be overwritten during a slow launch, race-grade reading works on every scenario, and a run of OCR and template fixes (rank glyphs, View Results, Legacy Select, knapsack chain pricing).
 
     </releaseNotes>
   </update>
