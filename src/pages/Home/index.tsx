@@ -10,14 +10,15 @@ import { MessageLogContext } from "../../context/MessageLogContext"
 import { useTheme } from "../../context/ThemeContext"
 import { Text } from "../../components/ui/text"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../../components/ui/alert-dialog"
-import { Play, Square, AlertCircle, Info, CircleCheck, Repeat, AlertTriangle, ThumbsUp } from "lucide-react-native"
+import { Play, Square, AlertCircle, Info, CircleCheck, Repeat, AlertTriangle, ThumbsUp, ChevronRight } from "lucide-react-native"
 import type { LucideIcon } from "lucide-react-native"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../components/ui/tooltip"
 import PageHeader from "../../components/PageHeader"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 import SelectButton from "../../components/SelectButton"
-import CustomSelect from "../../components/CustomSelect"
+import PresetPicker from "../../components/PresetPicker"
 import { characterPresets, trainerAdvisories } from "../../data/characterPresets"
+import { presetCharacter, presetOutfit } from "../../data/presetMeta"
 import { useNavigation } from "@react-navigation/native"
 
 const styles = StyleSheet.create({
@@ -93,6 +94,7 @@ const Home = () => {
     const [accessibilityRequirement, setAccessibilityRequirement] = useState<"enable" | "restart" | null>(null)
     const [queueProgress, setQueueProgress] = useState<{ currentRun: number; totalRuns: number; status: string; message?: string } | null>(null)
     const [selectedPreset, setSelectedPreset] = useState<string | undefined>(undefined)
+    const [pickerOpen, setPickerOpen] = useState<boolean>(false)
     const [interruptedQueue, setInterruptedQueue] = useState<{ currentRun: number; totalRuns: number; ageMinutes: number } | null>(null)
 
     const navigation = useNavigation()
@@ -192,13 +194,20 @@ const Home = () => {
     }, [bsc.settings.general.scenario])
 
     /**
-     * Character presets filtered by the currently selected scenario.
+     * The preset currently applied to the settings, surviving app restarts: the session's
+     * picker choice when there is one, otherwise the last applied preset recorded in the
+     * racing snapshot (written on every apply).
      */
-    const filteredPresets = useMemo(() => {
-        const scenario = bsc.settings.general.scenario
-        if (!scenario) return []
-        return characterPresets.filter((p) => p.scenario === scenario).map((p) => ({ value: p.name, label: p.name }))
-    }, [bsc.settings.general.scenario])
+    const appliedPreset: { name: string; scenario: string } | null = useMemo(() => {
+        if (selectedPreset) return { name: selectedPreset, scenario: bsc.settings.general.scenario }
+        try {
+            const snapshot = bsc.settings.racing.appliedRacingSnapshot ? JSON.parse(bsc.settings.racing.appliedRacingSnapshot) : null
+            if (snapshot?.presetName) return { name: snapshot.presetName, scenario: snapshot.scenario ?? "" }
+        } catch {
+            // A malformed snapshot only loses the restored card label; applying a preset rewrites it.
+        }
+        return null
+    }, [selectedPreset, bsc.settings.racing.appliedRacingSnapshot, bsc.settings.general.scenario])
 
     /**
      * Computes whether the current (preset, scenario) combination is a known mismatch
@@ -207,25 +216,29 @@ const Home = () => {
      * this trainee/scenario pair (most common case → no banner rendered).
      */
     const presetAdvisory: { kind: "avoid"; reason: string } | { kind: "recommend" } | null = useMemo(() => {
-        if (!selectedPreset) return null
+        if (!appliedPreset) return null
         const scenario = bsc.settings.general.scenario
         if (!scenario) return null
-        const advisories = trainerAdvisories[selectedPreset]
+        const advisories = trainerAdvisories[appliedPreset.name]
         if (!advisories) return null
         const avoidEntry = advisories.avoid?.find((a) => a.scenario === scenario)
         if (avoidEntry) return { kind: "avoid", reason: avoidEntry.reason }
         if (advisories.recommended?.includes(scenario)) return { kind: "recommend" }
         return null
-    }, [selectedPreset, bsc.settings.general.scenario])
+    }, [appliedPreset, bsc.settings.general.scenario])
 
     /**
      * Applies a character preset's settings to the current configuration.
+     * @param presetName The preset to apply.
+     * @param scenarioOverride Optional scenario chosen in the picker; sets general.scenario as
+     * part of the same apply so a trainee-first pick lands atomically. Defaults to the current scenario.
      */
-    const handlePresetChange = async (presetName: string | undefined) => {
+    const handlePresetChange = async (presetName: string | undefined, scenarioOverride?: string) => {
         setSelectedPreset(presetName)
         if (!presetName) return
 
-        const preset = characterPresets.find((p) => p.name === presetName && p.scenario === bsc.settings.general.scenario)
+        const scenario = scenarioOverride ?? bsc.settings.general.scenario
+        const preset = characterPresets.find((p) => p.name === presetName && p.scenario === scenario)
         if (!preset) return
 
         // Capture the user's per-event override maps before the merge. Presets ship empty
@@ -258,6 +271,12 @@ const Home = () => {
             merged.trainingEvent.scenarioEventOverrides = { ...preservedScenarioOverrides, ...presetScenario }
         }
 
+        // A trainee-first pick from the picker carries its scenario; land it in the same apply so
+        // the preset and its scenario can never persist out of sync.
+        if (scenario !== merged.general.scenario) {
+            merged.general = { ...merged.general, scenario }
+        }
+
         // Record what this preset intended for the racing plan so the bot can warn at career start
         // when the live settings have drifted (a silently-off mandatory flag once dropped a career's
         // planned races unnoticed).
@@ -269,7 +288,7 @@ const Home = () => {
         }
         merged.racing.appliedRacingSnapshot = JSON.stringify({
             presetName,
-            scenario: bsc.settings.general.scenario,
+            scenario,
             enableRacingPlan: merged.racing.enableRacingPlan,
             enableMandatoryRacingPlan: merged.racing.enableMandatoryRacingPlan,
             plannedRaceCount,
@@ -279,7 +298,7 @@ const Home = () => {
         // Pass merged explicitly: settingsRef only syncs after the state update re-renders, so a
         // no-arg save here read the STALE pre-preset settings and persisted those instead.
         await saveSettings(merged)
-        logWithTimestamp(`[Home] Applied preset: ${presetName} (${bsc.settings.general.scenario})`)
+        logWithTimestamp(`[Home] Applied preset: ${presetName} (${scenario})`)
         setSnackbarMessage(`Preset "${presetName}" applied`)
         setSnackbarOpen(true)
     }
@@ -556,9 +575,37 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                 </View>
             )}
 
-            {isScenarioValid && filteredPresets.length > 0 && !isRunning && (
+            {!isRunning && (
                 <View style={{ width: "100%", paddingHorizontal: 4, marginBottom: 6 }}>
-                    <CustomSelect placeholder="Select Character Preset" options={filteredPresets} value={selectedPreset} onValueChange={handlePresetChange} width="100%" />
+                    <TouchableOpacity
+                        onPress={() => setPickerOpen(true)}
+                        style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            paddingHorizontal: 12,
+                            paddingVertical: 10,
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            borderColor: colors.border,
+                            backgroundColor: colors.background,
+                        }}
+                    >
+                        <View style={{ flex: 1 }}>
+                            {appliedPreset ? (
+                                <>
+                                    <Text style={{ fontSize: 11, color: colors.foreground, opacity: 0.55 }}>Trainee Preset</Text>
+                                    <Text style={{ fontSize: 15, fontWeight: "600", color: colors.foreground }}>{presetCharacter(appliedPreset.name)}</Text>
+                                    <Text style={{ fontSize: 12, color: colors.foreground, opacity: 0.6 }}>
+                                        {presetOutfit(appliedPreset.name)}
+                                        {appliedPreset.scenario ? ` — ${appliedPreset.scenario}` : ""}
+                                    </Text>
+                                </>
+                            ) : (
+                                <Text style={{ fontSize: 14, color: colors.foreground, opacity: 0.7 }}>Select Trainee Preset...</Text>
+                            )}
+                        </View>
+                        <ChevronRight size={18} color={colors.foreground} opacity={0.5} />
+                    </TouchableOpacity>
                     {presetAdvisory?.kind === "avoid" && (
                         <View
                             style={{
@@ -602,6 +649,15 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                     )}
                 </View>
             )}
+
+            <PresetPicker
+                visible={pickerOpen}
+                onClose={() => setPickerOpen(false)}
+                onApply={async (presetName, scenario) => {
+                    setPickerOpen(false)
+                    await handlePresetChange(presetName, scenario)
+                }}
+            />
 
             {queueProgress && (
                 <View

@@ -1,10 +1,11 @@
-import { useMemo, useContext, useRef } from "react"
-import { View, ScrollView, StyleSheet, TextInput, Text } from "react-native"
+import { useMemo, useContext, useRef, useState } from "react"
+import { View, ScrollView, StyleSheet, TextInput, Text, TouchableOpacity } from "react-native"
+import { ChevronRight } from "lucide-react-native"
 import { useTheme } from "../../context/ThemeContext"
 import { BotStateContext, defaultSettings } from "../../context/BotStateContext"
 import CustomSlider from "../../components/CustomSlider"
 import CustomCheckbox from "../../components/CustomCheckbox"
-import CustomSelect from "../../components/CustomSelect"
+import PresetPicker from "../../components/PresetPicker"
 import CustomButton from "../../components/CustomButton"
 import CustomTitle from "../../components/CustomTitle"
 import PageHeader from "../../components/PageHeader"
@@ -77,9 +78,8 @@ const RunQueueSettings = () => {
         })
     }
 
-    // Preset options for the rotation rows. Each option encodes (name, scenario) so picking one
-    // sets both presetKey and scenario for the entry. The "@@" delimiter never occurs in a name.
-    const presetOptions = useMemo(() => characterPresets.map((p) => ({ value: `${p.name}@@${p.scenario}`, label: `${p.name} — ${p.scenario}` })).sort((a, b) => a.label.localeCompare(b.label)), [])
+    // Which rotation row the preset picker is currently open for, or null when closed.
+    const [pickerForRow, setPickerForRow] = useState<number | null>(null)
 
     // Preset names are "Character (Outfit)" for outfit-specific presets, plain "Character" otherwise.
     // The in-game Trainee Select banner the OCR reads is "[Outfit] Character", so derive that form to
@@ -285,29 +285,25 @@ const RunQueueSettings = () => {
                                                 <View key={i} style={styles.rotationCard}>
                                                     <Text style={styles.rotationHeader}>Trainee #{i + 1}</Text>
 
-                                                    <CustomSelect
-                                                        placeholder="Pick a preset..."
-                                                        label="Preset (character + scenario)"
-                                                        options={presetOptions}
-                                                        value={entry.presetKey ? `${entry.presetKey}@@${entry.scenario}` : undefined}
-                                                        onValueChange={(v) => {
-                                                            if (!v) return
-                                                            const sep = v.lastIndexOf("@@")
-                                                            const newKey = v.slice(0, sep)
-                                                            const patch: Partial<(typeof rotation)[number]> = {
-                                                                presetKey: newKey,
-                                                                scenario: v.slice(sep + 2),
-                                                                excludeOutfits: deriveExcludeOutfits(newKey),
-                                                            }
-                                                            // Auto-fill the In-Game Name to the selected character+outfit. Overwrite when the
-                                                            // character changes (kills the stale-name drift) or the field is empty; keep a
-                                                            // user-customized name when only the scenario changes for the same character.
-                                                            if (!entry.inGameName.trim() || baseCharacter(entry.presetKey) !== baseCharacter(newKey)) {
-                                                                patch.inGameName = deriveInGameName(newKey)
-                                                            }
-                                                            updateRotationEntry(i, patch)
+                                                    <Text style={styles.inputLabel}>Preset (character + scenario)</Text>
+                                                    <TouchableOpacity
+                                                        onPress={() => setPickerForRow(i)}
+                                                        style={{
+                                                            flexDirection: "row",
+                                                            alignItems: "center",
+                                                            paddingHorizontal: 10,
+                                                            paddingVertical: 9,
+                                                            borderRadius: 6,
+                                                            borderWidth: 1,
+                                                            borderColor: colors.border,
+                                                            backgroundColor: colors.background,
                                                         }}
-                                                    />
+                                                    >
+                                                        <Text style={{ flex: 1, fontSize: 13, color: colors.foreground, opacity: entry.presetKey ? 1 : 0.6 }}>
+                                                            {entry.presetKey ? `${entry.presetKey} — ${entry.scenario}` : "Pick a preset..."}
+                                                        </Text>
+                                                        <ChevronRight size={16} color={colors.foreground} opacity={0.5} />
+                                                    </TouchableOpacity>
 
                                                     <Text style={styles.inputLabel}>In-Game Name</Text>
                                                     <TextInput
@@ -329,6 +325,29 @@ const RunQueueSettings = () => {
                                             <CustomButton variant="outline" style={{ marginTop: 12 }} onPress={addRotationEntry}>
                                                 + Add Trainee
                                             </CustomButton>
+
+                                            <PresetPicker
+                                                visible={pickerForRow !== null}
+                                                onClose={() => setPickerForRow(null)}
+                                                onApply={(presetName, scenario) => {
+                                                    const row = pickerForRow
+                                                    setPickerForRow(null)
+                                                    if (row === null || row >= rotation.length) return
+                                                    const entry = rotation[row]
+                                                    const patch: Partial<(typeof rotation)[number]> = {
+                                                        presetKey: presetName,
+                                                        scenario,
+                                                        excludeOutfits: deriveExcludeOutfits(presetName),
+                                                    }
+                                                    // Auto-fill the In-Game Name to the selected character+outfit. Overwrite when the
+                                                    // character changes (kills the stale-name drift) or the field is empty; keep a
+                                                    // user-customized name when only the scenario changes for the same character.
+                                                    if (!entry.inGameName.trim() || baseCharacter(entry.presetKey) !== baseCharacter(presetName)) {
+                                                        patch.inGameName = deriveInGameName(presetName)
+                                                    }
+                                                    updateRotationEntry(row, patch)
+                                                }}
+                                            />
 
                                             <WarningContainer style={{ marginTop: 12 }}>
                                                 The In-Game Name must match exactly what the Trainee Select preview shows, including the [Outfit] prefix — the bot reads that banner to confirm it
