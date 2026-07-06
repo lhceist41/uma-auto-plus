@@ -8,6 +8,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- A searchable trainee picker replacing both preset dropdowns (Home and the rotation editor): one row per character/outfit with colored avatars, per-scenario recommendation chips, a badge showing whether a build has been proven in real completed runs or is still research-based, and a build summary per scenario card. Applying a preset now sets its scenario together with its settings, and the Home card remembers the applied preset across app restarts.
+- Favorites: star a trainee in the picker and she pins to a Favorites section on top. Stored outside the settings database, so favorites survive preset switches and profile changes.
+- Cross-scenario run queues. Rotation entries can mix URA Finale, Unity Cup, and Trackblazer; the between-run navigator now recognizes the Scenario Select carousel and pages it to each run's scenario before confirming (new templates for the screen header, all three scenario logos, and the carousel arrow).
+- Presets for the six most-requested top-tier cards: Kitasan Black, Nishino Flower, Seiun Sky, Maruzensky (Hot☆Summer Night), Oguri Cap, and Oguri Cap (Ashen Miracle) -- the roster is now 105 presets across 35 entries. Built from verified per-card aptitude and objective data with racing plans checked against the race database; research-graded until live careers land, and the picker's badge says so.
+
+### Changed
+
+- Training gains that land a stat above 1200 are scored at half weight, matching the July rebalance rule that halves stat effectiveness past 1200 -- training points stop chasing soft-capped stats that race calculations discount anyway.
+- The center button now says what pressing it does -- Stop while running, Start Queue (N runs) with the queue enabled, Start with the scenario otherwise -- instead of doubling as a scenario label. Daily Races and Team Trials are hidden from its dropdown for now; the career-preset flow owns the Home screen.
+
+### Fixed
+
+- The Scenario Select carousel arrow pulses; paging now tolerates mid-animation frames (retry on a fresh capture, lower match threshold) instead of failing the queue one template short of a scenario switch.
+
 ## [1.3.6] - 2026-07-05
 
 The July 2026 game update (the Global 2nd-anniversary rebalance) raised stat caps, added new screens, and changed the training math. This release adapts to all of it and ships a large reliability pass on top: sturdier unattended queues, a run of screen-reading fixes, stamina tuning for the long-distance trainees, and a new results history that records how every career actually ended.
@@ -351,7 +369,7 @@ The fork already differed substantially from upstream v5.4.8 on day one. The lis
 - In-app update checker polling the GitHub releases feed.
 
 ### Multi-run queue (entirely new)
-- Queue 2–20 consecutive career runs of the same scenario unattended.
+- Queue 2–20 consecutive career runs unattended, mixing scenarios freely — the between-run navigator pages the Scenario Select carousel to each run's scenario.
 - The bot navigates itself between runs: career summary → home → scenario select → deck setup → confirmation → cinematic → training menu.
 - Queue progress is saved continuously for crash recovery and resumption.
 - Queue progress UI on the Home page with skip-run button.
@@ -359,8 +377,8 @@ The fork already differed substantially from upstream v5.4.8 on day one. The lis
 - Configurable `stopOnError` (default: continue past errors), reuse-last-launch-setup, auto-fill support deck.
 
 ### Character presets (entirely new)
-- 81 built-in character profile presets (27 characters × 3 scenarios: Trackblazer, Unity Cup, URA Finale).
-- Scenario-filtered preset picker on the Home page that deep-merges preset settings into the active profile.
+- 105 built-in character profile presets (35 character entries × 3 scenarios: Trackblazer, Unity Cup, URA Finale).
+- Searchable trainee picker on the Home page — character-grouped with per-scenario advisory chips, validation badges, and starred favorites — that deep-merges preset settings into the active profile and sets the scenario together with the preset.
 
 ### Bot behaviour improvements
 - Career flow: the mood-recovery deadlock fix, the skill-buy retry cap, and cleaner per-day state resets across scenarios.

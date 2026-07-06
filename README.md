@@ -20,14 +20,14 @@ steve1316 built the bot engine. This fork is a substantial body of work on top o
 **Hands-off, multi-run grinding**
 
 - **Multi-run queue** -- queue 2-20 consecutive careers so the bot grinds unattended, with configurable run count, inter-run delay, and stop-on-error.
-- **Trainee rotation** -- queue several different trainees and the bot cycles through them, each run under her own preset, switching automatically between careers (off by default).
+- **Trainee rotation** -- queue several different trainees and the bot cycles through them, each run under her own preset, switching automatically between careers (off by default). Scenarios mix freely: the bot pages the Scenario Select carousel to each trainee's scenario between runs.
 - **Between-run navigation** -- the bot walks back through the post-career menus and launches the next run by itself, and stops with a clear message instead of looping when it hits a screen it can't handle.
 - **Overnight resilience** -- the bot keeps the screen awake, restarts itself if it freezes, resumes the queue after a crash, gives up on a stuck run after a time limit you set, restores TP from whatever is available (Toughness, then Star Fruit, then a Carats refill), and repairs its own Accessibility service when an emulator like MuMu silently kills it mid-run. Each of these came from a real overnight queue that died early.
 - **Career-end spark reroll** -- opt-in, off by default: spends 30 TP once to redraw a career's sparks when the odds are good and no target 3-star spark is already present, keeping the better of the two. Supervise the first use.
 
 **Pick-and-go presets**
 
-- **87 hand-tuned character presets** -- 29 trainees across 3 scenarios (URA Finale / Unity Cup / Trackblazer), each pre-filling stat priorities, race plan, skill plan, event picks, and training thresholds. Pick a scenario, pick a character, hit Start -- no manual tuning required.
+- **105 hand-tuned character presets** -- 35 character entries across 3 scenarios (URA Finale / Unity Cup / Trackblazer), each pre-filling stat priorities, race plan, skill plan, event picks, and training thresholds. A searchable trainee picker shows per-scenario recommendations, a validated-or-research badge per build, and starred favorites; applying a preset sets its scenario with it. Pick a trainee, hit Start -- no manual tuning required.
 - **Scenario advisories** -- the Home page shows a green "good pick" or yellow "mismatch" banner (with the reason) for the selected trainee and scenario.
 
 **Decision-engine extensions** (built on top of steve1316's scoring)
