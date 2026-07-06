@@ -39,7 +39,10 @@ object LabelWinToBecomeRank : ComponentInterface {
 }
 
 object LabelUnityCupOpponentSelectionLaurel : ComponentInterface {
-    override val template = Template("components/label/unitycup_opponent_selection_laurel", region = Region.leftHalf)
+    // Recaptured 2026-07-06: the July patch replaced the laurel medals with per-rank colored
+    // ones, so the asset is now the rank-agnostic "Win to become rank" pill text that sits on
+    // every opponent card (name kept for history; one match per card, tap lands on the card).
+    override val template = Template("components/label/unitycup_opponent_selection_laurel", region = Region.rightHalf)
 }
 
 object LabelScenarioSelectHeader : ComponentInterface {

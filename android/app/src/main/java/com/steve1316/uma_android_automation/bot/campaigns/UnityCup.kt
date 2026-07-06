@@ -182,6 +182,8 @@ class UnityCup(game: Game) : Campaign(game) {
                         MessageLog.e(TAG, "[ERROR] handleRaceEventsUnityCup:: Failed to detect all three opponents on opponent selection screen.")
                         return false
                     }
+                    // findAll order is not guaranteed; index semantics are top-to-bottom.
+                    opponents.sortBy { it.y }
 
                     selectedOpponentIndex = selectedOpponentIndex.coerceIn(0, opponents.lastIndex)
                     val opponent = opponents[selectedOpponentIndex]

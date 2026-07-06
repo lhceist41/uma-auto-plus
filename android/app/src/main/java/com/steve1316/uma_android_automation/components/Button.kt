@@ -290,7 +290,11 @@ object ButtonSeeResults : ButtonInterface {
 }
 
 object ButtonSelectOpponent : ButtonInterface {
-    override val template = Template("components/button/select_opponent", region = Region.topHalf)
+    // Recaptured 2026-07-06: the July patch restyled Team Showdown. The old asset was the
+    // screen's blue header banner (top half); the new one is the green two-line confirm
+    // button at the bottom, which is both the screen's gate and the click target. Shared
+    // with TeamTrialsTask, whose screen uses the same restyled UI family.
+    override val template = Template("components/button/select_opponent", region = Region.bottomHalf)
 }
 
 object ButtonSelectLegacy : ButtonInterface {
