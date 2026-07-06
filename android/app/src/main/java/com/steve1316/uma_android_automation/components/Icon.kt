@@ -54,6 +54,19 @@ object IconDoubleCircle : ComponentInterface {
     override val template = Template("components/icon/double_circle")
 }
 
+/**
+ * Single-circle prediction glyph on the Unity Cup showdown confirmation screen (one tier below
+ * the double circle). PROVISIONAL asset: synthesized from double_circle.png by erasing its inner
+ * ring, on the assumption the real glyph shares the outer ring's stroke (the skill-title pair of
+ * this glyph family supports that - same stroke within a few percent). Recut from a native
+ * screenshot of a mixed prediction row if live logs show 0 single-circles where the screen
+ * clearly has some, OR implausibly high double counts on such rows (a bolder-than-assumed single
+ * ring cross-fires the double template instead).
+ */
+object IconSingleCircle : ComponentInterface {
+    override val template = Template("components/icon/single_circle")
+}
+
 object IconUnityCupRaceEndLogo : ComponentInterface {
     override val template = Template("components/icon/unity_cup_race_end_logo", region = Region.topHalf)
 }

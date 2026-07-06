@@ -16,11 +16,13 @@ import com.steve1316.uma_android_automation.components.ButtonUnityCupSeeAllRaceR
 import com.steve1316.uma_android_automation.components.ButtonUnityCupWatchMainRace
 import com.steve1316.uma_android_automation.components.DialogInterface
 import com.steve1316.uma_android_automation.components.IconDoubleCircle
+import com.steve1316.uma_android_automation.components.IconSingleCircle
 import com.steve1316.uma_android_automation.components.IconTrainingEventHorseshoe
 import com.steve1316.uma_android_automation.components.IconUnityCupRaceEndLogo
 import com.steve1316.uma_android_automation.components.IconUnityCupTutorialHeader
 import com.steve1316.uma_android_automation.components.LabelUnityCupOpponentSelectionLaurel
 import org.opencv.core.Point
+import kotlin.math.abs
 
 /**
  * Handles the Unity Cup scenario with scenario-specific logic and handling.
@@ -41,20 +43,23 @@ class UnityCup(game: Game) : Campaign(game) {
     private var bOverrideOpponentSelection: Boolean = false
 
     /**
-     * Best double-circle prediction count seen across the three opponents this selection cycle, and
-     * the opponent index holding it. When no opponent clears [confidentWinDoubleCircleThreshold],
-     * the confirmation loop races [bestPredictionIndex] (the highest win chance) instead of a fixed
+     * Best weighted prediction score seen across the three opponents this selection cycle, and the
+     * opponent index holding it. When no opponent clears [confidentWinPredictionScore], the
+     * confirmation loop races [bestPredictionIndex] (the highest win chance) instead of a fixed
      * position, since a showdown loss costs team rank and stats. Reset when a new selection begins.
      */
-    private var bestPredictionDoubleCircles: Int = -1
+    private var bestPredictionScore: Int = -1
     private var bestPredictionIndex: Int = 0
 
     /**
-     * Minimum double-circles (of the five discipline slots) for a match to count as a confident win
-     * worth taking outright. Opponents are checked hardest-first, so the first to clear this bar is
-     * also the highest-reward safe pick.
+     * Minimum weighted prediction score (double circle = 2, single circle = 1, across the five
+     * discipline slots) for a match to count as a confident win worth taking outright. 6 keeps the
+     * old three-double-circle bar and additionally admits strong-singles rows (2 doubles + 2
+     * singles, 1 double + 4 singles). Singles substitute for doubles at 2:1 - this is NOT a raw
+     * circle count; three singles alone score 3 and fail. Opponents are checked hardest-first, so
+     * the first to clear this bar is also the highest-reward safe pick.
      */
-    private val confidentWinDoubleCircleThreshold: Int = 3
+    private val confidentWinPredictionScore: Int = 6
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -79,12 +84,12 @@ class UnityCup(game: Game) : Campaign(game) {
                     result.dialog.close(game.imageUtils)
                     if (selectedOpponentIndex >= 2) {
                         // All three opponents checked; none cleared the confident-win bar. Race the
-                        // opponent with the most double-circles (best win chance) instead of a fixed
-                        // position - a loss costs team rank and stats. Ties were already resolved
-                        // toward the easier opponent in analyzeOpponentRacePrediction.
+                        // opponent with the best weighted prediction (best win chance) instead of a
+                        // fixed position - a loss costs team rank and stats. Ties were already
+                        // resolved toward the easier opponent in analyzeOpponentRacePrediction.
                         MessageLog.w(
                             TAG,
-                            "[WARN] handleDialogs:: No opponent cleared the confident-win bar. Falling back to opponent #${bestPredictionIndex + 1} (best prediction: $bestPredictionDoubleCircles double-circle(s)).",
+                            "[WARN] handleDialogs:: No opponent cleared the confident-win bar. Falling back to opponent #${bestPredictionIndex + 1} (best prediction score: $bestPredictionScore).",
                         )
                         selectedOpponentIndex = bestPredictionIndex
                         bOverrideOpponentSelection = true
@@ -148,29 +153,55 @@ class UnityCup(game: Game) : Campaign(game) {
     }
 
     /**
-     * Counts the currently-selected opponent's double-circle predictions on the confirmation screen
-     * and decides whether the match is a confident win. Also records the count against the running
-     * best so the exhaustion fallback in [handleDialogs] can race the highest-win-chance opponent.
+     * Scores the currently-selected opponent's prediction row on the confirmation screen (five
+     * discipline slots; double circle = 2 points, single circle = 1) and decides whether the match
+     * is a confident win. Also records the score against the running best so the exhaustion
+     * fallback in [handleDialogs] can race the highest-win-chance opponent.
      *
-     * @return True if the count clears [confidentWinDoubleCircleThreshold], false otherwise.
+     * @return True if the weighted score clears [confidentWinPredictionScore], false otherwise.
      */
     private fun analyzeOpponentRacePrediction(): Boolean {
-        val doubleCircles = IconDoubleCircle.findAll(game.imageUtils, region = game.imageUtils.regionMiddle, confidence = 0.0)
-        val count = doubleCircles.size
+        val sourceBitmap = game.imageUtils.getSourceBitmap()
+        // 0.85 instead of the 0.8 default: true glyphs self-match at 0.98+, while the double
+        // template scores ~0.79 on a bold single-circle ring and generic ring ornaments reach
+        // ~0.83 - the higher bar keeps both cross-fire classes out without costing real matches.
+        val doubleCircles = IconDoubleCircle.findAll(game.imageUtils, sourceBitmap = sourceBitmap, region = game.imageUtils.regionMiddle, confidence = 0.85)
+        // The single-circle template is the double's outer ring, so it can weakly co-match on a
+        // double-circle glyph. Any single match within half a glyph (~20px) of a double is the same
+        // slot and gets dropped; real slots sit ~197px apart.
+        var singleCircles =
+            IconSingleCircle.findAll(game.imageUtils, sourceBitmap = sourceBitmap, region = game.imageUtils.regionMiddle, confidence = 0.85)
+                .count { single -> doubleCircles.none { double -> abs(double.x - single.x) < 20 && abs(double.y - single.y) < 20 } }
+        // The row has exactly five slots. Counts beyond that mean a template is false-firing
+        // somewhere in the region; clamp so a phantom match cannot quietly lower the win bar.
+        if (doubleCircles.size + singleCircles > 5) {
+            MessageLog.w(
+                TAG,
+                "[WARN] analyzeOpponentRacePrediction:: Implausible prediction counts (${doubleCircles.size} double + $singleCircles single > 5 slots). Clamping singles; check the single_circle template for false matches.",
+            )
+            singleCircles = (5 - doubleCircles.size).coerceAtLeast(0)
+        }
+        val score = doubleCircles.size * 2 + singleCircles
 
         // Track the strongest prediction seen so far. >= breaks ties toward the later (weaker/easier)
         // opponent, the safer bet once no opponent clears the confident-win bar. Opponents are always
         // checked in top-to-bottom (hardest-to-easiest) order, so the last tie is the easiest.
-        if (count >= bestPredictionDoubleCircles) {
-            bestPredictionDoubleCircles = count
+        if (score >= bestPredictionScore) {
+            bestPredictionScore = score
             bestPredictionIndex = selectedOpponentIndex
         }
 
-        return if (count >= confidentWinDoubleCircleThreshold) {
-            MessageLog.i(TAG, "[UNITY_CUP] Opponent #${selectedOpponentIndex + 1} shows $count double-circle prediction(s); a confident win. Selecting it now...")
+        return if (score >= confidentWinPredictionScore) {
+            MessageLog.i(
+                TAG,
+                "[UNITY_CUP] Opponent #${selectedOpponentIndex + 1} predictions: ${doubleCircles.size} double + $singleCircles single = score $score; a confident win. Selecting it now...",
+            )
             true
         } else {
-            MessageLog.i(TAG, "[UNITY_CUP] Opponent #${selectedOpponentIndex + 1} shows only $count double-circle prediction(s); below the confident-win bar. Checking the next opponent.")
+            MessageLog.i(
+                TAG,
+                "[UNITY_CUP] Opponent #${selectedOpponentIndex + 1} predictions: ${doubleCircles.size} double + $singleCircles single = score $score; below the confident-win bar. Checking the next opponent.",
+            )
             false
         }
     }
@@ -201,7 +232,7 @@ class UnityCup(game: Game) : Campaign(game) {
                 ButtonUnityCupRace.click(game.imageUtils, sourceBitmap = sourceBitmap) -> {
                     selectedOpponentIndex = 0
                     bOverrideOpponentSelection = false
-                    bestPredictionDoubleCircles = -1
+                    bestPredictionScore = -1
                     bestPredictionIndex = 0
                     game.waitForLoading()
                 }
@@ -283,6 +314,14 @@ class UnityCup(game: Game) : Campaign(game) {
                 // Exit from function if it runs too long.
                 System.currentTimeMillis() - startTime > executionTimeThresholdMs -> {
                     MessageLog.w(TAG, "[WARN] handleRaceEventsUnityCup:: Race event took too long to complete. Aborting...")
+                    // Clear selection state so a later re-entry starts a clean cycle. The reset in
+                    // the Race-button branch is skipped when recovery taps reach the selection
+                    // screen another way, and a leftover bOverrideOpponentSelection would insta-OK
+                    // the first opponent of the NEXT showdown with no analysis.
+                    selectedOpponentIndex = 0
+                    bOverrideOpponentSelection = false
+                    bestPredictionScore = -1
+                    bestPredictionIndex = 0
                     return false
                 }
 
