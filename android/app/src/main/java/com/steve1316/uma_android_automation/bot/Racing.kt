@@ -24,17 +24,17 @@ import com.steve1316.uma_android_automation.components.ButtonRaceManual
 import com.steve1316.uma_android_automation.components.ButtonRaces
 import com.steve1316.uma_android_automation.components.ButtonSkip
 import com.steve1316.uma_android_automation.components.ButtonTryAgainAlt
-import com.steve1316.uma_android_automation.components.LabelCongratulations
 import com.steve1316.uma_android_automation.components.ButtonViewResults
 import com.steve1316.uma_android_automation.components.IconRaceAgendaEmpty
 import com.steve1316.uma_android_automation.components.IconRaceDayRibbon
-import com.steve1316.uma_android_automation.components.IconRaceListMaidenPill
 import com.steve1316.uma_android_automation.components.IconRaceListFansIcon
+import com.steve1316.uma_android_automation.components.IconRaceListMaidenPill
 import com.steve1316.uma_android_automation.components.IconRaceListPredictionDoubleStar
 import com.steve1316.uma_android_automation.components.IconRaceListPredictionSingleStar
 import com.steve1316.uma_android_automation.components.IconRaceListSelectionBracketBottomRight
 import com.steve1316.uma_android_automation.components.IconScrollListBottomRight
 import com.steve1316.uma_android_automation.components.IconScrollListTopLeft
+import com.steve1316.uma_android_automation.components.LabelCongratulations
 import com.steve1316.uma_android_automation.components.LabelRaceCriteriaFans
 import com.steve1316.uma_android_automation.components.LabelRaceCriteriaG3OrAbove
 import com.steve1316.uma_android_automation.components.LabelRaceCriteriaMaiden
@@ -1145,7 +1145,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // that line whenever the deadline is near and the title arm did not already match; the line
         // only shows a number while the criteria is unmet, so no separate already-met check needed.
         val criteriaFanShortfall: Int? =
-            if (bGoalDeadlineNear && !campaign.date.isSummer() &&
+            if (bGoalDeadlineNear &&
+                !campaign.date.isSummer() &&
                 !goalTextNearDeadline.contains("fans", ignoreCase = true)
             ) {
                 game.imageUtils.getGoalCriteriaFanShortfall()
@@ -1158,13 +1159,15 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             MessageLog.i(TAG, "[RACE] Goal entry criteria unmet: $criteriaFanShortfall fan(s) to go with $turnsRemaining turn(s) left.")
         }
         val fanGoalUnmet =
-            bGoalDeadlineNear && !campaign.date.isSummer() && !bFanGoalAlreadyMet &&
+            bGoalDeadlineNear &&
+                !campaign.date.isSummer() &&
+                !bFanGoalAlreadyMet &&
                 (
                     hasFanRequirement ||
                         goalTextNearDeadline.contains("fans", ignoreCase = true) ||
                         criteriaFanShortfallUnmet ||
                         LabelRaceCriteriaFans.check(game.imageUtils, confidence = 0.9)
-                    )
+                )
         bFanEmergencyActive = isFanEmergency(fanGoalUnmet, turnsRemaining)
         if (bFanEmergencyActive) {
             MessageLog.i(TAG, "[RACE] Fan emergency: unmet fan goal due in $turnsRemaining turn(s). Forcing racing; single-star prediction races are acceptable entries.")
@@ -1178,13 +1181,18 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // races become enterable. The admission site gates these to good-aptitude races so we enter
         // winnable ones (the Junior-Dec G1, Medium/Long OPs) not unwinnable Mile/Sprint single-stars
         // that bank ~nothing. Stand down if the goal reads met.
-        if (bGoalDeadlineNear && !campaign.date.isSummer() && !hasInsufficientGoalRacePtsRequirement &&
+        if (bGoalDeadlineNear &&
+            !campaign.date.isSummer() &&
+            !hasInsufficientGoalRacePtsRequirement &&
             goalTextNearDeadline.contains("Result Pt", ignoreCase = true) &&
             !goalTextNearDeadline.contains("Achieved", ignoreCase = true) &&
             !goalTextNearDeadline.contains("MAX", ignoreCase = true)
         ) {
             hasInsufficientGoalRacePtsRequirement = true
-            MessageLog.i(TAG, "[RACE] Result-Pts goal unmet near deadline ($turnsRemaining turn(s) left): \"$goalTextNearDeadline\". Proactively allowing good-aptitude single-star races to bank points.")
+            MessageLog.i(
+                TAG,
+                "[RACE] Result-Pts goal unmet near deadline ($turnsRemaining turn(s) left): \"$goalTextNearDeadline\". Proactively allowing good-aptitude single-star races to bank points.",
+            )
         }
 
         // Don't bother looking for races on Junior Year Early July (Turn 13) since they only start showing up on Turn 14.
@@ -2476,6 +2484,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // ========================== END PRE-FLIGHT CHECK ==========================
 
         data class Candidate(val point: Point, val race: RaceData, val detectedName: String, val isRival: Boolean, val tier: PredictionTier)
+
         // Cache: entry.index → list of (location-within-entry-bitmap, OCR'd race name, tier) triples.
         // Eliminates the redundant prediction findAll the original did inside onEntry on top of the
         // keyExtractor's findAll, halving the template-match work per scroll page.

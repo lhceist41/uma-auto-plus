@@ -343,44 +343,45 @@ class CareerLaunchNavigator(private val context: Context) {
             // no queueFailed event, stale queueState. Rebind once and retry; recurrence fails
             // structured. InterruptedException must keep propagating - the nav deadline thread
             // relies on it to kill a wedged queue thread.
-            val detectedState = try {
-                detectScreenState()
-            } catch (e: InterruptedException) {
-                throw e
-            } catch (e: Exception) {
-                if (!BotService.isRunning || StartModule.queueStopRequested) {
-                    // A stop/teardown race makes capture and service calls throw; report the stop
-                    // itself, not an infrastructure failure (stop attribution feeds the queue ledger).
+            val detectedState =
+                try {
+                    detectScreenState()
+                } catch (e: InterruptedException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (!BotService.isRunning || StartModule.queueStopRequested) {
+                        // A stop/teardown race makes capture and service calls throw; report the stop
+                        // itself, not an infrastructure failure (stop attribution feeds the queue ledger).
+                        return NavigationResult(
+                            success = false,
+                            lastDetectedState = currentState.name,
+                            failureReason = "Queue was stopped during navigation.",
+                            isRecoverable = false,
+                            recommendedAction = "Restart the queue when ready.",
+                        )
+                    }
+                    if (!exceptionRecoveryUsed) {
+                        exceptionRecoveryUsed = true
+                        MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} during screen detection: ${e.message}. Force-rebinding the accessibility service and retrying once.")
+                        tempGame?.forceRebindAccessibilityService()
+                        // The rebind may have fixed whatever wedged the FSM, so grant fresh attempts -
+                        // carrying stale stuck/progress counters into recovery would fail it early.
+                        stuckInStateCount = 0
+                        tapToContinueCount = 0
+                        iterationsWithoutProgress = 0
+                        consecutiveUnknowns = 0
+                        waitSafe(2.0)
+                        continue
+                    }
                     return NavigationResult(
                         success = false,
                         lastDetectedState = currentState.name,
-                        failureReason = "Queue was stopped during navigation.",
+                        failureReason = "Screen detection threw ${e.javaClass.simpleName}: ${e.message}",
                         isRecoverable = false,
-                        recommendedAction = "Restart the queue when ready.",
+                        recommendedAction = "Check that screen capture and the accessibility service are alive, then restart the queue. All completed runs are saved.",
+                        screenshotPath = captureFailureScreenshot("exception_detect"),
                     )
                 }
-                if (!exceptionRecoveryUsed) {
-                    exceptionRecoveryUsed = true
-                    MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} during screen detection: ${e.message}. Force-rebinding the accessibility service and retrying once.")
-                    tempGame?.forceRebindAccessibilityService()
-                    // The rebind may have fixed whatever wedged the FSM, so grant fresh attempts -
-                    // carrying stale stuck/progress counters into recovery would fail it early.
-                    stuckInStateCount = 0
-                    tapToContinueCount = 0
-                    iterationsWithoutProgress = 0
-                    consecutiveUnknowns = 0
-                    waitSafe(2.0)
-                    continue
-                }
-                return NavigationResult(
-                    success = false,
-                    lastDetectedState = currentState.name,
-                    failureReason = "Screen detection threw ${e.javaClass.simpleName}: ${e.message}",
-                    isRecoverable = false,
-                    recommendedAction = "Check that screen capture and the accessibility service are alive, then restart the queue. All completed runs are saved.",
-                    screenshotPath = captureFailureScreenshot("exception_detect"),
-                )
-            }
             MessageLog.i(TAG, "[NAV] Attempt $attempt: Detected state = $detectedState (previous = $currentState)")
 
             if (detectedState != LaunchScreenState.UNKNOWN) {
@@ -497,43 +498,44 @@ class CareerLaunchNavigator(private val context: Context) {
 
             // Handle the detected state. Same exception boundary as detection above: handlers
             // drive taps and captures, so they share the same throwers.
-            val transitionResult = try {
-                handleState(currentState, reuseLastLaunchSetup, autoFillSupports)
-            } catch (e: InterruptedException) {
-                throw e
-            } catch (e: Exception) {
-                if (!BotService.isRunning || StartModule.queueStopRequested) {
-                    // Same stop/teardown mislabel guard as the detection catch above.
+            val transitionResult =
+                try {
+                    handleState(currentState, reuseLastLaunchSetup, autoFillSupports)
+                } catch (e: InterruptedException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (!BotService.isRunning || StartModule.queueStopRequested) {
+                        // Same stop/teardown mislabel guard as the detection catch above.
+                        return NavigationResult(
+                            success = false,
+                            lastDetectedState = currentState.name,
+                            failureReason = "Queue was stopped during navigation.",
+                            isRecoverable = false,
+                            recommendedAction = "Restart the queue when ready.",
+                        )
+                    }
+                    if (!exceptionRecoveryUsed) {
+                        exceptionRecoveryUsed = true
+                        MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} while handling $currentState: ${e.message}. Force-rebinding the accessibility service and retrying once.")
+                        tempGame?.forceRebindAccessibilityService()
+                        // Fresh attempts post-rebind, mirroring the detection catch.
+                        stuckInStateCount = 0
+                        tapToContinueCount = 0
+                        iterationsWithoutProgress = 0
+                        consecutiveUnknowns = 0
+                        waitSafe(2.0)
+                        continue
+                    }
                     return NavigationResult(
                         success = false,
                         lastDetectedState = currentState.name,
-                        failureReason = "Queue was stopped during navigation.",
+                        failureReason = "Handling $currentState threw ${e.javaClass.simpleName}: ${e.message}",
+                        failedTransition = "${currentState.name} -> next screen",
                         isRecoverable = false,
-                        recommendedAction = "Restart the queue when ready.",
+                        recommendedAction = "Check that screen capture and the accessibility service are alive, then restart the queue. All completed runs are saved.",
+                        screenshotPath = captureFailureScreenshot("exception_handle"),
                     )
                 }
-                if (!exceptionRecoveryUsed) {
-                    exceptionRecoveryUsed = true
-                    MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} while handling $currentState: ${e.message}. Force-rebinding the accessibility service and retrying once.")
-                    tempGame?.forceRebindAccessibilityService()
-                    // Fresh attempts post-rebind, mirroring the detection catch.
-                    stuckInStateCount = 0
-                    tapToContinueCount = 0
-                    iterationsWithoutProgress = 0
-                    consecutiveUnknowns = 0
-                    waitSafe(2.0)
-                    continue
-                }
-                return NavigationResult(
-                    success = false,
-                    lastDetectedState = currentState.name,
-                    failureReason = "Handling $currentState threw ${e.javaClass.simpleName}: ${e.message}",
-                    failedTransition = "${currentState.name} -> next screen",
-                    isRecoverable = false,
-                    recommendedAction = "Check that screen capture and the accessibility service are alive, then restart the queue. All completed runs are saved.",
-                    screenshotPath = captureFailureScreenshot("exception_handle"),
-                )
-            }
 
             when (transitionResult) {
                 is TransitionResult.Success -> {
@@ -722,7 +724,8 @@ class CareerLaunchNavigator(private val context: Context) {
 
         // Pre-run confirmation - "Start Career!" button visible without the Support
         // Formation banner. This is the Final Confirmation popup.
-        if (ButtonStartCareer.check(iu, sourceBitmap = bitmap) || ButtonStartCareerOffset.check(iu, sourceBitmap = bitmap) ||
+        if (ButtonStartCareer.check(iu, sourceBitmap = bitmap) ||
+            ButtonStartCareerOffset.check(iu, sourceBitmap = bitmap) ||
             ButtonStartCareerRight.check(iu, sourceBitmap = bitmap)
         ) {
             return LaunchScreenState.PRE_RUN_CONFIRMATION
@@ -1124,8 +1127,15 @@ class CareerLaunchNavigator(private val context: Context) {
             }
         val name =
             iu.performOCROnRegion(
-                bitmap, 110, 265, 650, 84,
-                useThreshold = false, useGrayscale = true, ocrEngine = "mlkit", debugName = "sparkStatRow",
+                bitmap,
+                110,
+                265,
+                650,
+                84,
+                useThreshold = false,
+                useGrayscale = true,
+                ocrEngine = "mlkit",
+                debugName = "sparkStatRow",
             ).trim()
         if (name.isEmpty()) return null
         // Canonicalize OCR fuzz to a stat name where possible ("Spccd" -> "Speed") so the gate's
@@ -1200,11 +1210,12 @@ class CareerLaunchNavigator(private val context: Context) {
             )
         }
         val useCarats = caratsLocation != null
-        val itemName = when {
-            drinkLocation != null -> "Toughness 30"
-            starFruitLocation != null -> "Star Fruit"
-            else -> "Carats"
-        }
+        val itemName =
+            when {
+                drinkLocation != null -> "Toughness 30"
+                starFruitLocation != null -> "Star Fruit"
+                else -> "Carats"
+            }
         if (useCarats) {
             MessageLog.w(TAG, "[NAV] No Toughness 30 or Star Fruit stock left. Max-filling TP with Carats (last resort per the enabled setting).")
         }
@@ -1527,7 +1538,8 @@ class CareerLaunchNavigator(private val context: Context) {
         // Deck is already complete OR autoFillSupports is off. Click Start Career. The right-crop
         // variant matches when the trainee chibi is idling over the button's left edge, which held
         // the full-button templates below threshold for 15 straight checks on a live run.
-        if (ButtonStartCareer.check(iu, sourceBitmap = bitmap) || ButtonStartCareerOffset.check(iu, sourceBitmap = bitmap) ||
+        if (ButtonStartCareer.check(iu, sourceBitmap = bitmap) ||
+            ButtonStartCareerOffset.check(iu, sourceBitmap = bitmap) ||
             ButtonStartCareerRight.check(iu, sourceBitmap = bitmap)
         ) {
             if (startCareerClickAttempts >= 5) {
@@ -1569,8 +1581,10 @@ class CareerLaunchNavigator(private val context: Context) {
     private val traineeGridRows = 2
     private val traineeMaxSwipes = 8
     private val traineeMatchThreshold = 0.86
+
     // Preview name banner: white "[Outfit] Name" text on a saturated character-colored pill. x,y,w,h.
     private val traineePreviewRegion = floatArrayOf(0.02f, 0.295f, 0.74f, 0.05f)
+
     // Header band carrying the "Trainee Select" title (top-left). x,y,w,h fractions.
     private val traineeHeaderRegion = floatArrayOf(0.0f, 0.125f, 0.45f, 0.05f)
 
@@ -1725,8 +1739,14 @@ class CareerLaunchNavigator(private val context: Context) {
             val raw =
                 try {
                     iu.performOCROnRegion(
-                        bitmap, x, y, boxW, boxH,
-                        useThreshold = true, useGrayscale = true, scale = 3.0,
+                        bitmap,
+                        x,
+                        y,
+                        boxW,
+                        boxH,
+                        useThreshold = true,
+                        useGrayscale = true,
+                        scale = 3.0,
                         ocrEngine = "tesseract_digits",
                         debugName = "deck_count_${deckStatLabels[i]}",
                     )
@@ -1843,8 +1863,9 @@ class CareerLaunchNavigator(private val context: Context) {
         // Sibling outfits to skip: a bare base-name target ("El Condor Pasa") is outfit-insensitive and
         // would otherwise match an owned outfit's banner ("[Kukulkan Warrior] El Condor Pasa"). The
         // frontend supplies the names; empty for outfit-specific or pre-existing entries (old behavior).
-        val excludeOutfits = SettingsHelper.getStringSetting("queueState", "currentTraineeExcludes")
-            .split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+        val excludeOutfits =
+            SettingsHelper.getStringSetting("queueState", "currentTraineeExcludes")
+                .split("\n").map { it.trim() }.filter { it.isNotEmpty() }
         if (target.isBlank()) {
             return TransitionResult.Failed(
                 reason = "On Trainee Select but no target trainee recorded (queueState.currentTrainee empty); cannot choose safely.",
@@ -1971,7 +1992,9 @@ class CareerLaunchNavigator(private val context: Context) {
         }
 
         return TransitionResult.Failed(
-            reason = "Trainee '$target' not found after scanning ${seen.size} unique roster trainee(s); best was '$bestLabel' @ ${"%.3f".format(bestScore)}. Stopping to avoid running the wrong trainee.",
+            reason = "Trainee '$target' not found after scanning ${seen.size} unique roster trainee(s); best was '$bestLabel' @ ${"%.3f".format(
+                bestScore,
+            )}. Stopping to avoid running the wrong trainee.",
             transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
             isRecoverable = true,
             recommendedAction = "Check that the rotation trainee is one you own and that its inGameName matches the in-game name, or select the trainee manually and restart.",

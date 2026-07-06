@@ -269,14 +269,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             try {
                 val arr = JSONArray(SettingsHelper.getStringSetting("runQueue", "traineeRotation"))
                 names = (0 until arr.length()).map { arr.getJSONObject(it).optString("inGameName", "") }
-                excludes = (0 until arr.length()).map { i ->
-                    val ex = arr.getJSONObject(i).optJSONArray("excludeOutfits")
-                    if (ex == null) {
-                        emptyList()
-                    } else {
-                        (0 until ex.length()).mapNotNull { j -> ex.optString(j, "").trim().takeIf { it.isNotEmpty() } }
+                excludes =
+                    (0 until arr.length()).map { i ->
+                        val ex = arr.getJSONObject(i).optJSONArray("excludeOutfits")
+                        if (ex == null) {
+                            emptyList()
+                        } else {
+                            (0 until ex.length()).mapNotNull { j -> ex.optString(j, "").trim().takeIf { it.isNotEmpty() } }
+                        }
                     }
-                }
             } catch (e: Exception) {
                 MessageLog.w(TAG, "[ROTATION] Could not parse traineeRotation list: ${e.message}")
                 names = emptyList()

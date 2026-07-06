@@ -310,10 +310,11 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
 
         var point: Point? = null
         var templateBitmap: Bitmap? = null
-        val variants = listOf(
-            Triple("v1", LabelSkillListScreenSkillPoints, v1Bitmap),
-            Triple("v2", LabelSkillListScreenSkillPointsV2, v2Bitmap),
-        )
+        val variants =
+            listOf(
+                Triple("v1", LabelSkillListScreenSkillPoints, v1Bitmap),
+                Triple("v2", LabelSkillListScreenSkillPointsV2, v2Bitmap),
+            )
         // Pass 1: every variant at strict confidence before any relaxed match. The legacy v1
         // template loosely matches the teal/mint v2 banner at the 0.60 relaxed threshold, so a
         // per-variant strict-then-relaxed-then-break loop accepts v1's relaxed match and breaks
@@ -545,7 +546,8 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
                 }
             if (candidateGlyph.isNotEmpty() && baseName.isNotEmpty() && game.skillDatabase.checkSkillName("$baseName $candidateGlyph") != null) {
                 iconChar = candidateGlyph
-            } else if (baseName != skillName && baseName.isNotEmpty() &&
+            } else if (baseName != skillName &&
+                baseName.isNotEmpty() &&
                 game.skillDatabase.checkSkillName(skillName) == null &&
                 game.skillDatabase.checkSkillName(baseName) != null
             ) {
@@ -864,8 +866,10 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         // unrelated screens. The Skill Points label can match below threshold across its yellow-green
         // vs teal/mint variants, so use a lowered threshold and try the v2 (teal) template too.
         val labelConfidence = 0.60
-        val labelMatched = { LabelSkillListScreenSkillPoints.check(game.imageUtils, sourceBitmap = srcBitmap, confidence = labelConfidence) ||
-            LabelSkillListScreenSkillPointsV2.check(game.imageUtils, sourceBitmap = srcBitmap, confidence = labelConfidence) }
+        val labelMatched = {
+            LabelSkillListScreenSkillPoints.check(game.imageUtils, sourceBitmap = srcBitmap, confidence = labelConfidence) ||
+                LabelSkillListScreenSkillPointsV2.check(game.imageUtils, sourceBitmap = srcBitmap, confidence = labelConfidence)
+        }
 
         if (ButtonSkillListFullStats.check(game.imageUtils, sourceBitmap = srcBitmap) && labelMatched()) {
             return true
@@ -878,8 +882,9 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
 
         // Re-check if we are at the SkillList screen after handling dialogs.
         val freshBitmap: Bitmap = game.imageUtils.getSourceBitmap()
-        val freshLabelMatched = LabelSkillListScreenSkillPoints.check(game.imageUtils, sourceBitmap = freshBitmap, confidence = labelConfidence) ||
-            LabelSkillListScreenSkillPointsV2.check(game.imageUtils, sourceBitmap = freshBitmap, confidence = labelConfidence)
+        val freshLabelMatched =
+            LabelSkillListScreenSkillPoints.check(game.imageUtils, sourceBitmap = freshBitmap, confidence = labelConfidence) ||
+                LabelSkillListScreenSkillPointsV2.check(game.imageUtils, sourceBitmap = freshBitmap, confidence = labelConfidence)
         return ButtonSkillListFullStats.check(game.imageUtils, sourceBitmap = freshBitmap) && freshLabelMatched
     }
 
@@ -966,11 +971,12 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         // was just verified, so accept the screen read when the drop is plausible for this purchase,
         // otherwise keep the conservative committed value.
         val spDrop: Int? = spAfter?.let { spBefore - it }
-        skillPoints = if (spAfter != null && spDrop != null && spDrop >= 1 && spDrop <= entry.screenPrice * 2) {
-            spAfter
-        } else {
-            spBefore - entry.screenPrice
-        }
+        skillPoints =
+            if (spAfter != null && spDrop != null && spDrop >= 1 && spDrop <= entry.screenPrice * 2) {
+                spAfter
+            } else {
+                spBefore - entry.screenPrice
+            }
         entry.markObtained()
 
         if (spAfter != null && (spBefore - spAfter) != entry.screenPrice) {

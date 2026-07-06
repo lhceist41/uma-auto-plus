@@ -450,10 +450,11 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 if (chainPresent.size <= 1) {
                     val item = chainPresent.firstOrNull() ?: candidate
                     val isRequired = item.name in requiredNames
-                    val choices = buildList {
-                        if (!isRequired) add(KnapsackChoice(emptyList()))
-                        add(KnapsackChoice(listOf(item)))
-                    }
+                    val choices =
+                        buildList {
+                            if (!isRequired) add(KnapsackChoice(emptyList()))
+                            add(KnapsackChoice(listOf(item)))
+                        }
                     groups.add(KnapsackGroup(choices, isRequired))
                     processedNames.add(item.name)
                     continue
@@ -461,12 +462,13 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
 
                 // Multi-link chain: choices are [skip, base, base+up1, base+up1+up2, ...].
                 val chainRequired = chainPresent.any { it.name in requiredNames }
-                val choices = buildList {
-                    if (!chainRequired) add(KnapsackChoice(emptyList()))
-                    for (i in chainPresent.indices) {
-                        add(KnapsackChoice(chainPresent.subList(0, i + 1).toList()))
+                val choices =
+                    buildList {
+                        if (!chainRequired) add(KnapsackChoice(emptyList()))
+                        for (i in chainPresent.indices) {
+                            add(KnapsackChoice(chainPresent.subList(0, i + 1).toList()))
+                        }
                     }
-                }
                 groups.add(KnapsackGroup(choices, chainRequired))
                 chainPresent.forEach { processedNames.add(it.name) }
             }
@@ -561,9 +563,10 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             // Strategy-specific purchases. Drop ◎ upgrades up front when the toggle is on so every
             // strategy below — including the knapsack DP that models the ○ -> ◎ chain as a group — only
             // ever sees the ○ form.
-            val remainingCandidates = candidates.filter {
-                it.name !in alreadyBought && (!skipDoubleCircle || !isDoubleCircleUpgrade(it.name))
-            }
+            val remainingCandidates =
+                candidates.filter {
+                    it.name !in alreadyBought && (!skipDoubleCircle || !isDoubleCircleUpgrade(it.name))
+                }
             val strategyPurchases =
                 when (settings.strategy) {
                     SpendingStrategy.DEFAULT, SpendingStrategy.OPTIMIZE_RANK -> {
@@ -601,12 +604,13 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                         // edge cases, but without the mutual-exclusion benefit. Callers with the chain map
                         // should call [calculateOptimizeKnapsackPurchases] + [buildKnapsackGroups] directly;
                         // the in-bot [getSkillsToBuyOptimizeKnapsackStrategy] does and gets the full benefit.
-                        val singletonGroups = remainingCandidates.map { c ->
-                            KnapsackGroup(
-                                choices = listOf(KnapsackChoice(emptyList()), KnapsackChoice(listOf(c))),
-                                isRequired = false,
-                            )
-                        }
+                        val singletonGroups =
+                            remainingCandidates.map { c ->
+                                KnapsackGroup(
+                                    choices = listOf(KnapsackChoice(emptyList()), KnapsackChoice(listOf(c))),
+                                    isRequired = false,
+                                )
+                            }
                         calculateOptimizeKnapsackPurchases(singletonGroups, budget - spent)
                     }
                 }
@@ -1038,7 +1042,16 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 // preference is set (a no_preference axis resolves to null and never restricts). Without
                 // this, OPTIMIZE_RANK bought purely by ratio, and off-preference skills also leaked in via
                 // the OPTIMIZE_SKILLS leftover-budget tail that spends through this strategy.
-                if (!matchesPreference(entry.trackDistance, entry.runningStyle, entry.inferredRunningStyles, entry.trackSurface, preferredTrackDistance, preferredRunningStyle, preferredTrackSurface)) {
+                if (!matchesPreference(
+                        entry.trackDistance,
+                        entry.runningStyle,
+                        entry.inferredRunningStyles,
+                        entry.trackSurface,
+                        preferredTrackDistance,
+                        preferredRunningStyle,
+                        preferredTrackSurface,
+                    )
+                ) {
                     continue
                 }
 
@@ -1094,47 +1107,52 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         // Optimize Skills/Rank; the knapsack is our addition, so extend the same gate here for
         // consistency. A no_preference axis resolves to null and never restricts (default presets unaffected).
         val (preferredRunningStyle, preferredTrackDistance, preferredTrackSurface) = resolvePreferredAxes()
-        val available = skillList.getAvailableSkills().filterValues { entry ->
-            entry.bIsAvailable && entry.name !in skillsToBuy && entry.screenPrice > 0 &&
-                // Drop ◎ upgrades before buildKnapsackGroups runs, otherwise the ○ -> ◎ chain group still
-                // offers the [○, ◎] combo and the DP buys the ◎ — the toggle would no-op on the one
-                // strategy every preset uses at careerComplete.
-                (!skipDoubleCircleUpgrades || !isDoubleCircleUpgrade(entry.name)) &&
-                matchesPreference(
-                    entry.trackDistance,
-                    entry.runningStyle,
-                    entry.inferredRunningStyles,
-                    entry.trackSurface,
-                    preferredTrackDistance,
-                    preferredRunningStyle,
-                    preferredTrackSurface,
-                )
-        }
+        val available =
+            skillList.getAvailableSkills().filterValues { entry ->
+                entry.bIsAvailable &&
+                    entry.name !in skillsToBuy &&
+                    entry.screenPrice > 0 &&
+                    // Drop ◎ upgrades before buildKnapsackGroups runs, otherwise the ○ -> ◎ chain group still
+                    // offers the [○, ◎] combo and the DP buys the ◎ — the toggle would no-op on the one
+                    // strategy every preset uses at careerComplete.
+                    (!skipDoubleCircleUpgrades || !isDoubleCircleUpgrade(entry.name)) &&
+                    matchesPreference(
+                        entry.trackDistance,
+                        entry.runningStyle,
+                        entry.inferredRunningStyles,
+                        entry.trackSurface,
+                        preferredTrackDistance,
+                        preferredRunningStyle,
+                        preferredTrackSurface,
+                    )
+            }
         if (available.isEmpty()) {
             MessageLog.i(TAG, "[KNAPSACK] No available skills to plan against. Budget remaining: $availableSkillPoints.")
             return result.toMap()
         }
 
         // Convert live SkillListEntry instances into SkillCandidate snapshots for the DP.
-        val candidates: List<SkillCandidate> = available.values.map { entry ->
-            SkillCandidate(
-                name = entry.name,
-                price = entry.screenPrice,
-                evaluationPoints = entry.evaluationPoints,
-                isNegative = entry.skillData.bIsNegative,
-                isInheritedUnique = entry.skillData.bIsInheritedUnique,
-                isUserPlanned = entry.name in skillPlanSettings.skillNames,
-                communityTier = entry.skillData.communityTier,
-            )
-        }
+        val candidates: List<SkillCandidate> =
+            available.values.map { entry ->
+                SkillCandidate(
+                    name = entry.name,
+                    price = entry.screenPrice,
+                    evaluationPoints = entry.evaluationPoints,
+                    isNegative = entry.skillData.bIsNegative,
+                    isInheritedUnique = entry.skillData.bIsInheritedUnique,
+                    isUserPlanned = entry.name in skillPlanSettings.skillNames,
+                    communityTier = entry.skillData.communityTier,
+                )
+            }
 
         // Group skills that share an upgrade chain so the DP can evaluate the
         // "buy base then upgrade" combo as a single mutually-exclusive option.
-        val groups = buildKnapsackGroups(
-            candidates = candidates,
-            upgradeChains = game.skillDatabase.skillUpgradeChains,
-            requiredNames = emptySet(), // Common phase already handled user-planned/negative/inherited.
-        )
+        val groups =
+            buildKnapsackGroups(
+                candidates = candidates,
+                upgradeChains = game.skillDatabase.skillUpgradeChains,
+                requiredNames = emptySet(), // Common phase already handled user-planned/negative/inherited.
+            )
 
         MessageLog.d(
             TAG,
@@ -1459,10 +1477,11 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             // Drop what the current budget can no longer cover — re-scrolling the whole list for a
             // skill that cannot be bought is pure waste. Prices can drift between parse and buy, so
             // evaluate against the live screenPrice where known.
-            val remaining: List<String> = unbought.filter { name ->
-                val price: Int = skillList.getAllSkills()[name]?.screenPrice ?: skillsToPurchase[name] ?: Int.MAX_VALUE
-                price <= skillList.skillPoints
-            }
+            val remaining: List<String> =
+                unbought.filter { name ->
+                    val price: Int = skillList.getAllSkills()[name]?.screenPrice ?: skillsToPurchase[name] ?: Int.MAX_VALUE
+                    price <= skillList.skillPoints
+                }
             val droppedUnaffordable: List<String> = unbought - remaining.toSet()
             if (droppedUnaffordable.isNotEmpty()) {
                 MessageLog.w(TAG, "[WARN] Dropping ${droppedUnaffordable.size} planned skill(s) no longer affordable with ${skillList.skillPoints} SP: ${droppedUnaffordable.joinToString(", ")}.")

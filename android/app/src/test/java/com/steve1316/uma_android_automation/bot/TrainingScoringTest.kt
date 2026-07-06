@@ -1,9 +1,9 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.bot.Training.Companion.admitIrregularTraining
 import com.steve1316.uma_android_automation.bot.Training.Companion.calculateMiscScore
 import com.steve1316.uma_android_automation.bot.Training.Companion.calculateRawTrainingScore
 import com.steve1316.uma_android_automation.bot.Training.Companion.calculateRelationshipScore
-import com.steve1316.uma_android_automation.bot.Training.Companion.admitIrregularTraining
 import com.steve1316.uma_android_automation.bot.Training.Companion.calculateStatEfficiencyScore
 import com.steve1316.uma_android_automation.bot.Training.Companion.getFinaleStatBonus
 import com.steve1316.uma_android_automation.bot.Training.Companion.getRemainingFinaleRaces
@@ -223,7 +223,8 @@ class TrainingScoringTest {
     @Test
     @DisplayName("Irregular C2: a blue bond bar below 80% counts as secondary value")
     fun testIrregularC2AdmitsBuildableBond() {
-        val r = admitIrregularTraining(StatName.SPEED, statGainsToMap(intArrayOf(13, 0, 0, 0, 0)), listOf(bar("blue", 50.0)), 0, 0, baseline = 20, year = DateYear.CLASSIC, day = 26, currentMainStat = 400)
+        val r =
+            admitIrregularTraining(StatName.SPEED, statGainsToMap(intArrayOf(13, 0, 0, 0, 0)), listOf(bar("blue", 50.0)), 0, 0, baseline = 20, year = DateYear.CLASSIC, day = 26, currentMainStat = 400)
         assertNotNull(r)
         assertTrue(r!!.startsWith("C2"))
     }
@@ -231,13 +232,37 @@ class TrainingScoringTest {
     @Test
     @DisplayName("Irregular: a bond bar at/above 80% does not count (near-rainbow, low build value)")
     fun testIrregularBondAtCapNotSecondary() {
-        assertNull(admitIrregularTraining(StatName.SPEED, statGainsToMap(intArrayOf(13, 0, 0, 0, 0)), listOf(bar("blue", 85.0)), 0, 0, baseline = 20, year = DateYear.CLASSIC, day = 26, currentMainStat = 400))
+        assertNull(
+            admitIrregularTraining(
+                StatName.SPEED,
+                statGainsToMap(intArrayOf(13, 0, 0, 0, 0)),
+                listOf(bar("blue", 85.0)),
+                0,
+                0,
+                baseline = 20,
+                year = DateYear.CLASSIC,
+                day = 26,
+                currentMainStat = 400,
+            ),
+        )
     }
 
     @Test
     @DisplayName("Irregular: an orange (rainbow-achieved) bar does not count as buildable")
     fun testIrregularOrangeBarNotBuildable() {
-        assertNull(admitIrregularTraining(StatName.SPEED, statGainsToMap(intArrayOf(13, 0, 0, 0, 0)), listOf(bar("orange", 50.0)), 0, 0, baseline = 20, year = DateYear.CLASSIC, day = 26, currentMainStat = 400))
+        assertNull(
+            admitIrregularTraining(
+                StatName.SPEED,
+                statGainsToMap(intArrayOf(13, 0, 0, 0, 0)),
+                listOf(bar("orange", 50.0)),
+                0,
+                0,
+                baseline = 20,
+                year = DateYear.CLASSIC,
+                day = 26,
+                currentMainStat = 400,
+            ),
+        )
     }
 
     @Test
@@ -411,7 +436,10 @@ class TrainingScoringTest {
     @DisplayName("The energy tiebreak never overrides a genuine bond advantage")
     fun testEnergyTiebreakDoesNotOverrideBond() {
         // Speed carries an extra green bar (>= 0.5 more bond); Wit's small free-energy tiebreak must not flip it.
-        val speedScore = scoreFriendshipTraining(createDefaultTrainingOption(name = StatName.SPEED, relationshipBars = arrayListOf(BarFillResult(StatName.SPEED, 50.0, 2, "blue"), BarFillResult(StatName.SPEED, 50.0, 2, "green"))))
+        val speedScore =
+            scoreFriendshipTraining(
+                createDefaultTrainingOption(name = StatName.SPEED, relationshipBars = arrayListOf(BarFillResult(StatName.SPEED, 50.0, 2, "blue"), BarFillResult(StatName.SPEED, 50.0, 2, "green"))),
+            )
         val witScore = scoreFriendshipTraining(createDefaultTrainingOption(name = StatName.WIT, relationshipBars = arrayListOf(BarFillResult(StatName.SPEED, 50.0, 2, "blue"))))
         assertTrue(speedScore > witScore, "A genuinely better bond (extra green bar) must beat Wit's tiebreak")
     }

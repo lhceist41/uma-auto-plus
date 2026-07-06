@@ -18,7 +18,6 @@ import com.steve1316.uma_android_automation.components.ButtonCareerEndSkills
 import com.steve1316.uma_android_automation.components.ButtonChangeRunningStyle
 import com.steve1316.uma_android_automation.components.ButtonClose
 import com.steve1316.uma_android_automation.components.ButtonCompleteCareer
-import com.steve1316.uma_android_automation.components.ButtonConfirm
 import com.steve1316.uma_android_automation.components.ButtonCraneGame
 import com.steve1316.uma_android_automation.components.ButtonCraneGameOk
 import com.steve1316.uma_android_automation.components.ButtonDetails
@@ -30,7 +29,6 @@ import com.steve1316.uma_android_automation.components.ButtonInheritance
 import com.steve1316.uma_android_automation.components.ButtonNext
 import com.steve1316.uma_android_automation.components.ButtonNextRaceEnd
 import com.steve1316.uma_android_automation.components.ButtonOk
-import com.steve1316.uma_android_automation.components.ButtonShop
 import com.steve1316.uma_android_automation.components.ButtonRaceStrategyEnd
 import com.steve1316.uma_android_automation.components.ButtonRaceStrategyFront
 import com.steve1316.uma_android_automation.components.ButtonRaceStrategyLate
@@ -38,6 +36,7 @@ import com.steve1316.uma_android_automation.components.ButtonRaceStrategyPace
 import com.steve1316.uma_android_automation.components.ButtonRecreation
 import com.steve1316.uma_android_automation.components.ButtonRest
 import com.steve1316.uma_android_automation.components.ButtonRestAndRecreation
+import com.steve1316.uma_android_automation.components.ButtonShop
 import com.steve1316.uma_android_automation.components.ButtonSkills
 import com.steve1316.uma_android_automation.components.ButtonSkip
 import com.steve1316.uma_android_automation.components.ButtonSkipOff
@@ -222,11 +221,12 @@ abstract class Campaign(game: Game) : Task(game) {
     private val moodFloorString: String = SettingsHelper.getStringSetting("training", "moodFloor", "Good")
 
     /** Resolved Mood enum form of [moodFloorString]. Falls back to GOOD on unrecognized strings. */
-    protected val moodFloor: Mood = when (moodFloorString.lowercase()) {
-        "normal" -> Mood.NORMAL
-        "great" -> Mood.GREAT
-        else -> Mood.GOOD
-    }
+    protected val moodFloor: Mood =
+        when (moodFloorString.lowercase()) {
+            "normal" -> Mood.NORMAL
+            "great" -> Mood.GREAT
+            else -> Mood.GOOD
+        }
 
     /**
      * Pre-career deck validation: when enabled, the first time aptitudes are read for a
@@ -250,23 +250,24 @@ abstract class Campaign(game: Game) : Task(game) {
     private val outcomeConfigSnapshot: Map<String, String> = buildOutcomeConfigSnapshot()
 
     private fun buildOutcomeConfigSnapshot(): Map<String, String> {
-        val cfg = linkedMapOf(
-            "statPrioritization" to SettingsHelper.getStringArraySetting("training", "statPrioritization").joinToString(","),
-            "preferredDistanceOverride" to SettingsHelper.getStringSetting("training", "preferredDistanceOverride"),
-            "maximumFailureChance" to SettingsHelper.getIntSetting("training", "maximumFailureChance").toString(),
-            "focusOnSparkStatTarget" to SettingsHelper.getStringArraySetting("training", "focusOnSparkStatTarget").joinToString(","),
-            "enableRainbowTrainingBonus" to SettingsHelper.getBooleanSetting("training", "enableRainbowTrainingBonus").toString(),
-            "enablePrioritizeNearMaxFriendship" to SettingsHelper.getBooleanSetting("training", "enablePrioritizeNearMaxFriendship", true).toString(),
-            "enableRiskyTraining" to SettingsHelper.getBooleanSetting("training", "enableRiskyTraining").toString(),
-            "moodFloor" to SettingsHelper.getStringSetting("training", "moodFloor", "Good"),
-            "enableFarmingFans" to SettingsHelper.getBooleanSetting("racing", "enableFarmingFans").toString(),
-            "daysToRunExtraRaces" to SettingsHelper.getIntSetting("racing", "daysToRunExtraRaces").toString(),
-            "minFansThreshold" to SettingsHelper.getIntSetting("racing", "minFansThreshold").toString(),
-            "enableRacingPlan" to SettingsHelper.getBooleanSetting("racing", "enableRacingPlan").toString(),
-            "enableMandatoryRacingPlan" to SettingsHelper.getBooleanSetting("racing", "enableMandatoryRacingPlan").toString(),
-            "disableRaceRetries" to SettingsHelper.getBooleanSetting("racing", "disableRaceRetries").toString(),
-            "skillPointCheck" to SettingsHelper.getIntSetting("skills", "skillPointCheck").toString(),
-        )
+        val cfg =
+            linkedMapOf(
+                "statPrioritization" to SettingsHelper.getStringArraySetting("training", "statPrioritization").joinToString(","),
+                "preferredDistanceOverride" to SettingsHelper.getStringSetting("training", "preferredDistanceOverride"),
+                "maximumFailureChance" to SettingsHelper.getIntSetting("training", "maximumFailureChance").toString(),
+                "focusOnSparkStatTarget" to SettingsHelper.getStringArraySetting("training", "focusOnSparkStatTarget").joinToString(","),
+                "enableRainbowTrainingBonus" to SettingsHelper.getBooleanSetting("training", "enableRainbowTrainingBonus").toString(),
+                "enablePrioritizeNearMaxFriendship" to SettingsHelper.getBooleanSetting("training", "enablePrioritizeNearMaxFriendship", true).toString(),
+                "enableRiskyTraining" to SettingsHelper.getBooleanSetting("training", "enableRiskyTraining").toString(),
+                "moodFloor" to SettingsHelper.getStringSetting("training", "moodFloor", "Good"),
+                "enableFarmingFans" to SettingsHelper.getBooleanSetting("racing", "enableFarmingFans").toString(),
+                "daysToRunExtraRaces" to SettingsHelper.getIntSetting("racing", "daysToRunExtraRaces").toString(),
+                "minFansThreshold" to SettingsHelper.getIntSetting("racing", "minFansThreshold").toString(),
+                "enableRacingPlan" to SettingsHelper.getBooleanSetting("racing", "enableRacingPlan").toString(),
+                "enableMandatoryRacingPlan" to SettingsHelper.getBooleanSetting("racing", "enableMandatoryRacingPlan").toString(),
+                "disableRaceRetries" to SettingsHelper.getBooleanSetting("racing", "disableRaceRetries").toString(),
+                "skillPointCheck" to SettingsHelper.getIntSetting("skills", "skillPointCheck").toString(),
+            )
         // The plan CONTENT matters, not just the flag: editing a curated racing plan changes how
         // the career races, so it must split arms. A digest keeps the record small.
         val racingPlan = SettingsHelper.getStringSetting("racing", "racingPlan")
@@ -1177,10 +1178,11 @@ abstract class Campaign(game: Game) : Task(game) {
                     "preferred style ${style.name} aptitude=$styleAptitude, floor=$deckValidationMinAptitude.",
             )
         } else {
-            val shortfalls = buildList {
-                if (!distOk) add("distance ${distance.name}=$distAptitude (need ${deckValidationMinAptitude}+)")
-                if (!styleOk) add("style ${style.name}=$styleAptitude (need ${deckValidationMinAptitude}+)")
-            }.joinToString(", ")
+            val shortfalls =
+                buildList {
+                    if (!distOk) add("distance ${distance.name}=$distAptitude (need $deckValidationMinAptitude+)")
+                    if (!styleOk) add("style ${style.name}=$styleAptitude (need $deckValidationMinAptitude+)")
+                }.joinToString(", ")
 
             MessageLog.w(
                 TAG,
@@ -1597,7 +1599,10 @@ abstract class Campaign(game: Game) : Task(game) {
                             false
                         }
                     } else {
-                        MessageLog.i(TAG, "[INJURY] No injury detected (Infirmary disabled; negative status \"${statuses.joinToString(", ")}\" present, turn $turnsWithPersistentNegativeStatus of episode).")
+                        MessageLog.i(
+                            TAG,
+                            "[INJURY] No injury detected (Infirmary disabled; negative status \"${statuses.joinToString(", ")}\" present, turn $turnsWithPersistentNegativeStatus of episode).",
+                        )
                         false
                     }
                 }
@@ -2299,12 +2304,19 @@ abstract class Campaign(game: Game) : Task(game) {
                         "turn_t${date.day}",
                         sourceBitmap,
                         mapOf(
-                            "scenario" to game.scenario, "trainee" to trainee.name,
-                            "turn" to date.day, "date" to date.toString(),
-                            "spd" to trainee.stats.speed, "sta" to trainee.stats.stamina,
-                            "pwr" to trainee.stats.power, "grt" to trainee.stats.guts, "wit" to trainee.stats.wit,
-                            "energy" to trainee.energy, "mood" to trainee.mood.name,
-                            "fans" to trainee.fans, "skillPts" to trainee.skillPoints,
+                            "scenario" to game.scenario,
+                            "trainee" to trainee.name,
+                            "turn" to date.day,
+                            "date" to date.toString(),
+                            "spd" to trainee.stats.speed,
+                            "sta" to trainee.stats.stamina,
+                            "pwr" to trainee.stats.power,
+                            "grt" to trainee.stats.guts,
+                            "wit" to trainee.stats.wit,
+                            "energy" to trainee.energy,
+                            "mood" to trainee.mood.name,
+                            "fans" to trainee.fans,
+                            "skillPts" to trainee.skillPoints,
                         ),
                     )
                 }
@@ -2553,6 +2565,7 @@ abstract class Campaign(game: Game) : Task(game) {
         // DecisionTracer: accumulate the alternatives ruled out as the priority cascade descends, and
         // record the chosen action plus its reason at the point it wins. Null-safe no-op in release.
         val tracerRejected = mutableListOf<DecisionTracer.RejectedAlternative>()
+
         fun choose(action: MainScreenAction, reason: String): MainScreenAction {
             decisionTracer?.recordActionChoice(action, reason, tracerRejected.toList())
             return action
@@ -2766,40 +2779,42 @@ abstract class Campaign(game: Game) : Task(game) {
         val st = trainee.stats
         // Snapshot for the career-end SPARKS screen: the reroll gate reads the final stat values
         // after this Campaign instance is gone. Keyed by the statPrioritization display names.
-        StartModule.lastCareerEndStats = mapOf(
-            "Speed" to st.speed,
-            "Stamina" to st.stamina,
-            "Power" to st.power,
-            "Guts" to st.guts,
-            "Wit" to st.wit,
-        )
+        StartModule.lastCareerEndStats =
+            mapOf(
+                "Speed" to st.speed,
+                "Stamina" to st.stamina,
+                "Power" to st.power,
+                "Guts" to st.guts,
+                "Wit" to st.wit,
+            )
         val outcome = classifyCareerOutcome(result.code, careerForceEnded)
 
         // Stage 3 of the outcome-measurement plan: the same fields as the ledger line, appended
         // as one JSON record to the on-device corpus with the app version and the config-arm
         // fingerprint. The write swallows its own failures, so the ledger line below always logs.
-        val record = JSONObject().apply {
-            put("ts", System.currentTimeMillis())
-            put("app", BuildConfig.VERSION_NAME)
-            put("fp", outcomeConfigFingerprint(BuildConfig.VERSION_NAME, outcomeConfigSnapshot))
-            put("result", result.code.name.removePrefix("TASK_RESULT_"))
-            put("outcome", outcome)
-            forceEndReason?.let { put("forceEndReason", it) }
-            put("trainee", resolvedName)
-            put("scenario", scenarioToken)
-            put("turn", date.day)
-            put("fans", trainee.fans)
-            put("spd", st.speed)
-            put("sta", st.stamina)
-            put("pwr", st.power)
-            put("grt", st.guts)
-            put("wit", st.wit)
-            put("skillPts", trainee.skillPoints)
-            if (result.code == TaskResultCode.TASK_RESULT_MANUALLY_STOPPED) {
-                StartModule.queueStopReason?.let { put("stopReason", it) }
+        val record =
+            JSONObject().apply {
+                put("ts", System.currentTimeMillis())
+                put("app", BuildConfig.VERSION_NAME)
+                put("fp", outcomeConfigFingerprint(BuildConfig.VERSION_NAME, outcomeConfigSnapshot))
+                put("result", result.code.name.removePrefix("TASK_RESULT_"))
+                put("outcome", outcome)
+                forceEndReason?.let { put("forceEndReason", it) }
+                put("trainee", resolvedName)
+                put("scenario", scenarioToken)
+                put("turn", date.day)
+                put("fans", trainee.fans)
+                put("spd", st.speed)
+                put("sta", st.stamina)
+                put("pwr", st.power)
+                put("grt", st.guts)
+                put("wit", st.wit)
+                put("skillPts", trainee.skillPoints)
+                if (result.code == TaskResultCode.TASK_RESULT_MANUALLY_STOPPED) {
+                    StartModule.queueStopReason?.let { put("stopReason", it) }
+                }
+                put("cfg", JSONObject(outcomeConfigSnapshot as Map<*, *>))
             }
-            put("cfg", JSONObject(outcomeConfigSnapshot as Map<*, *>))
-        }
         OutcomeCorpus.append(game.myContext, record)
 
         return buildString {
@@ -3000,7 +3015,10 @@ abstract class Campaign(game: Game) : Task(game) {
                                 "A screenshot was saved to the temp folder as career_end_exit_stuck.",
                         )
                     }
-                    MessageLog.w(TAG, "[WARN] process:: Still on the career-end skill screen after the plan ran (exit attempt $careerEndExitAttempts/$maxCareerEndExitAttempts). Resetting and backing out...")
+                    MessageLog.w(
+                        TAG,
+                        "[WARN] process:: Still on the career-end skill screen after the plan ran (exit attempt $careerEndExitAttempts/$maxCareerEndExitAttempts). Resetting and backing out...",
+                    )
                     careerEndScreenChecker.cancelAndExit()
                 }
             } else if (checkCampaignSpecificConditions()) {
@@ -3020,12 +3038,19 @@ abstract class Campaign(game: Game) : Task(game) {
                         "unknown_t${date.day}_n$consecutiveUnknownScreenCount",
                         null,
                         mapOf(
-                            "scenario" to game.scenario, "trainee" to trainee.name,
-                            "turn" to date.day, "date" to date.toString(),
+                            "scenario" to game.scenario,
+                            "trainee" to trainee.name,
+                            "turn" to date.day,
+                            "date" to date.toString(),
                             "stuckCount" to consecutiveUnknownScreenCount,
-                            "spd" to trainee.stats.speed, "sta" to trainee.stats.stamina,
-                            "pwr" to trainee.stats.power, "grt" to trainee.stats.guts, "wit" to trainee.stats.wit,
-                            "energy" to trainee.energy, "mood" to trainee.mood.name, "fans" to trainee.fans,
+                            "spd" to trainee.stats.speed,
+                            "sta" to trainee.stats.stamina,
+                            "pwr" to trainee.stats.power,
+                            "grt" to trainee.stats.guts,
+                            "wit" to trainee.stats.wit,
+                            "energy" to trainee.energy,
+                            "mood" to trainee.mood.name,
+                            "fans" to trainee.fans,
                         ),
                     )
                 }
@@ -3087,6 +3112,7 @@ abstract class Campaign(game: Game) : Task(game) {
      *
      * @param count The current [consecutiveUnknownScreenCount] for this stuck streak.
      */
+
     /**
      * Whether the bottom-left in-career Skip pill (Skip Off / Skip On) is on screen. It renders only
      * during story / event cutscenes that must be tapped through to reach their choice options.

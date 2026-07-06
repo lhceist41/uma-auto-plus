@@ -13,6 +13,7 @@ import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonClose
 import com.steve1316.uma_android_automation.components.ButtonConfirmUse
+import com.steve1316.uma_android_automation.components.ButtonHomeFullStats
 import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.components.ButtonRaceDayRace
 import com.steve1316.uma_android_automation.components.ButtonRaceListFullStats
@@ -20,7 +21,6 @@ import com.steve1316.uma_android_automation.components.ButtonRaces
 import com.steve1316.uma_android_automation.components.ButtonShopTrackblazer
 import com.steve1316.uma_android_automation.components.ButtonSkillUp
 import com.steve1316.uma_android_automation.components.ButtonTraining
-import com.steve1316.uma_android_automation.components.ButtonHomeFullStats
 import com.steve1316.uma_android_automation.components.ButtonTrainingItems
 import com.steve1316.uma_android_automation.components.ButtonUseTrainingItems
 import com.steve1316.uma_android_automation.components.DialogConfirmUse
@@ -813,7 +813,9 @@ class Trackblazer(game: Game) : Campaign(game) {
      * checks OR the turn-start cached flags count - a single missed read must not skip a race
      * (same belt-and-braces rationale as the irregular-training gate). */
     private fun isRaceCommitmentTurn(): Boolean {
-        return cachedMandatoryRaceDay || cachedScheduledRaceDay || cachedGoalRibbonDay ||
+        return cachedMandatoryRaceDay ||
+            cachedScheduledRaceDay ||
+            cachedGoalRibbonDay ||
             LabelScheduledRace.check(game.imageUtils) ||
             IconRaceDayRibbon.check(game.imageUtils) ||
             IconGoalRibbon.check(game.imageUtils)
@@ -1557,7 +1559,9 @@ class Trackblazer(game: Game) : Campaign(game) {
                                 val forcedMainGain = forcedCandidate?.statGains?.get(trainingSelected) ?: 0
                                 val charmAvailable = (currentInventory["Good-Luck Charm"] ?: 0) > 0
                                 val charmWouldFire =
-                                    charmAvailable && !bUsedCharmToday && forcedFail >= 20 &&
+                                    charmAvailable &&
+                                        !bUsedCharmToday &&
+                                        forcedFail >= 20 &&
                                         !shouldConserveTrainingEffectItems(trainingSelected, trainee) &&
                                         forcedMainGain >= lowMainStatGainItemFloor
                                 if (!charmWouldFire && forcedFail >= 50) {

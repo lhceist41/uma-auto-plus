@@ -7,28 +7,28 @@ import android.provider.Settings
 import android.util.Log
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.BotService
-import com.steve1316.uma_android_automation.CareerLaunchNavigator
-import com.steve1316.uma_android_automation.StartModule
-import com.steve1316.uma_android_automation.components.ButtonTraining
-import com.steve1316.uma_android_automation.components.ButtonRest
-import com.steve1316.uma_android_automation.components.ButtonCompleteCareer
-import com.steve1316.uma_android_automation.components.ButtonLog
-import com.steve1316.uma_android_automation.components.ButtonSkillListFullStats
-import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPoints
-import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPointsV2
 import com.steve1316.automation_library.utils.DiscordUtils
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.SettingsHelper
+import com.steve1316.uma_android_automation.CareerLaunchNavigator
 import com.steve1316.uma_android_automation.MainActivity
+import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.bot.SkillDatabase
 import com.steve1316.uma_android_automation.bot.Task
 import com.steve1316.uma_android_automation.bot.campaigns.Trackblazer
 import com.steve1316.uma_android_automation.bot.campaigns.UnityCup
 import com.steve1316.uma_android_automation.bot.campaigns.UraFinale
+import com.steve1316.uma_android_automation.components.ButtonCompleteCareer
+import com.steve1316.uma_android_automation.components.ButtonLog
+import com.steve1316.uma_android_automation.components.ButtonRest
+import com.steve1316.uma_android_automation.components.ButtonSkillListFullStats
+import com.steve1316.uma_android_automation.components.ButtonTraining
 import com.steve1316.uma_android_automation.components.LabelConnecting
 import com.steve1316.uma_android_automation.components.LabelNowLoading
+import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPoints
+import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPointsV2
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -450,7 +450,7 @@ class Game(val myContext: Context) {
     private fun isOnTrainingMenu(): Boolean {
         val bitmap = imageUtils.getSourceBitmap()
         return ButtonTraining.check(imageUtils, sourceBitmap = bitmap) ||
-               ButtonRest.check(imageUtils, sourceBitmap = bitmap)
+            ButtonRest.check(imageUtils, sourceBitmap = bitmap)
     }
 
     /**
@@ -521,7 +521,7 @@ class Game(val myContext: Context) {
             (
                 LabelSkillListScreenSkillPoints.check(imageUtils, sourceBitmap = bitmap, confidence = labelConfidence) ||
                     LabelSkillListScreenSkillPointsV2.check(imageUtils, sourceBitmap = bitmap, confidence = labelConfidence)
-                )
+            )
     }
 
     /**

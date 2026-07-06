@@ -2635,8 +2635,12 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         // happens when the caller is on the wrong screen (e.g. shop screen while assuming main, so
         // date-region offsets land outside the bitmap). Returning empty turns the crash into a
         // recoverable OCR miss that the caller retries once screen-state detection re-converges.
-        if (x < 0 || y < 0 || width <= 0 || height <= 0 ||
-            x + width > sourceBitmap.width || y + height > sourceBitmap.height
+        if (x < 0 ||
+            y < 0 ||
+            width <= 0 ||
+            height <= 0 ||
+            x + width > sourceBitmap.width ||
+            y + height > sourceBitmap.height
         ) {
             MessageLog.w(
                 TAG,

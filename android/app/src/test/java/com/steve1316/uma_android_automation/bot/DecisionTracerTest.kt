@@ -115,11 +115,12 @@ class DecisionTracerTest {
     @DisplayName("buildTracerRunnerUps maps a non-finite score to a scoreless hard-penalty exclusion")
     fun `non-finite score becomes a scoreless exclusion`() {
         val wit = option(StatName.WIT)
-        val runnerUps = buildTracerRunnerUps(
-            trainingScores = emptyMap(),
-            skippedScores = mapOf(wit to Double.NEGATIVE_INFINITY),
-            picked = null,
-        )
+        val runnerUps =
+            buildTracerRunnerUps(
+                trainingScores = emptyMap(),
+                skippedScores = mapOf(wit to Double.NEGATIVE_INFINITY),
+                picked = null,
+            )
 
         val entry = runnerUps.single()
         assertEquals(StatName.WIT, entry.stat)

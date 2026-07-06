@@ -15,7 +15,6 @@ import com.steve1316.uma_android_automation.components.ButtonMenuBarRaceUnselect
 import com.steve1316.uma_android_automation.components.ButtonNext
 import com.steve1316.uma_android_automation.components.ButtonNextWithImage
 import com.steve1316.uma_android_automation.components.ButtonOk
-import com.steve1316.uma_android_automation.components.ButtonRaceConfirm
 import com.steve1316.uma_android_automation.components.ButtonSeeAllRaceResults
 import com.steve1316.uma_android_automation.components.ButtonSelectOpponent
 import com.steve1316.uma_android_automation.components.ButtonTeamRace
@@ -316,11 +315,12 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
     private fun handleSelectOpponent() {
         // Ratios measured from 1080x1920 captures. The 3 rows occupy roughly y=0.19..0.32
         // (top), 0.34..0.47 (middle), 0.49..0.62 (bottom); click the vertical center of each.
-        val ratioY: Double = when (opponentPick) {
-            OpponentPick.TOP -> 0.26
-            OpponentPick.MIDDLE -> 0.41
-            OpponentPick.BOTTOM -> 0.56
-        }
+        val ratioY: Double =
+            when (opponentPick) {
+                OpponentPick.TOP -> 0.26
+                OpponentPick.MIDDLE -> 0.41
+                OpponentPick.BOTTOM -> 0.56
+            }
 
         val x: Double = SharedData.displayWidth * 0.5
         val y: Double = SharedData.displayHeight * ratioY

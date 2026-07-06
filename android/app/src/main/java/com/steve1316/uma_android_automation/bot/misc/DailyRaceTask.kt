@@ -274,8 +274,11 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         // Post-race results - a summary screen with a Next button. Gate on raceSequenceCommitted
         // so we only treat a Next button as results after we've actually started the sequence.
         if (raceSequenceCommitted &&
-            (ButtonNext.check(game.imageUtils, sourceBitmap = sourceBitmap) ||
-                ButtonNextWithImage.check(game.imageUtils, sourceBitmap = sourceBitmap))) {
+            (
+                ButtonNext.check(game.imageUtils, sourceBitmap = sourceBitmap) ||
+                    ButtonNextWithImage.check(game.imageUtils, sourceBitmap = sourceBitmap)
+            )
+        ) {
             return DailyRaceScreenState.POST_RACE_RESULTS
         }
 
@@ -333,15 +336,16 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
      * the ticket counter is zero, causing the tile to be hidden). Otherwise null to continue.
      */
     private fun handleRacePick(): TaskResult? {
-        val tile = when (targetRaceName) {
-            "Moonlight Sho" -> ButtonDailyRacesMoonlightSho
-            "Jupiter Cup" -> ButtonDailyRacesJupiterCup
-            else -> {
-                val msg = "Unknown targetRace setting: \"$targetRaceName\". Expected \"Moonlight Sho\" or \"Jupiter Cup\"."
-                MessageLog.e(TAG, "[ERROR] handleRacePick:: $msg")
-                return TaskResult.Error(TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION, msg)
+        val tile =
+            when (targetRaceName) {
+                "Moonlight Sho" -> ButtonDailyRacesMoonlightSho
+                "Jupiter Cup" -> ButtonDailyRacesJupiterCup
+                else -> {
+                    val msg = "Unknown targetRace setting: \"$targetRaceName\". Expected \"Moonlight Sho\" or \"Jupiter Cup\"."
+                    MessageLog.e(TAG, "[ERROR] handleRacePick:: $msg")
+                    return TaskResult.Error(TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION, msg)
+                }
             }
-        }
 
         if (!tile.check(game.imageUtils)) {
             // Tile not present on this rotation OR 0 tickets remaining (tile hidden).
@@ -370,16 +374,17 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
      * fragile under cosmetic UI refreshes; the ratios come from a calibration capture.
      */
     private fun handleDifficultyPick() {
-        val ratioY: Double = when (targetDifficulty.uppercase()) {
-            "VERY_HARD" -> 0.53    // top row
-            "HARD" -> 0.65          // second row
-            "NORMAL" -> 0.77        // third row (may require scroll)
-            "EASY" -> 0.89          // bottom row (usually requires scroll)
-            else -> {
-                MessageLog.w(TAG, "[WARN] handleDifficultyPick:: unknown tier \"$targetDifficulty\"; defaulting to VERY_HARD.")
-                0.53
+        val ratioY: Double =
+            when (targetDifficulty.uppercase()) {
+                "VERY_HARD" -> 0.53 // top row
+                "HARD" -> 0.65 // second row
+                "NORMAL" -> 0.77 // third row (may require scroll)
+                "EASY" -> 0.89 // bottom row (usually requires scroll)
+                else -> {
+                    MessageLog.w(TAG, "[WARN] handleDifficultyPick:: unknown tier \"$targetDifficulty\"; defaulting to VERY_HARD.")
+                    0.53
+                }
             }
-        }
 
         val x: Double = SharedData.displayWidth * 0.5
         val y: Double = SharedData.displayHeight * ratioY
@@ -480,13 +485,14 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
      */
     private fun handlePostRaceResults() {
         // Try each advance button in rough order of frequency on post-race screens.
-        val advanceButtons = listOf(
-            "Next" to ButtonNext,
-            "NextWithImage" to ButtonNextWithImage,
-            "Confirm" to ButtonConfirm,
-            "OK" to ButtonOk,
-            "Close" to ButtonClose,
-        )
+        val advanceButtons =
+            listOf(
+                "Next" to ButtonNext,
+                "NextWithImage" to ButtonNextWithImage,
+                "Confirm" to ButtonConfirm,
+                "OK" to ButtonOk,
+                "Close" to ButtonClose,
+            )
 
         for ((name, button) in advanceButtons) {
             if (button.check(game.imageUtils)) {

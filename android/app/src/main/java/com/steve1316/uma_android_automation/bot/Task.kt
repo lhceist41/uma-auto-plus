@@ -282,7 +282,9 @@ abstract class Task(game: Game) : DialogHandler(game) {
         // this wait once at task end.
         val settleDeadline = System.currentTimeMillis() + 1500
         while (System.currentTimeMillis() < settleDeadline &&
-            !StartModule.queueStopRequested && !StartModule.queueSkipRequested && BotService.isRunning
+            !StartModule.queueStopRequested &&
+            !StartModule.queueSkipRequested &&
+            BotService.isRunning
         ) {
             try {
                 Thread.sleep(100)

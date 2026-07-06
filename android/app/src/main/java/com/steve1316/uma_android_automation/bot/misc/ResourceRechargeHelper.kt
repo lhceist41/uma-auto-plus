@@ -193,10 +193,11 @@ class ResourceRechargeHelper(private val game: Game) {
      * Coordinate-based since the + buttons are small icons without distinctive templates.
      */
     private fun tapPlusButton(pool: Pool): Boolean {
-        val xRatio = when (pool) {
-            Pool.TP -> TP_PLUS_X_RATIO
-            Pool.RP -> RP_PLUS_X_RATIO
-        }
+        val xRatio =
+            when (pool) {
+                Pool.TP -> TP_PLUS_X_RATIO
+                Pool.RP -> RP_PLUS_X_RATIO
+            }
         val x = SharedData.displayWidth * xRatio
         val y = SharedData.displayHeight * PLUS_Y_RATIO
 
@@ -209,10 +210,11 @@ class ResourceRechargeHelper(private val game: Game) {
 
     /** Check whether the Recover TP/RP list popup is currently visible. */
     private fun verifyRechargePopupOpen(pool: Pool): Boolean {
-        val label = when (pool) {
-            Pool.TP -> LabelRecoverTP
-            Pool.RP -> LabelRecoverRP
-        }
+        val label =
+            when (pool) {
+                Pool.TP -> LabelRecoverTP
+                Pool.RP -> LabelRecoverRP
+            }
         return label.check(game.imageUtils, region = Region.topHalf, tries = 2)
     }
 
@@ -267,8 +269,9 @@ class ResourceRechargeHelper(private val game: Game) {
      */
     private fun dismissAnyOpenPopups() {
         for (i in 0 until 3) {
-            val closed = ButtonClose.click(game.imageUtils) ||
-                ButtonCancel.click(game.imageUtils)
+            val closed =
+                ButtonClose.click(game.imageUtils) ||
+                    ButtonCancel.click(game.imageUtils)
             if (!closed) break
             game.wait(0.8)
         }

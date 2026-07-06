@@ -273,7 +273,10 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
                 // frames). Fail region detection so callers fall back to component-based reads
                 // (processWithFallback finds the row + buttons directly). Plain create() callers
                 // (skill/race list) already handle a null here.
-                MessageLog.w(TAG, "[WARN] getListBoundingRegion:: Scroll list anchors detected out of order (TL=($x0,$y0), BR=($x1,$y1)). Treating as a failed region detection so callers use the component fallback.")
+                MessageLog.w(
+                    TAG,
+                    "[WARN] getListBoundingRegion:: Scroll list anchors detected out of order (TL=($x0,$y0), BR=($x1,$y1)). Treating as a failed region detection so callers use the component fallback.",
+                )
                 return null
             }
 
@@ -879,7 +882,10 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
                 MessageLog.w(TAG, "[WARN] process:: No entries detected in current frame after retries (empty frame $consecutiveEmptyFrames/$maxConsecutiveEmptyFrames).")
                 if (consecutiveEmptyFrames >= maxConsecutiveEmptyFrames) {
                     game.imageUtils.saveBitmap(filename = "scroll_list_empty_frames", fullRes = true)
-                    MessageLog.e(TAG, "[ERROR] process:: $consecutiveEmptyFrames consecutive frames with zero detected entries - the list is empty or row detection failed (capture rendered but no rows matched). Aborting the scroll pass.")
+                    MessageLog.e(
+                        TAG,
+                        "[ERROR] process:: $consecutiveEmptyFrames consecutive frames with zero detected entries - the list is empty or row detection failed (capture rendered but no rows matched). Aborting the scroll pass.",
+                    )
                     return false
                 }
             } else {

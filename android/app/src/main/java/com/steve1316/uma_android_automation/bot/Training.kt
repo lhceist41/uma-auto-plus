@@ -551,11 +551,12 @@ class Training(private val game: Game, private val campaign: Campaign) {
             // Energy-economy tiebreaker (see BONDING_ENERGY_TIEBREAK): on an equal bond score prefer the
             // free-energy Wit facility and avoid the costly Guts one. The magnitude stays under the 0.5
             // minimum gap between distinct bar sums, so this only ever decides a tie.
-            score += when (training.name) {
-                StatName.WIT -> BONDING_ENERGY_TIEBREAK
-                StatName.GUTS -> -BONDING_ENERGY_TIEBREAK
-                else -> 0.0
-            }
+            score +=
+                when (training.name) {
+                    StatName.WIT -> BONDING_ENERGY_TIEBREAK
+                    StatName.GUTS -> -BONDING_ENERGY_TIEBREAK
+                    else -> 0.0
+                }
 
             val scoreString: String = String.format("%.2f", score)
             MessageLog.i(TAG, "[TRAINING] ${training.name} Training has a score of $scoreString with a focus on building ${barResults.size} relationship bars.")
@@ -856,11 +857,16 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     // (Umamusume of the Year) trainer support, and her bond drives MotY point gains, so
                     // trainings showing her get an extra multiplier on top of the generic trainer-support
                     // bonus. We have no OCR template for the MotY ranking UI, so bond is the best proxy.
-                    val akikawaBondingBonus = if (
-                        config.scenario == "Trackblazer" &&
-                        bar.isTrainerSupport &&
-                        bar.trainerName == "Yayoi Akikawa"
-                    ) 1.25 else 1.0
+                    val akikawaBondingBonus =
+                        if (
+                            config.scenario == "Trackblazer" &&
+                            bar.isTrainerSupport &&
+                            bar.trainerName == "Yayoi Akikawa"
+                        ) {
+                            1.25
+                        } else {
+                            1.0
+                        }
 
                     val contribution = baseValue * diminishingFactor * earlyGameBonus * trainerSupportBonus * akikawaBondingBonus
                     score += contribution
@@ -957,12 +963,13 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     DecisionTracer.TrainingRunnerUp(
                         stat = option.name,
                         rejected = wasSkipped || excluded,
-                        reason = option.skipReason?.takeIf { it.isNotBlank() }
-                            ?: when {
-                                excluded -> "excluded (hard penalty)"
-                                wasSkipped -> "filtered out"
-                                else -> "outscored"
-                            },
+                        reason =
+                            option.skipReason?.takeIf { it.isNotBlank() }
+                                ?: when {
+                                    excluded -> "excluded (hard penalty)"
+                                    wasSkipped -> "filtered out"
+                                    else -> "outscored"
+                                },
                         score = rawScore?.takeIf { it.isFinite() },
                         failureChance = option.failureChance.takeIf { it >= 0 },
                         statGains = option.statGains,
@@ -1188,7 +1195,8 @@ class Training(private val game: Game, private val campaign: Campaign) {
             MessageLog.v(TAG, "\n[TRAINING] Now starting process to analyze the training on screen.")
         } else if (cachedAnalysisResults != null &&
             cachedIgnoreFailureChance == ignoreFailureChance &&
-            cachedIsIrregularEvaluation == isIrregularEvaluation) {
+            cachedIsIrregularEvaluation == isIrregularEvaluation
+        ) {
             // Cache hit with matching evaluation flags. Safe to replay.
             MessageLog.i(TAG, "[TRAINING] Using cached training analysis results for this turn.")
             processAnalysisResults(cachedAnalysisResults!!, ignoreFailureChance, isIrregularEvaluation, test)
@@ -1434,7 +1442,10 @@ class Training(private val game: Game, private val campaign: Campaign) {
         // This acts as an early exit from training analysis to speed up training.
         var failureChance: Int = game.imageUtils.findTrainingFailureChance(tries = 3)
         if (failureChance == -1 && !singleTraining) {
-            MessageLog.w(TAG, "[WARN] analyzeTrainings:: First failure chance detection failed all attempts. Attempting recovery by backing out to the Main screen and re-entering the Training screen.")
+            MessageLog.w(
+                TAG,
+                "[WARN] analyzeTrainings:: First failure chance detection failed all attempts. Attempting recovery by backing out to the Main screen and re-entering the Training screen.",
+            )
             failureChance = recoverAndRetryFailureChance()
         }
         if (failureChance == -1) {
