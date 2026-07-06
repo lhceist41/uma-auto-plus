@@ -40,6 +40,22 @@ class UnityCup(game: Game) : Campaign(game) {
     /** Flag indicating if the opponent selection should be overridden. */
     private var bOverrideOpponentSelection: Boolean = false
 
+    /**
+     * Best double-circle prediction count seen across the three opponents this selection cycle, and
+     * the opponent index holding it. When no opponent clears [confidentWinDoubleCircleThreshold],
+     * the confirmation loop races [bestPredictionIndex] (the highest win chance) instead of a fixed
+     * position, since a showdown loss costs team rank and stats. Reset when a new selection begins.
+     */
+    private var bestPredictionDoubleCircles: Int = -1
+    private var bestPredictionIndex: Int = 0
+
+    /**
+     * Minimum double-circles (of the five discipline slots) for a match to count as a confident win
+     * worth taking outright. Opponents are checked hardest-first, so the first to clear this bar is
+     * also the highest-reward safe pick.
+     */
+    private val confidentWinDoubleCircleThreshold: Int = 3
+
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -62,8 +78,15 @@ class UnityCup(game: Game) : Campaign(game) {
                 } else {
                     result.dialog.close(game.imageUtils)
                     if (selectedOpponentIndex >= 2) {
-                        MessageLog.w(TAG, "[WARN] handleDialogs:: Could not determine any opponent with sufficient double circle predictions. Selecting the 2nd opponent as a fallback.")
-                        selectedOpponentIndex = 1
+                        // All three opponents checked; none cleared the confident-win bar. Race the
+                        // opponent with the most double-circles (best win chance) instead of a fixed
+                        // position - a loss costs team rank and stats. Ties were already resolved
+                        // toward the easier opponent in analyzeOpponentRacePrediction.
+                        MessageLog.w(
+                            TAG,
+                            "[WARN] handleDialogs:: No opponent cleared the confident-win bar. Falling back to opponent #${bestPredictionIndex + 1} (best prediction: $bestPredictionDoubleCircles double-circle(s)).",
+                        )
+                        selectedOpponentIndex = bestPredictionIndex
                         bOverrideOpponentSelection = true
                     } else {
                         selectedOpponentIndex++
@@ -125,18 +148,30 @@ class UnityCup(game: Game) : Campaign(game) {
     }
 
     /**
-     * Analyzes the opponent race prediction images to determine if they are favorable.
+     * Counts the currently-selected opponent's double-circle predictions on the confirmation screen
+     * and decides whether the match is a confident win. Also records the count against the running
+     * best so the exhaustion fallback in [handleDialogs] can race the highest-win-chance opponent.
      *
-     * @return True if there are sufficient double circle predictions, false otherwise.
+     * @return True if the count clears [confidentWinDoubleCircleThreshold], false otherwise.
      */
     private fun analyzeOpponentRacePrediction(): Boolean {
         val doubleCircles = IconDoubleCircle.findAll(game.imageUtils, region = game.imageUtils.regionMiddle, confidence = 0.0)
-        if (doubleCircles.size >= 3) {
-            MessageLog.i(TAG, "[UNITY_CUP] Race #${selectedOpponentIndex + 1} has sufficient double circle predictions. Selecting it now...")
-            return true
+        val count = doubleCircles.size
+
+        // Track the strongest prediction seen so far. >= breaks ties toward the later (weaker/easier)
+        // opponent, the safer bet once no opponent clears the confident-win bar. Opponents are always
+        // checked in top-to-bottom (hardest-to-easiest) order, so the last tie is the easiest.
+        if (count >= bestPredictionDoubleCircles) {
+            bestPredictionDoubleCircles = count
+            bestPredictionIndex = selectedOpponentIndex
+        }
+
+        return if (count >= confidentWinDoubleCircleThreshold) {
+            MessageLog.i(TAG, "[UNITY_CUP] Opponent #${selectedOpponentIndex + 1} shows $count double-circle prediction(s); a confident win. Selecting it now...")
+            true
         } else {
-            MessageLog.i(TAG, "[UNITY_CUP] Race #${selectedOpponentIndex + 1} only had ${doubleCircles.size} double predictions and falls short. Skipping this opponent.")
-            return false
+            MessageLog.i(TAG, "[UNITY_CUP] Opponent #${selectedOpponentIndex + 1} shows only $count double-circle prediction(s); below the confident-win bar. Checking the next opponent.")
+            false
         }
     }
 
@@ -166,6 +201,8 @@ class UnityCup(game: Game) : Campaign(game) {
                 ButtonUnityCupRace.click(game.imageUtils, sourceBitmap = sourceBitmap) -> {
                     selectedOpponentIndex = 0
                     bOverrideOpponentSelection = false
+                    bestPredictionDoubleCircles = -1
+                    bestPredictionIndex = 0
                     game.waitForLoading()
                 }
 
