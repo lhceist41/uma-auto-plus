@@ -46,6 +46,8 @@ interface SelectButtonProps {
     placeholder?: string
     /** The currently selected value. */
     value?: string
+    /** Optional label override for the main button area (e.g. an action verb instead of the selected option's label). */
+    displayLabel?: string
     /** The function to set the selected value. */
     setValue?: React.Dispatch<React.SetStateAction<string>>
     /** Callback fired when the value changes. */
@@ -72,6 +74,7 @@ const SelectButton: React.FC<SelectButtonProps> = ({
     defaultValue,
     placeholder,
     value,
+    displayLabel,
     setValue,
     onValueChange,
     onPress,
@@ -211,7 +214,7 @@ const SelectButton: React.FC<SelectButtonProps> = ({
         <Select onValueChange={handleValueChange} value={value as any} defaultValue={defaultValue as any}>
             <View style={[styles.container, style]} ref={triggerRef} onLayout={onTriggerLayout}>
                 <CustomButton style={styles.button} variant={variant as any} icon={getIcon()} iconPosition={iconPosition} size={size} isLoading={false} onPress={onPressButton}>
-                    {currentLabel ?? placeholder}
+                    {displayLabel ?? currentLabel ?? placeholder}
                 </CustomButton>
                 <Separator orientation="vertical" style={{ backgroundColor: "transparent" }} />
                 <SelectPrimitive.Trigger asChild>

@@ -76,6 +76,14 @@ const scenarios = [
 const isMiscScenario = (scenario: string): boolean => scenario === "Daily Races" || scenario === "Team Trials"
 
 /**
+ * Scenarios offered in the center-button dropdown. The misc modes are implemented and
+ * functional (DailyRaceTask/TeamTrialsTask) but hidden from the picker for now — they are
+ * single-session modes that don't fit the career-preset flow the Home screen is built around.
+ * Remove the filter to surface them again.
+ */
+const dropdownScenarios = scenarios.filter((s) => !isMiscScenario(s.value))
+
+/**
  * The main Home page of the application.
  * Displays the Start/Stop button for the bot, a message log, and handles bot lifecycle events including settings persistence and readiness checks.
  */
@@ -226,6 +234,19 @@ const Home = () => {
         if (advisories.recommended?.includes(scenario)) return { kind: "recommend" }
         return null
     }, [appliedPreset, bsc.settings.general.scenario])
+
+    /**
+     * Action label for the center button: what pressing it will do, not which scenario is
+     * selected (the preset card below already shows that). Undefined falls back to the
+     * "Select a Scenario" placeholder.
+     */
+    const startButtonLabel: string | undefined = useMemo(() => {
+        if (isRunning) return "Stop"
+        const scenario = bsc.settings.general.scenario
+        if (!scenario) return undefined
+        if (bsc.settings.runQueue.enableRunQueue) return `Start Queue (${bsc.settings.runQueue.totalRuns} runs)`
+        return `Start · ${scenario}`
+    }, [isRunning, bsc.settings.general.scenario, bsc.settings.runQueue.enableRunQueue, bsc.settings.runQueue.totalRuns])
 
     /**
      * Applies a character preset's settings to the current configuration.
@@ -467,7 +488,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                         <Info size={24} color={colors.info} />
                     </TooltipTrigger>
                     <TooltipContent sideOffset={12} side="bottom" style={{ width: 200 }}>
-                        <Text>Select a Scenario to start from the center button dropdown.</Text>
+                        <Text>Pick a trainee preset below, or a scenario from the center button dropdown, to get ready.</Text>
                     </TooltipContent>
                 </Tooltip>
             )
@@ -499,9 +520,10 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                     <SelectButton
                         variant={getSelectButtonVariant()}
                         iconName={getSelectButtonIconName()}
-                        options={scenarios}
+                        options={dropdownScenarios}
                         placeholder={deviceMetrics ? "Select a Scenario" : "Not Ready"}
                         value={bsc.settings.general.scenario}
+                        displayLabel={startButtonLabel}
                         onValueChange={(value) => {
                             const newScenario = value || ""
                             bsc.setSettings({ ...bsc.settings, general: { ...bsc.settings.general, scenario: newScenario } })
