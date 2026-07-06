@@ -15,7 +15,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A searchable trainee picker replacing both preset dropdowns (Home and the rotation editor): one row per character/outfit with colored avatars, per-scenario recommendation chips, a badge showing whether a build has been proven in real completed runs or is still research-based, and a build summary per scenario card. Applying a preset now sets its scenario together with its settings, and the Home card remembers the applied preset across app restarts.
 - Favorites: star a trainee in the picker and she pins to a Favorites section on top. Stored outside the settings database, so favorites survive preset switches and profile changes.
 - Cross-scenario run queues. Rotation entries can mix URA Finale, Unity Cup, and Trackblazer; the between-run navigator now recognizes the Scenario Select carousel and pages it to each run's scenario before confirming (new templates for the screen header, all three scenario logos, and the carousel arrow).
-- Presets for the six most-requested top-tier cards: Kitasan Black, Nishino Flower, Seiun Sky, Maruzensky (Hot☆Summer Night), Oguri Cap, and Oguri Cap (Ashen Miracle) -- the roster is now 105 presets across 35 entries. Built from verified per-card aptitude and objective data with racing plans checked against the race database; research-graded until live careers land, and the picker's badge says so.
+- Presets for the six most-requested top-tier cards: Kitasan Black, Nishino Flower, Seiun Sky, Maruzensky (Hot☆Summer Night), Oguri Cap, and Oguri Cap (Ashen Miracle). Built from verified per-card aptitude and objective data with racing plans checked against the race database; research-graded until live careers land, and the picker's badge says so.
+- The rest of the community S-tier list: 17 more cards taking the roster to 156 presets across 52 entries. Ten new characters -- Silence Suzuka, Manhattan Cafe, Narita Taishin, Tamamo Cross, Mejiro Dober, Special Week, Smart Falcon, Meisho Doto, Tokai Teio, T.M. Opera O (New Year, Same Radiance!) -- plus alternate outfits for Special Week, Tokai Teio, Seiun Sky, Mayano Top Gun, Gold Ship, King Halo, and Taiki Shuttle. Built the same way as the first batch, with the same research badge. Smart Falcon is the second dirt specialist after Haru Urara, with a hand-built dirt race plan that starts early enough to clear his turn-25 two-win goal. Narita Taishin is the roster's first End Closer. Silence Suzuka runs Front (her unique needs a clear lead) and Medium-first despite her Mile aptitude, because her goals are almost all Medium races. Trackblazer warnings ship for the characters whose early-career race pool there is too thin (Manhattan Cafe, Tamamo Cross, Meisho Doto, both Teio cards) and for Smart Falcon's weak turf grade.
 
 ### Changed
 
@@ -377,7 +378,7 @@ The fork already differed substantially from upstream v5.4.8 on day one. The lis
 - Configurable `stopOnError` (default: continue past errors), reuse-last-launch-setup, auto-fill support deck.
 
 ### Character presets (entirely new)
-- 105 built-in character profile presets (35 character entries × 3 scenarios: Trackblazer, Unity Cup, URA Finale).
+- 156 built-in character presets (52 characters and outfits × 3 scenarios: Trackblazer, Unity Cup, URA Finale).
 - Searchable trainee picker on the Home page — character-grouped with per-scenario advisory chips, validation badges, and starred favorites — that deep-merges preset settings into the active profile and sets the scenario together with the preset.
 
 ### Bot behaviour improvements
