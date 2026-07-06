@@ -42,6 +42,22 @@ object LabelUnityCupOpponentSelectionLaurel : ComponentInterface {
     override val template = Template("components/label/unitycup_opponent_selection_laurel", region = Region.leftHalf)
 }
 
+object LabelScenarioSelectHeader : ComponentInterface {
+    override val template = Template("components/label/scenario_select_header", region = Region.topHalf)
+}
+
+object LabelScenarioSelectUra : ComponentInterface {
+    override val template = Template("components/label/scenario_select_ura", region = Region.middle)
+}
+
+object LabelScenarioSelectUnityCup : ComponentInterface {
+    override val template = Template("components/label/scenario_select_unity_cup", region = Region.middle)
+}
+
+object LabelScenarioSelectTrackblazer : ComponentInterface {
+    override val template = Template("components/label/scenario_select_trackblazer", region = Region.middle)
+}
+
 object LabelEnergy : ComponentInterface {
     override val template = Template("components/label/energy")
 }

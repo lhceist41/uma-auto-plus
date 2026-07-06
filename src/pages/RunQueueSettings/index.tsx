@@ -351,7 +351,8 @@ const RunQueueSettings = () => {
 
                                             <WarningContainer style={{ marginTop: 12 }}>
                                                 The In-Game Name must match exactly what the Trainee Select preview shows, including the [Outfit] prefix — the bot reads that banner to confirm it
-                                                picked the right unit. All trainees must use the same scenario for now. Snapshots are rebuilt from your current settings each time you press Start.
+                                                picked the right unit. Mixed scenarios are supported: the bot pages the Scenario Select carousel to each trainee's scenario between runs. Snapshots are
+                                                rebuilt from your current settings each time you press Start.
                                             </WarningContainer>
                                         </View>
                                     )}

@@ -78,6 +78,12 @@ object IconRaceListPredictionSingleStar : ComponentInterface {
     override val template = Template("components/icon/race_list_prediction_single_star", region = Region.rightHalf)
 }
 
+object IconScenarioSelectArrowRight : ComponentInterface {
+    // The green right chevron on the Scenario Select carousel. Pages the 3-scenario cycle
+    // (URA Finale -> Unity Cup -> Trackblazer) toward the run's target scenario.
+    override val template = Template("components/icon/scenario_select_arrow_right", region = Region.rightHalf)
+}
+
 object IconRaceListFansIcon : ComponentInterface {
     // The coral fan-count glyph shown on every race-list row next to the "+N fans" value. Used as
     // a universal row anchor so rows WITHOUT any prediction icon become findable (the game renders

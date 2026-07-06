@@ -140,7 +140,7 @@ class CareerLaunchNavigator(private val context: Context) {
         /** Career entry / mode selection. Requires CAREER button template (not yet provided). */
         CAREER_ENTRY,
 
-        /** Scenario selection screen. Requires template (not yet provided). */
+        /** Scenario Select carousel. Paged to the run's target scenario before advancing. */
         SCENARIO_SELECT,
 
         /** Trainee/character selection or reuse. Requires template (not yet provided). */
@@ -667,6 +667,16 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.CAREER_END_SKILL_SCREEN
         }
 
+        // Scenario Select carousel - its header banner is unique to this screen. MUST precede the
+        // generic POST_RUN_RESULTS Next check: the screen shows a green Next that would otherwise
+        // blind-confirm whatever scenario the game last played, which is exactly wrong for a
+        // cross-scenario rotation that needs the carousel paged to the target scenario first.
+        // Gated on the launch not having advanced past Start Career (mirrors TRAINEE_SELECT_SCREEN):
+        // the header only exists pre-deck, so in-career screens never pay this scan.
+        if (!careerLaunchInitiated && LabelScenarioSelectHeader.check(iu, sourceBitmap = bitmap)) {
+            return LaunchScreenState.SCENARIO_SELECT
+        }
+
         // POST_RUN_RESULTS - generic post-run / between-screens dialog with Next, OK, Confirm,
         // or Close (wide or compact-pill style) as the primary advance button. This is the most
         // common state during between-run navigation (10-20 iterations per career), so we check it early.
@@ -897,13 +907,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     recommendedAction = "Provide the 'career_home' template image, or manually enter Career mode and restart the queue.",
                 )
 
-            LaunchScreenState.SCENARIO_SELECT ->
-                TransitionResult.Failed(
-                    reason = "Reached SCENARIO_SELECT state but no template exists for scenario selection UI. Cannot navigate further.",
-                    transition = "SCENARIO_SELECT -> TRAINEE_SETUP",
-                    isRecoverable = true,
-                    recommendedAction = "Provide scenario select templates, or manually select the scenario and restart the queue.",
-                )
+            LaunchScreenState.SCENARIO_SELECT -> handleScenarioSelect()
 
             LaunchScreenState.TRAINEE_SETUP ->
                 TransitionResult.Failed(
@@ -2359,6 +2363,67 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.w(TAG, "[NAV] Failed to save failure screenshot: ${e.message}")
             ""
         }
+    }
+
+    /**
+     * SCENARIO_SELECT: pages the scenario carousel to the run's target scenario, then advances.
+     *
+     * The game opens this screen on whatever scenario was last played, so a same-scenario queue
+     * passes with a single Next tap. A cross-scenario rotation pages the 3-entry cyclic carousel
+     * (URA Finale -> Unity Cup -> Trackblazer) with the right arrow until the target scenario's
+     * logo shows. Bounded at one full cycle plus a settle re-check so a misread cannot loop.
+     */
+    private fun handleScenarioSelect(): TransitionResult {
+        val target = SettingsHelper.getStringSetting("general", "scenario")
+        val targetLogo =
+            when (target) {
+                "URA Finale" -> LabelScenarioSelectUra
+                "Unity Cup" -> LabelScenarioSelectUnityCup
+                "Trackblazer" -> LabelScenarioSelectTrackblazer
+                else ->
+                    return TransitionResult.Failed(
+                        reason = "Scenario Select reached with unsupported target scenario \"$target\".",
+                        transition = "SCENARIO_SELECT -> TRAINEE_SETUP",
+                        isRecoverable = false,
+                        recommendedAction = "Select a career scenario (URA Finale, Unity Cup, or Trackblazer) in the app and restart the queue.",
+                    )
+            }
+
+        repeat(4) { attempt ->
+            if (!BotService.isRunning || StartModule.queueStopRequested) {
+                return TransitionResult.Failed(
+                    reason = "Bot stopped while paging the Scenario Select carousel.",
+                    transition = "SCENARIO_SELECT -> TRAINEE_SETUP",
+                )
+            }
+            val bitmap = iu.getSourceBitmap()
+            if (targetLogo.check(iu, sourceBitmap = bitmap)) {
+                MessageLog.i(TAG, "[NAV] Scenario Select shows \"$target\". Advancing to trainee setup.")
+                return if (ButtonNext.click(iu)) {
+                    waitSafe(2.0)
+                    TransitionResult.Continue
+                } else {
+                    TransitionResult.Failed(
+                        reason = "Scenario Select shows \"$target\" but the Next button could not be clicked.",
+                        transition = "SCENARIO_SELECT -> TRAINEE_SETUP",
+                    )
+                }
+            }
+            MessageLog.i(TAG, "[NAV] Scenario Select is not showing \"$target\" (page check ${attempt + 1}/4). Paging the carousel right.")
+            if (!IconScenarioSelectArrowRight.click(iu)) {
+                return TransitionResult.Failed(
+                    reason = "Scenario Select carousel arrow not found while paging toward \"$target\".",
+                    transition = "SCENARIO_SELECT -> TRAINEE_SETUP",
+                    recommendedAction = "Manually select the scenario in-game and restart the queue.",
+                )
+            }
+            waitSafe(1.5)
+        }
+        return TransitionResult.Failed(
+            reason = "Scenario Select never showed \"$target\" after paging the full carousel.",
+            transition = "SCENARIO_SELECT -> TRAINEE_SETUP",
+            recommendedAction = "Manually select the scenario in-game and restart the queue. If the scenario logos changed in a patch, recapture the scenario_select_* templates.",
+        )
     }
 
     // ////////////////////////////////////////////////////////////////////////////

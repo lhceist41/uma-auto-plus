@@ -376,15 +376,8 @@ const Home = () => {
             // on an unresolved preset or a persistence failure rather than let the queue hit a switch
             // boundary it can't satisfy — match-or-stop applies at config time, not just in-game.
             if (bsc.settings.runQueue.enableTraineeRotation) {
-                // Single scenario per rotation: the scenario-select screen is tapped through keeping the
-                // last scenario, so mixed-scenario entries would silently run the wrong campaign. Block
-                // until a scenario-select handler exists.
-                const scenarios = new Set(bsc.settings.runQueue.traineeRotation.map((e) => e.scenario))
-                if (scenarios.size > 1) {
-                    setSnackbarMessage("Trainee rotation supports one scenario at a time. Make every trainee use the same scenario.")
-                    setSnackbarOpen(true)
-                    return
-                }
+                // Mixed scenarios are supported: each snapshot carries its entry's scenario and the
+                // navigator pages the Scenario Select carousel to it before confirming the launch.
                 const missing = await prepareTraineeRotation()
                 if (missing === null) {
                     setSnackbarMessage("Failed to prepare trainee rotation snapshots. Not starting.")
