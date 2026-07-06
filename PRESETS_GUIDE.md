@@ -6,11 +6,13 @@ This document explains how built-in character presets work in UMA Auto+, how the
 
 ## Overview
 
-UMA Auto+ ships with **87 built-in character presets** (29 character entries x 3 scenarios). When a user selects a scenario on the Home page, a dropdown appears showing only the characters available for that scenario. Picking a character instantly applies all of its optimized settings.
+UMA Auto+ ships with **105 built-in character presets** (35 character entries x 3 scenarios). Trainees are picked in the searchable trainee picker on the Home page — one row per character/outfit with per-scenario advisory chips and a validation badge — and applying a preset sets its scenario together with its settings.
 
 The 2026-06-11 batch added seven entries from the June banner research pass: Sweep Tosho, Mihono Bourbon, Mejiro Palmer, El Condor Pasa (Kukulkan Warrior), Tosen Jordan, Super Creek, and Matikanetannhauser. Their URA presets ship curated racing plans (see "Curated racing plans in presets" below); Tosen Jordan's presets enable negative-skill buying so the buy pass clears her 3D Nail Art speed debuff. Symboli Rudolf (Emperor's Path) was added 2026-06-18 — a Late Surger Medium built around her late-overtake unique; URA and Trackblazer are her recommended scenarios. Biwa Hayahide (Pace Chaser, built as a Long stayer) and Mejiro Ryan (Late Surger Medium) were added 2026-06-21 to make two owned-but-unpresetted Medium/Long-A turf bodies farmable hands-off; both fill the Medium/Long Team-Trials slots and are URA + Trackblazer recommended.
 
 The 2026-07-05 tuning pass put Stamina first in the URA Finale and Unity Cup presets for Mayano Top Gun, Tosen Jordan, and Symboli Rudolf: all three were reaching their Long goal races (Kikuka Sho, Tenno Sho Spring) short on stamina and force-ending, and the training-priority order — not the stat targets — is what governs early training. Their Trackblazer presets are unchanged (its goals are result-point-based, not a Long chain). Winning Ticket (Get to Winning!) kept her Trackblazer preset but picked up an avoid advisory for it: her Sprint=G/Mile=F aptitudes make the Junior Result-Points checkpoint unreliable, so the "Yes" below means the preset ships, not that it is recommended — the Home advisory flags it.
+
+The 2026-07-06 batch added the six top-tier cards the community asked for: Kitasan Black, Nishino Flower, Seiun Sky, Maruzensky (Hot☆Summer Night), Oguri Cap, and Oguri Cap (Ashen Miracle). All six are research-graded — built from verified per-card aptitude/objective data (career objective chains are shared across a character's outfits, so the two Oguri cards share one racing plan) and cloned from the nearest validated archetype, but none has completed a live career on the maintainer's account yet; the picker shows them with the Research badge. Kitasan and Seiun train Stamina first (Long goal chains), Nishino is a Sprint/Mile speed build with a participation-only Oaks gate, and both recovery-gated uniques (summer Maruzensky, Ashen Miracle Oguri) ship skill plans that front-load the recovery skills their uniques need.
 
 ### Currently included characters
 
@@ -28,7 +30,9 @@ The 2026-07-05 tuning pass put Stamina first in the URA Finale and Unity Cup pre
 | Haru Urara | Yes | Yes | Yes |
 | Hishi Amazon | Yes | Yes | Yes |
 | King Halo | Yes | Yes | Yes |
+| Kitasan Black | Yes | Yes | Yes |
 | Maruzensky (Formula R) | Yes | Yes | Yes |
+| Maruzensky (Hot☆Summer Night) | Yes | Yes | Yes |
 | Matikanefukukitaru | Yes | Yes | Yes |
 | Matikanetannhauser | Yes | Yes | Yes |
 | Mayano Top Gun | Yes | Yes | Yes |
@@ -37,7 +41,11 @@ The 2026-07-05 tuning pass put Stamina first in the URA Finale and Unity Cup pre
 | Mejiro Ryan | Yes | Yes | Yes |
 | Mihono Bourbon | Yes | Yes | Yes |
 | Nice Nature | Yes | Yes | Yes |
+| Nishino Flower | Yes | Yes | Yes |
+| Oguri Cap | Yes | Yes | Yes |
+| Oguri Cap (Ashen Miracle) | Yes | Yes | Yes |
 | Sakura Bakushin O | Yes | Yes | Yes |
+| Seiun Sky | Yes | Yes | Yes |
 | Super Creek | Yes | Yes | Yes |
 | Sweep Tosho | Yes | Yes | Yes |
 | Symboli Rudolf (Emperor's Path) | Yes | Yes | Yes |
@@ -52,10 +60,10 @@ The 2026-07-05 tuning pass put Stamina first in the URA Finale and Unity Cup pre
 
 ### User flow
 
-1. User opens UMA Auto+ and selects a **scenario** (e.g., "Trackblazer") on the Home page.
-2. A **character preset dropdown** appears below the scenario selector, filtered to show only presets for that scenario (29 characters).
-3. User picks a character (e.g., "El Condor Pasa").
-4. The preset's full settings are **deep-merged** into the current app configuration, overwriting every settings category.
+1. User opens UMA Auto+ and taps the **trainee preset card** on the Home page (or picks a scenario first from the center-button dropdown — both orders work).
+2. The **trainee picker** opens: searchable, one row per character/outfit, with URA/UC/TB advisory chips, a Validated/Research badge per scenario, and starred favorites pinned on top.
+3. User expands a trainee and taps **Apply** on one of her scenario cards (e.g., "El Condor Pasa" — Trackblazer). The scenario is set together with the preset.
+4. The preset's settings are **deep-merged** into the current app configuration, overwriting every settings category it ships.
 5. Settings are **saved to SQLite immediately** so the Kotlin backend reads the correct values.
 6. A green confirmation snackbar appears: `Preset "El Condor Pasa" applied`.
 7. The bot is now configured with that character's optimized settings and ready to start.
