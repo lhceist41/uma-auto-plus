@@ -2389,7 +2389,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     )
             }
 
-        repeat(4) { attempt ->
+        repeat(6) { attempt ->
             if (!BotService.isRunning || StartModule.queueStopRequested) {
                 return TransitionResult.Failed(
                     reason = "Bot stopped while paging the Scenario Select carousel.",
@@ -2409,15 +2409,15 @@ class CareerLaunchNavigator(private val context: Context) {
                     )
                 }
             }
-            MessageLog.i(TAG, "[NAV] Scenario Select is not showing \"$target\" (page check ${attempt + 1}/4). Paging the carousel right.")
+            MessageLog.i(TAG, "[NAV] Scenario Select is not showing \"$target\" (page check ${attempt + 1}/6). Paging the carousel right.")
             if (!IconScenarioSelectArrowRight.click(iu)) {
-                return TransitionResult.Failed(
-                    reason = "Scenario Select carousel arrow not found while paging toward \"$target\".",
-                    transition = "SCENARIO_SELECT -> TRAINEE_SETUP",
-                    recommendedAction = "Manually select the scenario in-game and restart the queue.",
-                )
+                // The chevron pulses, so a single miss is usually an animation trough - settle
+                // onto a different frame and let the loop retry instead of failing the queue.
+                MessageLog.w(TAG, "[NAV] Carousel arrow not matched on this frame. Retrying on a fresh capture.")
+                waitSafe(0.75)
+            } else {
+                waitSafe(1.5)
             }
-            waitSafe(1.5)
         }
         return TransitionResult.Failed(
             reason = "Scenario Select never showed \"$target\" after paging the full carousel.",

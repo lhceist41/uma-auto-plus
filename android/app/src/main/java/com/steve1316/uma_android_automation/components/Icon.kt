@@ -81,7 +81,10 @@ object IconRaceListPredictionSingleStar : ComponentInterface {
 object IconScenarioSelectArrowRight : ComponentInterface {
     // The green right chevron on the Scenario Select carousel. Pages the 3-scenario cycle
     // (URA Finale -> Unity Cup -> Trackblazer) toward the run's target scenario.
-    override val template = Template("components/icon/scenario_select_arrow_right", region = Region.rightHalf)
+    // The chevron pulses: a mid-animation frame matched only 0.688 on the first live boundary
+    // (2026-07-06) and failed the default 0.8, so the threshold sits at 0.6 - its best match
+    // on non-carousel screens stays around 0.4.
+    override val template = Template("components/icon/scenario_select_arrow_right", region = Region.rightHalf, confidence = 0.6)
 }
 
 object IconRaceListFansIcon : ComponentInterface {
