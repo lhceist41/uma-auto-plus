@@ -503,12 +503,7 @@ describe("parseLogs", () => {
     it("updates existing day's dateText when same day appears again in same file", () => {
         // Day 5 first appears without dateText (bare Turn Number line without [DATE] prefix),
         // then appears again with proper dateText.
-        const content = [
-            "Current Turn Number 5",
-            "some log line",
-            "[INFO] Detected date: Junior Year Early Mar",
-            "[DATE] It is currently Junior Year Early Mar / Turn Number 5.",
-        ].join("\n")
+        const content = ["Current Turn Number 5", "some log line", "[INFO] Detected date: Junior Year Early Mar", "[DATE] It is currently Junior Year Early Mar / Turn Number 5."].join("\n")
         const result = parseLogs([file("a.txt", content)])
         const days = dayRecords(result)
         const day5 = days.find((d) => d.dayNumber === 5)!
@@ -636,11 +631,7 @@ describe("aggregateYearSummaries", () => {
     })
 
     it("produces summaries in order [Junior, Classic, Senior]", () => {
-        const records = [
-            makeDayRecord({ dayNumber: 25, year: "Classic" }),
-            makeDayRecord({ dayNumber: 1, year: "Junior" }),
-            makeDayRecord({ dayNumber: 49, year: "Senior" }),
-        ]
+        const records = [makeDayRecord({ dayNumber: 25, year: "Classic" }), makeDayRecord({ dayNumber: 1, year: "Junior" }), makeDayRecord({ dayNumber: 49, year: "Senior" })]
         const result = aggregateYearSummaries(records)
         expect(result.summaries.map((s) => s.year)).toEqual(["Junior", "Classic", "Senior"])
     })
@@ -740,10 +731,7 @@ describe("aggregateYearSummaries", () => {
     })
 
     it("marks hasFinals for Senior year when turns 73-75 are present", () => {
-        const records = [
-            makeDayRecord({ dayNumber: 72, year: "Senior" }),
-            makeDayRecord({ dayNumber: 73, year: "Senior" }),
-        ]
+        const records = [makeDayRecord({ dayNumber: 72, year: "Senior" }), makeDayRecord({ dayNumber: 73, year: "Senior" })]
         const result = aggregateYearSummaries(records)
         const senior = result.summaries.find((s) => s.year === "Senior")!
         expect(senior.hasFinals).toBe(true)
