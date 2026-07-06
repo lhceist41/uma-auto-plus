@@ -463,6 +463,25 @@ class Training(private val game: Game, private val campaign: Campaign) {
             return getScenarioStatCap(config.scenario, statName)
         }
 
+        /** Race calculations value stat points past 1200 at half weight (July 2026 rebalance). */
+        private const val SOFT_CAP_STAT_VALUE = 1200
+
+        /**
+         * Effective value of a stat gain under the 1200 soft cap: the portion of a gain landing
+         * above 1200 counts at half weight in race calculations (a 1500 stat performs as 1350),
+         * so training points spent past the line buy half the performance. An unknown current
+         * stat (absent from the map or the -1 OCR-miss sentinel) can never trigger the discount.
+         *
+         * @param currentStat The trainee's current value of the stat.
+         * @param statGain The detected gain for the stat.
+         * @return The soft-cap-adjusted gain value.
+         */
+        fun softCapAdjustedGain(currentStat: Int, statGain: Int): Double {
+            if (statGain <= 0) return 0.0
+            val fullPortion = (SOFT_CAP_STAT_VALUE - currentStat).coerceIn(0, statGain)
+            return fullPortion + (statGain - fullPortion) * 0.5
+        }
+
         /** Stats gained per finale race win, per stat. Slightly above the actual +10 to account for misc event/card gains. */
         private const val FINALE_RACE_STAT_BONUS = 15
 
@@ -765,20 +784,25 @@ class Training(private val game: Game, private val campaign: Campaign) {
                             1.0
                         }
 
+                    // July 2026 soft cap: points landing above 1200 deliver half race value, so a
+                    // gain that crosses the line is worth less than its raw size suggests.
+                    val effectiveGain = softCapAdjustedGain(currentStat, statGain)
+
                     val bonusNote = if (isMainStat && statGain >= 30) " [HIGH MAIN STAT]" else ""
                     val sparkNote = if (isSparkStat && canTriggerSpark) " [SPARK PRIORITY]" else ""
                     val levelNote = if (levelMultiplier > 1.0) " [LVL ${training.trainingLevel} BOOST ${String.format("%.2f", levelMultiplier)}x]" else ""
+                    val softCapNote = if (effectiveGain < statGain) " [SOFT CAP ${String.format("%.1f", effectiveGain)}]" else ""
                     val completionString: String = String.format("%.2f", completionPercent)
                     val ratioMultiplierString: String = String.format("%.2f", ratioMultiplier)
                     val priorityMultiplierString: String = String.format("%.2f", priorityMultiplier)
                     Log.d(
                         TAG,
                         "$statName: gain=$statGain, completion=$completionString%, " +
-                            "ratioMultiplierString=$ratioMultiplierString, priorityMultiplierString=${priorityMultiplierString}$bonusNote$sparkNote$levelNote",
+                            "ratioMultiplierString=$ratioMultiplierString, priorityMultiplierString=${priorityMultiplierString}$bonusNote$sparkNote$levelNote$softCapNote",
                     )
 
                     // Calculate final score for this stat.
-                    var statScore = statGain.toDouble()
+                    var statScore = effectiveGain
                     statScore *= ratioMultiplier
                     statScore *= priorityMultiplier
                     statScore *= levelMultiplier

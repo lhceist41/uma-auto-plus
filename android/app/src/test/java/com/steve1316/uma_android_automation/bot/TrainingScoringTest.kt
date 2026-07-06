@@ -11,6 +11,7 @@ import com.steve1316.uma_android_automation.bot.Training.Companion.getScenarioSt
 import com.steve1316.uma_android_automation.bot.Training.Companion.scoreFriendshipTraining
 import com.steve1316.uma_android_automation.bot.Training.Companion.scoreUnityCupTraining
 import com.steve1316.uma_android_automation.bot.Training.Companion.selectBestTrainingWithHintPriority
+import com.steve1316.uma_android_automation.bot.Training.Companion.softCapAdjustedGain
 import com.steve1316.uma_android_automation.bot.Training.TrainingConfig
 import com.steve1316.uma_android_automation.bot.Training.TrainingOption
 import com.steve1316.uma_android_automation.types.DateMonth
@@ -542,6 +543,88 @@ class TrainingScoringTest {
         val score = calculateStatEfficiencyScore(config, training)
 
         assertEquals(0.0, score, "Training with no stat gains should return zero")
+    }
+
+    // ============================================================================
+    // Soft-cap (July 2026 rebalance, >1200 half-value) Tests
+    // ============================================================================
+
+    @Test
+    @DisplayName("Soft cap: gains landing below 1200 keep full value")
+    fun testSoftCapBelowCapFullValue() {
+        assertEquals(20.0, softCapAdjustedGain(1000, 20), 0.001)
+        assertEquals(20.0, softCapAdjustedGain(1180, 20), 0.001)
+    }
+
+    @Test
+    @DisplayName("Soft cap: a gain straddling 1200 keeps full value below the line and half above")
+    fun testSoftCapStraddlingGain() {
+        // 10 points to reach 1200 at full value + 10 points above at half = 15.
+        assertEquals(15.0, softCapAdjustedGain(1190, 20), 0.001)
+    }
+
+    @Test
+    @DisplayName("Soft cap: gains entirely above 1200 count at half value")
+    fun testSoftCapAboveCapHalfValue() {
+        assertEquals(10.0, softCapAdjustedGain(1200, 20), 0.001)
+        assertEquals(10.0, softCapAdjustedGain(1500, 20), 0.001)
+    }
+
+    @Test
+    @DisplayName("Soft cap: zero gain and an unknown current stat are safe")
+    fun testSoftCapEdgeCases() {
+        assertEquals(0.0, softCapAdjustedGain(1300, 0), 0.001)
+        // An unknown current stat (absent key -> 0, or the -1 OCR-miss sentinel) must never discount.
+        assertEquals(20.0, softCapAdjustedGain(0, 20), 0.001)
+        assertEquals(20.0, softCapAdjustedGain(-1, 20), 0.001)
+    }
+
+    @Test
+    @DisplayName("Soft cap applies to side-stat gains above 1200, pinned by an exact composite score")
+    fun testSoftCapAppliesToSideStats() {
+        // SPEED (main) below the cap at full value; WIT (side) above the cap at half value.
+        val training =
+            createDefaultTrainingOption(
+                name = StatName.SPEED,
+                statGains = statGainsToMap(intArrayOf(20, 0, 0, 0, 10)),
+            )
+        val config =
+            createDefaultConfig(
+                trainingOptions = listOf(training),
+                currentStats = mapOf(StatName.SPEED to 600, StatName.STAMINA to 120, StatName.POWER to 120, StatName.GUTS to 120, StatName.WIT to 1260),
+            ).copy(statTargets = mapOf(StatName.SPEED to 1000, StatName.STAMINA to 300, StatName.POWER to 300, StatName.GUTS to 300, StatName.WIT to 2100))
+
+        // Both stats sit at 60% completion (ratio 3.0). SPEED: 20 x 3.0 x 1.5 priority = 90.
+        // WIT: effective gain 5.0 (10 halved above the cap) x 3.0 x 1.2 priority = 18. Total 108.
+        val score = calculateStatEfficiencyScore(config, training)
+        assertEquals(108.0, score, 0.001, "Side-stat gains above 1200 must be discounted in the composite score")
+    }
+
+    @Test
+    @DisplayName("Soft cap halves the stat-efficiency score above 1200 at equal completion")
+    fun testSoftCapHalvesEfficiencyScoreAboveCap() {
+        val training =
+            createDefaultTrainingOption(
+                name = StatName.SPEED,
+                statGains = statGainsToMap(intArrayOf(20, 0, 0, 0, 0)),
+            )
+        // Same 60% completion on both sides of the cap so every other multiplier is identical.
+        val belowCap =
+            createDefaultConfig(
+                trainingOptions = listOf(training),
+                currentStats = mapOf(StatName.SPEED to 600, StatName.STAMINA to 120, StatName.POWER to 120, StatName.GUTS to 120, StatName.WIT to 120),
+            ).copy(statTargets = mapOf(StatName.SPEED to 1000, StatName.STAMINA to 300, StatName.POWER to 300, StatName.GUTS to 300, StatName.WIT to 300))
+        val aboveCap =
+            createDefaultConfig(
+                trainingOptions = listOf(training),
+                currentStats = mapOf(StatName.SPEED to 1260, StatName.STAMINA to 120, StatName.POWER to 120, StatName.GUTS to 120, StatName.WIT to 120),
+            ).copy(statTargets = mapOf(StatName.SPEED to 2100, StatName.STAMINA to 300, StatName.POWER to 300, StatName.GUTS to 300, StatName.WIT to 300))
+
+        val belowScore = calculateStatEfficiencyScore(belowCap, training)
+        val aboveScore = calculateStatEfficiencyScore(aboveCap, training)
+
+        assertTrue(belowScore > 0.0, "The below-cap control score must be positive")
+        assertEquals(belowScore / 2.0, aboveScore, 0.001, "A gain entirely above 1200 should score at exactly half weight")
     }
 
     // ============================================================================
