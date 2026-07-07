@@ -464,25 +464,10 @@ const searchConfig: SearchOption[] = [
     // Skill Settings
     // ============================================================
     {
-        id: "enable-skill-point-check",
-        title: "Enable Skill Point Check",
-        description:
-            "Enables check for a certain skill point threshold. When the threshold is reached, the bot is stopped. This can be changed to allow the selected Skill Plan to spend those points instead of stopping the bot.",
-        page: "SkillSettings",
-    },
-    {
         id: "skill-point-check",
-        title: "Skill Point Threshold",
-        description: "The number of skill points to accumulate before stopping the bot.",
+        title: "Spend Skill Points",
+        description: "When the bot spends skill points mid-career: a preset (0 / 350 / 700 / 1200 SP), a custom threshold, or Career end to save them all for the Pre-Finals and end-of-career buys.",
         page: "SkillSettings",
-        parentId: "enable-skill-point-check",
-    },
-    {
-        id: "skill-point-check-plan",
-        title: "Enable Skill Plan Upon Meeting Threshold",
-        description: "Instead of stopping the bot, this will run the Skill Plan to spend the skill points when the threshold is met.",
-        page: "SkillSettings",
-        parentId: "enable-skill-point-check",
     },
     {
         id: "skill-plan-running-style",

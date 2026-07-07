@@ -1,5 +1,5 @@
-import { useMemo, useContext, useEffect, useRef } from "react"
-import { View, Text, ScrollView, StyleSheet } from "react-native"
+import { useMemo, useContext, useRef } from "react"
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import { Divider } from "react-native-paper"
 import { useTheme } from "../../context/ThemeContext"
@@ -34,18 +34,6 @@ const SkillSettings = () => {
     const skillSettings = { ...defaultSettings.skills, ...settings.skills }
     const { preferredRunningStyle, preferredTrackDistance, preferredTrackSurface } = skillSettings
 
-    useEffect(() => {
-        if (bsc.settings.skills.plans.skillPointCheck.enabled) {
-            bsc.setSettings({
-                ...bsc.settings,
-                skills: {
-                    ...bsc.settings.skills,
-                    enableSkillPointCheck: true,
-                },
-            })
-        }
-    }, [bsc.settings.skills.plans.skillPointCheck.enabled])
-
     /**
      * Update a skill setting.
      * @param key The key of the setting to update.
@@ -58,6 +46,32 @@ const SkillSettings = () => {
                 ...bsc.settings.skills,
                 [key]: value,
             },
+        })
+    }
+
+    // Skill-point spending threshold. A preset chip or a typed number sets the mid-career threshold
+    // and turns the check on; the plan is always forced to SPEND (never the legacy "stop the bot at
+    // the threshold" behavior). "Career end" turns the mid-career check off entirely, leaving only
+    // the day-72 Pre-Finals and end-of-career buys - the way the upstream project handles skills.
+    const SPEND_PRESETS = [0, 350, 700, 1200]
+    const setSpendThreshold = (value: number) => {
+        setSettings({
+            ...bsc.settings,
+            skills: {
+                ...bsc.settings.skills,
+                enableSkillPointCheck: true,
+                skillPointCheck: value,
+                plans: {
+                    ...bsc.settings.skills.plans,
+                    skillPointCheck: { ...bsc.settings.skills.plans.skillPointCheck, enabled: true },
+                },
+            },
+        })
+    }
+    const setSpendAtCareerEnd = () => {
+        setSettings({
+            ...bsc.settings,
+            skills: { ...bsc.settings.skills, enableSkillPointCheck: false },
         })
     }
 
@@ -107,6 +121,32 @@ const SkillSettings = () => {
                     includeFontPadding: false,
                     marginTop: 2,
                 },
+                chipRow: {
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    marginBottom: 4,
+                },
+                chip: {
+                    paddingVertical: 8,
+                    paddingHorizontal: 16,
+                    borderRadius: 20,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    backgroundColor: colors.card,
+                },
+                chipActive: {
+                    backgroundColor: colors.primary,
+                    borderColor: colors.primary,
+                },
+                chipText: {
+                    fontSize: 14,
+                    color: colors.foreground,
+                },
+                chipTextActive: {
+                    color: colors.primaryForeground,
+                    fontWeight: "600",
+                },
             }),
         [colors]
     )
@@ -123,69 +163,41 @@ const SkillSettings = () => {
                             process of farming rank in events less of a hassle.
                         </Text>
                         <Divider style={{ marginBottom: 16 }} />
-                        <CustomCheckbox
-                            searchId="enable-skill-point-check"
-                            checked={bsc.settings.skills.enableSkillPointCheck}
-                            onCheckedChange={(checked) => {
-                                bsc.setSettings({
-                                    ...bsc.settings,
-                                    skills: { ...bsc.settings.skills, enableSkillPointCheck: checked },
-                                })
-                            }}
-                            label="Enable Skill Point Check"
-                            description="Enables check for a certain skill point threshold. When the threshold is reached, the bot is stopped. This can be changed to allow the selected Skill Plan to spend those points instead of stopping the bot."
-                        />
+                        <Text style={styles.inputLabel}>Spend skill points when SP reaches</Text>
+                        <Text style={styles.description}>
+                            The bot buys skills mid-career once your skill points reach this amount. Tap a preset or set an exact number below. Career end (the last chip) holds everything for the
+                            Pre-Finals and end-of-career buys, matching the upstream project. Applying a trainee preset resets this to that preset&apos;s value.
+                        </Text>
+                        <View style={styles.chipRow}>
+                            {SPEND_PRESETS.map((preset) => {
+                                const active = bsc.settings.skills.enableSkillPointCheck && bsc.settings.skills.skillPointCheck === preset
+                                return (
+                                    <TouchableOpacity key={preset} style={[styles.chip, active && styles.chipActive]} onPress={() => setSpendThreshold(preset)}>
+                                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{preset}</Text>
+                                    </TouchableOpacity>
+                                )
+                            })}
+                            <TouchableOpacity style={[styles.chip, !bsc.settings.skills.enableSkillPointCheck && styles.chipActive]} onPress={setSpendAtCareerEnd}>
+                                <Text style={[styles.chipText, !bsc.settings.skills.enableSkillPointCheck && styles.chipTextActive]}>Career end</Text>
+                            </TouchableOpacity>
+                        </View>
 
                         <View style={bsc.settings.skills.enableSkillPointCheck ? { marginTop: 8 } : { display: "none" }}>
                             <CustomSlider
                                 searchId="skill-point-check"
                                 searchCondition={bsc.settings.skills.enableSkillPointCheck}
-                                parentId="enable-skill-point-check"
                                 value={bsc.settings.skills.skillPointCheck}
                                 placeholder={bsc.defaultSettings.skills.skillPointCheck}
-                                onValueChange={(value) => {
-                                    bsc.setSettings({
-                                        ...bsc.settings,
-                                        skills: { ...bsc.settings.skills, skillPointCheck: value },
-                                    })
-                                }}
-                                onSlidingComplete={(value) => {
-                                    bsc.setSettings({
-                                        ...bsc.settings,
-                                        skills: { ...bsc.settings.skills, skillPointCheck: value },
-                                    })
-                                }}
-                                min={100}
+                                onValueChange={(value) => setSpendThreshold(value)}
+                                onSlidingComplete={(value) => setSpendThreshold(value)}
+                                min={0}
                                 max={2000}
                                 step={10}
-                                label="Skill Point Threshold"
-                                description="The number of skill points to accumulate before stopping the bot."
+                                label="Custom Threshold"
+                                description="Spend when skill points reach this exact amount. Type a number or drag."
                                 labelUnit=""
                                 showValue={true}
                                 showLabels={true}
-                            />
-                            <CustomCheckbox
-                                searchId="skill-point-check-plan"
-                                searchCondition={bsc.settings.skills.enableSkillPointCheck}
-                                parentId="enable-skill-point-check"
-                                checked={bsc.settings.skills.plans.skillPointCheck.enabled}
-                                onCheckedChange={(checked) => {
-                                    bsc.setSettings({
-                                        ...bsc.settings,
-                                        skills: {
-                                            ...bsc.settings.skills,
-                                            plans: {
-                                                ...bsc.settings.skills.plans,
-                                                skillPointCheck: {
-                                                    ...bsc.settings.skills.plans.skillPointCheck,
-                                                    enabled: checked,
-                                                },
-                                            },
-                                        },
-                                    })
-                                }}
-                                label="Enable Skill Plan Upon Meeting Threshold"
-                                description="Instead of stopping the bot, this will run the Skill Plan to spend the skill points when the threshold is met."
                             />
                         </View>
                     </View>
