@@ -599,7 +599,18 @@ class CareerLaunchNavigator(private val context: Context) {
         //     misclassified as HOME by the weaker MenuBarHomeSelected fallback at the bottom.
 
         // GOAL STATE: Active training menu - Training or Rest button visible.
-        if (ButtonTraining.check(iu, sourceBitmap = bitmap) || ButtonRest.check(iu, sourceBitmap = bitmap)) {
+        //
+        // On a mandatory RACE DAY the in-career main screen collapses to Skills + Race! with a
+        // "Race Day" ribbon and NO Training/Rest button, so those two checks miss it. When the
+        // navigator resumes a career interrupted on a race day (a mid-career client kick lands here),
+        // that screen must still count as reaching the career - the IconRaceDayRibbon is the same
+        // signal Campaign.checkMandatoryRacePrepScreen uses, and handing off lets the campaign race
+        // it. The ribbon appears only in-career, never on a between-run/launch screen, so treating
+        // it as the success/exit state cannot misfire on the launch path.
+        if (ButtonTraining.check(iu, sourceBitmap = bitmap) ||
+            ButtonRest.check(iu, sourceBitmap = bitmap) ||
+            IconRaceDayRibbon.check(iu, sourceBitmap = bitmap)
+        ) {
             return LaunchScreenState.ACTIVE_TRAINING_MENU
         }
 

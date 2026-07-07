@@ -25,6 +25,7 @@ import com.steve1316.uma_android_automation.components.ButtonLog
 import com.steve1316.uma_android_automation.components.ButtonRest
 import com.steve1316.uma_android_automation.components.ButtonSkillListFullStats
 import com.steve1316.uma_android_automation.components.ButtonTraining
+import com.steve1316.uma_android_automation.components.IconRaceDayRibbon
 import com.steve1316.uma_android_automation.components.LabelConnecting
 import com.steve1316.uma_android_automation.components.LabelNowLoading
 import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPoints
@@ -443,14 +444,17 @@ class Game(val myContext: Context) {
     }
 
     /**
-     * Checks if the bot is currently on the in-career training menu.
-     * Uses the same detection as the CareerLaunchNavigator's ACTIVE_TRAINING_MENU state:
-     * looks for the Training or Rest buttons which are unique to that screen.
+     * Checks if the bot is currently on the in-career main screen (a normal training turn OR a
+     * mandatory race day). Kept in sync with the CareerLaunchNavigator's ACTIVE_TRAINING_MENU
+     * detection: the Training/Rest buttons mark a normal turn, and the Race Day ribbon marks a
+     * race-day turn (which has no Training/Rest button). Either means the bot is already in the
+     * career and needs no auto-navigation.
      */
     private fun isOnTrainingMenu(): Boolean {
         val bitmap = imageUtils.getSourceBitmap()
         return ButtonTraining.check(imageUtils, sourceBitmap = bitmap) ||
-            ButtonRest.check(imageUtils, sourceBitmap = bitmap)
+            ButtonRest.check(imageUtils, sourceBitmap = bitmap) ||
+            IconRaceDayRibbon.check(imageUtils, sourceBitmap = bitmap)
     }
 
     /**
