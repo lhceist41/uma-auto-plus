@@ -18,6 +18,7 @@ import com.steve1316.uma_android_automation.components.ButtonCareerEndSkills
 import com.steve1316.uma_android_automation.components.ButtonChangeRunningStyle
 import com.steve1316.uma_android_automation.components.ButtonClose
 import com.steve1316.uma_android_automation.components.ButtonCompleteCareer
+import com.steve1316.uma_android_automation.components.ButtonConfirm
 import com.steve1316.uma_android_automation.components.ButtonCraneGame
 import com.steve1316.uma_android_automation.components.ButtonCraneGameOk
 import com.steve1316.uma_android_automation.components.ButtonDetails
@@ -3114,13 +3115,31 @@ abstract class Campaign(game: Game) : Task(game) {
      */
 
     /**
-     * Whether the bottom-left in-career Skip pill (Skip Off / Skip On) is on screen. It renders only
-     * during story / event cutscenes that must be tapped through to reach their choice options.
-     * Template match first, then an OCR fallback over the pill band - the same detection the launch
-     * navigator uses, so the in-career loop recognizes exactly the cutscenes the navigator does.
+     * Whether the bot is on a story / event cutscene that must be body-tapped through to reach its
+     * choices. Detects the in-career "Skip" affordance (skip_off / skip_on template, then an OCR
+     * fallback over the pill band).
+     *
+     * The catch: that green "Skip >>" affordance is NOT cutscene-exclusive - it also sits on the
+     * main screen, the skill list, and race-day screens. Those each carry an interactive control a
+     * genuine cutscene never shows (Training / Rest / Confirm / the race-day ribbon), so a leading
+     * guard rules them out first. Without it the bot mistook a momentarily-unrecognized normal screen
+     * for a cutscene and body-tapped it, wasting cycles and occasionally nudging the persistent Skip
+     * toggle to a slower speed (the misfire was frequent in Unity Cup, which churns through the most
+     * transient multi-screen states). A real cutscene has none of those controls, so it still fires.
      */
     private fun isEventCutsceneSkipPillVisible(): Boolean {
         val sourceBitmap = game.imageUtils.getSourceBitmap()
+
+        // Not a cutscene if a normal-screen interactive control is present: this is a real screen
+        // that merely also shows the ubiquitous "Skip >>" button, not a dialogue to tap through.
+        if (ButtonTraining.check(game.imageUtils, sourceBitmap = sourceBitmap) ||
+            ButtonRest.check(game.imageUtils, sourceBitmap = sourceBitmap) ||
+            ButtonConfirm.check(game.imageUtils, sourceBitmap = sourceBitmap) ||
+            IconRaceDayRibbon.check(game.imageUtils, sourceBitmap = sourceBitmap)
+        ) {
+            return false
+        }
+
         if (ButtonSkipOff.check(game.imageUtils, sourceBitmap = sourceBitmap) ||
             ButtonSkipOn.check(game.imageUtils, sourceBitmap = sourceBitmap)
         ) {
