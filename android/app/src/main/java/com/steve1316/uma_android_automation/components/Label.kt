@@ -61,6 +61,13 @@ object LabelScenarioSelectTrackblazer : ComponentInterface {
     override val template = Template("components/label/scenario_select_trackblazer", region = Region.middle)
 }
 
+object LabelVeteranUmamusumeMax : ComponentInterface {
+    // The "Veteran Umamusume Max" popup shown when the veteran roster is full (e.g. 260/260) and a
+    // career cannot start until one is transferred/released. Detected so the between-run queue stops
+    // with a clear reason instead of looping - the popup's Close just bounces back to Scenario Select.
+    override val template = Template("components/label/veteran_umamusume_max", region = Region.topHalf)
+}
+
 object LabelEnergy : ComponentInterface {
     override val template = Template("components/label/energy")
 }

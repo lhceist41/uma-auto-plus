@@ -134,6 +134,10 @@ class CareerLaunchNavigator(private val context: Context) {
         /** "Continue Career" dialog with "Cancel" and "Resume" buttons. */
         CONTINUE_CAREER_DIALOG,
 
+        /** "Veteran Umamusume Max" popup: the veteran roster is full and no career can start until one
+         * is transferred/released. Terminal - the queue stops with a clear reason rather than looping. */
+        VETERAN_UMAMUSUME_MAX,
+
         /** Game main menu with the bottom menu bar. */
         HOME_SCREEN,
 
@@ -688,6 +692,13 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.SCENARIO_SELECT
         }
 
+        // "Veteran Umamusume Max" popup: the veteran roster is full (e.g. 260/260) and the game blocks
+        // starting a career until one is transferred/released. MUST precede POST_RUN_RESULTS - the popup
+        // carries a Close that the generic handler would tap, bouncing back to Scenario Select forever.
+        if (LabelVeteranUmamusumeMax.check(iu, sourceBitmap = bitmap)) {
+            return LaunchScreenState.VETERAN_UMAMUSUME_MAX
+        }
+
         // POST_RUN_RESULTS - generic post-run / between-screens dialog with Next, OK, Confirm,
         // or Close (wide or compact-pill style) as the primary advance button. This is the most
         // common state during between-run navigation (10-20 iterations per career), so we check it early.
@@ -897,6 +908,7 @@ class CareerLaunchNavigator(private val context: Context) {
             LaunchScreenState.COMPLETE_CAREER_CONFIRMATION -> handleCompleteCareerConfirmation()
             LaunchScreenState.SPARKS_SCREEN -> handleSparksScreen()
             LaunchScreenState.POST_RUN_RESULTS -> handlePostRunResults()
+            LaunchScreenState.VETERAN_UMAMUSUME_MAX -> handleVeteranUmamusumeMax()
             LaunchScreenState.CAREER_COMPLETE_DIALOG -> handleCareerCompleteDialog()
             LaunchScreenState.TRAINEE_SELECT_SCREEN -> handleTraineeSelectScreen()
             LaunchScreenState.LEGACY_SELECT_SCREEN -> handleLegacySelectScreen()
@@ -1270,6 +1282,20 @@ class CareerLaunchNavigator(private val context: Context) {
      * (detailsTitleRegion) for "DETAIL" - the reliable positive signal isTraineeSelectScreen already
      * relies on, precisely because this card's big Close button does NOT dependably template-match.
      */
+
+    /**
+     * "Veteran Umamusume Max" popup: the veteran roster is full, so the game refuses to start a
+     * career. Nothing the queue can do without deleting the user's completed umamusume (never
+     * automated) - stop with a clear, actionable reason instead of looping on the popup's Close.
+     */
+    private fun handleVeteranUmamusumeMax(): TransitionResult =
+        TransitionResult.Failed(
+            reason = "Veteran Umamusume roster is full - the game will not start a new career until one is transferred or released.",
+            transition = "SCENARIO_SELECT -> VETERAN_UMAMUSUME_MAX",
+            isRecoverable = false,
+            recommendedAction = "Open the Veteran Umamusume list in-game and transfer or release some, then restart the queue. All completed runs are saved.",
+        )
+
     private fun isUmamusumeDetailsScreen(bitmap: Bitmap): Boolean {
         val title =
             try {
