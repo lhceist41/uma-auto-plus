@@ -17,7 +17,7 @@ import PageHeader from "../../components/PageHeader"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 import SelectButton from "../../components/SelectButton"
 import PresetPicker from "../../components/PresetPicker"
-import { characterPresets, trainerAdvisories } from "../../data/characterPresets"
+import { avoidAdvisoryFor, characterPresets, trainerAdvisories } from "../../data/characterPresets"
 import { presetCharacter, presetOutfit } from "../../data/presetMeta"
 import { useNavigation } from "@react-navigation/native"
 
@@ -103,6 +103,10 @@ const Home = () => {
     const [queueProgress, setQueueProgress] = useState<{ currentRun: number; totalRuns: number; status: string; message?: string } | null>(null)
     const [selectedPreset, setSelectedPreset] = useState<string | undefined>(undefined)
     const [pickerOpen, setPickerOpen] = useState<boolean>(false)
+    // Pre-start mismatch gate: the avoid pairings found in the pending launch, and whether the
+    // confirm dialog is shown. Empty list → start proceeds without a prompt.
+    const [showAvoidDialog, setShowAvoidDialog] = useState<boolean>(false)
+    const [avoidWarnings, setAvoidWarnings] = useState<{ label: string; reason: string }[]>([])
     const [interruptedQueue, setInterruptedQueue] = useState<{ currentRun: number; totalRuns: number; ageMinutes: number } | null>(null)
 
     const navigation = useNavigation()
@@ -269,6 +273,13 @@ const Home = () => {
         const preservedSupportOverrides = bsc.settings.trainingEvent?.supportEventOverrides || {}
         const preservedScenarioOverrides = bsc.settings.trainingEvent?.scenarioEventOverrides || {}
 
+        // Capture the user's skill-spend threshold + on/off switch before the merge. Every preset ships
+        // a uniform skillPointCheck (350); the shallow merge below would otherwise apply it over whatever
+        // the user set in Skill Settings. The per-preset skill plan still applies — only the spend timing
+        // is the user's global choice, so it must survive a preset switch (same rationale as the maps).
+        const preservedSkillPointCheck = bsc.settings.skills.skillPointCheck
+        const preservedEnableSkillPointCheck = bsc.settings.skills.enableSkillPointCheck
+
         // Deep merge preset settings with current settings
         const merged = { ...bsc.settings }
         for (const [category, values] of Object.entries(preset.settings)) {
@@ -290,6 +301,13 @@ const Home = () => {
             const presetScenario = (preset.settings as any)?.trainingEvent?.scenarioEventOverrides || {}
             merged.trainingEvent.supportEventOverrides = { ...preservedSupportOverrides, ...presetSupport }
             merged.trainingEvent.scenarioEventOverrides = { ...preservedScenarioOverrides, ...presetScenario }
+        }
+
+        // Restore the user's skill-spend threshold + on/off switch (captured above) so the preset's
+        // uniform 350 never overrides the user's Skill Settings choice.
+        if (merged.skills) {
+            merged.skills.skillPointCheck = preservedSkillPointCheck
+            merged.skills.enableSkillPointCheck = preservedEnableSkillPointCheck
         }
 
         // A trainee-first pick from the picker carries its scenario; land it in the same apply so
@@ -361,65 +379,100 @@ const Home = () => {
     /**
      * Handles the button press for starting or stopping the bot.
      */
+    /**
+     * Every avoid pairing in the launch about to start: each rotation slot under its own scenario
+     * when rotation is on, otherwise the single applied preset. Drives the pre-start confirm so a
+     * known mismatch (e.g. a Turf=G trainee dropped into a turf scenario) can't launch silently.
+     */
+    const collectAvoidWarnings = (): { label: string; reason: string }[] => {
+        if (bsc.settings.runQueue.enableTraineeRotation) {
+            const out: { label: string; reason: string }[] = []
+            bsc.settings.runQueue.traineeRotation.forEach((entry, i) => {
+                if (!entry.presetKey) return
+                const avoid = avoidAdvisoryFor(entry.presetKey, entry.scenario)
+                if (avoid) out.push({ label: `#${i + 1} ${entry.presetKey} — ${entry.scenario}`, reason: avoid.reason })
+            })
+            return out
+        }
+        if (presetAdvisory?.kind === "avoid") {
+            return [{ label: `${appliedPreset?.name ?? "This trainee"} — ${bsc.settings.general.scenario}`, reason: presetAdvisory.reason }]
+        }
+        return []
+    }
+
+    /** Runs the actual start sequence: accessibility gate → save settings → rotation snapshots → start. */
+    const proceedToStart = async () => {
+        // Check accessibility status first.
+        try {
+            const status = await StartModule.getAccessibilityStatus()
+            if (!status.enabled) {
+                setAccessibilityRequirement("enable")
+                setShowAccessibilityDialog(true)
+                return
+            } else if (!status.active) {
+                setAccessibilityRequirement("restart")
+                setShowAccessibilityDialog(true)
+                return
+            }
+        } catch (error) {
+            logErrorWithTimestamp("[Home] Failed to check accessibility status:", error)
+        }
+
+        // Save settings before starting the bot.
+        // Also has the added benefit of only writing to the SQLite database when the bot is started instead of every time the settings are changed.
+        logWithTimestamp("[Home] Saving settings before starting bot...")
+        try {
+            await saveSettings()
+            logWithTimestamp("[Home] Settings saved successfully, starting bot...")
+        } catch (error) {
+            logErrorWithTimestamp("[Home] Failed to save settings:", error)
+            setSnackbarMessage(`Failed to save settings before starting: ${error}`)
+            setSnackbarOpen(true)
+        }
+
+        // Precompute the per-trainee rotation snapshots from the just-saved settings. Block start
+        // on an unresolved preset or a persistence failure rather than let the queue hit a switch
+        // boundary it can't satisfy — match-or-stop applies at config time, not just in-game.
+        if (bsc.settings.runQueue.enableTraineeRotation) {
+            // Mixed scenarios are supported: each snapshot carries its entry's scenario and the
+            // navigator pages the Scenario Select carousel to it before confirming the launch.
+            const missing = await prepareTraineeRotation()
+            if (missing === null) {
+                setSnackbarMessage("Failed to prepare trainee rotation snapshots. Not starting.")
+                setSnackbarOpen(true)
+                return
+            }
+            if (missing.length > 0) {
+                const detail = missing.map((m) => `#${m.index + 1} ${m.presetKey} (${m.scenario})`).join(", ")
+                setSnackbarMessage(`Rotation has unresolved presets: ${detail}. Fix the rotation list before starting.`)
+                setSnackbarOpen(true)
+                return
+            }
+        } else {
+            // Rotation off: still clear any stale snapshots so a later enable starts clean.
+            await prepareTraineeRotation()
+        }
+
+        StartModule.start()
+    }
+
     const handleButtonPress = async () => {
         if (isRunning) {
             StartModule.stop()
-        } else if (bsc.readyStatus) {
-            // Check accessibility status first.
-            try {
-                const status = await StartModule.getAccessibilityStatus()
-                if (!status.enabled) {
-                    setAccessibilityRequirement("enable")
-                    setShowAccessibilityDialog(true)
-                    return
-                } else if (!status.active) {
-                    setAccessibilityRequirement("restart")
-                    setShowAccessibilityDialog(true)
-                    return
-                }
-            } catch (error) {
-                logErrorWithTimestamp("[Home] Failed to check accessibility status:", error)
-            }
-
-            // Save settings before starting the bot.
-            // Also has the added benefit of only writing to the SQLite database when the bot is started instead of every time the settings are changed.
-            logWithTimestamp("[Home] Saving settings before starting bot...")
-            try {
-                await saveSettings()
-                logWithTimestamp("[Home] Settings saved successfully, starting bot...")
-            } catch (error) {
-                logErrorWithTimestamp("[Home] Failed to save settings:", error)
-                setSnackbarMessage(`Failed to save settings before starting: ${error}`)
-                setSnackbarOpen(true)
-            }
-
-            // Precompute the per-trainee rotation snapshots from the just-saved settings. Block start
-            // on an unresolved preset or a persistence failure rather than let the queue hit a switch
-            // boundary it can't satisfy — match-or-stop applies at config time, not just in-game.
-            if (bsc.settings.runQueue.enableTraineeRotation) {
-                // Mixed scenarios are supported: each snapshot carries its entry's scenario and the
-                // navigator pages the Scenario Select carousel to it before confirming the launch.
-                const missing = await prepareTraineeRotation()
-                if (missing === null) {
-                    setSnackbarMessage("Failed to prepare trainee rotation snapshots. Not starting.")
-                    setSnackbarOpen(true)
-                    return
-                }
-                if (missing.length > 0) {
-                    const detail = missing.map((m) => `#${m.index + 1} ${m.presetKey} (${m.scenario})`).join(", ")
-                    setSnackbarMessage(`Rotation has unresolved presets: ${detail}. Fix the rotation list before starting.`)
-                    setSnackbarOpen(true)
-                    return
-                }
-            } else {
-                // Rotation off: still clear any stale snapshots so a later enable starts clean.
-                await prepareTraineeRotation()
-            }
-
-            StartModule.start()
-        } else {
-            setShowNotReadyDialog(true)
+            return
         }
+        if (!bsc.readyStatus) {
+            setShowNotReadyDialog(true)
+            return
+        }
+        // Gate a known-mismatch launch behind an explicit confirm so it never starts silently.
+        const avoids = collectAvoidWarnings()
+        if (avoids.length > 0) {
+            setAvoidWarnings(avoids)
+            setShowAvoidDialog(true)
+            return
+        }
+        await proceedToStart()
     }
 
     /** Gets the appropriate icon component for the SelectButton based on device state. */
@@ -761,6 +814,50 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                             }}
                         >
                             <Text>Go to Settings</Text>
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={showAvoidDialog} onOpenChange={setShowAvoidDialog}>
+                <AlertDialogContent onDismiss={() => setShowAvoidDialog(false)}>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Poor trainee/scenario fit</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            {avoidWarnings.length === 1
+                                ? "This pairing is a known mismatch and will likely force-end the career early:"
+                                : "These pairings are known mismatches and will likely force-end their careers early:"}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <View style={{ gap: 8 }}>
+                        {avoidWarnings.map((w, i) => (
+                            <View
+                                key={i}
+                                style={{
+                                    paddingHorizontal: 10,
+                                    paddingVertical: 8,
+                                    backgroundColor: "rgba(234, 179, 8, 0.15)",
+                                    borderLeftWidth: 3,
+                                    borderLeftColor: "#eab308",
+                                    borderRadius: 6,
+                                }}
+                            >
+                                <Text style={{ fontSize: 13, fontWeight: "700", color: "#eab308", marginBottom: 2 }}>{w.label}</Text>
+                                <Text style={{ fontSize: 12, color: colors.foreground, lineHeight: 16 }}>{w.reason}</Text>
+                            </View>
+                        ))}
+                    </View>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onPress={() => setShowAvoidDialog(false)}>
+                            <Text>Cancel</Text>
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onPress={() => {
+                                setShowAvoidDialog(false)
+                                proceedToStart()
+                            }}
+                        >
+                            <Text>Start anyway</Text>
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

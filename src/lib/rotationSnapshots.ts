@@ -66,9 +66,9 @@ const SNAPSHOT_KEY_DENYLIST = new Set([
  * Builds each rotation trainee's full settings snapshot as namespaced SQLite rows.
  *
  * The merge mirrors Home's `handlePresetChange` exactly — deep-merge the preset onto the current
- * `base`, preserve the user's per-event override maps, force the entry's scenario, and stamp the
- * racing-drift snapshot — so a rotation run behaves identically to the user having hand-applied
- * that preset. Each resulting row is re-keyed `rot{i}_{category}`; at a switch boundary the Kotlin
+ * `base`, preserve the user's per-event override maps and skill-spend threshold, force the entry's
+ * scenario, and stamp the racing-drift snapshot — so a rotation run behaves identically to the user
+ * having hand-applied that preset. Each resulting row is re-keyed `rot{i}_{category}`; at a switch boundary the Kotlin
  * queue copies `rot{i}_*` straight into the live `settings` rows, so no serialization logic is
  * duplicated on the Kotlin side.
  *
@@ -104,6 +104,16 @@ export function buildRotationSnapshotRows(base: Settings, rotation: RotationEntr
             const presetScenario = (preset.settings as any)?.trainingEvent?.scenarioEventOverrides || {}
             merged.trainingEvent.supportEventOverrides = { ...(base.trainingEvent?.supportEventOverrides || {}), ...presetSupport }
             merged.trainingEvent.scenarioEventOverrides = { ...(base.trainingEvent?.scenarioEventOverrides || {}), ...presetScenario }
+        }
+
+        // Preserve the user's skill-spend threshold + on/off switch. Every preset ships a uniform
+        // skillPointCheck (350) that the spread above would otherwise apply over whatever the user set
+        // in Skill Settings, silently discarding it at every rotation switch. The per-preset skill plan
+        // (which skills to buy) still comes from the preset; only the spend timing and enable flag are
+        // the user's global choice. (Mirrors handlePresetChange.)
+        if (merged.skills && base.skills) {
+            merged.skills.skillPointCheck = base.skills.skillPointCheck
+            merged.skills.enableSkillPointCheck = base.skills.enableSkillPointCheck
         }
 
         // The rotation entry's scenario is authoritative for which Campaign subclass runs.

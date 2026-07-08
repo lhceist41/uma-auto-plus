@@ -166,7 +166,7 @@ const SkillSettings = () => {
                         <Text style={styles.inputLabel}>Spend skill points when SP reaches</Text>
                         <Text style={styles.description}>
                             The bot buys skills mid-career once your skill points reach this amount. Tap a preset or set an exact number below. Career end (the last chip) holds everything for the
-                            Pre-Finals and end-of-career buys, matching the upstream project. Applying a trainee preset resets this to that preset&apos;s value.
+                            Pre-Finals and end-of-career buys, matching the upstream project. Your choice here sticks across trainee preset and rotation switches.
                         </Text>
                         <View style={styles.chipRow}>
                             {SPEND_PRESETS.map((preset) => {

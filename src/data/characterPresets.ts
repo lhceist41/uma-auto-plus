@@ -434,6 +434,14 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
     },
 }
 
+/**
+ * The avoid advisory for a (preset, scenario) pair, or null when the pair carries no avoid
+ * (recommended, neutral, or the trainee has no advisory at all). Used by the rotation editor's
+ * per-slot banner and the Home pre-start check; mirrors the equivalent inline lookup the picker
+ * cards do (PresetPicker's advisoryFor) so every surface agrees on what counts as a mismatch.
+ */
+export const avoidAdvisoryFor = (presetName: string, scenario: string): ScenarioAdvisory | null => trainerAdvisories[presetName]?.avoid?.find((a) => a.scenario === scenario) ?? null
+
 export const characterPresets: CharacterPreset[] = [
     {
         name: "Agnes Tachyon",

@@ -1,6 +1,6 @@
 import { useMemo, useContext, useRef, useState } from "react"
 import { View, ScrollView, StyleSheet, TextInput, Text, TouchableOpacity } from "react-native"
-import { ChevronRight } from "lucide-react-native"
+import { ChevronRight, TriangleAlert } from "lucide-react-native"
 import { useTheme } from "../../context/ThemeContext"
 import { BotStateContext, defaultSettings } from "../../context/BotStateContext"
 import CustomSlider from "../../components/CustomSlider"
@@ -10,7 +10,7 @@ import CustomButton from "../../components/CustomButton"
 import CustomTitle from "../../components/CustomTitle"
 import PageHeader from "../../components/PageHeader"
 import WarningContainer from "../../components/WarningContainer"
-import { characterPresets } from "../../data/characterPresets"
+import { avoidAdvisoryFor, characterPresets } from "../../data/characterPresets"
 import { SearchPageProvider } from "../../context/SearchPageContext"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 
@@ -304,6 +304,33 @@ const RunQueueSettings = () => {
                                                         </Text>
                                                         <ChevronRight size={16} color={colors.foreground} opacity={0.5} />
                                                     </TouchableOpacity>
+
+                                                    {entry.presetKey
+                                                        ? (() => {
+                                                              const avoid = avoidAdvisoryFor(entry.presetKey, entry.scenario)
+                                                              return avoid ? (
+                                                                  <View
+                                                                      style={{
+                                                                          flexDirection: "row",
+                                                                          alignItems: "flex-start",
+                                                                          marginTop: 10,
+                                                                          paddingHorizontal: 10,
+                                                                          paddingVertical: 8,
+                                                                          backgroundColor: "rgba(234, 179, 8, 0.15)",
+                                                                          borderLeftWidth: 3,
+                                                                          borderLeftColor: "#eab308",
+                                                                          borderRadius: 6,
+                                                                      }}
+                                                                  >
+                                                                      <TriangleAlert size={16} color="#eab308" style={{ marginRight: 6, marginTop: 2 }} />
+                                                                      <Text style={{ flex: 1, fontSize: 12, color: colors.foreground, lineHeight: 16 }}>
+                                                                          <Text style={{ fontWeight: "700", color: "#eab308" }}>Mismatch: </Text>
+                                                                          {avoid.reason}
+                                                                      </Text>
+                                                                  </View>
+                                                              ) : null
+                                                          })()
+                                                        : null}
 
                                                     <Text style={styles.inputLabel}>In-Game Name</Text>
                                                     <TextInput

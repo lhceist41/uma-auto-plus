@@ -34,6 +34,11 @@ describe("buildRotationSnapshotRows", () => {
         // two transient/UI-state keys that must be excluded, plus an ordinary key that must be retained.
         discord: { discordToken: "secret-token-123", enableDiscordNotifications: false },
         misc: { currentProfileName: "MyProfile", formattedSettingsString: "cached dump", enableSettingsDisplay: true },
+        // skills carries the user's global skill-spend choice: threshold 750 with the mid-career check
+        // turned OFF ("Career end"). Every preset ships skillPointCheck 350 AND enableSkillPointCheck true,
+        // so BOTH base values must survive the merge - the enable flag is deliberately the opposite of the
+        // preset's so its assertion actually discriminates (regression guard for the clobber bug).
+        skills: { skillPointCheck: 750, enableSkillPointCheck: false, preferredRunningStyle: "inherit" },
     } as any
 
     const { rows, missing } = buildRotationSnapshotRows(baseSettings, [{ inGameName: "Test", presetKey: preset.name, scenario: preset.scenario }])
@@ -76,5 +81,16 @@ describe("buildRotationSnapshotRows", () => {
     it("forces the entry's scenario into general.scenario", () => {
         const scenarioRow = rows.find((r) => r.category === "rot0_general" && r.key === "scenario")
         expect(scenarioRow?.value).toBe(preset.scenario)
+    })
+
+    it("preserves the user's skill-spend threshold + enable flag over the preset's uniform values", () => {
+        // Base = user's choice (threshold 750, mid-career check OFF); every preset ships 350 + check ON.
+        // Both base values must win the merge. The threshold assertion (750 vs the preset's 350) and the
+        // enable assertion (false vs the preset's true) each fail if their own preservation line is dropped
+        // - the class of bug this change prevents (a "Career end" user silently re-enabled at every switch).
+        const thresholdRow = rows.find((r) => r.category === "rot0_skills" && r.key === "skillPointCheck")
+        expect(thresholdRow?.value).toBe(750)
+        const enableRow = rows.find((r) => r.category === "rot0_skills" && r.key === "enableSkillPointCheck")
+        expect(enableRow?.value).toBe(false)
     })
 })

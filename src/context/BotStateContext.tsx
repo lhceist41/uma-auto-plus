@@ -361,15 +361,17 @@ export const defaultSettings: Settings = {
         appliedRacingSnapshot: "",
     },
     skills: {
-        // Out-of-box defaults matching the safe baseline every character preset applies: mid-run
-        // buying with a conservative 1200 SP threshold (triggers only in late Senior year, when hints
-        // have accumulated and skills are cheaper) plus preFinals + careerComplete as safety nets.
-        // Strategy optimize_skills across all three plans filters by the trainee's aptitudes and sorts
-        // by community-tier ranking from skills.json. enableBuyInheritedUniqueSkills: true buys
-        // inherited uniques when affordable (almost always worth it); enableBuyNegativeSkills stays
-        // false so the bot never buys debuffs.
+        // Out-of-box default matching the baseline every character preset applies: mid-run buying at a
+        // 350 SP threshold (buys skills in waves once points accumulate) plus preFinals + careerComplete
+        // as safety nets. This is a global default the user can override in Skill Settings, and that
+        // override now survives preset and rotation switches (see handlePresetChange /
+        // buildRotationSnapshotRows) rather than being silently reset to a preset's value. Strategy
+        // optimize_skills across all three plans filters by the trainee's aptitudes and sorts by
+        // community-tier ranking from skills.json. enableBuyInheritedUniqueSkills: true buys inherited
+        // uniques when affordable (almost always worth it); enableBuyNegativeSkills stays false so the
+        // bot never buys debuffs.
         enableSkillPointCheck: true,
-        skillPointCheck: 1200,
+        skillPointCheck: 350,
         preferredRunningStyle: "inherit",
         preferredTrackDistance: "inherit",
         preferredTrackSurface: "no_preference",
