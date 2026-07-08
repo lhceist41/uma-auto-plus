@@ -215,12 +215,26 @@ class UnityCup(game: Game) : Campaign(game) {
         MessageLog.i(TAG, "[UNITY_CUP] Starting process for handling the Unity Cup racing process.")
 
         // If none of these exist then we aren't in any Unity Cup screens at the moment. Abort.
-        if (!ButtonUnityCupRace.check(game.imageUtils) && !ButtonUnityCupRaceFinal.check(game.imageUtils) && !ButtonUnityCupWatchMainRace.check(game.imageUtils)) {
+        // The race-end logo (post-race standings) is part of the gate too: if a showdown call ever
+        // returns before its Next-exit, the career loop re-enters here on the standings screen, and
+        // without this the gate would reject it (no race-start button present) and strand the screen
+        // as "unknown" until the 25-cycle career abort - the exact death seen on 2026-07-08.
+        if (!ButtonUnityCupRace.check(game.imageUtils) &&
+            !ButtonUnityCupRaceFinal.check(game.imageUtils) &&
+            !ButtonUnityCupWatchMainRace.check(game.imageUtils) &&
+            !IconUnityCupRaceEndLogo.check(game.imageUtils)
+        ) {
             return false
         }
 
-        // We use this as a means of exiting the loop if it runs too long.
-        val executionTimeThresholdMs = 30000 // 30 seconds.
+        // Exit-loop guard. A full showdown (opponent select -> 5-race sim -> WIN/results/standings)
+        // runs ~30s even on the See-All skip path post-July-2026, and longer when the race is watched
+        // or the result animations play. The old 30s cap aborted at the finish line: the standings
+        // race-end logo matched at ~27-30s but the Next button was still sliding in, so the loop timed
+        // out 0.1s before it could exit and the career died flailing on the stranded standings screen.
+        // 120s gives ample margin; the career stall watchdog still backstops a true hang because a
+        // working loop keeps its heartbeat fresh.
+        val executionTimeThresholdMs = 120000 // 2 minutes.
         val startTime = System.currentTimeMillis()
 
         while (true) {
