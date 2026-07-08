@@ -408,6 +408,7 @@ object DialogObjects {
             DialogPurchaseAlarmClock,
             DialogPurchaseCarats,
             DialogPurchaseDailyRaceTicket,
+            DialogQuickModeSettings,
             DialogRaceDetails,
             DialogRacePlayback,
             DialogRaceRecommendations,
@@ -524,6 +525,15 @@ object DialogAutoSelect : DialogInterface {
             ButtonOk,
             Checkbox,
         )
+}
+
+/** Career Launch (Quick Mode prompt) */
+object DialogQuickModeSettings : DialogInterface {
+    override val name: String = "quick_mode_settings"
+    override val title: String = "Quick Mode Settings"
+    override val closeButton = null
+    override val okButton: BaseComponentInterface = ButtonConfirm
+    override val buttons: List<BaseComponentInterface> = listOf(ButtonConfirm)
 }
 
 /** Career (event only) */
