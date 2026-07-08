@@ -5,6 +5,7 @@ import { useCallback } from "react"
 import { PortalHost } from "@rn-primitives/portal"
 import { StatusBar } from "expo-status-bar"
 import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context"
+import { GestureHandlerRootView } from "react-native-gesture-handler"
 import { BotStateProvider } from "./context/BotStateContext"
 import { MessageLogProvider } from "./context/MessageLogContext"
 import { SettingsProvider } from "./context/SettingsContext"
@@ -125,11 +126,15 @@ function AppContent() {
 
 function App() {
     return (
-        <SafeAreaProvider>
-            <ThemeProvider>
-                <AppContent />
-            </ThemeProvider>
-        </SafeAreaProvider>
+        // GestureHandlerRootView must wrap the whole tree or the drawer's swipe gestures silently die
+        // on Android (react-native-gesture-handler is installed but was never mounted as the root).
+        <GestureHandlerRootView style={{ flex: 1 }}>
+            <SafeAreaProvider>
+                <ThemeProvider>
+                    <AppContent />
+                </ThemeProvider>
+            </SafeAreaProvider>
+        </GestureHandlerRootView>
     )
 }
 
