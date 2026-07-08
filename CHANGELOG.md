@@ -8,24 +8,36 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
-## [Unreleased]
+## [1.3.7] - 2026-07-08
+
+A roster and control pass on top of the July-patch adaptation from 1.3.6: the full community S-tier preset list -- 156 presets across 52 entries -- reachable through a new searchable trainee picker with favorites and cross-scenario run queues, a control for when the bot spends skill points, smarter Unity Cup opponent selection, handling for URA Finale's new duel screen, and a set of reliability fixes.
 
 ### Added
 
 - A searchable trainee picker replacing both preset dropdowns (Home and the rotation editor): one row per character/outfit with colored avatars, per-scenario recommendation chips, a badge showing whether a build has been proven in real completed runs or is still research-based, and a build summary per scenario card. Applying a preset now sets its scenario together with its settings, and the Home card remembers the applied preset across app restarts.
 - Favorites: star a trainee in the picker and she pins to a Favorites section on top. Stored outside the settings database, so favorites survive preset switches and profile changes.
-- Cross-scenario run queues. Rotation entries can mix URA Finale, Unity Cup, and Trackblazer; the between-run navigator now recognizes the Scenario Select carousel and pages it to each run's scenario before confirming (new templates for the screen header, all three scenario logos, and the carousel arrow).
+- Cross-scenario run queues. Rotation entries can mix URA Finale, Unity Cup, and Trackblazer; between runs the bot now recognizes the Scenario Select carousel and swipes it to each run's scenario before confirming (it learned the screen's header and all three scenario logos).
 - Presets for the six most-requested top-tier cards: Kitasan Black, Nishino Flower, Seiun Sky, Maruzensky (Hot☆Summer Night), Oguri Cap, and Oguri Cap (Ashen Miracle). Built from verified per-card aptitude and objective data with racing plans checked against the race database; research-graded until live careers land, and the picker's badge says so.
 - The rest of the community S-tier list: 17 more cards taking the roster to 156 presets across 52 entries. Ten new characters -- Silence Suzuka, Manhattan Cafe, Narita Taishin, Tamamo Cross, Mejiro Dober, Special Week, Smart Falcon, Meisho Doto, Tokai Teio, T.M. Opera O (New Year, Same Radiance!) -- plus alternate outfits for Special Week, Tokai Teio, Seiun Sky, Mayano Top Gun, Gold Ship, King Halo, and Taiki Shuttle. Built the same way as the first batch, with the same research badge. Smart Falcon is the second dirt specialist after Haru Urara, with a hand-built dirt race plan that starts early enough to clear his turn-25 two-win goal. Narita Taishin is the roster's first End Closer. Silence Suzuka runs Front (her unique needs a clear lead) and Medium-first despite her Mile aptitude, because her goals are almost all Medium races. Trackblazer warnings ship for the characters whose early-career race pool there is too thin (Manhattan Cafe, Tamamo Cross, Meisho Doto, both Teio cards) and for Smart Falcon's weak turf grade.
+- A control for when the bot buys skills mid-career: preset chips (0, 350, 700, 1200) or a typed threshold, or "Career end" to hold everything for the Pre-Finals and end-of-career buys the way the upstream project does. Under Skill Settings.
+- URA Finale's new Happy Meek stat-contest screen (added in the July patch) is handled: the bot reads which stat is being contested, pages to the trainee's strongest one, and confirms. Keep an eye on the first one it plays through.
 
 ### Changed
 
 - Training gains that land a stat above 1200 are scored at half weight, matching the July rebalance rule that halves stat effectiveness past 1200 -- training points stop chasing soft-capped stats that race calculations discount anyway.
 - The center button now says what pressing it does -- Stop while running, Start Queue (N runs) with the queue enabled, Start with the scenario otherwise -- instead of doubling as a scenario label. Daily Races and Team Trials are hidden from its dropdown for now; the career-preset flow owns the Home screen.
+- Unity Cup picks its showdown opponent by reading the prediction circles on the confirmation screen -- the best-predicted matchup when none is a confident win, double circles weighted over single -- instead of always taking the middle card.
+- Starting a run whose trainee/scenario pairing is a known mismatch (say a Turf-G trainee in a turf-heavy scenario) now asks for confirmation before launching, for the single applied preset or any rotation slot, and the rotation editor flags each mismatched slot with a banner. You can still start it, just not by accident.
 
 ### Fixed
 
-- The Scenario Select carousel arrow pulses; paging now tolerates mid-animation frames (retry on a fresh capture, lower match threshold) instead of failing the queue one template short of a scenario switch.
+- The between-run queue no longer stalls at Scenario Select. The bot now swipes the scenario carousel directly instead of trying to tap the little pulsing arrow, which it couldn't spot reliably enough -- a queue could die one screen short of switching scenarios.
+- The between-run queue no longer dies on the post-career Umamusume Details summary card. Its big Close button is hard for the bot to spot, so the card is now recognized by its title text and dismissed.
+- Your skill-point spend threshold and on/off choice now stick across preset and rotation switches. Every preset ships a shared 350 threshold that used to silently overwrite whatever you set in Skill Settings; the merge now preserves your value the way it already preserves per-event overrides.
+- The bot no longer mistakes the persistent green Skip toggle -- which also sits on the main, skill, and race-day screens -- for an event cutscene, a mix-up that had been nudging playback to a slower speed and wasting time in Unity Cup.
+- A career resumed on a race-day screen is recognized as already in-career instead of being misread as a between-run transition.
+- The navigation drawer's swipe-to-open gesture works again on Android; the app root was missing its gesture-handler wrapper.
+- The Quick Mode Settings popup is handled again, so the bot can pick "Shorten all events" like it's supposed to.
 
 ## [1.3.6] - 2026-07-05
 

@@ -28,14 +28,16 @@ steve1316 built the bot engine. This fork is a substantial body of work on top o
 **Pick-and-go presets**
 
 - **156 hand-tuned character presets** -- 52 characters and outfits across 3 scenarios (URA Finale / Unity Cup / Trackblazer), each pre-filling stat priorities, race plan, skill plan, event picks, and training thresholds. A searchable trainee picker shows per-scenario recommendations, a badge telling you whether a build is proven in real runs or still research-based, and starred favorites; applying a preset sets its scenario with it. Pick a trainee, hit Start -- no manual tuning required.
-- **Scenario advisories** -- the Home page shows a green "good pick" or yellow "mismatch" banner (with the reason) for the selected trainee and scenario.
+- **Scenario advisories** -- the Home page shows a green "good pick" or yellow "mismatch" banner (with the reason) for the selected trainee and scenario, the rotation editor flags each mismatched slot inline, and starting a known-mismatch run (single preset or any rotation slot) asks for confirmation first so a doomed pairing never launches by accident.
 
 **Decision-engine extensions** (built on top of steve1316's scoring)
 
 - **Optimize Knapsack skill buying** -- works out the best combination of skills your end-of-career points can buy, including how upgrade chains exclude each other, instead of just grabbing the best-looking skill first.
+- **Skill-spend timing control** -- choose when the bot buys skills mid-career: preset thresholds (0 / 350 / 700 / 1200 SP), a typed value, or "Career end" to hold everything for the Pre-Finals and end-of-career buys the way the upstream project does. Your choice sticks across preset and rotation switches.
 - **Deck validation at career start** -- warns immediately if the trainee's aptitudes are too low or her race predictions won't be visible to the bot, instead of letting a doomed run waste half an hour.
 - **Single-star prediction detection** -- the bot can see single-star races on the race list (the original only sees double-star ones), and forces a fan-earning race when a Junior fan goal is about to fail.
-- **July 2026 rebalance adaptation** -- per-scenario stat caps (URA 1400 / Unity Cup 1300 with Wit 1800 / Trackblazer 1200 with Stamina 1900 and Wit 1500) and a scenario-aware stat-reading ceiling, so a legitimate high stat past the old flat 1200 limit is no longer discarded as a misread.
+- **Unity Cup opponent selection** -- reads the showdown prediction circles on the confirmation screen and picks the best-predicted matchup (double circles weighted over single) rather than always taking the middle card.
+- **July 2026 rebalance adaptation** -- per-scenario stat caps (URA 1400 / Unity Cup 1300 with Wit 1800 / Trackblazer 1200 with Stamina 1900 and Wit 1500) and a scenario-aware stat-reading ceiling, so a legitimate high stat past the old flat 1200 limit is no longer discarded as a misread. URA Finale's new Happy Meek duel screen is handled by contesting the trainee's strongest stat.
 - **Race and training refinements** -- mandatory races retry toward 1st place when a free retry is available, and training anticipates rainbows from bars close to maximum friendship.
 - **Trackblazer tuning** -- Akikawa-bonding training priority (a proxy for MotY points), climax energy-item reservation, an Alarm Clock retry policy, and an opt-in irregular-training gate. Trackblazer is the fork's most-tuned scenario.
 - **Mood-floor guard** -- an optional stricter mood floor for trainees with single-option mood-trap events.
