@@ -33,6 +33,7 @@ A roster and control pass on top of the July-patch adaptation from 1.3.6: the fu
 
 - The between-run queue no longer stalls at Scenario Select. The bot now swipes the scenario carousel directly instead of trying to tap the little pulsing arrow, which it couldn't spot reliably enough -- a queue could die one screen short of switching scenarios.
 - The between-run queue no longer dies on the post-career Umamusume Details summary card. Its big Close button is hard for the bot to spot, so the card is now recognized by its title text and dismissed.
+- The Trackblazer scenario is recognized again on Scenario Select after the game recolored its "Start of the Climax" logo from red to blue. The bot was still looking for the old colors, so Trackblazer rotations could never confirm the scenario.
 - Your skill-point spend threshold and on/off choice now stick across preset and rotation switches. Every preset ships a shared 350 threshold that used to silently overwrite whatever you set in Skill Settings; the merge now preserves your value the way it already preserves per-event overrides.
 - The bot no longer mistakes the persistent green Skip toggle -- which also sits on the main, skill, and race-day screens -- for an event cutscene, a mix-up that had been nudging playback to a slower speed and wasting time in Unity Cup.
 - A career resumed on a race-day screen is recognized as already in-career instead of being misread as a between-run transition.
