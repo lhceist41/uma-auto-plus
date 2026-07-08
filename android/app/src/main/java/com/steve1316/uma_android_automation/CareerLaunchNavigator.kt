@@ -1265,6 +1265,33 @@ class CareerLaunchNavigator(private val context: Context) {
         return TransitionResult.Continue
     }
 
+    /**
+     * True when the post-career "Umamusume Details" summary card is up. OCR the centered title bar
+     * (detailsTitleRegion) for "DETAIL" - the reliable positive signal isTraineeSelectScreen already
+     * relies on, precisely because this card's big Close button does NOT dependably template-match.
+     */
+    private fun isUmamusumeDetailsScreen(bitmap: Bitmap): Boolean {
+        val title =
+            try {
+                iu.performOCROnRegion(
+                    bitmap,
+                    (bitmap.width * detailsTitleRegion[0]).toInt(),
+                    (bitmap.height * detailsTitleRegion[1]).toInt(),
+                    (bitmap.width * detailsTitleRegion[2]).toInt(),
+                    (bitmap.height * detailsTitleRegion[3]).toInt(),
+                    useThreshold = false,
+                    useGrayscale = true,
+                    scale = 2.0,
+                    debugName = "nav_postrun_details_title",
+                )
+            } catch (e: InterruptedException) {
+                throw e
+            } catch (_: Exception) {
+                ""
+            }
+        return title.uppercase().contains("DETAIL")
+    }
+
     private fun handlePostRunResults(): TransitionResult {
         val bitmap = iu.getSourceBitmap()
 
@@ -1311,6 +1338,20 @@ class CareerLaunchNavigator(private val context: Context) {
                 else -> false
             }
         if (!clicked) {
+            // Last resort before failing: the post-career "Umamusume Details" summary card lands
+            // here because its big Close button does not reliably template-match (the cascade above
+            // already tried ButtonClose). Detect it by its OCR'd title and dismiss it - try the wide
+            // Close template first (it sometimes matches), else tap the card's fixed bottom-center
+            // Close position. Without this the queue dies one screen short of the next launch
+            // (observed 2026-07-08 on a Palmer -> next-run hand-off).
+            if (isUmamusumeDetailsScreen(bitmap)) {
+                if (!ButtonCloseWide.click(iu, sourceBitmap = bitmap)) {
+                    gestureUtils.tap(bitmap.width * 0.5, bitmap.height * 0.86, "umamusume_details_close")
+                }
+                MessageLog.i(TAG, "[NAV] Dismissed the post-career \"Umamusume Details\" summary card to continue the between-run hand-off.")
+                waitSafe(1.5)
+                return TransitionResult.Continue
+            }
             return TransitionResult.Failed(
                 reason = "POST_RUN_RESULTS state detected but could not click any advancement button.",
                 transition = "POST_RUN_RESULTS -> next screen",
@@ -2420,15 +2461,15 @@ class CareerLaunchNavigator(private val context: Context) {
                     )
                 }
             }
-            MessageLog.i(TAG, "[NAV] Scenario Select is not showing \"$target\" (page check ${attempt + 1}/6). Paging the carousel right.")
-            if (!IconScenarioSelectArrowRight.click(iu)) {
-                // The chevron pulses, so a single miss is usually an animation trough - settle
-                // onto a different frame and let the loop retry instead of failing the queue.
-                MessageLog.w(TAG, "[NAV] Carousel arrow not matched on this frame. Retrying on a fresh capture.")
-                waitSafe(0.75)
-            } else {
-                waitSafe(1.5)
-            }
+            MessageLog.i(TAG, "[NAV] Scenario Select is not showing \"$target\" (page check ${attempt + 1}/6). Swiping the carousel to the next scenario.")
+            // Swipe the card rather than tapping the arrow chevron. The chevron is a thin outline over
+            // per-scenario background art and template-matches unreliably (it stalled the queue at ~0.55,
+            // under the 0.6 gate). A horizontal drag across the card pages regardless of the arrow, and the
+            // carousel wraps, so consistently dragging one direction cycles through every scenario within
+            // the 6 attempts. Drag right-to-left across the card's upper-mid band (clear of the buttons).
+            val swipeY = bitmap.height * 0.42f
+            gestureUtils.swipe(bitmap.width * 0.80f, swipeY, bitmap.width * 0.20f, swipeY, duration = 450L)
+            waitSafe(1.5)
         }
         return TransitionResult.Failed(
             reason = "Scenario Select never showed \"$target\" after paging the full carousel.",
