@@ -34,16 +34,23 @@ export interface OutcomeRecord {
     grt: number
     wit: number
     skillPts: number
+    /** Finale races entered (URA finale only today; undefined on records predating the feature). */
+    finaleRaces?: number
+    /** Finale races taken at 1st place (the "Congratulations" banner). */
+    finaleWins?: number
+    /** Career-quality label: WIN / FINALE_LOST / COMPLETED / FORCE_END / INCOMPLETE (undefined on old records). */
+    quality?: string
     cfg?: Record<string, string>
     source: "jsonl" | "log"
     file?: string
 }
 
 /**
- * Outcome bucket by end turn. The finale block sits at turns 73-75 (URA and Trackblazer both;
- * Unity Cup is close enough), so >=73 reads as a full arc. The 60-72 band holds late stat-wall
- * force-ends and lost finals — the zone the turn proxy is blind in (see the plan's constraint
- * notes); treat "late" as suspicious, not as success.
+ * Outcome bucket by end turn, refined by the finale win/lose signal where present. The finale block
+ * sits at turns 73-75, so >=73 reads as a full arc by turn alone — but a URA career that reached the
+ * finale and LOST it (quality=FINALE_LOST) is bucketed "late", not "full", and a confirmed sweep
+ * (quality=WIN) as "full". Records without the signal (Unity Cup / Trackblazer / legacy) fall back to
+ * the turn bands, where the 60-72 "late" band still hides lost finals and stat walls.
  */
 export type OutcomeBucket = "full" | "late" | "mid" | "early" | "incomplete"
 
@@ -56,6 +63,10 @@ export interface ArmSummary {
     buckets: Record<OutcomeBucket, number>
     /** Share of non-incomplete runs that completed the full arc. */
     fullRate: number
+    /** Careers that reached an observed finale (URA), and how many were won outright (quality=WIN).
+     * 0/0 for scenarios that don't observe finale wins (Unity Cup, Trackblazer, legacy records). */
+    finaleReached: number
+    finaleWon: number
     fans: { p25: number; p50: number; p75: number }
     medianStats: { spd: number; sta: number; pwr: number; grt: number; wit: number }
     /** End turns of the non-full, non-incomplete runs, ascending — where this arm dies. */
@@ -124,6 +135,9 @@ export function parseLedgerLine(line: string, file?: string): OutcomeRecord | nu
         grt: toInt(fields.grt),
         wit: toInt(fields.wit),
         skillPts: toInt(fields.skillPts),
+        finaleRaces: fields.finaleRaces !== undefined ? toInt(fields.finaleRaces) : undefined,
+        finaleWins: fields.finaleWins !== undefined ? toInt(fields.finaleWins) : undefined,
+        quality: fields.quality,
         source: "log",
         file,
     }
@@ -166,6 +180,9 @@ export function parseJsonl(text: string, file?: string): OutcomeRecord[] {
                 grt: Number(obj.grt) || 0,
                 wit: Number(obj.wit) || 0,
                 skillPts: Number(obj.skillPts) || 0,
+                finaleRaces: obj.finaleRaces !== undefined ? Number(obj.finaleRaces) : undefined,
+                finaleWins: obj.finaleWins !== undefined ? Number(obj.finaleWins) : undefined,
+                quality: obj.quality !== undefined ? String(obj.quality) : undefined,
                 cfg: obj.cfg,
                 source: "jsonl",
                 file,
@@ -177,7 +194,7 @@ export function parseJsonl(text: string, file?: string): OutcomeRecord[] {
     return records
 }
 
-/** Buckets a record by outcome label and end turn. */
+/** Buckets a record by outcome label, the finale win/lose signal, and end turn. */
 export function classifyBucket(record: OutcomeRecord): OutcomeBucket {
     if (record.outcome === "INCOMPLETE") return "incomplete"
     // A source-confirmed force-end is a loss even when it happens inside the finale block
@@ -187,10 +204,26 @@ export function classifyBucket(record: OutcomeRecord): OutcomeBucket {
         if (record.turn >= 30) return "mid"
         return "early"
     }
+    // The finale win/lose signal overrides the turn proxy where it was blind (URA only today): a
+    // career that reached the finale but lost a finals race is NOT a full arc even at turn 75, and a
+    // confirmed sweep is unambiguously full. Records without the signal fall back to the turn bands.
+    if (record.quality === "FINALE_LOST") return "late"
+    if (record.quality === "WIN") return "full"
     if (record.turn >= 73) return "full"
     if (record.turn >= 60) return "late"
     if (record.turn >= 30) return "mid"
     return "early"
+}
+
+/**
+ * A record that reflects a bot fault - an UNHANDLED_EXCEPTION stop on an unrecognized screen -
+ * rather than a career outcome. The career usually resumes afterward (the between-run navigator, or
+ * the in-place Home-lobby re-entry, picks it back up), so its crash-time snapshot (a mid-career turn,
+ * partial stats) is not an end state. Counting these as "incomplete" careers under-reports a
+ * trainee's reliability, so aggregate() drops them from arm summaries; the CLI tallies them apart.
+ */
+export function isBotFault(record: OutcomeRecord): boolean {
+    return record.result === "UNHANDLED_EXCEPTION"
 }
 
 /** Nearest-rank percentile of an unsorted number list; 0 for an empty list. */
@@ -228,10 +261,14 @@ interface Group {
 
 /** Groups records into (trainee, scenario, arm) summaries, sorted by trainee then scenario. */
 export function aggregate(records: OutcomeRecord[]): ArmSummary[] {
+    // Bot faults (UNHANDLED_EXCEPTION crash-stops) are not career outcomes - the career usually
+    // resumes afterward via the between-run navigator or the in-place Home-lobby re-entry - so they
+    // must not land in any arm's buckets or record count. The CLI tallies them separately.
+    const outcomeRecords = records.filter((r) => !isBotFault(r))
     // Group identity is held on the group object, never re-split from the key: an OCR'd pipe
     // in a trainee name must not shift fields.
     const groups = new Map<string, Group>()
-    for (const record of records) {
+    for (const record of outcomeRecords) {
         const arm = armOf(record)
         const key = [record.trainee, record.scenario, arm].join(" ")
         const group = groups.get(key)
@@ -250,6 +287,8 @@ export function aggregate(records: OutcomeRecord[]): ArmSummary[] {
         const fans = finished.map((r) => r.fans)
         const median = (pick: (r: OutcomeRecord) => number) => percentile(finished.map(pick), 50)
         const nonIncomplete = list.length - buckets.incomplete
+        const finaleReached = list.filter((r) => r.quality === "WIN" || r.quality === "FINALE_LOST").length
+        const finaleWon = list.filter((r) => r.quality === "WIN").length
 
         summaries.push({
             trainee,
@@ -258,6 +297,8 @@ export function aggregate(records: OutcomeRecord[]): ArmSummary[] {
             n: list.length,
             buckets,
             fullRate: nonIncomplete === 0 ? 0 : buckets.full / nonIncomplete,
+            finaleReached,
+            finaleWon,
             fans: { p25: percentile(fans, 25), p50: percentile(fans, 50), p75: percentile(fans, 75) },
             medianStats: {
                 spd: median((r) => r.spd),
@@ -281,17 +322,20 @@ export function aggregate(records: OutcomeRecord[]): ArmSummary[] {
 /** Renders arm summaries as a GitHub-flavored markdown table. */
 export function renderMarkdown(summaries: ArmSummary[]): string {
     const lines: string[] = []
-    lines.push("| Trainee | Scenario | Arm | N | Full | Late | Mid | Early | Inc | Fans p50 (p25-p75) | Sta p50 | Spd p50 | Died at turns |")
-    lines.push("|---|---|---|---:|---:|---:|---:|---:|---:|---|---:|---:|---|")
+    lines.push("| Trainee | Scenario | Arm | N | Full | Late | Mid | Early | Inc | Finale W/R | Fans p50 (p25-p75) | Sta p50 | Spd p50 | Died at turns |")
+    lines.push("|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|---:|---:|---|")
     for (const s of summaries) {
         const fans = `${s.fans.p50.toLocaleString()} (${s.fans.p25.toLocaleString()}-${s.fans.p75.toLocaleString()})`
         const died = s.forceEndTurns.length > 0 ? s.forceEndTurns.join(", ") : "-"
         const nCell = s.lowN ? `${s.n}*` : `${s.n}`
+        const finale = s.finaleReached > 0 ? `${s.finaleWon}/${s.finaleReached}` : "-"
         lines.push(
-            `| ${s.trainee} | ${s.scenario} | ${s.arm} | ${nCell} | ${s.buckets.full} | ${s.buckets.late} | ${s.buckets.mid} | ${s.buckets.early} | ${s.buckets.incomplete} | ${fans} | ${s.medianStats.sta} | ${s.medianStats.spd} | ${died} |`
+            `| ${s.trainee} | ${s.scenario} | ${s.arm} | ${nCell} | ${s.buckets.full} | ${s.buckets.late} | ${s.buckets.mid} | ${s.buckets.early} | ${s.buckets.incomplete} | ${finale} | ${fans} | ${s.medianStats.sta} | ${s.medianStats.spd} | ${died} |`
         )
     }
     lines.push("")
-    lines.push(`\\* fewer than ${LOW_N_THRESHOLD} records: anecdote, not signal. Full = turn >=73; Late (60-72) hides lost finals and stat walls.`)
+    lines.push(
+        `\\* fewer than ${LOW_N_THRESHOLD} records: anecdote, not signal. Full = confirmed finale WIN or turn >=73 with no loss signal; a URA finale loss now falls to Late. Finale W/R = careers won / reached the finale (URA only).`
+    )
     return lines.join("\n")
 }

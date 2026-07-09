@@ -56,4 +56,34 @@ class CareerOutcomeTest {
         assertEquals(false, base == outcomeConfigFingerprint("1.0.0", mapOf("x" to "2")))
         assertEquals(false, base == outcomeConfigFingerprint("1.0.1", mapOf("x" to "1")))
     }
+
+    @Test
+    @DisplayName("COMPLETED with a swept finale (wins == races > 0) is WIN")
+    fun `completed with swept finale is win`() {
+        assertEquals("WIN", classifyCareerQuality("COMPLETED", finaleRaces = 3, finaleWins = 3))
+        assertEquals("WIN", classifyCareerQuality("COMPLETED", finaleRaces = 1, finaleWins = 1))
+    }
+
+    @Test
+    @DisplayName("COMPLETED that reached the finale but dropped a race is FINALE_LOST")
+    fun `completed with a lost finale race is finale_lost`() {
+        assertEquals("FINALE_LOST", classifyCareerQuality("COMPLETED", finaleRaces = 3, finaleWins = 2))
+        assertEquals("FINALE_LOST", classifyCareerQuality("COMPLETED", finaleRaces = 3, finaleWins = 0))
+        assertEquals("FINALE_LOST", classifyCareerQuality("COMPLETED", finaleRaces = 1, finaleWins = 0))
+    }
+
+    @Test
+    @DisplayName("COMPLETED with no observed finale stays COMPLETED (Unity Cup / Trackblazer never tag FINALE)")
+    fun `completed with no finale stays completed`() {
+        assertEquals("COMPLETED", classifyCareerQuality("COMPLETED", finaleRaces = 0, finaleWins = 0))
+    }
+
+    @Test
+    @DisplayName("Non-COMPLETED outcomes pass through unchanged regardless of finale counts")
+    fun `non-completed outcomes pass through`() {
+        assertEquals("FORCE_END", classifyCareerQuality("FORCE_END", finaleRaces = 0, finaleWins = 0))
+        assertEquals("INCOMPLETE", classifyCareerQuality("INCOMPLETE", finaleRaces = 3, finaleWins = 3))
+        // A force-end that somehow also observed finale races must never be relabeled a WIN.
+        assertEquals("FORCE_END", classifyCareerQuality("FORCE_END", finaleRaces = 3, finaleWins = 3))
+    }
 }

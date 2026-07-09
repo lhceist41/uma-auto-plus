@@ -14,6 +14,10 @@ import com.steve1316.uma_android_automation.types.StatName
  * @property game The [Game] instance for interacting with the game state.
  */
 class UraFinale(game: Game) : Campaign(game) {
+    // The URA finale's three climax races show the 1st-place "Congratulations" banner, so the base
+    // finalizeRaceResults capture can record a true win/lose signal into the career ledger.
+    override val capturesFinaleWins: Boolean = true
+
     override fun openFansDialog() {
         ButtonHomeFansInfo.click(game.imageUtils, region = game.imageUtils.regionTopHalf, tries = 10)
         bHasTriedCheckingFansToday = true

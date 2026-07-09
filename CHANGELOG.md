@@ -8,6 +8,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- The run history now records whether a URA Finale career actually **won** its finale, not just whether it reached it. Each of the three finale races is checked for a 1st-place result, and every career is labelled accordingly -- won the finale, reached it but lost a race, or the existing completed / force-ended / incomplete. Before this, a triumphant URA win and a run that limped through a lost finale looked identical in the logs. URA Finale only for now; Unity Cup and Trackblazer finales aren't read yet.
+
+### Fixed
+
+- The game's daily reset can dump you back to the main lobby in the middle of a career. The bot used to flail on that screen, eventually recover in the wrong way (skipping ahead in the queue and briefly running the career under the wrong preset), and leave a mess in the logs. It now recognizes the lobby and simply re-enters the career in progress, keeping the same run and preset.
+- The run-history report no longer counts a mid-career bot hiccup (a stop on an unrecognized screen) as a failed career. The career usually resumes right afterward, so these are tallied separately and a trainee that hit one transient stop is no longer made to look worse than she is.
+
 ## [1.3.7] - 2026-07-09
 
 A roster and control pass on top of the July-patch adaptation from 1.3.6: the full community S-tier preset list -- 156 presets across 52 entries -- reachable through a new searchable trainee picker with favorites and cross-scenario run queues, a control for when the bot spends skill points, smarter Unity Cup opponent selection, handling for URA Finale's new duel screen, and a set of reliability fixes.

@@ -17,7 +17,7 @@
 
 import { readFileSync, readdirSync, statSync } from "node:fs"
 import { basename, extname, join } from "node:path"
-import { aggregate, dedupe, harvestLogText, parseJsonl, renderMarkdown } from "../src/lib/outcomeAnalysis.ts"
+import { aggregate, dedupe, harvestLogText, isBotFault, parseJsonl, renderMarkdown } from "../src/lib/outcomeAnalysis.ts"
 
 function collectFiles(path, depth = 0) {
     const stat = statSync(path)
@@ -61,7 +61,15 @@ function main(args) {
 
     const unique = dedupe(records)
     const dropped = records.length - unique.length
-    console.log(`${unique.length} career record(s) from ${filesRead} file(s)${dropped > 0 ? ` (${dropped} log duplicate(s) of corpus records dropped)` : ""}\n`)
+    // Bot faults (UNHANDLED_EXCEPTION crash-stops) are not career outcomes; aggregate() drops them.
+    // Surface the count instead of letting them vanish silently.
+    const botFaults = unique.filter(isBotFault).length
+    const outcomeCount = unique.length - botFaults
+    console.log(
+        `${outcomeCount} career outcome(s) from ${filesRead} file(s)` +
+            `${dropped > 0 ? ` (${dropped} log duplicate(s) of corpus records dropped)` : ""}` +
+            `${botFaults > 0 ? `; ${botFaults} bot-fault record(s) (UNHANDLED_EXCEPTION) excluded from outcomes` : ""}\n`,
+    )
     console.log(renderMarkdown(aggregate(unique)))
     console.log(
         "\nCaveats: the corpus is not one-row-per-started-run (hard terminators emit nothing)," +

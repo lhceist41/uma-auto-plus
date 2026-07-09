@@ -151,6 +151,29 @@ abstract class Campaign(game: Game) : Task(game) {
         }
     }
 
+    /** Finale-race results observed this career, for the outcome ledger's win/lose signal. The URA
+     * finale (days 73-75, any race tagged RaceGrade.FINALE) runs through the mandatory-race path, so
+     * [Racing.finalizeRaceResults] reports each result here via [noteFinaleRaceResult]. [finaleRaces]
+     * counts finale races seen; [finaleRaces1st] how many were taken at 1st place (the Congratulations
+     * banner). A swept URA arc reads 3/3 (=> quality WIN); a COMPLETED career with finaleRaces==0 never
+     * reached a finale; finaleRaces1st < finaleRaces means it reached the finale but lost a race. A
+     * fresh Campaign runs each career, so the zero default is the per-career reset. */
+    private var finaleRaces: Int = 0
+    private var finaleRaces1st: Int = 0
+
+    /** Record one finale-race result. Called from [Racing.finalizeRaceResults] on a FINALE-grade race. */
+    fun noteFinaleRaceResult(won: Boolean) {
+        finaleRaces++
+        if (won) finaleRaces1st++
+    }
+
+    /** Whether this scenario's FINALE-graded races show the 1st-place "Congratulations" banner that
+     * [Racing.finalizeRaceResults] reads for the win/lose ledger signal. Only URA Finale is verified.
+     * Trackblazer also tags its Twinkle Star Climax races RaceGrade.FINALE (Trackblazer.kt) but uses a
+     * different result UI, so recording there could mislabel a good Climax career FINALE_LOST. Off by
+     * default; a scenario opts in only once its finale banner is confirmed on a live device. */
+    open val capturesFinaleWins: Boolean = false
+
     /** Attempts made to actively exit the career-end skill screen after the plan already ran. */
     private var careerEndExitAttempts: Int = 0
 
@@ -326,10 +349,33 @@ abstract class Campaign(game: Game) : Task(game) {
     private var consecutiveDialogTicks: Int = 0
 
     /**
+     * Home-lobby re-entry attempts used within the current unknown-screen streak. A mid-career bounce
+     * to the game's outer lobby (daily-reset reload) is re-entered in place via the navigator, but if
+     * that cannot advance (e.g. silently dead gesture dispatch) it is capped at [maxLobbyReentryAttempts]
+     * so the loop falls through to the standard stop instead of thrashing. Reset with
+     * [consecutiveUnknownScreenCount].
+     */
+    private var lobbyReentryAttempts: Int = 0
+
+    /**
+     * True once this task has recognized in-career UI (a Main training screen tick). Gates the
+     * Home-lobby re-entry: a bot STARTED with the game parked at the lobby (no career in flight)
+     * must fall through to the normal ladder/stop instead of driving the launch flow - an
+     * interrupted queue can leave a stale trainee target armed there, and reusing it would silently
+     * start a career for the wrong trainee (2026-07-09: El Condor selected instead of the applied
+     * Rudolf preset). A daily-reset bounce always happens after main-screen ticks, so the gate
+     * never blocks the case this recovery exists for.
+     */
+    private var careerScreenObservedThisTask: Boolean = false
+
+    /**
      * Upper bound on [consecutiveUnknownScreenCount] before the bot stops with a diagnostic rather
      * than loop on an unrecognized screen forever. ~25 ticks is roughly a minute of being stuck.
      */
     private val maxUnknownScreenBeforeStop: Int = 25
+
+    /** Max in-place Home-lobby re-entries per unknown-screen streak (see [lobbyReentryAttempts]). */
+    private val maxLobbyReentryAttempts: Int = 3
 
     /**
      * Stuck-cycle counts at which [recoverFromUnknownScreen] force-rebinds the Accessibility Service.
@@ -2789,6 +2835,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "Wit" to st.wit,
             )
         val outcome = classifyCareerOutcome(result.code, careerForceEnded)
+        val quality = classifyCareerQuality(outcome, finaleRaces, finaleRaces1st)
 
         // Stage 3 of the outcome-measurement plan: the same fields as the ledger line, appended
         // as one JSON record to the on-device corpus with the app version and the config-arm
@@ -2811,6 +2858,9 @@ abstract class Campaign(game: Game) : Task(game) {
                 put("grt", st.guts)
                 put("wit", st.wit)
                 put("skillPts", trainee.skillPoints)
+                put("finaleRaces", finaleRaces)
+                put("finaleWins", finaleRaces1st)
+                put("quality", quality)
                 if (result.code == TaskResultCode.TASK_RESULT_MANUALLY_STOPPED) {
                     StartModule.queueStopReason?.let { put("stopReason", it) }
                 }
@@ -2850,6 +2900,9 @@ abstract class Campaign(game: Game) : Task(game) {
             append(" grt=").append(st.guts)
             append(" wit=").append(st.wit)
             append(" skillPts=").append(trainee.skillPoints)
+            append(" finaleRaces=").append(finaleRaces)
+            append(" finaleWins=").append(finaleRaces1st)
+            append(" quality=").append(quality)
             if (result.code == TaskResultCode.TASK_RESULT_MANUALLY_STOPPED) {
                 StartModule.queueStopReason?.let { append(" stopReason=\"").append(it).append('"') }
             }
@@ -2899,6 +2952,7 @@ abstract class Campaign(game: Game) : Task(game) {
 
             if (handleMainScreen()) {
                 consecutiveUnknownScreenCount = 0
+                careerScreenObservedThisTask = true
                 return null
             }
 
@@ -3082,6 +3136,7 @@ abstract class Campaign(game: Game) : Task(game) {
 
             if (detectedKnownScreen) {
                 consecutiveUnknownScreenCount = 0
+                lobbyReentryAttempts = 0
             }
             if (!bMiscBackPressedThisTick) {
                 consecutiveMiscBackPresses = 0
@@ -3238,6 +3293,34 @@ abstract class Campaign(game: Game) : Task(game) {
             MessageLog.i(TAG, "[MISC] Event cutscene intro detected (Skip pill present); tapping to advance the dialogue toward the choices (tap $count).")
             game.tap(540.0, 1300.0, taps = 1)
             return
+        }
+
+        // A mid-career bounce to the game's outer Home lobby - the 17:00 JST daily-reset reload, an
+        // app resume, or a crash-to-title - is invisible to every in-career screen check, so without
+        // this the loop spirals to the maxUnknownScreenBeforeStop stop and only recovers via the
+        // queue's between-run path. That path treats the crash as a finished run: it advances the
+        // rotation cursor onto the NEXT preset, writes a phantom CAREER_END, and rebuilds Training/
+        // TrainingEvent against the wrong preset (both cache their config at construction). Detect the
+        // lobby and re-enter THIS career in place through the navigator (HOME -> CAREER -> Continue ->
+        // Resume), keeping the task alive so none of that happens. Gated at >=2 cycles so a one-frame
+        // misdetect during a normal transition cannot trigger it, AND on careerScreenObservedThisTask
+        // so a bot started at the lobby never launches a career on stale state; any failure falls
+        // through to the standard ladder below.
+        if (count >= 2 && careerScreenObservedThisTask && lobbyReentryAttempts < maxLobbyReentryAttempts) {
+            val navigator = CareerLaunchNavigator(game.myContext)
+            navigator.attachLiveGame(game)
+            if (navigator.isOnHomeScreen()) {
+                lobbyReentryAttempts++
+                MessageLog.w(TAG, "[RECOVERY] Detected the game's Home lobby mid-career (likely a daily-reset bounce). Re-entering the in-progress career in place (attempt $lobbyReentryAttempts/$maxLobbyReentryAttempts)...")
+                val result = navigator.navigate(reuseLastLaunchSetup = true)
+                if (result.success) {
+                    MessageLog.i(TAG, "[RECOVERY] Re-entered the career via the navigator; resuming the in-career loop.")
+                    consecutiveUnknownScreenCount = 0
+                    lobbyReentryAttempts = 0
+                    return
+                }
+                MessageLog.w(TAG, "[RECOVERY] Lobby re-entry failed (${result.failureReason}); falling through to the standard recovery ladder.")
+            }
         }
 
         // MuMu can leave the Accessibility Service "enabled" in secure settings while its gesture

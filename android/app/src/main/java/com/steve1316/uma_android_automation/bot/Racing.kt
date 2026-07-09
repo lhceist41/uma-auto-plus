@@ -35,6 +35,7 @@ import com.steve1316.uma_android_automation.components.IconRaceListSelectionBrac
 import com.steve1316.uma_android_automation.components.IconScrollListBottomRight
 import com.steve1316.uma_android_automation.components.IconScrollListTopLeft
 import com.steve1316.uma_android_automation.components.LabelCongratulations
+import com.steve1316.uma_android_automation.components.LabelFirstPlace
 import com.steve1316.uma_android_automation.components.LabelRaceCriteriaFans
 import com.steve1316.uma_android_automation.components.LabelRaceCriteriaG3OrAbove
 import com.steve1316.uma_android_automation.components.LabelRaceCriteriaMaiden
@@ -1809,6 +1810,23 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // A race definitively ran. Any non-maiden grade proves the in-game maiden requirement is
         // cleared, so the maiden-race check stops re-firing every turn when the fan-tier OCR reads stale.
         campaign.trainee.noteCompletedRaceGrade(lastRaceGrade)
+
+        // Close the outcome loop for the finale: the gold "1st" laurel (= 1st place) is co-present with
+        // the results screen just confirmed above, before we click through it. Read the laurel, NOT the
+        // text banner - the URA Qualifier and Semi-Final show "You did it!" while only the Finals shows
+        // "Congratulations!", so a LabelCongratulations check undercounts (validated live 2026-07-09:
+        // Rudolf swept 3/3 but the text-only check caught only the Finals). Record win/lose per finale
+        // race so the ledger tells a true finale win from a completed-but-lost run. Double-read since the
+        // result graphic can lag one frame.
+        if (lastRaceGrade == RaceGrade.FINALE && campaign.capturesFinaleWins) {
+            var wonFinaleRace = LabelFirstPlace.check(game.imageUtils)
+            if (!wonFinaleRace) {
+                game.wait(0.5, skipWaitingForLoading = true)
+                wonFinaleRace = LabelFirstPlace.check(game.imageUtils)
+            }
+            campaign.noteFinaleRaceResult(wonFinaleRace)
+            MessageLog.i(TAG, "[RACE] Finale race result recorded: ${if (wonFinaleRace) "1st place (won)" else "below 1st"}.")
+        }
 
         // Max time limit for the while loop to attempt to finalize race results.
         // It really shouldn't ever take this long.

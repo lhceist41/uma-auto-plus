@@ -1,8 +1,14 @@
-import { aggregate, classifyBucket, dedupe, harvestLogText, parseJsonl, parseLedgerLine, percentile, renderMarkdown } from "../outcomeAnalysis"
+import { aggregate, classifyBucket, dedupe, harvestLogText, isBotFault, parseJsonl, parseLedgerLine, percentile, renderMarkdown } from "../outcomeAnalysis"
 import type { OutcomeRecord } from "../outcomeAnalysis"
 
 const MODERN_LINE =
     "00:45:49.128 [INFO] [CAREER_END] result=COMPLETE outcome=COMPLETED trainee=Matikanetannhauser scenario=URA_Finale turn=75 fans=277728 spd=880 sta=775 pwr=673 grt=779 wit=404 skillPts=3"
+
+const FINALE_WIN_LINE =
+    "01:20:04.500 [INFO] [CAREER_END] result=COMPLETE outcome=COMPLETED trainee=Symboli_Rudolf scenario=URA_Finale turn=75 fans=361000 spd=1100 sta=751 pwr=820 grt=600 wit=500 skillPts=8 finaleRaces=3 finaleWins=3 quality=WIN"
+
+const FINALE_LOSS_LINE =
+    "01:21:00.000 [INFO] [CAREER_END] result=COMPLETE outcome=COMPLETED trainee=Winning_Ticket scenario=URA_Finale turn=75 fans=233119 spd=952 sta=527 pwr=796 grt=569 wit=472 skillPts=10 finaleRaces=3 finaleWins=1 quality=FINALE_LOST"
 
 const LEGACY_LINE = "05:08:39.225 [INFO] [CAREER_END] result=COMPLETE trainee=Gold_Ship scenario=Trackblazer turn=75 fans=540278 spd=839 sta=761 pwr=600 grt=519 wit=575 skillPts=1"
 
@@ -67,6 +73,22 @@ describe("parseLedgerLine", () => {
         const r = parseLedgerLine(LEGACY_LINE.replace("Gold_Ship", "EI_Condor_Pasa"))
         expect(r!.trainee).toBe("El Condor Pasa")
     })
+
+    it("parses the finale win/lose fields on a modern line", () => {
+        const win = parseLedgerLine(FINALE_WIN_LINE)
+        expect(win!.finaleRaces).toBe(3)
+        expect(win!.finaleWins).toBe(3)
+        expect(win!.quality).toBe("WIN")
+        const loss = parseLedgerLine(FINALE_LOSS_LINE)
+        expect(loss!.finaleWins).toBe(1)
+        expect(loss!.quality).toBe("FINALE_LOST")
+    })
+
+    it("leaves finale fields undefined on a line that predates them", () => {
+        const r = parseLedgerLine(MODERN_LINE)
+        expect(r!.finaleRaces).toBeUndefined()
+        expect(r!.quality).toBeUndefined()
+    })
 })
 
 describe("harvestLogText", () => {
@@ -104,6 +126,29 @@ describe("parseJsonl", () => {
         expect(records[0].cfg?.statPrioritization).toBe("Stamina,Speed,Power,Wit,Guts")
         expect(records[0].source).toBe("jsonl")
     })
+
+    it("parses finale fields from a corpus record", () => {
+        const line = JSON.stringify({
+            result: "COMPLETE",
+            outcome: "COMPLETED",
+            trainee: "Test Uma",
+            scenario: "URA Finale",
+            turn: 75,
+            fans: 250000,
+            spd: 950,
+            sta: 700,
+            pwr: 720,
+            grt: 600,
+            wit: 480,
+            skillPts: 12,
+            finaleRaces: 3,
+            finaleWins: 3,
+            quality: "WIN",
+        })
+        const [r] = parseJsonl(line)
+        expect(r.finaleWins).toBe(3)
+        expect(r.quality).toBe("WIN")
+    })
 })
 
 describe("classifyBucket", () => {
@@ -122,6 +167,23 @@ describe("classifyBucket", () => {
         expect(classifyBucket(record({ turn: 74, outcome: "FORCE_END" }))).toBe("late")
         expect(classifyBucket(record({ turn: 55, outcome: "FORCE_END" }))).toBe("mid")
         expect(classifyBucket(record({ turn: 24, outcome: "FORCE_END" }))).toBe("early")
+    })
+
+    it("uses the finale win/lose signal over the turn proxy", () => {
+        // A finale loss at turn 75 is NOT a full arc — the disambiguation the signal adds.
+        expect(classifyBucket(record({ turn: 75, quality: "FINALE_LOST" }))).toBe("late")
+        // A confirmed sweep is a full arc.
+        expect(classifyBucket(record({ turn: 75, quality: "WIN" }))).toBe("full")
+        // Records without the signal still fall back to the turn bands.
+        expect(classifyBucket(record({ turn: 75 }))).toBe("full")
+    })
+})
+
+describe("isBotFault", () => {
+    it("flags only UNHANDLED_EXCEPTION crash-stops", () => {
+        expect(isBotFault(record({ result: "UNHANDLED_EXCEPTION", outcome: "INCOMPLETE", turn: 32 }))).toBe(true)
+        expect(isBotFault(record({ result: "COMPLETE" }))).toBe(false)
+        expect(isBotFault(record({ result: "MANUALLY_STOPPED", outcome: "INCOMPLETE" }))).toBe(false)
     })
 })
 
@@ -172,6 +234,36 @@ describe("aggregate", () => {
         expect(summaries).toHaveLength(3)
         expect(summaries.map((s) => s.arm).sort()).toEqual(["1.3.5@aaaaaaaaaa", "1.3.5@bbbbbbbbbb", "legacy"])
     })
+
+    it("counts finale wins/reaches and moves a turn-75 finale loss out of full", () => {
+        const records = [
+            record({ quality: "WIN", finaleWins: 3, finaleRaces: 3 }),
+            record({ quality: "WIN", finaleWins: 3, finaleRaces: 3 }),
+            record({ quality: "FINALE_LOST", finaleWins: 1, finaleRaces: 3, turn: 75 }),
+            record({ quality: "COMPLETED", turn: 40 }),
+        ]
+        const [summary] = aggregate(records)
+        expect(summary.finaleReached).toBe(3)
+        expect(summary.finaleWon).toBe(2)
+        // The turn-75 finale loss buckets late, not full, so fullRate reads as a true win-rate.
+        expect(summary.buckets.full).toBe(2)
+        expect(summary.buckets.late).toBe(1)
+        expect(summary.buckets.mid).toBe(1)
+    })
+
+    it("excludes UNHANDLED_EXCEPTION crash-stops from an arm's outcomes", () => {
+        // The real career plus a mid-career crash-stop (the daily-reset lobby bounce) for the same
+        // trainee. The crash must not count as a career, nor inflate the incomplete bucket.
+        const records = [record({ turn: 75 }), record({ result: "UNHANDLED_EXCEPTION", outcome: "INCOMPLETE", turn: 32, fans: 31492 })]
+        const [summary] = aggregate(records)
+        expect(summary.n).toBe(1)
+        expect(summary.buckets.full).toBe(1)
+        expect(summary.buckets.incomplete).toBe(0)
+    })
+
+    it("produces no summary for an arm that is only bot faults", () => {
+        expect(aggregate([record({ result: "UNHANDLED_EXCEPTION", outcome: "INCOMPLETE", turn: 32 })])).toEqual([])
+    })
 })
 
 describe("renderMarkdown", () => {
@@ -179,5 +271,11 @@ describe("renderMarkdown", () => {
         const table = renderMarkdown(aggregate([record({})]))
         expect(table).toContain("| Test Uma | URA Finale | legacy | 1* |")
         expect(table).toContain("anecdote, not signal")
+    })
+
+    it("includes the Finale W/R column with the per-arm win/reach count", () => {
+        const table = renderMarkdown(aggregate([record({ quality: "WIN", finaleWins: 3, finaleRaces: 3 })]))
+        expect(table).toContain("Finale W/R")
+        expect(table).toContain("| 1/1 |")
     })
 })

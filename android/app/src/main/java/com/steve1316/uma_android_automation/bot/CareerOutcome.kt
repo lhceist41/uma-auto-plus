@@ -23,6 +23,29 @@ internal fun classifyCareerOutcome(resultCode: TaskResultCode, careerForceEnded:
     }
 
 /**
+ * Richer career-quality label that closes the `COMPLETED` ambiguity [classifyCareerOutcome] leaves:
+ * a completed run is either a true finale win or a career that reached the finale and lost it (or an
+ * unflagged early force-end, which `turn` still splits). Derived from the raw [outcome] plus the
+ * finale-race tally captured during the run ([finaleRaces] seen, [finaleWins] taken at 1st place).
+ *
+ * - Non-`COMPLETED` outcomes (`INCOMPLETE`, `FORCE_END`) pass through unchanged.
+ * - `COMPLETED` with an observed finale swept (`finaleWins >= finaleRaces > 0`) => `WIN`.
+ * - `COMPLETED` that reached the finale but dropped a race (`finaleWins < finaleRaces`) => `FINALE_LOST`.
+ * - `COMPLETED` with no observed finale race (`finaleRaces == 0`) stays `COMPLETED`. This is deliberate:
+ *   only URA-style finales tag `RaceGrade.FINALE`, so a Unity Cup / Trackblazer completion (which never
+ *   sets it) is never mislabeled - the WIN/LOST axis is only asserted when a finale was actually seen.
+ *
+ * Pure and side-effect-free so all branches are unit-testable without a live [Campaign].
+ */
+internal fun classifyCareerQuality(outcome: String, finaleRaces: Int, finaleWins: Int): String =
+    when {
+        outcome != "COMPLETED" -> outcome
+        finaleRaces == 0 -> outcome
+        finaleWins >= finaleRaces -> "WIN"
+        else -> "FINALE_LOST"
+    }
+
+/**
  * Stable short fingerprint of the config arm a career ran under, for the outcome corpus
  * (Stage 3 of the outcome-measurement plan). Two runs with the same fingerprint are
  * comparable; any change to an enumerated tunable or the app version starts a new arm.

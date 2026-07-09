@@ -260,6 +260,17 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
+     * Point this navigator at an already-live [Game] instead of letting [ensureInitialised] build a
+     * throwaway one. Used when the in-career loop drives the navigator mid-career (re-entering a
+     * career after a daily-reset bounce to the Home lobby) so we reuse the running capture pipeline
+     * rather than standing up a second Game beside it. Call before isOnHomeScreen()/navigate().
+     */
+    fun attachLiveGame(game: Game) {
+        tempGame = game
+        imageUtils = game.imageUtils
+    }
+
+    /**
      * One-shot probe: is the game parked on the main home screen?
      *
      * Used by the queue before run 1. The navigator otherwise only runs BETWEEN careers,
