@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
-## [1.3.7] - 2026-07-08
+## [1.3.7] - 2026-07-09
 
 A roster and control pass on top of the July-patch adaptation from 1.3.6: the full community S-tier preset list -- 156 presets across 52 entries -- reachable through a new searchable trainee picker with favorites and cross-scenario run queues, a control for when the bot spends skill points, smarter Unity Cup opponent selection, handling for URA Finale's new duel screen, and a set of reliability fixes.
 
