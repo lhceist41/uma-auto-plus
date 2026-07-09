@@ -434,7 +434,12 @@ open class DialogHandler(val game: Game) {
             }
 
             else -> {
-                Log.w(TAG, "[WARN] handleDialogs:: Unknown dialog \"${dialog.name}\" detected so it will not be handled.")
+                // This is the shared-dialog level (the deepest handler in the chain). Reaching here only
+                // means the dialog is not one of the cross-cutting shared dialogs, so it cascades up to the
+                // campaign/scenario handler that owns it - the normal path (e.g. consecutive_race_warning is
+                // handled by Campaign). Log at DEBUG, not WARN: the real "nobody handled it" warning is
+                // emitted by the most-derived handler's else, so warning here was a false alarm.
+                Log.d(TAG, "[DEBUG] handleDialogs:: Dialog \"${dialog.name}\" is not a shared dialog; cascading to the campaign handler.")
                 return DialogHandlerResult.Unhandled(dialog)
             }
         }

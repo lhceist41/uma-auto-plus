@@ -2818,6 +2818,24 @@ abstract class Campaign(game: Game) : Task(game) {
             }
         OutcomeCorpus.append(game.myContext, record)
 
+        // The automation_library writes a per-career .txt log itself, but that silently stopped on a
+        // long-lived queue session (2026-07-09: an 11h run produced zero .txt logs while this corpus kept
+        // appending). Write our own copy from the readable buffer so every career leaves a triage log
+        // regardless of the library's state. Best-effort: a logging failure must never abort the run.
+        try {
+            val filesDir = game.myContext.getExternalFilesDir(null)
+            if (filesDir != null) {
+                val logsDir = java.io.File(filesDir, "logs")
+                if (logsDir.exists() || logsDir.mkdirs()) {
+                    val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH_mm_ss", java.util.Locale.US).format(java.util.Date())
+                    java.io.File(logsDir, "${resolvedName}_$stamp.txt")
+                        .writeText(MessageLog.getMessageLogCopy().joinToString("\n"))
+                }
+            }
+        } catch (e: Exception) {
+            MessageLog.w(TAG, "[WARN] careerEndLedgerLine:: Failed to write the per-career log file: ${e.message}")
+        }
+
         return buildString {
             append("[CAREER_END] result=").append(result.code.name.removePrefix("TASK_RESULT_"))
             append(" outcome=").append(outcome)
