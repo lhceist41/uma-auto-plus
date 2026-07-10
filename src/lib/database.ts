@@ -54,8 +54,6 @@ export interface DatabaseSkill {
     key: string
     /** The skill ID. */
     skill_id: number
-    /** The skill ID for the inherited version of the skill. Same as ID if skill can't be inherited. */
-    gene_id: number
     /** The name of the skill. */
     name_en: string
     /** The description of the skill. */
@@ -66,10 +64,6 @@ export interface DatabaseSkill {
     cost: number
     /** The evaluation point of the skill. */
     eval_pt: number
-    /** The point ratio of the skill. */
-    pt_ratio: number
-    /** The rarity of the skill. */
-    rarity: number
     /** The condition of the skill. */
     condition: string
     /** The precondition of the skill. */
@@ -78,8 +72,6 @@ export interface DatabaseSkill {
     inherited: boolean
     /** The community tier of the skill. */
     community_tier: number | null
-    /** The versions of the skill. */
-    versions: number[] | null
     /** The upgrade of the skill. */
     upgrade: number | null
     /** The downgrade of the skill. */
@@ -256,19 +248,15 @@ export class DatabaseManager {
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     key TEXT UNIQUE NOT NULL,
                     skill_id INTEGER NOT NULL,
-                    gene_id INTEGER NOT NULL,
                     name_en TEXT NOT NULL,
                     desc_en TEXT NOT NULL,
                     icon_id INTEGER NOT NULL,
                     cost INTEGER NOT NULL,
                     eval_pt INTEGER NOT NULL,
-                    pt_ratio REAL NOT NULL,
-                    rarity INTEGER NOT NULL,
                     condition TEXT NOT NULL,
                     precondition TEXT NOT NULL,
                     inherited BOOLEAN NOT NULL DEFAULT 0,
                     community_tier INTEGER,
-                    versions TEXT NOT NULL,
                     upgrade INTEGER,
                     downgrade INTEGER
                 )
@@ -753,32 +741,24 @@ export class DatabaseManager {
 
                 await this.db!.runAsync("BEGIN TRANSACTION")
                 const stmt = await this.db!.prepareAsync(
-                    `INSERT OR REPLACE INTO ${this.TABLE_SKILLS} (key, skill_id, gene_id, name_en, desc_en, icon_id, cost, eval_pt, pt_ratio, rarity, condition, precondition, inherited, community_tier, versions, upgrade, downgrade)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    `INSERT OR REPLACE INTO ${this.TABLE_SKILLS} (key, skill_id, name_en, desc_en, icon_id, cost, eval_pt, condition, precondition, inherited, community_tier, upgrade, downgrade)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
                 )
 
                 // Execute all skills in batch using prepared statement.
                 for (const skill of skills) {
-                    let versions: string = ""
-                    if (skill.versions !== null) {
-                        versions = skill.versions.join(",")
-                    }
                     await stmt.executeAsync([
                         skill.key,
                         skill.skill_id,
-                        skill.gene_id,
                         skill.name_en,
                         skill.desc_en,
                         skill.icon_id,
                         skill.cost,
                         skill.eval_pt,
-                        skill.pt_ratio,
-                        skill.rarity,
                         skill.condition,
                         skill.precondition,
                         skill.inherited,
                         skill.community_tier,
-                        versions,
                         skill.upgrade,
                         skill.downgrade,
                     ])

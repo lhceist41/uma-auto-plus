@@ -679,7 +679,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 continue
             }
 
-            if (entry.screenPrice <= remainingSkillPoints) {
+            // bIsAvailable guard ported from upstream 90b51885: auto-obtained rows tallied here
+            // spent budget on skills that were never purchasable.
+            if (entry.bIsAvailable && entry.screenPrice <= remainingSkillPoints) {
                 result[name] = entry.screenPrice
                 remainingSkillPoints -= entry.screenPrice
                 entry.buy()
@@ -712,7 +714,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 continue
             }
 
-            if (entry.screenPrice <= remainingSkillPoints) {
+            // Same 90b51885 guard as the negative-skill tally above.
+            if (entry.bIsAvailable && entry.screenPrice <= remainingSkillPoints) {
                 result[name] = entry.screenPrice
                 remainingSkillPoints -= entry.screenPrice
                 entry.buy()

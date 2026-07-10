@@ -150,6 +150,9 @@ abstract class Task(game: Game) : DialogHandler(game) {
         // One greppable outcome line per career run; campaigns emit it, non-career tasks return null.
         careerEndLedgerLine(result)?.let { MessageLog.i(TAG, it) }
 
+        // AFTER the ledger line is in the buffer, so the per-career file contains its own line.
+        writePerCareerLog(result)
+
         if (DiscordUtils.enableDiscordNotifications) {
             DiscordUtils.queue.add("```diff\n$diffChar ${MessageLog.getSystemTimeString()} $discordMessage.\n```")
             // Wait to ensure the Discord message queue is processed.
@@ -166,6 +169,13 @@ abstract class Task(game: Game) : DialogHandler(game) {
      * overrides this to emit the `[CAREER_END]` ledger line.
      */
     protected open fun careerEndLedgerLine(result: TaskResult): String? = null
+
+    /**
+     * Optional per-career log-file write, called by [handleTaskEnd] AFTER the ledger line has been
+     * logged - so the file can contain its own `[CAREER_END]` line. Base tasks write nothing;
+     * [Campaign] overrides this with the buffer-slice file write.
+     */
+    protected open fun writePerCareerLog(result: TaskResult) {}
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////

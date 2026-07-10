@@ -16,8 +16,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- When a rotation gets knocked out of sync (say, by a game update mid-queue) and the bot recovers, the resumed career now actually runs on the right trainee's preset. It used to fix the queue but keep the wrong trainee's stat priorities, racing plan, event picks, and skill plan until the career ended -- at one point Winning Ticket ran a full career on Symboli Rudolf's settings. Everything is reloaded from the correct preset now.
+- Every rotation career now states in its log, right at career start, whether it is running the settings its rotation slot intended -- so a wrong-settings launch is visible immediately instead of only being discovered after a bad career.
+- Each career's log file now contains exactly that one career. On a long queue session, every file used to also carry the tail end of all the careers before it, which made them confusing to read and share.
+- Skill buying no longer counts skills you already own automatically as purchasable, which had been quietly eating into the skill-point budget for skills it could never buy.
 - The game's daily reset can dump you back to the main lobby in the middle of a career. The bot used to flail on that screen, eventually recover in the wrong way (skipping ahead in the queue and briefly running the career under the wrong preset), and leave a mess in the logs. It now recognizes the lobby and simply re-enters the career in progress, keeping the same run and preset.
 - The run-history report no longer counts a mid-career bot hiccup (a stop on an unrecognized screen) as a failed career. The career usually resumes right afterward, so these are tallied separately and a trainee that hit one transient stop is no longer made to look worse than she is.
+
+### Changed
+
+- Internal housekeeping on the skills database so future game-data updates from the upstream project import cleanly. No visible change.
 
 ## [1.3.7] - 2026-07-09
 

@@ -23,8 +23,6 @@ import icons from "../SkillSettings/icons"
 interface Skill {
     /** The unique skill ID. */
     id: number
-    /** The skill ID for the inherited version of the skill. Same as ID if skill can't be inherited. */
-    gene_id: number
     /** The English display name of the skill. */
     name_en: string
     /** The English description of the skill. */
@@ -35,10 +33,6 @@ interface Skill {
     cost: number
     /** The evaluated point value of the skill. */
     eval_pt: number
-    /** The point-to-cost ratio for ranking efficiency. */
-    pt_ratio: number
-    /** The rarity tier of the skill. */
-    rarity: number
     /** The activation condition string for the skill. */
     condition: string
     /** The precondition string that must be met before activation. */
@@ -47,8 +41,6 @@ interface Skill {
     inherited: boolean
     /** The community tier list rating, or null if unrated. */
     community_tier: number | null
-    /** The game version numbers where this skill is available. */
-    versions: number[]
     /** The ID of the upgraded version of this skill, or null. */
     upgrade: number | null
     /** The ID of the downgraded version of this skill, or null. */

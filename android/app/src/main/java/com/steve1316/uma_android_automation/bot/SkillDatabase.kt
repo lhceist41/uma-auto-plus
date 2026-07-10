@@ -38,9 +38,6 @@ class SkillDatabase(private val game: Game) {
         /** The name of the skill ID column. */
         private const val SKILLS_COLUMN_SKILL_ID = "skill_id"
 
-        /** The name of the gene ID column. */
-        private const val SKILLS_COLUMN_GENE_ID = "gene_id"
-
         /** The name of the English name column. */
         private const val SKILLS_COLUMN_NAME_EN = "name_en"
 
@@ -56,12 +53,6 @@ class SkillDatabase(private val game: Game) {
         /** The name of the evaluation points column. */
         private const val SKILLS_COLUMN_EVAL_PT = "eval_pt"
 
-        /** The name of the point ratio column. */
-        private const val SKILLS_COLUMN_PT_RATIO = "pt_ratio"
-
-        /** The name of the rarity column. */
-        private const val SKILLS_COLUMN_RARITY = "rarity"
-
         /** The name of the condition column. */
         private const val SKILLS_COLUMN_CONDITION = "condition"
 
@@ -73,9 +64,6 @@ class SkillDatabase(private val game: Game) {
 
         /** The name of the community tier column. */
         private const val SKILLS_COLUMN_COMMUNITY_TIER = "community_tier"
-
-        /** The name of the versions' column. */
-        private const val SKILLS_COLUMN_VERSIONS = "versions"
 
         /** The name of the upgrade ID column. */
         private const val SKILLS_COLUMN_UPGRADE = "upgrade"
@@ -113,38 +101,30 @@ class SkillDatabase(private val game: Game) {
                 if (cursor.moveToFirst()) {
                     do {
                         val idIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_SKILL_ID)
-                        val geneIdIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_GENE_ID)
                         val nameIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_NAME_EN)
                         val descriptionIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_DESC_EN)
                         val iconIdIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_ICON_ID)
                         val costIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_COST)
                         val evalPtIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_EVAL_PT)
-                        val ptRatioIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_PT_RATIO)
-                        val rarityIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_RARITY)
                         val conditionIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_CONDITION)
                         val preconditionIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_PRECONDITION)
                         val inheritedIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_INHERITED)
                         val communityTierIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_COMMUNITY_TIER)
-                        val versionsIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_VERSIONS)
                         val upgradeIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_UPGRADE)
                         val downgradeIndex: Int = cursor.getColumnIndexOrThrow(SKILLS_COLUMN_DOWNGRADE)
 
                         val skillDataItem =
                             SkillData(
                                 id = it.getInt(idIndex),
-                                geneId = it.getInt(geneIdIndex),
                                 name = it.getString(nameIndex),
                                 description = it.getString(descriptionIndex),
                                 iconId = it.getInt(iconIdIndex),
                                 cost = it.getInt(costIndex),
                                 evalPt = it.getInt(evalPtIndex),
-                                ptRatio = it.getDouble(ptRatioIndex),
-                                rarity = it.getInt(rarityIndex),
                                 condition = it.getString(conditionIndex),
                                 precondition = it.getString(preconditionIndex),
                                 bIsInheritedUnique = it.getInt(inheritedIndex) == 1,
                                 communityTier = if (it.isNull(communityTierIndex)) null else it.getInt(communityTierIndex),
-                                versions = it.getString(versionsIndex),
                                 upgrade = if (it.isNull(upgradeIndex)) null else it.getInt(upgradeIndex),
                                 downgrade = if (it.isNull(downgradeIndex)) null else it.getInt(downgradeIndex),
                             )

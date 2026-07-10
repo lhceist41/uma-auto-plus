@@ -118,10 +118,10 @@ enum class MainScreenAction {
  */
 abstract class Campaign(game: Game) : Task(game) {
     /** Required instance of the Racing class. */
-    protected val racing: Racing = Racing(game, this)
+    protected var racing: Racing = Racing(game, this)
 
     /** Required instance of the SkillPlan class. */
-    protected val skillPlan: SkillPlan = SkillPlan(game, this)
+    protected var skillPlan: SkillPlan = SkillPlan(game, this)
 
     /** Lazily-built [SkillList] used only for career-end screen detection in [process]. Lazy and
      * shared because the constructor generates the full skill entries map from the database. */
@@ -204,11 +204,69 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Required instance of the Trainee class. */
     val trainee: Trainee = Trainee()
 
-    /** Required instance of the Training class. */
-    val training: Training = Training(game, this)
+    /** Required instance of the Training class. Reassignable so [reloadTraineeConfig] can rebuild it
+     * onto a resynced preset - both Training and TrainingEvent cache their config at construction. */
+    var training: Training = Training(game, this)
 
-    /** Required instance of the TrainingEvent class. */
-    protected val trainingEvent: TrainingEvent = TrainingEvent(game, this)
+    /** Required instance of the TrainingEvent class. Reassignable; see [reloadTraineeConfig]. */
+    protected var trainingEvent: TrainingEvent = TrainingEvent(game, this)
+
+    /**
+     * Rebuilds [training] and [trainingEvent] from the current settings DB. Called after the rotation
+     * mismatch guard resyncs onto a different trainee's snapshot: both classes cache their config
+     * (stat priorities/targets, failure cap, the four event-override maps) at construction, so a
+     * mid-flight snapshot swap would otherwise leave the career running the wrong preset's cached
+     * values for the rest of the run (the pre-2026-07-10 defect that ran Winning Ticket under Symboli
+     * Rudolf's config). The resync fires at the umamusume_details dialog - ~turn 1 on a fresh career,
+     * or immediately on a re-entered one - before any training decision, and both constructors are
+     * pure config reads whose per-tick caches reset to empty harmlessly.
+     */
+    private fun reloadTraineeConfig() {
+        training = Training(game, this)
+        trainingEvent = TrainingEvent(game, this)
+        // Racing and SkillPlan construction-cache career-shaping config too (the curated racing
+        // plan, fan-farming policy, the skill plans map) - a resync that misses them races and
+        // buys skills on the wrong preset. Reconstruction resets their per-career heuristics
+        // (e.g. the consecutive-race counter) to a fresh start, which is acceptable at the
+        // turn-1/re-entry point the resync fires at and strictly better than wrong config.
+        racing = Racing(game, this)
+        skillPlan = SkillPlan(game, this)
+        // The outcome record must report the config the career actually RUNS on from here out -
+        // without this refresh a resynced career plays correctly but fingerprints as the old arm.
+        outcomeConfigSnapshot = buildOutcomeConfigSnapshot()
+    }
+
+    /**
+     * Fingerprint of rotation slot [index]'s STORED snapshot (its rot{i}_-prefixed settings rows),
+     * over the same key set as the live fingerprint. Null when the slot has no stored scenario
+     * (no snapshot captured), so callers skip the comparison instead of warning on noise.
+     */
+    private fun rotationSlotFingerprint(index: Int): String? {
+        if (index < 0) return null
+        val slotScenario = SettingsHelper.getStringSetting("rot${index}_general", "scenario").ifEmpty { return null }
+        return outcomeConfigFingerprint(BuildConfig.VERSION_NAME, buildOutcomeConfigSnapshot("rot${index}_", slotScenario))
+    }
+
+    /**
+     * Compares the LIVE config fingerprint against rotation slot [slotIndex]'s stored snapshot and
+     * logs the verdict under [CONFIG_DRIFT]. The explicit OK line is deliberate - it is the
+     * observable proof that a career is running the intended preset (silence proves nothing in a
+     * rotated-away log). A mismatch means the settings DB no longer holds what the slot's preset
+     * captured: the wrong-preset class of failure that ran Winning Ticket under Rudolf's config.
+     */
+    private fun warnOnTraineeConfigDrift(slotIndex: Int, context: String) {
+        val slotFp = rotationSlotFingerprint(slotIndex) ?: return
+        val liveFp = outcomeConfigFingerprint(BuildConfig.VERSION_NAME, buildOutcomeConfigSnapshot())
+        if (liveFp == slotFp) {
+            MessageLog.i(TAG, "[CONFIG_DRIFT] $context: live config fp=$liveFp matches rotation slot #${slotIndex + 1}'s snapshot. This career runs the intended preset.")
+        } else {
+            MessageLog.w(
+                TAG,
+                "[CONFIG_DRIFT] $context: live config fp=$liveFp does NOT match rotation slot #${slotIndex + 1}'s snapshot fp=$slotFp - " +
+                    "this career may be running another preset's settings.",
+            )
+        }
+    }
 
     /** Required instance of the GameDate class. */
     var date: GameDate = GameDate(day = 1)
@@ -271,35 +329,46 @@ abstract class Campaign(game: Game) : Task(game) {
      * trainee's config. The set is enumerated deliberately: the tunables that shape play quality.
      * A field added here changes every fingerprint, deliberately starting new arms.
      */
-    private val outcomeConfigSnapshot: Map<String, String> = buildOutcomeConfigSnapshot()
+    private var outcomeConfigSnapshot: Map<String, String> = buildOutcomeConfigSnapshot()
 
-    private fun buildOutcomeConfigSnapshot(): Map<String, String> {
+    /**
+     * Builds the enumerated config snapshot from the settings DB. With [categoryPrefix] set (e.g.
+     * "rot2_") it reads a rotation slot's STORED snapshot rows instead of the live settings, over
+     * the identical key set - which makes the two fingerprints directly comparable for the
+     * [CONFIG_DRIFT] check. [scenarioForKeys] gates the scenario-conditional keys (the slot's own
+     * scenario for slot reads; the live scenario otherwise).
+     */
+    private fun buildOutcomeConfigSnapshot(categoryPrefix: String = "", scenarioForKeys: String = game.scenario): Map<String, String> {
+        val training = "${categoryPrefix}training"
+        val racing = "${categoryPrefix}racing"
+        val skills = "${categoryPrefix}skills"
+        val scenarioOverrides = "${categoryPrefix}scenarioOverrides"
         val cfg =
             linkedMapOf(
-                "statPrioritization" to SettingsHelper.getStringArraySetting("training", "statPrioritization").joinToString(","),
-                "preferredDistanceOverride" to SettingsHelper.getStringSetting("training", "preferredDistanceOverride"),
-                "maximumFailureChance" to SettingsHelper.getIntSetting("training", "maximumFailureChance").toString(),
-                "focusOnSparkStatTarget" to SettingsHelper.getStringArraySetting("training", "focusOnSparkStatTarget").joinToString(","),
-                "enableRainbowTrainingBonus" to SettingsHelper.getBooleanSetting("training", "enableRainbowTrainingBonus").toString(),
-                "enablePrioritizeNearMaxFriendship" to SettingsHelper.getBooleanSetting("training", "enablePrioritizeNearMaxFriendship", true).toString(),
-                "enableRiskyTraining" to SettingsHelper.getBooleanSetting("training", "enableRiskyTraining").toString(),
-                "moodFloor" to SettingsHelper.getStringSetting("training", "moodFloor", "Good"),
-                "enableFarmingFans" to SettingsHelper.getBooleanSetting("racing", "enableFarmingFans").toString(),
-                "daysToRunExtraRaces" to SettingsHelper.getIntSetting("racing", "daysToRunExtraRaces").toString(),
-                "minFansThreshold" to SettingsHelper.getIntSetting("racing", "minFansThreshold").toString(),
-                "enableRacingPlan" to SettingsHelper.getBooleanSetting("racing", "enableRacingPlan").toString(),
-                "enableMandatoryRacingPlan" to SettingsHelper.getBooleanSetting("racing", "enableMandatoryRacingPlan").toString(),
-                "disableRaceRetries" to SettingsHelper.getBooleanSetting("racing", "disableRaceRetries").toString(),
-                "skillPointCheck" to SettingsHelper.getIntSetting("skills", "skillPointCheck").toString(),
+                "statPrioritization" to SettingsHelper.getStringArraySetting(training, "statPrioritization").joinToString(","),
+                "preferredDistanceOverride" to SettingsHelper.getStringSetting(training, "preferredDistanceOverride"),
+                "maximumFailureChance" to SettingsHelper.getIntSetting(training, "maximumFailureChance").toString(),
+                "focusOnSparkStatTarget" to SettingsHelper.getStringArraySetting(training, "focusOnSparkStatTarget").joinToString(","),
+                "enableRainbowTrainingBonus" to SettingsHelper.getBooleanSetting(training, "enableRainbowTrainingBonus").toString(),
+                "enablePrioritizeNearMaxFriendship" to SettingsHelper.getBooleanSetting(training, "enablePrioritizeNearMaxFriendship", true).toString(),
+                "enableRiskyTraining" to SettingsHelper.getBooleanSetting(training, "enableRiskyTraining").toString(),
+                "moodFloor" to SettingsHelper.getStringSetting(training, "moodFloor", "Good"),
+                "enableFarmingFans" to SettingsHelper.getBooleanSetting(racing, "enableFarmingFans").toString(),
+                "daysToRunExtraRaces" to SettingsHelper.getIntSetting(racing, "daysToRunExtraRaces").toString(),
+                "minFansThreshold" to SettingsHelper.getIntSetting(racing, "minFansThreshold").toString(),
+                "enableRacingPlan" to SettingsHelper.getBooleanSetting(racing, "enableRacingPlan").toString(),
+                "enableMandatoryRacingPlan" to SettingsHelper.getBooleanSetting(racing, "enableMandatoryRacingPlan").toString(),
+                "disableRaceRetries" to SettingsHelper.getBooleanSetting(racing, "disableRaceRetries").toString(),
+                "skillPointCheck" to SettingsHelper.getIntSetting(skills, "skillPointCheck").toString(),
             )
         // The plan CONTENT matters, not just the flag: editing a curated racing plan changes how
         // the career races, so it must split arms. A digest keeps the record small.
-        val racingPlan = SettingsHelper.getStringSetting("racing", "racingPlan")
+        val racingPlan = SettingsHelper.getStringSetting(racing, "racingPlan")
         cfg["racingPlanDigest"] = if (racingPlan.isEmpty()) "none" else shortSha1(racingPlan)
-        if (game.scenario == "Trackblazer") {
-            cfg["trackblazerEnergyThreshold"] = SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerEnergyThreshold", 40).toString()
-            cfg["trackblazerConsecutiveRacesLimit"] = SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerConsecutiveRacesLimit", 2).toString()
-            cfg["trackblazerEnableIrregularTraining"] = SettingsHelper.getBooleanSetting("scenarioOverrides", "trackblazerEnableIrregularTraining", false).toString()
+        if (scenarioForKeys == "Trackblazer") {
+            cfg["trackblazerEnergyThreshold"] = SettingsHelper.getIntSetting(scenarioOverrides, "trackblazerEnergyThreshold", 40).toString()
+            cfg["trackblazerConsecutiveRacesLimit"] = SettingsHelper.getIntSetting(scenarioOverrides, "trackblazerConsecutiveRacesLimit", 2).toString()
+            cfg["trackblazerEnableIrregularTraining"] = SettingsHelper.getBooleanSetting(scenarioOverrides, "trackblazerEnableIrregularTraining", false).toString()
         }
         return cfg
     }
@@ -1309,6 +1378,10 @@ abstract class Campaign(game: Game) : Task(game) {
         val targetScore = matchScore(target)
         if (targetScore >= rotationVerifyMatchThreshold) {
             MessageLog.i(TAG, "[ROTATION] Trainee verify OK: career '$inCareer' matches the loaded preset for '$target' (score=${"%.2f".format(targetScore)}).")
+            // Identity matched - now verify the SETTINGS did too. Identity and config can diverge
+            // (a resume that re-applied the wrong slot, a stale Home preset overwrite): the
+            // fingerprint comparison catches what the name check structurally cannot.
+            warnOnTraineeConfigDrift(StartModule.loadRotationConfig().inGameNames.indexOf(target), "career-start check")
             return
         }
 
@@ -1338,13 +1411,17 @@ abstract class Campaign(game: Game) : Task(game) {
             // the outfits apart, and guessing the wrong slot would apply the wrong preset.
             val duplicateSlots = rotationNames.count { deOutfit(it) == deOutfit(matched) }
             if (duplicateSlots == 1 && StartModule.resyncRotationOntoCareer(game.myContext, bestIndex)) {
+                // Rebuild the training config from the resynced DB - without this the career keeps the
+                // wrong preset's construction-cached stat priorities and event overrides to the end.
+                reloadTraineeConfig()
                 MessageLog.w(
                     TAG,
                     "[ROTATION] Resynced onto interrupted career: this career is '$inCareer' (rotation entry #${bestIndex + 1} '$matched', " +
                         "score=${"%.2f".format(bestScore)}) but the queue had loaded the preset for '$target'. Applied the snapshot for " +
-                        "'$matched' and fast-forwarded the rotation cursor; the queue continues from her entry. Settings this career already " +
-                        "read at startup keep the old preset's values until it ends.",
+                        "'$matched', fast-forwarded the rotation cursor, and rebuilt the training config so the career now runs on her preset.",
                 )
+                // Prove the reload landed: the live fingerprint must now equal the resynced slot's.
+                warnOnTraineeConfigDrift(bestIndex, "post-resync verification")
                 return
             }
             if (duplicateSlots > 1) {
@@ -2817,6 +2894,14 @@ abstract class Campaign(game: Game) : Task(game) {
      * `[WARN] Could not find ButtonDetails`), the fields fall back to the last in-career OCR and will
      * understate the finale rewards (~+40 per stat, large fan injection) — trust `turn`/`result` then.
      */
+    /**
+     * Size of the process-lifetime message buffer at this Campaign's construction (= this career's
+     * start). [writePerCareerLog] slices from here so the per-career .txt holds only THIS career's
+     * lines. The buffer deliberately survives across queued careers (clearing it would blank the
+     * on-screen RN log), which used to bleed the prior career's tail into every file.
+     */
+    private val careerLogStartIndex: Int = MessageLog.getMessageLogCopy().size
+
     override fun careerEndLedgerLine(result: TaskResult): String {
         val resolvedName =
             trainee.name.ifEmpty {
@@ -2868,24 +2953,6 @@ abstract class Campaign(game: Game) : Task(game) {
             }
         OutcomeCorpus.append(game.myContext, record)
 
-        // The automation_library writes a per-career .txt log itself, but that silently stopped on a
-        // long-lived queue session (2026-07-09: an 11h run produced zero .txt logs while this corpus kept
-        // appending). Write our own copy from the readable buffer so every career leaves a triage log
-        // regardless of the library's state. Best-effort: a logging failure must never abort the run.
-        try {
-            val filesDir = game.myContext.getExternalFilesDir(null)
-            if (filesDir != null) {
-                val logsDir = java.io.File(filesDir, "logs")
-                if (logsDir.exists() || logsDir.mkdirs()) {
-                    val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH_mm_ss", java.util.Locale.US).format(java.util.Date())
-                    java.io.File(logsDir, "${resolvedName}_$stamp.txt")
-                        .writeText(MessageLog.getMessageLogCopy().joinToString("\n"))
-                }
-            }
-        } catch (e: Exception) {
-            MessageLog.w(TAG, "[WARN] careerEndLedgerLine:: Failed to write the per-career log file: ${e.message}")
-        }
-
         return buildString {
             append("[CAREER_END] result=").append(result.code.name.removePrefix("TASK_RESULT_"))
             append(" outcome=").append(outcome)
@@ -2906,6 +2973,40 @@ abstract class Campaign(game: Game) : Task(game) {
             if (result.code == TaskResultCode.TASK_RESULT_MANUALLY_STOPPED) {
                 StartModule.queueStopReason?.let { append(" stopReason=\"").append(it).append('"') }
             }
+        }
+    }
+
+    /**
+     * The automation_library writes a per-career .txt log itself, but that silently stopped on a
+     * long-lived queue session (2026-07-09: an 11h run produced zero .txt logs while the outcome
+     * corpus kept appending). Write our own copy from the readable buffer so every career leaves a
+     * triage log regardless of the library's state. Runs AFTER the [CAREER_END] line is logged
+     * (Task.handleTaskEnd ordering) so the file contains its own ledger line, and slices from
+     * [careerLogStartIndex] so a long app session does not bleed prior careers' tails into the file.
+     * Best-effort: a logging failure must never abort the run.
+     */
+    override fun writePerCareerLog(result: TaskResult) {
+        try {
+            val filesDir = game.myContext.getExternalFilesDir(null) ?: return
+            val logsDir = java.io.File(filesDir, "logs")
+            if (!logsDir.exists() && !logsDir.mkdirs()) return
+            val resolvedName =
+                trainee.name.ifEmpty {
+                    SettingsHelper.getStringSetting("misc", "currentProfileName").ifEmpty { "unknown" }
+                }.replace(" ", "_")
+            val buffer = MessageLog.getMessageLogCopy()
+            // Defensive: if the buffer was ever trimmed below the start snapshot, write the full
+            // copy (old behavior) rather than a wrong slice.
+            val lines = if (careerLogStartIndex <= buffer.size) buffer.subList(careerLogStartIndex, buffer.size) else buffer
+            val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH_mm_ss", java.util.Locale.US).format(java.util.Date())
+            val logFile = java.io.File(logsDir, "${resolvedName}_$stamp.txt")
+            logFile.writeText(lines.joinToString("\n"))
+            // App-written files land u0_a75:u0_a75 on this emulator image, which locks the adb
+            // shell out of triage pulls (observed 2026-07-10: cat/pull Permission denied while the
+            // outcome corpus stayed readable). Best-effort world-read so logs stay pullable.
+            logFile.setReadable(true, false)
+        } catch (e: Exception) {
+            MessageLog.w(TAG, "[WARN] writePerCareerLog:: Failed to write the per-career log file: ${e.message}")
         }
     }
 
