@@ -2874,6 +2874,14 @@ abstract class Campaign(game: Game) : Task(game) {
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
+     * Size of the process-lifetime message buffer at this Campaign's construction (= this career's
+     * start). [writePerCareerLog] slices from here so the per-career .txt holds only THIS career's
+     * lines. The buffer deliberately survives across queued careers (clearing it would blank the
+     * on-screen RN log), which used to bleed the prior career's tail into every file.
+     */
+    private val careerLogStartIndex: Int = MessageLog.getMessageLogCopy().size
+
+    /**
      * One structured outcome line per career run, logged when any run ends.
      *
      * Greppable as `[CAREER_END]` to build a per-preset completion ledger across runs. The game shows
@@ -2894,14 +2902,6 @@ abstract class Campaign(game: Game) : Task(game) {
      * `[WARN] Could not find ButtonDetails`), the fields fall back to the last in-career OCR and will
      * understate the finale rewards (~+40 per stat, large fan injection) — trust `turn`/`result` then.
      */
-    /**
-     * Size of the process-lifetime message buffer at this Campaign's construction (= this career's
-     * start). [writePerCareerLog] slices from here so the per-career .txt holds only THIS career's
-     * lines. The buffer deliberately survives across queued careers (clearing it would blank the
-     * on-screen RN log), which used to bleed the prior career's tail into every file.
-     */
-    private val careerLogStartIndex: Int = MessageLog.getMessageLogCopy().size
-
     override fun careerEndLedgerLine(result: TaskResult): String {
         val resolvedName =
             trainee.name.ifEmpty {
