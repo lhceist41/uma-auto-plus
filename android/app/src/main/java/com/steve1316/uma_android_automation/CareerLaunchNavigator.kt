@@ -1065,8 +1065,10 @@ class CareerLaunchNavigator(private val context: Context) {
      * Default (setting off): click Confirm and keep the generated set - the pre-reroll behavior.
      * With the opt-in `runQueue.enableSparkReroll`, the reroll gate runs: reroll once iff the
      * build's core stat finished >= 1100 (spark star odds plateau there) AND the stat spark
-     * (row 1, the blue bar) is not already a 3-star of that stat, AND the Confirm Reroll dialog
-     * offers the spend (it does not when TP < 30). The reroll is a pure independent redraw; the
+     * (row 1, the blue bar) is not already a 3-star of that stat. With TP < 30 the game swaps
+     * the spend dialog for a Restore-TP prompt; when item restore is enabled the bot restores
+     * (same ladder and session cap as the career-start restore) and retries the spend once,
+     * because a confirmed set can never be rerolled. The reroll is a pure independent redraw; the
      * bot keeps the redrawn set (it only rerolls sets that failed the gate) and saves a
      * screenshot of the post-reroll state - the keep-original toggle is uncaptured, so choosing
      * the better of the two sets is a follow-up once those pixels exist.
@@ -1134,7 +1136,18 @@ class CareerLaunchNavigator(private val context: Context) {
         // is not a safe advance. This click is the deliberate 30 TP spend. tries=3 rides out a
         // slow dialog-open animation with fresh captures per attempt.
         if (!ButtonRerollSparksConfirm.click(iu, tries = 3)) {
-            MessageLog.w(TAG, "[REROLL] Confirm Reroll dialog did not offer the spend (out of TP, or the dialog never opened). Keeping the original set.")
+            // With TP < 30 the game swaps the spend dialog for "You need N more TP to reroll
+            // Sparks. Restore TP?" (seen live 2026-07-10). Restore and retry once when item
+            // restore is enabled: the next career start draws on the same items anyway, and a
+            // confirmed set can never be rerolled, so declining here saves nothing.
+            if (tryRestoreTpForReroll() && retryRerollSpend()) {
+                MessageLog.i(TAG, "[REROLL] Spent 30 TP to reroll sparks after restoring TP: $targetStat=$targetValue with a ${statRow.second}-star ${statRow.first} spark cleared the gate.")
+                sparksRerollAttempted = true
+                sparksRerollExecuted = true
+                waitSafe(4.0)
+                return TransitionResult.Continue
+            }
+            MessageLog.w(TAG, "[REROLL] The spend was not available (dialog never opened, or TP is short with item restore off/exhausted). Keeping the original set.")
             ButtonCancel.click(iu)
             sparksRerollAttempted = true
             waitSafe(1.0)
@@ -1145,6 +1158,57 @@ class CareerLaunchNavigator(private val context: Context) {
         sparksRerollExecuted = true
         waitSafe(4.0)
         return TransitionResult.Continue
+    }
+
+    /**
+     * Handles the reroll's TP-short dialog by restoring TP with items. Runs only when the dialog
+     * on screen really is the TP prompt (No button present and the body text mentions TP), item
+     * restore is enabled, and the per-session restore cap has room. Returns true when TP was
+     * restored and the sparks screen is ready for a second spend attempt.
+     */
+    private fun tryRestoreTpForReroll(): Boolean {
+        if (!SettingsHelper.getBooleanSetting("runQueue", "enableTpRestoreWithItems", false)) {
+            MessageLog.i(TAG, "[REROLL] The spend dialog is missing and item restore is disabled - not spending items without the opt-in.")
+            return false
+        }
+        if (tpRestoresThisSession >= MAX_TP_RESTORES_PER_SESSION) {
+            MessageLog.w(TAG, "[REROLL] TP restore cap reached ($MAX_TP_RESTORES_PER_SESSION this session) - not restoring for the reroll.")
+            return false
+        }
+        val bmp = iu.getSourceBitmap()
+        val noLocation = ButtonNo.findImageWithBitmap(iu, bmp) ?: return false
+        val body =
+            try {
+                iu.performOCROnRegion(
+                    bmp,
+                    (bmp.width * 0.10).toInt(),
+                    (bmp.height * 0.35).toInt(),
+                    (bmp.width * 0.80).toInt(),
+                    (bmp.height * 0.25).toInt(),
+                    useThreshold = false,
+                    useGrayscale = true,
+                    scale = 2.0,
+                    debugName = "reroll_tp_dialog_ocr",
+                )
+            } catch (e: InterruptedException) {
+                throw e
+            } catch (_: Exception) {
+                return false
+            }
+        if (!Regex("\\bTP\\b").containsMatchIn(body.uppercase())) return false
+        MessageLog.i(TAG, "[REROLL] Out of TP for the reroll: \"${body.replace("\n", " ").take(70)}\". Restoring with items...")
+        return driveTpRestorePicker(noLocation.x, noLocation.y) == TpRestoreOutcome.RESTORED
+    }
+
+    /** Re-clicks Reroll Sparks and the spend confirmation after a TP restore. One retry only. */
+    private fun retryRerollSpend(): Boolean {
+        waitSafe(1.5)
+        if (!ButtonRerollSparks.click(iu)) {
+            MessageLog.w(TAG, "[REROLL] Reroll Sparks not clickable after the TP restore.")
+            return false
+        }
+        waitSafe(1.5)
+        return ButtonRerollSparksConfirm.click(iu, tries = 3)
     }
 
     /** Clicks Confirm on the SPARKS screen; falls back to re-detection when the click misses. */
@@ -1336,7 +1400,36 @@ class CareerLaunchNavigator(private val context: Context) {
         }
 
         MessageLog.i(TAG, "[NAV] Out of TP. Restoring with items per the enabled setting...")
-        gestureUtils.tap(noLocation.x + TP_RESTORE_FROM_NO_DX, noLocation.y, "tp_restore_button")
+        return when (driveTpRestorePicker(noLocation.x, noLocation.y)) {
+            TpRestoreOutcome.RESTORED -> {
+                MessageLog.i(TAG, "[NAV] Resuming the career start.")
+                TransitionResult.Continue
+            }
+            TpRestoreOutcome.NO_ROW ->
+                TransitionResult.Failed(
+                    reason = "TP restore was enabled but no usable row (Toughness 30, Star Fruit, or Carats) was found in the Recover TP picker.",
+                    transition = "TP_RESTORE_DIALOG -> RECOVER_TP_PICKER",
+                    isRecoverable = false,
+                    recommendedAction = "Restore TP manually, then restart the queue. All completed runs are saved.",
+                )
+            // Quantity popup never presented OK - leave the screen up and re-detect next tick.
+            TpRestoreOutcome.NO_QUANTITY_OK -> TransitionResult.Continue
+        }
+    }
+
+    /** Outcome of driving the Recover TP picker (see [driveTpRestorePicker]). */
+    private enum class TpRestoreOutcome { RESTORED, NO_ROW, NO_QUANTITY_OK }
+
+    /**
+     * Drives the item-based TP restore from the "Restore TP?" dialog through the Recover TP
+     * picker: Restore -> item ladder -> Use -> Max-fill quantity -> OK -> Close. Shared by the
+     * career-start restore and the spark reroll's TP-short path - both spend the same items
+     * against the same per-session cap. [anchorX]/[anchorY] locate the dialog's No button; the
+     * Restore button sits at a fixed offset to its right. NO_ROW closes the picker before
+     * returning; NO_QUANTITY_OK leaves the screen as-is for the caller to re-detect.
+     */
+    private fun driveTpRestorePicker(anchorX: Double, anchorY: Double): TpRestoreOutcome {
+        gestureUtils.tap(anchorX + TP_RESTORE_FROM_NO_DX, anchorY, "tp_restore_button")
         waitSafe(1.5)
 
         // Item ladder: Toughness 30 (farmed) -> Star Fruit (event stock) -> Carats (premium,
@@ -1347,17 +1440,12 @@ class CareerLaunchNavigator(private val context: Context) {
         val caratsLocation = if (drinkLocation == null && starFruitLocation == null) IconTpCarats.find(iu).first else null
         val rowLocation = drinkLocation ?: starFruitLocation ?: caratsLocation
         if (rowLocation == null) {
-            MessageLog.w(TAG, "[NAV] No restore row found in the Recover TP picker (Toughness 30, Star Fruit, or Carats). Closing and ending the queue.")
+            MessageLog.w(TAG, "[NAV] No restore row found in the Recover TP picker (Toughness 30, Star Fruit, or Carats). Closing it.")
             // The picker uses the wide list-dialog Close - the standard variants left it open on
             // screen when this branch fired live (2026-07-03).
             if (!ButtonCloseWide.click(iu) && !ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
             waitSafe(1.0)
-            return TransitionResult.Failed(
-                reason = "TP restore was enabled but no usable row (Toughness 30, Star Fruit, or Carats) was found in the Recover TP picker.",
-                transition = "TP_RESTORE_DIALOG -> RECOVER_TP_PICKER",
-                isRecoverable = false,
-                recommendedAction = "Restore TP manually, then restart the queue. All completed runs are saved.",
-            )
+            return TpRestoreOutcome.NO_ROW
         }
         val useCarats = caratsLocation != null
         val itemName =
@@ -1376,7 +1464,7 @@ class CareerLaunchNavigator(private val context: Context) {
         val okLocation = ButtonOk.find(iu).first
         if (okLocation == null) {
             MessageLog.w(TAG, "[NAV] Quantity dialog OK button not found after Use. Re-detecting...")
-            return TransitionResult.Continue
+            return TpRestoreOutcome.NO_QUANTITY_OK
         }
         // Fill TP to the cap with Max rather than a single +30. A normal career costs 30 TP,
         // but an Event Boost (TP Usage x2) career costs 60 - more than one use covers - and
@@ -1393,11 +1481,8 @@ class CareerLaunchNavigator(private val context: Context) {
         waitSafe(1.0)
 
         tpRestoresThisSession++
-        MessageLog.i(
-            TAG,
-            "[NAV] Restored TP with $itemName (restore $tpRestoresThisSession/$MAX_TP_RESTORES_PER_SESSION this session). Resuming the career start.",
-        )
-        return TransitionResult.Continue
+        MessageLog.i(TAG, "[NAV] Restored TP with $itemName (restore $tpRestoresThisSession/$MAX_TP_RESTORES_PER_SESSION this session).")
+        return TpRestoreOutcome.RESTORED
     }
 
     /**
