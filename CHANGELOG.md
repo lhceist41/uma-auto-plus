@@ -31,6 +31,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- The final run of a queue now finishes the career properly instead of stopping on the Complete Career screen. The sparks screen (and its auto-reroll), the results dialogs, and the veteran registration all happen after that screen, so the last career of every queue used to silently skip them -- no reroll chance, and no sparks in the run history. The bot now walks the same career-end flow it uses between runs and parks the game on the home screen. A run that was stopped, skipped, or errored still leaves the screen exactly where it was.
 - Internal housekeeping on the skills database so future game-data updates from the upstream project import cleanly. No visible change.
 
 ## [1.3.7] - 2026-07-09

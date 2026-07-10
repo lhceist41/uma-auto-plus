@@ -206,6 +206,10 @@ class CareerLaunchNavigator(private val context: Context) {
     // Prevents infinite loops when the Auto-Fill button remains visible after clicking it.
     private var autoFillAlreadyDone: Boolean = false
 
+    /** Finalize mode for the queue's final run: end navigation successfully at the home lobby
+     * instead of launching another career (set per navigate() call). */
+    private var finalizeToHomeMode: Boolean = false
+
     // Session-scoped flag: Auto-Select on the Legacy Select screen has already been clicked.
     // The Auto-Select button stays visible after a successful run - without this guard the
     // navigator would re-enter Legacy Select handling each iteration instead of clicking Next.
@@ -297,17 +301,21 @@ class CareerLaunchNavigator(private val context: Context) {
      * Navigates from the post-run state to the active training menu for the next queued run.
      *
      * @param reuseLastLaunchSetup If true, attempt to reuse the previous trainee/deck setup.
+     * @param finalizeToHome If true, stop successfully at the home lobby instead of launching
+     *   another career - used after a queue's final run so the career-end flow (summary, results,
+     *   the sparks screen and its reroll, veteran registration) still completes.
      * @return A [NavigationResult] indicating success or failure with diagnostics.
      */
-    fun navigate(reuseLastLaunchSetup: Boolean): NavigationResult {
+    fun navigate(reuseLastLaunchSetup: Boolean, finalizeToHome: Boolean = false): NavigationResult {
         val autoFillSupports = SettingsHelper.getBooleanSetting("runQueue", "autoFillSupports", false)
-        MessageLog.i(TAG, "[NAV] Starting between-run navigation. reuseLastLaunchSetup=$reuseLastLaunchSetup, autoFillSupports=$autoFillSupports")
+        MessageLog.i(TAG, "[NAV] Starting between-run navigation. reuseLastLaunchSetup=$reuseLastLaunchSetup, autoFillSupports=$autoFillSupports, finalizeToHome=$finalizeToHome")
 
         // Reset session-scoped flags for this navigation run.
         autoFillAlreadyDone = false
         skipToggleAlreadyDone = false
         legacyAutoSelectAlreadyDone = false
         careerLaunchInitiated = false
+        finalizeToHomeMode = finalizeToHome
 
         if (!ensureInitialised()) {
             return NavigationResult(
@@ -557,7 +565,7 @@ class CareerLaunchNavigator(private val context: Context) {
 
             when (transitionResult) {
                 is TransitionResult.Success -> {
-                    return NavigationResult(success = true, lastDetectedState = LaunchScreenState.ACTIVE_TRAINING_MENU.name)
+                    return NavigationResult(success = true, lastDetectedState = currentState.name)
                 }
                 is TransitionResult.Continue -> {
                     waitSafe(1.5)
@@ -930,7 +938,16 @@ class CareerLaunchNavigator(private val context: Context) {
             LaunchScreenState.TP_RESTORE_DIALOG -> handleTpRestoreDialog()
             LaunchScreenState.SUPPORT_DECK_SCREEN -> handleSupportDeckScreen(reuseLastLaunchSetup, autoFillSupports)
             LaunchScreenState.CINEMATIC_INTRO -> handleCinematicIntro()
-            LaunchScreenState.HOME_SCREEN -> handleHomeScreen()
+            LaunchScreenState.HOME_SCREEN ->
+                if (finalizeToHomeMode) {
+                    // Final-run finalize: reaching the home lobby means the career-end flow
+                    // (summary, results, sparks/reroll, dialogs) is done. Stop here instead of
+                    // starting another career.
+                    MessageLog.i(TAG, "[NAV] Home screen reached - career-end flow finished. Stopping here (finalize mode).")
+                    TransitionResult.Success
+                } else {
+                    handleHomeScreen()
+                }
             LaunchScreenState.QUICK_MODE_PROMPT -> handleQuickModePrompt()
             LaunchScreenState.TAP_TO_CONTINUE -> handleTapToContinue()
 

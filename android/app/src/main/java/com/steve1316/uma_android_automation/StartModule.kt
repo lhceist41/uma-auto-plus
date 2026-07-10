@@ -1093,7 +1093,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      * doesn't land within the grace window, it requests a queue stop so the session still ends
      * with a saved log instead of an invisible hang.
      */
-    private fun navigateWithDeadline(reuseLastLaunchSetup: Boolean, navigator: CareerLaunchNavigator = CareerLaunchNavigator(context)): NavigationResult {
+    private fun navigateWithDeadline(
+        reuseLastLaunchSetup: Boolean,
+        navigator: CareerLaunchNavigator = CareerLaunchNavigator(context),
+        finalizeToHome: Boolean = false,
+    ): NavigationResult {
         val navDone = java.util.concurrent.atomic.AtomicBoolean(false)
         // Set true ONLY when the deadline thread itself interrupts the queue thread. The catch
         // below uses this to tell a genuine wedge from a stop/teardown interrupt: an
@@ -1138,7 +1142,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         deadlineThread.start()
 
         return try {
-            navigator.navigate(reuseLastLaunchSetup)
+            navigator.navigate(reuseLastLaunchSetup, finalizeToHome)
         } catch (e: InterruptedException) {
             // Clear the interrupt flag so queue teardown (log saving, events) is not poisoned.
             Thread.interrupted()
@@ -1430,6 +1434,25 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 MessageLog.w(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Continuing queue (stopOnError=false).")
                                 completedRuns++
                             }
+                        }
+                    }
+
+                    // Final queue run: the career-end flow (Complete Career -> results -> sparks
+                    // and its reroll -> veteran registration) only runs inside the between-run
+                    // navigation, so stopping on the summary screen would skip it - the last
+                    // career of every queue lost its reroll chance and its sparks record. Walk
+                    // the same flow but stop at the home lobby. Only after a career that truly
+                    // completed: stops, errors, skips, and breakpoints keep the screen as-is.
+                    if (i == totalRuns && enableRunQueue && effectiveResult.code == TaskResultCode.TASK_RESULT_COMPLETE &&
+                        !queueStopRequested && BotService.isRunning
+                    ) {
+                        MessageLog.i(TAG, "[QUEUE] Final run complete. Finishing the career-end flow through to the home screen...")
+                        val finalizeResult = navigateWithDeadline(reuseLastLaunchSetup, finalizeToHome = true)
+                        if (finalizeResult.success) {
+                            MessageLog.i(TAG, "[QUEUE] Career-end flow finished; the game is parked on the home screen.")
+                        } else {
+                            logNavigationFailure(finalizeResult)
+                            MessageLog.w(TAG, "[QUEUE] Career-end finalize did not reach the home screen; the game stays where it stopped.")
                         }
                     }
 
