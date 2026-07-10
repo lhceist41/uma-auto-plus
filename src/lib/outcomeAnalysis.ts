@@ -161,7 +161,12 @@ export function parseJsonl(text: string, file?: string): OutcomeRecord[] {
         if (!line) continue
         try {
             const obj = JSON.parse(line)
-            if (typeof obj !== "object" || obj === null || !obj.result || !obj.trainee) continue
+            if (typeof obj !== "object" || obj === null) continue
+            // Auxiliary typed records (e.g. type="sparks" appended by the career-end sparks
+            // reader) share the corpus file but are not career outcomes - skip them explicitly
+            // rather than relying on them lacking a result field.
+            if (obj.type !== undefined) continue
+            if (!obj.result || !obj.trainee) continue
             records.push({
                 ts: obj.ts,
                 app: obj.app,

@@ -127,6 +127,23 @@ describe("parseJsonl", () => {
         expect(records[0].source).toBe("jsonl")
     })
 
+    it("skips auxiliary typed records such as sparks", () => {
+        const career = JSON.stringify({ result: "COMPLETE", outcome: "COMPLETED", trainee: "Test Uma", scenario: "URA Finale", turn: 75, fans: 1000 })
+        const sparks = JSON.stringify({
+            type: "sparks",
+            ts: 1783300000001,
+            trainee: "Test_Uma",
+            phase: "original",
+            rows: [
+                { name: "Speed", stars: 2, kind: "stat" },
+                { name: "Long", stars: 2, kind: "aptitude" },
+            ],
+        })
+        const records = parseJsonl(`${career}\n${sparks}\n`)
+        expect(records).toHaveLength(1)
+        expect(records[0].trainee).toBe("Test Uma")
+    })
+
     it("parses finale fields from a corpus record", () => {
         const line = JSON.stringify({
             result: "COMPLETE",

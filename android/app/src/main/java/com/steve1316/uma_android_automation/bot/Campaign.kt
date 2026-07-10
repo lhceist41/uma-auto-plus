@@ -3125,6 +3125,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "Guts" to st.guts,
                 "Wit" to st.wit,
             )
+        StartModule.lastCareerEndTrainee = resolvedName
         val outcome = classifyCareerOutcome(result.code, careerForceEnded)
         val quality = classifyCareerQuality(outcome, finaleRaces, finaleRaces1st)
 

@@ -74,6 +74,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         @Volatile
         var lastCareerEndStats: Map<String, Int>? = null
 
+        /** In-career trainee name of the last completed career, snapshotted alongside
+         * [lastCareerEndStats] so the navigator's sparks corpus records are self-contained. */
+        @Volatile
+        var lastCareerEndTrainee: String? = null
+
         /** When true, the current run should be skipped and the queue should advance. */
         @Volatile
         var queueSkipRequested: Boolean = false

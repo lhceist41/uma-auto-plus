@@ -11,7 +11,10 @@ import com.steve1316.automation_library.utils.TextUtils
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.components.*
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
+import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
+import org.json.JSONArray
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -1048,6 +1051,10 @@ class CareerLaunchNavigator(private val context: Context) {
      * second SPARKS_SCREEN entry must Confirm, never reroll again. */
     private var sparksRerollAttempted = false
 
+    /** One-shot flag: the original spark set was already read and recorded this handoff, so a
+     * missed Confirm click re-entering the screen cannot append a duplicate corpus record. */
+    private var sparksSetRecorded = false
+
     /** True only when the 30 TP spend actually clicked - distinguishes "keeping the redrawn set"
      * from "the dialog declined the spend and the original set is still up" in the exit logs. */
     private var sparksRerollExecuted = false
@@ -1068,6 +1075,13 @@ class CareerLaunchNavigator(private val context: Context) {
         val bitmap = iu.getSourceBitmap()
         val enableReroll = SettingsHelper.getBooleanSetting("runQueue", "enableSparkReroll", false)
 
+        // Read and record the career's rolled spark set exactly once, independent of the reroll
+        // setting - this is ledger enrichment (which sparks each career produced), not reroll logic.
+        if (!sparksSetRecorded) {
+            sparksSetRecorded = true
+            recordSparkSet(bitmap, "original")
+        }
+
         if (sparksRerollAttempted) {
             if (sparksRerollExecuted) {
                 // Post-reroll: log + archive what the redraw produced, then Confirm to keep it.
@@ -1076,6 +1090,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 }
                 val rerolled = readSparkStatRow(bitmap)
                 MessageLog.i(TAG, "[REROLL] Rerolled stat spark: ${rerolled?.let { "${it.first} ${it.second}-star" } ?: "unreadable"}. Keeping the redrawn set.")
+                recordSparkSet(bitmap, "rerolled")
             } else {
                 MessageLog.i(TAG, "[REROLL] The spend was declined earlier - the original set is still up. Confirming it.")
             }
@@ -1181,6 +1196,103 @@ class CareerLaunchNavigator(private val context: Context) {
         // non-stat rows so the log stays informative.
         val canonical = TextUtils.matchStringInList(name, listOf("Speed", "Stamina", "Power", "Guts", "Wit")) ?: name
         return Pair(canonical, goldStars)
+    }
+
+    /** One spark row read off the career-end SPARKS screen. */
+    private data class SparkRowRead(val name: String, val goldStars: Int, val kind: String)
+
+    /**
+     * Reads every visible spark row (up to the 6 the unscrolled list shows): OCR'd name, gold-star
+     * count, and the row kind from its bar color - blue = stat, pink = aptitude, green = unique,
+     * grey = white skill. Fixed top-anchored geometry measured on 1080-wide captures (row centers
+     * at y = 307 + 119*i, same anchors as [readSparkStatRow]); an all-white bar sample means the
+     * grid ended. Best-effort: an unreadable name is recorded as such rather than dropped, so the
+     * record stays honest about what was on screen.
+     */
+    private fun readSparkRows(bitmap: Bitmap): List<SparkRowRead> {
+        if (bitmap.width < 1000 || bitmap.height < 1000) return emptyList()
+        fun meanChannel(cx: Int, cy: Int, extract: (Int) -> Int): Int {
+            var sum = 0
+            for (dy in -2..2) for (dx in -2..2) sum += extract(bitmap.getPixel(cx + dx, cy + dy))
+            return sum / 25
+        }
+        val rows = mutableListOf<SparkRowRead>()
+        for (i in 0 until 6) {
+            val y = 307 + i * 119
+            if (y + 3 >= bitmap.height) break
+            val barR = meanChannel(770, y, Color::red)
+            val barG = meanChannel(770, y, Color::green)
+            val barB = meanChannel(770, y, Color::blue)
+            // Rows are contiguous; a pure-white sample (no bar, no grey row body - measured 255
+            // vs the white-skill row's 224) means the grid ended.
+            if (barR >= 245 && barG >= 245 && barB >= 245) break
+            val kind =
+                when {
+                    barB > 240 && barR < 150 -> "stat"
+                    barR > 240 && barG < 180 && barB > 160 -> "aptitude"
+                    barG > 200 && barB < 100 -> "unique"
+                    else -> "skill"
+                }
+            val goldStars =
+                listOf(846, 894, 941).count { x ->
+                    meanChannel(x, y, Color::red) > 200 && meanChannel(x, y, Color::blue) < 150
+                }
+            val name =
+                iu.performOCROnRegion(
+                    bitmap,
+                    110,
+                    y - 42,
+                    650,
+                    84,
+                    useThreshold = false,
+                    useGrayscale = true,
+                    ocrEngine = "mlkit",
+                    debugName = "sparkRow$i",
+                ).trim()
+            rows.add(SparkRowRead(name.ifEmpty { "unreadable" }, goldStars, kind))
+        }
+        return rows
+    }
+
+    /**
+     * Logs one greppable `[SPARKS]` line for the visible spark set and appends a type="sparks"
+     * record to the outcome corpus. The career's own outcome record precedes it in the same file
+     * and the trainee snapshot makes the record self-contained. [phase] is "original" for the set
+     * the career rolled, "rerolled" for the redraw after a 30 TP spend - the last [SPARKS] line
+     * before Confirm is the set that was kept. Best-effort: a failure here must never disturb the
+     * career-end navigation.
+     */
+    private fun recordSparkSet(bitmap: Bitmap, phase: String) {
+        val rows = readSparkRows(bitmap)
+        if (rows.isEmpty()) {
+            MessageLog.w(TAG, "[SPARKS] Could not read any spark rows ($phase set) - geometry drift or a mid-transition frame.")
+            return
+        }
+        MessageLog.i(TAG, "[SPARKS] ${phase.replaceFirstChar { it.uppercase() }} set: " + rows.joinToString(" | ") { "${it.name} ${it.goldStars}-star (${it.kind})" })
+        runCatching {
+            val record = JSONObject()
+            record.put("type", "sparks")
+            record.put("ts", System.currentTimeMillis())
+            StartModule.lastCareerEndTrainee?.let { record.put("trainee", it) }
+            record.put("phase", phase)
+            record.put(
+                "rows",
+                JSONArray().apply {
+                    rows.forEach { row ->
+                        put(
+                            JSONObject().apply {
+                                put("name", row.name)
+                                put("stars", row.goldStars)
+                                put("kind", row.kind)
+                            },
+                        )
+                    }
+                },
+            )
+            OutcomeCorpus.append(context, record)
+        }.onFailure {
+            MessageLog.w(TAG, "[SPARKS] Failed to append the sparks record: $it")
+        }
     }
 
     /**
