@@ -2260,7 +2260,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             }
 
         // Parse preferred distances.
-        val preferredDistances =
+        val parsedPreferredDistances =
             try {
                 // Parse as JSON array.
                 val jsonArray = JSONArray(preferredTrackDistanceString)
@@ -2273,6 +2273,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 MessageLog.w(TAG, "[WARN] filterRacesByCriteria:: Fallback parsing result: $parsed")
                 parsed
             }
+        // The setting and every preset store "Short", but the TrackDistance enum (and race data after its
+        // load-time normalization) use SPRINT, so sprint races never passed the distance preference until mapped here.
+        val preferredDistances = parsedPreferredDistances.map { if (it == "SHORT") "SPRINT" else it }
 
         if (game.debugMode) {
             MessageLog.d(

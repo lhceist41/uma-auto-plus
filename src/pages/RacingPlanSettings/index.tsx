@@ -115,7 +115,8 @@ const RacingPlanSettings = () => {
             const matchesFans = race.fans >= minFansThreshold
             const matchesTerrain = preferredTerrain === "Any" || race.terrain === preferredTerrain
             const matchesGrade = preferredGrades.includes(race.grade) && race.grade !== "OP" && race.grade !== "Pre-OP"
-            const matchesDistance = preferredDistances.includes(race.distanceType)
+            // Settings store "Short" but races.json says "Sprint" -- normalize or sprint races never appear in the browser.
+            const matchesDistance = preferredDistances.includes(race.distanceType === "Sprint" ? "Short" : race.distanceType)
 
             return matchesSearch && matchesFans && matchesTerrain && matchesGrade && matchesDistance
         })
