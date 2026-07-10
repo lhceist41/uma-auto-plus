@@ -1228,12 +1228,31 @@ class CareerLaunchNavigator(private val context: Context) {
         return ButtonRerollSparksConfirm.click(iu, tries = 3)
     }
 
-    /** Clicks Confirm on the SPARKS screen; falls back to re-detection when the click misses. */
+    /** One-shot flag: the full spark set was read off the keep-set confirmation dialog. */
+    private var sparksFullSetRecorded = false
+
+    /** Clicks Confirm on the SPARKS screen; falls back to re-detection when the click misses.
+     * The click raises the "Keep this set of Sparks?" confirmation, which lists EVERY spark on
+     * one screen (the sparks list itself shows only 6 unscrolled) - the kept set is recorded in
+     * full from it before the generic dialog handling confirms it away. */
     private fun confirmSparks(bitmap: Bitmap): TransitionResult {
         if (!ButtonConfirm.click(iu, sourceBitmap = bitmap)) {
             MessageLog.w(TAG, "[NAV] Confirm not clickable on the SPARKS screen. Re-detecting...")
         }
         waitSafe(1.5)
+        if (!sparksFullSetRecorded) {
+            runCatching {
+                val dialogBitmap = iu.getSourceBitmap()
+                val rows = readSparkRows(dialogBitmap, sparksConfirmGeometry)
+                // Sanity gate: a real spark list always leads stat/aptitude/unique. Anything else
+                // means the dialog is not up (missed click, layout drift) - skip silently and keep
+                // the 6-row record as coverage.
+                if (rows.size >= 3 && rows[0].kind == "stat" && rows[1].kind == "aptitude" && rows[2].kind == "unique") {
+                    sparksFullSetRecorded = true
+                    recordSparkSet(dialogBitmap, "kept", sparksConfirmGeometry)
+                }
+            }
+        }
         return TransitionResult.Continue
     }
 
@@ -1282,15 +1301,26 @@ class CareerLaunchNavigator(private val context: Context) {
     /** One spark row read off the career-end SPARKS screen. */
     private data class SparkRowRead(val name: String, val goldStars: Int, val kind: String)
 
+    /** Pixel geometry of a spark list on 1080-wide captures: first row center, max visible rows,
+     * and the three star-slot sample centers (row pitch is 119 on both known layouts). */
+    private data class SparkListGeometry(val firstRowY: Int, val maxRows: Int, val starXs: List<Int>, val debugPrefix: String)
+
+    /** The career-end SPARKS screen list: shows at most 6 rows without scrolling. */
+    private val sparksScreenGeometry = SparkListGeometry(firstRowY = 307, maxRows = 6, starXs = listOf(846, 894, 941), debugPrefix = "sparkRow")
+
+    /** The "Keep this set of Sparks?" confirmation dialog: lists EVERY spark on one screen
+     * (measured on a live 10-row capture: rows from y=315, stars ~9px right of the list's). */
+    private val sparksConfirmGeometry = SparkListGeometry(firstRowY = 315, maxRows = 11, starXs = listOf(855, 901, 947), debugPrefix = "sparkKeepRow")
+
     /**
-     * Reads every visible spark row (up to the 6 the unscrolled list shows): OCR'd name, gold-star
-     * count, and the row kind from its bar color - blue = stat, pink = aptitude, green = unique,
-     * grey = white skill. Fixed top-anchored geometry measured on 1080-wide captures (row centers
-     * at y = 307 + 119*i, same anchors as [readSparkStatRow]); an all-white bar sample means the
-     * grid ended. Best-effort: an unreadable name is recorded as such rather than dropped, so the
-     * record stays honest about what was on screen.
+     * Reads every visible spark row of a spark list: OCR'd name, gold-star count, and the row
+     * kind from its bar color - blue = stat, pink = aptitude, green = unique, grey = white skill.
+     * Fixed top-anchored [geometry] measured on 1080-wide captures (the SPARKS screen shares its
+     * anchors with [readSparkStatRow]); an all-white bar sample means the grid ended. Best-effort:
+     * an unreadable name is recorded as such rather than dropped, so the record stays honest
+     * about what was on screen.
      */
-    private fun readSparkRows(bitmap: Bitmap): List<SparkRowRead> {
+    private fun readSparkRows(bitmap: Bitmap, geometry: SparkListGeometry = sparksScreenGeometry): List<SparkRowRead> {
         if (bitmap.width < 1000 || bitmap.height < 1000) return emptyList()
         fun meanChannel(cx: Int, cy: Int, extract: (Int) -> Int): Int {
             var sum = 0
@@ -1298,8 +1328,8 @@ class CareerLaunchNavigator(private val context: Context) {
             return sum / 25
         }
         val rows = mutableListOf<SparkRowRead>()
-        for (i in 0 until 6) {
-            val y = 307 + i * 119
+        for (i in 0 until geometry.maxRows) {
+            val y = geometry.firstRowY + i * 119
             if (y + 3 >= bitmap.height) break
             val barR = meanChannel(770, y, Color::red)
             val barG = meanChannel(770, y, Color::green)
@@ -1315,7 +1345,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     else -> "skill"
                 }
             val goldStars =
-                listOf(846, 894, 941).count { x ->
+                geometry.starXs.count { x ->
                     meanChannel(x, y, Color::red) > 200 && meanChannel(x, y, Color::blue) < 150
                 }
             val name =
@@ -1328,7 +1358,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     useThreshold = false,
                     useGrayscale = true,
                     ocrEngine = "mlkit",
-                    debugName = "sparkRow$i",
+                    debugName = "${geometry.debugPrefix}$i",
                 ).trim()
             rows.add(SparkRowRead(name.ifEmpty { "unreadable" }, goldStars, kind))
         }
@@ -1343,8 +1373,8 @@ class CareerLaunchNavigator(private val context: Context) {
      * before Confirm is the set that was kept. Best-effort: a failure here must never disturb the
      * career-end navigation.
      */
-    private fun recordSparkSet(bitmap: Bitmap, phase: String) {
-        val rows = readSparkRows(bitmap)
+    private fun recordSparkSet(bitmap: Bitmap, phase: String, geometry: SparkListGeometry = sparksScreenGeometry) {
+        val rows = readSparkRows(bitmap, geometry)
         if (rows.isEmpty()) {
             MessageLog.w(TAG, "[SPARKS] Could not read any spark rows ($phase set) - geometry drift or a mid-transition frame.")
             return
