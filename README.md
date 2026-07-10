@@ -27,7 +27,7 @@ steve1316 built the bot engine. This fork is a substantial body of work on top o
 
 **Pick-and-go presets**
 
-- **156 hand-tuned character presets** -- 52 characters and outfits across 3 scenarios (URA Finale / Unity Cup / Trackblazer), each pre-filling stat priorities, race plan, skill plan, event picks, and training thresholds. A searchable trainee picker shows per-scenario recommendations, a badge telling you whether a build is proven in real runs or still research-based, and starred favorites; applying a preset sets its scenario with it. Pick a trainee, hit Start -- no manual tuning required.
+- **210 hand-tuned character presets** -- 70 characters and outfits across 3 scenarios (URA Finale / Unity Cup / Trackblazer), each pre-filling stat priorities, race plan, skill plan, event picks, and training thresholds. A searchable trainee picker shows per-scenario recommendations, a badge telling you whether a build is proven in real runs or still research-based, and starred favorites; applying a preset sets its scenario with it. Pick a trainee, hit Start -- no manual tuning required.
 - **Scenario advisories** -- the Home page shows a green "good pick" or yellow "mismatch" banner (with the reason) for the selected trainee and scenario, the rotation editor flags each mismatched slot inline, and starting a known-mismatch run (single preset or any rotation slot) asks for confirmation first so a doomed pairing never launches by accident.
 
 **Decision-engine extensions** (built on top of steve1316's scoring)

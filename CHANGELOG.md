@@ -419,7 +419,7 @@ The fork already differed substantially from upstream v5.4.8 on day one. The lis
 - Configurable `stopOnError` (default: continue past errors), reuse-last-launch-setup, auto-fill support deck.
 
 ### Character presets (entirely new)
-- 156 built-in character presets (52 characters and outfits × 3 scenarios: Trackblazer, Unity Cup, URA Finale).
+- 210 built-in character presets (70 characters and outfits × 3 scenarios: Trackblazer, Unity Cup, URA Finale).
 - Searchable trainee picker on the Home page — character-grouped with per-scenario advisory chips, validation badges, and starred favorites — that deep-merges preset settings into the active profile and sets the scenario together with the preset.
 
 ### Bot behaviour improvements
