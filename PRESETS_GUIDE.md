@@ -6,7 +6,7 @@ This document explains how built-in character presets work in UMA Auto+, how the
 
 ## Overview
 
-UMA Auto+ ships with **156 built-in character presets** (52 character entries x 3 scenarios). Trainees are picked in the searchable trainee picker on the Home page — one row per character/outfit with per-scenario advisory chips and a validation badge — and applying a preset sets its scenario together with its settings.
+UMA Auto+ ships with **210 built-in character presets** (70 character entries x 3 scenarios). Trainees are picked in the searchable trainee picker on the Home page — one row per character/outfit with per-scenario advisory chips and a validation badge — and applying a preset sets its scenario together with its settings.
 
 The 2026-06-11 batch added seven entries from the June banner research pass: Sweep Tosho, Mihono Bourbon, Mejiro Palmer, El Condor Pasa (Kukulkan Warrior), Tosen Jordan, Super Creek, and Matikanetannhauser. Their URA presets ship curated racing plans (see "Curated racing plans in presets" below); Tosen Jordan's presets enable negative-skill buying so the buy pass clears her 3D Nail Art speed debuff. Symboli Rudolf (Emperor's Path) was added 2026-06-18 — a Late Surger Medium built around her late-overtake unique; URA and Trackblazer are her recommended scenarios. Biwa Hayahide (Pace Chaser, built as a Long stayer) and Mejiro Ryan (Late Surger Medium) were added 2026-06-21 to make two owned-but-unpresetted Medium/Long-A turf bodies farmable hands-off; both fill the Medium/Long Team-Trials slots and are URA + Trackblazer recommended.
 
@@ -16,22 +16,35 @@ The 2026-07-06 batch added the six top-tier cards the community asked for: Kitas
 
 The second 2026-07-06 batch completed the community S-tier list with 17 more cards: ten new characters (Silence Suzuka, Manhattan Cafe, Narita Taishin, Tamamo Cross, Mejiro Dober, Special Week, Smart Falcon, Meisho Doto, Tokai Teio, T.M. Opera O in her New Year outfit) plus alternate outfits for Special Week, Tokai Teio, Seiun Sky, Mayano Top Gun, Gold Ship, King Halo, and Taiki Shuttle. All research-graded, same pipeline as the first batch: cloned from the nearest validated archetype, per-card grids and growths verified, racing plans checked against the race database and each card's goal turns. Notables: Smart Falcon is the second dirt specialist after Haru Urara -- his URA preset ships a curated dirt agenda whose three Junior entries exist to satisfy the turn-25 two-win goal (mandatory plans race planned turns only, so a plan that starts too late force-ends the career). Narita Taishin is the roster's first End Closer, with his archetype's Late-Surger skills swapped to End counterparts. Silence Suzuka is Front-forced (her unique needs a clear lead) and Medium-primary despite the Mile-A grid, because her goal chain is almost entirely Medium. Trackblazer avoid advisories ship for the narrow-Junior-pool bodies (Manhattan Cafe, Tamamo Cross, Meisho Doto, both Teio cards) and for Smart Falcon's Turf E.
 
+The 2026-07-10 batch closed the remaining global-roster gaps with 18 characters: Admire Vega, Agnes Digital, Air Shakur, Bamboo Memory, Curren Chan, Eishin Flash, Fine Motion, Fuji Kiseki, Hishi Akebono, Inari One, Ines Fujin, Mejiro Ardan, Mejiro Bright, Narita Brian, Rice Shower, Sakura Chiyono O, Satono Diamond, and Yaeno Muteki. Same research-graded pipeline: verified grids, growths, and goal chains; racing plans validated entry-by-entry against the race database; event pins verified against the character event data. Notables: Inari One joins the dirt roster as an End Closer whose skill plan carries a surface-agnostic recovery for her dirt-to-turf Arima pivot; Ines Fujin is Front Runner-locked like Silence Suzuka; the sprinters with thin fan-gated Junior pools (Curren Chan, Hishi Akebono) carry Trackblazer avoid advisories; goal-sparse or gate-heavy bodies (Agnes Digital's unscheduled turn-47-60 G1 window, Rice Shower's near-empty Junior, Mejiro Ardan's 6,000-fan wall at turn 30, Hishi Akebono's early fan checkpoints) all ship curated racing plans. Bamboo Memory postdates the bundled game data: her presets ship empty event overrides until the next characters.json sync, so her story events fall back to the OCR stat-option heuristic.
+
 ### Currently included characters
 
 | Character | Trackblazer | Unity Cup | URA Finale |
 |-----------|:-----------:|:---------:|:----------:|
+| Admire Vega | Yes | Yes | Yes |
+| Agnes Digital | Yes | Yes | Yes |
 | Agnes Tachyon | Yes | Yes | Yes |
 | Air Groove | Yes | Yes | Yes |
+| Air Shakur | Yes | Yes | Yes |
+| Bamboo Memory | Yes | Yes | Yes |
 | Biwa Hayahide | Yes | Yes | Yes |
+| Curren Chan | Yes | Yes | Yes |
 | Daiwa Scarlet | Yes | Yes | Yes |
+| Eishin Flash | Yes | Yes | Yes |
 | El Condor Pasa | Yes | Yes | Yes |
 | El Condor Pasa (Kukulkan Warrior) | Yes | Yes | Yes |
+| Fine Motion | Yes | Yes | Yes |
+| Fuji Kiseki | Yes | Yes | Yes |
 | Gold City (Autumn Cosmos) | Yes | Yes | Yes |
 | Gold Ship | Yes | Yes | Yes |
 | Gold Ship (RUN! RUIN! LAUNCHER!) | Yes | Yes | Yes |
 | Grass Wonder | Yes | Yes | Yes |
 | Haru Urara | Yes | Yes | Yes |
+| Hishi Akebono | Yes | Yes | Yes |
 | Hishi Amazon | Yes | Yes | Yes |
+| Inari One | Yes | Yes | Yes |
+| Ines Fujin | Yes | Yes | Yes |
 | King Halo | Yes | Yes | Yes |
 | King Halo (Cheerleader in Noble White) | Yes | Yes | Yes |
 | Kitasan Black | Yes | Yes | Yes |
@@ -43,17 +56,23 @@ The second 2026-07-06 batch completed the community S-tier list with 17 more car
 | Mayano Top Gun | Yes | Yes | Yes |
 | Mayano Top Gun (Sunlight Bouquet) | Yes | Yes | Yes |
 | Meisho Doto | Yes | Yes | Yes |
+| Mejiro Ardan | Yes | Yes | Yes |
+| Mejiro Bright | Yes | Yes | Yes |
 | Mejiro Dober | Yes | Yes | Yes |
 | Mejiro McQueen (Frontline Elegance) | Yes | Yes | Yes |
 | Mejiro Palmer | Yes | Yes | Yes |
 | Mejiro Ryan | Yes | Yes | Yes |
 | Mihono Bourbon | Yes | Yes | Yes |
+| Narita Brian | Yes | Yes | Yes |
 | Narita Taishin | Yes | Yes | Yes |
 | Nice Nature | Yes | Yes | Yes |
 | Nishino Flower | Yes | Yes | Yes |
 | Oguri Cap | Yes | Yes | Yes |
 | Oguri Cap (Ashen Miracle) | Yes | Yes | Yes |
+| Rice Shower | Yes | Yes | Yes |
 | Sakura Bakushin O | Yes | Yes | Yes |
+| Sakura Chiyono O | Yes | Yes | Yes |
+| Satono Diamond | Yes | Yes | Yes |
 | Seiun Sky | Yes | Yes | Yes |
 | Seiun Sky (Soirée des Chatons) | Yes | Yes | Yes |
 | Silence Suzuka | Yes | Yes | Yes |
@@ -72,6 +91,7 @@ The second 2026-07-06 batch completed the community S-tier list with 17 more car
 | Tosen Jordan | Yes | Yes | Yes |
 | Vodka | Yes | Yes | Yes |
 | Winning Ticket (Get to Winning!) | Yes | Yes | Yes |
+| Yaeno Muteki | Yes | Yes | Yes |
 
 ---
 
