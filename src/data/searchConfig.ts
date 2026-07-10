@@ -37,7 +37,8 @@ const searchConfig: SearchOption[] = [
     {
         id: "settings-dating-schedule",
         title: "Enable Support Card Dating Schedule",
-        description: "Performs a recreation outing on the selected preset's pinned career turns to advance a Group support card's outing chain, holding the final outing for the Pure Passion turn where the preset times it.",
+        description:
+            "Performs a recreation outing on the selected preset's pinned career turns to advance a Group support card's outing chain, holding the final outing for the Pure Passion turn where the preset times it.",
         page: "SettingsMain",
     },
     {

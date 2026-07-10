@@ -380,8 +380,11 @@ object ButtonCloseWide : ButtonInterface {
 }
 
 /** "Reroll Sparks / Consumes 30 TP" on the career-end SPARKS screen - unique to that screen,
- * so it doubles as the screen's detection anchor. Dimmed under the Confirm Reroll dialog
- * (scores ~0.69 there), so a fresh match implies the dialog is NOT up. */
+ * so it doubles as the screen's detection anchor. Recaptured 2026-07-10 from a live career-end
+ * frame: the original capture under-scored the live button (0.783 vs the 0.80 bar) so the sparks
+ * screen was never detected and the generic post-run path confirmed straight past it. The old
+ * "dimmed under the Confirm Reroll dialog scores ~0.69" measurement predates the recapture -
+ * re-verify the fresh-match-implies-dialog-closed inference at the first supervised reroll. */
 object ButtonRerollSparks : ButtonInterface {
     override val template = Template("components/button/reroll_sparks", region = Region.bottomHalf)
 }
