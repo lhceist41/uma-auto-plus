@@ -35,6 +35,24 @@ const searchConfig: SearchOption[] = [
         page: "SettingsMain",
     },
     {
+        id: "settings-dating-schedule",
+        title: "Enable Support Card Dating Schedule",
+        description: "Performs a recreation outing on the selected preset's pinned career turns to advance a Group support card's outing chain, holding the final outing for the Pure Passion turn where the preset times it.",
+        page: "SettingsMain",
+    },
+    {
+        id: "settings-dating-schedule-preset",
+        title: "Dating Schedule Preset",
+        description: "Pinned recreation turns for the equipped Group support card (Team Sirius, Heirs to the Throne).",
+        page: "SettingsMain",
+    },
+    {
+        id: "settings-dating-catch-up",
+        title: "Catch Up Missed Outings",
+        description: "If a pinned turn gets pre-empted (e.g. by a race), makes up the outing on the next available turn.",
+        page: "SettingsMain",
+    },
+    {
         id: "settings-enable-settings-display",
         title: "Enable Settings Display in Message Log",
         description: "Shows current bot configuration settings at the top of the message log.",

@@ -35,6 +35,20 @@ export interface Settings {
         stopAtDates: string[]
         waitDelay: number
         dialogWaitDelay: number
+        // Support-card dating schedule: perform a recreation outing on the pinned career turns,
+        // holding the chain's final outing for the Pure Passion turn (timed friendship-training buff).
+        enableDatingSchedule: boolean
+        // Selected schedule preset key from DATING_SCHEDULE_PRESETS, or "custom" after a manual edit.
+        datingSchedulePreset: string
+        // 1-indexed career turns (1-72) pinned for regular recreation outings.
+        recreationTurns: number[]
+        // The single turn pinned for the final outing / Pure Passion activation; non-positive = unset.
+        purePassionTurn: number
+        // Total outings in the active card's chain (Team Sirius 7, Heirs to the Throne 5). The bot
+        // overrides this live from the in-game "Group Event Progress X/Y" once the dialog is read.
+        recreationTotalOutings: number
+        // Make up a missed pinned outing (pre-empted by a race) on the next available turn.
+        enableRecreationCatchUp: boolean
     }
 
     // Racing settings
@@ -307,6 +321,12 @@ export const defaultSettings: Settings = {
         stopAtDates: ["Senior January Early"],
         waitDelay: 0.5,
         dialogWaitDelay: 0.5,
+        enableDatingSchedule: false,
+        datingSchedulePreset: "siriusSenior",
+        recreationTurns: [29, 35, 43, 47, 52, 55, 58],
+        purePassionTurn: -1,
+        recreationTotalOutings: 7,
+        enableRecreationCatchUp: true,
     },
     racing: {
         enableFarmingFans: false,

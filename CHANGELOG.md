@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **Support-card dating schedule** (from the upstream project, off by default): if you run a Group support card (Team Sirius, Heirs to the Throne), the bot takes its recreation outings on the right career turns to advance the card's outing chain, and holds the final outing so the Pure Passion training buff lands exactly when you want it. It reads the card's "Group Event Progress X/Y" counter from the screen, so it stays on track even after restarts or manual dates, catches up missed outings on the next free turn (can be disabled), and quietly drops the schedule if the window has passed. Career-goal races always come first; when the schedule is active, ordinary mood recovery goes on dates with the trainee instead so it never wastes a scheduled outing. If an outing can't start for any reason, the bot moves on with its turn instead of getting stuck reopening the menu.
 - The run history now records whether a URA Finale career actually **won** its finale, not just whether it reached it. Each of the three finale races is checked for a 1st-place result, and every career is labelled accordingly -- won the finale, reached it but lost a race, or the existing completed / force-ended / incomplete. Before this, a triumphant URA win and a run that limped through a lost finale looked identical in the logs. URA Finale only for now; Unity Cup and Trackblazer finales aren't read yet.
 
 ### Fixed

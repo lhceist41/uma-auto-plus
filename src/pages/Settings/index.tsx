@@ -20,6 +20,7 @@ import SearchableItem from "../../components/SearchableItem"
 import { useSettings } from "../../context/SettingsContext"
 import { useSettingsFileManager } from "../../hooks/useSettingsFileManager"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
+import { DATING_SCHEDULE_PRESETS } from "../../lib/datingSchedule"
 
 /**
  * The main Settings page of the application.
@@ -76,6 +77,25 @@ const Settings = () => {
     //////////////////////////////////////////////////
     //////////////////////////////////////////////////
     // Rendering
+
+    const datingPresetOptions = Object.entries(DATING_SCHEDULE_PRESETS).map(([key, preset]) => ({ label: preset.label, value: key }))
+
+    // Applying a preset writes the whole schedule (turns, Pure Passion timing, chain length) in one
+    // update so the Kotlin side never sees a half-applied mix of two presets.
+    const handleDatingPresetChange = (presetKey: string) => {
+        const preset = DATING_SCHEDULE_PRESETS[presetKey]
+        if (!preset) return
+        bsc.setSettings({
+            ...bsc.settings,
+            general: {
+                ...bsc.settings.general,
+                datingSchedulePreset: presetKey,
+                recreationTurns: [...preset.recreationTurns],
+                purePassionTurn: preset.purePassionTurn,
+                recreationTotalOutings: preset.totalOutings,
+            },
+        })
+    }
 
     const years = [
         { label: "Junior", value: "Junior" },
@@ -340,6 +360,55 @@ const Settings = () => {
                     description="When enabled, the bot will attempt to complete the crane game. By default, the bot will stop when it is detected."
                     className="mt-4"
                 />
+
+                <CustomCheckbox
+                    searchId="settings-dating-schedule"
+                    checked={bsc.settings.general.enableDatingSchedule}
+                    onCheckedChange={(checked) => {
+                        bsc.setSettings({
+                            ...bsc.settings,
+                            general: { ...bsc.settings.general, enableDatingSchedule: checked },
+                        })
+                    }}
+                    label="Enable Support Card Dating Schedule"
+                    description="Performs a recreation outing on the selected preset's pinned career turns to advance a Group support card's outing chain, holding the final outing for the Pure Passion turn where the preset times it. Mandatory races always outrank a pinned outing; scheduled agenda races are overridden."
+                    className="mt-4"
+                />
+
+                {bsc.settings.general.enableDatingSchedule && (
+                    <SearchableItem
+                        id="settings-dating-schedule-preset"
+                        title="Dating Schedule Preset"
+                        description="Pinned recreation turns for the equipped Group support card."
+                        style={{ marginLeft: 16, marginTop: 8 }}
+                    >
+                        <CustomSelect
+                            placeholder="Preset"
+                            width="100%"
+                            options={datingPresetOptions}
+                            value={bsc.settings.general.datingSchedulePreset}
+                            onValueChange={(value) => handleDatingPresetChange(value || "siriusSenior")}
+                        />
+                        <Text style={{ fontSize: 12, color: colors.foreground, opacity: 0.7, marginTop: 8 }}>
+                            {`Pinned turns: ${bsc.settings.general.recreationTurns.join(", ")}${
+                                bsc.settings.general.purePassionTurn > 0 ? ` - Pure Passion final on turn ${bsc.settings.general.purePassionTurn}` : " - Pure Passion untimed"
+                            }`}
+                        </Text>
+                        <CustomCheckbox
+                            searchId="settings-dating-catch-up"
+                            checked={bsc.settings.general.enableRecreationCatchUp}
+                            onCheckedChange={(checked) => {
+                                bsc.setSettings({
+                                    ...bsc.settings,
+                                    general: { ...bsc.settings.general, enableRecreationCatchUp: checked },
+                                })
+                            }}
+                            label="Catch Up Missed Outings"
+                            description="If a pinned turn gets pre-empted (e.g. by a race), makes up the outing on the next available turn."
+                            className="mt-4"
+                        />
+                    </SearchableItem>
+                )}
 
                 <CustomCheckbox
                     searchId="settings-enable-settings-display"

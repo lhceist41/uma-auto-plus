@@ -105,9 +105,16 @@ enum class MainScreenAction {
     /** Indicates a mood recovery action. */
     RECOVER_MOOD,
 
+    /** Indicates a scheduled support-card recreation ("dating") outing. */
+    DATE,
+
     /** Indicates no action. */
     NONE,
 }
+
+// Position of the "Group Event Progress X/Y" text relative to the right edge of the matched "Group Event Progress" pill ([LabelEventProgress]), for OCR. Tune if the "GroupEventProgress" debug crop misses the digits.
+private const val GROUP_PROGRESS_GAP_X = 15
+private const val GROUP_PROGRESS_WIDTH = 120
 
 /**
  * Defines the base campaign class that contains all shared logic for campaign automation.
@@ -507,6 +514,47 @@ abstract class Campaign(game: Game) : Task(game) {
 
     /** Whether a recreation date event has been completed today. */
     protected var recreationDateCompleted: Boolean = false
+
+    /** Whether the support-card recreation ("dating") schedule is enabled. */
+    protected val enableDatingSchedule: Boolean = SettingsHelper.getBooleanSetting("general", "enableDatingSchedule", false)
+
+    /** Whether a scheduled recreation outing that got pre-empted (a race, or recreation not yet available) should be made up on the next available turn. */
+    protected val enableRecreationCatchUp: Boolean = SettingsHelper.getBooleanSetting("general", "enableRecreationCatchUp", true)
+
+    /** The set of 1-indexed career turns (1-72) pinned for regular recreation outings. */
+    protected val recreationTurns: Set<Int> =
+        run {
+            val json = SettingsHelper.getStringSetting("general", "recreationTurns", "[]")
+            try {
+                org.json.JSONArray(json).let { arr -> (0 until arr.length()).map { arr.getInt(it) }.toSet() }
+            } catch (_: Exception) {
+                setOf()
+            }
+        }
+
+    /** The single career turn pinned for the final outing / Pure Passion activation, or a non-positive value when unset. */
+    protected val purePassionTurn: Int = SettingsHelper.getIntSetting("general", "purePassionTurn", 60)
+
+    /** The total outings in the active support card's recreation chain (Team Sirius 7, Heirs to the Throne 5). */
+    protected val recreationTotalOutings: Int = SettingsHelper.getIntSetting("general", "recreationTotalOutings", 7)
+
+    /** Whether the recreation chain is complete for this run - no more dates are available. Latched true once the in-game
+     * complete label is seen and never reset. Distinct from [recreationDateCompleted] on purpose: that flag means "a date
+     * was handled TODAY" and resets every turn (it short-circuits re-checks within one recovery sequence), while this one
+     * is the run-lifetime chain state the schedule keys on. Upstream overloads one flag for both; our per-turn reset is
+     * load-bearing for the recovery paths, so the two meanings get two fields. */
+    protected var recreationChainComplete: Boolean = false
+
+    /** The number of recreation outings actually started this run. Used to hold the final outing for the Pure Passion turn. */
+    protected var recreationOutingsStarted: Int = 0
+
+    /** The group-event chain length as last read from the game's "X/Y" progress, or the configured fallback until the partner dialog is first read. */
+    protected var recreationTotalOutingsKnown: Int = recreationTotalOutings
+
+    /** Latch: a scheduled recreation attempt backed out without starting an outing this turn (no rows, held final, dead
+     * pill). Backing out does not advance the game turn, so without this the decision loop would re-choose DATE and
+     * reopen the same dialog forever (the Staticwitt-reported livelock). Cleared when the date actually advances. */
+    protected var recreationAttemptFailedThisTurn: Boolean = false
 
     /** The turn number when the stop-at-date check first started. */
     protected var stopAtDateInitialTurnNumber: Int = -1
@@ -981,6 +1029,12 @@ abstract class Campaign(game: Game) : Task(game) {
                     bDeckValidationChecked = true
                 }
 
+                result.dialog.close(game.imageUtils)
+            }
+
+            "choose_recreation_partner" -> {
+                // The recreation was opened but the outing is being held (reserved for the Pure Passion turn), leaving this dialog up. Close it.
+                MessageLog.i(TAG, "[RECREATION_DATE] Choose Recreation Partner dialog left open. Closing it.")
                 result.dialog.close(game.imageUtils)
             }
 
@@ -1855,7 +1909,9 @@ abstract class Campaign(game: Game) : Task(game) {
         if (
             !recreationDateCompleted &&
             IconRecreationDate.check(game.imageUtils, sourceBitmap = sourceBitmap) &&
-            handleRecreationDate(recoverMoodIfCompleted = false)
+            // With an active dating schedule the chain belongs to the scheduler - an energy-recovery
+            // recreation goes to the trainee instead of consuming a scheduled outing.
+            handleRecreationDate(recoverMoodIfCompleted = false, doDateRecreation = !isScheduleActive())
         ) {
             MessageLog.v(TAG, "[ENERGY] Successfully recovered energy via recreation date.")
             return true
@@ -1927,7 +1983,9 @@ abstract class Campaign(game: Game) : Task(game) {
 
             // Check if a date is available.
             if (!recreationDateCompleted && IconRecreationDate.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
-                if (handleRecreationDate(recoverMoodIfCompleted = true)) {
+                // With an active dating schedule the chain belongs to the scheduler - a mood-recovery
+                // recreation goes to the trainee instead of consuming a scheduled outing.
+                if (handleRecreationDate(recoverMoodIfCompleted = true, doDateRecreation = !isScheduleActive())) {
                     MessageLog.v(TAG, "[MOOD] Successfully recovered mood via recreation date.")
                 }
             } else {
@@ -1971,12 +2029,103 @@ abstract class Campaign(game: Game) : Task(game) {
     }
 
     /**
+     * Whether the bot should spend this turn on a scheduled recreation outing. True only when the dating schedule is enabled, the chain is not yet
+     * complete, a recreation date is on screen, the current turn is pinned (regular or Pure Passion), and no mandatory career-goal race is present.
+     * Scheduled (in-game agenda) races do NOT block it - a pinned recreation outranks them.
+     *
+     * @param sourceBitmap An already-captured screen frame to reuse, or null to capture lazily only after the cheap pinned-turn checks pass.
+     * @return True if the bot should perform a recreation outing this turn.
+     */
+    open fun shouldDoRecreationToday(sourceBitmap: Bitmap? = null): Boolean {
+        if (!isScheduleActive() || recreationChainComplete || recreationDateCompleted) return false
+        // A back-out this turn (held final, no rows) does not advance the game, so retrying before the
+        // turn changes would reopen the same dialog forever. The latch clears when the date advances.
+        if (recreationAttemptFailedThisTurn) return false
+        // Do an outing on a pinned turn, or - when catch-up is on - on any turn where a missed outing has left us behind schedule.
+        val pinnedOrBehind =
+            DatingSchedule.isPinnedRecreationTurn(date.day, recreationTurns, purePassionTurn) ||
+                (enableRecreationCatchUp && DatingSchedule.isBehindSchedule(date.day, recreationTurns, recreationOutingsStarted))
+        if (!pinnedOrBehind) return false
+        // If only the final outing remains and this is not the Pure Passion turn, hold it: spend the turn on a normal action instead of opening the recreation.
+        if (DatingSchedule.shouldHoldFinalOuting(recreationOutingsStarted, recreationTotalOutingsKnown, allowFinalOutingNow())) return false
+        val bitmap = sourceBitmap ?: game.imageUtils.getSourceBitmap()
+        // Mandatory career-goal races cannot be skipped, so they still outrank a recreation. Scheduled (in-game agenda) races
+        // do not - the recreation overrides them. Upstream also blocks on IconGoalRibbon here; deliberately dropped: on this
+        // fork the goal ribbon persists on the Main screen for any active objective (see cachedGoalRibbonDay), so keying on
+        // it would dead-block the schedule on most turns. The race-day ribbon is the reliable race-day signal here.
+        if (cachedMandatoryRaceDay || IconRaceDayRibbon.check(game.imageUtils, sourceBitmap = bitmap)) {
+            return false
+        }
+        if (!IconRecreationDate.check(game.imageUtils, sourceBitmap = bitmap)) return false
+        return true
+    }
+
+    /**
+     * Reads the in-game "Group Event Progress X/Y" (e.g. "3/4") from the open Choose Recreation Partner dialog by OCR-ing just to the right of the [LabelEventProgress] label.
+     * This is the authoritative chain position - unlike the per-run counter it survives a bot restart and any dates done manually. The offset region is display-dependent,
+     * so it may need on-device calibration. The debugName dumps the cropped region for tuning.
+     *
+     * @param sourceBitmap The current screen capture with the partner dialog open.
+     * @return The (completed, total) outing counts, or null when the label or the numbers could not be read.
+     */
+    open fun getGroupEventProgress(sourceBitmap: Bitmap): Pair<Int, Int>? {
+        val templateBitmap = LabelEventProgress.template.getBitmap(game.imageUtils) ?: return null
+        val point = LabelEventProgress.findImageWithBitmap(game.imageUtils, sourceBitmap = sourceBitmap) ?: return null
+        // The "X/Y" sits just right of the "Group Event Progress" pill, so anchor to the pill's right edge and match its height. This survives scrolling and resolution changes.
+        val text =
+            game.imageUtils.performOCROnRegion(
+                sourceBitmap,
+                game.imageUtils.relX(0.0, (point.x + (templateBitmap.width / 2)).toInt() + GROUP_PROGRESS_GAP_X),
+                game.imageUtils.relY(0.0, (point.y - (templateBitmap.height / 2) - 4).toInt()),
+                game.imageUtils.relWidth(GROUP_PROGRESS_WIDTH),
+                game.imageUtils.relHeight(templateBitmap.height + 8),
+                useThreshold = true,
+                useGrayscale = true,
+                scale = 2.0,
+                ocrEngine = "tesseract",
+                debugName = "GroupEventProgress",
+            )
+        val numbers = Regex("\\d+").findAll(text).mapNotNull { it.value.toIntOrNull() }.toList()
+        if (numbers.size < 2) {
+            MessageLog.w(TAG, "[WARN] getGroupEventProgress:: Could not read an X/Y progress from \"$text\".")
+            return null
+        }
+        val completed = numbers[0]
+        val total = numbers[1]
+        if (total < 1 || completed < 0 || completed > total) {
+            MessageLog.w(TAG, "[WARN] getGroupEventProgress:: Implausible progress $completed/$total from \"$text\".")
+            return null
+        }
+        return Pair(completed, total)
+    }
+
+    /**
+     * Backs out of the open Choose Recreation Partner dialog and waits for the screen to settle.
+     *
+     * @return Always false, so a caller can return it directly as the "did not start an outing" result.
+     */
+    private fun cancelPartnerDialog(): Boolean {
+        ButtonCancel.click(game.imageUtils)
+        game.waitForLoading()
+        return false
+    }
+
+    /** Whether the final chain outing may be taken right now - only on the Pure Passion turn (or when the schedule or Pure Passion turn is off). */
+    protected fun allowFinalOutingNow(): Boolean = DatingSchedule.allowFinalOuting(enableDatingSchedule, purePassionTurn, date.day)
+
+    /** Whether the recreation schedule is actively driving decisions: enabled and not abandoned (the Pure Passion window has not passed with the chain
+     * unfinished). Protected rather than upstream's private so Trackblazer's budget override can exempt scheduled outings. */
+    protected fun isScheduleActive(): Boolean = enableDatingSchedule && !DatingSchedule.isScheduleAbandoned(purePassionTurn, date.day, recreationChainComplete)
+
+    /**
      * Handles the Recreation date event if detected on the screen.
      *
      * @param recoverMoodIfCompleted If true, recovers mood if the date was already completed.
+     * @param allowFinalOuting If false, the final outing in the chain is held back (the bot backs out of the partner dialog) so it can be done on the Pure Passion turn.
+     * @param doDateRecreation If true, advance the support-card date chain (tap the group event). If false, recreate with the trainee instead - used for opportunistic mood / energy recovery so the schedule alone drives the date chain.
      * @return True if the Recreation date event was successfully completed, false otherwise.
      */
-    open fun handleRecreationDate(recoverMoodIfCompleted: Boolean = false): Boolean {
+    open fun handleRecreationDate(recoverMoodIfCompleted: Boolean = false, allowFinalOuting: Boolean = true, doDateRecreation: Boolean = true): Boolean {
         return if (ButtonRecreation.click(game.imageUtils)) {
             // Tap OK for the possibility of a scheduled race warning popup.
             game.wait(game.dialogWaitDelay)
@@ -1990,6 +2139,7 @@ abstract class Campaign(game: Game) : Task(game) {
             if (LabelRecreationDateComplete.check(game.imageUtils, tries = 3)) {
                 MessageLog.v(TAG, "[RECREATION_DATE] Recreation date is already completed.")
                 recreationDateCompleted = true
+                recreationChainComplete = true
                 if (recoverMoodIfCompleted) {
                     MessageLog.v(TAG, "[RECREATION_DATE] Mood requires recovery. Recovering mood with the Umamusume now...")
                     LabelRecreationUmamusume.click(game.imageUtils)
@@ -2010,28 +2160,55 @@ abstract class Campaign(game: Game) : Task(game) {
                     game.wait(1.0)
                     MessageLog.v(TAG, "[RECREATION_DATE] Choose Recreation Partner dialog opened.")
 
-                    // Use the ScrollList processor to find and click the first available date progress label.
-                    val bResult =
-                        ScrollList.processWithFallback(
-                            game,
-                            fallbackComponent = ButtonEventProgressChevron,
-                            bForceComponentDetection = true,
-                            onEntry = { _, entry ->
-                                MessageLog.i(TAG, "[INFO] Found entry: $entry at ${entry.bbox.cx}, ${entry.bbox.cy}")
-                                game.tap(entry.bbox.cx.toDouble(), entry.bbox.cy.toDouble())
+                    if (!doDateRecreation) {
+                        // The schedule drives the date chain, so an opportunistic recovery recreation goes to the trainee (normal recreation) and leaves the chain alone.
+                        if (LabelRecreationUmamusume.click(game.imageUtils)) {
+                            MessageLog.v(TAG, "[RECREATION_DATE] Recreating with the trainee (normal recreation), leaving the date chain for the schedule.")
+                            game.waitForLoading()
+                            true
+                        } else {
+                            // The trainee option was not found, so back out of the partner dialog rather than leave it open to desync the next turn.
+                            MessageLog.w(TAG, "[WARN] handleRecreationDate:: Could not find the trainee recreation option. Backing out of the partner dialog.")
+                            cancelPartnerDialog()
+                        }
+                    } else {
+                        // Read the in-game group-event progress (e.g. "3/4"). This is the authoritative chain position, so it holds correctly even after a bot restart or manual play.
+                        getGroupEventProgress(game.imageUtils.getSourceBitmap())?.let { (completed, total) ->
+                            recreationOutingsStarted = completed
+                            recreationTotalOutingsKnown = total
+                            MessageLog.i(TAG, "[RECREATION_DATE] Group event progress read as $completed/$total.")
+                        }
+
+                        if (DatingSchedule.shouldHoldFinalOuting(recreationOutingsStarted, recreationTotalOutingsKnown, allowFinalOuting)) {
+                            // The next outing would complete the chain and trigger Pure Passion. This is not the Pure Passion turn, so back out and leave the final for that turn.
+                            MessageLog.i(TAG, "[RECREATION_DATE] Next outing is the final one. Holding it for the Pure Passion turn. Backing out.")
+                            cancelPartnerDialog()
+                        } else {
+                            // Use the ScrollList processor to find and click the first available date progress label.
+                            val bResult =
+                                ScrollList.processWithFallback(
+                                    game,
+                                    fallbackComponent = ButtonEventProgressChevron,
+                                    bForceComponentDetection = true,
+                                    onEntry = { _, entry ->
+                                        MessageLog.i(TAG, "[INFO] Found entry: $entry at ${entry.bbox.cx}, ${entry.bbox.cy}")
+                                        game.tap(entry.bbox.cx.toDouble(), entry.bbox.cy.toDouble())
+                                        game.waitForLoading()
+                                        true
+                                    },
+                                )
+
+                            if (bResult) {
+                                recreationOutingsStarted++
+                                MessageLog.v(TAG, "[RECREATION_DATE] Started a date from the partner selection dialog. Outings started this run: $recreationOutingsStarted.")
                                 game.waitForLoading()
                                 true
-                            },
-                        )
-
-                    if (bResult) {
-                        MessageLog.v(TAG, "[RECREATION_DATE] Started a date from the partner selection dialog.")
-                        game.waitForLoading()
-                        true
-                    } else {
-                        MessageLog.e(TAG, "[ERROR] handleRecreationDate:: Failed to find any date progress labels in the partner selection dialog.")
-                        game.waitForLoading()
-                        false
+                            } else {
+                                // Back out rather than leave the dialog open to desync the next turn (the choose_recreation_partner dialog case is the backstop).
+                                MessageLog.e(TAG, "[ERROR] handleRecreationDate:: Failed to find any date progress labels in the partner selection dialog. Backing out.")
+                                cancelPartnerDialog()
+                            }
+                        }
                     }
                 } else if (LabelEventProgress.click(game.imageUtils)) {
                     // Legacy support cards or situations where the dialog doesn't apply.
@@ -2046,6 +2223,7 @@ abstract class Campaign(game: Game) : Task(game) {
                             "[RECREATION_DATE] Popup still open after tapping Event Progress - the date row is not selectable. Treating the date as completed.",
                         )
                         recreationDateCompleted = true
+                        recreationChainComplete = true
                         if (recoverMoodIfCompleted) {
                             LabelRecreationUmamusume.click(game.imageUtils)
                             game.waitForLoading()
@@ -2055,6 +2233,7 @@ abstract class Campaign(game: Game) : Task(game) {
                             false
                         }
                     } else {
+                        recreationOutingsStarted++
                         MessageLog.v(TAG, "[RECREATION_DATE] Recreation date can be done.")
                         true
                     }
@@ -2405,6 +2584,8 @@ abstract class Campaign(game: Game) : Task(game) {
                 // The flag is only meant to short-circuit re-checks within a single recovery sequence,
                 // not to permanently disable recreation date detection for the rest of the run.
                 recreationDateCompleted = false
+                // The turn advanced, so a failed scheduled-outing attempt may be retried fresh.
+                recreationAttemptFailedThisTurn = false
 
                 // Reset scenario-specific daily flags.
                 resetDailyFlags()
@@ -2699,8 +2880,12 @@ abstract class Campaign(game: Game) : Task(game) {
         // same two template scans. The bitmap is captured lazily - only the late branches
         // (checkInjury, shouldRecoverMood) actually use it, so race/popup/maiden/etc. fast
         // paths can return before paying the MediaProjection screenshot cost (~50-150 ms).
-        if (cachedMandatoryRaceDay || cachedScheduledRaceDay) {
-            return choose(MainScreenAction.RACE, if (cachedMandatoryRaceDay) "mandatory race day" else "scheduled race day")
+        // Split mandatory from scheduled so a pinned recreation outing can sit between them:
+        // mandatory career-goal races outrank everything, but a pinned recreation outranks a
+        // scheduled (in-game agenda) race. shouldDoRecreationToday is a settings-only fast
+        // no-op while the dating schedule is disabled (no screenshot cost).
+        if (cachedMandatoryRaceDay) {
+            return choose(MainScreenAction.RACE, "mandatory race day")
         }
 
         if (racing.encounteredRacingPopup) {
@@ -2708,8 +2893,17 @@ abstract class Campaign(game: Game) : Task(game) {
             // the daily reset would clear it anyway; if the race attempt fails or finds no suitable
             // race, we don't want to spin on RACE decisions turn after turn just because a popup
             // appeared two turns ago. A fresh popup on a future turn will simply set the flag again.
+            // Sits above DATE: an open popup must be consumed before any Recreation tap can land.
             racing.encounteredRacingPopup = false
             return choose(MainScreenAction.RACE, "a racing popup was encountered")
+        }
+
+        if (shouldDoRecreationToday()) {
+            return choose(MainScreenAction.DATE, "dating schedule: pinned recreation turn ${date.day}")
+        }
+
+        if (cachedScheduledRaceDay) {
+            return choose(MainScreenAction.RACE, "scheduled race day")
         }
 
         if (racing.enableForceRacing) {
@@ -2861,6 +3055,18 @@ abstract class Campaign(game: Game) : Task(game) {
                     MessageLog.w(TAG, "[WARN] Mood recovery made no progress toward the $target floor. Training this turn instead.")
                     return executeAction(MainScreenAction.TRAIN, bIsScheduledRaceDay)
                 }
+            }
+
+            MainScreenAction.DATE -> {
+                MessageLog.i(TAG, "[INFO] Decision made to perform a scheduled recreation outing.")
+                val started = handleRecreationDate(recoverMoodIfCompleted = false, allowFinalOuting = allowFinalOutingNow(), doDateRecreation = true)
+                if (!started) {
+                    // Backing out (held final, no selectable rows) does not advance the turn, so latch the
+                    // failure - otherwise decideNextAction re-picks DATE and reopens the dialog forever.
+                    recreationAttemptFailedThisTurn = true
+                    MessageLog.i(TAG, "[RECREATION_DATE] Scheduled outing did not start. Deferring to the normal action flow for the rest of this turn.")
+                }
+                bHasCheckedDateThisTurn = false
             }
 
             MainScreenAction.NONE -> {

@@ -463,10 +463,14 @@ class Trackblazer(game: Game) : Campaign(game) {
      * streak-break calls (gated by the budget).
      * @return True if a recreation was consumed, false if the budget was enforced.
      */
-    override fun handleRecreationDate(recoverMoodIfCompleted: Boolean): Boolean {
+    override fun handleRecreationDate(recoverMoodIfCompleted: Boolean, allowFinalOuting: Boolean, doDateRecreation: Boolean): Boolean {
         val isMoodRecovery = recoverMoodIfCompleted
         val isSenior = date.year == DateYear.SENIOR
-        if (!isMoodRecovery && !isSenior && recreationUsedCount >= recreationUsageCapBeforeSenior) {
+        // A scheduled outing (the DATE action under an active dating schedule) is user-pinned, so it is
+        // exempt from the energy-recreation budget. Opportunistic recovery calls under an active schedule
+        // pass doDateRecreation=false, which makes this condition identify exactly the scheduled path.
+        val isScheduledOuting = doDateRecreation && isScheduleActive()
+        if (!isMoodRecovery && !isScheduledOuting && !isSenior && recreationUsedCount >= recreationUsageCapBeforeSenior) {
             MessageLog.i(
                 TAG,
                 "[TRACKBLAZER] Recreation budget exhausted ($recreationUsedCount/$recreationUsageCapBeforeSenior) in ${date.year} on energy-recovery call. Reserving remaining rec(s) for Senior-year mood management. Falling back to rest.",
@@ -474,7 +478,7 @@ class Trackblazer(game: Game) : Campaign(game) {
             return false
         }
 
-        val success = super.handleRecreationDate(recoverMoodIfCompleted)
+        val success = super.handleRecreationDate(recoverMoodIfCompleted, allowFinalOuting, doDateRecreation)
         if (success) {
             recreationUsedCount++
             MessageLog.i(TAG, "[TRACKBLAZER] Recreation used. Total this career: $recreationUsedCount.")
@@ -848,6 +852,17 @@ class Trackblazer(game: Game) : Campaign(game) {
             MessageLog.i(TAG, "[TRACKBLAZER] It is the Finale. Prioritizing training.")
             decisionTracer?.recordActionChoice(MainScreenAction.TRAIN, "Trackblazer: Finale training (turns 73-75)")
             return MainScreenAction.TRAIN
+        }
+
+        // A pinned recreation outing outranks every action below here - scheduled (in-game agenda)
+        // races, the bond-building window, and the low-energy guard. Only mandatory career-goal races
+        // outrank it (checked inside shouldDoRecreationToday, which no-ops fast while the dating
+        // schedule is disabled). Pinned turns never fall in Summer, so this sits just below the
+        // Summer / Finale training hijacks.
+        if (shouldDoRecreationToday()) {
+            MessageLog.i(TAG, "[TRACKBLAZER] Dating schedule: pinned recreation turn ${date.day}. Performing the scheduled outing.")
+            decisionTracer?.recordActionChoice(MainScreenAction.DATE, "Trackblazer: dating schedule pinned recreation turn ${date.day}")
+            return MainScreenAction.DATE
         }
 
         // Post-debut bond-building window (Junior July, turns 13-14): Rival Races unlock Junior
