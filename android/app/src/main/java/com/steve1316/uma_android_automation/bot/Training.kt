@@ -463,6 +463,16 @@ class Training(private val game: Game, private val campaign: Campaign) {
             return getScenarioStatCap(config.scenario, statName)
         }
 
+        /**
+         * Maximum cap raise from inherited blue sparks (July 2026 rebalance): +4/+9/+16 per
+         * 1/2/3-star spark, applied for up to six inherited sparks across career start and the
+         * two inheritance events - 6 x 16 = 96 at the extreme. A trainee's PERSONAL cap cannot
+         * be derived on our side (borrowed parents are invisible), so cap consumers that must
+         * not block legitimate spark-raised values allow this much headroom above the base
+         * scenario cap.
+         */
+        const val SPARK_CAP_HEADROOM = 96
+
         /** Race calculations value stat points past 1200 at half weight (July 2026 rebalance). */
         private const val SOFT_CAP_STAT_VALUE = 1200
 
@@ -996,8 +1006,11 @@ class Training(private val game: Game, private val campaign: Campaign) {
             val finaleBonus = getFinaleStatBonus(config.currentDate.day)
             val effectiveStatCap = statCap - 100 - finaleBonus
 
-            // Don't score for stats that are close to the absolute cap.
-            if (currentStat >= statCap) {
+            // Don't score for stats that are at the absolute cap. Inherited blue sparks raise the
+            // personal cap by up to SPARK_CAP_HEADROOM above the base scenario cap, so the hard
+            // skip allows that band: a truly capped stat shows +0 gains and scores itself out,
+            // while a spark-raised stat keeps training legitimately past the base cap.
+            if (currentStat >= statCap + SPARK_CAP_HEADROOM) {
                 return 0.0
             }
 

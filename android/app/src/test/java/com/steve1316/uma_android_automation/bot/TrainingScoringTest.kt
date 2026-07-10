@@ -886,6 +886,73 @@ class TrainingScoringTest {
     }
 
     @Test
+    @DisplayName("Spark-raised band above the base cap still allows rainbow training")
+    fun testSparkRaisedBandAllowsRainbowTraining() {
+        // Inherited blue sparks raise the personal cap by up to SPARK_CAP_HEADROOM above the
+        // base scenario cap, so a stat past the base cap is not necessarily maxed. The buffer
+        // check still applies, so only the one-time rainbow allowance trains here - but it must
+        // not be zeroed by the hard at-cap skip.
+        val currentStats =
+            mapOf(
+                StatName.SPEED to 1250,
+                StatName.STAMINA to 400,
+                StatName.POWER to 400,
+                StatName.GUTS to 400,
+                StatName.WIT to 400,
+            )
+
+        val rainbowTraining =
+            createDefaultTrainingOption(
+                name = StatName.SPEED,
+                statGains = statGainsToMap(intArrayOf(60, 0, 30, 0, 0)),
+                numRainbow = 1,
+            )
+
+        val config =
+            createDefaultConfig(
+                trainingOptions = listOf(rainbowTraining),
+                currentStats = currentStats,
+                // scenario="Unknown" pins the base cap at 1200, so 1250 sits inside the spark band.
+                scenario = "Unknown",
+            )
+
+        val score = calculateRawTrainingScore(config, rainbowTraining)
+
+        assertTrue(score > 0.0, "A stat inside the spark-raised band (base cap..base cap + headroom) should still score for rainbow training")
+    }
+
+    @Test
+    @DisplayName("Stat at the base cap plus spark headroom returns zero even for rainbow training")
+    fun testStatAtSparkHeadroomCeilingReturnsZero() {
+        val currentStats =
+            mapOf(
+                StatName.SPEED to 1200 + Training.SPARK_CAP_HEADROOM,
+                StatName.STAMINA to 400,
+                StatName.POWER to 400,
+                StatName.GUTS to 400,
+                StatName.WIT to 400,
+            )
+
+        val rainbowTraining =
+            createDefaultTrainingOption(
+                name = StatName.SPEED,
+                statGains = statGainsToMap(intArrayOf(60, 0, 30, 0, 0)),
+                numRainbow = 1,
+            )
+
+        val config =
+            createDefaultConfig(
+                trainingOptions = listOf(rainbowTraining),
+                currentStats = currentStats,
+                scenario = "Unknown",
+            )
+
+        val score = calculateRawTrainingScore(config, rainbowTraining)
+
+        assertEquals(0.0, score, "No personal cap can exceed base cap + SPARK_CAP_HEADROOM, so this is a true max and must score zero")
+    }
+
+    @Test
     @DisplayName("Maxed stat with disableTrainingOnMaxedStat returns zero")
     fun testMaxedStatWithDisableSettingReturnsZero() {
         val currentStats =

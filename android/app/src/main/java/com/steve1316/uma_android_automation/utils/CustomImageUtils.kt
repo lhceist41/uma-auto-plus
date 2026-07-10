@@ -932,13 +932,16 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         // Parse the text.
         Log.d(TAG, "[DEBUG] determineSingleStatValue:: Detected number of stats for $statName from Tesseract before formatting: $text")
         if (text.lowercase().contains("max") || text.lowercase().contains("ax")) {
-            // MAX means at-cap, so no misread headroom here - but clamp to the LARGER of the caps:
-            // clamping to the 1200 manual default would record a maxed 1400-cap URA stat as 1200.
+            // MAX means at-cap - but clamp to the LARGER of the caps plus the blue-spark headroom:
+            // inherited sparks raise the personal cap above the base scenario cap, so a maxed
+            // spark-raised stat can legitimately read past it. With no digits alongside the MAX,
+            // the base cap is recorded as the best available approximation (the true personal cap
+            // is unknowable when parents are borrowed).
             val maxedCap = maxOf(com.steve1316.uma_android_automation.bot.Training.getScenarioStatCap(game.scenario, statName), manualStatCap)
             Log.d(TAG, "[DEBUG] determineSingleStatValue:: $statName seems to be maxed out. Setting it to $maxedCap.")
             val cleanedText = text.replace(Regex("[^0-9]"), "")
             return try {
-                cleanedText.toInt().coerceIn(0, maxedCap)
+                cleanedText.toInt().coerceIn(0, maxedCap + com.steve1316.uma_android_automation.bot.Training.SPARK_CAP_HEADROOM)
             } catch (_: NumberFormatException) {
                 maxedCap
             }
