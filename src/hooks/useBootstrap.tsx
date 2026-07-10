@@ -158,6 +158,13 @@ export const useBootstrap = () => {
             await databaseManager.saveSetting("trainingEvent", "scenarioEventData", scenariosData, true)
             logWithTimestamp(`[Bootstrap] Successfully saved scenario-specific event data (${Object.keys(scenariosData).length} scenarios) to SQLite`)
 
+            // Rewrite the bulk race-metadata blob like the event datasets above. It is persisted
+            // with every settings save and the load path deep-merges saved rows over defaults, so
+            // without this rewrite the install-day copy shadows a refreshed races.json forever
+            // (the races table refreshes every launch; this one setting did not).
+            await databaseManager.saveSetting("racing", "racingPlanData", JSON.stringify(racesData), true)
+            logWithTimestamp("[Bootstrap] Successfully refreshed the bulk race metadata (racingPlanData) in SQLite")
+
             logWithTimestamp("[Bootstrap] Event data population complete")
         } catch (error) {
             logErrorWithTimestamp("[Bootstrap] Error populating event data:", error)
