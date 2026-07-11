@@ -400,17 +400,26 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          * stops before the career starts rather than run the wrong trainee.
          */
         fun setRotationSwitchPending(context: Context, pending: Boolean) {
+            setQueueStateValue(context, "rotationSwitchPending", pending.toString())
+        }
+
+        /**
+         * Writes one queueState key straight to the settings DB. Kotlin-side state only: queueState is
+         * excluded from the RN settings load and serialization, so nothing written here reaches the
+         * frontend or exported profiles.
+         */
+        fun setQueueStateValue(context: Context, key: String, value: String) {
             try {
                 val dbFile = File(context.filesDir, "SQLite/settings.db")
                 if (!dbFile.exists()) return
                 val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
                 db.execSQL(
                     "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
-                    arrayOf("queueState", "rotationSwitchPending", pending.toString()),
+                    arrayOf("queueState", key, value),
                 )
                 db.close()
             } catch (e: Exception) {
-                Log.w(TAG, "[ROTATION] Failed to set rotationSwitchPending: ${e.message}")
+                Log.w(TAG, "[ROTATION] Failed to write queueState.$key: ${e.message}")
             }
         }
 

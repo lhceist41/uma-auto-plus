@@ -48,6 +48,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Switching trainees between queued careers is much faster. The bot now remembers where each trainee sits in the roster grid and jumps straight to her cell, verifying the name the same way as before advancing -- only a changed roster (a new pull, a re-sort) falls back to the old cell-by-cell scan. A measured switch took ~90 seconds before and ~30 after; staying on the same trainee was already instant and is unchanged.
 - The final run of a queue now finishes the career properly instead of stopping on the Complete Career screen. The sparks screen (and its auto-reroll), the results dialogs, and the veteran registration all happen after that screen, so the last career of every queue used to silently skip them -- no reroll chance, and no sparks in the run history. The bot now walks the same career-end flow it uses between runs and parks the game on the home screen. A run that was stopped, skipped, or errored still leaves the screen exactly where it was.
 - Internal housekeeping on the skills database so future game-data updates from the upstream project import cleanly. No visible change.
 

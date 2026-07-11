@@ -2325,33 +2325,51 @@ class CareerLaunchNavigator(private val context: Context) {
         var bestLabel = ""
         val seen = HashSet<String>()
 
-        // Anchor to the TOP of the roster first, then scan straight down. The game opens the roster
-        // pre-scrolled to the last-played trainee — a variable entry row — so a fixed top anchor is
-        // what lets a single-direction scan cover everyone. Scroll UP until the top-left tile stops
-        // changing (the list hit its ceiling); over-scrolling up is a harmless no-op. Capped so a
-        // flaky read can't loop forever. (Replaced a bidirectional scan whose down-swing overshot and
-        // skipped a whole row of trainees between pages — see swipeTraineeGrid.)
-        var prevTop = ""
-        for (i in 0..traineeMaxSwipes + 2) {
-            if (!BotService.isRunning || StartModule.queueStopRequested) {
+        anchorTraineeGridTop()?.let { return it }
+
+        // Remembered-position jump: the roster order is stable between careers and the page swipe is a
+        // fixed-distance drag, so the cell where this trainee was found last time is almost always
+        // still hers. Swipe straight down to that page and tap only that cell; the same preview-OCR
+        // threshold as the scan verifies the selection, so a miss (new pull, re-sort) costs nothing
+        // but the jump and falls back to the full scan below. Measured: a full scan runs ~90s, this
+        // path ~10s past the anchor.
+        val posKey = "traineePos_" + target.lowercase().replace(Regex("[^a-z0-9]"), "")
+        val remembered = SettingsHelper.getStringSetting("queueState", posKey).split(",").mapNotNull { it.trim().toIntOrNull() }
+        if (remembered.size == 3 &&
+            remembered[0] in 0..traineeMaxSwipes &&
+            remembered[1] in traineeColFractions.indices &&
+            remembered[2] in 0 until traineeGridRows
+        ) {
+            val (rPage, rCol, rRow) = remembered
+            MessageLog.i(TAG, "[ROTATION] Trying remembered position page=$rPage cell=($rCol,$rRow) for '$target'.")
+            var jumpBitmap = iu.getSourceBitmap()
+            repeat(rPage) {
+                swipeTraineeGrid(jumpBitmap, pageDown = true)
+                waitSafe(1.2)
+                jumpBitmap = iu.getSourceBitmap()
+            }
+            gestureUtils.tap(
+                (jumpBitmap.width * traineeColFractions[rCol]).toDouble(),
+                (jumpBitmap.height * (traineeRow0Fraction + rRow * traineeRowStepFraction)).toDouble(),
+                "trainee_remembered_c${rCol}_r$rRow",
+            )
+            waitSafe(1.0)
+            val preview = readTraineePreviewName()
+            val previewExcluded = excludeOutfits.any { TraineeNameMatcher.hasOutfit(preview, it) }
+            if (!previewExcluded && preview.isNotBlank() && TraineeNameMatcher.score(target, preview) >= traineeMatchThreshold) {
+                MessageLog.i(TAG, "[ROTATION] Remembered position hit: '$preview'. Selecting and advancing.")
+                if (ButtonNext.click(iu)) {
+                    waitSafe(2.0)
+                    return TransitionResult.Continue
+                }
                 return TransitionResult.Failed(
-                    reason = "Queue stopped during trainee selection.",
+                    reason = "Matched trainee '$preview' at the remembered position but the Next click failed.",
                     transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
-                    isRecoverable = false,
+                    recommendedAction = "Manually press Next and restart the queue.",
                 )
             }
-            val anchorBmp = iu.getSourceBitmap()
-            gestureUtils.tap(
-                (anchorBmp.width * traineeColFractions[0]).toDouble(),
-                (anchorBmp.height * traineeRow0Fraction).toDouble(),
-                "trainee_anchor_top",
-            )
-            waitSafe(0.8)
-            val top = readTraineePreviewName().lowercase().replace(Regex("[^a-z0-9]"), "")
-            if (top.isNotEmpty() && top == prevTop) break // top-left unchanged after a swipe = ceiling.
-            prevTop = top
-            swipeTraineeGrid(anchorBmp, pageDown = false)
-            waitSafe(1.2)
+            MessageLog.i(TAG, "[ROTATION] Remembered position missed (read '$preview'); re-anchoring for the full scan.")
+            anchorTraineeGridTop()?.let { return it }
         }
 
         // Single top-down pass from the anchored top. The page swipe spans less than the scan band
@@ -2394,6 +2412,9 @@ class CareerLaunchNavigator(private val context: Context) {
                     }
                     if (score >= traineeMatchThreshold) {
                         MessageLog.i(TAG, "[ROTATION] Match: '$preview' (${"%.3f".format(score)}). Selecting and advancing.")
+                        // Remember where she was found so the next switch to her can jump here
+                        // directly instead of re-scanning the grid cell by cell.
+                        StartModule.setQueueStateValue(context, posKey, "$page,$col,$row")
                         waitSafe(0.5)
                         if (ButtonNext.click(iu)) {
                             waitSafe(2.0)
@@ -2423,6 +2444,43 @@ class CareerLaunchNavigator(private val context: Context) {
             isRecoverable = true,
             recommendedAction = "Check that the rotation trainee is one you own and that its inGameName matches the in-game name, or select the trainee manually and restart.",
         )
+    }
+
+    /**
+     * Anchors the trainee roster to its TOP. The game opens the roster pre-scrolled to the
+     * last-played trainee — a variable entry row — so a fixed top anchor is what lets a
+     * single-direction scan (and the remembered-position page arithmetic) cover everyone
+     * reproducibly. Scrolls UP until the top-left tile stops changing (the list hit its ceiling);
+     * over-scrolling up is a harmless no-op. Capped so a flaky read can't loop forever. (Replaced a
+     * bidirectional scan whose down-swing overshot and skipped a whole row of trainees between
+     * pages — see swipeTraineeGrid.)
+     *
+     * @return A [TransitionResult.Failed] when the queue was stopped mid-anchor, else null once anchored.
+     */
+    private fun anchorTraineeGridTop(): TransitionResult? {
+        var prevTop = ""
+        for (i in 0..traineeMaxSwipes + 2) {
+            if (!BotService.isRunning || StartModule.queueStopRequested) {
+                return TransitionResult.Failed(
+                    reason = "Queue stopped during trainee selection.",
+                    transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
+                    isRecoverable = false,
+                )
+            }
+            val anchorBmp = iu.getSourceBitmap()
+            gestureUtils.tap(
+                (anchorBmp.width * traineeColFractions[0]).toDouble(),
+                (anchorBmp.height * traineeRow0Fraction).toDouble(),
+                "trainee_anchor_top",
+            )
+            waitSafe(0.8)
+            val top = readTraineePreviewName().lowercase().replace(Regex("[^a-z0-9]"), "")
+            if (top.isNotEmpty() && top == prevTop) break // top-left unchanged after a swipe = ceiling.
+            prevTop = top
+            swipeTraineeGrid(anchorBmp, pageDown = false)
+            waitSafe(1.2)
+        }
+        return null
     }
 
     /** Reads the "[Outfit] Name" preview banner (white text on a colored pill) via color OCR. */
