@@ -1352,7 +1352,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator)
                         if (!navResult.success) {
                             logNavigationFailure(navResult)
-                            sendQueueProgressEvent(startFromRun, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, navResult.failureReason)
+                            // A user Stop mid-navigation is a clean cancellation, not a navigation
+                            // failure - skip the failure event and let the post-loop queueComplete
+                            // report the ending, same as a Stop during a run.
+                            if (navResult.lastDetectedState != "STOPPED") {
+                                sendQueueProgressEvent(startFromRun, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, navResult.failureReason)
+                            }
                             queueStopRequested = true
                         }
                     }
@@ -1509,7 +1514,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
                             if (!navResult.success) {
                                 logNavigationFailure(navResult)
-                                sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, navResult.failureReason)
+                                // Same as the cold-start path: a user Stop mid-navigation is not a
+                                // navigation failure - no failure event, the post-loop queueComplete
+                                // reports the ending.
+                                if (navResult.lastDetectedState != "STOPPED") {
+                                    sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, navResult.failureReason)
+                                }
                                 break
                             }
                         }
