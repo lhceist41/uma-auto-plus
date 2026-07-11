@@ -70,6 +70,11 @@ object DialogUtils {
             "components/dialog/dialog_title_gradient_2",
             "components/dialog/dialog_title_gradient_0",
             "components/dialog/dialog_title_gradient_1",
+            // Not a gradient: the first-win "TROPHY WON!" popup uses a green celebration banner
+            // as its header, so without this anchor neither check() nor getTitle can see the
+            // popup at all and it rides the unknown-screen recovery instead (~100s of race
+            // budget burned after a first-time race win). Last so standard dialogs match first.
+            "components/label/trophy_won",
         )
 
     /** List of dialogs that are considered dangerous because they may involve real-world purchases. Detection of these dialogs will cause the bot to stop immediately. */
@@ -133,6 +138,12 @@ object DialogUtils {
                     suppressError = true,
                 )
             if (titleLocation != null) {
+                // The trophy banner anchor names its dialog outright: the "TROPHY WON!" WordArt
+                // defeats OCR (reads empty, tripping the empty-text bail below), so the popup
+                // can never be identified through the text pipeline.
+                if (template == "components/label/trophy_won") {
+                    return DialogTrophyWon.title
+                }
                 // Retrieve the template bitmap to calculate the bounding box.
                 templateBitmap = imageUtils.getTemplateBitmap(template.substringAfterLast('/'), "images/" + template.substringBeforeLast('/'))
                 break
