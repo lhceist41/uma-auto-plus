@@ -3008,6 +3008,16 @@ abstract class Campaign(game: Game) : Task(game) {
         // From here on the downstream branches need a screenshot - capture it now.
         val sourceBitmap = game.imageUtils.getSourceBitmap()
 
+        // A mandatory career requirement (fan / trophy / goal-pts) can only be met by racing, so it
+        // outranks the pre-summer prep below - the forced rest/mood turn would otherwise eat the very
+        // turn the requirement needed. If no races turn out to be available, Racing resets the flags
+        // and the turn falls back to training, so routing here is safe on a raceless day.
+        val isRacingRequirementActive = racing.hasFanRequirement || racing.hasTrophyRequirement || racing.hasInsufficientGoalRacePtsRequirement
+        if (isRacingRequirementActive) {
+            MessageLog.i(TAG, "[INFO] Racing requirement is active. Bypassing health and mood checks.")
+            return choose(MainScreenAction.RACE, "racing requirement active (fan/trophy/goal-pts)")
+        }
+
         if (mustRestBeforeSummer && (date.year == DateYear.CLASSIC || date.year == DateYear.SENIOR) && date.month == DateMonth.JUNE && date.phase == DatePhase.LATE) {
             // An explicit mandatory plan entry or a due fan goal outranks summer prep. This forced
             // rest once consumed the exact turn of a mandatory planned race (Unicorn Stakes) while a
@@ -3036,12 +3046,6 @@ abstract class Campaign(game: Game) : Task(game) {
                 bForcedWitTraining = true
                 return choose(MainScreenAction.TRAIN, "pre-summer prep: forced Wit training (energy and mood sufficient)")
             }
-        }
-
-        val isRacingRequirementActive = racing.hasFanRequirement || racing.hasTrophyRequirement
-        if (isRacingRequirementActive) {
-            MessageLog.i(TAG, "[INFO] Racing requirement is active. Bypassing health and mood checks.")
-            return choose(MainScreenAction.RACE, "racing requirement active (fan/trophy goal)")
         }
 
         val isFinals = checkFinals()

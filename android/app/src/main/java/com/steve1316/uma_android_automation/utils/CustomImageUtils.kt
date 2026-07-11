@@ -550,14 +550,16 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 // Replace OCR misidentification of 'o/O' with '0'.
                 val cleanedResult = detectedText.lowercase().replace("o", "0").replace("%", "").replace("failure", "").replace("\n", "").replace(Regex("[^0-9]"), "").trim()
 
-                var value = cleanedResult.toInt()
+                val value = cleanedResult.toInt()
 
-                // Correct the OCR error if failure chance exceeds 100% and strip the last digit.
-                if (value > 100 && cleanedResult.length > 2) {
-                    val correctedResult = cleanedResult.dropLast(1)
-                    val correctedValue = correctedResult.toInt()
-                    Log.w(TAG, "[WARN] findTrainingFailureChance:: Failure chance $value% exceeds 100%, correcting to $correctedValue%.")
-                    value = correctedValue
+                // A failure chance above 100% is an impossible read (a stray extra OCR digit). The old
+                // digit-drop "correction" fabricated a plausible-but-wrong value - a real 55% that picked
+                // up a stray leading 1 became a trusted 15% and the bot trained into the risk. Reject it
+                // instead: the retry loop takes a fresh bitmap, and the caller's robust fallback covers
+                // exhaustion.
+                if (value > 100) {
+                    Log.w(TAG, "[WARN] findTrainingFailureChance:: Failure chance $value% exceeds 100%; treating as an invalid read.")
+                    return -1
                 }
 
                 value
