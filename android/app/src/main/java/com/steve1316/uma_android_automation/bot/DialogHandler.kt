@@ -114,10 +114,21 @@ open class DialogHandler(val game: Game) {
                 }
 
                 if (game.connectionErrorRetryAttempts >= game.maxConnectionErrorRetryAttempts) {
-                    if (DiscordUtils.enableDiscordNotifications) {
-                        DiscordUtils.queue.add("```diff\n- ${MessageLog.getSystemTimeString()} Max connection error retry attempts reached. Stopping bot...\n```")
+                    if (!game.connectionErrorExtendedWaitUsed) {
+                        // The career is server-saved, so an outage is survivable in place: hold
+                        // once (wait() stays stop-responsive and ticks the watchdog heartbeat),
+                        // then grant the ladder one final full round before giving up.
+                        game.connectionErrorExtendedWaitUsed = true
+                        MessageLog.w(TAG, "[CONNECTION] Max connection error retries reached. Holding 180s for the outage to pass, then retrying one final round (once per career).")
+                        game.wait(180.0)
+                        game.connectionErrorRetryAttempts = 0
+                        game.lastConnectionErrorRetryTimeMs = System.currentTimeMillis()
+                    } else {
+                        if (DiscordUtils.enableDiscordNotifications) {
+                            DiscordUtils.queue.add("```diff\n- ${MessageLog.getSystemTimeString()} Max connection error retry attempts reached. Stopping bot...\n```")
+                        }
+                        throw InterruptedException("Max connection error retry attempts reached. Stopping bot...")
                     }
-                    throw InterruptedException("Max connection error retry attempts reached. Stopping bot...")
                 }
 
                 game.connectionErrorRetryAttempts++

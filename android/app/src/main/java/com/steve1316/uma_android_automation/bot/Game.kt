@@ -109,6 +109,11 @@ class Game(val myContext: Context) {
     /** The cooldown time between connection error retries. */
     internal val connectionErrorRetryCooldownTimeMs: Long = 10000 // 10 seconds
 
+    /** One extended hold per career when the connection-error ladder exhausts: flakes cluster
+     * around the daily-reset window and pass in minutes, and burning the queue slot for one is
+     * a bad trade (El Condor 2026-07-11: 173k-fan career lost 9 minutes before reset). */
+    internal var connectionErrorExtendedWaitUsed: Boolean = false
+
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]Game"
 
