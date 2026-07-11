@@ -101,6 +101,12 @@ class CareerLaunchNavigator(private val context: Context) {
         private const val MAX_TAP_TO_CONTINUE_ITERATIONS = 30
         private const val TAP_TO_CONTINUE_REBIND_AT = 18
 
+        /** Force-rebind partway through a stuck-in-KNOWN-state episode too: identical detection
+         * every tick while every click changes nothing is the same dead-gesture-dispatch signature
+         * the unknown-state and TAP_TO_CONTINUE paths already self-heal (2026-07-11: the Recover TP
+         * quantity popup wedged as POST_RUN_RESULTS for all 15 iterations and killed the queue). */
+        private const val STUCK_STATE_REBIND_AT = 7
+
         /** Item-based TP restores performed this bot session. Lives on the companion because
          * each between-run handoff constructs a fresh navigator - an instance field would reset
          * every handoff, making the per-session cap really a per-handoff cap. Reset from
@@ -190,6 +196,12 @@ class CareerLaunchNavigator(private val context: Context) {
 
         /** "Restore TP?" confirmation - the account lacks Training Points for another career. */
         TP_RESTORE_DIALOG,
+
+        /** Recover TP quantity popup (Min/-/+/Max over Cancel/OK) opened from the Recover TP
+         * picker. Gets its own state so its green OK can never fall through to the generic
+         * POST_RUN_RESULTS clicker, and so a restore cut short mid-flow (or a queue started
+         * cold on this screen) is finished instead of wedging. */
+        RECOVER_TP_QUANTITY,
 
         /** Screen could not be identified by any detector. */
         UNKNOWN,
@@ -418,6 +430,14 @@ class CareerLaunchNavigator(private val context: Context) {
                     detectedState != LaunchScreenState.TAP_TO_CONTINUE
                 ) {
                     stuckInStateCount++
+                    // Dead gesture dispatch wedges a KNOWN state exactly like this: the same
+                    // detection every tick while every click silently no-ops (dispatchGesture
+                    // still returns true). Rebind once mid-episode - a real transition resets
+                    // the counter, so this only fires when clicks demonstrably do nothing.
+                    if (stuckInStateCount == STUCK_STATE_REBIND_AT) {
+                        MessageLog.w(TAG, "[NAV] $detectedState repeated $STUCK_STATE_REBIND_AT times with no effect from clicks; force-rebinding the accessibility service.")
+                        tempGame?.forceRebindAccessibilityService()
+                    }
                     if (stuckInStateCount >= MAX_STUCK_ITERATIONS) {
                         val screenshotPath = captureFailureScreenshot("stuck_in_${detectedState.name}")
                         return NavigationResult(
@@ -721,6 +741,14 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.VETERAN_UMAMUSUME_MAX
         }
 
+        // Recover TP quantity popup - Max exists only on quantity popups, and the TP restore's is
+        // the only quantity popup in the between-run flow. MUST precede the generic
+        // POST_RUN_RESULTS check: the popup's green OK matched it on 2026-07-11 and the generic
+        // handler clicked OK at quantity 0 for 15 straight iterations while the queue died.
+        if (ButtonMax.check(iu, sourceBitmap = bitmap) && ButtonOk.check(iu, sourceBitmap = bitmap)) {
+            return LaunchScreenState.RECOVER_TP_QUANTITY
+        }
+
         // POST_RUN_RESULTS - generic post-run / between-screens dialog with Next, OK, Confirm,
         // or Close (wide or compact-pill style) as the primary advance button. This is the most
         // common state during between-run navigation (10-20 iterations per career), so we check it early.
@@ -936,6 +964,7 @@ class CareerLaunchNavigator(private val context: Context) {
             LaunchScreenState.LEGACY_SELECT_SCREEN -> handleLegacySelectScreen()
             LaunchScreenState.PRE_RUN_CONFIRMATION -> handlePreRunConfirmation()
             LaunchScreenState.TP_RESTORE_DIALOG -> handleTpRestoreDialog()
+            LaunchScreenState.RECOVER_TP_QUANTITY -> handleRecoverTpQuantity()
             LaunchScreenState.SUPPORT_DECK_SCREEN -> handleSupportDeckScreen(reuseLastLaunchSetup, autoFillSupports)
             LaunchScreenState.CINEMATIC_INTRO -> handleCinematicIntro()
             LaunchScreenState.HOME_SCREEN ->
@@ -1524,12 +1553,62 @@ class CareerLaunchNavigator(private val context: Context) {
         waitSafe(0.6)
         ButtonOk.click(iu)
         waitSafe(1.2)
+        // The Max/OK clicks above can silently no-op (dead gesture dispatch - seen live
+        // 2026-07-11 on the Carats rung's first firing, which then logged a phantom restore).
+        // Max is unique to the quantity popup: still visible means nothing was spent. Report
+        // failure so the FSM re-detects the popup as RECOVER_TP_QUANTITY and finishes it there
+        // (the stuck-state counter force-rebinds dispatch partway through).
+        if (ButtonMax.find(iu).first != null) {
+            MessageLog.w(TAG, "[NAV] Recover TP quantity popup still open after Max+OK ($itemName) - the restore did not go through. Re-detecting...")
+            return TpRestoreOutcome.NO_QUANTITY_OK
+        }
         if (!ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
         waitSafe(1.0)
 
         tpRestoresThisSession++
         MessageLog.i(TAG, "[NAV] Restored TP with $itemName (restore $tpRestoresThisSession/$MAX_TP_RESTORES_PER_SESSION this session).")
         return TpRestoreOutcome.RESTORED
+    }
+
+    /**
+     * RECOVER_TP_QUANTITY: the Recover TP quantity popup is up on its own - a dispatch death cut
+     * a restore short mid-flow, or the queue was started cold on this screen. Finish the restore:
+     * Max-fill, OK, verify the popup actually closed, then close the picker list behind it.
+     * Honors the same setting and session cap as the item ladder; when spending is not allowed
+     * the popup is cancelled so the next Start Career's TP prompt can decline cleanly.
+     */
+    private fun handleRecoverTpQuantity(): TransitionResult {
+        val restoreWithItems = SettingsHelper.getBooleanSetting("runQueue", "enableTpRestoreWithItems", false)
+        if (!restoreWithItems || tpRestoresThisSession >= MAX_TP_RESTORES_PER_SESSION) {
+            MessageLog.w(
+                TAG,
+                "[NAV] Recover TP quantity popup is up but ${if (!restoreWithItems) "item restore is disabled" else "the session restore cap is reached"}. Cancelling it.",
+            )
+            ButtonCancel.click(iu)
+            waitSafe(1.0)
+            if (!ButtonCloseWide.click(iu) && !ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
+            waitSafe(1.0)
+            return TransitionResult.Continue
+        }
+        if (!ButtonMax.click(iu)) {
+            // Max is this state's own detection cue - a miss means the popup closed under us.
+            return TransitionResult.Continue
+        }
+        waitSafe(0.6)
+        ButtonOk.click(iu)
+        waitSafe(1.2)
+        if (ButtonMax.find(iu).first != null) {
+            // Clicks are not landing. Keep re-detecting: the stuck-state counter force-rebinds
+            // gesture dispatch partway through and this handler runs again with live taps.
+            MessageLog.w(TAG, "[NAV] Recover TP quantity popup still open after Max+OK. Re-detecting...")
+            return TransitionResult.Continue
+        }
+        waitSafe(0.5)
+        if (!ButtonCloseWide.click(iu) && !ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
+        waitSafe(1.0)
+        tpRestoresThisSession++
+        MessageLog.i(TAG, "[NAV] Restored TP from the quantity popup (restore $tpRestoresThisSession/$MAX_TP_RESTORES_PER_SESSION this session).")
+        return TransitionResult.Continue
     }
 
     /**
