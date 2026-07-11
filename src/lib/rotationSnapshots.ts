@@ -20,6 +20,57 @@ export interface RotationEntry {
     excludeOutfits?: string[]
 }
 
+/**
+ * Preset names read "Character" or "Character (Suffix)". Usually the suffix is an OUTFIT
+ * ("El Condor Pasa (Kukulkan Warrior)"), which the Trainee Select banner renders as
+ * "[Kukulkan Warrior] El Condor Pasa". Build variants like "(Legacy Farm)" are NOT outfits -
+ * they are alternate presets of the base character, and no "[Legacy Farm]" banner exists
+ * in-game. Deriving one as an OCR target makes the navigator scan the entire roster, find
+ * nothing above the match threshold, and stop the queue. Keep this set in sync with any
+ * future non-outfit suffix presets.
+ */
+const NON_OUTFIT_SUFFIXES = new Set(["Legacy Farm"])
+
+/** Splits a preset name into base character name and outfit (absent for plain/variant names). */
+export function parsePresetName(presetName: string): { base: string; outfit?: string } {
+    const m = presetName.match(/^(.*?)\s*\(([^)]*)\)\s*$/)
+    if (!m) return { base: presetName.trim() }
+    const suffix = m[2].trim()
+    return NON_OUTFIT_SUFFIXES.has(suffix) ? { base: m[1].trim() } : { base: m[1].trim(), outfit: suffix }
+}
+
+/** Base character name, for "did the picked character actually change?" comparisons. */
+export function baseCharacter(presetName: string): string {
+    return parsePresetName(presetName).base
+}
+
+/**
+ * The Trainee Select target to auto-fill when a preset is picked: "[Outfit] Name" for
+ * outfit-specific presets, the bare character name otherwise (bare targets are
+ * outfit-insensitive in the Kotlin matcher).
+ */
+export function deriveInGameName(presetName: string): string {
+    const { base, outfit } = parsePresetName(presetName)
+    return outfit ? `[${outfit}] ${base}` : base
+}
+
+/**
+ * Sibling-outfit names the in-game matcher must skip for a bare base-name target, collected
+ * from the preset roster. Outfit-specific targets already disambiguate and get none; variant
+ * presets ("(Legacy Farm)") are base-character targets and need the same protection as the
+ * plain name.
+ */
+export function deriveExcludeOutfits(presetName: string): string[] {
+    if (parsePresetName(presetName).outfit) return []
+    const base = baseCharacter(presetName)
+    const outfits = new Set<string>()
+    for (const p of characterPresets) {
+        const parsed = parsePresetName(p.name)
+        if (parsed.outfit && parsed.base === base) outfits.add(parsed.outfit)
+    }
+    return [...outfits]
+}
+
 export interface RotationBatchRow {
     category: string
     key: string

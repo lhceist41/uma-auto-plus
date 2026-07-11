@@ -1,4 +1,4 @@
-import { buildRotationSnapshotRows } from "../rotationSnapshots"
+import { buildRotationSnapshotRows, baseCharacter, deriveInGameName, deriveExcludeOutfits } from "../rotationSnapshots"
 import { characterPresets } from "../../data/characterPresets"
 
 // ===========================================================================
@@ -92,5 +92,50 @@ describe("buildRotationSnapshotRows", () => {
         expect(thresholdRow?.value).toBe(750)
         const enableRow = rows.find((r) => r.category === "rot0_skills" && r.key === "enableSkillPointCheck")
         expect(enableRow?.value).toBe(false)
+    })
+})
+
+// ===========================================================================
+// preset-name parsing (In-Game Name / exclude-outfit derivation)
+// ===========================================================================
+
+describe("preset-name derivation", () => {
+    it("derives '[Outfit] Name' for outfit-specific presets", () => {
+        expect(deriveInGameName("El Condor Pasa (Kukulkan Warrior)")).toBe("[Kukulkan Warrior] El Condor Pasa")
+    })
+
+    it("passes plain character names through unchanged", () => {
+        expect(deriveInGameName("Symboli Rudolf")).toBe("Symboli Rudolf")
+    })
+
+    it("derives the bare character name for (Legacy Farm) build variants - no such banner exists in-game", () => {
+        // Regression: "[Legacy Farm] Air Groove" as the OCR target scanned all 32 roster trainees at
+        // 0.437 best score (threshold 0.86) and stopped the queue with "trainee not found".
+        expect(deriveInGameName("Air Groove (Legacy Farm)")).toBe("Air Groove")
+        expect(deriveInGameName("Daiwa Scarlet (Legacy Farm)")).toBe("Daiwa Scarlet")
+        expect(deriveInGameName("El Condor Pasa (Legacy Farm)")).toBe("El Condor Pasa")
+    })
+
+    it("strips both outfit and variant suffixes for character-identity comparison", () => {
+        expect(baseCharacter("El Condor Pasa (Kukulkan Warrior)")).toBe("El Condor Pasa")
+        expect(baseCharacter("Air Groove (Legacy Farm)")).toBe("Air Groove")
+        expect(baseCharacter("Air Groove")).toBe("Air Groove")
+    })
+
+    it("gives variant presets the same sibling-outfit protection as the plain base name", () => {
+        // The bare "El Condor Pasa" target would also match "[Kukulkan Warrior] El Condor Pasa" on the
+        // grid, so the legacy entry must exclude the sibling outfit exactly like the plain preset does.
+        expect(deriveExcludeOutfits("El Condor Pasa (Legacy Farm)")).toContain("Kukulkan Warrior")
+        expect(deriveExcludeOutfits("El Condor Pasa")).toContain("Kukulkan Warrior")
+    })
+
+    it("never collects a build variant as an outfit to exclude", () => {
+        for (const name of ["El Condor Pasa", "Air Groove", "Daiwa Scarlet"]) {
+            expect(deriveExcludeOutfits(name)).not.toContain("Legacy Farm")
+        }
+    })
+
+    it("gives outfit-specific presets no exclusions (their full-banner target already disambiguates)", () => {
+        expect(deriveExcludeOutfits("El Condor Pasa (Kukulkan Warrior)")).toEqual([])
     })
 })

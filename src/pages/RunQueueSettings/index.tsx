@@ -10,7 +10,8 @@ import CustomButton from "../../components/CustomButton"
 import CustomTitle from "../../components/CustomTitle"
 import PageHeader from "../../components/PageHeader"
 import WarningContainer from "../../components/WarningContainer"
-import { avoidAdvisoryFor, characterPresets } from "../../data/characterPresets"
+import { avoidAdvisoryFor } from "../../data/characterPresets"
+import { baseCharacter, deriveInGameName, deriveExcludeOutfits } from "../../lib/rotationSnapshots"
 import { SearchPageProvider } from "../../context/SearchPageContext"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 
@@ -80,30 +81,6 @@ const RunQueueSettings = () => {
 
     // Which rotation row the preset picker is currently open for, or null when closed.
     const [pickerForRow, setPickerForRow] = useState<number | null>(null)
-
-    // Preset names are "Character (Outfit)" for outfit-specific presets, plain "Character" otherwise.
-    // The in-game Trainee Select banner the OCR reads is "[Outfit] Character", so derive that form to
-    // auto-fill the In-Game Name when a preset is picked. baseCharacter() strips the outfit so we can
-    // tell a genuine character change (reset the name) from a scenario-only change (keep the user's edit).
-    const baseCharacter = (presetName: string) => presetName.replace(/\s*\([^)]*\)\s*$/, "").trim()
-    const deriveInGameName = (presetName: string) => {
-        const m = presetName.match(/^(.*?)\s*\(([^)]*)\)\s*$/)
-        return m ? `[${m[2].trim()}] ${m[1].trim()}` : presetName.trim()
-    }
-    // A bare base-name target ("El Condor Pasa") is outfit-INSENSITIVE in the in-game OCR matcher, so
-    // if you own the same character in another outfit ("[Kukulkan Warrior] El Condor Pasa") the bot can
-    // grab the wrong banner. Collect this character's other outfit names so the navigator skips them.
-    // Outfit-specific entries already disambiguate via their full "[Outfit] Name", so they get none.
-    const deriveExcludeOutfits = (presetName: string): string[] => {
-        if (/\([^)]*\)\s*$/.test(presetName)) return []
-        const base = baseCharacter(presetName)
-        const outfits = new Set<string>()
-        for (const p of characterPresets) {
-            const m = p.name.match(/^(.*?)\s*\(([^)]*)\)\s*$/)
-            if (m && m[1].trim() === base) outfits.add(m[2].trim())
-        }
-        return [...outfits]
-    }
 
     const rotation = runQueueSettings.traineeRotation
     const updateRotationEntry = (index: number, patch: Partial<(typeof rotation)[number]>) => {
