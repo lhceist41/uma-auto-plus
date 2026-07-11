@@ -38307,9 +38307,9 @@ export const characterPresets: CharacterPreset[] = [
     // Bamboo Memory
     // Aptitudes: Turf=A Dirt=D | Sprint=A Mile=A Medium=C Long=G | Late=A End=C Pace=E Front=G
     // Growth: Speed+10%, Power+10%, Guts+10%. Late Surger Mile primary, Sprint=A secondary.
-    // NOT in characters.json yet (postdates the last game-data sync): no character-event overrides,
-    // her events fall back to the default option heuristics until the next data refresh. Her unique
-    // "Red-Hot Discipline!" is absent from skills.json too, so the plans reference existing ids only.
+    // In characters.json since the 2026-07-11 data refresh; character-event overrides pin the
+    // load-bearing calls below (the rest resolve correctly via the priority heuristic). Her unique
+    // "Red-Hot Discipline!" is in skills.json now; the plans deliberately reference purchasable ids only.
     // Goals (9): t12 debut (1200m) / t24 3,000 FANS / t29 6,000 FANS (Classic early Mar) / t44 Swan
     // Stakes top3 / t54 Takamatsunomiya top3 / t59 Yasuda top3 / t60 Takarazuka PARTICIPATE
     // (Medium=C, participation is safe) / t66 Sprinters Stakes WIN / t70 Mile Championship WIN.
@@ -38456,10 +38456,26 @@ export const characterPresets: CharacterPreset[] = [
                         requiresConfirmation: false,
                     },
                 },
-                // Deliberately empty: Bamboo Memory is not in characters.json yet (postdates the last
-                // game-data sync). Her events resolve via the default option heuristics until the next
-                // data refresh - repopulate this block then.
-                characterEventOverrides: {},
+                // Speed/Power picks throughout (both ride +10% growth; Guts also grows +10% and
+                // overflows its 500 target for free, so Guts payouts are dead value). Her remaining
+                // stat-vs-stat events are left to the priority heuristic, which resolves all of them
+                // correctly under Speed > Power > Wit > Stamina > Guts. The two load-bearing pins are
+                // the meal gamble and Beyond Fiction!, where the energy weighting otherwise chases the
+                // wrong option. Event keys verified against characters.json under "Bamboo Memory".
+                // Same block for URA / Unity Cup / Trackblazer (identical build and priorities).
+                characterEventOverrides: {
+                    "Bamboo Memory|Beyond Fiction!": 0, // random Power +10~20 / Guts +5~20 at 0~10 energy; beats flat Energy +10 on her Power growth
+                    "Bamboo Memory|Red-Hot Ramen Rumble!": 0, // safe Energy +10 / SP +5; other option gambles ~10% Slow Metabolism + Speed -5 (same call as Biwa's Banana Fiend)
+                    "Bamboo Memory|I'm the BEST OF THE BEST!": 0, // single option: Power +30 / Guts +30 / Sprint Straightaways + Homestretch Haste hints +2
+                    "Bamboo Memory|Bonus at start": 0, // Skill points +120
+                    "Bamboo Memory|At Summer Camp (Year 2)": 0, // Power +10 over Guts +10
+                    "Bamboo Memory|Dance Lesson": 1, // Power +10 over Wit +10
+                    "Bamboo Memory|Etsuko's Exhaustive Coverage (G1)": 1, // deterministic Energy -20 + SP + bond, no mood-loss gamble
+                    "Bamboo Memory|Etsuko's Exhaustive Coverage (G2/G3)": 1, // deterministic Energy -20 + SP + bond, no mood-loss gamble
+                    "Bamboo Memory|Etsuko's Exhaustive Coverage (Pre/OP)": 1, // deterministic Energy -20 + SP + bond, no mood-loss gamble
+                    "Bamboo Memory|Failed training (Get Well Soon!)": 1, // gamble carries the Practice Perfect upside
+                    "Bamboo Memory|Failed training (Don't Overdo It!)": 0, // deterministic Energy +10; avoids the Mood -3 + guaranteed Practice Poor branch
+                },
                 supportEventOverrides: {},
                 scenarioEventOverrides: {},
             },
