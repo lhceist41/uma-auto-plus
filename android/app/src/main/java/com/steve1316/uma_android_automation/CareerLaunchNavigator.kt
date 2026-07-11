@@ -653,9 +653,17 @@ class CareerLaunchNavigator(private val context: Context) {
         // signal Campaign.checkMandatoryRacePrepScreen uses, and handing off lets the campaign race
         // it. The ribbon appears only in-career, never on a between-run/launch screen, so treating
         // it as the success/exit state cannot misfire on the launch path.
+        //
+        // ButtonRace / ButtonRaceExclamation catch the next screen in that flow - the race lineup
+        // (entrant roster + green "Race!") a Continue-Career resume lands on when the career was
+        // interrupted deeper into a race. It has no ribbon or Training button, so without this a
+        // resume onto it failed CONTINUE_CAREER_DIALOG -> UNKNOWN and killed the queue (2026-07-11).
+        // The green Race! button exists only in-career, so it cannot misfire on a launch screen.
         if (ButtonTraining.check(iu, sourceBitmap = bitmap) ||
             ButtonRest.check(iu, sourceBitmap = bitmap) ||
-            IconRaceDayRibbon.check(iu, sourceBitmap = bitmap)
+            IconRaceDayRibbon.check(iu, sourceBitmap = bitmap) ||
+            ButtonRace.check(iu, sourceBitmap = bitmap) ||
+            ButtonRaceExclamation.check(iu, sourceBitmap = bitmap)
         ) {
             return LaunchScreenState.ACTIVE_TRAINING_MENU
         }

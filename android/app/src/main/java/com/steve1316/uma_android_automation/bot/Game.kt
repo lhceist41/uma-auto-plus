@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.bot
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.os.PowerManager
 import android.provider.Settings
@@ -110,6 +111,10 @@ class Game(val myContext: Context) {
 
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]Game"
+
+        /** Package name of the Umamusume game (Global). The restart net relaunches this. If the JP
+         * client (jp.co.cygames.umamusume) is ever targeted this needs to change. */
+        const val GAME_PACKAGE: String = "com.cygames.umamusume"
 
         // --- Stall watchdog ---
         // On MuMu (and other emulators) the AccessibilityService's gesture injector can
@@ -606,6 +611,43 @@ class Game(val myContext: Context) {
                 "[ERROR] forceRebindAccessibilityService:: Cannot toggle the Accessibility Service - WRITE_SECURE_SETTINGS is not granted. " +
                     "Run once: adb shell pm grant ${myContext.packageName} android.permission.WRITE_SECURE_SETTINGS",
             )
+            false
+        }
+    }
+
+    /**
+     * Relaunches the Umamusume game from scratch as a last-resort recovery from a screen no handler
+     * can identify or advance (e.g. the game itself soft-locking, distinct from MuMu's gesture death
+     * which [forceRebindAccessibilityService] handles). Fires the game's launcher intent with
+     * CLEAR_TASK so the framework tears down the existing (wedged) task and recreates the entry
+     * Activity, then waits for the title/loading screens to settle. Career progress is saved
+     * server-side each turn, so the game comes back on its Continue-Career flow, which the campaign's
+     * lobby re-entry path resumes in place - no career is lost (validated manually 2026-07-11 via an
+     * adb force-stop + relaunch that resumed El Condor's career).
+     *
+     * An ordinary app cannot force-stop another package without root, so this is a best-effort
+     * relaunch rather than a hard kill; it recovers a UI/task soft-lock but may not reset a crashed
+     * native renderer. Falls through (returns false) if the launcher intent cannot be resolved, so
+     * the caller's normal stop still applies - no new dead-end.
+     *
+     * @param waitAfterLaunch Seconds to wait after firing the intent for the game to come up.
+     * @return True if the relaunch intent was dispatched, false if it could not be resolved.
+     */
+    fun restartGame(waitAfterLaunch: Double = 20.0): Boolean {
+        val launchIntent: Intent? = myContext.packageManager.getLaunchIntentForPackage(GAME_PACKAGE)
+        if (launchIntent == null) {
+            MessageLog.e(TAG, "[ERROR] restartGame:: Could not resolve a launcher intent for $GAME_PACKAGE. Is the game installed under that package? Skipping the restart.")
+            return false
+        }
+        return try {
+            // CLEAR_TASK | NEW_TASK: destroy the existing (wedged) task and start the entry Activity fresh.
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
+            MessageLog.w(TAG, "[RECOVERY] Relaunching the game ($GAME_PACKAGE) from scratch to recover from an unrecognized/soft-locked screen. The career resumes via Continue Career.")
+            myContext.startActivity(launchIntent)
+            wait(waitAfterLaunch, skipWaitingForLoading = true)
+            true
+        } catch (e: Exception) {
+            MessageLog.e(TAG, "[ERROR] restartGame:: Failed to relaunch the game: ${e.message}")
             false
         }
     }

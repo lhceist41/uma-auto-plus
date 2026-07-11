@@ -31,6 +31,8 @@ import com.steve1316.uma_android_automation.components.ButtonInheritance
 import com.steve1316.uma_android_automation.components.ButtonNext
 import com.steve1316.uma_android_automation.components.ButtonNextRaceEnd
 import com.steve1316.uma_android_automation.components.ButtonOk
+import com.steve1316.uma_android_automation.components.ButtonRace
+import com.steve1316.uma_android_automation.components.ButtonRaceExclamation
 import com.steve1316.uma_android_automation.components.ButtonRaceStrategyEnd
 import com.steve1316.uma_android_automation.components.ButtonRaceStrategyFront
 import com.steve1316.uma_android_automation.components.ButtonRaceStrategyLate
@@ -469,6 +471,24 @@ abstract class Campaign(game: Game) : Task(game) {
      * well before the stop.
      */
     private val gestureRebindThresholds: Set<Int> = setOf(13, 19)
+
+    /**
+     * Stuck-cycle count at which [recoverFromUnknownScreen] relaunches the whole game as a last resort.
+     * Sits AFTER both gesture rebinds (13, 19) - so it only fires once a dead-dispatch rebind has
+     * demonstrably not helped - and BEFORE the stop (25), so there is room for the relaunch + a fresh
+     * cycle before giving up. This is the rung for a game-side soft-lock (an un-driveable screen that
+     * is not MuMu gesture death), e.g. a race the account has never run that wedged before the play
+     * path could handle it (2026-07-11).
+     */
+    private val gameRestartThreshold: Int = 22
+
+    /**
+     * Guards [Game.restartGame] to one attempt per stuck episode. Reset to false whenever a known
+     * screen is handled (progress made), so a later, distinct wedge can restart again, but a restart
+     * that did NOT clear the current wedge cannot loop into a relaunch storm - the episode falls
+     * through to the normal stop instead.
+     */
+    private var gameRestartAttemptedThisEpisode: Boolean = false
 
     /**
      * Cap on [consecutiveUnknownScreenCount] while a story-event intro cutscene is being tapped
@@ -1619,6 +1639,15 @@ abstract class Campaign(game: Game) : Task(game) {
         MessageLog.i(TAG, "\n[INFO] Checking if the bot is sitting on the Racing screen.")
         return if (ButtonChangeRunningStyle.check(game.imageUtils)) {
             MessageLog.v(TAG, "[INFO] Bot is at the Racing screen waiting to be skipped or done manually.")
+            true
+        } else if (ButtonRace.check(game.imageUtils) || ButtonRaceExclamation.check(game.imageUtils)) {
+            // The lineup screen (roster of entrants + green "Race!" button) also belongs to the race
+            // flow, but has no ButtonChangeRunningStyle. Resuming a career that was interrupted mid-race
+            // lands here, which every other screen check misses - it killed the queue on 2026-07-11
+            // when a Continue-Career resume dropped onto this screen and the loop counted it unknown to
+            // the stop. handleStandaloneRace clicks Race and rides the race out. Checked AFTER the
+            // strategy-screen match so the normal prep flow is unaffected.
+            MessageLog.v(TAG, "[INFO] Bot is at the race lineup screen (Race! button present); entering the race.")
             true
         } else {
             MessageLog.i(TAG, "[INFO] Bot is not at the Racing screen.")
@@ -3534,6 +3563,7 @@ abstract class Campaign(game: Game) : Task(game) {
             if (detectedKnownScreen) {
                 consecutiveUnknownScreenCount = 0
                 lobbyReentryAttempts = 0
+                gameRestartAttemptedThisEpisode = false
             }
             if (!bMiscBackPressedThisTick) {
                 consecutiveMiscBackPresses = 0
@@ -3733,6 +3763,25 @@ abstract class Campaign(game: Game) : Task(game) {
                 "[WARN] recoverFromUnknownScreen:: Stuck for $count cycles - forcing an Accessibility Service rebind in case gesture dispatch died silently.",
             )
             game.forceRebindAccessibilityService()
+        }
+
+        // Last resort before the stop: relaunch the whole game. The gesture rebinds above cover MuMu's
+        // dead-dispatch mode; this covers a GAME-side soft-lock (an un-driveable screen that a rebind
+        // cannot fix - e.g. the game wedged on a first-time race). Gated to a career actually in
+        // progress (careerScreenObservedThisTask) so a bot parked at the lobby never relaunches, and
+        // to one attempt per stuck episode so a restart that does not clear the wedge falls through to
+        // the stop instead of looping. The career is server-saved and resumes via the lobby re-entry
+        // path (Continue Career) on the next ticks.
+        if (count == gameRestartThreshold && careerScreenObservedThisTask && !gameRestartAttemptedThisEpisode) {
+            gameRestartAttemptedThisEpisode = true
+            MessageLog.w(TAG, "[RECOVERY] Stuck for $count cycles and gesture rebinds did not help - relaunching the game as a last resort before stopping.")
+            if (game.restartGame()) {
+                // Give the relaunch a fresh window: the next ticks land on the game's title/lobby,
+                // which the lobby re-entry branch above resumes into the interrupted career.
+                consecutiveUnknownScreenCount = 0
+                return
+            }
+            MessageLog.w(TAG, "[RECOVERY] Game relaunch could not be dispatched; falling through to the standard stop.")
         }
 
         if (DialogUtils.check(game.imageUtils)) {

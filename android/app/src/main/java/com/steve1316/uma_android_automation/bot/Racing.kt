@@ -1584,14 +1584,19 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Reset the shared per-race retry counter at the start of the button-based loop (covers direct callers like UnityCup that bypass handleRaceEvents' gate).
         retriesThisRace = 0
 
-        // Safety counter to prevent infinite loop.
-        var loopCount = 0
-        val maxLoopCount = 100
+        // Time budget rather than an iteration count. A race the ACCOUNT has never run has no
+        // View Results / Skip (both unlock only after the first playthrough), so it MUST be watched
+        // live - a full animated race runs ~60-120s. The old fixed 100-iteration cap burned out on
+        // that un-skippable playback in ~30-60s, returned false, and dropped control to the campaign
+        // loop, which counted the still-playing race to its 25-cycle unknown-screen stop and killed
+        // the career (2026-07-11, El Condor first-time dirt G1s, twice). A wall-clock budget lets a
+        // watched first-time race reach its results screen while a genuinely hung race still bails.
+        val raceStartMs = System.currentTimeMillis()
+        val maxRaceDurationMs = 210_000L
 
         do {
-            loopCount++
-            if (loopCount > maxLoopCount) {
-                MessageLog.w(TAG, "[WARN] runRaceWithRetries:: Safety loop limit reached. Exiting race retry loop...")
+            if (System.currentTimeMillis() - raceStartMs > maxRaceDurationMs) {
+                MessageLog.w(TAG, "[WARN] runRaceWithRetries:: Race exceeded the ${maxRaceDurationMs / 1000}s budget without reaching results. Exiting race retry loop...")
                 return false
             }
 
@@ -1779,10 +1784,17 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     return true
                 }
 
-                // Otherwise click to progress through screens.
+                // Otherwise click to progress through screens. This also carries a first-time race
+                // that has to be watched live: none of the buttons above are present while the race
+                // animates (Skip is locked until the account has run the race once), so tap to reveal
+                // and dismiss the auto-hiding playback overlay, then wait a beat to pace with the
+                // animation rather than spinning the loop. A single tap (not three) avoids toggling
+                // the overlay straight back off. The race ends on its own and lands on the results
+                // screen, where the ButtonNext branch above returns true.
                 else -> {
                     Log.d(TAG, "[DEBUG] runRaceWithRetries:: No components detected. Tapping to progress...")
-                    game.tap(350.0, 450.0, taps = 3)
+                    game.tap(350.0, 450.0, taps = 1)
+                    game.wait(1.5, skipWaitingForLoading = true)
                 }
             }
         } while (true)
