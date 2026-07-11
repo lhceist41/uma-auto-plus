@@ -60,6 +60,19 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 import kotlin.text.replace
 
+/**
+ * Returns the key with the highest score, but only if that score clears the floor. This is the argmax that replaces the old first-match-wins loop for aptitude letter detection, so a lower-ranked
+ * letter that merely clears the confidence floor can no longer win over the true best match. Pure so it is unit-testable without OpenCV.
+ *
+ * @param scores Map of candidate keys to their template-match correlation scores.
+ * @param floor The minimum score the winner must reach to be accepted.
+ * @return The key with the highest score at or above [floor], or null if the map is empty or the best score is below the floor.
+ */
+internal fun <K> argMaxAboveFloor(scores: Map<K, Double>, floor: Double): K? {
+    val best = scores.maxByOrNull { it.value } ?: return null
+    return if (best.value >= floor) best.key else null
+}
+
 /** Utility functions for image processing via CV like OpenCV. */
 class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(context) {
     /** OCR threshold for text recognition. */
@@ -316,6 +329,49 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 localTemplate.recycle()
             }
         }
+    }
+
+    /**
+     * Finds the best-matching candidate template within a cropped cell by argmax over correlation scores.
+     *
+     * Unlike the first-match-wins loop it replaces, this scores every candidate template and returns the one with the highest TM_CCOEFF_NORMED correlation, so a lower-ranked template that merely
+     * clears the confidence floor can no longer shadow the true best match. The cell is normalized to the 1080p reference crop size so the reference-sized templates match at scale 1.0 on any device.
+     *
+     * @param sourceBitmap The cropped cell bitmap containing a single glyph.
+     * @param candidates Map of candidate keys to the [ComponentInterface] whose template represents each.
+     * @param referenceWidth The 1080p reference width of the crop, used to normalize the cell before matching.
+     * @param referenceHeight The 1080p reference height of the crop, used to normalize the cell before matching.
+     * @param minConfidence The minimum correlation the winner must reach. Defaults to the global template-match confidence.
+     * @return The best-matching key, or null if no candidate template reached [minConfidence].
+     */
+    fun <K> findBestTemplateMatch(sourceBitmap: Bitmap, candidates: Map<K, ComponentInterface>, referenceWidth: Int, referenceHeight: Int, minConfidence: Double = confidence): K? {
+        // Normalize the cell to the reference crop size so the fixed reference-sized templates match at scale 1.0 regardless of device resolution.
+        val normalizedCell: Bitmap =
+            if (sourceBitmap.width != referenceWidth || sourceBitmap.height != referenceHeight) sourceBitmap.scale(referenceWidth, referenceHeight) else sourceBitmap
+
+        val sourceMat = Mat()
+        Utils.bitmapToMat(normalizedCell, sourceMat)
+        Imgproc.cvtColor(sourceMat, sourceMat, Imgproc.COLOR_BGR2GRAY)
+
+        val scores = mutableMapOf<K, Double>()
+        for ((key, component) in candidates) {
+            val templateBitmap: Bitmap = component.template.getBitmap(this) ?: continue
+            val templateMat = Mat()
+            Utils.bitmapToMat(templateBitmap, templateMat)
+            Imgproc.cvtColor(templateMat, templateMat, Imgproc.COLOR_BGR2GRAY)
+
+            // Skip templates larger than the cell to avoid an invalid matchTemplate call.
+            if (templateMat.cols() <= sourceMat.cols() && templateMat.rows() <= sourceMat.rows()) {
+                val resultMat = Mat()
+                Imgproc.matchTemplate(sourceMat, templateMat, resultMat, Imgproc.TM_CCOEFF_NORMED)
+                scores[key] = Core.minMaxLoc(resultMat).maxVal
+                resultMat.release()
+            }
+            templateMat.release()
+        }
+        sourceMat.release()
+
+        return argMaxAboveFloor(scores, minConfidence)
     }
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
