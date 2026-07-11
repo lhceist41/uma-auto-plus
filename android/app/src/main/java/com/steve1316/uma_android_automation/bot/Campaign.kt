@@ -3372,6 +3372,10 @@ abstract class Campaign(game: Game) : Task(game) {
                 handleTrainingEvent()
             } else if (checkMandatoryRacePrepScreen()) {
                 // If the bot is at the Main screen with the button to select a race visible, that means the bot needs to handle a mandatory race.
+                // Race screens only exist in-career, so they count as having observed the career -
+                // without this, a task resumed directly onto a race day never arms the lobby
+                // re-entry or the game-restart net, both gated on this flag.
+                careerScreenObservedThisTask = true
                 if (!handleRaceEvents() && racing.detectedMandatoryRaceCheck) {
                     return TaskResult.Success(
                         TaskResultCode.TASK_RESULT_BREAKPOINT_REACHED,
@@ -3380,6 +3384,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 }
             } else if (checkRacingScreen()) {
                 // If the bot is already at the Racing screen, then complete this standalone race.
+                careerScreenObservedThisTask = true
                 racing.handleStandaloneRace()
             } else if (checkEndScreen()) {
                 // Stop when the bot has reached the screen where it details the overall result of the run.
@@ -3777,8 +3782,11 @@ abstract class Campaign(game: Game) : Task(game) {
             MessageLog.w(TAG, "[RECOVERY] Stuck for $count cycles and gesture rebinds did not help - relaunching the game as a last resort before stopping.")
             if (game.restartGame()) {
                 // Give the relaunch a fresh window: the next ticks land on the game's title/lobby,
-                // which the lobby re-entry branch above resumes into the interrupted career.
+                // which the lobby re-entry branch above resumes into the interrupted career. The
+                // re-entry budget resets too - the relaunched game is a fresh lobby, not the one any
+                // earlier failed re-entries were fighting.
                 consecutiveUnknownScreenCount = 0
+                lobbyReentryAttempts = 0
                 return
             }
             MessageLog.w(TAG, "[RECOVERY] Game relaunch could not be dispatched; falling through to the standard stop.")

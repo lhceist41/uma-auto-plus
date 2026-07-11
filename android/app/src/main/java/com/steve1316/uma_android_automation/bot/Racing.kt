@@ -1595,8 +1595,11 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val maxRaceDurationMs = 210_000L
 
         do {
-            if (System.currentTimeMillis() - raceStartMs > maxRaceDurationMs) {
-                MessageLog.w(TAG, "[WARN] runRaceWithRetries:: Race exceeded the ${maxRaceDurationMs / 1000}s budget without reaching results. Exiting race retry loop...")
+            // Scale the budget per attempt: a retried race runs the playback again, and a retry of a
+            // FIRST-TIME race may replay live a second time - a single fixed window would bail mid-retry.
+            val budgetMs = maxRaceDurationMs * (1 + retriesThisRace)
+            if (System.currentTimeMillis() - raceStartMs > budgetMs) {
+                MessageLog.w(TAG, "[WARN] runRaceWithRetries:: Race exceeded the ${budgetMs / 1000}s budget without reaching results. Exiting race retry loop...")
                 return false
             }
 
