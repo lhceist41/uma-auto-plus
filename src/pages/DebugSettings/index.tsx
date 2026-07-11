@@ -39,6 +39,7 @@ const DebugSettings = () => {
         "debugMode_startTrackblazerBuyItemsTest",
         "debugMode_startTraineeSelectTest",
         "debugMode_startDeckStatReadTest",
+        "debugMode_startRainbowDetectionTest",
     ] as const
 
     /**
@@ -588,6 +589,15 @@ const DebugSettings = () => {
                                 onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startDeckStatReadTest", checked)}
                                 label="Start Deck Stat Read Test"
                                 description="Read-only [DECK] calibration. Park the game on the deck-selection screen (the one with Start Career! and Perks), then start the bot: it logs the support-card count it reads for each stat type and the build's core stat, without tapping anything, so the count-row OCR regions can be tuned. Tagged [DECK-TEST] in the log."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-rainbow-detection-test"
+                                checked={bsc.settings.debug.debugMode_startRainbowDetectionTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startRainbowDetectionTest", checked)}
+                                label="Start Rainbow Detection Test"
+                                description="Disables normal bot operations and starts the Rainbow detection test. Run it while the game shows the Training screen: it detects the rainbow glow ring on each support face circle for a few seconds, logs the per-support hue metrics and the derived rainbow count, and saves an annotated crop for calibration."
                                 style={{ marginTop: 10 }}
                             />
                         </View>

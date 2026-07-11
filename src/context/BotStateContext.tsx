@@ -222,6 +222,7 @@ export interface Settings {
         debugMode_startTrackblazerBuyItemsTest: boolean
         debugMode_startTraineeSelectTest: boolean
         debugMode_startDeckStatReadTest: boolean
+        debugMode_startRainbowDetectionTest: boolean
         enableScreenRecording: boolean
         recordingBitRate: number
         recordingFrameRate: number
@@ -671,6 +672,7 @@ export const defaultSettings: Settings = {
         debugMode_startTrackblazerBuyItemsTest: false,
         debugMode_startTraineeSelectTest: false,
         debugMode_startDeckStatReadTest: false,
+        debugMode_startRainbowDetectionTest: false,
         enableScreenRecording: false,
         recordingBitRate: 6,
         recordingFrameRate: 30,

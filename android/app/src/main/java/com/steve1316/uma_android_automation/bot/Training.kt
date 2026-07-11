@@ -1619,7 +1619,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     val startTimeRelationshipBars = System.currentTimeMillis()
                     try {
                         result.relationshipBars = game.imageUtils.analyzeRelationshipBars(sourceBitmap, statName, game.scenario)
-                        result.numRainbow = result.relationshipBars.count { barFillResult -> barFillResult.isRainbow }
+                        // Count rainbow trainings directly from the glowing support face circles rather than inferring from an orange relationship bar, which also fired on maxed
+                        // supports that were not actually glowing.
+                        result.numRainbow = game.imageUtils.countRainbowTrainings(sourceBitmap)
                     } catch (e: Exception) {
                         Log.e(TAG, "[ERROR] analyzeTrainings:: Error in analyzeRelationshipBars: ${e.stackTraceToString()}")
                         result.relationshipBars = arrayListOf()
