@@ -3462,13 +3462,19 @@ abstract class Campaign(game: Game) : Task(game) {
 
                 // Re-open the Details dialog to read the owned skills from its Skills tab - the first open was consumed by the standard dialog handler (final stats + aptitudes),
                 // which closes the dialog on its way out. The owned skills and unique level feed the estimated rank below.
-                if (buttonLocation != null) {
-                    ButtonDetails.click(game.imageUtils)
+                // Gate on the re-click actually landing: if it misses (screen already moved on), the tab
+                // tap, scroll swipes, and close-fallback tap would all fire blind on an unknown screen.
+                if (buttonLocation != null && ButtonDetails.click(game.imageUtils)) {
                     game.wait(1.0)
                     val ownedSkills = SkillList(game, this).parseDetailsSkillsTab()
-                    trainee.ownedSkillNames.clear()
-                    trainee.ownedSkillNames.addAll(ownedSkills.skillNames)
-                    trainee.uniqueSkillLevel = ownedSkills.uniqueLevel
+                    // The Skills tab always holds at least the unique skill, so an empty read is a failed
+                    // read (tab never rendered, OCR blackout) - keep the purchase-tracked set instead of
+                    // wiping it, or the final estimate silently drops every skill the career bought.
+                    if (ownedSkills.skillNames.isNotEmpty()) {
+                        trainee.ownedSkillNames.clear()
+                        trainee.ownedSkillNames.addAll(ownedSkills.skillNames)
+                        trainee.uniqueSkillLevel = ownedSkills.uniqueLevel
+                    }
                     // Dismiss the dialog directly - it now shows the Skills tab, which the generic details handler must not process as a stats read. Same close idiom the
                     // between-run navigator uses for this card (wide Close template, else the card's fixed bottom-center Close position).
                     val closeBitmap = game.imageUtils.getSourceBitmap()
