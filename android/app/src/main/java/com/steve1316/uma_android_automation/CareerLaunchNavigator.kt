@@ -1397,6 +1397,12 @@ class CareerLaunchNavigator(private val context: Context) {
                     ocrEngine = "mlkit",
                     debugName = "${geometry.debugPrefix}$i",
                 ).trim()
+            // Every real spark shows at least 1 gold star. A starless, textless slot is past the
+            // end of the list: the keep-set dialog shrink-wraps to the set size and its body is
+            // not the pure white the break above expects, so the slots below the real set used to
+            // be recorded as phantom "unreadable" 0-star skill rows (53 of 165 kept-phase rows in
+            // the corpus, always contiguous at the tail).
+            if (goldStars == 0 && name.isEmpty()) break
             rows.add(SparkRowRead(name.ifEmpty { "unreadable" }, goldStars, kind))
         }
         return rows
