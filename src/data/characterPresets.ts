@@ -4197,7 +4197,7 @@ export const characterPresets: CharacterPreset[] = [
                 statPrioritization: ["Speed", "Power", "Wit", "Stamina", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Power", "Wit", "Stamina", "Guts"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Medium",
                 mustRestBeforeSummer: true,
@@ -4401,7 +4401,7 @@ export const characterPresets: CharacterPreset[] = [
                 statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Power", "Stamina", "Wit", "Guts"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Mile",
                 mustRestBeforeSummer: true,
@@ -4607,7 +4607,7 @@ export const characterPresets: CharacterPreset[] = [
                 statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Power", "Stamina", "Wit", "Guts"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Mile",
                 mustRestBeforeSummer: true,
@@ -7334,7 +7334,7 @@ export const characterPresets: CharacterPreset[] = [
                 statPrioritization: ["Speed", "Power", "Wit", "Stamina", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Power", "Wit", "Stamina", "Guts"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Medium",
                 mustRestBeforeSummer: true,
@@ -7538,7 +7538,7 @@ export const characterPresets: CharacterPreset[] = [
                 statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Power", "Stamina", "Wit", "Guts"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Mile",
                 mustRestBeforeSummer: true,
@@ -7744,7 +7744,7 @@ export const characterPresets: CharacterPreset[] = [
                 statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Power", "Stamina", "Wit", "Guts"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Mile",
                 mustRestBeforeSummer: true,
@@ -45885,9 +45885,11 @@ export const characterPresets: CharacterPreset[] = [
     // Daiwa Scarlet (Legacy Farm) - parent/legacy-farming clone of the Daiwa Scarlet URA
     // preset; only the racing-plan block differs. 10 planned G1 on top of her 7 G1 goals
     // gives 17 G1 entries per career (G1 wins drive white-spark race factors at career
-    // end). Core stats >= 1100 is the blue-spark threshold the build chases; the source
-    // preset's focusOnSparkStatTarget (Speed/Power) already carries the target stats and
-    // is kept. Generator warnings: Takarazuka Kinen is planned in both its years - fine
+    // end). The blue spark's stat is drawn at random from all five and its 3-star odds are
+    // banded by that stat's final value (600+ required, ~5-6%; doubles at 1100+), so
+    // focusOnSparkStatTarget lists all five stats: the sub-600 rescue boost lifts stragglers
+    // over the floor late-career and is a uniform no-op early while everything is sub-600.
+    // Generator warnings: Takarazuka Kinen is planned in both its years - fine
     // for entry (decisions key on the plan's own turnNumber), but the bare-name race map
     // keeps only one year's row, which can mis-window the non-mandatory look-ahead. t33
     // NHK Mile Cup is adjacent to a goal turn and extends a forced streak (max
@@ -46063,7 +46065,7 @@ export const characterPresets: CharacterPreset[] = [
                 statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Power", "Stamina", "Wit", "Guts"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Mile",
                 mustRestBeforeSummer: true,
@@ -46115,9 +46117,11 @@ export const characterPresets: CharacterPreset[] = [
     // El Condor Pasa (Legacy Farm) - parent/legacy-farming clone of the El Condor Pasa URA
     // preset; only the racing-plan block differs. 15 planned G1 on top of his 5 G1 goals
     // gives 20 G1 entries per career (G1 wins drive white-spark race factors at career
-    // end). Core stats >= 1100 is the blue-spark threshold the build chases; the source
-    // preset's focusOnSparkStatTarget (Speed/Power) already carries the target stats and
-    // is kept. Generator warnings: Tenno Sho (Autumn) is planned in both its years - fine
+    // end). The blue spark's stat is drawn at random from all five and its 3-star odds are
+    // banded by that stat's final value (600+ required, ~5-6%; doubles at 1100+), so
+    // focusOnSparkStatTarget lists all five stats: the sub-600 rescue boost lifts stragglers
+    // over the floor late-career and is a uniform no-op early while everything is sub-600.
+    // Generator warnings: Tenno Sho (Autumn) is planned in both its years - fine
     // for entry (decisions key on the plan's own turnNumber), but the bare-name race map
     // keeps only one year's row, which can mis-window the non-mandatory look-ahead. t44
     // Tenno Sho (Autumn), t59 Yasuda Kinen, and t69 Queen Elizabeth II Cup are each
@@ -46302,7 +46306,7 @@ export const characterPresets: CharacterPreset[] = [
                 statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Power", "Stamina", "Wit", "Guts"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Mile",
                 mustRestBeforeSummer: true,
@@ -46354,8 +46358,10 @@ export const characterPresets: CharacterPreset[] = [
     // Air Groove (Legacy Farm) - parent/legacy-farming clone of the Air Groove URA preset;
     // only the racing-plan block differs. 7 planned G1 on top of her 7 G1 goals gives 14
     // G1 entries per career (G1 wins drive white-spark race factors at career end). Core
-    // stats >= 1100 is the blue-spark threshold the build chases; the source preset's
-    // focusOnSparkStatTarget (Speed/Power) already carries the target stats and is kept.
+    // stats: the blue spark's stat is drawn at random from all five and its 3-star odds are
+    // banded by that stat's final value (600+ required, ~5-6%; doubles at 1100+), so
+    // focusOnSparkStatTarget lists all five stats - the sub-600 rescue boost lifts stragglers
+    // over the floor late-career and is a uniform no-op early while everything is sub-600.
     // Generator warnings: Japan Cup is planned in both its years - fine for entry
     // (decisions key on the plan's own turnNumber), but the bare-name race map keeps only
     // one year's row, which can mis-window the non-mandatory look-ahead. t24 Hopeful
@@ -46536,7 +46542,7 @@ export const characterPresets: CharacterPreset[] = [
                 statPrioritization: ["Speed", "Power", "Wit", "Stamina", "Guts"],
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
-                focusOnSparkStatTarget: ["Speed", "Power"],
+                focusOnSparkStatTarget: ["Speed", "Power", "Wit", "Stamina", "Guts"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Medium",
                 mustRestBeforeSummer: true,
