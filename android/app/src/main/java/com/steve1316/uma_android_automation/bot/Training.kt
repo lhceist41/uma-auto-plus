@@ -365,6 +365,82 @@ class Training(private val game: Game, private val campaign: Campaign) {
         private val TAG: String = "[${MainActivity.loggerTag}]Training"
 
         /**
+         * Estimates the failure chance a facility should show at the given energy. Non-Wit facilities
+         * follow the game's ~2%-per-energy-point curve below 50 energy and read 0% at or above it; Wit
+         * gets its own flatter curve since it stays trainable at lower energy. A crude model, but a read
+         * deviating from it by more than the caller's tolerance is an OCR misread in practice.
+         *
+         * @param currentEnergy The trainee's current energy (0-100).
+         * @param statName The facility, or null for the generic non-Wit curve.
+         * @return The estimated failure chance percentage (0-100).
+         */
+        fun estimateFailureChanceFromEnergy(currentEnergy: Int, statName: StatName? = null): Int {
+            val energy = currentEnergy.coerceIn(0, 100)
+            val estimated =
+                if (statName == StatName.WIT) {
+                    (161.4 * 0.9793.pow(energy.toDouble()) - 81.4).toInt()
+                } else {
+                    if (energy >= 50) 0 else (50 - energy) * 2
+                }
+            return estimated.coerceIn(0, 100)
+        }
+
+        /**
+         * Cross-validates failure chances and returns corrected values. Failure chances are
+         * monotonically non-decreasing in facility order - Speed <= Stamina <= Power <= Guts, with Wit
+         * apart since it naturally reads lower.
+         *
+         * First, any facility (including Wit) whose read sits far ABOVE the energy-based estimate is
+         * clamped down to the estimate - that catches a gross misread such as 99% at full energy, which
+         * otherwise strands the bot in energy recovery on a full-energy turn. Then any facility reading
+         * suspiciously below its successor is checked against the energy curve and corrected if it
+         * deviates heavily; a modest dip within tolerance is a genuine support-card effect and is kept.
+         * The tolerance also absorbs ordinary negative-status effects, so a genuinely raised chance from
+         * a condition is not clobbered.
+         *
+         * @param failureChances List of ([StatName], failureChance) pairs with valid (>= 0) values.
+         * @param currentEnergy The trainee's current energy level.
+         * @param suspiciousJumpThreshold Minimum difference to the successor to consider suspicious.
+         * @param outlierTolerance Maximum deviation from the energy estimate before a correction applies.
+         * @return Map of [StatName] to corrected failure chance.
+         */
+        fun crossValidateFailureChances(
+            failureChances: List<Pair<StatName, Int>>,
+            currentEnergy: Int,
+            suspiciousJumpThreshold: Int = 20,
+            outlierTolerance: Int = 30,
+        ): Map<StatName, Int> {
+            val clamped =
+                failureChances.map { (name, chance) ->
+                    val estimate = estimateFailureChanceFromEnergy(currentEnergy, name)
+                    name to if (chance - estimate > outlierTolerance) estimate else chance
+                }
+
+            // Wit is excluded from the monotonicity walk as it naturally has a lower failure chance.
+            val witEntry = clamped.filter { it.first == StatName.WIT }
+            val withoutWit = clamped.filter { it.first != StatName.WIT }
+
+            if (withoutWit.size < 2) return clamped.toMap()
+
+            val sorted = withoutWit.sortedBy { it.first.ordinal }.toMutableList()
+
+            // Walk backwards: correct any value suspiciously lower than its successor.
+            for (i in sorted.size - 2 downTo 0) {
+                val (currentName, currentChance) = sorted[i]
+                val (_, nextChance) = sorted[i + 1]
+
+                if (nextChance - currentChance > suspiciousJumpThreshold) {
+                    val expectedChance = estimateFailureChanceFromEnergy(currentEnergy, currentName)
+                    if (kotlin.math.abs(currentChance - expectedChance) > outlierTolerance) {
+                        sorted[i] = currentName to expectedChance
+                    }
+                }
+            }
+
+            return (sorted + witEntry).toMap()
+        }
+
+        /**
          * Decide whether a training is admissible as a Trackblazer irregular-training hijack (skip a
          * voluntary race to train this turn instead). Pure so it is directly unit-testable. Three paths:
          *  - C1: main-stat gain >= the phase-curved baseline threshold (a strong training stands alone).
@@ -1830,6 +1906,10 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     }
                 }
 
+                // Cross-validate the failure chances across facilities to correct OCR misreads before
+                // they feed scoring and the cache.
+                normalizeFailureChances(analysisResults)
+
                 // Process results and populate training maps.
                 processAnalysisResults(analysisResults, ignoreFailureChance, isIrregularEvaluation, test)
 
@@ -1996,6 +2076,29 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     trainingLevel = result.trainingLevel,
                 )
             trainingMap[result.name] = newTraining
+        }
+    }
+
+    /**
+     * Cross-validates and corrects the failure chances across all training results via
+     * [crossValidateFailureChances], logging any correction it applies.
+     *
+     * @param results The list of [TrainingAnalysisResult] to normalize in place.
+     */
+    private fun normalizeFailureChances(results: List<TrainingAnalysisResult>) {
+        val validResults = results.filter { it.failureChance >= 0 }
+        if (validResults.size < 2) return
+
+        val corrected = crossValidateFailureChances(validResults.map { it.name to it.failureChance }, campaign.trainee.energy)
+        for (result in validResults) {
+            val newValue = corrected[result.name] ?: continue
+            if (newValue != result.failureChance) {
+                MessageLog.w(
+                    TAG,
+                    "[WARN] normalizeFailureChances:: ${result.name} failure chance corrected from ${result.failureChance}% to $newValue% (cross-validated against the other facilities and the energy curve).",
+                )
+                result.failureChance = newValue
+            }
         }
     }
 
