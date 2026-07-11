@@ -612,6 +612,27 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
         // that, gets the badge.
         recommended: ["Trackblazer"],
     },
+    "Daiwa Scarlet (Legacy Farm)": {
+        // Parent-farming agenda: a mandatory 10-race G1 plan stacked on her 7 G1 goals
+        // (17 G1 entries per career) to farm white-spark race factors, chasing 1100+ core
+        // stats for top blue-spark odds. More racing, fewer training turns - not a preset
+        // for badge or rating chasing.
+        recommended: ["URA Finale"],
+    },
+    "El Condor Pasa (Legacy Farm)": {
+        // Parent-farming agenda: a mandatory 15-race G1 plan stacked on his 5 G1 goals
+        // (20 G1 entries per career, the densest of the three legacy builds) to farm
+        // white-spark race factors, chasing 1100+ core stats for top blue-spark odds.
+        // More racing, fewer training turns - not a preset for badge or rating chasing.
+        recommended: ["URA Finale"],
+    },
+    "Air Groove (Legacy Farm)": {
+        // Parent-farming agenda: a mandatory 7-race G1 plan stacked on her 7 G1 goals
+        // (14 G1 entries per career) to farm white-spark race factors, chasing 1100+ core
+        // stats for top blue-spark odds. More racing, fewer training turns - not a preset
+        // for badge or rating chasing.
+        recommended: ["URA Finale"],
+    },
 }
 
 /**
@@ -45845,6 +45866,709 @@ export const characterPresets: CharacterPreset[] = [
                 trainingLongStatTarget_powerStatTarget: 800,
                 trainingLongStatTarget_gutsStatTarget: 300,
                 trainingLongStatTarget_witStatTarget: 400,
+            },
+            scenarioOverrides: {
+                trackblazerConsecutiveRacesLimit: 5,
+                trackblazerEnergyThreshold: 40,
+                trackblazerShopCheckGrades: ["G1"],
+                trackblazerMinStatGainForCharm: 15,
+                trackblazerMaxRetriesPerRace: 3,
+                trackblazerWhistleForcesTraining: false,
+                trackblazerRetryRacesBeforeFinalGrades: ["G1"],
+                trackblazerEnableIrregularTraining: false,
+                trackblazerIrregularTrainingMinStatGain: 20,
+                trackblazerExcludedItems: ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food", "Coaching Megaphone", "Guts Scroll", "Guts Manual"],
+                trackblazerShopCheckFrequency: 3,
+            },
+        },
+    },
+    // Daiwa Scarlet (Legacy Farm) - parent/legacy-farming clone of the Daiwa Scarlet URA
+    // preset; only the racing-plan block differs. 10 planned G1 on top of her 7 G1 goals
+    // gives 17 G1 entries per career (G1 wins drive white-spark race factors at career
+    // end). Core stats >= 1100 is the blue-spark threshold the build chases; the source
+    // preset's focusOnSparkStatTarget (Speed/Power) already carries the target stats and
+    // is kept. Generator warnings: Takarazuka Kinen is planned in both its years - fine
+    // for entry (decisions key on the plan's own turnNumber), but the bare-name race map
+    // keeps only one year's row, which can mis-window the non-mandatory look-ahead. t33
+    // NHK Mile Cup is adjacent to a goal turn and extends a forced streak (max
+    // consecutive-race streak incl. goals: 2).
+    {
+        name: "Daiwa Scarlet (Legacy Farm)",
+        scenario: "URA Finale",
+        settings: {
+            general: {
+                scenario: "URA Finale",
+                enablePopupCheck: false,
+                enableCraneGameAttempt: true,
+                enableStopBeforeFinals: false,
+                enableStopAtDate: false,
+                stopAtDates: ["Senior January Early"],
+                waitDelay: 0.5,
+                dialogWaitDelay: 0.5,
+            },
+            racing: {
+                // The mandatory plan below owns the racing agenda - interval fan farming
+                // stays off (it is structurally inert under mandatory-plan mode anyway).
+                enableFarmingFans: false,
+                // Mandatory-plan mode overrides the in-game consecutive-race warning at
+                // runtime, so this flag never fires on planned races - the plan's spacing
+                // is the guardrail.
+                ignoreConsecutiveRaceWarning: false,
+                daysToRunExtraRaces: 5,
+                disableRaceRetries: false,
+                enableFreeRaceRetry: true,
+                enableCompleteCareerOnFailure: true,
+                enableStopOnMandatoryRaces: false,
+                enableForceRacing: false,
+                enableUserInGameRaceAgenda: false,
+                limitRacesToInGameAgenda: false,
+                skipSummerTrainingForAgenda: false,
+                selectedUserAgenda: "Agenda 1",
+                customAgendaTitle: "",
+                enableRacingPlan: true,
+                enableMandatoryRacingPlan: true,
+                racingPlan: JSON.stringify([
+                    { raceName: "Asahi Hai Futurity Stakes", date: "Junior Class December, First Half", priority: 1, turnNumber: 23 },
+                    { raceName: "Hopeful Stakes", date: "Junior Class December, Second Half", priority: 2, turnNumber: 24 },
+                    { raceName: "NHK Mile Cup", date: "Classic Class May, First Half", priority: 3, turnNumber: 33 },
+                    { raceName: "Takarazuka Kinen", date: "Classic Class June, Second Half", priority: 4, turnNumber: 36 },
+                    { raceName: "Arima Kinen", date: "Classic Class December, Second Half", priority: 5, turnNumber: 48 },
+                    { raceName: "Tenno Sho (Spring)", date: "Senior Class April, Second Half", priority: 6, turnNumber: 56 },
+                    { raceName: "Victoria Mile", date: "Senior Class May, First Half", priority: 7, turnNumber: 57 },
+                    { raceName: "Yasuda Kinen", date: "Senior Class June, First Half", priority: 8, turnNumber: 59 },
+                    { raceName: "Takarazuka Kinen", date: "Senior Class June, Second Half", priority: 9, turnNumber: 60 },
+                    { raceName: "Japan Cup", date: "Senior Class November, Second Half", priority: 10, turnNumber: 70 },
+                ]),
+                minFansThreshold: 0,
+                preferredTerrain: "Turf",
+                preferredGrades: ["G1", "G2", "G3"],
+                preferredDistances: ["Mile", "Short", "Medium", "Long"],
+                lookAheadDays: 10,
+                smartRacingCheckInterval: 2,
+                juniorYearRaceStrategy: "Default",
+                originalRaceStrategy: "Default",
+                minimumQualityThreshold: 50,
+                timeDecayFactor: 0.7,
+                improvementThreshold: 50,
+            },
+            skills: {
+                enableSkillPointCheck: true,
+                skillPointCheck: 350,
+                preferredRunningStyle: "front_runner",
+                preferredTrackDistance: "mile",
+                preferredTrackSurface: "turf",
+                plans: {
+                    skillPointCheck: {
+                        enabled: true,
+                        strategy: "optimize_skills",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "200431,200541,200551,200531,201251,201241,201041,201031,200681,200331,200021,201281,200352,200382,200552",
+                    },
+                    preFinals: {
+                        enabled: true,
+                        strategy: "optimize_skills",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "200431,200541,200551,200531,201251,201241,201041,201031,200681,200331,200021,201281,200352,200382,200552",
+                    },
+                    careerComplete: {
+                        enabled: true,
+                        strategy: "optimize_knapsack",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "200431,200541,200551,200531,201251,201241,201041,201031,200681,200331,200021,201281,200352,200382,200552",
+                    },
+                },
+            },
+            trainingEvent: {
+                enablePrioritizeEnergyOptions: true,
+                enableAutomaticOCRRetry: true,
+                ocrConfidence: 90,
+                enableHideOCRComparisonResults: true,
+                specialEventOverrides: {
+                    "New Year's Resolutions": {
+                        selectedOption: "Option 2: Energy +20",
+                        requiresConfirmation: false,
+                    },
+                    "New Year's Shrine Visit": {
+                        selectedOption: "Option 1: Energy +30",
+                        requiresConfirmation: false,
+                    },
+                    "Victory!": {
+                        selectedOption: "Option 2: Energy -5/-20 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    "Solid Showing": {
+                        selectedOption: "Option 1: Energy -15 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    Defeat: {
+                        selectedOption: "Option 1: Energy -25 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    "Get Well Soon!": {
+                        selectedOption: "Option 2: (Random) Mood -1 / Stat decrease / Get Practice Poor negative status",
+                        requiresConfirmation: false,
+                    },
+                    "Don't Overdo It!": {
+                        selectedOption: "Option 1: Energy +10 / Mood -2 / Stat decrease / Get Practice Poor negative status",
+                        requiresConfirmation: false,
+                    },
+                    "Extra Training": {
+                        selectedOption: "Option 2: Energy +5",
+                        requiresConfirmation: false,
+                    },
+                    "Acupuncture (Just an Acupuncturist, No Worries! ☆)": {
+                        selectedOption: "Option 3: Energy recovery + Heal all negative status effects",
+                        requiresConfirmation: false,
+                    },
+                    "Etsuko's Exhaustive Coverage": {
+                        selectedOption: "Option 2: Energy Down / Gain skill points",
+                        requiresConfirmation: false,
+                    },
+                    "A Team at Last": {
+                        selectedOption: "Default",
+                        requiresConfirmation: false,
+                    },
+                },
+                characterEventOverrides: {
+                    "Daiwa Scarlet|The Weight of Racewear": 0,
+                    "Daiwa Scarlet|Recommended Restaurant": 0,
+                    "Daiwa Scarlet|Advice from an Older Student": 0,
+                    "Daiwa Scarlet|Enjoying Number One": 0,
+                    "Daiwa Scarlet|Can't Lose Sight of Number One!": 0,
+                    "Daiwa Scarlet|Acupuncture (Just an Acupuncturist, No Worries! ☆)": 2,
+                    "Daiwa Scarlet|Etsuko's Exhaustive Coverage (G1)": 1,
+                    "Daiwa Scarlet|Etsuko's Exhaustive Coverage (G2/G3)": 1,
+                    "Daiwa Scarlet|Etsuko's Exhaustive Coverage (Pre/OP)": 1,
+                    "Daiwa Scarlet|The Best Pose": 0,
+                    "Daiwa Scarlet|Her": 0,
+                    "Daiwa Scarlet|Failed training (Get Well Soon!)": 1,
+                    "Daiwa Scarlet|Failed training (Don't Overdo It!)": 0,
+                    "Daiwa Scarlet|At Summer Camp (Year 2)": 0,
+                    "Daiwa Scarlet|Dance Lesson": 1,
+                },
+                supportEventOverrides: {},
+                scenarioEventOverrides: {},
+            },
+            misc: {
+                enableSettingsDisplay: false,
+                enableMessageIdDisplay: false,
+                messageLogFontSize: 8,
+                overlayButtonSizeDP: 40,
+            },
+            training: {
+                trainingBlacklist: [],
+                statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
+                maximumFailureChance: 15,
+                disableTrainingOnMaxedStat: true,
+                focusOnSparkStatTarget: ["Speed", "Power"],
+                enableRainbowTrainingBonus: false,
+                preferredDistanceOverride: "Mile",
+                mustRestBeforeSummer: true,
+                enableRiskyTraining: false,
+                riskyTrainingMinStatGain: 20,
+                riskyTrainingMaxFailureChance: 30,
+                trainWitDuringFinale: true,
+                enablePrioritizeSkillHints: true,
+                enableTrainingAnalysisValidation: false,
+                enableYoloStatDetection: false,
+            },
+            trainingStatTarget: {
+                trainingSprintStatTarget_speedStatTarget: 1200,
+                trainingSprintStatTarget_staminaStatTarget: 450,
+                trainingSprintStatTarget_powerStatTarget: 900,
+                trainingSprintStatTarget_gutsStatTarget: 500,
+                trainingSprintStatTarget_witStatTarget: 1200,
+                trainingMileStatTarget_speedStatTarget: 1200,
+                trainingMileStatTarget_staminaStatTarget: 650,
+                trainingMileStatTarget_powerStatTarget: 1000,
+                trainingMileStatTarget_gutsStatTarget: 250,
+                trainingMileStatTarget_witStatTarget: 450,
+                trainingMediumStatTarget_speedStatTarget: 1200,
+                trainingMediumStatTarget_staminaStatTarget: 700,
+                trainingMediumStatTarget_powerStatTarget: 900,
+                trainingMediumStatTarget_gutsStatTarget: 400,
+                trainingMediumStatTarget_witStatTarget: 600,
+                trainingLongStatTarget_speedStatTarget: 1200,
+                trainingLongStatTarget_staminaStatTarget: 900,
+                trainingLongStatTarget_powerStatTarget: 900,
+                trainingLongStatTarget_gutsStatTarget: 400,
+                trainingLongStatTarget_witStatTarget: 600,
+            },
+            scenarioOverrides: {
+                trackblazerConsecutiveRacesLimit: 5,
+                trackblazerEnergyThreshold: 40,
+                trackblazerShopCheckGrades: ["G1"],
+                trackblazerMinStatGainForCharm: 15,
+                trackblazerMaxRetriesPerRace: 3,
+                trackblazerWhistleForcesTraining: false,
+                trackblazerRetryRacesBeforeFinalGrades: ["G1"],
+                trackblazerEnableIrregularTraining: false,
+                trackblazerIrregularTrainingMinStatGain: 20,
+                trackblazerExcludedItems: ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food", "Coaching Megaphone", "Guts Scroll", "Guts Manual"],
+                trackblazerShopCheckFrequency: 3,
+            },
+        },
+    },
+    // El Condor Pasa (Legacy Farm) - parent/legacy-farming clone of the El Condor Pasa URA
+    // preset; only the racing-plan block differs. 15 planned G1 on top of his 5 G1 goals
+    // gives 20 G1 entries per career (G1 wins drive white-spark race factors at career
+    // end). Core stats >= 1100 is the blue-spark threshold the build chases; the source
+    // preset's focusOnSparkStatTarget (Speed/Power) already carries the target stats and
+    // is kept. Generator warnings: Tenno Sho (Autumn) is planned in both its years - fine
+    // for entry (decisions key on the plan's own turnNumber), but the bare-name race map
+    // keeps only one year's row, which can mis-window the non-mandatory look-ahead. t44
+    // Tenno Sho (Autumn), t59 Yasuda Kinen, and t69 Queen Elizabeth II Cup are each
+    // adjacent to a goal turn and extend a forced streak; the plan's single 3-streak runs
+    // t68 Tenno Sho (Autumn) -> t69 Queen Elizabeth II Cup -> the t70 Japan Cup goal (max
+    // consecutive-race streak incl. goals: 3).
+    {
+        name: "El Condor Pasa (Legacy Farm)",
+        scenario: "URA Finale",
+        settings: {
+            general: {
+                scenario: "URA Finale",
+                enablePopupCheck: false,
+                enableCraneGameAttempt: true,
+                enableStopBeforeFinals: false,
+                enableStopAtDate: false,
+                stopAtDates: ["Senior January Early"],
+                waitDelay: 0.5,
+                dialogWaitDelay: 0.5,
+            },
+            racing: {
+                // The mandatory plan below owns the racing agenda - interval fan farming
+                // stays off (it is structurally inert under mandatory-plan mode anyway).
+                enableFarmingFans: false,
+                // Mandatory-plan mode overrides the in-game consecutive-race warning at
+                // runtime, so this flag never fires on planned races - the plan's spacing
+                // is the guardrail.
+                ignoreConsecutiveRaceWarning: false,
+                daysToRunExtraRaces: 5,
+                disableRaceRetries: false,
+                enableFreeRaceRetry: true,
+                enableCompleteCareerOnFailure: true,
+                enableStopOnMandatoryRaces: false,
+                enableForceRacing: false,
+                enableUserInGameRaceAgenda: false,
+                limitRacesToInGameAgenda: false,
+                skipSummerTrainingForAgenda: false,
+                selectedUserAgenda: "Agenda 1",
+                customAgendaTitle: "",
+                enableRacingPlan: true,
+                enableMandatoryRacingPlan: true,
+                racingPlan: JSON.stringify([
+                    { raceName: "Asahi Hai Futurity Stakes", date: "Junior Class December, First Half", priority: 1, turnNumber: 23 },
+                    { raceName: "Hopeful Stakes", date: "Junior Class December, Second Half", priority: 2, turnNumber: 24 },
+                    { raceName: "Satsuki Sho", date: "Classic Class April, First Half", priority: 3, turnNumber: 31 },
+                    { raceName: "Takarazuka Kinen", date: "Classic Class June, Second Half", priority: 4, turnNumber: 36 },
+                    { raceName: "Japan Dirt Derby", date: "Classic Class July, First Half", priority: 5, turnNumber: 37 },
+                    { raceName: "Tenno Sho (Autumn)", date: "Classic Class October, Second Half", priority: 6, turnNumber: 44 },
+                    { raceName: "Japan Cup", date: "Classic Class November, Second Half", priority: 7, turnNumber: 46 },
+                    { raceName: "Arima Kinen", date: "Classic Class December, Second Half", priority: 8, turnNumber: 48 },
+                    { raceName: "February Stakes", date: "Senior Class February, Second Half", priority: 9, turnNumber: 52 },
+                    { raceName: "Osaka Hai", date: "Senior Class March, Second Half", priority: 10, turnNumber: 54 },
+                    { raceName: "Tenno Sho (Spring)", date: "Senior Class April, Second Half", priority: 11, turnNumber: 56 },
+                    { raceName: "Victoria Mile", date: "Senior Class May, First Half", priority: 12, turnNumber: 57 },
+                    { raceName: "Yasuda Kinen", date: "Senior Class June, First Half", priority: 13, turnNumber: 59 },
+                    { raceName: "Tenno Sho (Autumn)", date: "Senior Class October, Second Half", priority: 14, turnNumber: 68 },
+                    { raceName: "Queen Elizabeth II Cup", date: "Senior Class November, First Half", priority: 15, turnNumber: 69 },
+                ]),
+                minFansThreshold: 0,
+                preferredTerrain: "Turf",
+                preferredGrades: ["G1", "G2", "G3"],
+                preferredDistances: ["Mile", "Short", "Medium", "Long"],
+                lookAheadDays: 10,
+                smartRacingCheckInterval: 2,
+                juniorYearRaceStrategy: "Default",
+                originalRaceStrategy: "Default",
+                minimumQualityThreshold: 50,
+                timeDecayFactor: 0.7,
+                improvementThreshold: 50,
+            },
+            skills: {
+                enableSkillPointCheck: true,
+                skillPointCheck: 350,
+                preferredRunningStyle: "pace_chaser",
+                preferredTrackDistance: "mile",
+                preferredTrackSurface: "turf",
+                plans: {
+                    skillPointCheck: {
+                        enabled: true,
+                        strategy: "optimize_skills",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "200431,100711,200581,201321,201311,201041,201031,201351,200681,200331,200351,200021,200352,200382,201051",
+                    },
+                    preFinals: {
+                        enabled: true,
+                        strategy: "optimize_skills",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "200431,100711,200581,201321,201311,201041,201031,201351,200681,200331,200351,200021,200352,200382,201051",
+                    },
+                    careerComplete: {
+                        enabled: true,
+                        strategy: "optimize_knapsack",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "200431,100711,200581,201321,201311,201041,201031,201351,200681,200331,200351,200021,200352,200382,201051",
+                    },
+                },
+            },
+            trainingEvent: {
+                enablePrioritizeEnergyOptions: true,
+                enableAutomaticOCRRetry: true,
+                ocrConfidence: 90,
+                enableHideOCRComparisonResults: true,
+                specialEventOverrides: {
+                    "New Year's Resolutions": {
+                        selectedOption: "Option 2: Energy +20",
+                        requiresConfirmation: false,
+                    },
+                    "New Year's Shrine Visit": {
+                        selectedOption: "Option 1: Energy +30",
+                        requiresConfirmation: false,
+                    },
+                    "Victory!": {
+                        selectedOption: "Option 2: Energy -5/-20 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    "Solid Showing": {
+                        selectedOption: "Option 1: Energy -15 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    Defeat: {
+                        selectedOption: "Option 1: Energy -25 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    "Get Well Soon!": {
+                        selectedOption: "Option 2: (Random) Mood -1 / Stat decrease / Get Practice Poor negative status",
+                        requiresConfirmation: false,
+                    },
+                    "Don't Overdo It!": {
+                        selectedOption: "Option 1: Energy +10 / Mood -2 / Stat decrease / Get Practice Poor negative status",
+                        requiresConfirmation: false,
+                    },
+                    "Extra Training": {
+                        selectedOption: "Option 2: Energy +5",
+                        requiresConfirmation: false,
+                    },
+                    "Acupuncture (Just an Acupuncturist, No Worries! ☆)": {
+                        selectedOption: "Option 3: Energy recovery + Heal all negative status effects",
+                        requiresConfirmation: false,
+                    },
+                    "Etsuko's Exhaustive Coverage": {
+                        selectedOption: "Option 2: Energy Down / Gain skill points",
+                        requiresConfirmation: false,
+                    },
+                    "A Team at Last": {
+                        selectedOption: "Default",
+                        requiresConfirmation: false,
+                    },
+                },
+                characterEventOverrides: {
+                    "El Condor Pasa|Passion-filled Outfit": 1,
+                    "El Condor Pasa|A Personalized Mask": 0,
+                    "El Condor Pasa|Go for the Extra-Large Pizza!": 0,
+                    "El Condor Pasa|Hot and Spicy!": 0,
+                    "El Condor Pasa|Acupuncture (Just an Acupuncturist, No Worries! ☆)": 2,
+                    "El Condor Pasa|Determination of the World's Strongest": 0,
+                    "El Condor Pasa|Etsuko's Exhaustive Coverage (G1)": 1,
+                    "El Condor Pasa|Etsuko's Exhaustive Coverage (G2/G3)": 1,
+                    "El Condor Pasa|Etsuko's Exhaustive Coverage (Pre/OP)": 1,
+                    "El Condor Pasa|Passion! Connection! Guidance!": 0,
+                    "El Condor Pasa|A Challenge from the Past": 0,
+                    "El Condor Pasa|The Wrestler I Admire": 1,
+                    "El Condor Pasa|Shocking Retirement": 1,
+                    "El Condor Pasa|Failed training (Get Well Soon!)": 1,
+                    "El Condor Pasa|Failed training (Don't Overdo It!)": 0,
+                    "El Condor Pasa|At Summer Camp (Year 2)": 0,
+                    "El Condor Pasa|Cactus Feast": 0,
+                },
+                supportEventOverrides: {},
+                scenarioEventOverrides: {},
+            },
+            misc: {
+                enableSettingsDisplay: false,
+                enableMessageIdDisplay: false,
+                messageLogFontSize: 8,
+                overlayButtonSizeDP: 40,
+            },
+            training: {
+                trainingBlacklist: [],
+                statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
+                maximumFailureChance: 15,
+                disableTrainingOnMaxedStat: true,
+                focusOnSparkStatTarget: ["Speed", "Power"],
+                enableRainbowTrainingBonus: false,
+                preferredDistanceOverride: "Mile",
+                mustRestBeforeSummer: true,
+                enableRiskyTraining: false,
+                riskyTrainingMinStatGain: 20,
+                riskyTrainingMaxFailureChance: 30,
+                trainWitDuringFinale: true,
+                enablePrioritizeSkillHints: true,
+                enableTrainingAnalysisValidation: false,
+                enableYoloStatDetection: false,
+            },
+            trainingStatTarget: {
+                trainingSprintStatTarget_speedStatTarget: 1200,
+                trainingSprintStatTarget_staminaStatTarget: 450,
+                trainingSprintStatTarget_powerStatTarget: 900,
+                trainingSprintStatTarget_gutsStatTarget: 500,
+                trainingSprintStatTarget_witStatTarget: 1200,
+                trainingMileStatTarget_speedStatTarget: 1200,
+                trainingMileStatTarget_staminaStatTarget: 650,
+                trainingMileStatTarget_powerStatTarget: 900,
+                trainingMileStatTarget_gutsStatTarget: 250,
+                trainingMileStatTarget_witStatTarget: 450,
+                trainingMediumStatTarget_speedStatTarget: 1200,
+                trainingMediumStatTarget_staminaStatTarget: 700,
+                trainingMediumStatTarget_powerStatTarget: 800,
+                trainingMediumStatTarget_gutsStatTarget: 400,
+                trainingMediumStatTarget_witStatTarget: 600,
+                trainingLongStatTarget_speedStatTarget: 1200,
+                trainingLongStatTarget_staminaStatTarget: 900,
+                trainingLongStatTarget_powerStatTarget: 800,
+                trainingLongStatTarget_gutsStatTarget: 400,
+                trainingLongStatTarget_witStatTarget: 600,
+            },
+            scenarioOverrides: {
+                trackblazerConsecutiveRacesLimit: 5,
+                trackblazerEnergyThreshold: 40,
+                trackblazerShopCheckGrades: ["G1"],
+                trackblazerMinStatGainForCharm: 15,
+                trackblazerMaxRetriesPerRace: 3,
+                trackblazerWhistleForcesTraining: false,
+                trackblazerRetryRacesBeforeFinalGrades: ["G1"],
+                trackblazerEnableIrregularTraining: false,
+                trackblazerIrregularTrainingMinStatGain: 20,
+                trackblazerExcludedItems: ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food", "Coaching Megaphone", "Guts Scroll", "Guts Manual"],
+                trackblazerShopCheckFrequency: 3,
+            },
+        },
+    },
+    // Air Groove (Legacy Farm) - parent/legacy-farming clone of the Air Groove URA preset;
+    // only the racing-plan block differs. 7 planned G1 on top of her 7 G1 goals gives 14
+    // G1 entries per career (G1 wins drive white-spark race factors at career end). Core
+    // stats >= 1100 is the blue-spark threshold the build chases; the source preset's
+    // focusOnSparkStatTarget (Speed/Power) already carries the target stats and is kept.
+    // Generator warnings: Japan Cup is planned in both its years - fine for entry
+    // (decisions key on the plan's own turnNumber), but the bare-name race map keeps only
+    // one year's row, which can mis-window the non-mandatory look-ahead. t24 Hopeful
+    // Stakes, t33 NHK Mile Cup, and t59 Yasuda Kinen are each adjacent to a goal turn and
+    // extend a forced streak (max consecutive-race streak incl. goals: 2).
+    {
+        name: "Air Groove (Legacy Farm)",
+        scenario: "URA Finale",
+        settings: {
+            general: {
+                scenario: "URA Finale",
+                enablePopupCheck: false,
+                enableCraneGameAttempt: true,
+                enableStopBeforeFinals: false,
+                enableStopAtDate: false,
+                stopAtDates: ["Senior January Early"],
+                waitDelay: 0.5,
+                dialogWaitDelay: 0.5,
+            },
+            racing: {
+                // The mandatory plan below owns the racing agenda - interval fan farming
+                // stays off (it is structurally inert under mandatory-plan mode anyway).
+                enableFarmingFans: false,
+                // Mandatory-plan mode overrides the in-game consecutive-race warning at
+                // runtime, so this flag never fires on planned races - the plan's spacing
+                // is the guardrail.
+                ignoreConsecutiveRaceWarning: false,
+                daysToRunExtraRaces: 5,
+                disableRaceRetries: false,
+                enableFreeRaceRetry: true,
+                enableCompleteCareerOnFailure: true,
+                enableStopOnMandatoryRaces: false,
+                enableForceRacing: false,
+                enableUserInGameRaceAgenda: false,
+                limitRacesToInGameAgenda: false,
+                skipSummerTrainingForAgenda: false,
+                selectedUserAgenda: "Agenda 1",
+                customAgendaTitle: "",
+                enableRacingPlan: true,
+                enableMandatoryRacingPlan: true,
+                racingPlan: JSON.stringify([
+                    { raceName: "Hopeful Stakes", date: "Junior Class December, Second Half", priority: 1, turnNumber: 24 },
+                    { raceName: "NHK Mile Cup", date: "Classic Class May, First Half", priority: 2, turnNumber: 33 },
+                    { raceName: "Takarazuka Kinen", date: "Classic Class June, Second Half", priority: 3, turnNumber: 36 },
+                    { raceName: "Japan Cup", date: "Classic Class November, Second Half", priority: 4, turnNumber: 46 },
+                    { raceName: "Victoria Mile", date: "Senior Class May, First Half", priority: 5, turnNumber: 57 },
+                    { raceName: "Yasuda Kinen", date: "Senior Class June, First Half", priority: 6, turnNumber: 59 },
+                    { raceName: "Japan Cup", date: "Senior Class November, Second Half", priority: 7, turnNumber: 70 },
+                ]),
+                minFansThreshold: 0,
+                preferredTerrain: "Turf",
+                preferredGrades: ["G1", "G2", "G3"],
+                preferredDistances: ["Medium", "Short", "Mile", "Long"],
+                lookAheadDays: 10,
+                smartRacingCheckInterval: 2,
+                juniorYearRaceStrategy: "Default",
+                originalRaceStrategy: "Default",
+                minimumQualityThreshold: 50,
+                timeDecayFactor: 0.7,
+                improvementThreshold: 50,
+            },
+            skills: {
+                enableSkillPointCheck: true,
+                skillPointCheck: 350,
+                preferredRunningStyle: "late_surger",
+                preferredTrackDistance: "medium",
+                preferredTrackSurface: "turf",
+                plans: {
+                    skillPointCheck: {
+                        enabled: true,
+                        strategy: "optimize_skills",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "200431,100711,201391,201381,201111,201101,201161,200331,200351,200021,200352,200382",
+                    },
+                    preFinals: {
+                        enabled: true,
+                        strategy: "optimize_skills",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "200431,100711,201391,201381,201111,201101,201161,200331,200351,200021,200352,200382",
+                    },
+                    careerComplete: {
+                        enabled: true,
+                        strategy: "optimize_knapsack",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "200431,100711,201391,201381,201111,201101,201161,200331,200351,200021,200352,200382",
+                    },
+                },
+            },
+            trainingEvent: {
+                enablePrioritizeEnergyOptions: true,
+                enableAutomaticOCRRetry: true,
+                ocrConfidence: 90,
+                enableHideOCRComparisonResults: true,
+                specialEventOverrides: {
+                    "New Year's Resolutions": {
+                        selectedOption: "Option 2: Energy +20",
+                        requiresConfirmation: false,
+                    },
+                    "New Year's Shrine Visit": {
+                        selectedOption: "Option 1: Energy +30",
+                        requiresConfirmation: false,
+                    },
+                    "Victory!": {
+                        selectedOption: "Option 2: Energy -5/-20 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    "Solid Showing": {
+                        selectedOption: "Option 1: Energy -15 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    Defeat: {
+                        selectedOption: "Option 1: Energy -25 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    "Get Well Soon!": {
+                        selectedOption: "Option 2: (Random) Mood -1 / Stat decrease / Get Practice Poor negative status",
+                        requiresConfirmation: false,
+                    },
+                    "Don't Overdo It!": {
+                        selectedOption: "Option 1: Energy +10 / Mood -2 / Stat decrease / Get Practice Poor negative status",
+                        requiresConfirmation: false,
+                    },
+                    "Extra Training": {
+                        selectedOption: "Option 2: Energy +5",
+                        requiresConfirmation: false,
+                    },
+                    "Acupuncture (Just an Acupuncturist, No Worries! ☆)": {
+                        selectedOption: "Option 3: Energy recovery + Heal all negative status effects",
+                        requiresConfirmation: false,
+                    },
+                    "Etsuko's Exhaustive Coverage": {
+                        selectedOption: "Option 2: Energy Down / Gain skill points",
+                        requiresConfirmation: false,
+                    },
+                    "A Team at Last": {
+                        selectedOption: "Default",
+                        requiresConfirmation: false,
+                    },
+                },
+                characterEventOverrides: {
+                    "Air Groove|The Empress and Mom": 0,
+                    "Air Groove|Seize Her!": 1,
+                    "Air Groove|Take Good Care of Your Tail": 1,
+                    "Air Groove|A Taste of Effort": 0,
+                    "Air Groove|Imprinted Memories": 0,
+                    "Air Groove|Acupuncture (Just an Acupuncturist, No Worries! ☆)": 2,
+                    "Air Groove|Flowers for You": 1,
+                    "Air Groove|Etsuko's Exhaustive Coverage (G1)": 1,
+                    "Air Groove|Etsuko's Exhaustive Coverage (G2/G3)": 1,
+                    "Air Groove|Etsuko's Exhaustive Coverage (Pre/OP)": 1,
+                    "Air Groove|Who Will Stand Beside Her?": 1,
+                    "Air Groove|Never-Ending Road": 1,
+                    "Air Groove|Operation: Flowerbed": 1,
+                    "Air Groove|Suggestion Box of Freedom": 1,
+                    "Air Groove|A Little Encounter": 0,
+                    "Air Groove|Sweet Potato Cake": 0,
+                    "Air Groove|Smoldering Silently": 1,
+                    "Air Groove|Failed training (Get Well Soon!)": 1,
+                    "Air Groove|Failed training (Don't Overdo It!)": 0,
+                    "Air Groove|At Summer Camp (Year 2)": 0,
+                    "Air Groove|A Beautiful Stress Relief Method?": 0,
+                    "Air Groove|Guidepost": 0,
+                },
+                supportEventOverrides: {},
+                scenarioEventOverrides: {},
+            },
+            misc: {
+                enableSettingsDisplay: false,
+                enableMessageIdDisplay: false,
+                messageLogFontSize: 8,
+                overlayButtonSizeDP: 40,
+            },
+            training: {
+                trainingBlacklist: [],
+                statPrioritization: ["Speed", "Power", "Wit", "Stamina", "Guts"],
+                maximumFailureChance: 15,
+                disableTrainingOnMaxedStat: true,
+                focusOnSparkStatTarget: ["Speed", "Power"],
+                enableRainbowTrainingBonus: false,
+                preferredDistanceOverride: "Medium",
+                mustRestBeforeSummer: true,
+                enableRiskyTraining: false,
+                riskyTrainingMinStatGain: 20,
+                riskyTrainingMaxFailureChance: 30,
+                trainWitDuringFinale: true,
+                enablePrioritizeSkillHints: true,
+                enableTrainingAnalysisValidation: false,
+                enableYoloStatDetection: false,
+            },
+            trainingStatTarget: {
+                trainingSprintStatTarget_speedStatTarget: 1200,
+                trainingSprintStatTarget_staminaStatTarget: 450,
+                trainingSprintStatTarget_powerStatTarget: 900,
+                trainingSprintStatTarget_gutsStatTarget: 500,
+                trainingSprintStatTarget_witStatTarget: 1200,
+                trainingMileStatTarget_speedStatTarget: 1200,
+                trainingMileStatTarget_staminaStatTarget: 650,
+                trainingMileStatTarget_powerStatTarget: 900,
+                trainingMileStatTarget_gutsStatTarget: 400,
+                trainingMileStatTarget_witStatTarget: 800,
+                trainingMediumStatTarget_speedStatTarget: 1200,
+                trainingMediumStatTarget_staminaStatTarget: 450,
+                trainingMediumStatTarget_powerStatTarget: 800,
+                trainingMediumStatTarget_gutsStatTarget: 250,
+                trainingMediumStatTarget_witStatTarget: 700,
+                trainingLongStatTarget_speedStatTarget: 1200,
+                trainingLongStatTarget_staminaStatTarget: 1000,
+                trainingLongStatTarget_powerStatTarget: 800,
+                trainingLongStatTarget_gutsStatTarget: 400,
+                trainingLongStatTarget_witStatTarget: 600,
             },
             scenarioOverrides: {
                 trackblazerConsecutiveRacesLimit: 5,
