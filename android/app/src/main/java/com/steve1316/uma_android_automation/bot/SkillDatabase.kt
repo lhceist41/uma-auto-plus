@@ -32,6 +32,35 @@ class SkillDatabase(private val game: Game) {
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]SkillDatabase"
 
+        // Affinity roles for the estimated-rank skill scoring, keyed by the numeric values the game data uses in skill conditions.
+        private val STYLE_ROLES = mapOf("1" to "Front", "2" to "Pace", "3" to "Late", "4" to "End")
+        private val DISTANCE_ROLES = mapOf("1" to "Sprint", "2" to "Mile", "3" to "Medium", "4" to "Long")
+        private val GROUND_ROLES = mapOf("1" to "Turf", "2" to "Dirt")
+        private val CHECK_TYPE_PATTERN = Regex("(running_style|distance_type|ground_type)==(\\d+)")
+
+        /**
+         * Derives a skill's aptitude affinity ("checkType") from its activation condition and precondition strings, for the estimated-rank skill scoring. Reproduces UmaTools'
+         * `affinity_role` for ~97% of skills. Returns "" when the skill has no aptitude affinity, in which case it scores its flat base.
+         *
+         * @param condition The skill's activation condition string, e.g. "running_style==3&up_slope_random==1".
+         * @param precondition The skill's precondition string, which can carry affinity tokens too.
+         * @return The affinity roles joined with "/", ordered surface then distance then style, e.g. "Dirt/Mile" - or "" for none.
+         */
+        fun deriveCheckType(condition: String, precondition: String): String {
+            val surface = LinkedHashSet<String>()
+            val distance = LinkedHashSet<String>()
+            val style = LinkedHashSet<String>()
+            for (match in CHECK_TYPE_PATTERN.findAll("$condition&$precondition")) {
+                val (variable, value) = match.destructured
+                when (variable) {
+                    "ground_type" -> GROUND_ROLES[value]?.let { surface.add(it) }
+                    "distance_type" -> DISTANCE_ROLES[value]?.let { distance.add(it) }
+                    "running_style" -> STYLE_ROLES[value]?.let { style.add(it) }
+                }
+            }
+            return (surface + distance + style).joinToString("/")
+        }
+
         /** The name of the skills table in the database. */
         private const val TABLE_SKILLS = "skills"
 

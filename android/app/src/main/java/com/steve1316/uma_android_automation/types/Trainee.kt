@@ -34,6 +34,7 @@ import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.types.TrackDistance
 import com.steve1316.uma_android_automation.types.TrackSurface
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
+import com.steve1316.uma_scoring.RankResult
 import net.ricecode.similarity.JaroWinklerStrategy
 import net.ricecode.similarity.StringSimilarityServiceImpl
 import org.opencv.core.Point
@@ -187,6 +188,15 @@ class Trainee {
 
     /** Whether the trainee's preferred [RunningStyle] has been locked in on the race prep screen. */
     var bHasSetRunningStyle: Boolean = false
+
+    /** Names of skills the trainee currently owns, used to score the estimated rank. Seeded from the Details "Skills" tab and augmented as the bot buys skills. */
+    val ownedSkillNames: MutableSet<String> = mutableSetOf()
+
+    /** The trainee's unique-skill level read from the Skills tab, or 0 when unknown. */
+    var uniqueSkillLevel: Int = 0
+
+    /** The most recently computed estimated overall rank, or null before the first computation. */
+    var estimatedRank: RankResult? = null
 
     /** The trainee's approximate energy percentage (0-100). */
     var energy: Int = 100
@@ -931,6 +941,7 @@ class Trainee {
         MessageLog.v(TAG, "[TRAINEE] Energy: $energy%")
         MessageLog.v(TAG, "[TRAINEE] Fans: $fans")
         MessageLog.v(TAG, "[TRAINEE] Skill Points: $skillPoints")
+        estimatedRank?.let { MessageLog.v(TAG, "[TRAINEE] Estimated Rank: ${it.rankLabel} (${it.totalScore})") }
         val trackString = "Turf=${trackSurfaceAptitudes[TrackSurface.TURF]}, Dirt=${trackSurfaceAptitudes[TrackSurface.DIRT]}"
         val distanceString =
             "Sprint=${trackDistanceAptitudes[TrackDistance.SPRINT]}, Mile=${trackDistanceAptitudes[TrackDistance.MILE]}, Medium=${trackDistanceAptitudes[TrackDistance.MEDIUM]}, Long=${trackDistanceAptitudes[TrackDistance.LONG]}"

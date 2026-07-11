@@ -1324,12 +1324,16 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 val purchaseResult: SkillListEntry? = skillList.buySkill(name, point)
                 if (purchaseResult != null) {
                     MessageLog.i(TAG, "[INFO] Buying \"${purchaseResult.name}\" for ${purchaseResult.price} pts")
+                    // Track the purchase so the estimated rank stays current without re-reading the Details Skills tab.
+                    campaign.trainee.ownedSkillNames.add(purchaseResult.name)
                 }
             }
         } else {
             val purchaseResult: SkillListEntry? = skillList.buySkill(entry.name, point)
             if (purchaseResult != null) {
                 MessageLog.i(TAG, "[INFO] Buying \"${purchaseResult.name}\" for ${purchaseResult.price} pts")
+                // Track the purchase so the estimated rank stays current without re-reading the Details Skills tab.
+                campaign.trainee.ownedSkillNames.add(purchaseResult.name)
             }
         }
 

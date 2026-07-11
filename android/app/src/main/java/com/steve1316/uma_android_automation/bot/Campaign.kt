@@ -17,6 +17,7 @@ import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonCareerEndSkills
 import com.steve1316.uma_android_automation.components.ButtonChangeRunningStyle
 import com.steve1316.uma_android_automation.components.ButtonClose
+import com.steve1316.uma_android_automation.components.ButtonCloseWide
 import com.steve1316.uma_android_automation.components.ButtonCompleteCareer
 import com.steve1316.uma_android_automation.components.ButtonConfirm
 import com.steve1316.uma_android_automation.components.ButtonCraneGame
@@ -74,6 +75,11 @@ import com.steve1316.uma_android_automation.types.GameDate
 import com.steve1316.uma_android_automation.types.Mood
 import com.steve1316.uma_android_automation.types.RunningStyle
 import com.steve1316.uma_android_automation.types.SkillList
+import com.steve1316.uma_android_automation.types.TrackDistance
+import com.steve1316.uma_android_automation.types.TrackSurface
+import com.steve1316.uma_scoring.RankAptitudes
+import com.steve1316.uma_scoring.SkillScoreInput
+import com.steve1316.uma_scoring.estimateRank
 import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.types.Trainee
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
@@ -2682,7 +2688,8 @@ abstract class Campaign(game: Game) : Task(game) {
             return true
         }
 
-        // Print the trainee info after all turn-start updates and potential fan count updates.
+        // Compute the estimated overall rank, then print the trainee info after all turn-start updates and potential fan count updates.
+        updateEstimatedRank()
         trainee.logInfo()
 
         // Scenario-specific main screen entry hook (e.g. for item usage).
@@ -2698,6 +2705,43 @@ abstract class Campaign(game: Game) : Task(game) {
         // recorded inside executeAction land in the block. emit() is idempotent per turn.
         decisionTracer?.emit()
         return actionExecuted
+    }
+
+    /**
+     * Recomputes the trainee's estimated overall rank from her current stats, aptitudes, owned skills, and unique-skill level. The estimate mirrors the UmaTools calculator
+     * (an approximation of the game's unpublished formula), so it is labeled "Est." wherever shown; it lands in [Trainee.estimatedRank] for the turn log and the career ledger.
+     */
+    fun updateEstimatedRank() {
+        if (!trainee.bHasUpdatedStats) return
+        val aptitudes =
+            RankAptitudes(
+                turf = trainee.trackSurfaceAptitudes[TrackSurface.TURF]?.name ?: "G",
+                dirt = trainee.trackSurfaceAptitudes[TrackSurface.DIRT]?.name ?: "G",
+                sprint = trainee.trackDistanceAptitudes[TrackDistance.SPRINT]?.name ?: "G",
+                mile = trainee.trackDistanceAptitudes[TrackDistance.MILE]?.name ?: "G",
+                medium = trainee.trackDistanceAptitudes[TrackDistance.MEDIUM]?.name ?: "G",
+                long = trainee.trackDistanceAptitudes[TrackDistance.LONG]?.name ?: "G",
+                front = trainee.runningStyleAptitudes[RunningStyle.FRONT_RUNNER]?.name ?: "G",
+                pace = trainee.runningStyleAptitudes[RunningStyle.PACE_CHASER]?.name ?: "G",
+                late = trainee.runningStyleAptitudes[RunningStyle.LATE_SURGER]?.name ?: "G",
+                end = trainee.runningStyleAptitudes[RunningStyle.END_CLOSER]?.name ?: "G",
+            )
+        val skillInputs =
+            trainee.ownedSkillNames.toList().mapNotNull { skillName ->
+                val data = game.skillDatabase.getSkillData(skillName) ?: return@mapNotNull null
+                SkillScoreInput(data.evalPt, SkillDatabase.deriveCheckType(data.condition, data.precondition))
+            }
+        trainee.estimatedRank =
+            estimateRank(
+                trainee.stats.speed,
+                trainee.stats.stamina,
+                trainee.stats.power,
+                trainee.stats.guts,
+                trainee.stats.wit,
+                skillInputs,
+                aptitudes,
+                trainee.uniqueSkillLevel,
+            )
     }
 
     /**
@@ -3169,6 +3213,10 @@ abstract class Campaign(game: Game) : Task(game) {
                 put("finaleRaces", finaleRaces)
                 put("finaleWins", finaleRaces1st)
                 put("quality", quality)
+                trainee.estimatedRank?.let {
+                    put("estRank", it.rankLabel)
+                    put("estScore", it.totalScore)
+                }
                 if (result.code == TaskResultCode.TASK_RESULT_MANUALLY_STOPPED) {
                     StartModule.queueStopReason?.let { put("stopReason", it) }
                 }
@@ -3193,6 +3241,10 @@ abstract class Campaign(game: Game) : Task(game) {
             append(" finaleRaces=").append(finaleRaces)
             append(" finaleWins=").append(finaleRaces1st)
             append(" quality=").append(quality)
+            trainee.estimatedRank?.let {
+                append(" estRank=").append(it.rankLabel)
+                append(" estScore=").append(it.totalScore)
+            }
             if (result.code == TaskResultCode.TASK_RESULT_MANUALLY_STOPPED) {
                 StartModule.queueStopReason?.let { append(" stopReason=\"").append(it).append('"') }
             }
@@ -3373,6 +3425,27 @@ abstract class Campaign(game: Game) : Task(game) {
                 }
 
                 handleDialogs()
+
+                // Re-open the Details dialog to read the owned skills from its Skills tab - the first open was consumed by the standard dialog handler (final stats + aptitudes),
+                // which closes the dialog on its way out. The owned skills and unique level feed the estimated rank below.
+                if (buttonLocation != null) {
+                    ButtonDetails.click(game.imageUtils)
+                    game.wait(1.0)
+                    val ownedSkills = SkillList(game, this).parseDetailsSkillsTab()
+                    trainee.ownedSkillNames.clear()
+                    trainee.ownedSkillNames.addAll(ownedSkills.skillNames)
+                    trainee.uniqueSkillLevel = ownedSkills.uniqueLevel
+                    // Dismiss the dialog directly - it now shows the Skills tab, which the generic details handler must not process as a stats read. Same close idiom the
+                    // between-run navigator uses for this card (wide Close template, else the card's fixed bottom-center Close position).
+                    val closeBitmap = game.imageUtils.getSourceBitmap()
+                    if (!ButtonCloseWide.click(game.imageUtils, sourceBitmap = closeBitmap)) {
+                        game.gestureUtils.tap(closeBitmap.width * 0.5, closeBitmap.height * 0.86, "umamusume_details_close")
+                    }
+                    game.wait(1.0)
+                }
+
+                // Recompute the estimated rank from the final stats, aptitudes, and owned skills so the end-of-run log and the [CAREER_END] ledger reflect the completed career.
+                updateEstimatedRank()
 
                 // Print the final Trainee information.
                 trainee.logInfo()
