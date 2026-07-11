@@ -91,6 +91,12 @@ class Training(private val game: Game, private val campaign: Campaign) {
      * so replaying under a different flag yields non-equivalent decisions. */
     private var cachedIsIrregularEvaluation: Boolean = false
 
+    /** The turn (`campaign.date.day`) the cached analysis was written on. A hit must also match the
+     * current turn: an analysis-then-no-training turn (a race day, a forced rest) otherwise leaks its
+     * failure chances and gains across the turn boundary - caught live on a finale run, where turns
+     * 74 and 75 replayed turn 73's analysis. */
+    private var cachedAnalysisTurn: Int? = null
+
     /** The current training scenario name. */
     private val scenario = game.scenario
 
@@ -1207,20 +1213,21 @@ class Training(private val game: Game, private val campaign: Campaign) {
         } else if (singleTraining) {
             MessageLog.v(TAG, "\n[TRAINING] Now starting process to analyze the training on screen.")
         } else if (cachedAnalysisResults != null &&
+            cachedAnalysisTurn == campaign.date.day &&
             cachedIgnoreFailureChance == ignoreFailureChance &&
             cachedIsIrregularEvaluation == isIrregularEvaluation
         ) {
-            // Cache hit with matching evaluation flags. Safe to replay.
+            // Cache hit on the same turn with matching evaluation flags. Safe to replay.
             MessageLog.i(TAG, "[TRAINING] Using cached training analysis results for this turn.")
             processAnalysisResults(cachedAnalysisResults!!, ignoreFailureChance, isIrregularEvaluation, test)
             return
         } else if (cachedAnalysisResults != null) {
-            // Cache hit but flags differ from when the cache was written: re-run fresh. The stored
-            // TrainingAnalysisResult objects are mutable and may have been boosted/patched in place, so
-            // replaying them under different flags could yield non-equivalent (wrong) recommendations.
+            // Cache exists but is not reusable: written on a different turn, or under different flags.
+            // The stored TrainingAnalysisResult objects are mutable and may have been boosted/patched in
+            // place, and a prior turn's failure chances no longer hold after energy changed - re-run fresh.
             MessageLog.d(
                 TAG,
-                "[DEBUG] analyzeTrainings:: Cached results exist but flags changed (cached=ignore=$cachedIgnoreFailureChance/irregular=$cachedIsIrregularEvaluation, requested=ignore=$ignoreFailureChance/irregular=$isIrregularEvaluation). Re-analyzing from scratch.",
+                "[DEBUG] analyzeTrainings:: Cached results not reusable (cached turn=$cachedAnalysisTurn now=${campaign.date.day}; cached ignore=$cachedIgnoreFailureChance/irregular=$cachedIsIrregularEvaluation, requested ignore=$ignoreFailureChance/irregular=$isIrregularEvaluation). Re-analyzing from scratch.",
             )
         } else {
             MessageLog.v(TAG, "\n[TRAINING] Now starting process to analyze all 5 Trainings.")
@@ -1833,6 +1840,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     cachedAnalysisResults = analysisResults.toList()
                     cachedIgnoreFailureChance = ignoreFailureChance
                     cachedIsIrregularEvaluation = isIrregularEvaluation
+                    cachedAnalysisTurn = campaign.date.day
                 }
             }
         } else {
@@ -1999,6 +2007,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         cachedAnalysisResults = null
         cachedIgnoreFailureChance = false
         cachedIsIrregularEvaluation = false
+        cachedAnalysisTurn = null
         trainingMap.clear()
         skippedTrainingMap.clear()
         restrictedTrainingNames.clear()
