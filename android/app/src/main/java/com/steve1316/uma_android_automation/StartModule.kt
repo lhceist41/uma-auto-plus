@@ -1225,6 +1225,18 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             // Released in the finally below regardless of how the session ends.
             Game.acquireWakeLock(context)
             try {
+                // The library's session-end log save doesn't world-read its file the way
+                // writePerCareerLog does, which locks adb triage pulls out of exactly the
+                // segment that holds the between-run navigation and the sparks screens
+                // (observed 2026-07-12). Best-effort sweep at session start keeps every
+                // log file pullable, including ones written by past sessions.
+                try {
+                    context.getExternalFilesDir(null)?.let { filesDir ->
+                        java.io.File(filesDir, "logs").listFiles()?.forEach { it.setReadable(true, false) }
+                    }
+                } catch (_: Exception) {
+                }
+
                 // Reset queue control flags at the start of every new session.
                 queueStopRequested = false
                 queueStopReason = null
