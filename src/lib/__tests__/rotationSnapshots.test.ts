@@ -83,6 +83,16 @@ describe("buildRotationSnapshotRows", () => {
         expect(scenarioRow?.value).toBe(preset.scenario)
     })
 
+    it("stamps the entry's own trainee identity into the snapshot (single-run verification source)", () => {
+        // The snapshot rows become the LIVE settings when the rotation applies them, so each entry
+        // must carry ITS trainee - a stale appliedPresetTrainee inherited from the base would make
+        // a later single run verify Trainee Select against the wrong trainee on purpose.
+        const traineeRow = rows.find((r) => r.category === "rot0_general" && r.key === "appliedPresetTrainee")
+        expect(traineeRow?.value).toBe("Test")
+        const excludesRow = rows.find((r) => r.category === "rot0_general" && r.key === "appliedPresetTraineeExcludes")
+        expect(excludesRow?.value).toBe("")
+    })
+
     it("preserves the user's skill-spend threshold + enable flag over the preset's uniform values", () => {
         // Base = user's choice (threshold 750, mid-career check OFF); every preset ships 350 + check ON.
         // Both base values must win the merge. The threshold assertion (750 vs the preset's 350) and the

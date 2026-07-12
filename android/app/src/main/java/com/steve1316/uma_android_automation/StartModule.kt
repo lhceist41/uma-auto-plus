@@ -393,6 +393,32 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         }
 
         /**
+         * Keeps the SINGLE-RUN trainee expectation (general.appliedPresetTrainee, normally written
+         * by the Home preset apply) in sync when a rotation snapshot becomes the live settings.
+         * Without this, snapshots built before the fields existed re-prefix everything EXCEPT the
+         * expectation, leaving whatever the last Home apply wrote - and a later single run would
+         * then hunt the wrong trainee on purpose, the exact bug the expectation exists to prevent.
+         */
+        fun setAppliedPresetTrainee(context: Context, inGameName: String, excludes: List<String>) {
+            try {
+                val dbFile = File(context.filesDir, "SQLite/settings.db")
+                if (!dbFile.exists()) return
+                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
+                db.execSQL(
+                    "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+                    arrayOf("general", "appliedPresetTrainee", inGameName),
+                )
+                db.execSQL(
+                    "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+                    arrayOf("general", "appliedPresetTraineeExcludes", excludes.joinToString("\n")),
+                )
+                db.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "[ROTATION] Failed to record applied-preset trainee: ${e.message}")
+            }
+        }
+
+        /**
          * Marks whether the upcoming launch must switch the in-game trainee. The launch navigator
          * clears this once its Trainee Select handler has selected + verified the target; if it is
          * still set when the navigator reaches Legacy Select, the swap was missed (e.g. a Trainee
@@ -487,6 +513,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             if (!applyRotationSnapshot(context, index)) return false
             setCurrentTrainee(context, target)
             setCurrentTraineeExcludes(context, rotation.excludesForIndex(index))
+            setAppliedPresetTrainee(context, target, rotation.excludesForIndex(index))
             // Already in-career: no trainee switch can happen for this run, so disarm the backstop.
             setRotationSwitchPending(context, false)
             rotationCursorOffset = rotation.resyncOffsetFor(queueCurrentRun, index)
@@ -1084,6 +1111,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         }
         setCurrentTrainee(context, target)
         setCurrentTraineeExcludes(context, rotation.excludesForIndex(index))
+        setAppliedPresetTrainee(context, target, rotation.excludesForIndex(index))
         // Arm the missed-detection backstop only on an actual switch; the navigator clears it when
         // Trainee Select is handled, and fails at Legacy Select if it is still armed.
         setRotationSwitchPending(context, switching)

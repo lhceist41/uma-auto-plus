@@ -754,7 +754,18 @@ class Game(val myContext: Context) {
                 MessageLog.i(TAG, "[INFO] Bot is not on the training menu. Attempting auto-navigation...")
                 val navigator = CareerLaunchNavigator(myContext)
                 val reuseSetup = SettingsHelper.getBooleanSetting("runQueue", "reuseLastLaunchSetup", true)
-                val navResult = navigator.navigate(reuseSetup)
+                // Single (non-queue) runs verify Trainee Select against the applied preset's
+                // trainee: the game preselects whoever was picked last, and an interrupted queue
+                // once left El Condor preselected while Rudolf's preset was applied - this launch
+                // path would have run her career under his settings (2026-07-09, twice). Queue
+                // runs keep their rotation-managed targeting and pass no expectation.
+                val singleRun = !SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", false)
+                val expectedTrainee = if (singleRun) SettingsHelper.getStringSetting("general", "appliedPresetTrainee") else ""
+                val expectedExcludes = if (singleRun) SettingsHelper.getStringSetting("general", "appliedPresetTraineeExcludes") else ""
+                if (expectedTrainee.isNotBlank()) {
+                    MessageLog.i(TAG, "[INFO] Single-run launch will verify Trainee Select against '$expectedTrainee' (applied preset).")
+                }
+                val navResult = navigator.navigate(reuseSetup, singleRunTrainee = expectedTrainee, singleRunTraineeExcludes = expectedExcludes)
                 if (!navResult.success) {
                     MessageLog.e(TAG, "[INFO] Auto-navigation failed: ${navResult.failureReason}")
                     MessageLog.e(TAG, "[INFO] Last state: ${navResult.lastDetectedState}, transition: ${navResult.failedTransition}")

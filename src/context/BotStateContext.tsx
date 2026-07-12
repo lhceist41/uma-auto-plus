@@ -49,6 +49,13 @@ export interface Settings {
         recreationTotalOutings: number
         // Make up a missed pinned outing (pre-empted by a race) on the next available turn.
         enableRecreationCatchUp: boolean
+        // Internal: the applied preset's trainee in the in-game "[Outfit] Name" form the Trainee
+        // Select preview shows, plus sibling-outfit exclusions ("\n"-joined). Written by the Home
+        // preset apply (and kept in sync by the rotation apply on the Kotlin side); a single
+        // (non-queue) run verifies the Trainee Select screen against these instead of trusting
+        // the game's sticky preselection. Not user-facing controls.
+        appliedPresetTrainee: string
+        appliedPresetTraineeExcludes: string
     }
 
     // Racing settings
@@ -330,6 +337,8 @@ export const defaultSettings: Settings = {
         purePassionTurn: -1,
         recreationTotalOutings: 7,
         enableRecreationCatchUp: true,
+        appliedPresetTrainee: "",
+        appliedPresetTraineeExcludes: "",
     },
     racing: {
         enableFarmingFans: false,

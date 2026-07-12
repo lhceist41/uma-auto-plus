@@ -19,6 +19,7 @@ import SelectButton from "../../components/SelectButton"
 import PresetPicker from "../../components/PresetPicker"
 import { avoidAdvisoryFor, characterPresets, trainerAdvisories } from "../../data/characterPresets"
 import { presetCharacter, presetOutfit } from "../../data/presetMeta"
+import { deriveInGameName, deriveExcludeOutfits } from "../../lib/rotationSnapshots"
 import { useNavigation } from "@react-navigation/native"
 
 const styles = StyleSheet.create({
@@ -332,6 +333,13 @@ const Home = () => {
             enableMandatoryRacingPlan: merged.racing.enableMandatoryRacingPlan,
             plannedRaceCount,
         })
+
+        // Record who this preset is for, in the roster-preview form, so a single (non-queue)
+        // run can verify the Trainee Select screen instead of accepting the game's sticky
+        // preselection (an interrupted queue once left El Condor preselected and a Rudolf
+        // single run would have launched her under Rudolf's settings).
+        merged.general.appliedPresetTrainee = deriveInGameName(presetName)
+        merged.general.appliedPresetTraineeExcludes = deriveExcludeOutfits(presetName).join("\n")
 
         bsc.setSettings(merged)
         // Pass merged explicitly: settingsRef only syncs after the state update re-renders, so a

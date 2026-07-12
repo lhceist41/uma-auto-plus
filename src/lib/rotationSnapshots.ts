@@ -170,6 +170,16 @@ export function buildRotationSnapshotRows(base: Settings, rotation: RotationEntr
         // The rotation entry's scenario is authoritative for which Campaign subclass runs.
         if (merged.general) merged.general.scenario = entry.scenario
 
+        // Stamp the entry's own trainee identity into its snapshot: the snapshot rows become the
+        // LIVE settings when the rotation applies them, and a stale appliedPresetTrainee inherited
+        // from the last Home apply would otherwise ride along - a later single run would then
+        // verify Trainee Select against the wrong trainee ON PURPOSE. (The Kotlin rotation apply
+        // also overwrites these for snapshots built before the fields existed.)
+        if (merged.general) {
+            merged.general.appliedPresetTrainee = entry.inGameName
+            merged.general.appliedPresetTraineeExcludes = (entry.excludeOutfits ?? []).join("\n")
+        }
+
         // Stamp the racing-drift snapshot so Game.warnOnRacingConfigDrift can flag a mismatch at
         // career start, per trainee (a silently-off mandatory flag cost a career).
         if (merged.racing) {
