@@ -14,6 +14,7 @@ import com.steve1316.uma_android_automation.components.*
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
+import com.steve1316.uma_android_automation.utils.TraineePositionStore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -2344,13 +2345,18 @@ class CareerLaunchNavigator(private val context: Context) {
         // threshold as the scan verifies the selection, so a miss (new pull, re-sort) costs nothing
         // but the jump and falls back to the full scan below. Measured: a full scan runs ~90s, this
         // path ~10s past the anchor.
-        val posKey = "traineePos_" + target.lowercase().replace(Regex("[^a-z0-9]"), "")
-        val remembered = SettingsHelper.getStringSetting("queueState", posKey).split(",").mapNotNull { it.trim().toIntOrNull() }
-        if (remembered.size == 3 &&
-            remembered[0] in 0..traineeMaxSwipes &&
-            remembered[1] in traineeColFractions.indices &&
-            remembered[2] in 0 until traineeGridRows
-        ) {
+        // Positions live in TraineePositionStore (a flat file), NOT in settings rows: the settings
+        // variant provably saved and committed but was never readable by the next queue - see the
+        // store's kdoc for the investigation summary.
+        val posKey = target.lowercase().replace(Regex("[^a-z0-9]"), "")
+        val remembered =
+            TraineePositionStore.parseCell(
+                TraineePositionStore.get(context, posKey),
+                maxPage = traineeMaxSwipes,
+                colCount = traineeColFractions.size,
+                rowCount = traineeGridRows,
+            )
+        if (remembered != null) {
             val (rPage, rCol, rRow) = remembered
             MessageLog.i(TAG, "[ROTATION] Trying remembered position page=$rPage cell=($rCol,$rRow) for '$target'.")
             var jumpBitmap = iu.getSourceBitmap()
@@ -2425,7 +2431,11 @@ class CareerLaunchNavigator(private val context: Context) {
                         MessageLog.i(TAG, "[ROTATION] Match: '$preview' (${"%.3f".format(score)}). Selecting and advancing.")
                         // Remember where she was found so the next switch to her can jump here
                         // directly instead of re-scanning the grid cell by cell.
-                        StartModule.setQueueStateValue(context, posKey, "$page,$col,$row")
+                        if (TraineePositionStore.put(context, posKey, "$page,$col,$row")) {
+                            MessageLog.i(TAG, "[ROTATION] Saved position page=$page cell=($col,$row) for '$target'.")
+                        } else {
+                            MessageLog.w(TAG, "[ROTATION] Could not save the grid position for '$target' (file write failed).")
+                        }
                         waitSafe(0.5)
                         if (ButtonNext.click(iu)) {
                             waitSafe(2.0)
