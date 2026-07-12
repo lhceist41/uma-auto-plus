@@ -9,6 +9,7 @@ import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.automation_library.utils.TextUtils
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.SparkRerollPolicy
 import com.steve1316.uma_android_automation.components.*
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
@@ -1117,9 +1118,10 @@ class CareerLaunchNavigator(private val context: Context) {
      * Handles the career-end SPARKS screen.
      *
      * Default (setting off): click Confirm and keep the generated set - the pre-reroll behavior.
-     * With the opt-in `runQueue.enableSparkReroll`, the reroll gate runs: reroll once iff the
-     * build's core stat finished >= 1100 (spark star odds plateau there) AND the stat spark
-     * (row 1, the blue bar) is not already a 3-star of that stat. With TP < 30 the game swaps
+     * With the opt-in `runQueue.enableSparkReroll`, the redraw is priced by [SparkRerollPolicy]
+     * from the verified band odds: a 2/3-star blue is always kept; a 1-star blue rerolls when
+     * the expected fresh blue (uniform stat pick over the five final stats) beats the pink/
+     * unique/3-star-white holdings a redraw would forfeit. With TP < 30 the game swaps
      * the spend dialog for a Restore-TP prompt; when item restore is enabled the bot restores
      * (same ladder and session cap as the career-start restore) and retries the spend once,
      * because a confirmed set can never be rerolled. The reroll is a pure independent redraw; the
@@ -1156,28 +1158,31 @@ class CareerLaunchNavigator(private val context: Context) {
             return confirmSparks(bitmap)
         }
 
-        // The build's core stat, same resolution the deck checks use; its final value comes from
-        // the ledger-time snapshot (the Campaign instance is gone by the time the navigator runs).
-        val targetStat =
-            SettingsHelper.getStringArraySetting("training", "focusOnSparkStatTarget").firstOrNull()
-                ?: SettingsHelper.getStringArraySetting("training", "statPrioritization").firstOrNull()
-        val targetValue = targetStat?.let { StartModule.lastCareerEndStats?.get(it) }
-        val statRow = readSparkStatRow(bitmap)
-        MessageLog.i(
-            TAG,
-            "[REROLL] Gate: core stat ${targetStat ?: "unresolved"}=${targetValue ?: "unknown"}, stat spark = ${statRow?.let { "${it.first} ${it.second}-star" } ?: "unreadable"}.",
-        )
-
-        if (targetStat == null || targetValue == null || targetValue < 1100) {
-            MessageLog.i(TAG, "[REROLL] Core stat below 1100 or unknown - 3-star odds too low to spend 30 TP. Keeping the original sparks.")
+        // Price the redraw with the verified band odds instead of the old ">= 1100 core stat"
+        // rule, which predates the corrected spark model and could never pass on URA farm
+        // careers. Star counts come from the row color samples, so no OCR is involved; the
+        // final stats come from the ledger-time snapshot (the Campaign instance is gone by
+        // the time the navigator runs).
+        val finalStats = StartModule.lastCareerEndStats
+        val rows = readSparkRows(bitmap)
+        val rowsLeadCorrectly = rows.size >= 3 && rows[0].kind == "stat" && rows[1].kind == "aptitude" && rows[2].kind == "unique"
+        if (finalStats == null || finalStats.size < 5 || !rowsLeadCorrectly) {
+            MessageLog.w(
+                TAG,
+                "[REROLL] Cannot price the redraw (stats snapshot: ${finalStats?.size ?: "missing"}, spark rows: ${if (rowsLeadCorrectly) "ok" else "unexpected layout"}). Keeping the original sparks.",
+            )
             return confirmSparks(bitmap)
         }
-        if (statRow == null) {
-            MessageLog.w(TAG, "[REROLL] Stat spark row unreadable. Keeping the original sparks rather than reroll blind.")
-            return confirmSparks(bitmap)
-        }
-        if (statRow.second >= 3 && statRow.first.contains(targetStat, ignoreCase = true)) {
-            MessageLog.i(TAG, "[REROLL] Original set already has a 3-star $targetStat spark. Keeping it.")
+        val verdict =
+            SparkRerollPolicy.decide(
+                blueStars = rows[0].goldStars,
+                pinkStars = rows[1].goldStars,
+                uniqueStars = rows[2].goldStars,
+                visibleWhiteThreeStars = rows.drop(3).count { it.kind == "skill" && it.goldStars >= 3 },
+                finalStats = finalStats.values,
+            )
+        MessageLog.i(TAG, "[REROLL] EV gate: ${verdict.reason}")
+        if (!verdict.reroll) {
             return confirmSparks(bitmap)
         }
 
@@ -1195,7 +1200,7 @@ class CareerLaunchNavigator(private val context: Context) {
             // restore is enabled: the next career start draws on the same items anyway, and a
             // confirmed set can never be rerolled, so declining here saves nothing.
             if (tryRestoreTpForReroll() && retryRerollSpend()) {
-                MessageLog.i(TAG, "[REROLL] Spent 30 TP to reroll sparks after restoring TP: $targetStat=$targetValue with a ${statRow.second}-star ${statRow.first} spark cleared the gate.")
+                MessageLog.i(TAG, "[REROLL] Spent 30 TP to reroll sparks after restoring TP (${verdict.reason}).")
                 sparksRerollAttempted = true
                 sparksRerollExecuted = true
                 waitSafe(4.0)
@@ -1207,7 +1212,7 @@ class CareerLaunchNavigator(private val context: Context) {
             waitSafe(1.0)
             return TransitionResult.Continue
         }
-        MessageLog.i(TAG, "[REROLL] Spent 30 TP to reroll sparks: $targetStat=$targetValue with a ${statRow.second}-star ${statRow.first} spark cleared the gate.")
+        MessageLog.i(TAG, "[REROLL] Spent 30 TP to reroll sparks (${verdict.reason}).")
         sparksRerollAttempted = true
         sparksRerollExecuted = true
         waitSafe(4.0)

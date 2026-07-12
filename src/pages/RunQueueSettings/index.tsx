@@ -210,7 +210,7 @@ const RunQueueSettings = () => {
                                     checked={runQueueSettings.enableSparkReroll}
                                     onCheckedChange={(checked) => updateSetting("enableSparkReroll", checked)}
                                     label="Auto-Reroll Sparks (30 TP)"
-                                    description="On the career-end Sparks screen, spend 30 TP to reroll once when the build's core stat finished at 1100+ and the stat spark is not already a 3-star of that stat (3-star odds plateau around 10% at 1100+). Keeps the redrawn set. Watch the first firing - this spends TP."
+                                    description="On the career-end Sparks screen, spend 30 TP to redraw the spark set once when it prices below a fresh roll: a 2 or 3-star stat spark is always kept, and a 1-star stat spark is redrawn unless every stat finished under 600 (a redraw cannot roll a 3-star there) or the set holds a 3-star aptitude or skill spark worth protecting. Keeps the redrawn set. This spends TP."
                                     className="mt-4"
                                 />
 
