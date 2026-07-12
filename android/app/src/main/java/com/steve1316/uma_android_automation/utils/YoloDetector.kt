@@ -117,9 +117,13 @@ class YoloDetector(private val context: Context) {
         val padX = (INPUT_SIZE - newW) / 2f
         val padY = (INPUT_SIZE - newH) / 2f
 
-        // Scale the image and draw it centered onto the padded background.
+        // Scale the image and draw it centered onto the padded background. The scaled intermediate
+        // is recycled immediately - it is drawn into the letterbox canvas and never used again, and
+        // detect() runs often enough per turn that waiting on the garbage collector adds real
+        // memory pressure.
         val scaledBitmap = bitmap.scale(newW, newH)
         canvas.drawBitmap(scaledBitmap, padX, padY, Paint(Paint.FILTER_BITMAP_FLAG))
+        if (scaledBitmap !== bitmap) scaledBitmap.recycle()
 
         return LetterboxInfo(letterboxBitmap, ratio, padX, padY)
     }
@@ -277,24 +281,28 @@ class YoloDetector(private val context: Context) {
         val inputName = ortSession?.inputNames?.iterator()?.next() ?: "images"
 
         try {
-            // Create input tensor and run inference.
-            val inputTensor = OnnxTensor.createTensor(ortEnv, floatBuffer, longArrayOf(1, 3, INPUT_SIZE.toLong(), INPUT_SIZE.toLong()))
-            val results = ortSession?.run(Collections.singletonMap(inputName, inputTensor))
+            // Create input tensor and run inference. The input tensor owns native (off-heap) memory
+            // the JVM garbage collector never reclaims, so it must be closed explicitly - leaking it
+            // costs ~5 MB per detection call and progressively slows every subsequent inference as
+            // native memory pressure mounts over a career.
+            OnnxTensor.createTensor(ortEnv, floatBuffer, longArrayOf(1, 3, INPUT_SIZE.toLong(), INPUT_SIZE.toLong())).use { inputTensor ->
+                val results = ortSession?.run(Collections.singletonMap(inputName, inputTensor))
 
-            results?.use {
-                val outputValue = it.get(0).value
+                results?.use {
+                    val outputValue = it.get(0).value
 
-                // Standard YOLOv8 output format is float[1][attributes][anchors] (e.g., [1][15][336]).
-                if (outputValue is Array<*> && outputValue[BATCH_INDEX] is Array<*>) {
-                    val batchOutput = outputValue[BATCH_INDEX] as Array<FloatArray>
+                    // Standard YOLOv8 output format is float[1][attributes][anchors] (e.g., [1][15][336]).
+                    if (outputValue is Array<*> && outputValue[BATCH_INDEX] is Array<*>) {
+                        val batchOutput = outputValue[BATCH_INDEX] as Array<FloatArray>
 
-                    // Parse detections and scale coordinates back.
-                    val detections = parseOutput(batchOutput, letterboxInfo)
-                    val duration = System.currentTimeMillis() - startTime
-                    Log.d(TAG, "[DEBUG] detect:: Inference completed in ${duration}ms. Found ${detections.size} detections.")
-                    return detections
-                } else {
-                    Log.e(TAG, "[ERROR] detect:: Unexpected output tensor structure: ${outputValue?.javaClass?.simpleName}")
+                        // Parse detections and scale coordinates back.
+                        val detections = parseOutput(batchOutput, letterboxInfo)
+                        val duration = System.currentTimeMillis() - startTime
+                        Log.d(TAG, "[DEBUG] detect:: Inference completed in ${duration}ms. Found ${detections.size} detections.")
+                        return detections
+                    } else {
+                        Log.e(TAG, "[ERROR] detect:: Unexpected output tensor structure: ${outputValue?.javaClass?.simpleName}")
+                    }
                 }
             }
         } catch (e: Exception) {
