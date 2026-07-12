@@ -427,9 +427,9 @@ node android/generate-bundle.js
 cd android && ./gradlew assembleDebug
 ```
 
-The output APK will be at:
+The output APK will be at (version number matching the current build):
 ```
-android/app/build/outputs/apk/debug/UMA-Auto-Plus-v1.3.6-arm64-v8a-debug.apk
+android/app/build/outputs/apk/debug/UMA-Auto-Plus-v1.3.8-arm64-v8a-debug.apk
 ```
 
 ---

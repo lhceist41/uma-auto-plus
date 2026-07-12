@@ -13,7 +13,7 @@
 
 ## What this fork adds
 
-steve1316 built the bot engine. This fork is a substantial body of work on top of it -- roughly 200 commits past the v5.4.8 fork point -- turning that engine into a hands-off, meta-aligned distribution. Here is an honest split of what I added versus what is steve1316's.
+steve1316 built the bot engine. This fork is a substantial body of work on top of it -- roughly 300 commits past the v5.4.8 fork point -- turning that engine into a hands-off, meta-aligned distribution. Here is an honest split of what I added versus what is steve1316's.
 
 ### What I added
 
@@ -22,12 +22,13 @@ steve1316 built the bot engine. This fork is a substantial body of work on top o
 - **Multi-run queue** -- queue 2-20 consecutive careers so the bot grinds unattended, with configurable run count, inter-run delay, and stop-on-error.
 - **Trainee rotation** -- queue several different trainees and the bot cycles through them, each run under her own preset, switching automatically between careers (off by default). Scenarios mix freely: the bot pages the Scenario Select carousel to each trainee's scenario between runs.
 - **Between-run navigation** -- the bot walks back through the post-career menus and launches the next run by itself, and stops with a clear message instead of looping when it hits a screen it can't handle.
-- **Overnight resilience** -- the bot keeps the screen awake, restarts itself if it freezes, resumes the queue after a crash, gives up on a stuck run after a time limit you set, restores TP from whatever is available (Toughness, then Star Fruit, then a Carats refill), and repairs its own Accessibility service when an emulator like MuMu silently kills it mid-run. Each of these came from a real overnight queue that died early.
-- **Career-end spark reroll** -- opt-in, off by default: spends 30 TP once to redraw a career's sparks when the odds are good and no target 3-star spark is already present, keeping the better of the two. Supervise the first use.
+- **Overnight resilience** -- the bot keeps the screen awake, restarts itself if it freezes, resumes the queue after a crash, gives up on a stuck run after a time limit you set, restores TP from whatever is available (Toughness, then Star Fruit, then a Carats refill), rides out brief connection outages and the daily reset's bounce back to the lobby without losing the career, and repairs its own Accessibility service when an emulator like MuMu silently kills it mid-run. Each of these came from a real overnight queue that died early.
+- **Fast trainee switching** -- the bot remembers where each trainee sits in the roster grid, so a queue switching trainees jumps straight to her instead of scanning the whole roster (about 30 seconds instead of 90), and it always verifies the name on screen before advancing.
+- **Career-end spark reroll** -- opt-in, off by default: spends 30 TP once to redraw a career's spark set when the set is weak. The decision is priced from measured spark odds: a 2-star or better stat spark is always kept, a 1-star one is redrawn unless a 3-star spark elsewhere in the set would be put at risk, and TP is refilled with items if it is short. Supervise the first use.
 
 **Pick-and-go presets**
 
-- **210 hand-tuned character presets** -- 70 characters and outfits across 3 scenarios (URA Finale / Unity Cup / Trackblazer), each pre-filling stat priorities, race plan, skill plan, event picks, and training thresholds. A searchable trainee picker shows per-scenario recommendations, a badge telling you whether a build is proven in real runs or still research-based, and starred favorites; applying a preset sets its scenario with it. Pick a trainee, hit Start -- no manual tuning required.
+- **213 hand-tuned character presets** -- 70 characters and outfits across 3 scenarios (URA Finale / Unity Cup / Trackblazer), each pre-filling stat priorities, race plan, skill plan, event picks, and training thresholds, plus dedicated parent-farming "Legacy Farm" builds that race generated G1-dense schedules for breeding careers. A searchable trainee picker shows per-scenario recommendations, a badge telling you whether a build is proven in real runs or still research-based, and starred favorites; applying a preset sets its scenario with it. Pick a trainee, hit Start -- no manual tuning required.
 - **Scenario advisories** -- the Home page shows a green "good pick" or yellow "mismatch" banner (with the reason) for the selected trainee and scenario, the rotation editor flags each mismatched slot inline, and starting a known-mismatch run (single preset or any rotation slot) asks for confirmation first so a doomed pairing never launches by accident.
 
 **Decision-engine extensions** (built on top of steve1316's scoring)
@@ -41,9 +42,10 @@ steve1316 built the bot engine. This fork is a substantial body of work on top o
 - **Race and training refinements** -- mandatory races retry toward 1st place when a free retry is available, and training anticipates rainbows from bars close to maximum friendship.
 - **Trackblazer tuning** -- Akikawa-bonding training priority (a proxy for MotY points), climax energy-item reservation, an Alarm Clock retry policy, and an opt-in irregular-training gate. Trackblazer is the fork's most-tuned scenario.
 - **Mood-floor guard** -- an optional stricter mood floor for trainees with single-option mood-trap events.
-- **Results history** -- every career saves a record of how it ended (completed / force-ended / cut short) together with the settings it ran under, and a bundled tool turns a batch of them into a per-trainee results table, so preset tuning can be measured across many runs instead of judged one at a time. Extra diagnostics for bug reports sit behind the Debug Mode setting.
+- **Results history** -- every career saves a record of how it ended (completed / force-ended / cut short) together with the settings it ran under, an estimated overall rank (the B+/A/S grade the game shows, computed from stats, skills, and aptitudes), whether a URA finale was actually won, and the full spark set the career produced. A bundled tool turns a batch of records into a per-trainee results table, so preset tuning can be measured across many runs instead of judged one at a time. Extra diagnostics for bug reports sit behind the Debug Mode setting.
+- **Support-card dating schedule** -- off by default: with a Group support card in the deck, the bot takes its recreation outings on the right career turns to advance the card's outing chain and times the final outing for the Pure Passion training buff.
 
-**New modes (experimental)** -- Daily Races and Team Trials task modes -- fully implemented and selectable, but not yet verified end-to-end on a live run (upstream is career-only).
+**New modes** -- Daily Races and Team Trials task modes (upstream is career-only), for burning the daily attempts without touching a career.
 
 **UI and quality of life** -- a settings search across every page, a named-profile manager, queue progress with a skip-run button, and an icon overhaul that fixed a first-launch crash.
 
@@ -77,6 +79,17 @@ My work extends that engine's *decisions* and wraps it in a hands-off distributi
 
 > [!TIP]
 > For a detailed explanation of how the bot works -- including the decision engine, training scoring, racing system, item management, and scenario-specific logic -- see [HOW_IT_WORKS.md](HOW_IT_WORKS.md). That document is from the original project.
+
+---
+
+## Your deck and your races stay yours
+
+A few common questions, answered plainly:
+
+- **Does the bot change my support deck?** No. The queue reuses whatever deck you built, career after career, and never swaps a card you placed. The optional **Auto-Fill Support Deck** setting (off by default) only fills slots you left *empty* -- it never touches existing cards.
+- **Can I set everything up myself like in the original?** Yes. Build your deck, pick your parents, start the career, and press Start once you're on the training screen -- the bot plays from there and never sees a setup screen, exactly like the upstream project.
+- **What about the borrowed friend card?** That one the game itself forces: the borrow resets every career, and Start Career silently does nothing while the slot is empty. So on unattended queue runs the bot has to pick one -- it takes your strong friend card when it spots it, otherwise the top row of the list. Since the game sorts trainers you follow to the top, following the trainer whose card you want makes the pick yours.
+- **Is there a racing plan?** Yes -- the same Race Planner the upstream project has, plus more: every preset ships a hand-curated racing plan for its trainee, the smart-racing scheduler fills fan gaps dynamically, and the parent-farming presets run generated G1-dense schedules.
 
 ---
 
