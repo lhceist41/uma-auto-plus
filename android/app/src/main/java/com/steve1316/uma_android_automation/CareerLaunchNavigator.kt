@@ -109,6 +109,16 @@ class CareerLaunchNavigator(private val context: Context) {
          * quantity popup wedged as POST_RUN_RESULTS for all 15 iterations and killed the queue). */
         private const val STUCK_STATE_REBIND_AT = 7
 
+        /** Throttle for isOnHomeScreen()'s unknown-screen evidence capture: the daily-reset
+         * re-entry path re-probes every unknown tick and each capture is a full-res PNG. */
+        private const val HOME_PROBE_CAPTURE_THROTTLE_MS = 10L * 60L * 1000L
+
+        /** Last wall-clock time the unknown-home-probe screenshot was taken. Lives on the
+         * companion because callers construct a fresh navigator per probe - an instance field
+         * would never throttle anything. */
+        @Volatile
+        private var lastHomeProbeCaptureAtMs = 0L
+
         /** Item-based TP restores performed this bot session. Lives on the companion because
          * each between-run handoff constructs a fresh navigator - an instance field would reset
          * every handoff, making the per-session cap really a per-handoff cap. Reset from
@@ -303,7 +313,20 @@ class CareerLaunchNavigator(private val context: Context) {
     fun isOnHomeScreen(): Boolean {
         if (!ensureInitialised()) return false
         return try {
-            detectScreenState() == LaunchScreenState.HOME_SCREEN
+            val state = detectScreenState(deepHomeProbe = true)
+            if (state == LaunchScreenState.UNKNOWN) {
+                // Every caller of this probe EXPECTS the lobby (cold start, daily-reset bounce,
+                // post-restart recovery), so a screen no detector recognises is exactly what a
+                // reskinned lobby looks like - photograph it as recapture material. Throttled via
+                // the companion because the daily-reset path re-probes every unknown tick on a
+                // fresh navigator instance.
+                val now = System.currentTimeMillis()
+                if (now - lastHomeProbeCaptureAtMs > HOME_PROBE_CAPTURE_THROTTLE_MS) {
+                    lastHomeProbeCaptureAtMs = now
+                    captureFailureScreenshot("home_probe_unknown")
+                }
+            }
+            state == LaunchScreenState.HOME_SCREEN
         } catch (e: InterruptedException) {
             throw e
         } catch (_: Exception) {
@@ -385,7 +408,10 @@ class CareerLaunchNavigator(private val context: Context) {
             // relies on it to kill a wedged queue thread.
             val detectedState =
                 try {
-                    detectScreenState()
+                    // From the second consecutive unknown on, arm the deep home tier: the primary
+                    // lobby anchors may be what the current screen's skin broke, and the rebinds
+                    // below have already had their chance to fix a dead capture/dispatch instead.
+                    detectScreenState(deepHomeProbe = consecutiveUnknowns >= 2)
                 } catch (e: InterruptedException) {
                     throw e
                 } catch (e: Exception) {
@@ -627,8 +653,15 @@ class CareerLaunchNavigator(private val context: Context) {
      *
      * States are checked in priority order - the first match wins. Every detection here
      * uses real template matching against existing button/component assets.
+     *
+     * @param deepHomeProbe Also run the looser end-of-chain home-lobby detectors (CAREER text-crop
+     *   template, then OCR at the button's fixed position) when nothing else matched. Event skins
+     *   restyle the lobby chrome that the primary home anchors match on (the 2026-07-14 anniversary
+     *   reskins the home screen outright), so the one-shot home probes (cold start, daily-reset
+     *   re-entry, post-restart recovery) and an FSM loop that is already failing detection enable
+     *   this; normal navigation stays byte-identical.
      */
-    private fun detectScreenState(): LaunchScreenState {
+    private fun detectScreenState(deepHomeProbe: Boolean = false): LaunchScreenState {
         val bitmap = iu.getSourceBitmap()
 
         // Detection order is performance-sensitive: each check on a non-matching screen still
@@ -920,6 +953,23 @@ class CareerLaunchNavigator(private val context: Context) {
                 MessageLog.i(TAG, "[NAV] Follow Trainer prompt detected; tapping Cancel to dismiss and continue.")
                 DialogFollowTrainer.close(iu)
                 return LaunchScreenState.UNKNOWN
+            }
+        }
+
+        // Reskin-resilient home fallback: every home anchor above is lobby chrome (ButtonCareerHome
+        // at the top of the chain, the nav-bar last resort), and event skins restyle chrome - the
+        // July 2026 patch already pushed Auto-Select below its match threshold, and the 2026-07-14
+        // anniversary reskins the home screen outright. Deep probes only, so normal navigation is
+        // byte-identical; these looser detectors (0.55-confidence text crop, then OCR) are safe here
+        // precisely because every known screen was already ruled out above.
+        if (deepHomeProbe) {
+            if (ButtonCareerHomeText.check(iu, sourceBitmap = bitmap)) {
+                MessageLog.i(TAG, "[NAV] Deep home probe: CAREER text-crop matched after every other screen check missed -> HOME_SCREEN.")
+                return LaunchScreenState.HOME_SCREEN
+            }
+            if (ocrCareerLabelAtHomePosition(bitmap) != null) {
+                MessageLog.i(TAG, "[NAV] Deep home probe: OCR found the CAREER/Event label at the button position after every other screen check missed -> HOME_SCREEN.")
+                return LaunchScreenState.HOME_SCREEN
             }
         }
 
@@ -1791,13 +1841,55 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
-     * HOME_SCREEN: Detected via ButtonMenuBarHomeSelected or ButtonCareerHome.
+     * OCR probe for the home screen's CAREER button label at its fixed position. Shared by
+     * handleHomeScreen()'s detector 3 and detectScreenState()'s deep home probe.
+     *
+     * The CAREER button sits at ~75% width / ~86% height on both supported resolutions. The
+     * region is cropped to 55%-95% width so decorative "Event" banners on the LEFT side of the
+     * screen (common during seasonal promos) cannot match; vertically 80%-92% gives OCR room
+     * around the 85-88% label band. The "CAREER" text uses a decorative gold font Tesseract
+     * often can't read, but the "Event" label directly below it is plain and reads reliably -
+     * either word confirms the button is present.
+     *
+     * @return The matched word ("CAREER" or "Event"), or null when neither was read.
+     */
+    private fun ocrCareerLabelAtHomePosition(bitmap: Bitmap): String? {
+        return try {
+            val ocrText =
+                iu.performOCROnRegion(
+                    bitmap,
+                    (bitmap.width * 0.55).toInt(),
+                    (bitmap.height * 0.80).toInt(),
+                    (bitmap.width * 0.40).toInt(),
+                    (bitmap.height * 0.12).toInt(),
+                    useThreshold = false,
+                    useGrayscale = false,
+                    scale = 2.0,
+                    debugName = "nav_career_ocr",
+                )
+            MessageLog.i(TAG, "[NAV] [HOME] OCR result: '$ocrText'")
+            val ocrUpper = ocrText.uppercase()
+            when {
+                ocrUpper.contains("CAREER") -> "CAREER"
+                ocrUpper.contains("EVENT") -> "Event"
+                else -> null
+            }
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: Exception) {
+            MessageLog.w(TAG, "[NAV] [HOME] OCR detector failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * HOME_SCREEN: Detected via ButtonMenuBarHomeSelected or ButtonCareerHome (plus the deep-probe
+     * fallbacks in detectScreenState when armed).
      * Uses a multi-detector strategy to click the CAREER button:
      * 1. Primary: ButtonCareerHome (full button, lowered confidence 0.6)
      * 2. Secondary: ButtonCareerHomeText (text-only crop, confidence 0.55)
-     * 3. Tertiary: OCR scan for "CAREER" in the bottom-half of the screen
+     * 3. Tertiary: OCR scan for the CAREER/Event label at the button position
      *
-     * Detection: ButtonMenuBarHomeSelected or ButtonCareerHome template match.
      * Transition: Multi-detector click.
      */
     private fun handleHomeScreen(): TransitionResult {
@@ -1832,61 +1924,23 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.i(TAG, "[NAV] [HOME] Detector 2 did not match.")
         }
 
-        // Detector 3: OCR scan for "CAREER" text near the CAREER button's known position.
-        // The CAREER button area changes decorations (event banners, character art) but
-        // the "CAREER" text itself is always present.
+        // Detector 3: OCR scan for the CAREER/Event label at the button's known position
+        // (region bounds and word rules documented on ocrCareerLabelAtHomePosition, which the
+        // deep home probe in detectScreenState shares).
         MessageLog.i(TAG, "[NAV] [HOME] Trying detector 3: OCR scan for 'CAREER' text...")
-        try {
-            val screenWidth = bitmap.width
-            val screenHeight = bitmap.height
-            // The CAREER button sits at ~75% width. Limit the OCR region to 55%-95% width so
-            // decorative "Event" banners on the left side of the screen (common during
-            // seasonal events / campaign promos) cannot false-trigger the Event fallback
-            // below - which would otherwise fire a blind tap at the fixed CAREER button
-            // coordinates and navigate the bot to the wrong screen.
-            // Vertically, CAREER text is at 85-88% height. Scan 80-92% to give OCR room.
-            val ocrX = (screenWidth * 0.55).toInt()
-            val ocrY = (screenHeight * 0.80).toInt()
-            val ocrW = (screenWidth * 0.40).toInt()
-            val ocrH = (screenHeight * 0.12).toInt()
-
-            val ocrText =
-                iu.performOCROnRegion(
-                    bitmap,
-                    ocrX,
-                    ocrY,
-                    ocrW,
-                    ocrH,
-                    useThreshold = false,
-                    useGrayscale = false,
-                    scale = 2.0,
-                    debugName = "nav_career_ocr",
-                )
-            MessageLog.i(TAG, "[NAV] [HOME] OCR result: '$ocrText'")
-
-            // The "CAREER" text uses a decorative gold font that Tesseract often can't read.
-            // However, the "Event" label directly below it IS readable. If OCR finds either
-            // "CAREER" or "Event" in the bottom region, we know the CAREER button is present.
-            val ocrUpper = ocrText.uppercase()
-            if (ocrUpper.contains("CAREER") || ocrUpper.contains("EVENT")) {
-                val matchedWord = if (ocrUpper.contains("CAREER")) "CAREER" else "Event"
-                MessageLog.i(TAG, "[NAV] [HOME] OCR found '$matchedWord'. Tapping CAREER button area...")
-                // Tap at the center of the CAREER button. This is OCR-guided: we only
-                // reach here after confirming the CAREER/Event text is on screen AND
-                // we already verified HOME_SCREEN via ButtonMenuBarHomeSelected.
-                val tapX = (screenWidth * 0.75).toDouble()
-                val tapY = (screenHeight * 0.86).toDouble()
-                gestureUtils.tap(tapX, tapY, "career_ocr_tap")
-                waitSafe(3.0)
-                return TransitionResult.Continue
-            } else {
-                MessageLog.i(TAG, "[NAV] [HOME] OCR did not find 'CAREER' or 'Event'.")
-            }
-        } catch (e: InterruptedException) {
-            throw e
-        } catch (e: Exception) {
-            MessageLog.w(TAG, "[NAV] [HOME] OCR detector failed: ${e.message}")
+        val matchedWord = ocrCareerLabelAtHomePosition(bitmap)
+        if (matchedWord != null) {
+            MessageLog.i(TAG, "[NAV] [HOME] OCR found '$matchedWord'. Tapping CAREER button area...")
+            // Tap at the center of the CAREER button. This is OCR-guided: we only reach here
+            // after confirming the CAREER/Event text is on screen AND the state detection
+            // already established HOME_SCREEN.
+            val tapX = (bitmap.width * 0.75).toDouble()
+            val tapY = (bitmap.height * 0.86).toDouble()
+            gestureUtils.tap(tapX, tapY, "career_ocr_tap")
+            waitSafe(3.0)
+            return TransitionResult.Continue
         }
+        MessageLog.i(TAG, "[NAV] [HOME] OCR did not find 'CAREER' or 'Event'.")
 
         // All detectors failed
         val screenshotPath = captureFailureScreenshot("HOME_SCREEN_career_click")
