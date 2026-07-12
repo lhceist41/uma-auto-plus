@@ -1284,6 +1284,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 sparksRerollAttempted = true
                 sparksRerollExecuted = true
                 waitSafe(4.0)
+                captureRerollChoiceScreen()
                 return TransitionResult.Continue
             }
             MessageLog.w(TAG, "[REROLL] The spend was not available (dialog never opened, or TP is short with item restore off/exhausted). Keeping the original set.")
@@ -1296,7 +1297,21 @@ class CareerLaunchNavigator(private val context: Context) {
         sparksRerollAttempted = true
         sparksRerollExecuted = true
         waitSafe(4.0)
+        captureRerollChoiceScreen()
         return TransitionResult.Continue
+    }
+
+    /**
+     * Photographs whatever the game shows right after a successful reroll spend. The spend
+     * dialog's own note confirms Global offers a keep-original-vs-rerolled CHOICE, but its
+     * layout and button labels have never been seen live - the first successful spend lands
+     * here and hands over the pixels the choice handler will be built from.
+     */
+    private fun captureRerollChoiceScreen() {
+        runCatching {
+            iu.saveBitmap(filename = "reroll_choice_screen_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}", fullRes = true)
+            MessageLog.i(TAG, "[REROLL] Post-spend screen captured (reroll_choice_screen_*.png) - first-contact material for the keep-original/keep-new choice.")
+        }
     }
 
     /**
