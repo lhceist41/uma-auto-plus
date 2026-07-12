@@ -1,14 +1,16 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.3.7</latestVersion>
+    <latestVersion>1.3.8</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.3.7 - Full S-tier roster, a searchable trainee picker, and skill-spend control
+v1.3.8 - The spark reroll works, every career is graded, and the anniversary is covered
 
-- New: the whole community S-tier preset list -- 156 presets across 52 entries -- reachable through a searchable trainee picker with favorites, per-scenario advisory chips, and a validated-or-research badge. Applying a preset sets its scenario too, and the Home card remembers it across restarts.
-- New: cross-scenario run queues (mix URA Finale, Unity Cup, and Trackblazer in one rotation) and a control for when the bot buys skills mid-career -- preset thresholds, a typed value, or "Career end" to hold everything for the finale buys.
-- New: URA Finale's Happy Meek duel screen is handled, and Unity Cup now picks its showdown opponent by reading the prediction circles instead of always taking the middle card. Supervise the first URA duel -- its coordinates are uncalibrated until one is seen live.
-- Fixed: cross-scenario rotations no longer stall between runs (the Scenario Select carousel is paged by swipe, and the post-career Umamusume Details card is dismissed to reach the next launch), your skill-spend threshold sticks across preset and rotation switches, the persistent Skip toggle is no longer mistaken for a cutscene, a race-day resume is recognized as in-career, and the navigation drawer's swipe gesture works again on Android.
+- New: every career gets an estimated overall rank (B+, A, S...) in its run history, the complete spark set each career kept is recorded (both sets when the reroll spends), and URA careers log whether the finale was actually won. 18 more characters close out the Global roster -- 213 presets across 70 entries, including parent-farming Legacy Farm builds with G1-dense racing agendas.
+- New: the career-end spark reroll finally works end to end -- the Reroll button is detected, the decision is priced from verified spark odds (a 2-star or better stat spark is kept, a weak one is redrawn unless a 3-star spark is worth protecting), TP is restored with items when short, and the spend button is matched against the real dialog. The queue's final run now also walks the full career-end flow instead of stopping at Complete Career.
+- Fixed: first-time races no longer stall the bot, the trophy popup closes immediately, a brief connection outage no longer ends the run, the daily-reset bounce to the lobby resumes the career in place, each career's log file contains exactly that one career, and a single run (queue off) launches the trainee whose preset you applied instead of whoever the game had preselected.
+- Fixed: a native memory leak in the stat-gain reader that made training analysis measurably slower the longer a session ran.
+- Ready for July 14: if the anniversary reskin breaks the home-screen detection, the bot falls back to reading the CAREER button's text and photographs anything it cannot recognize. Treat the first session after the update as supervised anyway.
+- Faster: switching trainees between queued careers drops from about 90 seconds to about 30 thanks to remembered roster positions.
 
     </releaseNotes>
   </update>
