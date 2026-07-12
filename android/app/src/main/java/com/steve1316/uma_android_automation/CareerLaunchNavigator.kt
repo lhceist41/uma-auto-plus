@@ -1196,6 +1196,12 @@ class CareerLaunchNavigator(private val context: Context) {
         // is not a safe advance. This click is the deliberate 30 TP spend. tries=3 rides out a
         // slow dialog-open animation with fresh captures per attempt.
         if (!ButtonRerollSparksConfirm.click(iu, tries = 3)) {
+            // Capture whatever is actually on screen: the spend button's template has never
+            // matched a live TP-sufficient confirm dialog (three priced-positive rerolls lost
+            // 2026-07-12), and these pixels are the recapture material for fixing that.
+            runCatching {
+                iu.saveBitmap(filename = "reroll_confirm_fail_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}", fullRes = true)
+            }
             // With TP < 30 the game swaps the spend dialog for "You need N more TP to reroll
             // Sparks. Restore TP?" (seen live 2026-07-10). Restore and retry once when item
             // restore is enabled: the next career start draws on the same items anyway, and a
@@ -1236,7 +1242,14 @@ class CareerLaunchNavigator(private val context: Context) {
             return false
         }
         val bmp = iu.getSourceBitmap()
-        val noLocation = ButtonNo.findImageWithBitmap(iu, bmp) ?: return false
+        val noLocation = ButtonNo.findImageWithBitmap(iu, bmp)
+        if (noLocation == null) {
+            // Neither the spend dialog nor the TP prompt matched - unknown screen, save it.
+            runCatching {
+                iu.saveBitmap(filename = "reroll_no_dialog_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}", fullRes = true)
+            }
+            return false
+        }
         val body =
             try {
                 iu.performOCROnRegion(
@@ -1573,14 +1586,23 @@ class CareerLaunchNavigator(private val context: Context) {
         waitSafe(0.6)
         ButtonOk.click(iu)
         waitSafe(1.2)
-        // The Max/OK clicks above can silently no-op (dead gesture dispatch - seen live
-        // 2026-07-11 on the Carats rung's first firing, which then logged a phantom restore).
-        // Max is unique to the quantity popup: still visible means nothing was spent. Report
-        // failure so the FSM re-detects the popup as RECOVER_TP_QUANTITY and finishes it there
-        // (the stuck-state counter force-rebinds dispatch partway through).
+        // The Max/OK clicks above can silently no-op (dead gesture dispatch, or the Carats
+        // rung's quantity popup rendering slower than the item rungs' - seen live 2026-07-11
+        // and again 2026-07-12, both times on the Carats rung's first attempt). Max is unique
+        // to the quantity popup: still visible means nothing was spent. Retry the pair once in
+        // place - the 07-12 failure completed cleanly when the recovery state re-drove it two
+        // minutes later, but by then the reroll window was gone, so the retry has to happen here.
         if (ButtonMax.find(iu).first != null) {
-            MessageLog.w(TAG, "[NAV] Recover TP quantity popup still open after Max+OK ($itemName) - the restore did not go through. Re-detecting...")
-            return TpRestoreOutcome.NO_QUANTITY_OK
+            MessageLog.w(TAG, "[NAV] Recover TP quantity popup still open after Max+OK ($itemName) - retrying the pair once.")
+            waitSafe(1.5)
+            ButtonMax.click(iu)
+            waitSafe(0.6)
+            ButtonOk.click(iu)
+            waitSafe(1.2)
+            if (ButtonMax.find(iu).first != null) {
+                MessageLog.w(TAG, "[NAV] Recover TP quantity popup still open after the retry ($itemName) - the restore did not go through. Re-detecting...")
+                return TpRestoreOutcome.NO_QUANTITY_OK
+            }
         }
         if (!ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
         waitSafe(1.0)
