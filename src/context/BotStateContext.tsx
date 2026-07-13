@@ -254,6 +254,13 @@ export interface Settings {
         stopOnError: boolean
         reuseLastLaunchSetup: boolean
         autoFillSupports: boolean
+        // Which card to pick in the Borrow Card list when the queue fills the friend slot. A card
+        // or character name (e.g. "Kitasan Black" or "Fire at My Heels"); the first visible row
+        // whose name contains it (case-insensitive) is borrowed. Empty = the bot's default pick
+        // (your strong friend card when it spots it, otherwise the top row). If the preferred pick
+        // fails to fill the slot (e.g. the game refuses a duplicate of a card already in the deck),
+        // the retry falls back to the default pick automatically.
+        preferredBorrowName: string
         // When the game asks "Restore TP?" between queued runs, refill TP and continue instead
         // of ending the queue. Ladder: Toughness 30, then Star Fruit, then Carats as the last
         // resort - every rung Max-fills to the cap.
@@ -704,6 +711,7 @@ export const defaultSettings: Settings = {
         stopOnError: false,
         reuseLastLaunchSetup: true,
         autoFillSupports: true,
+        preferredBorrowName: "",
         enableTpRestoreWithItems: false,
         enableEventBoost: false,
         enableSparkReroll: false,

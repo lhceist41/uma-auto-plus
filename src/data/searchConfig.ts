@@ -810,6 +810,17 @@ const searchConfig: SearchOption[] = [
             "Disables normal bot operations and starts the Trackblazer buy items test. Opens the Shop if on the Main Screen and logs shop contents and purchase intentions without actually buying anything.",
         page: "DebugSettings",
     },
+
+    // ============================================================
+    // Run Queue Settings
+    // ============================================================
+    {
+        id: "run-queue-preferred-borrow",
+        title: "Preferred Borrow Card",
+        description:
+            "The friend card to borrow when the queue fills the empty friend slot. Type a card or character name and the first matching row in the Borrow Card list is picked; empty uses the default pick.",
+        page: "RunQueueSettings",
+    },
 ]
 
 export default searchConfig

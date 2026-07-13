@@ -22,6 +22,18 @@ import java.util.Date
 import java.util.Locale
 
 /**
+ * Whether a Borrow Card row's OCR text contains the user's preferred card/character name.
+ * Both sides are lowercased and stripped to alphanumerics, so OCR line breaks, brackets, and
+ * punctuation ("[Fire at My Heels]\nKitasan Black") cannot break a plain "kitasan black" match.
+ * Pure so it is unit-testable without OpenCV.
+ */
+internal fun borrowRowMatchesPreference(rowText: String, preference: String): Boolean {
+    val normRow = rowText.lowercase().filter { it.isLetterOrDigit() }
+    val normPref = preference.lowercase().filter { it.isLetterOrDigit() }
+    return normPref.isNotEmpty() && normRow.contains(normPref)
+}
+
+/**
  * Result of a navigation attempt between runs.
  *
  * @property success Whether navigation completed successfully.
@@ -108,6 +120,15 @@ class CareerLaunchNavigator(private val context: Context) {
          * the unknown-state and TAP_TO_CONTINUE paths already self-heal (2026-07-11: the Recover TP
          * quantity popup wedged as POST_RUN_RESULTS for all 15 iterations and killed the queue). */
         private const val STUCK_STATE_REBIND_AT = 7
+
+        /** Borrow Card list row pitch on 1080-wide captures, measured across the 2026-07-13
+         * picker screenshots (row centers 440/700/965/1225/1490 -> ~262 px). Rows are anchored
+         * off the Remove button: first row center sits borrowListFirstRowOffsetPx below it. */
+        private const val BORROW_ROW_PITCH_PX = 262
+
+        /** Half-height of the card-name OCR band inside a borrow row. The name renders as two
+         * lines (outfit, then character) centered in the row, well inside +-70 px. */
+        private const val BORROW_NAME_BAND_HALF_HEIGHT = 70
 
         /** Throttle for isOnHomeScreen()'s unknown-screen evidence capture: the daily-reset
          * re-entry path re-probes every unknown tick and each capture is a full-res PNG. */
@@ -2065,6 +2086,54 @@ class CareerLaunchNavigator(private val context: Context) {
             waitSafe(2.0)
             val (removeLocation, _) = ButtonBorrowCardRemove.find(iu)
             if (removeLocation != null) {
+                // Typed borrow preference, first attempt only: read the visible rows' card names
+                // and pick the first containing the user's preferred name. The second attempt
+                // deliberately ignores the preference - a pick the game refuses (e.g. a Duplicate
+                // Support of a card already in the deck) leaves the slot empty, and the retry
+                // must fall back to the default pick instead of repeating the refused one. Row
+                // geometry is anchor-relative to the Remove button, measured from real captures.
+                val preferredName = SettingsHelper.getStringSetting("runQueue", "preferredBorrowName").trim()
+                if (preferredName.isNotEmpty() && friendSlotFillAttempts == 1) {
+                    val listBitmap = iu.getSourceBitmap()
+                    var pickedY = -1.0
+                    var k = 0
+                    while (k < 8) {
+                        val centerY = removeLocation.y + borrowListFirstRowOffsetPx + k * BORROW_ROW_PITCH_PX
+                        // Stay above the Filters/Close chrome at the bottom of the dialog.
+                        if (centerY + BORROW_NAME_BAND_HALF_HEIGHT > listBitmap.height - 330) break
+                        val rowText =
+                            try {
+                                iu.performOCROnRegion(
+                                    listBitmap,
+                                    (listBitmap.width * 0.21).toInt(),
+                                    (centerY - BORROW_NAME_BAND_HALF_HEIGHT).toInt(),
+                                    (listBitmap.width * 0.52).toInt(),
+                                    BORROW_NAME_BAND_HALF_HEIGHT * 2,
+                                    useThreshold = false,
+                                    useGrayscale = true,
+                                    scale = 2.0,
+                                    debugName = "nav_borrow_row_ocr",
+                                )
+                            } catch (e: InterruptedException) {
+                                throw e
+                            } catch (_: Exception) {
+                                ""
+                            }
+                        MessageLog.i(TAG, "[NAV] [BORROW] Row ${k + 1}: \"${rowText.replace("\n", " ").trim().take(60)}\"")
+                        if (borrowRowMatchesPreference(rowText, preferredName)) {
+                            pickedY = centerY
+                            MessageLog.i(TAG, "[NAV] [BORROW] Preferred card \"$preferredName\" matched on row ${k + 1}. Selecting it at (540, ${centerY.toInt()})...")
+                            break
+                        }
+                        k++
+                    }
+                    if (pickedY > 0) {
+                        gestureUtils.tap(540.0, pickedY, "borrow_preferred_name_row")
+                        waitSafe(2.0)
+                        return TransitionResult.Continue
+                    }
+                    MessageLog.i(TAG, "[NAV] [BORROW] Preferred card \"$preferredName\" not found on the visible rows - using the default pick.")
+                }
                 // Prefer the user's strong friend card when it is visible (template:
                 // borrow_preferred_card.png). Blind first-row borrows produced measurably
                 // weaker careers. Tap at the row's center X, not on the card art, which opens
