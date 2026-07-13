@@ -142,6 +142,17 @@ class CareerLaunchNavigator(private val context: Context) {
          * realistic followed-trainer pool; the scan also stops early when a page adds nothing new. */
         private const val MAX_BORROW_SCAN_PAGES = 4
 
+        /** The "! Duplicate Support" pill straddles a borrow row's top edge; its center sits
+         * ~113 px above the row center on the measured captures. A pill inside this offset band
+         * marks the row's character as already present in the deck. */
+        private const val BORROW_DUPLICATE_PILL_MIN_OFFSET = 78
+        private const val BORROW_DUPLICATE_PILL_MAX_OFFSET = 148
+
+        /** Bounded replacements of a borrowed card the deck flags as a duplicate. Each retry
+         * excludes the refused character, so this only exhausts when the player's own deck
+         * clashes with this many distinct picks in a row. */
+        private const val MAX_BORROW_DUPLICATE_REPLACEMENTS = 3
+
         /** Throttle for isOnHomeScreen()'s unknown-screen evidence capture: the daily-reset
          * re-entry path re-probes every unknown tick and each capture is a full-res PNG. */
         private const val HOME_PROBE_CAPTURE_THROTTLE_MS = 10L * 60L * 1000L
@@ -305,6 +316,14 @@ class CareerLaunchNavigator(private val context: Context) {
     private var friendSlotFillAttempts: Int = 0
     private var startCareerClickAttempts: Int = 0
 
+    // Duplicate-borrow replacement state, reset per navigate(). A borrow of a character already
+    // in the deck COMMITS in the picker but blocks Start Career; the deck screen then marks both
+    // cards with a "! Duplicate Support" pill. Each replacement excludes the refused character so
+    // the next pick moves down the priority list instead of repeating the clash.
+    private var borrowDuplicateReplacements: Int = 0
+    private val borrowExcludedCharacters = mutableSetOf<String>()
+    private var lastBorrowPickEntry: String? = null
+
     // Vertical offset from the Borrow Card list's "Remove" bar to the center of the first
     // card row. Both supported screen configs render game content at 1080px width, so this
     // dialog-internal offset is stable across them.
@@ -404,6 +423,9 @@ class CareerLaunchNavigator(private val context: Context) {
         skipToggleAlreadyDone = false
         legacyAutoSelectAlreadyDone = false
         careerLaunchInitiated = false
+        borrowDuplicateReplacements = 0
+        borrowExcludedCharacters.clear()
+        lastBorrowPickEntry = null
         finalizeToHomeMode = finalizeToHome
         singleRunTraineeTarget = singleRunTrainee
         singleRunTraineeTargetExcludes = singleRunTraineeExcludes
@@ -2099,10 +2121,10 @@ class CareerLaunchNavigator(private val context: Context) {
             val (removeLocation, _) = ButtonBorrowCardRemove.find(iu)
             if (removeLocation != null) {
                 // Smart Borrow (default ON): scan the whole Borrow Card list for the best card on
-                // the curated priority list and pick it wherever it sits. First attempt only - a
-                // pick the game refuses (e.g. a Duplicate Support of a card already in the deck)
-                // leaves the slot empty, and the bounded retry must fall back to the default
-                // template/top-row pick instead of repeating the refused one.
+                // the curated priority list and pick it wherever it sits. First attempt only - if
+                // the tap does not commit, the bounded retry must fall back to the default
+                // template/top-row pick instead of repeating the same one. (A pick whose character
+                // is already in the deck DOES commit - the duplicate check below handles that.)
                 if (SettingsHelper.getBooleanSetting("runQueue", "enableSmartBorrow", true) && friendSlotFillAttempts == 1) {
                     if (trySmartBorrowPick()) {
                         waitSafe(2.0)
@@ -2130,6 +2152,54 @@ class CareerLaunchNavigator(private val context: Context) {
                 waitSafe(2.0)
             } else {
                 MessageLog.w(TAG, "[NAV] Tapped the friend slot but the Borrow Card list did not appear. Re-detecting...")
+            }
+            return TransitionResult.Continue
+        }
+
+        // A borrowed card of a character already in the deck commits in the picker just fine -
+        // the game only blocks at Start Career ("Cannot proceed with duplicate Umamusume in the
+        // Support Card deck", a transient toast) while marking both clashing cards with a
+        // persistent "! Duplicate Support" pill. Clicking Start into that wall wastes the whole
+        // launch, so replace the borrow instead: reopen the picker through the slot's Friends
+        // banner, exclude the refused character, and take the next-best card.
+        if (SettingsHelper.getBooleanSetting("runQueue", "enableSmartBorrow", true) &&
+            LabelDuplicateSupportDeck.check(iu, sourceBitmap = bitmap)
+        ) {
+            if (borrowDuplicateReplacements >= MAX_BORROW_DUPLICATE_REPLACEMENTS) {
+                return TransitionResult.Failed(
+                    reason = "The borrowed friend card duplicates a character already in the support deck, and $borrowDuplicateReplacements replacements did not resolve it.",
+                    transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                    recommendedAction = "Borrow a card of a character your deck does not contain manually, then restart the queue.",
+                )
+            }
+            borrowDuplicateReplacements++
+            val refused = lastBorrowPickEntry?.let { borrowEntryCharacter(it) }
+            refused?.let { borrowExcludedCharacters.add(it) }
+            lastBorrowPickEntry = null
+            MessageLog.w(
+                TAG,
+                "[NAV] [BORROW] The borrowed card duplicates a character already in the deck" +
+                    (refused?.let { " (\"$it\")" } ?: "") +
+                    ". Replacing it (attempt $borrowDuplicateReplacements/$MAX_BORROW_DUPLICATE_REPLACEMENTS)...",
+            )
+            val (bannerLocation, _) = LabelFriendSlotBanner.find(iu)
+            if (bannerLocation == null) {
+                MessageLog.w(TAG, "[NAV] [BORROW] Friend slot banner not found - re-detecting before retrying the replacement.")
+                waitSafe(2.0)
+                return TransitionResult.Continue
+            }
+            // Tap the card body above the banner; the banner strip itself may not be tappable.
+            gestureUtils.tap(bannerLocation.x, bannerLocation.y - 180, "borrow_slot_reopen")
+            waitSafe(2.0)
+            if (ButtonBorrowCardRemove.find(iu).first == null) {
+                MessageLog.w(TAG, "[NAV] [BORROW] Tapped the friend slot but the Borrow Card list did not appear. Re-detecting...")
+                return TransitionResult.Continue
+            }
+            if (trySmartBorrowPick(replaceMode = true)) {
+                waitSafe(2.0)
+            } else {
+                MessageLog.w(TAG, "[NAV] [BORROW] No replacement candidate found - the next pass retries until the replacement budget runs out.")
+                waitSafe(1.5)
             }
             return TransitionResult.Continue
         }
@@ -2754,13 +2824,20 @@ class CareerLaunchNavigator(private val context: Context) {
      * ahead of the curated list. When the best find sits on an earlier page, the picker is
      * closed and reopened (which resets it to the top) and the target page is re-scrolled.
      *
+     * @param replaceMode true when swapping out a committed borrow the deck flagged as a
+     *   Duplicate Support: the picker reopens through the filled slot's Friends banner instead of
+     *   the empty-slot icon, and when no curated card is available any untagged row of a
+     *   character not yet refused is taken - an arbitrary legal borrow beats one the game will
+     *   not start with.
      * @return true when a card was tapped; on false the picker has been closed so the caller's
      *   retry starts clean with the default pick.
      */
-    private fun trySmartBorrowPick(): Boolean {
-        val priorities = mutableListOf<String>()
-        SettingsHelper.getStringSetting("runQueue", "preferredBorrowName").trim().takeIf { it.isNotEmpty() }?.let { priorities.add(it) }
-        priorities.addAll(SmartBorrowList.priority)
+    private fun trySmartBorrowPick(replaceMode: Boolean = false): Boolean {
+        val allPriorities = mutableListOf<String>()
+        SettingsHelper.getStringSetting("runQueue", "preferredBorrowName").trim().takeIf { it.isNotEmpty() }?.let { allPriorities.add(it) }
+        allPriorities.addAll(SmartBorrowList.priority)
+        // Characters the deck already refused this launch are out, whatever the outfit.
+        val priorities = filterBorrowPriorities(allPriorities, borrowExcludedCharacters)
 
         var bestEntry = Int.MAX_VALUE
         var bestPage = -1
@@ -2789,6 +2866,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     // The best possible card is on screen right now - take it immediately.
                     val centerY = rows[pageBest.second].first
                     MessageLog.i(TAG, "[NAV] [BORROW] \"${priorities[0]}\" found. Selecting it at (540, ${centerY.toInt()}).")
+                    lastBorrowPickEntry = priorities[0]
                     gestureUtils.tap(540.0, centerY, "borrow_smart_row")
                     return true
                 }
@@ -2800,6 +2878,17 @@ class CareerLaunchNavigator(private val context: Context) {
         }
 
         if (bestPage < 0) {
+            if (replaceMode) {
+                // No curated card left to try: any row not tagged Duplicate Support (those never
+                // reach this list) and not already refused still beats the committed clash.
+                for ((centerY, text) in borrowRowsOnScreen(iu.getSourceBitmap())) {
+                    if (borrowExcludedCharacters.any { borrowRowMatchesPreference(text, it) }) continue
+                    MessageLog.i(TAG, "[NAV] [BORROW] No curated card available - replacing with \"${text.replace("\n", " ").trim().take(60)}\" at (540, ${centerY.toInt()}).")
+                    lastBorrowPickEntry = text
+                    gestureUtils.tap(540.0, centerY, "borrow_any_row")
+                    return true
+                }
+            }
             ButtonClose.click(iu)
             return false
         }
@@ -2808,7 +2897,7 @@ class CareerLaunchNavigator(private val context: Context) {
         MessageLog.i(TAG, "[NAV] [BORROW] Best available card is \"${priorities[bestEntry]}\" on page $bestPage. Reopening the picker to select it...")
         ButtonClose.click(iu)
         waitSafe(1.5)
-        if (!IconFriendSlotEmpty.click(iu)) return false
+        if (!reopenBorrowPicker(replaceMode)) return false
         waitSafe(2.0)
         repeat(bestPage) {
             swipeBorrowList(iu.getSourceBitmap())
@@ -2816,6 +2905,7 @@ class CareerLaunchNavigator(private val context: Context) {
         for ((centerY, text) in borrowRowsOnScreen(iu.getSourceBitmap())) {
             if (borrowRowMatchesPreference(text, priorities[bestEntry])) {
                 MessageLog.i(TAG, "[NAV] [BORROW] Selecting \"${priorities[bestEntry]}\" at (540, ${centerY.toInt()}).")
+                lastBorrowPickEntry = priorities[bestEntry]
                 gestureUtils.tap(540.0, centerY, "borrow_smart_row")
                 return true
             }
@@ -2825,19 +2915,35 @@ class CareerLaunchNavigator(private val context: Context) {
         return false
     }
 
+    /** Opens the Borrow Card picker from the deck screen: via the empty-slot icon normally, or
+     * via the filled slot's Friends banner when replacing a committed borrow. */
+    private fun reopenBorrowPicker(replaceMode: Boolean): Boolean {
+        if (!replaceMode) return IconFriendSlotEmpty.click(iu)
+        val (bannerLocation, _) = LabelFriendSlotBanner.find(iu)
+        if (bannerLocation == null) return false
+        gestureUtils.tap(bannerLocation.x, bannerLocation.y - 180, "borrow_slot_reopen")
+        return true
+    }
+
     /**
      * Reads the visible Borrow Card rows: each row is located by its Last Login pill and its
      * two-line card name is OCR'd from the fixed band above the pill. Rows whose name band would
-     * clip the dialog header or the Filters/Close chrome are skipped.
+     * clip the dialog header or the Filters/Close chrome are skipped, and so are rows the game
+     * tags "! Duplicate Support" - picking one commits but the deck then blocks Start Career.
      *
      * @return (row center Y, raw OCR text) pairs, top to bottom.
      */
     private fun borrowRowsOnScreen(bitmap: Bitmap): List<Pair<Double, String>> {
+        val duplicatePills = LabelDuplicateSupport.findAll(iu, sourceBitmap = bitmap)
         return LabelBorrowLastLogin.findAll(iu, sourceBitmap = bitmap)
             .sortedBy { it.y }
             .mapNotNull { pill ->
                 val centerY = pill.y - BORROW_PILL_TO_ROW_CENTER_PX
                 if (centerY - BORROW_NAME_BAND_HALF_HEIGHT < 150 || centerY + BORROW_NAME_BAND_HALF_HEIGHT > bitmap.height - 300) return@mapNotNull null
+                if (duplicatePills.any { it.y >= centerY - BORROW_DUPLICATE_PILL_MAX_OFFSET && it.y <= centerY - BORROW_DUPLICATE_PILL_MIN_OFFSET }) {
+                    MessageLog.i(TAG, "[NAV] [BORROW] Skipping a row marked \"! Duplicate Support\" (its character is already in the deck).")
+                    return@mapNotNull null
+                }
                 val text =
                     try {
                         iu.performOCROnRegion(

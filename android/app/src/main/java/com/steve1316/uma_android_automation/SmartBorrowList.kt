@@ -37,3 +37,22 @@ internal fun smartBorrowBestMatch(rowTexts: List<String>, priority: List<String>
     }
     return null
 }
+
+/**
+ * The character part of a borrow entry or row text: whatever follows the outfit's closing
+ * bracket, falling back to the last line for bracketless OCR reads. The game's duplicate rule
+ * is per CHARACTER, not per card, so exclusions must strip the outfit.
+ */
+internal fun borrowEntryCharacter(entry: String): String {
+    val afterBracket = entry.substringAfterLast(']', "").trim()
+    if (afterBracket.isNotEmpty()) return afterBracket
+    return entry.trim().lines().last().trim()
+}
+
+/**
+ * [priorities] minus every entry whose character is in [excludedCharacters] (any outfit of an
+ * excluded character goes - the deck clash is character-wide). Exclusion names match through
+ * [borrowRowMatchesPreference], so OCR-derived names work too.
+ */
+internal fun filterBorrowPriorities(priorities: List<String>, excludedCharacters: Collection<String>): List<String> =
+    priorities.filter { entry -> excludedCharacters.none { borrowRowMatchesPreference(entry, it) } }

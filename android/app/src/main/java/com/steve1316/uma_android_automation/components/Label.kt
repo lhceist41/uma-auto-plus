@@ -55,6 +55,26 @@ object LabelBorrowLastLogin : ComponentInterface {
     override val template = Template("components/label/borrow_last_login")
 }
 
+object LabelDuplicateSupport : ComponentInterface {
+    // Orange "! Duplicate Support" pill straddling the top edge of a Borrow Card row whose
+    // character is already in the support deck. Interior-only crop: the dialog and deck layers
+    // rasterize the same pill differently, so each context gets its own template.
+    override val template = Template("components/label/duplicate_support")
+}
+
+object LabelDuplicateSupportDeck : ComponentInterface {
+    // The same "! Duplicate Support" pill as rendered on the support deck screen's card slots.
+    // Present on BOTH clashing cards, so a single check() detects an illegal deck.
+    override val template = Template("components/label/duplicate_support_deck")
+}
+
+object LabelFriendSlotBanner : ComponentInterface {
+    // Pink "Friends" banner at the bottom of the FILLED friend slot on the support deck screen.
+    // Used to reopen the Borrow Card picker when the slot is no longer empty (the empty-slot
+    // icon is gone by then).
+    override val template = Template("components/label/friend_slot_banner")
+}
+
 object LabelScenarioSelectUra : ComponentInterface {
     override val template = Template("components/label/scenario_select_ura", region = Region.middle)
 }

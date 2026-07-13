@@ -50,4 +50,32 @@ class SmartBorrowTest {
         val rows = page1 + "[Sentimental Flare ♪]\nMaruzensky"
         assertEquals(0 to 5, smartBorrowBestMatch(rows, priorities), "The pinned card outranks Kitasan")
     }
+
+    @Test
+    @DisplayName("Excluding a character removes every outfit of that character from the priorities")
+    fun testFilterExcludesCharacterWide() {
+        val priorities = listOf(
+            "[Fire at My Heels] Kitasan Black",
+            "[Overflowing Feelings] Kitasan Black",
+            "[Sounds of Earth] Super Creek",
+        )
+        assertEquals(listOf("[Sounds of Earth] Super Creek"), filterBorrowPriorities(priorities, setOf("Kitasan Black")))
+        assertEquals(priorities, filterBorrowPriorities(priorities, emptySet()), "No exclusions leaves the list untouched")
+    }
+
+    @Test
+    @DisplayName("After excluding the deck's clash, the next-best available card wins")
+    fun testReplacementPickMovesDownTheList() {
+        val filtered = filterBorrowPriorities(SmartBorrowList.priority, setOf("Kitasan Black"))
+        val best = smartBorrowBestMatch(page1, filtered)
+        assertEquals(filtered.indexOfFirst { it.contains("Tazuna") } to 0, best, "Tazuna is the best remaining list card; the Kitasan row no longer matches anything")
+    }
+
+    @Test
+    @DisplayName("The character part is read from a clean entry or an OCR two-line read")
+    fun testBorrowEntryCharacter() {
+        assertEquals("Kitasan Black", borrowEntryCharacter("[Fire at My Heels] Kitasan Black"))
+        assertEquals("Kitasan Black", borrowEntryCharacter("[Fire at My Heels]\nKitasan Black"))
+        assertEquals("Kitasan Black", borrowEntryCharacter("Fire at My Heels\nKitasan Black"))
+    }
 }
