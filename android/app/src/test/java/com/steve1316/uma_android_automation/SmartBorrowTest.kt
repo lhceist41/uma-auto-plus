@@ -57,9 +57,9 @@ class SmartBorrowTest {
         val priorities = listOf(
             "[Fire at My Heels] Kitasan Black",
             "[Overflowing Feelings] Kitasan Black",
-            "[Sounds of Earth] Super Creek",
+            "[Piece of Mind] Super Creek",
         )
-        assertEquals(listOf("[Sounds of Earth] Super Creek"), filterBorrowPriorities(priorities, setOf("Kitasan Black")))
+        assertEquals(listOf("[Piece of Mind] Super Creek"), filterBorrowPriorities(priorities, setOf("Kitasan Black")))
         assertEquals(priorities, filterBorrowPriorities(priorities, emptySet()), "No exclusions leaves the list untouched")
     }
 

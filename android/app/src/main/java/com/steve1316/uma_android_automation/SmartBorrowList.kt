@@ -15,7 +15,7 @@ package com.steve1316.uma_android_automation
 internal object SmartBorrowList {
     val priority = listOf(
         "[Fire at My Heels] Kitasan Black",
-        "[Sounds of Earth] Super Creek",
+        "[Piece of Mind] Super Creek",
         "[Wave of Gratitude] Fine Motion",
         "[Tracen Reception] Tazuna Hayakawa",
         "[Beyond This Shining Moment] Silence Suzuka",
