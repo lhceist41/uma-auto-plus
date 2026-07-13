@@ -202,25 +202,6 @@ const RunQueueSettings = () => {
                                     className="mt-4"
                                 />
 
-                                <View style={{ marginTop: 16 }}>
-                                    <Text style={styles.inputLabel}>Preferred Borrow Card</Text>
-                                    <Text style={styles.inputDescription}>
-                                        The friend card to borrow when the queue fills the empty friend slot. Type a card or character name (e.g. "Kitasan Black" or "Fire at My Heels") and the
-                                        first matching row in the Borrow Card list is picked. Leave empty for the default pick: your strong friend card when the bot spots it, otherwise the top
-                                        row. Tip: follow the trainer whose card you want - the game sorts followed trainers to the top. If the pick cannot fill the slot (for example the card
-                                        would duplicate one already in your deck), the retry falls back to the default pick.
-                                    </Text>
-                                    <TextInput
-                                        style={styles.textInput}
-                                        value={runQueueSettings.preferredBorrowName}
-                                        onChangeText={(text) => updateSetting("preferredBorrowName", text)}
-                                        placeholder="e.g. Kitasan Black (empty = default pick)"
-                                        placeholderTextColor={colors.foreground + "55"}
-                                        autoCapitalize="none"
-                                        autoCorrect={false}
-                                    />
-                                </View>
-
                                 <CustomCheckbox
                                     searchId="run-queue-tp-restore-items"
                                     checked={runQueueSettings.enableTpRestoreWithItems}
