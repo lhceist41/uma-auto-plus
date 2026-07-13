@@ -138,9 +138,11 @@ class CareerLaunchNavigator(private val context: Context) {
          * rows and the text dedup absorbs any drag imprecision. */
         private const val BORROW_PAGE_SWIPE_PX = 3f * BORROW_ROW_PITCH_PX
 
-        /** Page-advance swipes after the first page. Five pages cover ~17 unique rows, past any
-         * realistic followed-trainer pool; the scan also stops early when a page adds nothing new. */
-        private const val MAX_BORROW_SCAN_PAGES = 4
+        /** Page-advance swipes after the first page. Nine pages cover ~29 unique rows - live
+         * followed pools proved deeper than the original five-page estimate and the scan stopped
+         * one swipe short of the list end. It still stops early the moment a page adds nothing
+         * new, so short lists pay no extra time. */
+        private const val MAX_BORROW_SCAN_PAGES = 8
 
         /** The "! Duplicate Support" pill straddles a borrow row's top edge; its center sits
          * ~113 px above the row center on the measured captures. A pill inside this offset band
@@ -2842,17 +2844,29 @@ class CareerLaunchNavigator(private val context: Context) {
         var bestEntry = Int.MAX_VALUE
         var bestPage = -1
         val seen = HashSet<String>()
+        // Priority entries whose offered rows all carry the "! Duplicate Support" tag can never
+        // be borrowed this launch. Treating them as unreachable lets the early tap settle for
+        // the best card that is actually legal instead of scanning on for a blocked one.
+        val unreachable = mutableSetOf<Int>()
         var page = 0
         while (page <= MAX_BORROW_SCAN_PAGES) {
             if (!BotService.isRunning || StartModule.queueStopRequested) break
             val bitmap = iu.getSourceBitmap()
-            val rows = borrowRowsOnScreen(bitmap)
-            if (page == 0 && rows.isEmpty()) {
+            val scan = borrowRowsOnScreen(bitmap)
+            val rows = scan.rows
+            if (page == 0 && rows.isEmpty() && scan.duplicateTexts.isEmpty()) {
                 MessageLog.w(TAG, "[NAV] [BORROW] No borrow rows detected on the opened picker.")
                 break
             }
+            for (dupText in scan.duplicateTexts) {
+                priorities.forEachIndexed { idx, entry ->
+                    if (borrowRowMatchesPreference(dupText, entry) && unreachable.add(idx)) {
+                        MessageLog.i(TAG, "[NAV] [BORROW] \"$entry\" is offered but would duplicate the deck - not a candidate this launch.")
+                    }
+                }
+            }
             var newRows = 0
-            for ((_, text) in rows) {
+            for (text in rows.map { it.second } + scan.duplicateTexts) {
                 val norm = text.lowercase().filter { it.isLetterOrDigit() }
                 if (norm.isEmpty() || !seen.add(norm)) continue
                 newRows++
@@ -2862,14 +2876,15 @@ class CareerLaunchNavigator(private val context: Context) {
             if (pageBest != null && pageBest.first < bestEntry) {
                 bestEntry = pageBest.first
                 bestPage = page
-                if (bestEntry == 0) {
-                    // The best possible card is on screen right now - take it immediately.
-                    val centerY = rows[pageBest.second].first
-                    MessageLog.i(TAG, "[NAV] [BORROW] \"${priorities[0]}\" found. Selecting it at (540, ${centerY.toInt()}).")
-                    lastBorrowPickEntry = priorities[0]
-                    gestureUtils.tap(540.0, centerY, "borrow_smart_row")
-                    return true
-                }
+            }
+            val firstReachable = priorities.indices.firstOrNull { it !in unreachable }
+            if (pageBest != null && firstReachable != null && pageBest.first == firstReachable) {
+                // The best card that can still legally be borrowed is on screen - take it now.
+                val centerY = rows[pageBest.second].first
+                MessageLog.i(TAG, "[NAV] [BORROW] \"${priorities[pageBest.first]}\" found. Selecting it at (540, ${centerY.toInt()}).")
+                lastBorrowPickEntry = priorities[pageBest.first]
+                gestureUtils.tap(540.0, centerY, "borrow_smart_row")
+                return true
             }
             if (newRows == 0) break // a page of only already-seen rows = the end of the list
             if (page == MAX_BORROW_SCAN_PAGES) break
@@ -2881,7 +2896,7 @@ class CareerLaunchNavigator(private val context: Context) {
             if (replaceMode) {
                 // No curated card left to try: any row not tagged Duplicate Support (those never
                 // reach this list) and not already refused still beats the committed clash.
-                for ((centerY, text) in borrowRowsOnScreen(iu.getSourceBitmap())) {
+                for ((centerY, text) in borrowRowsOnScreen(iu.getSourceBitmap()).rows) {
                     if (borrowExcludedCharacters.any { borrowRowMatchesPreference(text, it) }) continue
                     MessageLog.i(TAG, "[NAV] [BORROW] No curated card available - replacing with \"${text.replace("\n", " ").trim().take(60)}\" at (540, ${centerY.toInt()}).")
                     lastBorrowPickEntry = text
@@ -2902,7 +2917,7 @@ class CareerLaunchNavigator(private val context: Context) {
         repeat(bestPage) {
             swipeBorrowList(iu.getSourceBitmap())
         }
-        for ((centerY, text) in borrowRowsOnScreen(iu.getSourceBitmap())) {
+        for ((centerY, text) in borrowRowsOnScreen(iu.getSourceBitmap()).rows) {
             if (borrowRowMatchesPreference(text, priorities[bestEntry])) {
                 MessageLog.i(TAG, "[NAV] [BORROW] Selecting \"${priorities[bestEntry]}\" at (540, ${centerY.toInt()}).")
                 lastBorrowPickEntry = priorities[bestEntry]
@@ -2925,25 +2940,27 @@ class CareerLaunchNavigator(private val context: Context) {
         return true
     }
 
+    /** Visible picker rows split into borrowable [rows] and the texts of rows the game tagged
+     * "! Duplicate Support" - those cannot be borrowed this launch but still identify which
+     * priority entries are blocked. */
+    private data class BorrowScan(val rows: List<Pair<Double, String>>, val duplicateTexts: List<String>)
+
     /**
      * Reads the visible Borrow Card rows: each row is located by its Last Login pill and its
      * two-line card name is OCR'd from the fixed band above the pill. Rows whose name band would
-     * clip the dialog header or the Filters/Close chrome are skipped, and so are rows the game
-     * tags "! Duplicate Support" - picking one commits but the deck then blocks Start Career.
-     *
-     * @return (row center Y, raw OCR text) pairs, top to bottom.
+     * clip the dialog header or the Filters/Close chrome are skipped. Rows the game tags
+     * "! Duplicate Support" (picking one commits but the deck then blocks Start Career) are
+     * excluded from the borrowable rows and reported separately by name.
      */
-    private fun borrowRowsOnScreen(bitmap: Bitmap): List<Pair<Double, String>> {
+    private fun borrowRowsOnScreen(bitmap: Bitmap): BorrowScan {
         val duplicatePills = LabelDuplicateSupport.findAll(iu, sourceBitmap = bitmap)
-        return LabelBorrowLastLogin.findAll(iu, sourceBitmap = bitmap)
+        val duplicateTexts = mutableListOf<String>()
+        val rows = LabelBorrowLastLogin.findAll(iu, sourceBitmap = bitmap)
             .sortedBy { it.y }
             .mapNotNull { pill ->
                 val centerY = pill.y - BORROW_PILL_TO_ROW_CENTER_PX
                 if (centerY - BORROW_NAME_BAND_HALF_HEIGHT < 150 || centerY + BORROW_NAME_BAND_HALF_HEIGHT > bitmap.height - 300) return@mapNotNull null
-                if (duplicatePills.any { it.y >= centerY - BORROW_DUPLICATE_PILL_MAX_OFFSET && it.y <= centerY - BORROW_DUPLICATE_PILL_MIN_OFFSET }) {
-                    MessageLog.i(TAG, "[NAV] [BORROW] Skipping a row marked \"! Duplicate Support\" (its character is already in the deck).")
-                    return@mapNotNull null
-                }
+                val tagged = duplicatePills.any { it.y >= centerY - BORROW_DUPLICATE_PILL_MAX_OFFSET && it.y <= centerY - BORROW_DUPLICATE_PILL_MIN_OFFSET }
                 val text =
                     try {
                         iu.performOCROnRegion(
@@ -2962,8 +2979,14 @@ class CareerLaunchNavigator(private val context: Context) {
                     } catch (_: Exception) {
                         ""
                     }
+                if (tagged) {
+                    MessageLog.i(TAG, "[NAV] [BORROW] Skipping \"${text.replace("\n", " ").trim().take(60)}\" - marked \"! Duplicate Support\" (its character is already in the deck).")
+                    duplicateTexts.add(text)
+                    return@mapNotNull null
+                }
                 centerY to text
             }
+        return BorrowScan(rows, duplicateTexts)
     }
 
     /** One page-advance swipe on the Borrow Card list: slow so the drag lands without inertia. */
