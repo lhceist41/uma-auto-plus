@@ -817,7 +817,7 @@ const searchConfig: SearchOption[] = [
     {
         id: "run-queue-smart-borrow",
         title: "Smart Borrow",
-        description: "When the queue fills the empty friend slot, scans the whole Borrow Card list and borrows the best available card from a curated list of great picks.",
+        description: "When the bot fills the empty friend slot before a career (queued or single run), scans the whole Borrow Card list and borrows the best available card from a curated list of great picks, skipping duplicates of your own deck.",
         page: "RunQueueSettings",
     },
 ]
