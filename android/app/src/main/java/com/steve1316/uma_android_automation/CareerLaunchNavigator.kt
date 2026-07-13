@@ -122,13 +122,25 @@ class CareerLaunchNavigator(private val context: Context) {
         private const val STUCK_STATE_REBIND_AT = 7
 
         /** Borrow Card list row pitch on 1080-wide captures, measured across the 2026-07-13
-         * picker screenshots (row centers 440/700/965/1225/1490 -> ~262 px). Rows are anchored
-         * off the Remove button: first row center sits borrowListFirstRowOffsetPx below it. */
+         * picker screenshots (row centers 440/700/965/1225/1490 -> ~262 px). */
         private const val BORROW_ROW_PITCH_PX = 262
 
         /** Half-height of the card-name OCR band inside a borrow row. The name renders as two
          * lines (outfit, then character) centered in the row, well inside +-70 px. */
         private const val BORROW_NAME_BAND_HALF_HEIGHT = 70
+
+        /** Distance from a row's Last Login pill center up to the row's own center (the card-name
+         * band), measured on the same captures. Rows are located by the pill via findAll, which
+         * keeps the scan correct at any scroll position. */
+        private const val BORROW_PILL_TO_ROW_CENTER_PX = 87
+
+        /** One Borrow Card page advance: three row pitches, so consecutive pages overlap by two
+         * rows and the text dedup absorbs any drag imprecision. */
+        private const val BORROW_PAGE_SWIPE_PX = 3f * BORROW_ROW_PITCH_PX
+
+        /** Page-advance swipes after the first page. Five pages cover ~17 unique rows, past any
+         * realistic followed-trainer pool; the scan also stops early when a page adds nothing new. */
+        private const val MAX_BORROW_SCAN_PAGES = 4
 
         /** Throttle for isOnHomeScreen()'s unknown-screen evidence capture: the daily-reset
          * re-entry path re-probes every unknown tick and each capture is a full-res PNG. */
@@ -2086,53 +2098,21 @@ class CareerLaunchNavigator(private val context: Context) {
             waitSafe(2.0)
             val (removeLocation, _) = ButtonBorrowCardRemove.find(iu)
             if (removeLocation != null) {
-                // Typed borrow preference, first attempt only: read the visible rows' card names
-                // and pick the first containing the user's preferred name. The second attempt
-                // deliberately ignores the preference - a pick the game refuses (e.g. a Duplicate
-                // Support of a card already in the deck) leaves the slot empty, and the retry
-                // must fall back to the default pick instead of repeating the refused one. Row
-                // geometry is anchor-relative to the Remove button, measured from real captures.
-                val preferredName = SettingsHelper.getStringSetting("runQueue", "preferredBorrowName").trim()
-                if (preferredName.isNotEmpty() && friendSlotFillAttempts == 1) {
-                    val listBitmap = iu.getSourceBitmap()
-                    var pickedY = -1.0
-                    var k = 0
-                    while (k < 8) {
-                        val centerY = removeLocation.y + borrowListFirstRowOffsetPx + k * BORROW_ROW_PITCH_PX
-                        // Stay above the Filters/Close chrome at the bottom of the dialog.
-                        if (centerY + BORROW_NAME_BAND_HALF_HEIGHT > listBitmap.height - 330) break
-                        val rowText =
-                            try {
-                                iu.performOCROnRegion(
-                                    listBitmap,
-                                    (listBitmap.width * 0.21).toInt(),
-                                    (centerY - BORROW_NAME_BAND_HALF_HEIGHT).toInt(),
-                                    (listBitmap.width * 0.52).toInt(),
-                                    BORROW_NAME_BAND_HALF_HEIGHT * 2,
-                                    useThreshold = false,
-                                    useGrayscale = true,
-                                    scale = 2.0,
-                                    debugName = "nav_borrow_row_ocr",
-                                )
-                            } catch (e: InterruptedException) {
-                                throw e
-                            } catch (_: Exception) {
-                                ""
-                            }
-                        MessageLog.i(TAG, "[NAV] [BORROW] Row ${k + 1}: \"${rowText.replace("\n", " ").trim().take(60)}\"")
-                        if (borrowRowMatchesPreference(rowText, preferredName)) {
-                            pickedY = centerY
-                            MessageLog.i(TAG, "[NAV] [BORROW] Preferred card \"$preferredName\" matched on row ${k + 1}. Selecting it at (540, ${centerY.toInt()})...")
-                            break
-                        }
-                        k++
-                    }
-                    if (pickedY > 0) {
-                        gestureUtils.tap(540.0, pickedY, "borrow_preferred_name_row")
+                // Smart Borrow (default ON): scan the whole Borrow Card list for the best card on
+                // the curated priority list and pick it wherever it sits. First attempt only - a
+                // pick the game refuses (e.g. a Duplicate Support of a card already in the deck)
+                // leaves the slot empty, and the bounded retry must fall back to the default
+                // template/top-row pick instead of repeating the refused one.
+                if (SettingsHelper.getBooleanSetting("runQueue", "enableSmartBorrow", true) && friendSlotFillAttempts == 1) {
+                    if (trySmartBorrowPick()) {
                         waitSafe(2.0)
                         return TransitionResult.Continue
                     }
-                    MessageLog.i(TAG, "[NAV] [BORROW] Preferred card \"$preferredName\" not found on the visible rows - using the default pick.")
+                    // The picker was closed on failure; the next iteration reopens it and
+                    // attempt 2 runs the default pick.
+                    MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow made no pick - the retry will use the default pick.")
+                    waitSafe(1.5)
+                    return TransitionResult.Continue
                 }
                 // Prefer the user's strong friend card when it is visible (template:
                 // borrow_preferred_card.png). Blind first-row borrows produced measurably
@@ -2766,6 +2746,128 @@ class CareerLaunchNavigator(private val context: Context) {
      * Detection: ButtonAutoSelect template match.
      * Transition: ButtonAutoSelect.click() -> [opt-in: Checkbox.click() x N] -> ButtonOk.click() -> ButtonNext (next iteration).
      */
+    /**
+     * Scans the open Borrow Card list page by page for the highest-priority Smart Borrow card
+     * and taps it. Rows are located by their Last Login pill (findAll), which keeps the scan
+     * correct at any scroll position; pages advance by a fixed slow swipe and rows are deduped
+     * by normalized text. A non-empty runQueue.preferredBorrowName is treated as priority zero
+     * ahead of the curated list. When the best find sits on an earlier page, the picker is
+     * closed and reopened (which resets it to the top) and the target page is re-scrolled.
+     *
+     * @return true when a card was tapped; on false the picker has been closed so the caller's
+     *   retry starts clean with the default pick.
+     */
+    private fun trySmartBorrowPick(): Boolean {
+        val priorities = mutableListOf<String>()
+        SettingsHelper.getStringSetting("runQueue", "preferredBorrowName").trim().takeIf { it.isNotEmpty() }?.let { priorities.add(it) }
+        priorities.addAll(SmartBorrowList.priority)
+
+        var bestEntry = Int.MAX_VALUE
+        var bestPage = -1
+        val seen = HashSet<String>()
+        var page = 0
+        while (page <= MAX_BORROW_SCAN_PAGES) {
+            if (!BotService.isRunning || StartModule.queueStopRequested) break
+            val bitmap = iu.getSourceBitmap()
+            val rows = borrowRowsOnScreen(bitmap)
+            if (page == 0 && rows.isEmpty()) {
+                MessageLog.w(TAG, "[NAV] [BORROW] No borrow rows detected on the opened picker.")
+                break
+            }
+            var newRows = 0
+            for ((_, text) in rows) {
+                val norm = text.lowercase().filter { it.isLetterOrDigit() }
+                if (norm.isEmpty() || !seen.add(norm)) continue
+                newRows++
+                MessageLog.i(TAG, "[NAV] [BORROW] Page $page: \"${text.replace("\n", " ").trim().take(60)}\"")
+            }
+            val pageBest = smartBorrowBestMatch(rows.map { it.second }, priorities)
+            if (pageBest != null && pageBest.first < bestEntry) {
+                bestEntry = pageBest.first
+                bestPage = page
+                if (bestEntry == 0) {
+                    // The best possible card is on screen right now - take it immediately.
+                    val centerY = rows[pageBest.second].first
+                    MessageLog.i(TAG, "[NAV] [BORROW] \"${priorities[0]}\" found. Selecting it at (540, ${centerY.toInt()}).")
+                    gestureUtils.tap(540.0, centerY, "borrow_smart_row")
+                    return true
+                }
+            }
+            if (newRows == 0) break // a page of only already-seen rows = the end of the list
+            if (page == MAX_BORROW_SCAN_PAGES) break
+            swipeBorrowList(bitmap)
+            page++
+        }
+
+        if (bestPage < 0) {
+            ButtonClose.click(iu)
+            return false
+        }
+
+        // Reopen to reset the list to the top deterministically, then rescroll to the best page.
+        MessageLog.i(TAG, "[NAV] [BORROW] Best available card is \"${priorities[bestEntry]}\" on page $bestPage. Reopening the picker to select it...")
+        ButtonClose.click(iu)
+        waitSafe(1.5)
+        if (!IconFriendSlotEmpty.click(iu)) return false
+        waitSafe(2.0)
+        repeat(bestPage) {
+            swipeBorrowList(iu.getSourceBitmap())
+        }
+        for ((centerY, text) in borrowRowsOnScreen(iu.getSourceBitmap())) {
+            if (borrowRowMatchesPreference(text, priorities[bestEntry])) {
+                MessageLog.i(TAG, "[NAV] [BORROW] Selecting \"${priorities[bestEntry]}\" at (540, ${centerY.toInt()}).")
+                gestureUtils.tap(540.0, centerY, "borrow_smart_row")
+                return true
+            }
+        }
+        MessageLog.w(TAG, "[NAV] [BORROW] Could not relocate \"${priorities[bestEntry]}\" after reopening (the list order may have shifted). Falling back.")
+        ButtonClose.click(iu)
+        return false
+    }
+
+    /**
+     * Reads the visible Borrow Card rows: each row is located by its Last Login pill and its
+     * two-line card name is OCR'd from the fixed band above the pill. Rows whose name band would
+     * clip the dialog header or the Filters/Close chrome are skipped.
+     *
+     * @return (row center Y, raw OCR text) pairs, top to bottom.
+     */
+    private fun borrowRowsOnScreen(bitmap: Bitmap): List<Pair<Double, String>> {
+        return LabelBorrowLastLogin.findAll(iu, sourceBitmap = bitmap)
+            .sortedBy { it.y }
+            .mapNotNull { pill ->
+                val centerY = pill.y - BORROW_PILL_TO_ROW_CENTER_PX
+                if (centerY - BORROW_NAME_BAND_HALF_HEIGHT < 150 || centerY + BORROW_NAME_BAND_HALF_HEIGHT > bitmap.height - 300) return@mapNotNull null
+                val text =
+                    try {
+                        iu.performOCROnRegion(
+                            bitmap,
+                            (bitmap.width * 0.21).toInt(),
+                            (centerY - BORROW_NAME_BAND_HALF_HEIGHT).toInt(),
+                            (bitmap.width * 0.52).toInt(),
+                            BORROW_NAME_BAND_HALF_HEIGHT * 2,
+                            useThreshold = false,
+                            useGrayscale = true,
+                            scale = 2.0,
+                            debugName = "nav_borrow_row_ocr",
+                        )
+                    } catch (e: InterruptedException) {
+                        throw e
+                    } catch (_: Exception) {
+                        ""
+                    }
+                centerY to text
+            }
+    }
+
+    /** One page-advance swipe on the Borrow Card list: slow so the drag lands without inertia. */
+    private fun swipeBorrowList(bitmap: Bitmap) {
+        val x = bitmap.width * 0.5f
+        val from = bitmap.height * 0.72f
+        gestureUtils.swipe(x, from, x, from - BORROW_PAGE_SWIPE_PX, duration = 900L)
+        waitSafe(1.2)
+    }
+
     private fun handleLegacySelectScreen(): TransitionResult {
         // Rotation backstop: a trainee switch was required this launch but we reached Legacy Select
         // without handling Trainee Select (a missed detection tapped through it keeping the wrong

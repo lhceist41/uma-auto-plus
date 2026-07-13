@@ -811,6 +811,15 @@ const searchConfig: SearchOption[] = [
         page: "DebugSettings",
     },
 
+    // ============================================================
+    // Run Queue Settings
+    // ============================================================
+    {
+        id: "run-queue-smart-borrow",
+        title: "Smart Borrow",
+        description: "When the queue fills the empty friend slot, scans the whole Borrow Card list and borrows the best available card from a curated list of great picks.",
+        page: "RunQueueSettings",
+    },
 ]
 
 export default searchConfig

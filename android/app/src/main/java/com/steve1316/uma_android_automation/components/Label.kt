@@ -49,6 +49,12 @@ object LabelScenarioSelectHeader : ComponentInterface {
     override val template = Template("components/label/scenario_select_header", region = Region.topHalf)
 }
 
+object LabelBorrowLastLogin : ComponentInterface {
+    // Every row of the Borrow Card picker renders this pill at a fixed offset below the row's
+    // card name, so findAll on it locates every visible row regardless of scroll position.
+    override val template = Template("components/label/borrow_last_login")
+}
+
 object LabelScenarioSelectUra : ComponentInterface {
     override val template = Template("components/label/scenario_select_ura", region = Region.middle)
 }

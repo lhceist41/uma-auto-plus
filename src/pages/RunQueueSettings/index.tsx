@@ -203,6 +203,15 @@ const RunQueueSettings = () => {
                                 />
 
                                 <CustomCheckbox
+                                    searchId="run-queue-smart-borrow"
+                                    checked={runQueueSettings.enableSmartBorrow}
+                                    onCheckedChange={(checked) => updateSetting("enableSmartBorrow", checked)}
+                                    label="Smart Borrow"
+                                    description="When the queue fills the empty friend slot, scans the whole Borrow Card list and borrows the best available card from a curated list of great picks (Kitasan Black first). Follow trainers with strong cards to give it good options. If a pick is refused (e.g. it would duplicate a card already in your deck), the retry falls back to the default pick. Off = default pick only: your strong friend card when spotted, otherwise the top row."
+                                    className="mt-4"
+                                />
+
+                                <CustomCheckbox
                                     searchId="run-queue-tp-restore-items"
                                     checked={runQueueSettings.enableTpRestoreWithItems}
                                     onCheckedChange={(checked) => updateSetting("enableTpRestoreWithItems", checked)}
