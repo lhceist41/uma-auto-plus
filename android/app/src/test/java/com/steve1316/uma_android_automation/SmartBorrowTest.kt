@@ -33,7 +33,7 @@ class SmartBorrowTest {
     fun testBestRemaining() {
         val rows = listOf("[Dreams Do Come True!]\nWinning Ticket", "[Tracen Reception]\nTazuna Hayakawa")
         val best = smartBorrowBestMatch(rows)
-        assertEquals(3 to 1, best, "Tazuna is the best list card present; Winning Ticket is not on the list")
+        assertEquals(SmartBorrowList.priority.indexOfFirst { it.contains("Tazuna") } to 1, best, "Tazuna is the best list card present; Winning Ticket is not on the list")
     }
 
     @Test
