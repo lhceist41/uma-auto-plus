@@ -17,6 +17,7 @@ A comprehensive guide to the inner workings of the app. This document explains w
 - [9. Scenario: URA Finale](#9-scenario-ura-finale)
 - [10. Scenario: Unity Cup](#10-scenario-unity-cup)
 - [11. Scenario: Trackblazer](#11-scenario-trackblazer)
+- [12. Skill Purchasing](#12-skill-purchasing)
 
 ---
 
@@ -49,6 +50,31 @@ classDiagram
 ```
 
 The `Game` class instantiates the correct scenario subclass (`UraFinale`, `UnityCup`, or `Trackblazer`) based on the user's selection, then calls `process()` in a loop until the campaign ends or the bot is stopped.
+
+### Module map
+
+Ownership and boundaries for the parts whose responsibility is not obvious from the filename. The
+full directory listing is not reproduced here — read the tree from the repository, which is always
+current.
+
+| Module | Responsibility |
+|---|---|
+| `Game.kt` | Top-level orchestrator. Owns the `Campaign` instance and drives the tick loop |
+| `Task.kt` | Bot lifecycle — start, stop, runtime cap |
+| `Campaign.kt` | Open base class for one career. Owns `Trainee`, `Racing`, `Training`, `SkillPlan`, the date, deck validation, the mood floor, and dialog dispatch |
+| `StartModule.kt` | The JavaScript ↔ Kotlin bridge (start/stop, accessibility status) **and** the run queue |
+| `CareerLaunchNavigator.kt` | The between-career state machine: career summary → home → set up and start the next run. Distinct from the in-career loop |
+| `DialogHandler.kt` | Cross-cutting dialog dispatch for dialogs shared by all scenarios |
+| `TrainingEventRecognizer.kt` | OCR plus a Jaro-Winkler matcher for event names |
+| `components/` | Kotlin objects that wrap the template-match PNG assets. A component is the code-side handle for an image under `assets/images/components/` |
+| `types/Trainee.kt` | Stats, aptitudes, mood, energy, conditions, and their OCR readers |
+| `types/GameDate.kt` | Turn arithmetic and date OCR |
+| `utils/CustomImageUtils.kt` | Bitmap helpers, OCR wrappers, scenario-aware support detection |
+
+The frontend (`src/`) is a React Native settings and log UI. `src/context/BotStateContext.tsx` holds
+the canonical `Settings` shape; `src/data/characterPresets.ts` holds the preset library. Kotlin reads
+settings back through `SettingsHelper`, so a setting added on one side does nothing until it exists on
+both.
 
 ---
 
@@ -224,6 +250,19 @@ Each scenario can override these hooks to inject custom logic at specific points
 | `onScheduledRacePrepScreen()` | On the Race Prep screen before a scheduled or mandatory race | Trackblazer: use race items (hammers, glow sticks) |
 | `handleRaceEventFallback()` | When a race attempt fails (e.g. consecutive race limit) | Trackblazer: back out and train instead (non-mandatory races only) |
 | `resetDailyFlags()` | When date changes | Reset scenario-specific per-turn flags |
+
+The hooks above fire at points *within* a turn. Separately, a scenario subclass can override these
+core `Campaign` members, which define the turn itself:
+
+| Override | Purpose |
+|---|---|
+| `process()` | Called every tick from `Game`. Detects the current screen and dispatches |
+| `handleMainScreen()` | Decides the next action while on the Home training screen |
+| `handleRaceEvents(isScheduledRace)` | Scenario-specific race entry. Trackblazer, for example, restricts which prediction tiers it will enter |
+| `handleDialogs(args)` | Dialog dispatch; cascades to `DialogHandler` for dialogs shared across scenarios |
+| `shouldRecoverMood(sourceBitmap)` | Mood-floor check, configurable through the `moodFloor` setting |
+| `recoverMood(...)` / `performMoodRecovery(...)` | The mood-recovery action paths |
+| `runDeckValidation()` | One-shot check at career start. Warns when preferred-distance or preferred-style aptitude is below the floor, then warns on prediction visibility when the best distance aptitude is below B. Informational — it does not block |
 
 ---
 
@@ -1075,3 +1114,40 @@ Trackblazer uses a specialized race selection algorithm (`findSuitableTrackblaze
    - Then by **grade:** G1 > G2 > G3 > OP > Pre-OP
 5. **Second pass:** After selecting the winner, the bot scrolls back through the list to find the winner's current screen position and taps it.
 6. **Fallback:** If `ScrollList` creation fails, the bot falls back to single-page detection.
+
+### 11.8 Scenario-specific tuning
+
+Three deliberate deviations from the generic engine, all specific to this scenario:
+
+- **Bonding priority in training.** Training rooms showing the scenario's support character carry an
+  extra relationship-score weight, layered on top of the generic trainer-support bonus. This acts as
+  a proxy for the scenario's point gain, because the relevant UI screen has no template asset yet.
+  Implemented in `Training.kt`.
+- **Energy-item reservation.** Presets reserve the high-value energy items (Energy Drink MAX and its
+  EX variant, Yummy Cat Food, Coaching Megaphone) from early- and mid-game shop spending via
+  `trackblazerExcludedItems`, so they remain available for the climax.
+- **Shop interaction every turn** (`trackblazerShopCheckFrequency: 1`), unlike other scenarios which
+  visit the shop rarely or not at all.
+
+---
+
+## 12. Skill Purchasing
+
+Skill buying is driven by `SkillPlan.kt` and runs at defined checkpoints, not continuously. The
+strategy is selected per checkpoint by the `SkillPlan.SpendingStrategy` enum:
+
+| Strategy | Behaviour |
+|---|---|
+| `DEFAULT` / `OPTIMIZE_RANK` | Greedy sort by value-to-cost ratio |
+| `OPTIMIZE_SKILLS` | Community-tier prioritised |
+| `OPTIMIZE_KNAPSACK` | A grouped 0/1 knapsack dynamic program (`buildKnapsackGroups` plus `calculateOptimizeKnapsackPurchases`). Respects upgrade-chain mutual exclusion, so it never buys both a skill and its upgrade |
+
+`OPTIMIZE_KNAPSACK` is the default for the `careerComplete` checkpoint across the shipped presets,
+where the skill-point budget is large enough for a non-greedy strategy to pay off. Earlier checkpoints
+(`skillPointCheck`, `preFinals`) stay on `OPTIMIZE_SKILLS`, because at a small budget the dynamic
+program has nothing to optimise.
+
+The chosen plan is logged as `[KNAPSACK] DP plan: N skills for X SP. Skills: ...`.
+
+**A purchase is not complete until the confirmation screen is gone.** The on-screen skill-point counter
+is a selection preview, not a balance — see `docs/INCIDENTS.md`, entry 4.

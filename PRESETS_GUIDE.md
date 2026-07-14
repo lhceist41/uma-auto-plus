@@ -311,6 +311,8 @@ const handlePresetChange = async (presetName) => {
 - Do NOT include `formattedSettingsString` or `currentProfileName` (runtime state).
 - Each character needs a **separate preset per scenario** since stat priorities, racing plans, and skill builds differ between scenarios.
 - The `name` field must be unique within each scenario.
+- **Empty `supportEventOverrides: {}` and `scenarioEventOverrides: {}` are sentinel placeholders, not "no overrides".** When these arrive empty, the Home page's preset-merge code deliberately *preserves* the user's existing overrides across a preset switch. Filling them in "helpfully" will clobber whatever the user configured. Leave them empty unless you intend to overwrite.
+- **Parent-farming presets keep every stat listed in `focusOnSparkStatTarget`.** The career-end blue spark picks its stat uniformly at random among the five, and any stat finishing below 600 can never roll a 3-star. Narrowing the list to a trainee's "good" stats silently reintroduces dead rolls. The training scorer's spark-rescue boost only fires on listed stats, so the list *is* the lever — leave all five in place.
 
 ---
 
