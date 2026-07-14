@@ -254,11 +254,12 @@ export interface Settings {
         stopOnError: boolean
         reuseLastLaunchSetup: boolean
         autoFillSupports: boolean
-        // Smart Borrow: when the queue fills the empty friend slot, scan the whole Borrow Card
-        // list (scrolling included) and borrow the best available card from the bot's curated
-        // priority list. A pick the game refuses (e.g. a duplicate of a card already in the deck)
-        // falls back to the default pick on the retry. Off = the default pick only (the strong
-        // friend card when spotted, otherwise the top row).
+        // Smart Borrow: when the queue fills the empty friend slot, scroll down through the Borrow
+        // Card list and borrow the best card found from the bot's curated priority list. The scan
+        // is bounded (a very deep followed pool can run past it), so it takes the best card it
+        // reaches, not necessarily the best card that exists. A pick the game refuses (e.g. a
+        // duplicate of a card already in the deck) falls back to the default pick on the retry.
+        // Off = the default pick only (the strong friend card when spotted, otherwise the top row).
         enableSmartBorrow: boolean
         // Advanced/no UI yet: a card or character name treated as priority zero ahead of the
         // curated Smart Borrow list. Empty = list order only.

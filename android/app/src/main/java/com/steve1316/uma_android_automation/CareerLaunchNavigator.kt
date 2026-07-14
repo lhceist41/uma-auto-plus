@@ -2122,8 +2122,10 @@ class CareerLaunchNavigator(private val context: Context) {
             waitSafe(2.0)
             val (removeLocation, _) = ButtonBorrowCardRemove.find(iu)
             if (removeLocation != null) {
-                // Smart Borrow (default ON): scan the whole Borrow Card list for the best card on
-                // the curated priority list and pick it wherever it sits. First attempt only - if
+                // Smart Borrow (default ON): scroll down through the Borrow Card list, up to
+                // MAX_BORROW_SCAN_PAGES, for the best card on the curated priority list and pick it
+                // wherever it sits. The scan is bounded, so a card sitting past the last scanned
+                // page is not seen - it takes the best card it reaches. First attempt only - if
                 // the tap does not commit, the bounded retry must fall back to the default
                 // template/top-row pick instead of repeating the same one. (A pick whose character
                 // is already in the deck DOES commit - the duplicate check below handles that.)

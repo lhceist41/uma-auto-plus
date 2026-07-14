@@ -380,7 +380,7 @@ const RunQueueSettings = () => {
                             checked={runQueueSettings.enableSmartBorrow}
                             onCheckedChange={(checked) => updateSetting("enableSmartBorrow", checked)}
                             label="Smart Borrow"
-                            description="Whenever the bot fills the empty friend slot before starting a career - queued runs and single-run launches alike - it scans the whole Borrow Card list and borrows the best available card from a curated list of great picks (Kitasan Black first). Cards marked '! Duplicate Support' are skipped, and if a duplicate lands in the slot anyway it is swapped for the next-best pick instead of blocking the career start. Follow trainers with strong cards to give it good options. Off = the default pick: your strong friend card when spotted, otherwise the top row."
+                            description="Whenever the bot fills the empty friend slot before starting a career - queued runs and single-run launches alike - it scrolls down through the Borrow Card list and borrows the best card it finds from a curated list of great picks (Kitasan Black first). Cards marked '! Duplicate Support' are skipped, and if a duplicate lands in the slot anyway it is swapped for the next-best pick instead of blocking the career start. Follow trainers with strong cards to give it good options. Off = the default pick: your strong friend card when spotted, otherwise the top row."
                             className="mt-4"
                         />
                     </View>
