@@ -16,7 +16,9 @@ from bs4 import BeautifulSoup
 DATA_DIR = Path(__file__).resolve().parents[2] / "src" / "data"
 
 # Resolve the skill-icon output directory the same way so icons land in the app's bundled assets regardless of CWD.
-ICONS_DIR = Path(__file__).resolve().parents[2] / "src" / "pages" / "Skills" / "icons"
+# This must be the app's real icon dir (src/pages/SkillSettings/icons); the app reads icons through that dir's
+# index.ts require() map, which is regenerated below. Writing anywhere else means new icons never reach the bundle.
+ICONS_DIR = Path(__file__).resolve().parents[2] / "src" / "pages" / "SkillSettings" / "icons"
 
 GAMETORA_DATA_URL = "https://gametora.com/data"
 GAMETORA_MANIFESTS_URL = f"{GAMETORA_DATA_URL}/manifests/umamusume.json"
@@ -130,6 +132,22 @@ def download_image(url: str, out_fp: str):
             f_out.write(response.content)
     except (requests.exceptions.RequestException, OSError) as exc:
         print(f"An error occurred when downloading image: {exc}")
+
+
+def write_skill_icon_index(icons_dir):
+    """Regenerates the app's skill-icon require() map (index.ts) from the PNGs present in icons_dir.
+
+    The app looks up icons through this static map because Metro can't resolve a require() with a computed
+    filename, so a downloaded PNG stays invisible until it has an entry here. Building the map from the files
+    actually on disk (numeric id order) keeps it in sync with every scrape and never points at a missing file.
+    """
+    icons_dir = Path(icons_dir)
+    ids = sorted(int(m.group(1)) for p in icons_dir.glob("utx_ico_skill_*.png") if (m := re.match(r"utx_ico_skill_(\d+)\.png$", p.name)))
+    lines = ["const icons: { [key: number]: any } = {"]
+    lines += [f'    {i}: require("./utx_ico_skill_{i}.png"),' for i in ids]
+    lines += ["}", "", "export default icons"]
+    # Force LF; the checked-in index.ts is LF and this file has no .gitattributes to normalize it.
+    (icons_dir / "index.ts").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
 
 def fetch_gametora_manifest_data(manifest_name: str) -> dict:
@@ -493,6 +511,9 @@ class SkillScraper(BaseScraper):
                     url = f"https://gametora.com/images/umamusume/skill_icons/utx_ico_skill_{icon_id}.png"
                     out_fp = str(ICONS_DIR / f"utx_ico_skill_{icon_id}.png")
                     download_image(url, out_fp)
+                # Rebuild index.ts so the icons just downloaded are actually bundled: the app can only see an
+                # icon that has a require() entry, and a bare PNG on disk does not create one.
+                write_skill_icon_index(ICONS_DIR)
             except Exception as exc:
                 print("Error downloading skill icons:", exc)
 
