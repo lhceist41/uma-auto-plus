@@ -89,6 +89,15 @@ class TraineeNameMatcherTest {
         }
 
         @Test
+        fun `bare Super Creek target matches the account's Murmuring Stream outfit banner`() {
+            // Blue Farm fix: the display name "Super Creek (Blue Farm)" now resolves to the bare trainee
+            // "Super Creek", which must match whatever outfit the account shows - here Murmuring Stream.
+            // (The live failure was the phantom target "[Blue Farm] Super Creek" scoring 0.000 against this.)
+            val s = TraineeNameMatcher.score("Super Creek", "[Murmuring Stream] Super Creek")
+            assertTrue(s >= threshold, "expected >= $threshold, got $s")
+        }
+
+        @Test
         fun `a plain-name target rejects a different trainee`() {
             val s = TraineeNameMatcher.score("Sweep Tosho", "[Autumn Cosmos] Gold City")
             assertTrue(s < threshold, "different trainee should be rejected, got $s")

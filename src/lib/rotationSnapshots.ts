@@ -45,12 +45,23 @@ export function baseCharacter(presetName: string): string {
 }
 
 /**
+ * The canonical in-game trainee identity for a preset display name: the preset's explicit
+ * `traineeName` when set, otherwise the display name unchanged. Decouples a variant/farming display
+ * name (e.g. "Super Creek (Blue Farm)") from the trainee it actually selects ("Super Creek"). General
+ * - driven by the preset's own declaration, never by a hard-coded suffix.
+ */
+export function presetTraineeName(presetName: string): string {
+    return characterPresets.find((p) => p.name === presetName)?.traineeName ?? presetName
+}
+
+/**
  * The Trainee Select target to auto-fill when a preset is picked: "[Outfit] Name" for
  * outfit-specific presets, the bare character name otherwise (bare targets are
- * outfit-insensitive in the Kotlin matcher).
+ * outfit-insensitive in the Kotlin matcher). Resolves `traineeName` first, so a variant display name
+ * never leaks a phantom "[Variant] Name" outfit into the selection target.
  */
 export function deriveInGameName(presetName: string): string {
-    const { base, outfit } = parsePresetName(presetName)
+    const { base, outfit } = parsePresetName(presetTraineeName(presetName))
     return outfit ? `[${outfit}] ${base}` : base
 }
 
@@ -61,11 +72,14 @@ export function deriveInGameName(presetName: string): string {
  * plain name.
  */
 export function deriveExcludeOutfits(presetName: string): string[] {
-    if (parsePresetName(presetName).outfit) return []
-    const base = baseCharacter(presetName)
+    const canonical = presetTraineeName(presetName)
+    if (parsePresetName(canonical).outfit) return []
+    const base = baseCharacter(canonical)
     const outfits = new Set<string>()
     for (const p of characterPresets) {
-        const parsed = parsePresetName(p.name)
+        // Resolve each roster entry to its canonical trainee too, so a variant display name's suffix
+        // (e.g. "(Blue Farm)") is never mistaken for a real sibling outfit to exclude.
+        const parsed = parsePresetName(presetTraineeName(p.name))
         if (parsed.outfit && parsed.base === base) outfits.add(parsed.outfit)
     }
     return [...outfits]

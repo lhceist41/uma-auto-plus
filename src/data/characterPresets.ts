@@ -19,6 +19,10 @@ type DeepPartial<T> = {
 
 export interface CharacterPreset {
     name: string
+    /** Canonical in-game trainee identity for Trainee Select, used when the display `name` carries a
+     * variant suffix that is NOT a real in-game outfit (e.g. "Super Creek (Blue Farm)" selects the
+     * trainee "Super Creek"). Omit for plain presets and real-outfit presets, which select by `name`. */
+    traineeName?: string
     scenario: string
     settings: DeepPartial<Settings>
 }
@@ -16007,6 +16011,208 @@ export const characterPresets: CharacterPreset[] = [
                 maximumFailureChance: 15,
                 disableTrainingOnMaxedStat: true,
                 focusOnSparkStatTarget: ["Speed", "Stamina"],
+                enableRainbowTrainingBonus: false,
+                preferredDistanceOverride: "Long",
+                mustRestBeforeSummer: true,
+                enableRiskyTraining: false,
+                riskyTrainingMinStatGain: 20,
+                riskyTrainingMaxFailureChance: 30,
+                trainWitDuringFinale: true,
+                enablePrioritizeSkillHints: true,
+                enableTrainingAnalysisValidation: false,
+                enableYoloStatDetection: false,
+            },
+            trainingStatTarget: {
+                trainingSprintStatTarget_speedStatTarget: 1200,
+                trainingSprintStatTarget_staminaStatTarget: 1200,
+                trainingSprintStatTarget_powerStatTarget: 450,
+                trainingSprintStatTarget_gutsStatTarget: 250,
+                trainingSprintStatTarget_witStatTarget: 550,
+                trainingMileStatTarget_speedStatTarget: 1200,
+                trainingMileStatTarget_staminaStatTarget: 1200,
+                trainingMileStatTarget_powerStatTarget: 450,
+                trainingMileStatTarget_gutsStatTarget: 250,
+                trainingMileStatTarget_witStatTarget: 550,
+                trainingMediumStatTarget_speedStatTarget: 1200,
+                trainingMediumStatTarget_staminaStatTarget: 1200,
+                trainingMediumStatTarget_powerStatTarget: 450,
+                trainingMediumStatTarget_gutsStatTarget: 250,
+                trainingMediumStatTarget_witStatTarget: 550,
+                trainingLongStatTarget_speedStatTarget: 1200,
+                trainingLongStatTarget_staminaStatTarget: 1200,
+                trainingLongStatTarget_powerStatTarget: 450,
+                trainingLongStatTarget_gutsStatTarget: 250,
+                trainingLongStatTarget_witStatTarget: 550,
+            },
+            scenarioOverrides: {
+                trackblazerConsecutiveRacesLimit: 5,
+                trackblazerEnergyThreshold: 40,
+                trackblazerShopCheckGrades: ["G1"],
+                trackblazerMinStatGainForCharm: 15,
+                trackblazerMaxRetriesPerRace: 3,
+                trackblazerWhistleForcesTraining: false,
+                trackblazerRetryRacesBeforeFinalGrades: ["G1"],
+                trackblazerEnableIrregularTraining: false,
+                trackblazerIrregularTrainingMinStatGain: 20,
+                trackblazerExcludedItems: ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food", "Coaching Megaphone", "Guts Scroll", "Guts Manual"],
+                trackblazerShopCheckFrequency: 3,
+            },
+        },
+    },
+    {
+        // Super Creek (Blue Farm) - inheritance/blue-spark farming variant of the Super Creek Unity
+        // Cup preset. A straight clone of that preset with ONE change: focusOnSparkStatTarget lists
+        // all five stats instead of just Speed+Stamina. Training.kt applies its under-600 spark-rescue
+        // (a 2.5x score boost) only to listed stats below 600, so this variant extends the rescue to
+        // Power, Guts and Wit - giving every stat a chance to finish above the 600 3-star-blue floor
+        // (the blue spark's stat is drawn at random from all five). This is NOT the default
+        // competitive Unity Cup build - keep the plain "Super Creek" preset for that; this one trades
+        // a little stat-peak focus for broader blue coverage. RESEARCH / NEW: unproven. The live
+        // evidence to date is on the original "Super Creek" Unity preset, NOT this variant - it stays
+        // unvalidated until its own completed careers are analyzed.
+        name: "Super Creek (Blue Farm)",
+        // The display name is a farming variant; the trainee it actually selects is plain Super Creek
+        // (there is no "[Blue Farm]" in-game outfit). traineeName decouples the picker label from the
+        // Trainee Select identity so the roster scan targets the real unit, whatever outfit it wears.
+        traineeName: "Super Creek",
+        scenario: "Unity Cup",
+        settings: {
+            general: {
+                scenario: "Unity Cup",
+                enablePopupCheck: false,
+                enableCraneGameAttempt: true,
+                enableStopBeforeFinals: false,
+                enableStopAtDate: false,
+                stopAtDates: ["Senior January Early"],
+                waitDelay: 0.5,
+                dialogWaitDelay: 0.5,
+            },
+            racing: {
+                enableFarmingFans: false,
+                ignoreConsecutiveRaceWarning: false,
+                daysToRunExtraRaces: 5,
+                disableRaceRetries: false,
+                enableFreeRaceRetry: true,
+                enableCompleteCareerOnFailure: true,
+                enableStopOnMandatoryRaces: false,
+                enableForceRacing: false,
+                enableUserInGameRaceAgenda: false,
+                limitRacesToInGameAgenda: false,
+                skipSummerTrainingForAgenda: false,
+                selectedUserAgenda: "Agenda 1",
+                customAgendaTitle: "",
+                enableRacingPlan: false,
+                enableMandatoryRacingPlan: false,
+                racingPlan: "",
+                minFansThreshold: 0,
+                preferredTerrain: "Turf",
+                preferredGrades: ["G1", "G2", "G3"],
+                preferredDistances: ["Long", "Short", "Mile", "Medium"],
+                lookAheadDays: 10,
+                smartRacingCheckInterval: 2,
+                juniorYearRaceStrategy: "Default",
+                originalRaceStrategy: "Default",
+                minimumQualityThreshold: 50,
+                timeDecayFactor: 0.7,
+                improvementThreshold: 50,
+            },
+            skills: {
+                enableSkillPointCheck: true,
+                skillPointCheck: 350,
+                preferredRunningStyle: "pace_chaser",
+                preferredTrackDistance: "long",
+                preferredTrackSurface: "turf",
+                plans: {
+                    skillPointCheck: {
+                        enabled: true,
+                        strategy: "optimize_skills",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                    },
+                    preFinals: {
+                        enabled: true,
+                        strategy: "optimize_skills",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                    },
+                    careerComplete: {
+                        enabled: true,
+                        strategy: "optimize_knapsack",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                    },
+                },
+            },
+            trainingEvent: {
+                enablePrioritizeEnergyOptions: true,
+                enableAutomaticOCRRetry: true,
+                ocrConfidence: 90,
+                enableHideOCRComparisonResults: true,
+                specialEventOverrides: {
+                    "New Year's Resolutions": {
+                        selectedOption: "Option 2: Energy +20",
+                        requiresConfirmation: false,
+                    },
+                    "New Year's Shrine Visit": {
+                        selectedOption: "Option 1: Energy +30",
+                        requiresConfirmation: false,
+                    },
+                    "Victory!": {
+                        selectedOption: "Option 2: Energy -5/-20 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    "Solid Showing": {
+                        selectedOption: "Option 1: Energy -15 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    Defeat: {
+                        selectedOption: "Option 1: Energy -25 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    "Get Well Soon!": {
+                        selectedOption: "Option 2: (Random) Mood -1 / Stat decrease / Get Practice Poor negative status",
+                        requiresConfirmation: false,
+                    },
+                    "Don't Overdo It!": {
+                        selectedOption: "Option 1: Energy +10 / Mood -2 / Stat decrease / Get Practice Poor negative status",
+                        requiresConfirmation: false,
+                    },
+                    "Extra Training": {
+                        selectedOption: "Option 2: Energy +5",
+                        requiresConfirmation: false,
+                    },
+                    "Acupuncture (Just an Acupuncturist, No Worries! ☆)": {
+                        selectedOption: "Option 3: Energy recovery + Heal all negative status effects",
+                        requiresConfirmation: false,
+                    },
+                    "Etsuko's Exhaustive Coverage": {
+                        selectedOption: "Option 2: Energy Down / Gain skill points",
+                        requiresConfirmation: false,
+                    },
+                    "A Team at Last": {
+                        selectedOption: "Default",
+                        requiresConfirmation: false,
+                    },
+                },
+                characterEventOverrides: {},
+                supportEventOverrides: {},
+                scenarioEventOverrides: {},
+            },
+            misc: {
+                enableSettingsDisplay: false,
+                enableMessageIdDisplay: false,
+                messageLogFontSize: 8,
+                overlayButtonSizeDP: 40,
+            },
+            training: {
+                trainingBlacklist: [],
+                statPrioritization: ["Speed", "Stamina", "Wit", "Power", "Guts"],
+                maximumFailureChance: 15,
+                disableTrainingOnMaxedStat: true,
+                focusOnSparkStatTarget: ["Speed", "Stamina", "Power", "Guts", "Wit"],
                 enableRainbowTrainingBonus: false,
                 preferredDistanceOverride: "Long",
                 mustRestBeforeSummer: true,

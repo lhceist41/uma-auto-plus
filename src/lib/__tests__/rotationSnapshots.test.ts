@@ -1,4 +1,4 @@
-import { buildRotationSnapshotRows, baseCharacter, deriveInGameName, deriveExcludeOutfits } from "../rotationSnapshots"
+import { buildRotationSnapshotRows, baseCharacter, deriveInGameName, deriveExcludeOutfits, presetTraineeName } from "../rotationSnapshots"
 import { characterPresets } from "../../data/characterPresets"
 
 // ===========================================================================
@@ -147,5 +147,46 @@ describe("preset-name derivation", () => {
 
     it("gives outfit-specific presets no exclusions (their full-banner target already disambiguates)", () => {
         expect(deriveExcludeOutfits("El Condor Pasa (Kukulkan Warrior)")).toEqual([])
+    })
+})
+
+describe("preset display name vs trainee selection identity (traineeName)", () => {
+    it("keeps 'Super Creek (Blue Farm)' as the picker display name under Unity Cup", () => {
+        const bf = characterPresets.find((p) => p.name === "Super Creek (Blue Farm)")
+        expect(bf).toBeDefined()
+        expect(bf!.scenario).toBe("Unity Cup")
+    })
+
+    it("resolves the Blue Farm preset to the canonical trainee 'Super Creek'", () => {
+        expect(presetTraineeName("Super Creek (Blue Farm)")).toBe("Super Creek")
+    })
+
+    it("targets the real trainee 'Super Creek', never the phantom '[Blue Farm] Super Creek'", () => {
+        // The live failure: deriveInGameName turned the display name into a nonexistent outfit target,
+        // scored 0.000 against '[Murmuring Stream] Super Creek', and stopped the queue.
+        expect(deriveInGameName("Super Creek (Blue Farm)")).toBe("Super Creek")
+        expect(deriveInGameName("Super Creek (Blue Farm)")).not.toBe("[Blue Farm] Super Creek")
+    })
+
+    it("never treats the variant suffix as a phantom outfit to exclude", () => {
+        expect(deriveExcludeOutfits("Super Creek (Blue Farm)")).not.toContain("Blue Farm")
+    })
+
+    it("leaves presets without traineeName unchanged (backward compatible)", () => {
+        expect(presetTraineeName("Symboli Rudolf")).toBe("Symboli Rudolf")
+        expect(presetTraineeName("El Condor Pasa (Kukulkan Warrior)")).toBe("El Condor Pasa (Kukulkan Warrior)")
+        expect(deriveInGameName("El Condor Pasa (Kukulkan Warrior)")).toBe("[Kukulkan Warrior] El Condor Pasa")
+        expect(deriveInGameName("Super Creek")).toBe("Super Creek")
+    })
+
+    it("audits (Legacy Farm) variants: each resolves to its real trainee, not '[Legacy Farm] <name>'", () => {
+        for (const [display, trainee] of [
+            ["Air Groove (Legacy Farm)", "Air Groove"],
+            ["Daiwa Scarlet (Legacy Farm)", "Daiwa Scarlet"],
+            ["El Condor Pasa (Legacy Farm)", "El Condor Pasa"],
+        ] as const) {
+            expect(deriveInGameName(display)).toBe(trainee)
+            expect(deriveInGameName(display)).not.toBe(`[Legacy Farm] ${trainee}`)
+        }
     })
 })

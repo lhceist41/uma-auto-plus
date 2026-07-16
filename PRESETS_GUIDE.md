@@ -6,7 +6,7 @@ This document explains how built-in character presets work in UMA Auto+, how the
 
 ## Overview
 
-UMA Auto+ ships with **213 built-in character presets** (70 character entries x 3 scenarios, plus three URA-only Legacy Farm variants). Trainees are picked in the searchable trainee picker on the Home page — one row per character/outfit with per-scenario advisory chips and a validation badge — and applying a preset sets its scenario together with its settings.
+UMA Auto+ ships with **214 built-in character presets** (70 character entries x 3 scenarios, plus three URA-only Legacy Farm variants and one Unity Cup Blue Farm variant). Trainees are picked in the searchable trainee picker on the Home page — one row per character/outfit with per-scenario advisory chips and a validation badge — and applying a preset sets its scenario together with its settings.
 
 The 2026-06-11 batch added seven entries from the June banner research pass: Sweep Tosho, Mihono Bourbon, Mejiro Palmer, El Condor Pasa (Kukulkan Warrior), Tosen Jordan, Super Creek, and Matikanetannhauser. Their URA presets ship curated racing plans (see "Curated racing plans in presets" below); Tosen Jordan's presets enable negative-skill buying so the buy pass clears her 3D Nail Art speed debuff. Symboli Rudolf (Emperor's Path) was added 2026-06-18 — a Late Surger Medium built around her late-overtake unique; URA and Trackblazer are her recommended scenarios. Biwa Hayahide (Pace Chaser, built as a Long stayer) and Mejiro Ryan (Late Surger Medium) were added 2026-06-21 to make two owned-but-unpresetted Medium/Long-A turf bodies farmable hands-off; both fill the Medium/Long Team-Trials slots and are URA + Trackblazer recommended.
 
@@ -19,6 +19,8 @@ The second 2026-07-06 batch completed the community S-tier list with 17 more car
 The 2026-07-10 batch closed the remaining global-roster gaps with 18 characters: Admire Vega, Agnes Digital, Air Shakur, Bamboo Memory, Curren Chan, Eishin Flash, Fine Motion, Fuji Kiseki, Hishi Akebono, Inari One, Ines Fujin, Mejiro Ardan, Mejiro Bright, Narita Brian, Rice Shower, Sakura Chiyono O, Satono Diamond, and Yaeno Muteki. Same research-graded pipeline: verified grids, growths, and goal chains; racing plans validated entry-by-entry against the race database; event pins verified against the character event data. Notables: Inari One joins the dirt roster as an End Closer whose skill plan carries a surface-agnostic recovery for her dirt-to-turf Arima pivot; Ines Fujin is Front Runner-locked like Silence Suzuka; the sprinters with thin fan-gated Junior pools (Curren Chan, Hishi Akebono) carry Trackblazer avoid advisories; goal-sparse or gate-heavy bodies (Agnes Digital's unscheduled turn-47-60 G1 window, Rice Shower's near-empty Junior, Mejiro Ardan's 6,000-fan wall at turn 30, Hishi Akebono's early fan checkpoints) all ship curated racing plans. Bamboo Memory postdates the bundled game data: her presets ship empty event overrides until the next characters.json sync, so her story events fall back to the OCR stat-option heuristic.
 
 The 2026-07-11 additions are the first **Legacy Farm** variants: Daiwa Scarlet, El Condor Pasa, and Air Groove parent-farming editions (URA only). Each clones the character's regular URA preset and swaps in a generated G1-dense mandatory racing plan — 17, 20, and 14 G1 entries per career respectively — spaced so the run never exceeds the consecutive-race limit the plan itself must guard (mandatory-plan mode overrides the in-game warning). Built for breeding parents: more racing and fewer training turns, so they are deliberately not recommended for badge or rating chasing. Generated with `scripts/generate-racing-plan.mjs`, which any future parent candidate can be run through.
+
+The 2026-07-15 addition is the first **Blue Farm** variant: Super Creek (Blue Farm), Unity Cup only. It clones the regular Super Creek Unity Cup preset and changes only `focusOnSparkStatTarget` to all five stats — the base competitive preset focuses just Speed+Stamina. The under-600 spark-rescue boost then fires on every stat, so an off-stat that would otherwise finish below the 600 3-star-blue floor gets lifted, trading a little stat-peak focus for broader blue coverage. Chosen because the analyzer measured Super Creek as the account's most reliable all-five-≥600 Unity Cup arm. Research/new and unproven — the plain "Super Creek" preset stays the competitive Unity Cup build, and the variant is unvalidated until its own completed careers are analyzed.
 
 ### Currently included characters
 
@@ -85,6 +87,7 @@ The 2026-07-11 additions are the first **Legacy Farm** variants: Daiwa Scarlet, 
 | Special Week | Yes | Yes | Yes |
 | Special Week (Hopp'n♪Happy Heart) | Yes | Yes | Yes |
 | Super Creek | Yes | Yes | Yes |
+| Super Creek (Blue Farm) | -- | Yes | -- |
 | Sweep Tosho | Yes | Yes | Yes |
 | Symboli Rudolf (Emperor's Path) | Yes | Yes | Yes |
 | T.M. Opera O (New Year, Same Radiance!) | Yes | Yes | Yes |
