@@ -15,6 +15,8 @@ import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.SKILL_POINTS_UNREADABLE
+import com.steve1316.uma_android_automation.bot.parseSkillPointsText
 import com.steve1316.uma_android_automation.components.ButtonRaceListFullStats
 import com.steve1316.uma_android_automation.components.ComponentInterface
 import com.steve1316.uma_android_automation.components.IconEnergyBarLeftPart
@@ -2275,15 +2277,16 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 debugName = "SkillPoints",
             )
 
-        // Parse the result.
+        // Parse the result. parseSkillPointsText refuses a read carrying more than one number instead
+        // of concatenating their digits, which is how a true 71 became a >=350 false high-water trigger.
         Log.d(TAG, "[DEBUG] determineSkillPoints:: Detected number of skill points before formatting: $detectedText")
-        return try {
-            Log.d(TAG, "[DEBUG] determineSkillPoints:: Converting $detectedText to integer for skill points")
-            val cleanedResult = detectedText.replace(Regex("[^0-9]"), "")
-            cleanedResult.toInt()
-        } catch (_: NumberFormatException) {
-            -1
+        val parsed: Int = parseSkillPointsText(detectedText)
+        if (parsed == SKILL_POINTS_UNREADABLE) {
+            // Rare and self-healing (the caller keeps the last known good value), but it is the only
+            // signal that the crop is drifting, so it goes to the message log rather than logcat.
+            MessageLog.w(TAG, "[SKILLS] Skill Point read refused - not a single number: \"$detectedText\". Keeping the last known value.")
         }
+        return parsed
     }
 
     /**

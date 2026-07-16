@@ -2382,6 +2382,56 @@ abstract class Campaign(game: Game) : Task(game) {
     internal fun currentConfigFingerprint(): String = outcomeConfigFingerprint(BuildConfig.VERSION_NAME, outcomeConfigSnapshot)
 
     /**
+     * Re-reads Skill Points from a fresh capture to confirm a candidate high-water crossing.
+     *
+     * Runs only when the per-turn value already appears to cross the bar, so an ordinary turn pays
+     * nothing for it. It exists because the per-turn reading is the one input to the trigger that
+     * nothing else validates: on 2026-07-16 a contaminated read dispatched a purchase whose own skill
+     * screen then reported 71 points against a 350 bar.
+     *
+     * Deliberately re-reads the Main screen only - opening the skill screen to check would cost the
+     * very navigation this gate exists to prevent, and would be indistinguishable from the false
+     * trigger it is meant to refuse.
+     *
+     * A rejection rewrites the trusted value so the next turn re-arms normally instead of re-confirming
+     * the same bad number every turn, and never marks the threshold handled: a genuine crossing later
+     * in the career must still fire.
+     *
+     * @return True to dispatch the high-water action, false to skip this turn.
+     */
+    private fun confirmHighWaterCrossing(): Boolean {
+        val candidate: Int = trainee.skillPoints
+        val fresh: Int = game.imageUtils.determineSkillPoints()
+        return when (confirmHighWater(fresh, skillPointsRequired)) {
+            SkillPointConfirmation.CONFIRMED -> {
+                if (fresh != candidate) {
+                    // Both cross the bar, so the trigger stands; trust the fresher number.
+                    trainee.skillPoints = fresh
+                }
+                true
+            }
+            SkillPointConfirmation.REJECTED -> {
+                MessageLog.w(
+                    TAG,
+                    "[SKILLS] High-water candidate $candidate rejected: a fresh read says $fresh, below the $skillPointsRequired threshold. " +
+                        "Not opening the skill screen. The threshold stays eligible for a later crossing.",
+                )
+                // Replace the bad candidate so the re-arm below the bar happens next turn and this does
+                // not re-confirm the same number every turn.
+                trainee.skillPoints = fresh
+                false
+            }
+            SkillPointConfirmation.UNREADABLE -> {
+                MessageLog.w(
+                    TAG,
+                    "[SKILLS] High-water candidate $candidate could not be confirmed (fresh read failed). Skipping this turn; the threshold stays eligible.",
+                )
+                false
+            }
+        }
+    }
+
+    /**
      * Records the careerComplete pass that never got to run because the Learn screen would not open
      * within its bounded attempts. [SkillPlan] cannot report this one: its session never started, so
      * the corpus would otherwise show a career whose final purchase silently vanished.
@@ -2962,7 +3012,12 @@ abstract class Campaign(game: Game) : Task(game) {
         }
 
         // The high-water threshold has been reached: stop the bot, or run the skill plan if enabled.
-        if (skillCheck.trigger == SkillCheckTrigger.HIGH_WATER) {
+        // The confirmation gates BOTH branches - an unconfirmed reading must not open the skill screen,
+        // and must not throw the breakpoint either, since in the plan-disabled configuration a bad read
+        // would otherwise kill a healthy run outright. Short-circuit: it only re-reads once the trigger
+        // already fired, so an ordinary turn pays nothing. An unconfirmed turn falls through to the
+        // stop checks below exactly as the not-on-Main-screen path already does.
+        if (skillCheck.trigger == SkillCheckTrigger.HIGH_WATER && confirmHighWaterCrossing()) {
             if (skillCheck.action == SkillCheckAction.RUN_PLAN) {
                 // Ensure we are actually at the Main screen before attempting to navigate.
                 // If not, we skip the skill purchase for now and retry on the next turn.
