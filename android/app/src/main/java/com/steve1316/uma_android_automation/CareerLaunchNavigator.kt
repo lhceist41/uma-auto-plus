@@ -1592,6 +1592,11 @@ class CareerLaunchNavigator(private val context: Context) {
             record.put("type", "sparks")
             record.put("ts", System.currentTimeMillis())
             StartModule.lastCareerEndTrainee?.let { record.put("trainee", it) }
+            // Direct arm attribution (same snapshot as this career's outcome record). Omitted when the
+            // snapshot is absent (first career of the session / debug-mode direct invocation) so the
+            // analyzer falls back to the positional join rather than reading a wrong field.
+            StartModule.lastCareerEndScenario?.let { record.put("scenario", it) }
+            StartModule.lastCareerEndFp?.let { record.put("fp", it) }
             record.put("phase", phase)
             record.put(
                 "rows",

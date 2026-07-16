@@ -79,6 +79,17 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         @Volatile
         var lastCareerEndTrainee: String? = null
 
+        /** Scenario token and config-arm fingerprint of the last completed career, snapshotted
+         * alongside [lastCareerEndTrainee] at [CAREER_END] so the navigator's sparks corpus records
+         * carry the SAME fp/scenario as that career's outcome record. Snapshotting (not recomputing
+         * later) prevents a queued run's settings change between career completion and spark recording
+         * from mis-attributing the set. Null until the first career-end of the session. */
+        @Volatile
+        var lastCareerEndScenario: String? = null
+
+        @Volatile
+        var lastCareerEndFp: String? = null
+
         /** When true, the current run should be skipped and the queue should advance. */
         @Volatile
         var queueSkipRequested: Boolean = false
@@ -257,6 +268,50 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 if (count <= 0) return 0
                 return (targetIndex - indexForRun(run)).mod(count)
             }
+        }
+
+        /** What the run loop does once a career playthrough returns. See [decidePostCareerAction]. */
+        enum class PostCareerAction {
+            /** Walk Complete Career -> sparks (+ opt-in reroll) -> veteran registration -> Home, then stop. */
+            FINALIZE_TO_HOME,
+
+            /** The queue has another run: run the between-run navigation and launch the next career. */
+            LAUNCH_NEXT,
+
+            /** Leave the game on whatever screen the run ended on (non-clean end, stop, or dead service). */
+            STOP,
+        }
+
+        /**
+         * Decides what to do after run [runIndex] of [totalRuns] returns [resultCode].
+         *
+         * Mandatory post-career cleanup is NOT queue-gated: every cleanly completed last/only career
+         * yields [PostCareerAction.FINALIZE_TO_HOME] so its sparks are read, recorded, optionally
+         * rerolled, and the game returns Home. The queue-disabled single run used to skip all of that
+         * and stop on the results screen, because finalize was reached only when [enableRunQueue] was
+         * true. Launching the NEXT career stays queue-gated - only a run queue with runs remaining
+         * yields [PostCareerAction.LAUNCH_NEXT] - so a single run can never start a second career. A
+         * stop request, a torn-down service, or any non-COMPLETE ending yields [PostCareerAction.STOP]
+         * and leaves the screen untouched.
+         *
+         * Pure: no Android, no settings reads. The caller passes already-resolved state so this is unit
+         * tested without standing up the module (see PostCareerDecisionTest).
+         */
+        fun decidePostCareerAction(
+            resultCode: TaskResultCode,
+            runIndex: Int,
+            totalRuns: Int,
+            enableRunQueue: Boolean,
+            queueStopRequested: Boolean,
+            botRunning: Boolean,
+        ): PostCareerAction {
+            // A stop request or a dead service: never navigate, leave the screen as-is.
+            if (queueStopRequested || !botRunning) return PostCareerAction.STOP
+            // The queue has more runs to play -> launch the next one (queue-only, unchanged).
+            if (enableRunQueue && runIndex < totalRuns) return PostCareerAction.LAUNCH_NEXT
+            // Last or only run: a clean completion runs the career-end flow through to Home; any
+            // other ending (skip, error, breakpoint) leaves the game where it stopped.
+            return if (resultCode == TaskResultCode.TASK_RESULT_COMPLETE) PostCareerAction.FINALIZE_TO_HOME else PostCareerAction.STOP
         }
 
         /**
@@ -1491,16 +1546,26 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         }
                     }
 
-                    // Final queue run: the career-end flow (Complete Career -> results -> sparks
-                    // and its reroll -> veteran registration) only runs inside the between-run
-                    // navigation, so stopping on the summary screen would skip it - the last
-                    // career of every queue lost its reroll chance and its sparks record. Walk
-                    // the same flow but stop at the home lobby. Only after a career that truly
-                    // completed: stops, errors, skips, and breakpoints keep the screen as-is.
-                    if (i == totalRuns && enableRunQueue && effectiveResult.code == TaskResultCode.TASK_RESULT_COMPLETE &&
-                        !queueStopRequested && BotService.isRunning
-                    ) {
-                        MessageLog.i(TAG, "[QUEUE] Final run complete. Finishing the career-end flow through to the home screen...")
+                    // Post-career routing. The career-end flow (Complete Career -> results -> sparks
+                    // and its reroll -> veteran registration -> Home) lives in the navigator and used
+                    // to run ONLY between queued careers, so a queue-disabled single run stopped on the
+                    // summary screen and skipped its sparks read, reroll, and Home return. Route through
+                    // one decision instead: a cleanly completed last/only career always finalizes to
+                    // Home (queued or not); launching the NEXT career stays queue-gated, so a single run
+                    // can never start a second one. Stops, errors, skips, and breakpoints leave the
+                    // screen as-is.
+                    val postCareerAction =
+                        decidePostCareerAction(
+                            resultCode = effectiveResult.code,
+                            runIndex = i,
+                            totalRuns = totalRuns,
+                            enableRunQueue = enableRunQueue,
+                            queueStopRequested = queueStopRequested,
+                            botRunning = BotService.isRunning,
+                        )
+
+                    if (postCareerAction == PostCareerAction.FINALIZE_TO_HOME) {
+                        MessageLog.i(TAG, "[QUEUE] Career complete. Finishing the career-end flow through to the home screen...")
                         val finalizeResult = navigateWithDeadline(reuseLastLaunchSetup, finalizeToHome = true)
                         if (finalizeResult.success) {
                             MessageLog.i(TAG, "[QUEUE] Career-end flow finished; the game is parked on the home screen.")
@@ -1510,8 +1575,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         }
                     }
 
-                    // If this is not the last run, navigate back and wait.
-                    if (i < totalRuns && enableRunQueue) {
+                    // If the queue has another run, navigate back and wait.
+                    if (postCareerAction == PostCareerAction.LAUNCH_NEXT) {
                         // Check stop again before navigation.
                         if (queueStopRequested || !BotService.isRunning) {
                             MessageLog.i(TAG, "[QUEUE] Queue stop requested. Exiting queue.")

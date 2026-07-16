@@ -3219,6 +3219,13 @@ abstract class Campaign(game: Game) : Task(game) {
                 "Wit" to st.wit,
             )
         StartModule.lastCareerEndTrainee = resolvedName
+        // Snapshot the same config-arm fingerprint + scenario the career-end record below carries, so
+        // the SPARKS records the navigator appends later join to this exact career/arm directly (not
+        // only positionally). Computed once here and reused for the record - never recomputed from
+        // settings a queued run may have changed between this career's end and its spark recording.
+        val careerEndFp = outcomeConfigFingerprint(BuildConfig.VERSION_NAME, outcomeConfigSnapshot)
+        StartModule.lastCareerEndScenario = scenarioToken
+        StartModule.lastCareerEndFp = careerEndFp
         val outcome = classifyCareerOutcome(result.code, careerForceEnded)
         val quality = classifyCareerQuality(outcome, finaleRaces, finaleRaces1st)
 
@@ -3229,7 +3236,7 @@ abstract class Campaign(game: Game) : Task(game) {
             JSONObject().apply {
                 put("ts", System.currentTimeMillis())
                 put("app", BuildConfig.VERSION_NAME)
-                put("fp", outcomeConfigFingerprint(BuildConfig.VERSION_NAME, outcomeConfigSnapshot))
+                put("fp", careerEndFp)
                 put("result", result.code.name.removePrefix("TASK_RESULT_"))
                 put("outcome", outcome)
                 forceEndReason?.let { put("forceEndReason", it) }
