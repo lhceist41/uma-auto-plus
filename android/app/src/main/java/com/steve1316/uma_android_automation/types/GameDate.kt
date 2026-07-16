@@ -81,6 +81,13 @@ class GameDate {
         const val TAG: String = "[${MainActivity.loggerTag}]GameDate"
 
         /**
+         * Splits the date string on any run of whitespace. The date banner OCR wraps onto two lines
+         * ("Senior Year\nLate Sep") and pads with repeated spaces, so a single-space split produced a
+         * short or index-shifted token list for a perfectly readable date.
+         */
+        private val DATE_TOKEN_SEPARATOR = Regex("\\s+")
+
+        /**
          * Converts a year/month/phase to a day number (turn number).
          *
          * The formula calculates the offset from the start of the Junior year. There are 24 turns (2 per month * 12 months) per year.
@@ -195,16 +202,31 @@ class GameDate {
                 return GameDate(day = finalsDay)
             }
 
+            return parseYearPhaseMonth(dayString)
+        }
+
+        /**
+         * Parses the regular "<Year> Year <Phase> <Month>" date banner (e.g. "Classic Year Early Feb").
+         *
+         * Pure and Context-free: [fromDateString] handles the Pre-Debut and Finale strings before this
+         * runs, so this only sees the 4-token format. Extracted so JUnit can exercise the tokenizer and
+         * the fail-closed paths without an OCR pipeline.
+         *
+         * @param dayString The date string recognized via OCR.
+         * @return The [GameDate], or null when year, month or phase cannot be recognized.
+         */
+        fun parseYearPhaseMonth(dayString: String): GameDate? {
             // Gather possible names for fuzzy matching.
             val years: List<String> = DateYear.entries.map { it.name }
             val months: List<String> = DateMonth.entries.map { it.shortName }
             val phases: List<String> = DatePhase.entries.map { it.name }
 
-            // Split by whitespace, e.g. "Classic Year Early Feb". Pre-debut/finale already returned,
-            // so this must be the 4-token "<Year> Year <Phase> <Month>" format. Require 4 tokens: the
-            // month is read at index 3, so fewer tokens defaults monthPart to JANUARY and fabricates a
-            // wrong date that mis-keys mandatory-race/summer/finale turns.
-            val parts = dayString.trim().split(" ")
+            // Tokenize on whitespace RUNS, e.g. "Classic Year Early Feb". Splitting on a single space
+            // dropped a wrapped read ("Senior Year\nLate Sep" -> 3 tokens) and shifted the indices of a
+            // double-spaced one, discarding dates the OCR had actually read correctly. Require 4 tokens:
+            // the month is read at index 3, so fewer tokens defaults monthPart to JANUARY and fabricates
+            // a wrong date that mis-keys mandatory-race/summer/finale turns.
+            val parts = dayString.trim().split(DATE_TOKEN_SEPARATOR)
             if (parts.size < 4) {
                 MessageLog.w(TAG, "[WARN] fromDateString:: Invalid date string format: $dayString")
                 return null

@@ -258,6 +258,81 @@ class GameDateTest {
     }
 
     // =========================================================================
+    // parseYearPhaseMonth()
+    // =========================================================================
+
+    @Nested
+    @DisplayName("parseYearPhaseMonth()")
+    inner class ParseYearPhaseMonthTests {
+        @Test
+        fun `normal single-line date parses`() {
+            val date = GameDate.parseYearPhaseMonth("Classic Year Early Feb")
+            assertNotNull(date)
+            assertEquals(DateYear.CLASSIC, date!!.year)
+            assertEquals(DateMonth.FEBRUARY, date.month)
+            assertEquals(DatePhase.EARLY, date.phase)
+        }
+
+        @Test
+        fun `newline between Year and phase parses`() {
+            // The date banner wraps onto two lines; splitting on a single space saw only 3 tokens and
+            // threw away a date the OCR had read perfectly.
+            val date = GameDate.parseYearPhaseMonth("Senior Year\nLate Sep")
+            assertNotNull(date)
+            assertEquals(DateYear.SENIOR, date!!.year)
+            assertEquals(DateMonth.SEPTEMBER, date.month)
+            assertEquals(DatePhase.LATE, date.phase)
+        }
+
+        @Test
+        fun `repeated spaces plus a newline before the month parses`() {
+            // Double spaces used to shift every index: phase read "" and month read "Early".
+            val date = GameDate.parseYearPhaseMonth("Classic Year  Early\n Feb")
+            assertNotNull(date)
+            assertEquals(DateYear.CLASSIC, date!!.year)
+            assertEquals(DateMonth.FEBRUARY, date.month)
+            assertEquals(DatePhase.EARLY, date.phase)
+        }
+
+        @Test
+        fun `tabs and surrounding whitespace parse`() {
+            val date = GameDate.parseYearPhaseMonth("  Junior\tYear\t Late  Jun  ")
+            assertNotNull(date)
+            assertEquals(DateYear.JUNIOR, date!!.year)
+            assertEquals(DateMonth.JUNE, date.month)
+            assertEquals(DatePhase.LATE, date.phase)
+        }
+
+        @Test
+        fun `wrapped and single-line reads of the same date agree`() {
+            val flat = GameDate.parseYearPhaseMonth("Senior Year Late Sep")
+            val wrapped = GameDate.parseYearPhaseMonth("Senior Year\nLate Sep")
+            assertNotNull(flat)
+            assertNotNull(wrapped)
+            assertEquals(flat!!.day, wrapped!!.day)
+        }
+
+        @Test
+        fun `missing month fails closed`() {
+            // Fewer than 4 tokens must never fabricate JANUARY - a wrong date mis-keys mandatory-race,
+            // summer and finale turns.
+            assertNull(GameDate.parseYearPhaseMonth("Classic Year Early"))
+        }
+
+        @Test
+        fun `unrelated text fails closed`() {
+            assertNull(GameDate.parseYearPhaseMonth("some totally unrelated text"))
+            assertNull(GameDate.parseYearPhaseMonth(""))
+            assertNull(GameDate.parseYearPhaseMonth("   "))
+        }
+
+        @Test
+        fun `unrecognizable month fails closed`() {
+            assertNull(GameDate.parseYearPhaseMonth("Classic Year Early Xyzzy"))
+        }
+    }
+
+    // =========================================================================
     // parseTrackblazerFinaleDay()
     // =========================================================================
 

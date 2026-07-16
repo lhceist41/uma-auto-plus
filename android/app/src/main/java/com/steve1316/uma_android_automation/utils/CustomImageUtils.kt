@@ -255,6 +255,46 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         }
 
         /**
+         * Seconds to let the failure bubble finish rendering before spending the next read attempt.
+         * See [runFailureChanceReads].
+         */
+        const val FAILURE_CHANCE_RETRY_PACE: Double = 0.5
+
+        /**
+         * Pure retry loop behind [findTrainingFailureChance], extracted here so JUnit can exercise the
+         * pacing and the short-circuit without a Context. Runs [attempt] (1-indexed) until it returns a
+         * valid read, which is returned immediately, and reports each invalid one to [onInvalid].
+         *
+         * [pace] runs ONLY between a failed attempt and the next one. A failed read usually means the
+         * bubble is mid-render right after a loading/"Connecting" round-trip: waitForLoading() has
+         * already returned but the panel has not redrawn, so back-to-back retries re-read the same blank
+         * region and burned the whole budget in ~250ms - the turn then lost its training analysis. Never
+         * paced before the first attempt or after a success (that would tax the common path), and never
+         * after the last attempt (no read left to benefit from it).
+         *
+         * @param tries The read budget; clamped to at least 1.
+         * @param attempt Performs read number `i`; returns [INVALID_FAILURE_CHANCE] when it failed.
+         * @param onInvalid Reports failed attempt number `i` (logging).
+         * @param pace Waits out the render gap between attempts.
+         * @return The first valid read, or [INVALID_FAILURE_CHANCE] when every attempt failed.
+         */
+        fun runFailureChanceReads(tries: Int, attempt: (attemptNumber: Int) -> Int, onInvalid: (attemptNumber: Int) -> Unit, pace: () -> Unit): Int {
+            val budget: Int = maxOf(1, tries)
+            for (i in 1..budget) {
+                val result: Int = attempt(i)
+                // Stop on the first valid read. The loop used to run all `tries` and keep the LAST
+                // result, so a later failed attempt silently clobbered an earlier good read.
+                if (result != INVALID_FAILURE_CHANCE) return result
+                onInvalid(i)
+                if (i < budget) pace()
+            }
+            return INVALID_FAILURE_CHANCE
+        }
+
+        /** Sentinel for a failure-chance read that could not be trusted (bubble missing, OCR garbage, >100%). */
+        const val INVALID_FAILURE_CHANCE: Int = -1
+
+        /**
          * Parses the unmet-fan shortfall from a goal-criteria line ("Criteria: 1,223 fan(s) to go").
          * Null when no number precedes a "fan" token - "Entry criteria met!" and unrelated text
          * parse to null. OCR regularly mangles the "(s)" suffix, so only the "fan" stem is required.
@@ -570,26 +610,23 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         }
 
         val tries: Int = maxOf(1, tries)
-        var result: Int = -1
-        for (i in 1..tries) {
-            // We only use the passed parameters on the first iteration since if
-            // we have to retry, then we want a new source bitmap.
-            result =
-                if (i == 1) {
-                    detectTrainingFailureChance(sourceBitmap, trainingSelectionLocation)
-                } else {
-                    detectTrainingFailureChance()
-                }
-
-            if (result == -1) {
-                MessageLog.w(TAG, "[WARN] findTrainingFailureChance:: Failed to detect training failure chance (attempt $i of $tries)")
-            } else {
-                // Stop on the first valid read. The loop used to run all `tries` and keep the LAST
-                // result, so a later failed attempt (-1) silently clobbered an earlier good read -
-                // making tries=3 turn a success into a miss instead of hardening it.
-                break
-            }
-        }
+        val result: Int =
+            runFailureChanceReads(
+                tries = tries,
+                // We only use the passed parameters on the first iteration since if
+                // we have to retry, then we want a new source bitmap.
+                attempt = { i ->
+                    if (i == 1) {
+                        detectTrainingFailureChance(sourceBitmap, trainingSelectionLocation)
+                    } else {
+                        detectTrainingFailureChance()
+                    }
+                },
+                onInvalid = { i ->
+                    MessageLog.w(TAG, "[WARN] findTrainingFailureChance:: Failed to detect training failure chance (attempt $i of $tries)")
+                },
+                pace = { game.wait(FAILURE_CHANCE_RETRY_PACE) },
+            )
 
         if (result == -1) {
             // When every detection attempt fails, save the actual Training screen so a failure-chance
