@@ -17,7 +17,7 @@
 
 import { readFileSync, readdirSync, statSync } from "node:fs"
 import { basename, extname, join } from "node:path"
-import { aggregate, dedupe, harvestLogText, isBotFault, parseJsonl, renderMarkdown } from "../src/lib/outcomeAnalysis.ts"
+import { aggregate, analyzeSparkFarm, dedupe, harvestLogText, isBotFault, parseCorpus, renderMarkdown, renderSparkFarmMarkdown } from "../src/lib/outcomeAnalysis.ts"
 
 function collectFiles(path, depth = 0) {
     const stat = statSync(path)
@@ -35,6 +35,7 @@ function main(args) {
     }
 
     const records = []
+    const sparks = []
     let filesRead = 0
     for (const arg of args) {
         let files
@@ -48,14 +49,20 @@ function main(args) {
             const ext = extname(file).toLowerCase()
             if (ext !== ".jsonl" && ext !== ".txt") continue
             const text = readFileSync(file, "utf8")
-            const parsed = ext === ".jsonl" ? parseJsonl(text, basename(file)) : harvestLogText(text, basename(file))
-            records.push(...parsed)
+            if (ext === ".jsonl") {
+                // parseCorpus (not parseJsonl) so the spark records in the same file are not discarded.
+                const parsed = parseCorpus(text, basename(file))
+                records.push(...parsed.outcomes)
+                sparks.push(...parsed.sparks)
+            } else {
+                records.push(...harvestLogText(text, basename(file)))
+            }
             filesRead++
         }
     }
 
-    if (records.length === 0) {
-        console.error(`No outcome records found in ${filesRead} file(s). Pull the device logs/corpus first (see the header of this script).`)
+    if (records.length === 0 && sparks.length === 0) {
+        console.error(`No outcome or spark records found in ${filesRead} file(s). Pull the device logs/corpus first (see the header of this script).`)
         return 1
     }
 
@@ -65,15 +72,28 @@ function main(args) {
     // Surface the count instead of letting them vanish silently.
     const botFaults = unique.filter(isBotFault).length
     const outcomeCount = unique.length - botFaults
+    const sparkReport = analyzeSparkFarm(unique, sparks)
+
     console.log(
-        `${outcomeCount} career outcome(s) from ${filesRead} file(s)` +
+        `${outcomeCount} career outcome(s), ${sparks.length} spark record(s) from ${filesRead} file(s)` +
             `${dropped > 0 ? ` (${dropped} log duplicate(s) of corpus records dropped)` : ""}` +
-            `${botFaults > 0 ? `; ${botFaults} bot-fault record(s) (UNHANDLED_EXCEPTION) excluded from outcomes` : ""}\n`,
+            `${botFaults > 0 ? `; ${botFaults} bot-fault record(s) (UNHANDLED_EXCEPTION) excluded from outcomes` : ""}` +
+            `${sparkReport.coverage.unjoined > 0 ? `; ${sparkReport.coverage.unjoined} unjoined spark record(s)` : ""}\n`,
     )
-    console.log(renderMarkdown(aggregate(unique)))
+
+    // 1) existing career-outcome report (or a clear note for a spark-only corpus), 2) blank separator,
+    // 3) Spark Farm report, 4) caveats.
+    if (outcomeCount > 0) {
+        console.log(renderMarkdown(aggregate(unique)))
+    } else {
+        console.log("_No career-outcome records in the input (spark-only corpus); showing the Spark Farm report only._")
+    }
+    console.log("")
+    console.log(renderSparkFarmMarkdown(sparkReport))
     console.log(
         "\nCaveats: the corpus is not one-row-per-started-run (hard terminators emit nothing)," +
-            "\nand arms under the low-N threshold are anecdotes - compare distributions, not single runs.",
+            "\narms under the low-N threshold are anecdotes - compare distributions, not single runs," +
+            "\nand confirmed-kept coverage below 100% means some careers' final sets were never captured.",
     )
     return 0
 }

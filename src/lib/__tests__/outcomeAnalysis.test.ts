@@ -1,4 +1,20 @@
-import { aggregate, classifyBucket, dedupe, harvestLogText, isBotFault, parseJsonl, parseLedgerLine, percentile, renderMarkdown } from "../outcomeAnalysis"
+import {
+    aggregate,
+    analyzeSparkFarm,
+    canonicalizeStatName,
+    classifyBucket,
+    dedupe,
+    harvestLogText,
+    isBotFault,
+    joinSparks,
+    parseCorpus,
+    parseJsonl,
+    parseLedgerLine,
+    percentile,
+    recognizeAptitude,
+    renderMarkdown,
+    renderSparkFarmMarkdown,
+} from "../outcomeAnalysis"
 import type { OutcomeRecord } from "../outcomeAnalysis"
 
 const MODERN_LINE =
@@ -294,5 +310,325 @@ describe("renderMarkdown", () => {
         const table = renderMarkdown(aggregate([record({ quality: "WIN", finaleWins: 3, finaleRaces: 3 })]))
         expect(table).toContain("Finale W/R")
         expect(table).toContain("| 1/1 |")
+    })
+})
+
+// ---- Spark Farm Analyzer -------------------------------------------------
+
+function careerJson(o: Partial<{ trainee: string; scenario: string; turn: number; outcome: string; result: string; spd: number; sta: number; pwr: number; grt: number; wit: number; app: string; fp: string; fans: number }> = {}): string {
+    return JSON.stringify({
+        result: o.result ?? "COMPLETE",
+        outcome: o.outcome ?? "COMPLETED",
+        trainee: o.trainee ?? "Test Uma",
+        scenario: o.scenario ?? "URA Finale",
+        turn: o.turn ?? 75,
+        fans: o.fans ?? 100000,
+        spd: o.spd ?? 900,
+        sta: o.sta ?? 700,
+        pwr: o.pwr ?? 700,
+        grt: o.grt ?? 700,
+        wit: o.wit ?? 700,
+        skillPts: 5,
+        app: o.app,
+        fp: o.fp,
+    })
+}
+
+function sparkJson(phase: string, trainee: string | undefined, rows: [string, number, string][]): string {
+    return JSON.stringify({ type: "sparks", ts: 1, trainee, phase, rows: rows.map(([name, stars, kind]) => ({ name, stars, kind })) })
+}
+
+/** Parse a synthetic corpus and run the analyzer over it. */
+function analyze(...lines: string[]) {
+    const { outcomes, sparks } = parseCorpus(lines.join("\n") + "\n", "corpus.jsonl")
+    return { outcomes, sparks, report: analyzeSparkFarm(outcomes, sparks) }
+}
+
+describe("parseCorpus", () => {
+    it("keeps parseJsonl career-outcome behavior unchanged (auxiliary sparks excluded)", () => {
+        const career = careerJson({ trainee: "Test Uma", fans: 1000 })
+        const sparks = sparkJson("original", "Test_Uma", [["Speed", 2, "stat"]])
+        const outcomes = parseJsonl(`${career}\n${sparks}\n`)
+        expect(outcomes).toHaveLength(1)
+        expect(outcomes[0].trainee).toBe("Test Uma")
+        expect(outcomes[0].source).toBe("jsonl")
+    })
+
+    it("parses a valid type=sparks record into a SparkRecord with normalized trainee", () => {
+        const { outcomes, sparks } = parseCorpus(sparkJson("original", "El_Condor_Pasa", [["Speed", 2, "stat"], ["Long", 1, "aptitude"]]), "c.jsonl")
+        expect(outcomes).toHaveLength(0)
+        expect(sparks).toHaveLength(1)
+        expect(sparks[0].phase).toBe("original")
+        expect(sparks[0].trainee).toBe("El Condor Pasa")
+        expect(sparks[0].rows).toHaveLength(2)
+        expect(sparks[0].file).toBe("c.jsonl")
+        expect(sparks[0].lineNumber).toBe(0)
+    })
+
+    it("drops malformed spark rows without aborting the record or later lines", () => {
+        const spark = JSON.stringify({
+            type: "sparks",
+            phase: "kept",
+            rows: [{ name: "Speed", stars: 3, kind: "stat" }, { name: "X", stars: "NaN", kind: "stat" }, { name: "Y", stars: 2, kind: "bogus" }, "nope"],
+        })
+        const career = careerJson({ trainee: "A" })
+        const { outcomes, sparks } = parseCorpus(`${spark}\n${career}\n`)
+        expect(sparks).toHaveLength(1)
+        expect(sparks[0].rows).toHaveLength(1)
+        expect(sparks[0].rows[0].name).toBe("Speed")
+        expect(sparks[0].droppedRows).toBe(3)
+        expect(outcomes).toHaveLength(1) // the later career line still parses
+    })
+
+    it("skips a malformed typed record whose rows are not an array", () => {
+        const { sparks } = parseCorpus(JSON.stringify({ type: "sparks", phase: "kept", rows: "notarray" }))
+        expect(sparks).toHaveLength(0)
+    })
+
+    it("retains file and line order across interleaved records", () => {
+        const text = [careerJson({ trainee: "A" }), sparkJson("original", "A", [["Speed", 1, "stat"]]), careerJson({ trainee: "B" }), sparkJson("kept", "B", [["Speed", 2, "stat"]])].join("\n")
+        const { outcomes, sparks } = parseCorpus(text, "f.jsonl")
+        expect(outcomes.map((o) => o.lineNumber)).toEqual([0, 2])
+        expect(sparks.map((s) => s.lineNumber)).toEqual([1, 3])
+        expect(outcomes[0].file).toBe("f.jsonl")
+    })
+})
+
+describe("joinSparks", () => {
+    it("joins an original/rerolled/kept sequence to the nearest preceding career in the same file", () => {
+        const { outcomes, sparks } = parseCorpus(
+            [careerJson({ trainee: "A" }), sparkJson("original", "A", [["Speed", 1, "stat"]]), sparkJson("rerolled", "A", [["Speed", 2, "stat"]]), sparkJson("kept", "A", [["Speed", 2, "stat"]]), careerJson({ trainee: "B" }), sparkJson("original", "B", [["Power", 1, "stat"]])].join("\n"),
+            "f.jsonl",
+        )
+        const join = joinSparks(outcomes, sparks)
+        expect(join.unjoined).toHaveLength(0)
+        expect(join.joinedCount).toBe(4)
+        const a = join.careers.find((c) => c.outcome.trainee === "A")!
+        const b = join.careers.find((c) => c.outcome.trainee === "B")!
+        expect(a.all).toHaveLength(3)
+        expect(a.kept).toHaveLength(1)
+        expect(b.all).toHaveLength(1)
+        expect(b.kept).toHaveLength(0)
+    })
+
+    it("never joins a spark record across files", () => {
+        const p1 = parseCorpus(careerJson({ trainee: "A" }), "f1.jsonl")
+        const p2 = parseCorpus(sparkJson("kept", "A", [["Speed", 2, "stat"]]), "f2.jsonl")
+        const join = joinSparks([...p1.outcomes, ...p2.outcomes], [...p1.sparks, ...p2.sparks])
+        expect(join.unjoined).toHaveLength(1)
+        expect(join.careers).toHaveLength(0)
+    })
+
+    it("leaves a trainee-mismatched spark unjoined", () => {
+        const { outcomes, sparks } = parseCorpus([careerJson({ trainee: "Alpha" }), sparkJson("kept", "Beta", [["Speed", 2, "stat"]])].join("\n"), "f.jsonl")
+        const join = joinSparks(outcomes, sparks)
+        expect(join.unjoined).toHaveLength(1)
+        expect(join.careers).toHaveLength(0)
+    })
+})
+
+describe("stat/aptitude canonicalization", () => {
+    it("canonicalizes ordinary OCR variation to a blue stat", () => {
+        expect(canonicalizeStatName("Speed")).toBe("Speed")
+        expect(canonicalizeStatName("speed")).toBe("Speed")
+        expect(canonicalizeStatName("Stamlna")).toBe("Stamina") // l->i slip
+        expect(canonicalizeStatName("P0wer")).toBe("Power") // 0->o slip after digit strip
+        expect(canonicalizeStatName("Guts")).toBe("Guts")
+        expect(canonicalizeStatName("Wit")).toBe("Wit")
+    })
+
+    it("leaves distant or unreadable stat names unknown", () => {
+        expect(canonicalizeStatName("")).toBeNull()
+        expect(canonicalizeStatName("unreadable")).toBeNull()
+        expect(canonicalizeStatName("Xyz")).toBeNull()
+        expect(canonicalizeStatName("W1t")).toBeNull() // short token, ambiguous after digit strip
+    })
+
+    it("recognizes Long and Dirt conservatively", () => {
+        expect(recognizeAptitude("Long")).toBe("Long")
+        expect(recognizeAptitude("long")).toBe("Long")
+        expect(recognizeAptitude("DIRT")).toBe("Dirt")
+        expect(recognizeAptitude("Dirt ")).toBe("Dirt")
+        expect(recognizeAptitude("Lung")).toBeNull()
+        expect(recognizeAptitude("Turf")).toBeNull()
+        expect(recognizeAptitude("")).toBeNull()
+    })
+})
+
+describe("analyzeSparkFarm — confirmed-kept authority", () => {
+    it("treats phase=kept as authoritative over original", () => {
+        const { report } = analyze(careerJson({ trainee: "A" }), sparkJson("original", "A", [["Speed", 1, "stat"]]), sparkJson("kept", "A", [["Speed", 3, "stat"]]))
+        const s = report.confirmedBlue.Speed
+        expect(s.best).toBe(3)
+        expect(s.threes).toBe(1)
+        expect(s.hasThree).toBe(true)
+        expect(s.ones).toBe(0) // the original 1-star is NOT counted as confirmed
+        expect(report.coverage.careersWithKept).toBe(1)
+    })
+
+    it("does not describe original-only data as confirmed kept", () => {
+        const { report } = analyze(careerJson({ trainee: "A" }), sparkJson("original", "A", [["Speed", 3, "stat"]]))
+        expect(report.coverage.kept).toBe(0)
+        expect(report.coverage.careersWithKept).toBe(0)
+        expect(report.confirmedBlue.Speed.hasThree).toBe(false)
+        expect(report.coverage.original).toBe(1)
+    })
+
+    it("does not describe rerolled-only data as confirmed kept", () => {
+        const { report } = analyze(careerJson({ trainee: "A" }), sparkJson("rerolled", "A", [["Speed", 3, "stat"]]))
+        expect(report.coverage.kept).toBe(0)
+        expect(report.coverage.careersWithKept).toBe(0)
+        expect(report.confirmedBlue.Speed.hasThree).toBe(false)
+        expect(report.coverage.rerolled).toBe(1)
+    })
+})
+
+describe("analyzeSparkFarm — blue-by-stat and missing 3-star", () => {
+    it("computes best confirmed blue by stat and the missing-3-star list", () => {
+        const { report } = analyze(
+            careerJson({ trainee: "A" }),
+            sparkJson("kept", "A", [["Speed", 2, "stat"]]),
+            careerJson({ trainee: "B" }),
+            sparkJson("kept", "B", [["Speed", 3, "stat"]]),
+            careerJson({ trainee: "C" }),
+            sparkJson("kept", "C", [["Stamina", 1, "stat"]]),
+        )
+        expect(report.confirmedBlue.Speed.best).toBe(3)
+        expect(report.confirmedBlue.Speed.twos).toBe(1)
+        expect(report.confirmedBlue.Speed.threes).toBe(1)
+        expect(report.confirmedBlue.Speed.bestSource).toBe("B / URA Finale")
+        expect(report.confirmedBlue.Stamina.best).toBe(1)
+        // Speed is the only stat with a confirmed 3-star.
+        expect(report.missingThreeBlue).toEqual(["Stamina", "Power", "Guts", "Wit"])
+    })
+
+    it("tracks unresolved stat-name reads separately instead of forcing them", () => {
+        const { report } = analyze(careerJson({ trainee: "A" }), sparkJson("kept", "A", [["Xyz", 3, "stat"]]))
+        expect(report.unknownStatReads).toBe(1)
+        expect(report.confirmedBlue.Speed.hasThree).toBe(false)
+        expect(report.missingThreeBlue).toHaveLength(5)
+    })
+})
+
+describe("analyzeSparkFarm — Long/Dirt and final-stat eligibility", () => {
+    it("reports confirmed Long/Dirt and counts unreadable aptitude rows", () => {
+        const { report } = analyze(careerJson({ trainee: "A" }), sparkJson("kept", "A", [["Long", 2, "aptitude"], ["Dirt", 1, "aptitude"], ["unreadable", 0, "aptitude"]]))
+        expect(report.long.best).toBe(2)
+        expect(report.long.byStar[2]).toBe(1)
+        expect(report.dirt.best).toBe(1)
+        expect(report.unreadableAptitudeRows).toBe(1)
+    })
+
+    it("bands final stats below600 / 600-1099 / 1100+ and excludes incomplete careers", () => {
+        const { report } = analyze(
+            careerJson({ trainee: "A", spd: 500 }),
+            careerJson({ trainee: "A", spd: 800 }),
+            careerJson({ trainee: "A", spd: 1200 }),
+            careerJson({ trainee: "A", spd: 1, outcome: "INCOMPLETE", result: "MANUALLY_STOPPED", turn: 5 }),
+        )
+        const spd = report.eligibility.overall.perStat.Speed
+        expect(spd.n).toBe(3) // the incomplete career is excluded
+        expect(spd.below600).toBe(1)
+        expect(spd.mid).toBe(1)
+        expect(spd.atLeast1100).toBe(1)
+    })
+
+    it("computes the all-five-at-least-600 rate over finished careers", () => {
+        const { report } = analyze(careerJson({ trainee: "A" }), careerJson({ trainee: "A", spd: 500 }))
+        const ov = report.eligibility.overall
+        expect(ov.n).toBe(2)
+        expect(ov.allFive600).toBe(1) // the spd=500 career fails the all-five gate
+        expect(ov.avgBelow600).toBeCloseTo(0.5)
+    })
+})
+
+describe("analyzeSparkFarm — yield sorting and low-N", () => {
+    it("marks a low-N arm as low confidence and renders the marker", () => {
+        const { report } = analyze(careerJson({ trainee: "A" }), sparkJson("kept", "A", [["Speed", 3, "stat"]]))
+        expect(report.yield).toHaveLength(1)
+        expect(report.yield[0].lowN).toBe(true)
+        expect(report.yield[0].keptCount).toBe(1)
+        const md = renderSparkFarmMarkdown(report)
+        expect(md).toContain("anecdote, not signal")
+    })
+})
+
+describe("renderSparkFarmMarkdown", () => {
+    it("contains every required section and the corpus-honesty label", () => {
+        const { report } = analyze(careerJson({ trainee: "A" }), sparkJson("kept", "A", [["Speed", 3, "stat"], ["Long", 2, "aptitude"]]))
+        const md = renderSparkFarmMarkdown(report)
+        expect(md).toContain("## 1. Corpus Coverage")
+        expect(md).toContain("## 2. Confirmed Kept Blue Sparks")
+        expect(md).toContain("## 3. Long and Dirt Aptitude Sparks")
+        expect(md).toContain("## 4. Final-Stat Eligibility")
+        expect(md).toContain("## 5. Farming Yield")
+        expect(md).toContain("## 6. Next-Farm Guidance")
+        expect(md).toContain("Missing from confirmed-kept corpus records")
+    })
+})
+
+describe("analyzeSparkFarm — spark-only corpus", () => {
+    it("does not crash and reports every spark as unjoined", () => {
+        const { outcomes, sparks } = parseCorpus([sparkJson("original", "A", [["Speed", 1, "stat"]]), sparkJson("kept", "A", [["Speed", 3, "stat"]])].join("\n"), "sparks-only.jsonl")
+        expect(outcomes).toHaveLength(0)
+        const report = analyzeSparkFarm(outcomes, sparks)
+        expect(report.coverage.careerOutcomes).toBe(0)
+        expect(report.coverage.sparkRecords).toBe(2)
+        expect(report.coverage.unjoined).toBe(2)
+        expect(report.coverage.careersWithKept).toBe(0)
+        expect(() => renderSparkFarmMarkdown(report)).not.toThrow()
+    })
+})
+
+// Direct fp/scenario attribution on spark records (the new on-device writer fields).
+function sparkArmJson(phase: string, trainee: string, scenario: string | undefined, fp: string | undefined, rows: [string, number, string][]): string {
+    return JSON.stringify({ type: "sparks", ts: 1, trainee, scenario, fp, phase, rows: rows.map(([name, stars, kind]) => ({ name, stars, kind })) })
+}
+
+describe("spark-record fp/scenario attribution", () => {
+    it("parseCorpus reads direct fp and normalizes scenario onto the SparkRecord", () => {
+        const { sparks } = parseCorpus(sparkArmJson("kept", "Test_Uma", "Unity_Cup", "arm1", [["Speed", 3, "stat"]]))
+        expect(sparks[0].fp).toBe("arm1")
+        expect(sparks[0].scenario).toBe("Unity Cup")
+        expect(sparks[0].trainee).toBe("Test Uma")
+    })
+
+    it("prefers a direct fp: a matching fp joins, a mismatched fp is rejected despite positional adjacency", () => {
+        const matched = parseCorpus([careerJson({ trainee: "A", app: "1.3.8", fp: "armA" }), sparkArmJson("kept", "A", "URA Finale", "armA", [["Speed", 3, "stat"]])].join("\n"), "f.jsonl")
+        const j1 = joinSparks(matched.outcomes, matched.sparks)
+        expect(j1.unjoined).toHaveLength(0)
+        expect(j1.careers).toHaveLength(1)
+
+        const mismatched = parseCorpus([careerJson({ trainee: "A", app: "1.3.8", fp: "armA" }), sparkArmJson("kept", "A", "URA Finale", "armDIFFERENT", [["Speed", 3, "stat"]])].join("\n"), "f.jsonl")
+        const j2 = joinSparks(mismatched.outcomes, mismatched.sparks)
+        expect(j2.unjoined).toHaveLength(1) // direct fp overrides the positional guess
+        expect(j2.careers).toHaveLength(0)
+    })
+
+    it("carries the same fp/scenario across original, rerolled and kept, joining them to one arm", () => {
+        const { outcomes, sparks } = parseCorpus(
+            [
+                careerJson({ trainee: "A", app: "1.3.8", fp: "armX" }),
+                sparkArmJson("original", "A", "Unity Cup", "armX", [["Speed", 1, "stat"]]),
+                sparkArmJson("rerolled", "A", "Unity Cup", "armX", [["Speed", 2, "stat"]]),
+                sparkArmJson("kept", "A", "Unity Cup", "armX", [["Speed", 3, "stat"]]),
+            ].join("\n"),
+            "f.jsonl",
+        )
+        const report = analyzeSparkFarm(outcomes, sparks)
+        expect(report.coverage.joined).toBe(3)
+        expect(report.coverage.unjoined).toBe(0)
+        expect(report.confirmedBlue.Speed.hasThree).toBe(true)
+        expect(report.yield).toHaveLength(1)
+        expect(report.yield[0].arm).toBe("1.3.8@armX") // arm reflects the career's fp
+    })
+
+    it("still analyzes historical records that lack fp/scenario (positional fallback preserved)", () => {
+        const { outcomes, sparks } = parseCorpus([careerJson({ trainee: "A" }), sparkJson("kept", "A", [["Speed", 3, "stat"]])].join("\n"), "old.jsonl")
+        expect(sparks[0].fp).toBeUndefined()
+        expect(sparks[0].scenario).toBeUndefined()
+        const report = analyzeSparkFarm(outcomes, sparks)
+        expect(report.coverage.unjoined).toBe(0)
+        expect(report.confirmedBlue.Speed.hasThree).toBe(true)
     })
 })
