@@ -183,10 +183,43 @@ export interface SparkRecord {
     droppedRows: number
 }
 
-/** Both record kinds parsed from one JSONL corpus, each tagged with file + line number. */
+/**
+ * One skill-spend session as appended on-device (`type:"skill_spend"` records) — one per invocation of
+ * the purchaser, never one per internal scroll pass. `proposed` is what the planner chose; `confirmed`
+ * is what the screen evidenced as obtained. Every identity field is optional: the writer omits what it
+ * cannot know rather than fabricating it, so readers must tolerate absence.
+ */
+export interface SkillSpendRecord {
+    type: "skill_spend"
+    ts?: number
+    policy?: string
+    outcome: string
+    trigger?: string
+    plan?: string
+    strategy?: string
+    trainee?: string
+    scenario?: string
+    fp?: string
+    turn?: number
+    spBefore?: number
+    spAfter?: number
+    unspent?: number
+    proposed: { name: string; price: number }[]
+    confirmed: string[]
+    skipped: { name: string; reason: string }[]
+    // Set when the points delta proved the screen's obtained set missed a purchase, so `confirmed` is
+    // a floor rather than the full set. Such a session carries no `skipped` rows: which planned skills
+    // went unbought is exactly what the gap makes unknowable.
+    confirmedIncomplete?: boolean
+    file?: string
+    lineNumber: number
+}
+
+/** All record kinds parsed from one JSONL corpus, each tagged with file + line number. */
 export interface ParsedCorpus {
     outcomes: OutcomeRecord[]
     sparks: SparkRecord[]
+    skillSpends: SkillSpendRecord[]
 }
 
 const SPARK_KINDS = new Set(["stat", "aptitude", "unique", "skill"])
@@ -210,6 +243,7 @@ function parseSparkRow(raw: unknown): SparkRowRecord | null {
 export function parseCorpus(text: string, file?: string): ParsedCorpus {
     const outcomes: OutcomeRecord[] = []
     const sparks: SparkRecord[] = []
+    const skillSpends: SkillSpendRecord[] = []
     const rawLines = text.split("\n")
     for (let i = 0; i < rawLines.length; i++) {
         const line = rawLines[i].trim()
@@ -247,6 +281,41 @@ export function parseCorpus(text: string, file?: string): ParsedCorpus {
             continue
         }
 
+        if (obj.type === "skill_spend") {
+            // A record with no usable outcome is malformed: skip it like any malformed line rather than
+            // invent an outcome bucket for it.
+            if (typeof obj.outcome !== "string" || !obj.outcome) continue
+            skillSpends.push({
+                type: "skill_spend",
+                ts: obj.ts !== undefined ? Number(obj.ts) : undefined,
+                policy: obj.policy !== undefined ? String(obj.policy) : undefined,
+                outcome: String(obj.outcome),
+                trigger: obj.trigger !== undefined ? String(obj.trigger) : undefined,
+                plan: obj.plan !== undefined ? String(obj.plan) : undefined,
+                strategy: obj.strategy !== undefined ? String(obj.strategy) : undefined,
+                trainee: obj.trainee !== undefined ? normalizeName(String(obj.trainee)) : undefined,
+                scenario: obj.scenario !== undefined ? String(obj.scenario).replace(/_/g, " ") : undefined,
+                fp: obj.fp !== undefined ? String(obj.fp) : undefined,
+                turn: Number.isFinite(Number(obj.turn)) ? Number(obj.turn) : undefined,
+                spBefore: Number.isFinite(Number(obj.spBefore)) ? Number(obj.spBefore) : undefined,
+                spAfter: Number.isFinite(Number(obj.spAfter)) ? Number(obj.spAfter) : undefined,
+                unspent: Number.isFinite(Number(obj.unspent)) ? Number(obj.unspent) : undefined,
+                proposed: Array.isArray(obj.proposed)
+                    ? obj.proposed
+                          .filter((p: any) => p && typeof p.name === "string" && Number.isFinite(Number(p.price)))
+                          .map((p: any) => ({ name: String(p.name), price: Number(p.price) }))
+                    : [],
+                confirmed: Array.isArray(obj.confirmed) ? obj.confirmed.filter((n: any) => typeof n === "string").map((n: any) => String(n)) : [],
+                skipped: Array.isArray(obj.skipped)
+                    ? obj.skipped.filter((s: any) => s && typeof s.name === "string" && typeof s.reason === "string").map((s: any) => ({ name: String(s.name), reason: String(s.reason) }))
+                    : [],
+                confirmedIncomplete: obj.confirmedIncomplete === true ? true : undefined,
+                file,
+                lineNumber: i,
+            })
+            continue
+        }
+
         // Any other typed record is not a career outcome (mirrors the pre-spark parseJsonl skip).
         if (obj.type !== undefined) continue
         if (!obj.result || !obj.trainee) continue
@@ -277,7 +346,7 @@ export function parseCorpus(text: string, file?: string): ParsedCorpus {
             lineNumber: i,
         })
     }
-    return { outcomes, sparks }
+    return { outcomes, sparks, skillSpends }
 }
 
 /** Parses a JSONL corpus text into career outcomes only; malformed lines are skipped, never fatal.
@@ -984,5 +1053,149 @@ export function renderSparkFarmMarkdown(r: SparkFarmReport): string {
     L.push("## 6. Next-Farm Guidance")
     for (const g of r.guidance) L.push(`- ${g}`)
 
+    return L.join("\n")
+}
+
+// ===========================================================================
+// Skill Spend — read-side over the `type:"skill_spend"` corpus records.
+//
+// Descriptive only: counts and point summaries of what the purchaser actually did. It deliberately
+// draws no conclusion about whether a policy is good — that needs far more sessions than the first
+// corpora will hold, and the records exist to make that judgement possible later, not now.
+// ===========================================================================
+
+export interface SkillSpendSummary {
+    sessions: number
+    byTrigger: Record<string, number>
+    byPlan: Record<string, number>
+    byOutcome: Record<string, number>
+    /** Sessions whose commit was verified on screen. */
+    committed: number
+    /** Skills evidenced as bought across all sessions. */
+    confirmedSkills: number
+    /** Skills the planner proposed across all sessions. */
+    proposedSkills: number
+    /** Sessions whose points delta proved the on-screen confirmation missed at least one purchase. */
+    confirmedIncomplete: number
+    spBefore: { n: number; p50: number; min: number; max: number }
+    spAfter: { n: number; p50: number; min: number; max: number }
+    unspent: { n: number; p50: number; min: number; max: number }
+    /** Per (trainee, scenario, arm) counts — only for records carrying that identity. */
+    byArm: { trainee: string; scenario: string; arm: string; sessions: number; committed: number; unspentP50: number }[]
+    /** Records lacking the identity needed to place them on an arm. */
+    unidentified: number
+}
+
+function tally(values: number[]): { n: number; p50: number; min: number; max: number } {
+    if (values.length === 0) return { n: 0, p50: 0, min: 0, max: 0 }
+    return { n: values.length, p50: percentile(values, 50), min: Math.min(...values), max: Math.max(...values) }
+}
+
+function bump(map: Record<string, number>, key: string): void {
+    map[key] = (map[key] ?? 0) + 1
+}
+
+/**
+ * Aggregates skill-spend sessions. Pure. An arm needs app+fp to exist; records written before a
+ * fingerprint was available (or by a future writer that omits it) are counted as unidentified rather
+ * than lumped onto a wrong arm.
+ */
+export function analyzeSkillSpend(records: SkillSpendRecord[]): SkillSpendSummary {
+    const byTrigger: Record<string, number> = {}
+    const byPlan: Record<string, number> = {}
+    const byOutcome: Record<string, number> = {}
+    const armMap = new Map<string, { trainee: string; scenario: string; arm: string; sessions: number; committed: number; unspents: number[] }>()
+    let unidentified = 0
+    let committed = 0
+    let confirmedSkills = 0
+    let proposedSkills = 0
+    let confirmedIncomplete = 0
+
+    for (const r of records) {
+        bump(byTrigger, r.trigger ?? "unknown")
+        bump(byPlan, r.plan ?? "unknown")
+        bump(byOutcome, r.outcome)
+        if (r.outcome === "committed") committed++
+        if (r.confirmedIncomplete) confirmedIncomplete++
+        confirmedSkills += r.confirmed.length
+        proposedSkills += r.proposed.length
+
+        if (r.trainee && r.scenario && r.fp) {
+            const key = [r.trainee, r.scenario, r.fp].join("  ")
+            let e = armMap.get(key)
+            if (!e) {
+                e = { trainee: r.trainee, scenario: r.scenario, arm: r.fp, sessions: 0, committed: 0, unspents: [] }
+                armMap.set(key, e)
+            }
+            e.sessions++
+            if (r.outcome === "committed") e.committed++
+            if (r.unspent !== undefined) e.unspents.push(r.unspent)
+        } else {
+            unidentified++
+        }
+    }
+
+    const byArm = [...armMap.values()]
+        .map((e) => ({ trainee: e.trainee, scenario: e.scenario, arm: e.arm, sessions: e.sessions, committed: e.committed, unspentP50: percentile(e.unspents, 50) }))
+        .sort((a, b) => a.trainee.localeCompare(b.trainee) || a.scenario.localeCompare(b.scenario) || a.arm.localeCompare(b.arm))
+
+    return {
+        sessions: records.length,
+        byTrigger,
+        byPlan,
+        byOutcome,
+        committed,
+        confirmedSkills,
+        proposedSkills,
+        confirmedIncomplete,
+        spBefore: tally(records.map((r) => r.spBefore).filter((v): v is number => v !== undefined)),
+        spAfter: tally(records.map((r) => r.spAfter).filter((v): v is number => v !== undefined)),
+        unspent: tally(records.map((r) => r.unspent).filter((v): v is number => v !== undefined)),
+        byArm,
+        unidentified,
+    }
+}
+
+/** Renders the Skill Spend summary as GitHub-flavored markdown. */
+export function renderSkillSpendMarkdown(s: SkillSpendSummary): string {
+    const L: string[] = []
+    L.push("# Skill Spend")
+    L.push("")
+    if (s.sessions === 0) {
+        L.push("_No `skill_spend` records in the corpus yet._")
+        return L.join("\n")
+    }
+    L.push(`- Sessions: **${s.sessions}** (one per purchaser invocation, not per scroll pass) · committed: **${s.committed}**`)
+    L.push(`- Skills proposed: ${s.proposedSkills} · evidenced as bought: ${s.confirmedSkills}`)
+    if (s.confirmedIncomplete > 0) {
+        L.push(
+            `- Sessions whose points delta proves the on-screen confirmation missed a purchase: **${s.confirmedIncomplete}** ` +
+                `(their \`confirmed\` is a floor, so the bought count above is understated)`,
+        )
+    }
+    if (s.unidentified > 0) L.push(`- Records without trainee/scenario/fp identity: ${s.unidentified} (excluded from the arm table)`)
+    const row = (label: string, t: { n: number; p50: number; min: number; max: number }) => `| ${label} | ${t.n} | ${t.p50} | ${t.min} | ${t.max} |`
+    L.push("")
+    L.push("| Points | N | p50 | min | max |")
+    L.push("|---|---:|---:|---:|---:|")
+    L.push(row("SP before", s.spBefore))
+    L.push(row("SP after", s.spAfter))
+    L.push(row("Unspent", s.unspent))
+    const counts = (label: string, m: Record<string, number>) => {
+        const entries = Object.entries(m).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        L.push("")
+        L.push(`${label}: ${entries.map(([k, v]) => `${k}=${v}`).join(" · ")}`)
+    }
+    counts("By trigger", s.byTrigger)
+    counts("By plan", s.byPlan)
+    counts("By outcome", s.byOutcome)
+    if (s.byArm.length > 0) {
+        L.push("")
+        L.push("| Trainee | Scenario | Arm | Sessions | Committed | Unspent p50 |")
+        L.push("|---|---|---|---:|---:|---:|")
+        for (const a of s.byArm) L.push(`| ${a.trainee} | ${a.scenario} | ${a.arm} | ${a.sessions} | ${a.committed} | ${a.unspentP50} |`)
+    }
+    L.push("")
+    L.push("\\* Descriptive only. These counts say what the purchaser did, not whether the policy is good — that needs many more sessions than a first corpus holds.")
     return L.join("\n")
 }

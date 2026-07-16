@@ -17,7 +17,7 @@
 
 import { readFileSync, readdirSync, statSync } from "node:fs"
 import { basename, extname, join } from "node:path"
-import { aggregate, analyzeSparkFarm, dedupe, harvestLogText, isBotFault, parseCorpus, renderMarkdown, renderSparkFarmMarkdown } from "../src/lib/outcomeAnalysis.ts"
+import { aggregate, analyzeSkillSpend, analyzeSparkFarm, dedupe, harvestLogText, isBotFault, parseCorpus, renderMarkdown, renderSkillSpendMarkdown, renderSparkFarmMarkdown } from "../src/lib/outcomeAnalysis.ts"
 
 function collectFiles(path, depth = 0) {
     const stat = statSync(path)
@@ -36,6 +36,7 @@ function main(args) {
 
     const records = []
     const sparks = []
+    const skillSpends = []
     let filesRead = 0
     for (const arg of args) {
         let files
@@ -54,6 +55,7 @@ function main(args) {
                 const parsed = parseCorpus(text, basename(file))
                 records.push(...parsed.outcomes)
                 sparks.push(...parsed.sparks)
+                skillSpends.push(...parsed.skillSpends)
             } else {
                 records.push(...harvestLogText(text, basename(file)))
             }
@@ -61,8 +63,8 @@ function main(args) {
         }
     }
 
-    if (records.length === 0 && sparks.length === 0) {
-        console.error(`No outcome or spark records found in ${filesRead} file(s). Pull the device logs/corpus first (see the header of this script).`)
+    if (records.length === 0 && sparks.length === 0 && skillSpends.length === 0) {
+        console.error(`No outcome, spark or skill-spend records found in ${filesRead} file(s). Pull the device logs/corpus first (see the header of this script).`)
         return 1
     }
 
@@ -75,7 +77,7 @@ function main(args) {
     const sparkReport = analyzeSparkFarm(unique, sparks)
 
     console.log(
-        `${outcomeCount} career outcome(s), ${sparks.length} spark record(s) from ${filesRead} file(s)` +
+        `${outcomeCount} career outcome(s), ${sparks.length} spark record(s), ${skillSpends.length} skill-spend record(s) from ${filesRead} file(s)` +
             `${dropped > 0 ? ` (${dropped} log duplicate(s) of corpus records dropped)` : ""}` +
             `${botFaults > 0 ? `; ${botFaults} bot-fault record(s) (UNHANDLED_EXCEPTION) excluded from outcomes` : ""}` +
             `${sparkReport.coverage.unjoined > 0 ? `; ${sparkReport.coverage.unjoined} unjoined spark record(s)` : ""}\n`,
@@ -90,6 +92,12 @@ function main(args) {
     }
     console.log("")
     console.log(renderSparkFarmMarkdown(sparkReport))
+    // Skill Spend rides after the farm report and only when the corpus actually carries the records,
+    // so an older corpus renders byte-identically to before.
+    if (skillSpends.length > 0) {
+        console.log("")
+        console.log(renderSkillSpendMarkdown(analyzeSkillSpend(skillSpends)))
+    }
     console.log(
         "\nCaveats: the corpus is not one-row-per-started-run (hard terminators emit nothing)," +
             "\narms under the low-N threshold are anecdotes - compare distributions, not single runs," +

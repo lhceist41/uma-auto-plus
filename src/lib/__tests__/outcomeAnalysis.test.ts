@@ -1,5 +1,6 @@
 import {
     aggregate,
+    analyzeSkillSpend,
     analyzeSparkFarm,
     canonicalizeStatName,
     classifyBucket,
@@ -13,6 +14,7 @@ import {
     percentile,
     recognizeAptitude,
     renderMarkdown,
+    renderSkillSpendMarkdown,
     renderSparkFarmMarkdown,
 } from "../outcomeAnalysis"
 import type { OutcomeRecord } from "../outcomeAnalysis"
@@ -344,6 +346,31 @@ function analyze(...lines: string[]) {
     return { outcomes, sparks, report: analyzeSparkFarm(outcomes, sparks) }
 }
 
+function skillSpendJson(
+    o: Partial<{
+        outcome: string
+        trigger: string
+        plan: string
+        trainee: string
+        scenario: string
+        fp: string
+        turn: number
+        spBefore: number
+        spAfter: number
+        unspent: number
+        proposed: { name: string; price: number }[]
+        confirmed: string[]
+        skipped: { name: string; reason: string }[]
+        confirmedIncomplete: boolean
+    }> = {},
+): string {
+    const record: Record<string, unknown> = { type: "skill_spend", ts: 1, policy: "trigger-v1", outcome: o.outcome ?? "committed" }
+    for (const key of ["trigger", "plan", "trainee", "scenario", "fp", "turn", "spBefore", "spAfter", "unspent", "proposed", "confirmed", "skipped", "confirmedIncomplete"] as const) {
+        if (o[key] !== undefined) record[key] = o[key]
+    }
+    return JSON.stringify(record)
+}
+
 describe("parseCorpus", () => {
     it("keeps parseJsonl career-outcome behavior unchanged (auxiliary sparks excluded)", () => {
         const career = careerJson({ trainee: "Test Uma", fans: 1000 })
@@ -630,5 +657,194 @@ describe("spark-record fp/scenario attribution", () => {
         const report = analyzeSparkFarm(outcomes, sparks)
         expect(report.coverage.unjoined).toBe(0)
         expect(report.confirmedBlue.Speed.hasThree).toBe(true)
+    })
+})
+
+// ===========================================================================
+// skill_spend records
+// ===========================================================================
+
+describe("parseCorpus — skill_spend records", () => {
+    it("parses a valid skill_spend record with normalized trainee and scenario", () => {
+        const { outcomes, sparks, skillSpends } = parseCorpus(
+            skillSpendJson({
+                trigger: "HIGH_WATER",
+                plan: "skillPointCheck",
+                trainee: "Super_Creek",
+                scenario: "Unity_Cup",
+                fp: "1e681a57e1",
+                turn: 40,
+                spBefore: 400,
+                spAfter: 58,
+                unspent: 58,
+                proposed: [{ name: "A", price: 200 }],
+                confirmed: ["A"],
+            }),
+            "c.jsonl",
+        )
+        expect(outcomes).toHaveLength(0)
+        expect(sparks).toHaveLength(0)
+        expect(skillSpends).toHaveLength(1)
+        const r = skillSpends[0]
+        expect(r.outcome).toBe("committed")
+        expect(r.trigger).toBe("HIGH_WATER")
+        expect(r.trainee).toBe("Super Creek")
+        expect(r.scenario).toBe("Unity Cup")
+        expect(r.fp).toBe("1e681a57e1")
+        expect(r.proposed).toEqual([{ name: "A", price: 200 }])
+        expect(r.confirmed).toEqual(["A"])
+        expect(r.lineNumber).toBe(0)
+    })
+
+    it("omits absent optional fields rather than defaulting them", () => {
+        const { skillSpends } = parseCorpus(skillSpendJson({ outcome: "empty_plan" }), "c.jsonl")
+        const r = skillSpends[0]
+        expect(r.outcome).toBe("empty_plan")
+        expect(r.trainee).toBeUndefined()
+        expect(r.fp).toBeUndefined()
+        expect(r.spBefore).toBeUndefined()
+        expect(r.proposed).toEqual([])
+        expect(r.confirmed).toEqual([])
+    })
+
+    it("skips a skill_spend record with no usable outcome instead of inventing one", () => {
+        const malformed = JSON.stringify({ type: "skill_spend", ts: 1 })
+        const { skillSpends } = parseCorpus(`${malformed}\n${skillSpendJson()}\n`, "c.jsonl")
+        expect(skillSpends).toHaveLength(1)
+    })
+
+    it("drops malformed proposed/skipped rows without discarding the record", () => {
+        const raw = JSON.stringify({
+            type: "skill_spend",
+            ts: 1,
+            outcome: "committed",
+            proposed: [{ name: "Good", price: 100 }, { name: "NoPrice" }, null],
+            skipped: [{ name: "S", reason: "unbought_after_passes" }, { name: "NoReason" }],
+            confirmed: ["Good", 42],
+        })
+        const { skillSpends } = parseCorpus(raw, "c.jsonl")
+        expect(skillSpends[0].proposed).toEqual([{ name: "Good", price: 100 }])
+        expect(skillSpends[0].skipped).toEqual([{ name: "S", reason: "unbought_after_passes" }])
+        expect(skillSpends[0].confirmed).toEqual(["Good"])
+    })
+
+    it("leaves career and spark parsing untouched in a mixed corpus (old corpora unchanged)", () => {
+        const { outcomes, sparks, skillSpends } = parseCorpus(
+            [careerJson({ trainee: "Test Uma" }), sparkJson("kept", "Test_Uma", [["Speed", 3, "stat"]]), skillSpendJson()].join("\n") + "\n",
+            "c.jsonl",
+        )
+        expect(outcomes).toHaveLength(1)
+        expect(outcomes[0].trainee).toBe("Test Uma")
+        expect(sparks).toHaveLength(1)
+        expect(sparks[0].phase).toBe("kept")
+        expect(skillSpends).toHaveLength(1)
+    })
+
+    it("a corpus with no skill_spend records yields an empty list (backward compatible)", () => {
+        const { skillSpends } = parseCorpus(`${careerJson()}\n${sparkJson("original", "T", [["Speed", 1, "stat"]])}\n`, "c.jsonl")
+        expect(skillSpends).toEqual([])
+    })
+})
+
+describe("analyzeSkillSpend", () => {
+    it("counts sessions by trigger, plan and outcome", () => {
+        const { skillSpends } = parseCorpus(
+            [
+                skillSpendJson({ trigger: "HIGH_WATER", plan: "skillPointCheck", outcome: "committed" }),
+                skillSpendJson({ trigger: "HIGH_WATER", plan: "skillPointCheck", outcome: "nothing_to_buy" }),
+                skillSpendJson({ trigger: "CAREER_COMPLETE", plan: "careerComplete", outcome: "committed" }),
+            ].join("\n") + "\n",
+            "c.jsonl",
+        )
+        const s = analyzeSkillSpend(skillSpends)
+        expect(s.sessions).toBe(3)
+        expect(s.committed).toBe(2)
+        expect(s.byTrigger).toEqual({ HIGH_WATER: 2, CAREER_COMPLETE: 1 })
+        expect(s.byPlan).toEqual({ skillPointCheck: 2, careerComplete: 1 })
+        expect(s.byOutcome).toEqual({ committed: 2, nothing_to_buy: 1 })
+    })
+
+    it("summarizes SP before/after and unspent", () => {
+        const { skillSpends } = parseCorpus(
+            [skillSpendJson({ spBefore: 400, spAfter: 58, unspent: 58 }), skillSpendJson({ spBefore: 1000, spAfter: 120, unspent: 120 })].join("\n") + "\n",
+            "c.jsonl",
+        )
+        const s = analyzeSkillSpend(skillSpends)
+        expect(s.spBefore.n).toBe(2)
+        expect(s.spBefore.min).toBe(400)
+        expect(s.spBefore.max).toBe(1000)
+        expect(s.unspent.min).toBe(58)
+        expect(s.unspent.max).toBe(120)
+    })
+
+    it("groups by arm only where identity exists, counting the rest as unidentified", () => {
+        const { skillSpends } = parseCorpus(
+            [
+                skillSpendJson({ trainee: "Super_Creek", scenario: "Unity_Cup", fp: "abc", unspent: 10 }),
+                skillSpendJson({ trainee: "Super_Creek", scenario: "Unity_Cup", fp: "abc", unspent: 30 }),
+                skillSpendJson({ trainee: "Super_Creek", scenario: "Unity_Cup" }),
+            ].join("\n") + "\n",
+            "c.jsonl",
+        )
+        const s = analyzeSkillSpend(skillSpends)
+        expect(s.byArm).toHaveLength(1)
+        expect(s.byArm[0]).toMatchObject({ trainee: "Super Creek", scenario: "Unity Cup", arm: "abc", sessions: 2 })
+        expect(s.unidentified).toBe(1)
+    })
+
+    it("tallies proposed vs confirmed skills across sessions", () => {
+        const { skillSpends } = parseCorpus(
+            skillSpendJson({ proposed: [{ name: "A", price: 1 }, { name: "B", price: 2 }], confirmed: ["A"], skipped: [{ name: "B", reason: "unbought_after_passes" }] }),
+            "c.jsonl",
+        )
+        const s = analyzeSkillSpend(skillSpends)
+        expect(s.proposedSkills).toBe(2)
+        expect(s.confirmedSkills).toBe(1)
+    })
+
+    it("handles an empty input without dividing by zero", () => {
+        const s = analyzeSkillSpend([])
+        expect(s.sessions).toBe(0)
+        expect(s.spBefore).toEqual({ n: 0, p50: 0, min: 0, max: 0 })
+        expect(renderSkillSpendMarkdown(s)).toContain("No `skill_spend` records")
+    })
+
+    it("counts sessions whose confirmation is known-incomplete", () => {
+        const { skillSpends } = parseCorpus(
+            [skillSpendJson({ confirmedIncomplete: true }), skillSpendJson({}), skillSpendJson({ confirmedIncomplete: true })].join("\n") + "\n",
+            "c.jsonl",
+        )
+        expect(analyzeSkillSpend(skillSpends).confirmedIncomplete).toBe(2)
+    })
+})
+
+describe("renderSkillSpendMarkdown", () => {
+    it("renders counts, point summary and the arm table without claiming policy quality", () => {
+        const { skillSpends } = parseCorpus(
+            [
+                skillSpendJson({ trigger: "HIGH_WATER", plan: "skillPointCheck", trainee: "Super_Creek", scenario: "Unity_Cup", fp: "abc", spBefore: 400, spAfter: 58, unspent: 58 }),
+                skillSpendJson({ trigger: "CAREER_COMPLETE", plan: "careerComplete", outcome: "aborted_entry" }),
+            ].join("\n") + "\n",
+            "c.jsonl",
+        )
+        const md = renderSkillSpendMarkdown(analyzeSkillSpend(skillSpends))
+        expect(md).toContain("# Skill Spend")
+        expect(md).toContain("Sessions: **2**")
+        expect(md).toContain("HIGH_WATER=1")
+        expect(md).toContain("aborted_entry=1")
+        expect(md).toContain("| Super Creek | Unity Cup | abc |")
+        expect(md).toContain("Descriptive only")
+    })
+
+    it("flags a known-incomplete confirmation instead of letting the bought count read as whole", () => {
+        const { skillSpends } = parseCorpus(skillSpendJson({ confirmedIncomplete: true }), "c.jsonl")
+        const md = renderSkillSpendMarkdown(analyzeSkillSpend(skillSpends))
+        expect(md).toContain("missed a purchase: **1**")
+        expect(md).toContain("understated")
+    })
+
+    it("stays silent about incompleteness when nothing proved a gap", () => {
+        const { skillSpends } = parseCorpus(skillSpendJson({}), "c.jsonl")
+        expect(renderSkillSpendMarkdown(analyzeSkillSpend(skillSpends))).not.toContain("missed a purchase")
     })
 })

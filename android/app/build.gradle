@@ -245,6 +245,10 @@ dependencies {
     // Unit testing.
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
+    // Real org.json for the JVM tests only: android.jar ships stubs, so JSONObject would return null
+    // for every field under returnDefaultValues and the corpus-record tests could assert nothing.
+    // testImplementation keeps it out of the APK, which uses the platform's own implementation.
+    testImplementation(libs.json)
 
     // ONNX Runtime for YOLOv8 inference.
     implementation(libs.onnxruntime)

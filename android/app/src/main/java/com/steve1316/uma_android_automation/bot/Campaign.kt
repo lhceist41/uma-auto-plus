@@ -2364,11 +2364,56 @@ abstract class Campaign(game: Game) : Task(game) {
      * skill plan. If no plan name is provided, the default skill plan is used.
      *
      * @param skillPlanName The optional name of the skill plan to use.
+     * @param trigger Why the skill screen was opened, recorded on the skill-spend telemetry record.
+     *   Null when the caller has no reason to name (the debug harness).
      * @return True if the skill purchasing process was successful, false otherwise.
      */
-    open fun handleSkillListScreen(skillPlanName: String? = null): Boolean {
+    open fun handleSkillListScreen(skillPlanName: String? = null, trigger: SkillCheckTrigger? = null): Boolean {
         MessageLog.v(TAG, "[SKILLS] Beginning process to purchase skills...")
-        return skillPlan.start(skillPlanName)
+        return skillPlan.start(skillPlanName, trigger)
+    }
+
+    /**
+     * The config-arm fingerprint of the career currently running, computed from the same snapshot and
+     * the same helper the [CAREER_END] record uses, so a mid-career record joins the arm its career
+     * will land in. Reuses [outcomeConfigFingerprint] rather than re-deriving the digest - two
+     * fingerprint implementations would silently split arms the day one of them drifted.
+     */
+    internal fun currentConfigFingerprint(): String = outcomeConfigFingerprint(BuildConfig.VERSION_NAME, outcomeConfigSnapshot)
+
+    /**
+     * Records the careerComplete pass that never got to run because the Learn screen would not open
+     * within its bounded attempts. [SkillPlan] cannot report this one: its session never started, so
+     * the corpus would otherwise show a career whose final purchase silently vanished.
+     *
+     * Best-effort like every other skill-spend write - a telemetry failure must not change the
+     * career-completion path this sits on.
+     */
+    private fun recordAbortedSkillEntry() {
+        runCatching {
+            val record =
+                SkillSpendTelemetry.buildRecord(
+                    timestamp = System.currentTimeMillis(),
+                    outcome = SkillSpendOutcome.ABORTED_ENTRY,
+                    trigger = SkillCheckTrigger.CAREER_COMPLETE,
+                    planKey = PLAN_CAREER_COMPLETE,
+                    strategy = skillPlan.skillPlans[PLAN_CAREER_COMPLETE]?.strategy?.name,
+                    trainee = trainee.name.ifEmpty { null }?.replace(" ", "_"),
+                    scenario = game.scenario.ifEmpty { null }?.replace(" ", "_"),
+                    fp = currentConfigFingerprint(),
+                    turn = date.day,
+                    // The last per-turn OCR is the only points reading available: the Learn screen never
+                    // opened, so there is no screen-authoritative total to quote.
+                    spBefore = trainee.skillPoints,
+                    spAfter = trainee.skillPoints,
+                    proposed = emptyList(),
+                    confirmed = emptyList(),
+                    skipped = emptyList(),
+                )
+            OutcomeCorpus.append(game.myContext, record)
+        }.onFailure {
+            MessageLog.w(TAG, "[SKILL_SPEND] Failed to append the aborted-entry record: $it")
+        }
     }
 
     /**
@@ -2868,11 +2913,34 @@ abstract class Campaign(game: Game) : Task(game) {
      * @return True if a check was handled, false otherwise.
      */
     open fun performGlobalChecks(): Boolean {
+        // Re-arm the high-water check once points fall back under the bar. Owned here because the flag
+        // is this instance's mutable state; decideSkillCheck only reads the resulting value.
+        if (trainee.skillPoints < skillPointsRequired) {
+            bHasHandledSkillPointCheck = false
+            skillPointCheckAttempts = 0
+        }
+
+        // Which skill check (if any) is due this turn, and why. Pure decision - navigation, the
+        // Main-screen confirmation, the attempt counters and the flags all stay below.
+        val skillCheck: SkillCheckDecision =
+            decideSkillCheck(
+                skillPoints = trainee.skillPoints,
+                highWaterThreshold = skillPointsRequired,
+                enableSkillPointCheck = enableSkillPointCheck,
+                highWaterPlanEnabled = skillPlan.skillPlans[PLAN_SKILL_POINT_CHECK]?.bIsEnabled ?: false,
+                alreadyHandledHighWater = bHasHandledSkillPointCheck,
+                day = date.day,
+                preFinalsPlanEnabled = skillPlan.skillPlans[PLAN_PRE_FINALS]?.bIsEnabled ?: false,
+                alreadyHandledPreFinals = bHasHandledPreFinalsCheck,
+            )
+
         // Now check if we need to handle skills before finals.
-        if (!bHasHandledPreFinalsCheck && date.day == 72 && skillPlan.skillPlans["preFinals"]?.bIsEnabled ?: false) {
+        if (skillCheck.action == SkillCheckAction.RUN_PLAN && skillCheck.trigger == SkillCheckTrigger.SCENARIO_FINALS) {
             ButtonSkills.click(game.imageUtils)
             game.wait(1.0)
-            if (!handleSkillListScreen()) {
+            // Plan name stays null so start() resolves it from the screen exactly as before; only the
+            // trigger is threaded through, for telemetry.
+            if (!handleSkillListScreen(trigger = SkillCheckTrigger.SCENARIO_FINALS)) {
                 preFinalsCheckAttempts++
                 if (preFinalsCheckAttempts >= preFinalsCheckMaxAttempts) {
                     MessageLog.w(
@@ -2893,24 +2961,16 @@ abstract class Campaign(game: Game) : Task(game) {
             return true
         }
 
-        // If we haven't already handled the skill point check this run and
-        // if the required skill points has been reached,
-        // stop the bot or run the skill plan if it is enabled.
-        if (trainee.skillPoints < skillPointsRequired) {
-            // Reset the flag if the skill points drop below the threshold.
-            bHasHandledSkillPointCheck = false
-            skillPointCheckAttempts = 0
-        }
-
-        if (!bHasHandledSkillPointCheck && enableSkillPointCheck && trainee.skillPoints >= skillPointsRequired) {
-            if (skillPlan.skillPlans["skillPointCheck"]?.bIsEnabled ?: false) {
+        // The high-water threshold has been reached: stop the bot, or run the skill plan if enabled.
+        if (skillCheck.trigger == SkillCheckTrigger.HIGH_WATER) {
+            if (skillCheck.action == SkillCheckAction.RUN_PLAN) {
                 // Ensure we are actually at the Main screen before attempting to navigate.
                 // If not, we skip the skill purchase for now and retry on the next turn.
                 if (checkMainScreen()) {
                     MessageLog.i(TAG, "[SKILLS] Beginning process to purchase skills...")
                     ButtonSkills.click(game.imageUtils)
                     game.wait(1.0)
-                    if (!handleSkillListScreen("skillPointCheck")) {
+                    if (!handleSkillListScreen(PLAN_SKILL_POINT_CHECK, SkillCheckTrigger.HIGH_WATER)) {
                         skillPointCheckAttempts++
                         if (skillPointCheckAttempts >= skillPointCheckMaxAttempts) {
                             MessageLog.w(
@@ -3425,6 +3485,10 @@ abstract class Campaign(game: Game) : Task(game) {
                         TAG,
                         "[ERROR] process:: Could not open the career-end skill screen after $maxCareerEndEntryAttempts attempts. Completing the career without the careerComplete plan (skill points may remain unspent).",
                     )
+                    // The one skill-spend outcome SkillPlan cannot report: its session never began, so
+                    // record the lost pass here - only now that every bounded attempt is spent, never
+                    // on the earlier retryable attempts.
+                    recordAbortedSkillEntry()
                     bCareerEndSkillsHandled = true
                 }
 
@@ -3515,7 +3579,8 @@ abstract class Campaign(game: Game) : Task(game) {
                     // the End screen branch above performs the final bookkeeping on a later tick.
                     MessageLog.i(TAG, "[INFO] Bot is on the career-end skill purchase screen. Running the careerComplete skill plan...")
                     bCareerEndSkillsHandled = true
-                    if (!handleSkillListScreen()) {
+                    // Plan name stays null so start() resolves it from the screen exactly as before.
+                    if (!handleSkillListScreen(trigger = SkillCheckTrigger.CAREER_COMPLETE)) {
                         MessageLog.w(TAG, "[WARN] process:: careerComplete skill plan failed on the career-end skill purchase screen.")
                     }
                 } else {

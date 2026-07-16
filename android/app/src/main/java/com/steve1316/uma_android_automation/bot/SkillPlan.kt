@@ -10,6 +10,7 @@ import com.steve1316.uma_android_automation.types.SkillList
 import com.steve1316.uma_android_automation.types.SkillListEntry
 import com.steve1316.uma_android_automation.types.TrackDistance
 import com.steve1316.uma_android_automation.types.TrackSurface
+import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import org.json.JSONObject
 import org.opencv.core.Point
 
@@ -1358,7 +1359,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
      * @param skillPlanName Optional name of the skill plan to execute. If null, defaults based on career status.
      * @return True if the process completed successfully, false otherwise.
      */
-    fun start(skillPlanName: String? = null): Boolean {
+    fun start(skillPlanName: String? = null, trigger: SkillCheckTrigger? = null): Boolean {
         val bitmap: Bitmap = game.imageUtils.getSourceBitmap()
 
         val skillList = SkillList(game, campaign)
@@ -1367,6 +1368,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         val bIsCareerComplete: Boolean = skillList.checkCareerCompleteSkillListScreen(bitmap)
         if (!bIsCareerComplete && !skillList.checkSkillListScreen(bitmap)) {
             MessageLog.e(TAG, "[ERROR] start:: Not at skill list screen. Aborting...")
+            recordSkillSpend(SkillSpendOutcome.FAILED, trigger, skillPlanName, null)
             return false
         }
 
@@ -1379,6 +1381,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     // Was skillPlans[...]!! — a degraded/empty plans map (bad parse, unmigrated settings,
                     // fresh install before a write) crashed skill buying instead of aborting. Abort gracefully.
                     MessageLog.e(TAG, "[ERROR] start:: No '$resolvedPlanName' skill plan found (plans map empty or missing the key). Aborting skill purchase.")
+                    recordSkillSpend(SkillSpendOutcome.FAILED, trigger, resolvedPlanName, null)
                     return false
                 }
                 resolvedPlan
@@ -1386,10 +1389,16 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 val tmpPlan: SkillPlanSettings? = skillPlans[skillPlanName]
                 if (tmpPlan == null) {
                     MessageLog.e(TAG, "[ERROR] start:: Invalid skill plan name: $skillPlanName")
+                    recordSkillSpend(SkillSpendOutcome.FAILED, trigger, skillPlanName, null)
                     return false
                 }
                 tmpPlan
             }
+
+        // Resolved plan key + trigger for telemetry. A null trigger means the caller did not name one
+        // (the debug harness), so the record carries the plan and omits the trigger rather than guessing.
+        val resolvedPlanKey: String = skillPlanName ?: if (bIsCareerComplete) PLAN_CAREER_COMPLETE else PLAN_PRE_FINALS
+        val effectiveTrigger: SkillCheckTrigger? = trigger ?: if (bIsCareerComplete) SkillCheckTrigger.CAREER_COMPLETE else null
 
         // If no purchasing options are enabled, exit early to avoid unnecessary scanning.
         if (
@@ -1399,6 +1408,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             !skillPlanSettings.bEnableBuyNegativeSkills
         ) {
             MessageLog.w(TAG, "[WARN] start:: Skill Plan is empty and no options to purchase any skills are enabled. Aborting...")
+            recordSkillSpend(SkillSpendOutcome.EMPTY_PLAN, effectiveTrigger, resolvedPlanKey, skillPlanSettings)
             skillList.cancelAndExit()
             return true
         }
@@ -1418,6 +1428,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         // Exit if the current skill points are below the minimum possible skill cost.
         if (skillPoints < 42) {
             MessageLog.i(TAG, "[SKILLS] Skill Points < 42. Cannot afford any skills. Aborting...")
+            recordSkillSpend(SkillSpendOutcome.NOTHING_TO_BUY, effectiveTrigger, resolvedPlanKey, skillPlanSettings, spBefore = skillPoints, spAfter = skillPoints)
             skillList.cancelAndExit()
             return true
         }
@@ -1426,6 +1437,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         skillList.parseSkillListEntries(bUseMockData = USE_MOCK_DATA)
         if (skillList.getAllSkills().isEmpty()) {
             MessageLog.e(TAG, "[ERROR] start:: Failed to detect skills.")
+            recordSkillSpend(SkillSpendOutcome.ABORTED_PARSE, effectiveTrigger, resolvedPlanKey, skillPlanSettings, spBefore = skillPoints, spAfter = skillPoints)
             skillList.cancelAndExit()
             return false
         }
@@ -1447,10 +1459,15 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
 
         // Exit if no skills were identified for purchase.
         if (skillsToPurchase.isEmpty()) {
+            recordSkillSpend(SkillSpendOutcome.NOTHING_TO_BUY, effectiveTrigger, resolvedPlanKey, skillPlanSettings, spBefore = skillPoints, spAfter = skillList.skillPoints)
             skillList.cancelAndExit()
             campaign.trainee.skillPoints = skillList.skillPoints
             return true
         }
+
+        // Planner output, snapshotted before execution can mutate the live entries. This is the
+        // `proposed` set: what the ranking decided to buy, at the price it planned against.
+        val proposedSkills: List<ProposedSkill> = skillsToPurchase.map { (name, price) -> ProposedSkill(name, price) }
 
         // Reset the in-memory purchase simulation from planning, preserving screen-confirmed ownership.
         skillList.sellAllSkills(preserve = ownedAtParse)
@@ -1519,6 +1536,17 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         val boughtAny: Boolean = skillsToPurchase.keys.any { it in skillList.getObtainedSkills() && it !in ownedAtParse }
         if (!boughtAny && totalEntriesSeen == 0) {
             MessageLog.e(TAG, "[ERROR] start:: All buy passes processed zero entries and nothing was bought. Not confirming; aborting the skill plan.")
+            recordSkillSpend(
+                SkillSpendOutcome.ABORTED_PARSE,
+                effectiveTrigger,
+                resolvedPlanKey,
+                skillPlanSettings,
+                spBefore = skillPoints,
+                spAfter = skillList.skillPoints,
+                proposed = proposedSkills,
+                confirmed = confirmedPurchases(skillList, skillsToPurchase.keys, ownedAtParse),
+                skillList = skillList,
+            )
             campaign.trainee.skillPoints = skillList.skillPoints
             return false
         }
@@ -1529,7 +1557,88 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         if (!committed) {
             MessageLog.e(TAG, "[ERROR] start:: Purchase commit could not be verified - selections may still be pending on the Learn screen.")
         }
+        recordSkillSpend(
+            if (committed) SkillSpendOutcome.COMMITTED else SkillSpendOutcome.COMMIT_UNVERIFIED,
+            effectiveTrigger,
+            resolvedPlanKey,
+            skillPlanSettings,
+            spBefore = skillPoints,
+            spAfter = skillList.skillPoints,
+            proposed = proposedSkills,
+            confirmed = confirmedPurchases(skillList, skillsToPurchase.keys, ownedAtParse),
+            skillList = skillList,
+        )
         campaign.trainee.skillPoints = skillList.skillPoints
         return committed
+    }
+
+    /**
+     * Skills this session actually obtained: on screen as obtained now, and not already owned when the
+     * list was parsed. Evidence, never intent - a tap that silently missed must not be recorded as a
+     * purchase, so the planned set is filtered by what the screen reports.
+     */
+    private fun confirmedPurchases(skillList: SkillList, planned: Set<String>, ownedAtParse: Set<String>): List<String> {
+        val obtained: Map<String, SkillListEntry> = skillList.getObtainedSkills()
+        return planned.filter { it in obtained && it !in ownedAtParse }
+    }
+
+    /**
+     * Appends one `type:"skill_spend"` record for this session. Best-effort in every sense: wrapped in
+     * runCatching so a corpus failure cannot change what [start] returns, and every optional identity
+     * field is omitted rather than guessed when it is not available.
+     */
+    @Suppress("LongParameterList")
+    private fun recordSkillSpend(
+        outcome: SkillSpendOutcome,
+        trigger: SkillCheckTrigger?,
+        planKey: String?,
+        settings: SkillPlanSettings?,
+        spBefore: Int? = null,
+        spAfter: Int? = null,
+        proposed: List<ProposedSkill> = emptyList(),
+        confirmed: List<String> = emptyList(),
+        skillList: SkillList? = null,
+    ) {
+        runCatching {
+            val livePrices: Map<String, Int> =
+                skillList?.getAllSkills()?.mapValues { it.value.screenPrice } ?: emptyMap()
+            // The points delta is the arbiter. If it says purchases happened that the obtained set
+            // never saw, every "skipped" verdict below would be unsound - flag the gap and say nothing
+            // more, rather than name skills as unbought when the points prove otherwise.
+            val confirmedIncomplete: Boolean =
+                SkillSpendTelemetry.confirmationIsIncomplete(proposed, confirmed.toSet(), spBefore, spAfter)
+            val skipped =
+                if (proposed.isEmpty() || confirmedIncomplete) {
+                    emptyList()
+                } else {
+                    SkillSpendTelemetry.deriveSkipped(proposed, confirmed.toSet(), livePrices, spAfter ?: 0)
+                }
+            val record =
+                SkillSpendTelemetry.buildRecord(
+                    timestamp = System.currentTimeMillis(),
+                    outcome = outcome,
+                    trigger = trigger,
+                    planKey = planKey,
+                    strategy = settings?.strategy?.name,
+                    trainee = campaign.trainee.name.ifEmpty { null }?.replace(" ", "_"),
+                    scenario = game.scenario.ifEmpty { null }?.replace(" ", "_"),
+                    fp = campaign.currentConfigFingerprint(),
+                    turn = campaign.date.day,
+                    spBefore = spBefore,
+                    spAfter = spAfter,
+                    proposed = proposed,
+                    confirmed = confirmed,
+                    skipped = skipped,
+                    confirmedIncomplete = confirmedIncomplete,
+                )
+            OutcomeCorpus.append(game.myContext, record)
+            MessageLog.i(
+                TAG,
+                "[SKILL_SPEND] ${outcome.token()} plan=$planKey trigger=${trigger?.name ?: "-"} sp=${spBefore ?: "-"}->${spAfter ?: "-"} " +
+                    "proposed=${proposed.size} confirmed=${confirmed.size}${if (confirmedIncomplete) " (confirmation incomplete)" else ""}",
+            )
+        }.onFailure {
+            MessageLog.w(TAG, "[SKILL_SPEND] Failed to append the skill-spend record: $it")
+        }
     }
 }
