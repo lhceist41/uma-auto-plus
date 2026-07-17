@@ -205,4 +205,40 @@ class TraineeNameMatcherTest {
             assertFalse(excludes.any { TraineeNameMatcher.hasOutfit("[E☆Número 1] El Condor Pasa", it) }, "base banner should be kept")
         }
     }
+
+    @Nested
+    @DisplayName("Grass Wonder outfit pair (Saintly Jade Cleric vs Stone-Piercing Blue)")
+    inner class GrassWonderOutfitPairTests {
+        // Both banners exactly as the account's Trainee Select renders them (read 2026-07-17).
+        private val sjcBanner = "[Saintly Jade Cleric] Grass Wonder"
+        private val baseBanner = "[Stone-Piercing Blue] Grass Wonder"
+
+        @Test
+        fun `the SJC target rejects the base outfit banner`() {
+            val s = TraineeNameMatcher.score(sjcBanner, baseBanner)
+            assertTrue(s < threshold, "Stone-Piercing Blue banner should be rejected for the SJC target, got $s")
+        }
+
+        @Test
+        fun `the SJC target accepts its own banner, brackets or not`() {
+            assertEquals(1.0, TraineeNameMatcher.score(sjcBanner, sjcBanner), 1e-9)
+            val stripped = TraineeNameMatcher.score(sjcBanner, "Saintly Jade Cleric Grass Wonder")
+            assertTrue(stripped >= threshold, "bracket-stripped SJC banner should still match, got $stripped")
+        }
+
+        @Test
+        fun `a bare Grass Wonder target would accept BOTH banners - the exclusion is load-bearing`() {
+            // This is why deriveExcludeOutfits("Grass Wonder") must list "Saintly Jade Cleric":
+            // the bare base-preset target is outfit-insensitive by design.
+            assertTrue(TraineeNameMatcher.score("Grass Wonder", baseBanner) >= threshold)
+            assertTrue(TraineeNameMatcher.score("Grass Wonder", sjcBanner) >= threshold)
+        }
+
+        @Test
+        fun `excluding Saintly Jade Cleric skips only the SJC banner`() {
+            val excludes = listOf("Saintly Jade Cleric")
+            assertTrue(excludes.any { TraineeNameMatcher.hasOutfit(sjcBanner, it) }, "SJC banner should be skipped for the base target")
+            assertFalse(excludes.any { TraineeNameMatcher.hasOutfit(baseBanner, it) }, "base banner should be kept for the base target")
+        }
+    }
 }

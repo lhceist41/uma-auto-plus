@@ -6,7 +6,7 @@ This document explains how built-in character presets work in UMA Auto+, how the
 
 ## Overview
 
-UMA Auto+ ships with **217 built-in character presets** (71 character entries x 3 scenarios, plus three URA-only Legacy Farm variants and one Unity Cup Blue Farm variant). Trainees are picked in the searchable trainee picker on the Home page — one row per character/outfit with per-scenario advisory chips and a validation badge — and applying a preset sets its scenario together with its settings.
+UMA Auto+ ships with **220 built-in character presets** (72 character entries x 3 scenarios, plus three URA-only Legacy Farm variants and one Unity Cup Blue Farm variant). Trainees are picked in the searchable trainee picker on the Home page -- one row per character/outfit with per-scenario advisory chips and a validation badge -- and applying a preset sets its scenario together with its settings.
 
 The 2026-06-11 batch added seven entries from the June banner research pass: Sweep Tosho, Mihono Bourbon, Mejiro Palmer, El Condor Pasa (Kukulkan Warrior), Tosen Jordan, Super Creek, and Matikanetannhauser. Their URA presets ship curated racing plans (see "Curated racing plans in presets" below); Tosen Jordan's presets enable negative-skill buying so the buy pass clears her 3D Nail Art speed debuff. Symboli Rudolf (Emperor's Path) was added 2026-06-18 — a Late Surger Medium built around her late-overtake unique; URA and Trackblazer are her recommended scenarios. Biwa Hayahide (Pace Chaser, built as a Long stayer) and Mejiro Ryan (Late Surger Medium) were added 2026-06-21 to make two owned-but-unpresetted Medium/Long-A turf bodies farmable hands-off; both fill the Medium/Long Team-Trials slots and are URA + Trackblazer recommended.
 
@@ -25,6 +25,8 @@ The 2026-07-17 addition is **Copano Rickey**, the third pure dirt body after Har
 Her first live career (2026-07-17) **won Kashiwa and took the sash**, reaching the race on Speed 657 / Stamina 337 / Power 656 / Guts 452 / Wit 413 and finishing on 850 / 479 / 838 / 645 / 625 (A rank, URA finals swept 3/3). That is one career, so it shows the profile is viable rather than repeatable — but it is the only stat evidence that exists for her, and it is worth knowing that the sash did not require the ~900-Speed-at-Kashiwa figure an earlier draft of this profile assumed. Treat higher stats as ceilings to aim at, not as thresholds she must clear; her growth is Power +10% / Wit +20% with no Speed growth, so Speed is simply the expensive stat on this body.
 
 The 2026-07-15 addition is the first **Blue Farm** variant: Super Creek (Blue Farm), Unity Cup only. It clones the regular Super Creek Unity Cup preset and changes only `focusOnSparkStatTarget` to all five stats — the base competitive preset focuses just Speed+Stamina. The under-600 spark-rescue boost then fires on every stat, so an off-stat that would otherwise finish below the 600 3-star-blue floor gets lifted, trading a little stat-peak focus for broader blue coverage. Chosen because the analyzer measured Super Creek as the account's most reliable all-five-≥600 Unity Cup arm. Research/new and unproven — the plain "Super Creek" preset stays the competitive Unity Cup build, and the variant is unvalidated until its own completed careers are analyzed.
+
+The second 2026-07-17 addition is **Grass Wonder (Saintly Jade Cleric)**, the roster's second Grass Wonder outfit with its own research-graded trio. She keeps the base card's aptitude grid and the same eight-goal chain (Asahi Hai Futurity Stakes through the Senior Arima Kinen win), so the trio mirrors the proven base configuration; what changes is the body and the kit. Her growth leans Stamina/Wit (+15% each), so training priorities promote Stamina over Power, and her skill plans center her own recovery line -- Deep Breaths upgrading into the Cooldown gold, plus A Small Breather -- in place of the base card's Be Still line, which this outfit has no hint discount for. Two kit skills sit behind Potential levels the account has not reached (Late Surger Savvy ○ at Lv4, Relax at Lv5) and are deliberately left out of every plan until her Potential is raised. With two owned outfits of one character, the trainee picker now shows two Grass Wonder rows, and in-game trainee selection targets the exact outfit banner: the base presets skip the Saintly Jade Cleric card, and the new presets accept only it.
 
 ### Currently included characters
 
@@ -52,6 +54,7 @@ The 2026-07-15 addition is the first **Blue Farm** variant: Super Creek (Blue Fa
 | Gold Ship | Yes | Yes | Yes |
 | Gold Ship (RUN! RUIN! LAUNCHER!) | Yes | Yes | Yes |
 | Grass Wonder | Yes | Yes | Yes |
+| Grass Wonder (Saintly Jade Cleric) | Yes | Yes | Yes |
 | Haru Urara | Yes | Yes | Yes |
 | Hishi Akebono | Yes | Yes | Yes |
 | Hishi Amazon | Yes | Yes | Yes |

@@ -322,6 +322,144 @@ describe("Copano Rickey game data (NAR dirt patch)", () => {
         expect(unique.condition).toBe("phase_laterhalf_random==1")
     })
 })
+describe("Grass Wonder (Saintly Jade Cleric) presets", () => {
+    const trio = characterPresets.filter((p) => p.name === "Grass Wonder (Saintly Jade Cleric)")
+    const sjc = (scenario: string) => trio.find((p) => p.scenario === scenario)!
+    const base = (scenario: string) => characterPresets.find((p) => p.name === "Grass Wonder" && p.scenario === scenario)!
+    const planIds = (p: (typeof characterPresets)[number], planKey: "skillPointCheck" | "preFinals" | "careerComplete") =>
+        String((p.settings.skills!.plans as any)[planKey].plan)
+            .split(",")
+            .filter(Boolean)
+            .map(Number)
+
+    it("ships exactly the pipeline trio, one preset per scenario", () => {
+        expect(trio).toHaveLength(3)
+        expect(trio.map((p) => p.scenario).sort()).toEqual(["Trackblazer", "URA Finale", "Unity Cup"])
+    })
+
+    it("selects by its real-outfit name - no traineeName indirection on either Grass Wonder row", () => {
+        for (const p of trio) expect(p.traineeName).toBeUndefined()
+        for (const scenario of ["URA Finale", "Unity Cup", "Trackblazer"]) expect(base(scenario).traineeName).toBeUndefined()
+    })
+
+    it("renders as a second Grass Wonder picker row with the Saintly Jade Cleric outfit", () => {
+        expect(presetCharacter("Grass Wonder (Saintly Jade Cleric)")).toBe("Grass Wonder")
+        expect(presetOutfit("Grass Wonder (Saintly Jade Cleric)")).toBe("Saintly Jade Cleric")
+        expect(presetCharacter("Grass Wonder")).toBe("Grass Wonder")
+        expect(presetOutfit("Grass Wonder")).toBe("Stone-Piercing Blue")
+    })
+
+    it("stays research-graded in every scenario until a live career says otherwise", () => {
+        for (const p of trio) expect(presetValidation(p.name, p.scenario)).toBe("research")
+    })
+
+    it("carries the Turf / Long / Late Surger identity in all three presets", () => {
+        for (const p of trio) {
+            expect(p.settings.skills!.preferredTrackSurface).toBe("turf")
+            expect(p.settings.skills!.preferredTrackDistance).toBe("long")
+            expect(p.settings.skills!.preferredRunningStyle).toBe("late_surger")
+            expect(p.settings.racing!.preferredTerrain).toBe("Turf")
+            expect(p.settings.training!.preferredDistanceOverride).toBe("Long")
+            expect(p.settings.general!.enablePopupCheck).toBe(false)
+        }
+    })
+
+    it("promotes Stamina over Power for the +15% Stamina growth, in priorities and spark focus", () => {
+        for (const p of trio) {
+            expect(p.settings.training!.statPrioritization).toEqual(["Speed", "Stamina", "Power", "Wit", "Guts"])
+            expect(p.settings.training!.focusOnSparkStatTarget).toEqual(["Speed", "Stamina"])
+        }
+    })
+
+    it("matches its base-scenario preset in everything except the declared kit diffs", () => {
+        // Same aptitude grid and same in-game objective chain as the base card (verified
+        // 2026-07-17), so everything except the kit-driven diffs must stay a faithful clone:
+        // skill plans (her own recovery chain) and stat priorities / spark focus (growth).
+        for (const scenario of ["URA Finale", "Unity Cup", "Trackblazer"]) {
+            const strip = (s: unknown) => {
+                const clone = JSON.parse(JSON.stringify(s))
+                delete clone.skills.plans
+                delete clone.skills.skillSpendObjective
+                delete clone.training.statPrioritization
+                delete clone.training.focusOnSparkStatTarget
+                return clone
+            }
+            expect(strip(sjc(scenario).settings)).toEqual(strip(base(scenario).settings))
+        }
+    })
+
+    it("plans her own Long recovery chain in every scenario (Deep Breaths -> Cooldown)", () => {
+        // Design decision for recovery protection: this profile PLANS its recovery (her own
+        // hint-discounted kit) rather than relying on automatic injection. 200741 Cooldown is
+        // awakening Lv3 and the account's verified Potential is Lv3, so the gold is obtainable.
+        for (const p of trio) {
+            for (const planKey of ["skillPointCheck", "preFinals", "careerComplete"] as const) {
+                const ids = planIds(p, planKey)
+                expect(ids).toContain(200741)
+                expect(ids).toContain(200742)
+            }
+        }
+    })
+
+    it("adds her Late recovery A Small Breather to the URA and Unity Cup plans", () => {
+        for (const scenario of ["URA Finale", "Unity Cup"]) {
+            expect(planIds(sjc(scenario), "careerComplete")).toContain(201422)
+        }
+    })
+
+    it("never plans a skill locked behind the account's Potential Lv3", () => {
+        // Read off her live Potential screen 2026-07-17: Lv2 Trick (Front) and Lv3 Cooldown are
+        // unlocked; Lv4 Late Surger Savvy ○ (201542) and Lv5 Relax (201421) are not. The base
+        // card's Trackblazer plan carries 201542, so a blind clone would have planned a locked
+        // skill - the Copano lesson. Raise her Potential -> revisit this pin.
+        for (const p of trio) {
+            for (const planKey of ["skillPointCheck", "preFinals", "careerComplete"] as const) {
+                const ids = planIds(p, planKey)
+                expect(ids).not.toContain(201542)
+                expect(ids).not.toContain(201421)
+            }
+        }
+    })
+
+    it("never plans the base card's Be Still line (no hint discount on this outfit)", () => {
+        for (const p of trio) {
+            const ids = planIds(p, "careerComplete")
+            expect(ids).not.toContain(201692)
+            expect(ids).not.toContain(201691)
+        }
+    })
+
+    it("plans only skills that exist in the skill database", () => {
+        const known = new Set<number>((Array.isArray(skills) ? skills : Object.values(skills)).map((s: any) => s.id))
+        for (const p of trio) {
+            for (const planKey of ["skillPointCheck", "preFinals", "careerComplete"] as const) {
+                const ids = planIds(p, planKey)
+                expect(ids.length).toBeGreaterThanOrEqual(12)
+                for (const id of ids) expect(known.has(id)).toBe(true)
+            }
+        }
+    })
+
+    it("uses the required plan strategies (greedy at checkpoints, knapsack at career end)", () => {
+        for (const p of trio) {
+            expect(p.settings.skills!.plans!.skillPointCheck!.strategy).toBe("optimize_skills")
+            expect(p.settings.skills!.plans!.preFinals!.strategy).toBe("optimize_skills")
+            expect(p.settings.skills!.plans!.careerComplete!.strategy).toBe("optimize_knapsack")
+        }
+    })
+
+    it("is advisory-covered but carries no recommended badge until her own careers complete", () => {
+        expect(trainerAdvisories["Grass Wonder (Saintly Jade Cleric)"]).toBeDefined()
+        expect(trainerAdvisories["Grass Wonder (Saintly Jade Cleric)"].recommended).toEqual([])
+        expect(trainerAdvisories["Grass Wonder (Saintly Jade Cleric)"].avoid ?? []).toEqual([])
+    })
+
+    it("keeps every preset key unique across the whole roster", () => {
+        const keys = characterPresets.map((p) => `${p.name}|${p.scenario}`)
+        expect(new Set(keys).size).toBe(keys.length)
+    })
+})
+
 describe("skill spend objective (Phase 2A)", () => {
     it("exactly the 2B-1 farming set and the Copano sash profile declare objectives", () => {
         // 2B-1 migrates the four farming profiles to sparks (planned-only spending under

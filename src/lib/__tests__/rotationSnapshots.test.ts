@@ -223,3 +223,51 @@ describe("preset display name vs trainee selection identity (traineeName)", () =
         }
     })
 })
+
+// ===========================================================================
+// Grass Wonder outfit disambiguation (Saintly Jade Cleric)
+// ===========================================================================
+
+describe("Grass Wonder outfit disambiguation (Saintly Jade Cleric)", () => {
+    // Second owned outfit of the same character: the SJC presets are real-outfit presets
+    // ("Grass Wonder (Saintly Jade Cleric)"), so they target the full banner, while the base
+    // "Grass Wonder" presets keep a bare target and must now exclude the sibling outfit.
+    it("targets the full '[Saintly Jade Cleric] Grass Wonder' banner for the SJC presets", () => {
+        expect(presetTraineeName("Grass Wonder (Saintly Jade Cleric)")).toBe("Grass Wonder (Saintly Jade Cleric)")
+        expect(deriveInGameName("Grass Wonder (Saintly Jade Cleric)")).toBe("[Saintly Jade Cleric] Grass Wonder")
+    })
+
+    it("keeps the base presets on the bare 'Grass Wonder' target", () => {
+        expect(presetTraineeName("Grass Wonder")).toBe("Grass Wonder")
+        expect(deriveInGameName("Grass Wonder")).toBe("Grass Wonder")
+    })
+
+    it("arms the base target's exclusion against the SJC banner (base never launches SJC)", () => {
+        expect(deriveExcludeOutfits("Grass Wonder")).toContain("Saintly Jade Cleric")
+    })
+
+    it("gives the SJC target no exclusions (its outfit-prefixed banner already disambiguates)", () => {
+        expect(deriveExcludeOutfits("Grass Wonder (Saintly Jade Cleric)")).toEqual([])
+    })
+
+    it("stamps the base identity, the SJC exclusion, and rank into a base Grass Wonder snapshot", () => {
+        // A stale applied-SJC base would otherwise ride along; the base entry must carry its own
+        // bare target plus the sibling exclusion, and must stamp rank over a leaky objective.
+        const base = {
+            general: { scenario: "Placeholder", enablePopupCheck: true },
+            skills: { skillPointCheck: 750, enableSkillPointCheck: false, skillSpendObjective: "safe_completion" },
+        } as any
+        const { rows, missing } = buildRotationSnapshotRows(base, [
+            {
+                inGameName: deriveInGameName("Grass Wonder"),
+                presetKey: "Grass Wonder",
+                scenario: "Unity Cup",
+                excludeOutfits: deriveExcludeOutfits("Grass Wonder"),
+            },
+        ])
+        expect(missing).toHaveLength(0)
+        expect(rows.find((r) => r.category === "rot0_general" && r.key === "appliedPresetTrainee")?.value).toBe("Grass Wonder")
+        expect(rows.find((r) => r.category === "rot0_general" && r.key === "appliedPresetTraineeExcludes")?.value).toBe("Saintly Jade Cleric")
+        expect(rows.find((r) => r.category === "rot0_skills" && r.key === "skillSpendObjective")?.value).toBe("rank")
+    })
+})
