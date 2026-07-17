@@ -101,10 +101,12 @@ class CareerLaunchNavigator(private val context: Context) {
         private const val EVENT_BOOST_GREEN_DOMINANCE = 40
         private const val EVENT_BOOST_ON_GREEN_PIXELS = 50
 
-        /** Hard cap on item-based TP restores per queue session - bounds item spend even if
-         * something loops. One restore covers one career, so 10 outruns any queue length the
-         * UI offers. */
-        private const val MAX_TP_RESTORES_PER_SESSION = 10
+        /** Floor for the session cap on item-based TP restores - bounds item spend even if
+         * something loops. The effective cap scales with the configured queue length (see
+         * [sessionRestoreCapFor]): one Max-fill funds ~3 normal careers, but an Event Boost
+         * career costs 60 TP and the spark reroll draws on the same budget, so a fixed 10
+         * starved legitimate long queues the UI allows (up to 20 runs). */
+        private const val DEFAULT_MAX_TP_RESTORES = 10
 
         /** Maximum consecutive iterations stuck in the same non-goal state before failing. */
         private const val MAX_STUCK_ITERATIONS = 15
@@ -172,9 +174,29 @@ class CareerLaunchNavigator(private val context: Context) {
         @Volatile
         private var tpRestoresThisSession = 0
 
-        /** Resets the session-scoped TP restore counter. Called when a new bot session starts. */
-        fun resetTpRestoresForSession() {
+        /** Effective restore cap for this bot session, derived from the configured queue length
+         * at session start. Companion-held for the same reason as the counter. */
+        @Volatile
+        private var maxTpRestoresThisSession = DEFAULT_MAX_TP_RESTORES
+
+        /** Session restore budget for a queue of [totalRuns] careers: up to one career-launch
+         * restore plus one reroll restore per career, plus startup slack. Never below the
+         * [DEFAULT_MAX_TP_RESTORES] floor, and the input is clamped so a corrupt setting row
+         * cannot make the spend bound effectively unbounded. */
+        internal fun sessionRestoreCapFor(totalRuns: Int): Int = maxOf(DEFAULT_MAX_TP_RESTORES, 2 * totalRuns.coerceIn(0, 100) + 2)
+
+        /** Reason string for the cap-reached career-start failure. A pure seam so the message the
+         * queue persists stays pinned by a JVM test - its predecessor reused the generic out-of-TP
+         * decline text, which told the user to enable a setting that was already enabled. */
+        internal fun tpRestoreCapReachedReason(count: Int, max: Int): String =
+            "TP restore session cap reached ($count/$max restores this bot session). Item restore is enabled but the session budget is spent, " +
+                "so the restore prompt was declined. All completed runs are saved - pressing Start begins a fresh bot session and re-arms the restore budget."
+
+        /** Resets the session-scoped TP restore counter and derives the session's cap from the
+         * configured queue length. Called when a new bot session starts. */
+        internal fun resetTpRestoresForSession(totalRuns: Int = 1) {
             tpRestoresThisSession = 0
+            maxTpRestoresThisSession = sessionRestoreCapFor(totalRuns)
         }
     }
 
@@ -1382,8 +1404,8 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.i(TAG, "[REROLL] The spend dialog is missing and item restore is disabled - not spending items without the opt-in.")
             return false
         }
-        if (tpRestoresThisSession >= MAX_TP_RESTORES_PER_SESSION) {
-            MessageLog.w(TAG, "[REROLL] TP restore cap reached ($MAX_TP_RESTORES_PER_SESSION this session) - not restoring for the reroll.")
+        if (tpRestoresThisSession >= maxTpRestoresThisSession) {
+            MessageLog.w(TAG, "[REROLL] TP restore session cap reached ($tpRestoresThisSession/$maxTpRestoresThisSession this session) - not restoring for the reroll.")
             return false
         }
         val bmp = iu.getSourceBitmap()
@@ -1647,9 +1669,21 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.w(TAG, "[NAV] Out of TP for another career playthrough. Declining the restore prompt and ending the queue (item restore is disabled).")
             return declineResult()
         }
-        if (tpRestoresThisSession >= MAX_TP_RESTORES_PER_SESSION) {
-            MessageLog.w(TAG, "[NAV] TP restore cap reached ($MAX_TP_RESTORES_PER_SESSION this session). Declining and ending the queue.")
-            return declineResult()
+        if (tpRestoresThisSession >= maxTpRestoresThisSession) {
+            // Do NOT reuse declineResult() here: its reason recommends enabling item restore,
+            // which on this branch is already enabled - the cap is the cause, and the persisted
+            // failure has to say so or triage chases the wrong setting.
+            MessageLog.w(TAG, "[NAV] TP restore session cap reached ($tpRestoresThisSession/$maxTpRestoresThisSession this session). Declining and ending the queue.")
+            ButtonNo.click(iu)
+            waitSafe(1.0)
+            return TransitionResult.Failed(
+                reason = tpRestoreCapReachedReason(tpRestoresThisSession, maxTpRestoresThisSession),
+                transition = "PRE_RUN_CONFIRMATION -> TP_RESTORE_DIALOG",
+                isRecoverable = false,
+                recommendedAction =
+                    "Press Start to begin a fresh bot session - the restore budget re-arms and the queue can be run again. " +
+                        "If a legitimately configured queue hit this cap, report it: the budget scales with the configured run count and should not run out.",
+            )
         }
 
         val noLocation = ButtonNo.find(iu).first
@@ -1758,7 +1792,7 @@ class CareerLaunchNavigator(private val context: Context) {
         waitSafe(1.0)
 
         tpRestoresThisSession++
-        MessageLog.i(TAG, "[NAV] Restored TP with $itemName (restore $tpRestoresThisSession/$MAX_TP_RESTORES_PER_SESSION this session).")
+        MessageLog.i(TAG, "[NAV] Restored TP with $itemName (restore $tpRestoresThisSession/$maxTpRestoresThisSession this session).")
         return TpRestoreOutcome.RESTORED
     }
 
@@ -1771,7 +1805,7 @@ class CareerLaunchNavigator(private val context: Context) {
      */
     private fun handleRecoverTpQuantity(): TransitionResult {
         val restoreWithItems = SettingsHelper.getBooleanSetting("runQueue", "enableTpRestoreWithItems", false)
-        if (!restoreWithItems || tpRestoresThisSession >= MAX_TP_RESTORES_PER_SESSION) {
+        if (!restoreWithItems || tpRestoresThisSession >= maxTpRestoresThisSession) {
             MessageLog.w(
                 TAG,
                 "[NAV] Recover TP quantity popup is up but ${if (!restoreWithItems) "item restore is disabled" else "the session restore cap is reached"}. Cancelling it.",
@@ -1799,7 +1833,7 @@ class CareerLaunchNavigator(private val context: Context) {
         if (!ButtonCloseWide.click(iu) && !ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
         waitSafe(1.0)
         tpRestoresThisSession++
-        MessageLog.i(TAG, "[NAV] Restored TP from the quantity popup (restore $tpRestoresThisSession/$MAX_TP_RESTORES_PER_SESSION this session).")
+        MessageLog.i(TAG, "[NAV] Restored TP from the quantity popup (restore $tpRestoresThisSession/$maxTpRestoresThisSession this session).")
         return TransitionResult.Continue
     }
 

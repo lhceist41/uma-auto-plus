@@ -1333,10 +1333,6 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 queueCurrentRun = 1
                 setRotationSwitchPending(context, false)
 
-                // Reset the session-scoped TP restore counter (companion-held so it survives
-                // the per-handoff navigator reconstruction).
-                CareerLaunchNavigator.resetTpRestoresForSession()
-
                 // Reset the log stream mute to ensure logs for the new run are broadcasted.
                 LogStreamServer.resetMute()
 
@@ -1346,6 +1342,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 val delayBetweenRuns = SettingsHelper.getIntSetting("runQueue", "delayBetweenRunsSeconds", 15)
                 val stopOnError = SettingsHelper.getBooleanSetting("runQueue", "stopOnError", false)
                 val reuseLastLaunchSetup = SettingsHelper.getBooleanSetting("runQueue", "reuseLastLaunchSetup", true)
+
+                // Reset the session-scoped TP restore counter and size its budget from the
+                // configured queue length (companion-held so it survives the per-handoff
+                // navigator reconstruction). Sits below the settings read because it needs
+                // totalRuns, and before the first navigator construction, which consumes it.
+                CareerLaunchNavigator.resetTpRestoresForSession(totalRuns)
 
                 // Trainee rotation: parse the cycle once, up here so the auto-resume decision below
                 // can distinguish a rotation queue (which must re-enter an interrupted career, never
@@ -1357,7 +1359,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 }
 
                 if (enableRunQueue) {
-                    MessageLog.i(TAG, "[QUEUE] Run queue enabled. Total runs: $totalRuns, delay: ${delayBetweenRuns}s, stopOnError: $stopOnError")
+                    MessageLog.i(
+                        TAG,
+                        "[QUEUE] Run queue enabled. Total runs: $totalRuns, delay: ${delayBetweenRuns}s, stopOnError: $stopOnError, " +
+                            "tpRestoreBudget: ${CareerLaunchNavigator.sessionRestoreCapFor(totalRuns)}",
+                    )
                 }
 
                 // --- Layer 4: auto-resume after process death ---
