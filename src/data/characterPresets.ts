@@ -16178,6 +16178,11 @@ export const characterPresets: CharacterPreset[] = [
             skills: {
                 enableSkillPointCheck: true,
                 skillPointCheck: 350,
+                // Blue-spark farming career: under Adaptive mode, sparks buys planned skills
+                // only and skips the broad strategy tail, so leftover SP is accepted instead
+                // of drained into spark-diluting filler. Her recovery is already in the plan
+                // (Corner/Straightaway Recovery, Hydrate, Swinging Maestro). Inert in Manual.
+                skillSpendObjective: "sparks",
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
@@ -46839,6 +46844,11 @@ export const characterPresets: CharacterPreset[] = [
             skills: {
                 enableSkillPointCheck: true,
                 skillPointCheck: 350,
+                // Legacy-farming career: under Adaptive mode, sparks buys planned skills only
+                // and skips the broad strategy tail, accepting leftover SP instead of buying
+                // spark-diluting filler. Recovery is already planned (Restless plus the
+                // Corner/Straightaway Recovery pair). Inert in Manual mode.
+                skillSpendObjective: "sparks",
                 preferredRunningStyle: "front_runner",
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "turf",
@@ -47078,6 +47088,11 @@ export const characterPresets: CharacterPreset[] = [
             skills: {
                 enableSkillPointCheck: true,
                 skillPointCheck: 350,
+                // Legacy-farming career: under Adaptive mode, sparks buys planned skills only
+                // and skips the broad strategy tail, accepting leftover SP instead of buying
+                // spark-diluting filler. Recovery is already planned (Gourmand, Swinging
+                // Maestro, and the Corner/Straightaway Recovery pair). Inert in Manual mode.
+                skillSpendObjective: "sparks",
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "turf",
@@ -47309,6 +47324,11 @@ export const characterPresets: CharacterPreset[] = [
             skills: {
                 enableSkillPointCheck: true,
                 skillPointCheck: 350,
+                // Legacy-farming career: under Adaptive mode, sparks buys planned skills only
+                // and skips the broad strategy tail, accepting leftover SP instead of buying
+                // spark-diluting filler. Recovery is already planned (Swinging Maestro and the
+                // Corner/Straightaway Recovery pair). Inert in Manual mode.
+                skillSpendObjective: "sparks",
                 preferredRunningStyle: "late_surger",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",

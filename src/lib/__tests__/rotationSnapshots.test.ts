@@ -125,6 +125,17 @@ describe("buildRotationSnapshotRows", () => {
         const objectiveRow = copanoRows.find((r) => r.category === "rot0_skills" && r.key === "skillSpendObjective")
         expect(objectiveRow?.value).toBe("race_reward")
     })
+
+    it("stamps sparks for the Blue Farm preset (2B-1 migration)", () => {
+        const blueFarm = characterPresets.find((p) => p.name === "Super Creek (Blue Farm)" && p.scenario === "Unity Cup")
+        expect(blueFarm).toBeDefined()
+        const { rows: farmRows, missing: farmMissing } = buildRotationSnapshotRows(baseSettings, [
+            { inGameName: "Super Creek", presetKey: blueFarm!.name, scenario: blueFarm!.scenario },
+        ])
+        expect(farmMissing).toHaveLength(0)
+        const objectiveRow = farmRows.find((r) => r.category === "rot0_skills" && r.key === "skillSpendObjective")
+        expect(objectiveRow?.value).toBe("sparks")
+    })
 })
 
 // ===========================================================================

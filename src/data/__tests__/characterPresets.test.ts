@@ -66,10 +66,15 @@ describe("Super Creek (Blue Farm) preset", () => {
         expect(new Set(focus).size).toBe(5)
     })
 
-    it("matches the source Creek Unity build in every setting except the spark target", () => {
+    it("matches the source Creek Unity build in every setting except the spark target and the sparks objective", () => {
+        // The two deliberate farming differences: the five-stat spark rescue and, since 2B-1,
+        // the planned-only sparks objective. Everything else must stay a faithful clone.
+        expect((blueFarm()!.settings.skills as { skillSpendObjective?: string }).skillSpendObjective).toBe("sparks")
+        expect((base()!.settings.skills as { skillSpendObjective?: string }).skillSpendObjective).toBeUndefined()
         const strip = (s: unknown) => {
             const clone = JSON.parse(JSON.stringify(s))
             delete clone.training.focusOnSparkStatTarget
+            delete clone.skills.skillSpendObjective
             return clone
         }
         expect(strip(blueFarm()!.settings)).toEqual(strip(base()!.settings))
@@ -318,13 +323,37 @@ describe("Copano Rickey game data (NAR dirt patch)", () => {
     })
 })
 describe("skill spend objective (Phase 2A)", () => {
-    it("only the Copano Rickey URA preset declares an objective in 2A", () => {
-        // 2A migrates exactly one preset - the sash profile, whose whole point is a must-win
-        // race. Everything else stays implicitly "rank" (the V1-identical behavior) until the
-        // Phase 2B migration set is validated. A new entry here must be a deliberate decision.
-        const declared = characterPresets.filter((p) => (p.settings as any)?.skills?.skillSpendObjective !== undefined)
-        expect(declared.map((p) => `${p.name} / ${p.scenario}`)).toEqual(["Copano Rickey / URA Finale"])
-        expect((declared[0].settings as any).skills.skillSpendObjective).toBe("race_reward")
+    it("exactly the 2B-1 farming set and the Copano sash profile declare objectives", () => {
+        // 2B-1 migrates the four farming profiles to sparks (planned-only spending under
+        // Adaptive); Copano URA keeps race_reward from 2A. Everything else stays implicitly
+        // "rank" (the V1-identical behavior). A new entry here must be a deliberate decision.
+        const declared = characterPresets
+            .filter((p) => (p.settings as any)?.skills?.skillSpendObjective !== undefined)
+            .map((p) => `${p.name} / ${p.scenario} -> ${(p.settings as any).skills.skillSpendObjective}`)
+            .sort()
+        expect(declared).toEqual([
+            "Air Groove (Legacy Farm) / URA Finale -> sparks",
+            "Copano Rickey / URA Finale -> race_reward",
+            "Daiwa Scarlet (Legacy Farm) / URA Finale -> sparks",
+            "El Condor Pasa (Legacy Farm) / URA Finale -> sparks",
+            "Super Creek (Blue Farm) / Unity Cup -> sparks",
+        ])
+    })
+
+    it("the competitive clones next to the farming profiles stay undeclared", () => {
+        // The farming presets are clones of these; a stray objective here would flip a
+        // competitive profile into planned-only mode.
+        const undeclared = (name: string, scenario: string) => {
+            const p = characterPresets.find((x) => x.name === name && x.scenario === scenario)
+            expect(p).toBeDefined()
+            expect((p!.settings as any)?.skills?.skillSpendObjective).toBeUndefined()
+        }
+        undeclared("Super Creek", "Unity Cup")
+        undeclared("Daiwa Scarlet", "URA Finale")
+        undeclared("El Condor Pasa", "URA Finale")
+        undeclared("Air Groove", "URA Finale")
+        undeclared("Copano Rickey", "Unity Cup")
+        undeclared("Copano Rickey", "Trackblazer")
     })
 
     it("never declares an objective outside the known enum", () => {
