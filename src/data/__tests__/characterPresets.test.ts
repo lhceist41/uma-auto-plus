@@ -318,6 +318,15 @@ describe("Copano Rickey game data (NAR dirt patch)", () => {
     })
 })
 describe("skill spend objective (Phase 2A)", () => {
+    it("only the Copano Rickey URA preset declares an objective in 2A", () => {
+        // 2A migrates exactly one preset - the sash profile, whose whole point is a must-win
+        // race. Everything else stays implicitly "rank" (the V1-identical behavior) until the
+        // Phase 2B migration set is validated. A new entry here must be a deliberate decision.
+        const declared = characterPresets.filter((p) => (p.settings as any)?.skills?.skillSpendObjective !== undefined)
+        expect(declared.map((p) => `${p.name} / ${p.scenario}`)).toEqual(["Copano Rickey / URA Finale"])
+        expect((declared[0].settings as any).skills.skillSpendObjective).toBe("race_reward")
+    })
+
     it("never declares an objective outside the known enum", () => {
         for (const p of characterPresets) {
             const objective = (p.settings as any)?.skills?.skillSpendObjective

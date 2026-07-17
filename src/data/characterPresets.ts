@@ -27485,6 +27485,11 @@ export const characterPresets: CharacterPreset[] = [
             skills: {
                 enableSkillPointCheck: true,
                 skillPointCheck: 1000,
+                // The sash profile IS a must-win race career: Kashiwa Kinen only rewards a
+                // Winner's Sash on 1st. race_reward arms the adaptive critical-race and
+                // planned-skill triggers so her kit is bought BEFORE the race, not after.
+                // Inert unless the user runs Adaptive mode.
+                skillSpendObjective: "race_reward",
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "dirt",

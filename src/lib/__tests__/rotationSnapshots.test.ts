@@ -114,6 +114,17 @@ describe("buildRotationSnapshotRows", () => {
         const objectiveRow = stampedRows.find((r) => r.category === "rot0_skills" && r.key === "skillSpendObjective")
         expect(objectiveRow?.value).toBe("rank")
     })
+
+    it("stamps the preset's own objective when it declares one (Copano URA race_reward)", () => {
+        const copanoUra = characterPresets.find((p) => p.name === "Copano Rickey" && p.scenario === "URA Finale")
+        expect(copanoUra).toBeDefined()
+        const { rows: copanoRows, missing: copanoMissing } = buildRotationSnapshotRows(baseSettings, [
+            { inGameName: "Copano Rickey", presetKey: copanoUra!.name, scenario: copanoUra!.scenario },
+        ])
+        expect(copanoMissing).toHaveLength(0)
+        const objectiveRow = copanoRows.find((r) => r.category === "rot0_skills" && r.key === "skillSpendObjective")
+        expect(objectiveRow?.value).toBe("race_reward")
+    })
 })
 
 // ===========================================================================
