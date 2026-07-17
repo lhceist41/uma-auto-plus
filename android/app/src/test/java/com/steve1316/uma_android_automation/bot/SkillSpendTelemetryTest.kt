@@ -32,6 +32,9 @@ class SkillSpendTelemetryTest {
         proposed: List<ProposedSkill> = listOf(ProposedSkill("Professor of Curvature", 200), ProposedSkill("Swinging Maestro", 142)),
         confirmed: List<String> = listOf("Professor of Curvature", "Swinging Maestro"),
         skipped: List<SkippedSkill> = emptyList(),
+        threshold: Int? = null,
+        tier: String? = null,
+        reason: String? = null,
     ) = SkillSpendTelemetry.buildRecord(
         timestamp = 1784213172197L,
         outcome = outcome,
@@ -47,6 +50,9 @@ class SkillSpendTelemetryTest {
         proposed = proposed,
         confirmed = confirmed,
         skipped = skipped,
+        threshold = threshold,
+        tier = tier,
+        reason = reason,
     )
 
     @Nested
@@ -57,7 +63,7 @@ class SkillSpendTelemetryTest {
             val r = record()
             assertEquals("skill_spend", r.getString("type"))
             assertEquals(1784213172197L, r.getLong("ts"))
-            assertEquals("trigger-v1", r.getString("policy"))
+            assertEquals("trigger-v2", r.getString("policy"))
             assertEquals("committed", r.getString("outcome"))
             assertEquals("HIGH_WATER", r.getString("trigger"))
             assertEquals(PLAN_SKILL_POINT_CHECK, r.getString("plan"))
@@ -128,7 +134,7 @@ class SkillSpendTelemetryTest {
             }
             // What is always known still lands, so the record is never anonymous.
             assertEquals("skill_spend", r.getString("type"))
-            assertEquals("trigger-v1", r.getString("policy"))
+            assertEquals("trigger-v2", r.getString("policy"))
             assertTrue(r.has("ts"))
         }
 
@@ -138,6 +144,47 @@ class SkillSpendTelemetryTest {
             assertFalse(r.has("proposed"))
             assertFalse(r.has("confirmed"))
             assertFalse(r.has("skipped"))
+        }
+    }
+
+    @Nested
+    @DisplayName("threshold policy fields (trigger-v2)")
+    inner class ThresholdPolicyTests {
+        @Test
+        fun `a manual-mode record carries threshold, tier and reason alongside a distinct trigger`() {
+            val r = record(trigger = SkillCheckTrigger.SCENARIO_FINALS, threshold = 1000, tier = "manual", reason = "manual threshold 1000")
+            assertEquals("trigger-v2", r.getString("policy"))
+            assertEquals(1000, r.getInt("threshold"))
+            assertEquals("manual", r.getString("tier"))
+            assertEquals("manual threshold 1000", r.getString("reason"))
+            // The trigger stays the spend cause; the reason stays the resolution story.
+            assertEquals("SCENARIO_FINALS", r.getString("trigger"))
+        }
+
+        @Test
+        fun `an adaptive record carries the resolved tier, never the raw auto value`() {
+            val resolved = resolveSkillThreshold(SkillSpendMode.ADAPTIVE, AccountTier.ESTABLISHED, 350)
+            val r = record(trigger = SkillCheckTrigger.HIGH_WATER, threshold = resolved.value, tier = resolved.tierToken(), reason = resolved.reason)
+            assertEquals(600, r.getInt("threshold"))
+            assertEquals("established", r.getString("tier"))
+            assertEquals("adaptive threshold 600 (established)", r.getString("reason"))
+            assertEquals("HIGH_WATER", r.getString("trigger"))
+        }
+
+        @Test
+        fun `absent policy fields are omitted, matching every other optional field`() {
+            val r = record(threshold = null, tier = null, reason = null)
+            for (key in listOf("threshold", "tier", "reason")) {
+                assertFalse(r.has(key), "\"$key\" must be omitted when unknown, not defaulted")
+            }
+        }
+
+        @Test
+        fun `the confirmation-gap arbiter ignores the policy fields entirely`() {
+            // Same arithmetic as before trigger-v2: the new fields are attribution, not evidence.
+            val proposed = listOf(ProposedSkill("A", 300), ProposedSkill("B", 263))
+            assertTrue(SkillSpendTelemetry.confirmationIsIncomplete(proposed, setOf("A"), spBefore = 567, spAfter = 4))
+            assertFalse(SkillSpendTelemetry.confirmationIsIncomplete(proposed, setOf("A", "B"), spBefore = 567, spAfter = 4))
         }
     }
 

@@ -1630,6 +1630,12 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     confirmed = confirmed,
                     skipped = skipped,
                     confirmedIncomplete = confirmedIncomplete,
+                    // The threshold policy the career is running under - the ACTING value Campaign
+                    // resolved at construction, not a re-read, so the record cannot disagree with
+                    // the decision that governed the run.
+                    threshold = campaign.resolvedSkillThreshold.value,
+                    tier = campaign.resolvedSkillThreshold.tierToken(),
+                    reason = campaign.resolvedSkillThreshold.reason,
                 )
             OutcomeCorpus.append(game.myContext, record)
             MessageLog.i(

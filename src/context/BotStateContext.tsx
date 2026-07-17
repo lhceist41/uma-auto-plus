@@ -2,6 +2,7 @@ import { createContext, useState, useMemo, useCallback } from "react"
 import { startTiming } from "../lib/performanceLogger"
 import racesData from "../data/races.json"
 import { skillPlanSettingsPages } from "../pages/SkillPlanSettings/config"
+import { DEFAULT_ACCOUNT_TIER, DEFAULT_SKILL_SPEND_MODE } from "../lib/adaptiveSkillPolicy"
 
 /**
  * Configuration for an individual skill plan (e.g. preFinals, careerComplete).
@@ -98,6 +99,14 @@ export interface Settings {
 
     // Skill Settings
     skills: {
+        // How the mid-career high-water threshold is chosen. "manual" (default) uses skillPointCheck
+        // exactly as configured - the long-standing behavior. "adaptive" derives it from accountTier.
+        // A user-global choice, like the threshold itself: presets must never set it.
+        skillSpendMode: "manual" | "adaptive"
+        // Account strength for adaptive mode: "auto" | "new" | "developing" | "established" | "endgame".
+        // Labels describe roster/support quality, not literal Team Rank. "auto" resolves to
+        // "developing" in V1 (conservative middle); ignored entirely in manual mode.
+        accountTier: string
         enableSkillPointCheck: boolean
         skillPointCheck: number
         preferredRunningStyle: string
@@ -412,6 +421,11 @@ export const defaultSettings: Settings = {
         // community-tier ranking from skills.json. enableBuyInheritedUniqueSkills: true buys inherited
         // uniques when affordable (almost always worth it); enableBuyNegativeSkills stays false so the
         // bot never buys debuffs.
+        // Manual by default: adaptive threshold selection is strictly opt-in, and these defaults
+        // reproduce the pre-adaptive behavior exactly. accountTier is inert while mode is manual.
+        // The constants live in lib/adaptiveSkillPolicy so the Jest suite pins the actual defaults.
+        skillSpendMode: DEFAULT_SKILL_SPEND_MODE,
+        accountTier: DEFAULT_ACCOUNT_TIER,
         enableSkillPointCheck: true,
         skillPointCheck: 350,
         preferredRunningStyle: "inherit",

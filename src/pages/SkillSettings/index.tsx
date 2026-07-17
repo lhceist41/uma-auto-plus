@@ -14,6 +14,7 @@ import { SearchPageProvider } from "../../context/SearchPageContext"
 import { skillPlanSettingsPages } from "../SkillPlanSettings/config"
 import InfoContainer from "../../components/InfoContainer"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
+import { adaptiveThresholdLabel, type AccountTier } from "../../lib/adaptiveSkillPolicy"
 
 /**
  * The Skill Settings page.
@@ -163,43 +164,100 @@ const SkillSettings = () => {
                             process of farming rank in events less of a hassle.
                         </Text>
                         <Divider style={{ marginBottom: 16 }} />
-                        <Text style={styles.inputLabel}>Spend skill points when SP reaches</Text>
-                        <Text style={styles.description}>
-                            The bot buys skills mid-career once your skill points reach this amount. Tap a preset or set an exact number below. Career end (the last chip) holds everything for the
-                            Pre-Finals and end-of-career buys, matching the upstream project. Your choice here sticks across trainee preset and rotation switches.
-                        </Text>
-                        <View style={styles.chipRow}>
-                            {SPEND_PRESETS.map((preset) => {
-                                const active = bsc.settings.skills.enableSkillPointCheck && bsc.settings.skills.skillPointCheck === preset
-                                return (
-                                    <TouchableOpacity key={preset} style={[styles.chip, active && styles.chipActive]} onPress={() => setSpendThreshold(preset)}>
-                                        <Text style={[styles.chipText, active && styles.chipTextActive]}>{preset}</Text>
+                        <CustomSelect
+                            searchId="skill-spend-mode"
+                            options={[
+                                { value: "manual", label: "Manual" },
+                                { value: "adaptive", label: "Adaptive" },
+                            ]}
+                            value={skillSettings.skillSpendMode}
+                            defaultValue={defaultSettings.skills.skillSpendMode}
+                            onValueChange={(value) => updateSkillsSetting("skillSpendMode", value)}
+                            label="Skill Spend Mode"
+                            description={
+                                skillSettings.skillSpendMode === "adaptive"
+                                    ? "Chooses a high-water threshold from the account-strength tier below. Finals and career-end spending still occur normally."
+                                    : "Uses the Skill Point threshold configured below. This preserves the current behavior."
+                            }
+                            placeholder="Select Mode"
+                        />
+                        {skillSettings.skillSpendMode === "adaptive" && (
+                            <View style={{ marginTop: 8 }}>
+                                <CustomSelect
+                                    searchId="account-strength"
+                                    options={[
+                                        { value: "auto", label: "Auto" },
+                                        { value: "new", label: "New" },
+                                        { value: "developing", label: "Developing" },
+                                        { value: "established", label: "Established" },
+                                        { value: "endgame", label: "Endgame" },
+                                    ]}
+                                    value={skillSettings.accountTier}
+                                    defaultValue={defaultSettings.skills.accountTier}
+                                    onValueChange={(value) => updateSkillsSetting("accountTier", value)}
+                                    label="Account Strength"
+                                    description="How developed this account's supports and roster are. Support quality and progression matter far more than the Team Rank letter - the ranks below are only a loose guide."
+                                    placeholder="Select Account Strength"
+                                />
+                                <InfoContainer>
+                                    <View>
+                                        <Text style={styles.infoLabel}>{adaptiveThresholdLabel(skillSettings.accountTier as AccountTier)}</Text>
+                                        <View style={styles.infoBlock}>
+                                            <Text style={styles.infoDescription}>Auto — uses Developing for now. New — early account, thin supports (roughly F–E). Developing — growing roster (roughly D–B). Established — reliable roster (roughly A–S). Endgame — strong roster (roughly SS and up).</Text>
+                                        </View>
+                                        {!skillSettings.enableSkillPointCheck && (
+                                            <View style={styles.infoBlock}>
+                                                <Text style={styles.infoDescription}>
+                                                    Mid-career spending is currently set to “Career end”, so no high-water threshold applies. Switch to Manual and pick a spend chip to re-enable it;
+                                                    the tier threshold then takes effect when you return to Adaptive.
+                                                </Text>
+                                            </View>
+                                        )}
+                                    </View>
+                                </InfoContainer>
+                            </View>
+                        )}
+                        {skillSettings.skillSpendMode === "manual" && (
+                            <>
+                                <Text style={styles.inputLabel}>Spend skill points when SP reaches</Text>
+                                <Text style={styles.description}>
+                                    The bot buys skills mid-career once your skill points reach this amount. Tap a preset or set an exact number below. Career end (the last chip) holds everything for
+                                    the Pre-Finals and end-of-career buys, matching the upstream project. Your choice here sticks across trainee preset and rotation switches.
+                                </Text>
+                                <View style={styles.chipRow}>
+                                    {SPEND_PRESETS.map((preset) => {
+                                        const active = bsc.settings.skills.enableSkillPointCheck && bsc.settings.skills.skillPointCheck === preset
+                                        return (
+                                            <TouchableOpacity key={preset} style={[styles.chip, active && styles.chipActive]} onPress={() => setSpendThreshold(preset)}>
+                                                <Text style={[styles.chipText, active && styles.chipTextActive]}>{preset}</Text>
+                                            </TouchableOpacity>
+                                        )
+                                    })}
+                                    <TouchableOpacity style={[styles.chip, !bsc.settings.skills.enableSkillPointCheck && styles.chipActive]} onPress={setSpendAtCareerEnd}>
+                                        <Text style={[styles.chipText, !bsc.settings.skills.enableSkillPointCheck && styles.chipTextActive]}>Career end</Text>
                                     </TouchableOpacity>
-                                )
-                            })}
-                            <TouchableOpacity style={[styles.chip, !bsc.settings.skills.enableSkillPointCheck && styles.chipActive]} onPress={setSpendAtCareerEnd}>
-                                <Text style={[styles.chipText, !bsc.settings.skills.enableSkillPointCheck && styles.chipTextActive]}>Career end</Text>
-                            </TouchableOpacity>
-                        </View>
+                                </View>
 
-                        <View style={bsc.settings.skills.enableSkillPointCheck ? { marginTop: 8 } : { display: "none" }}>
-                            <CustomSlider
-                                searchId="skill-point-check"
-                                searchCondition={bsc.settings.skills.enableSkillPointCheck}
-                                value={bsc.settings.skills.skillPointCheck}
-                                placeholder={bsc.defaultSettings.skills.skillPointCheck}
-                                onValueChange={(value) => setSpendThreshold(value)}
-                                onSlidingComplete={(value) => setSpendThreshold(value)}
-                                min={0}
-                                max={2000}
-                                step={10}
-                                label="Custom Threshold"
-                                description="Spend when skill points reach this exact amount. Type a number or drag."
-                                labelUnit=""
-                                showValue={true}
-                                showLabels={true}
-                            />
-                        </View>
+                                <View style={bsc.settings.skills.enableSkillPointCheck ? { marginTop: 8 } : { display: "none" }}>
+                                    <CustomSlider
+                                        searchId="skill-point-check"
+                                        searchCondition={bsc.settings.skills.enableSkillPointCheck}
+                                        value={bsc.settings.skills.skillPointCheck}
+                                        placeholder={bsc.defaultSettings.skills.skillPointCheck}
+                                        onValueChange={(value) => setSpendThreshold(value)}
+                                        onSlidingComplete={(value) => setSpendThreshold(value)}
+                                        min={0}
+                                        max={2000}
+                                        step={10}
+                                        label="Custom Threshold"
+                                        description="Spend when skill points reach this exact amount. Type a number or drag."
+                                        labelUnit=""
+                                        showValue={true}
+                                        showLabels={true}
+                                    />
+                                </View>
+                            </>
+                        )}
                     </View>
                     <CustomTitle title="Skill Style Overrides" description="Override which types of skills the bot can purchase." />
                     <Text style={styles.description}>

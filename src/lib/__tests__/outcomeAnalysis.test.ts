@@ -362,10 +362,14 @@ function skillSpendJson(
         confirmed: string[]
         skipped: { name: string; reason: string }[]
         confirmedIncomplete: boolean
+        policy: string
+        threshold: number
+        tier: string
+        reason: string
     }> = {},
 ): string {
-    const record: Record<string, unknown> = { type: "skill_spend", ts: 1, policy: "trigger-v1", outcome: o.outcome ?? "committed" }
-    for (const key of ["trigger", "plan", "trainee", "scenario", "fp", "turn", "spBefore", "spAfter", "unspent", "proposed", "confirmed", "skipped", "confirmedIncomplete"] as const) {
+    const record: Record<string, unknown> = { type: "skill_spend", ts: 1, policy: o.policy ?? "trigger-v1", outcome: o.outcome ?? "committed" }
+    for (const key of ["trigger", "plan", "trainee", "scenario", "fp", "turn", "spBefore", "spAfter", "unspent", "proposed", "confirmed", "skipped", "confirmedIncomplete", "threshold", "tier", "reason"] as const) {
         if (o[key] !== undefined) record[key] = o[key]
     }
     return JSON.stringify(record)
@@ -713,6 +717,27 @@ describe("parseCorpus — skill_spend records", () => {
         expect(skillSpends).toHaveLength(1)
     })
 
+    it("parses trigger-v2 threshold-policy fields and keeps trigger distinct from reason", () => {
+        const { skillSpends } = parseCorpus(
+            skillSpendJson({ policy: "trigger-v2", trigger: "HIGH_WATER", threshold: 600, tier: "established", reason: "adaptive threshold 600 (established)" }),
+            "c.jsonl",
+        )
+        const r = skillSpends[0]
+        expect(r.policy).toBe("trigger-v2")
+        expect(r.threshold).toBe(600)
+        expect(r.tier).toBe("established")
+        expect(r.reason).toBe("adaptive threshold 600 (established)")
+        expect(r.trigger).toBe("HIGH_WATER")
+    })
+
+    it("leaves the v2 fields undefined on trigger-v1 records rather than inferring them", () => {
+        const { skillSpends } = parseCorpus(skillSpendJson({ trigger: "HIGH_WATER" }), "c.jsonl")
+        const r = skillSpends[0]
+        expect(r.threshold).toBeUndefined()
+        expect(r.tier).toBeUndefined()
+        expect(r.reason).toBeUndefined()
+    })
+
     it("drops malformed proposed/skipped rows without discarding the record", () => {
         const raw = JSON.stringify({
             type: "skill_spend",
@@ -816,6 +841,20 @@ describe("analyzeSkillSpend", () => {
         )
         expect(analyzeSkillSpend(skillSpends).confirmedIncomplete).toBe(2)
     })
+
+    it("buckets sessions by threshold-policy tier, with pre-v2 records kept apart rather than inferred", () => {
+        const { skillSpends } = parseCorpus(
+            [
+                skillSpendJson({ policy: "trigger-v2", threshold: 1000, tier: "manual", reason: "manual threshold 1000" }),
+                skillSpendJson({ policy: "trigger-v2", threshold: 600, tier: "established", reason: "adaptive threshold 600 (established)" }),
+                skillSpendJson({ policy: "trigger-v2", threshold: 600, tier: "established", reason: "adaptive threshold 600 (established)" }),
+                skillSpendJson({}), // trigger-v1: governing policy unknown
+            ].join("\n") + "\n",
+            "c.jsonl",
+        )
+        const s = analyzeSkillSpend(skillSpends)
+        expect(s.byTier).toEqual({ manual: 1, established: 2, "pre-v2": 1 })
+    })
 })
 
 describe("renderSkillSpendMarkdown", () => {
@@ -846,5 +885,19 @@ describe("renderSkillSpendMarkdown", () => {
     it("stays silent about incompleteness when nothing proved a gap", () => {
         const { skillSpends } = parseCorpus(skillSpendJson({}), "c.jsonl")
         expect(renderSkillSpendMarkdown(analyzeSkillSpend(skillSpends))).not.toContain("missed a purchase")
+    })
+
+    it("identifies manual vs adaptive sessions in the tier line", () => {
+        const { skillSpends } = parseCorpus(
+            [
+                skillSpendJson({ policy: "trigger-v2", threshold: 1000, tier: "manual", reason: "manual threshold 1000" }),
+                skillSpendJson({ policy: "trigger-v2", threshold: 350, tier: "developing", reason: "adaptive threshold 350 (auto -> developing)" }),
+            ].join("\n") + "\n",
+            "c.jsonl",
+        )
+        const md = renderSkillSpendMarkdown(analyzeSkillSpend(skillSpends))
+        expect(md).toContain("By threshold-policy tier")
+        expect(md).toContain("manual=1")
+        expect(md).toContain("developing=1")
     })
 })

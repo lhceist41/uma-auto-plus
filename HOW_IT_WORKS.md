@@ -1151,3 +1151,28 @@ The chosen plan is logged as `[KNAPSACK] DP plan: N skills for X SP. Skills: ...
 
 **A purchase is not complete until the confirmation screen is gone.** The on-screen skill-point counter
 is a selection preview, not a balance — see `docs/INCIDENTS.md`, entry 4.
+
+### Adaptive threshold (V1)
+
+The mid-career high-water threshold that opens the skill screen comes from one of two sources,
+chosen by `skills.skillSpendMode`:
+
+- **Manual** (default): `skills.skillPointCheck`, exactly as configured. This is the pre-adaptive
+  behavior bit-for-bit — existing users see no change unless they opt in.
+- **Adaptive**: a fixed table keyed by `skills.accountTier` — New 300, Developing 350,
+  Established 600, Endgame 1000, with Auto resolving to Developing in V1. Weak accounts spend
+  earlier so mid-career races are not run skill-less; strong accounts hold for big
+  knapsack-efficient buys. The tier is the user's own assessment of support/roster strength:
+  the bot never reads Team Rank (the letter is a lifetime-accumulation number and a poor proxy
+  for what the current deck can fund), does not inspect the support inventory, and does not
+  learn or change the tier by itself in V1.
+
+Resolution happens once per career (`bot/AdaptiveSkillPolicy.kt`, logged as
+`[SKILLS] Skill spend policy: ...`) and feeds the unchanged trigger policy in
+`SkillCheckPolicy.kt` — finals-before-high-water ordering, the breakpoint stop when the plan is
+disabled, careerComplete, the optimizer strategies, and presets are all untouched. Unknown
+persisted values fall back to Manual + Auto. Every `skill_spend` record (`policy: trigger-v2`)
+carries the resolved `threshold`, `tier` (`manual` when no tier governs), and `reason`; the
+`trigger` field keeps recording what caused the spend itself. Presets must not set
+`skillSpendMode` or `accountTier` — like the threshold, they are the user's global choice, and
+account strength is a property of the account, not of a trainee profile.

@@ -211,6 +211,12 @@ export interface SkillSpendRecord {
     // a floor rather than the full set. Such a session carries no `skipped` rows: which planned skills
     // went unbought is exactly what the gap makes unknowable.
     confirmedIncomplete?: boolean
+    // trigger-v2 threshold-policy attribution: the resolved high-water threshold in effect for the
+    // career, the tier that produced it ("manual" when no tier governs), and the resolution reason.
+    // Absent on trigger-v1 records — readers must never infer values for them.
+    threshold?: number
+    tier?: string
+    reason?: string
     file?: string
     lineNumber: number
 }
@@ -310,6 +316,9 @@ export function parseCorpus(text: string, file?: string): ParsedCorpus {
                     ? obj.skipped.filter((s: any) => s && typeof s.name === "string" && typeof s.reason === "string").map((s: any) => ({ name: String(s.name), reason: String(s.reason) }))
                     : [],
                 confirmedIncomplete: obj.confirmedIncomplete === true ? true : undefined,
+                threshold: Number.isFinite(Number(obj.threshold)) && obj.threshold !== undefined ? Number(obj.threshold) : undefined,
+                tier: obj.tier !== undefined ? String(obj.tier) : undefined,
+                reason: obj.reason !== undefined ? String(obj.reason) : undefined,
                 file,
                 lineNumber: i,
             })
@@ -1069,6 +1078,9 @@ export interface SkillSpendSummary {
     byTrigger: Record<string, number>
     byPlan: Record<string, number>
     byOutcome: Record<string, number>
+    /** Per resolved threshold-policy tier ("manual", "developing", ...). trigger-v1 records land
+     * under "pre-v2" — their governing policy is unknown, never inferred. */
+    byTier: Record<string, number>
     /** Sessions whose commit was verified on screen. */
     committed: number
     /** Skills evidenced as bought across all sessions. */
@@ -1104,6 +1116,7 @@ export function analyzeSkillSpend(records: SkillSpendRecord[]): SkillSpendSummar
     const byTrigger: Record<string, number> = {}
     const byPlan: Record<string, number> = {}
     const byOutcome: Record<string, number> = {}
+    const byTier: Record<string, number> = {}
     const armMap = new Map<string, { trainee: string; scenario: string; arm: string; sessions: number; committed: number; unspents: number[] }>()
     let unidentified = 0
     let committed = 0
@@ -1115,6 +1128,7 @@ export function analyzeSkillSpend(records: SkillSpendRecord[]): SkillSpendSummar
         bump(byTrigger, r.trigger ?? "unknown")
         bump(byPlan, r.plan ?? "unknown")
         bump(byOutcome, r.outcome)
+        bump(byTier, r.tier ?? "pre-v2")
         if (r.outcome === "committed") committed++
         if (r.confirmedIncomplete) confirmedIncomplete++
         confirmedSkills += r.confirmed.length
@@ -1144,6 +1158,7 @@ export function analyzeSkillSpend(records: SkillSpendRecord[]): SkillSpendSummar
         byTrigger,
         byPlan,
         byOutcome,
+        byTier,
         committed,
         confirmedSkills,
         proposedSkills,
@@ -1189,6 +1204,7 @@ export function renderSkillSpendMarkdown(s: SkillSpendSummary): string {
     counts("By trigger", s.byTrigger)
     counts("By plan", s.byPlan)
     counts("By outcome", s.byOutcome)
+    counts("By threshold-policy tier", s.byTier)
     if (s.byArm.length > 0) {
         L.push("")
         L.push("| Trainee | Scenario | Arm | Sessions | Committed | Unspent p50 |")

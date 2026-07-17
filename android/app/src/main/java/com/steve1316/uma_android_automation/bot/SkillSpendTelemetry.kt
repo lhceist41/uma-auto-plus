@@ -58,8 +58,10 @@ data class SkippedSkill(val name: String, val reason: String)
  * purchase result.
  */
 object SkillSpendTelemetry {
-    /** Stamped on every record so a later policy change can be told apart in the corpus. */
-    const val POLICY_VERSION: String = "trigger-v1"
+    /** Stamped on every record so a later policy change can be told apart in the corpus.
+     * trigger-v2 = the adaptive-threshold fields (`threshold`/`tier`/`reason`) exist; readers of
+     * trigger-v1 records must tolerate their absence rather than infer values for old records. */
+    const val POLICY_VERSION: String = "trigger-v2"
 
     /** A planned skill whose live price rose above the remaining budget before it could be bought. */
     const val SKIP_UNAFFORDABLE: String = "unaffordable_drift"
@@ -84,12 +86,21 @@ object SkillSpendTelemetry {
         confirmed: List<String>,
         skipped: List<SkippedSkill>,
         confirmedIncomplete: Boolean = false,
+        threshold: Int? = null,
+        tier: String? = null,
+        reason: String? = null,
     ): JSONObject {
         val record = JSONObject()
         record.put("type", "skill_spend")
         record.put("ts", timestamp)
         record.put("policy", POLICY_VERSION)
         record.put("outcome", outcome.token())
+        // Threshold-policy attribution (trigger-v2): the resolved high-water threshold in effect
+        // for this career, the tier that produced it ("manual" when no tier governs), and the
+        // resolution reason. Distinct from `trigger`, which records what caused THIS spend.
+        threshold?.let { record.put("threshold", it) }
+        tier?.let { record.put("tier", it) }
+        reason?.let { record.put("reason", it) }
         trigger?.let { record.put("trigger", it.name) }
         planKey?.let { record.put("plan", it) }
         strategy?.let { record.put("strategy", it) }

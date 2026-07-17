@@ -483,6 +483,19 @@ const searchConfig: SearchOption[] = [
     // Skill Settings
     // ============================================================
     {
+        id: "skill-spend-mode",
+        title: "Skill Spend Mode",
+        description: "Manual uses the configured Skill Point threshold (the current behavior). Adaptive derives the mid-career threshold from your account-strength tier instead.",
+        page: "SkillSettings",
+    },
+    {
+        id: "account-strength",
+        title: "Account Strength",
+        description: "How developed the account's supports and roster are, for Adaptive skill spending: Auto, New, Developing, Established, or Endgame. Support quality matters more than Team Rank.",
+        page: "SkillSettings",
+        parentId: "skill-spend-mode",
+    },
+    {
         id: "skill-point-check",
         title: "Spend Skill Points",
         description: "When the bot spends skill points mid-career: a preset (0 / 350 / 700 / 1200 SP), a custom threshold, or Career end to save them all for the Pre-Finals and end-of-career buys.",

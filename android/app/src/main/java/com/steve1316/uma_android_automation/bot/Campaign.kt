@@ -522,8 +522,20 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Whether the bot must rest before Summer. */
     protected val mustRestBeforeSummer: Boolean = SettingsHelper.getBooleanSetting("training", "mustRestBeforeSummer")
 
+    /** The resolved skill-spend threshold policy for this career: manual passthrough of
+     * `skills.skillPointCheck`, or the account-tier table when adaptive mode is opted in.
+     * Resolved once at construction (settings cannot change mid-career) and logged so every
+     * career states which policy governed it. Deliberately NOT part of the outcome-config
+     * fingerprint: resolving inside that snapshot would rotate every existing arm and flag
+     * phantom [CONFIG_DRIFT] against rotation snapshots, so the skill_spend records carry the
+     * resolved threshold/tier/reason instead. */
+    internal val resolvedSkillThreshold: ResolvedSkillThreshold =
+        resolveSkillThresholdFromSettings().also {
+            MessageLog.i(TAG, "[SKILLS] Skill spend policy: ${it.reason}.")
+        }
+
     /** The number of skill points required to trigger a check. */
-    protected val skillPointsRequired: Int = SettingsHelper.getIntSetting("skills", "skillPointCheck")
+    protected val skillPointsRequired: Int = resolvedSkillThreshold.value
 
     /** The list of date strings at which the bot should stop. */
     protected val stopAtDates: List<String> =
