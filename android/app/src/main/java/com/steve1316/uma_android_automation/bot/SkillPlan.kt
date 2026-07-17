@@ -1636,6 +1636,12 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     threshold = campaign.resolvedSkillThreshold.value,
                     tier = campaign.resolvedSkillThreshold.tierToken(),
                     reason = campaign.resolvedSkillThreshold.reason,
+                    objective = campaign.skillSpendObjective.token(),
+                    criticalRace = campaign.activeTriggerContext?.takeIf { it.trigger == trigger }?.criticalRace,
+                    criticalRaceSource = campaign.activeTriggerContext?.takeIf { it.trigger == trigger }?.criticalRaceSource,
+                    turnsUntilRace = campaign.activeTriggerContext?.takeIf { it.trigger == trigger }?.turnsUntilRace,
+                    plannedSkill = campaign.activeTriggerContext?.takeIf { it.trigger == trigger }?.plannedSkill,
+                    plannedSkillObservedPrice = campaign.activeTriggerContext?.takeIf { it.trigger == trigger }?.plannedSkillObservedPrice,
                 )
             OutcomeCorpus.append(game.myContext, record)
             MessageLog.i(
@@ -1645,6 +1651,28 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             )
         }.onFailure {
             MessageLog.w(TAG, "[SKILL_SPEND] Failed to append the skill-spend record: $it")
+        }
+
+        // Phase 2A evidence feed: a session whose parse genuinely saw the skill screen refreshes
+        // the observed-availability store (names + live prices of AVAILABLE rows only). Aborted
+        // and failed sessions deliberately leave prior evidence untouched - a failed parse is
+        // not evidence of absence. Runs outside the telemetry runCatching so a corpus append
+        // failure cannot starve the evidence, and in its own so one cannot break the other.
+        runCatching {
+            if (skillList != null &&
+                outcome in setOf(SkillSpendOutcome.COMMITTED, SkillSpendOutcome.COMMIT_UNVERIFIED, SkillSpendOutcome.NOTHING_TO_BUY)
+            ) {
+                val availableWithPrices: Map<String, Int> =
+                    skillList.getAllSkills().filterValues { it.bIsAvailable }.mapValues { it.value.screenPrice }
+                campaign.plannedSkillEvidence.recordParse(
+                    availableWithPrices = availableWithPrices,
+                    parseTurn = campaign.date.day,
+                    fromAffordableSession = trigger == SkillCheckTrigger.PLANNED_SKILL_AFFORDABLE,
+                    confirmedPurchases = confirmed,
+                )
+            }
+        }.onFailure {
+            MessageLog.w(TAG, "[SKILL_SPEND] Failed to update planned-skill evidence: $it")
         }
     }
 }

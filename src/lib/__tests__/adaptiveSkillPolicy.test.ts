@@ -1,4 +1,15 @@
-import { ADAPTIVE_TIER_THRESHOLDS, DEFAULT_ACCOUNT_TIER, DEFAULT_SKILL_SPEND_MODE, adaptiveThresholdFor, adaptiveThresholdLabel, resolveAccountTier } from "../adaptiveSkillPolicy"
+import {
+    ADAPTIVE_TIER_THRESHOLDS,
+    DEFAULT_ACCOUNT_TIER,
+    DEFAULT_SKILL_SPEND_MODE,
+    DEFAULT_SKILL_SPEND_OBJECTIVE,
+    SKILL_SPEND_OBJECTIVES,
+    adaptiveThresholdFor,
+    adaptiveThresholdLabel,
+    objectiveLabel,
+    presetObjectiveOf,
+    resolveAccountTier,
+} from "../adaptiveSkillPolicy"
 
 // Display-side mirror of the Kotlin table in bot/AdaptiveSkillPolicy.kt. Both suites pin the same
 // values so the two tables cannot drift apart silently: change one and exactly one suite fails.
@@ -54,5 +65,33 @@ describe("adaptive skill spend settings", () => {
         expect(merged.skillSpendMode).toBe("manual")
         expect(merged.accountTier).toBe("auto")
         expect(merged.skillPointCheck).toBe(1000)
+    })
+})
+
+describe("skill spend objective (Phase 2A)", () => {
+    it("defaults to rank - the V1-identical behavior", () => {
+        expect(DEFAULT_SKILL_SPEND_OBJECTIVE).toBe("rank")
+        expect(SKILL_SPEND_OBJECTIVES).toEqual(["safe_completion", "rank", "sparks", "race_reward"])
+    })
+
+    it("presetObjectiveOf returns the preset's declared objective", () => {
+        expect(presetObjectiveOf({ skills: { skillSpendObjective: "race_reward" } })).toBe("race_reward")
+        expect(presetObjectiveOf({ skills: { skillSpendObjective: "sparks" } })).toBe("sparks")
+    })
+
+    it("presetObjectiveOf stamps rank for objective-less, malformed, or unknown presets", () => {
+        expect(presetObjectiveOf({ skills: {} })).toBe("rank")
+        expect(presetObjectiveOf({})).toBe("rank")
+        expect(presetObjectiveOf(undefined)).toBe("rank")
+        expect(presetObjectiveOf(null)).toBe("rank")
+        expect(presetObjectiveOf({ skills: { skillSpendObjective: "competitive" } })).toBe("rank")
+        expect(presetObjectiveOf({ skills: { skillSpendObjective: 42 } })).toBe("rank")
+    })
+
+    it("renders human labels for the read-only UI line", () => {
+        expect(objectiveLabel("race_reward")).toBe("Race reward")
+        expect(objectiveLabel("safe_completion")).toBe("Safe completion")
+        expect(objectiveLabel("rank")).toBe("Rank")
+        expect(objectiveLabel("nonsense")).toBe("Rank")
     })
 })

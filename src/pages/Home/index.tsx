@@ -20,6 +20,7 @@ import PresetPicker from "../../components/PresetPicker"
 import { avoidAdvisoryFor, characterPresets, trainerAdvisories } from "../../data/characterPresets"
 import { presetCharacter, presetOutfit } from "../../data/presetMeta"
 import { deriveInGameName, deriveExcludeOutfits } from "../../lib/rotationSnapshots"
+import { presetObjectiveOf } from "../../lib/adaptiveSkillPolicy"
 import { useNavigation } from "@react-navigation/native"
 
 const styles = StyleSheet.create({
@@ -309,6 +310,11 @@ const Home = () => {
         if (merged.skills) {
             merged.skills.skillPointCheck = preservedSkillPointCheck
             merged.skills.enableSkillPointCheck = preservedEnableSkillPointCheck
+            // Stamp the preset's objective on EVERY apply (absent -> "rank"): the spread above
+            // merges over current settings, so without the stamp an objective-less preset would
+            // silently inherit the previous preset's objective. Mode/tier stay user-global and
+            // are never stamped - presets must not set them.
+            merged.skills.skillSpendObjective = presetObjectiveOf(preset.settings)
         }
 
         // A trainee-first pick from the picker carries its scenario; land it in the same apply so

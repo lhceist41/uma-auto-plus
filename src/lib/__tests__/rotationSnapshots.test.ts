@@ -103,6 +103,17 @@ describe("buildRotationSnapshotRows", () => {
         const enableRow = rows.find((r) => r.category === "rot0_skills" && r.key === "enableSkillPointCheck")
         expect(enableRow?.value).toBe(false)
     })
+
+    it("stamps rank for an objective-less preset even when the base carries another objective", () => {
+        // The leakage bug this stamp prevents: apply Copano URA (race_reward), then snapshot an
+        // old preset - the spread over the base would carry race_reward onto a preset that never
+        // asked for it. Index-0 is a pre-2A preset with no objective, and the base deliberately
+        // carries the "wrong" one.
+        const leakyBase = { ...baseSettings, skills: { ...baseSettings.skills, skillSpendObjective: "race_reward" } }
+        const { rows: stampedRows } = buildRotationSnapshotRows(leakyBase, [{ inGameName: "Test", presetKey: preset.name, scenario: preset.scenario }])
+        const objectiveRow = stampedRows.find((r) => r.category === "rot0_skills" && r.key === "skillSpendObjective")
+        expect(objectiveRow?.value).toBe("rank")
+    })
 })
 
 // ===========================================================================

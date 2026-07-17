@@ -8,6 +8,7 @@ import com.steve1316.automation_library.utils.BotService
 import com.steve1316.automation_library.utils.DiscordUtils
 import com.steve1316.automation_library.utils.ImageUtils.ScaleConfidenceResult
 import com.steve1316.automation_library.utils.MessageLog
+import com.steve1316.automation_library.utils.SQLiteSettingsManager
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.BuildConfig
 import com.steve1316.uma_android_automation.CareerLaunchNavigator
@@ -522,6 +523,12 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Whether the bot must rest before Summer. */
     protected val mustRestBeforeSummer: Boolean = SettingsHelper.getBooleanSetting("training", "mustRestBeforeSummer")
 
+    /** The applied preset's skill-spend objective (Phase 2A). Preset-owned - stamped on every
+     * preset apply, so a preset that never set it reads back `rank`, which keeps both dynamic
+     * triggers inert and the behavior V1-identical. Manual mode ignores it entirely. */
+    internal val skillSpendObjective: SkillSpendObjective =
+        SkillSpendObjective.fromPersisted(SettingsHelper.getStringSetting("skills", "skillSpendObjective", "rank"))
+
     /** The resolved skill-spend threshold policy for this career: manual passthrough of
      * `skills.skillPointCheck`, or the account-tier table when adaptive mode is opted in.
      * Resolved once at construction (settings cannot change mid-career) and logged so every
@@ -531,11 +538,55 @@ abstract class Campaign(game: Game) : Task(game) {
      * resolved threshold/tier/reason instead. */
     internal val resolvedSkillThreshold: ResolvedSkillThreshold =
         resolveSkillThresholdFromSettings().also {
-            MessageLog.i(TAG, "[SKILLS] Skill spend policy: ${it.reason}.")
+            MessageLog.i(TAG, "[SKILLS] Skill spend policy: ${it.reason}; objective: ${skillSpendObjective.token()}.")
         }
 
     /** The number of skill points required to trigger a check. */
     protected val skillPointsRequired: Int = resolvedSkillThreshold.value
+
+    /** Phase 2A per-career trigger state. All instance fields, so a new career resets them
+     * naturally - none of this may ever move to the companion. */
+
+    /** This turn's mandatory-goal reading. Valid only while its `turn` equals `date.day`;
+     * produced at most once per turn by [produceGoalSnapshotIfDue]. */
+    private var currentGoalSnapshot: GoalDeadlineSnapshot? = null
+
+    /** The race turn a CRITICAL_RACE session already handled (both arms share this key), so
+     * firing at 2 turns out suppresses the 1-turn re-fire for the same race. */
+    private var lastCriticalRaceTurnHandled: Int? = null
+
+    /** Observed planned-skill availability/prices behind PLANNED_SKILL_AFFORDABLE. Fed by
+     * SkillPlan after every successful skill-screen parse. */
+    internal val plannedSkillEvidence = PlannedSkillEvidenceStore()
+
+    /** Trigger rationale for the in-flight skill session, consumed by SkillPlan's telemetry.
+     * Set immediately before a Phase 2A session opens and cleared right after it returns. */
+    internal var activeTriggerContext: SkillTriggerContext? = null
+
+    /** All race names (plain + formatted) from the on-device races table, for goal-text
+     * matching. Loaded once per career, empty on any failure so the matcher stays inert. */
+    private val goalRaceNameCandidates: Set<String> by lazy { loadGoalRaceNameCandidates() }
+
+    private fun loadGoalRaceNameCandidates(): Set<String> {
+        val settingsManager = SQLiteSettingsManager(game.myContext)
+        return try {
+            if (!settingsManager.isAvailable()) return emptySet()
+            val database = settingsManager.readableDatabase ?: return emptySet()
+            val names = mutableSetOf<String>()
+            database.query("races", arrayOf("name", "nameFormatted"), null, null, null, null, null).use { cursor ->
+                while (cursor.moveToNext()) {
+                    cursor.getString(0)?.takeIf { it.isNotBlank() }?.let { names.add(it) }
+                    cursor.getString(1)?.takeIf { it.isNotBlank() }?.let { names.add(it) }
+                }
+            }
+            names
+        } catch (e: Exception) {
+            MessageLog.w(TAG, "[SKILLS] Failed to load race names for goal matching: ${e.message}. Critical-race goal arm stays inert.")
+            emptySet()
+        } finally {
+            settingsManager.close()
+        }
+    }
 
     /** The list of date strings at which the bot should stop. */
     protected val stopAtDates: List<String> =
@@ -2982,6 +3033,20 @@ abstract class Campaign(game: Game) : Task(game) {
             skillPointCheckAttempts = 0
         }
 
+        // Phase 2A: compute the two adaptive-only trigger inputs. Everything defaults inert -
+        // manual mode, a rank objective, a disabled plan, OCR failure, or finals adjacency all
+        // leave both flags false and this function behaving exactly as V1.
+        val adaptive = resolvedSkillThreshold.mode == SkillSpendMode.ADAPTIVE
+        produceGoalSnapshotIfDue(adaptive)
+        val critical = computeCriticalRace(adaptive)
+        val affordableCandidate =
+            if (adaptive && skillSpendObjective.allowsPlannedSkillAffordable()) {
+                val planNames = skillPlan.skillPlans[PLAN_SKILL_POINT_CHECK]?.skillNames ?: emptyList()
+                plannedSkillEvidence.affordableCandidate(planNames, trainee.skillPoints)
+            } else {
+                null
+            }
+
         // Which skill check (if any) is due this turn, and why. Pure decision - navigation, the
         // Main-screen confirmation, the attempt counters and the flags all stay below.
         val skillCheck: SkillCheckDecision =
@@ -2994,7 +3059,61 @@ abstract class Campaign(game: Game) : Task(game) {
                 day = date.day,
                 preFinalsPlanEnabled = skillPlan.skillPlans[PLAN_PRE_FINALS]?.bIsEnabled ?: false,
                 alreadyHandledPreFinals = bHasHandledPreFinalsCheck,
+                criticalRaceDue = critical != null,
+                affordableSkillDue = affordableCandidate != null,
             )
+
+        // Phase 2A sessions: both run the skillPointCheck plan via the same screen flow as the
+        // high-water branch. Handled/re-arm bookkeeping differs per trigger, so they get their
+        // own branches instead of piggybacking on the high-water flags.
+        if (skillCheck.action == SkillCheckAction.RUN_PLAN && skillCheck.trigger == SkillCheckTrigger.CRITICAL_RACE && critical != null) {
+            if (!checkMainScreen()) {
+                MessageLog.i(TAG, "[SKILLS] Skipping the critical-race skill session for now - not confirmed on the Main screen.")
+                return false
+            }
+            MessageLog.i(TAG, "[SKILLS] Critical race '${critical.raceName}' in ${critical.turnsUntil} turn(s) (${critical.source}). Spending before it...")
+            activeTriggerContext =
+                SkillTriggerContext(
+                    trigger = SkillCheckTrigger.CRITICAL_RACE,
+                    criticalRace = critical.raceName,
+                    criticalRaceSource = critical.source,
+                    turnsUntilRace = critical.turnsUntil,
+                )
+            ButtonSkills.click(game.imageUtils)
+            game.wait(1.0)
+            val handled = handleSkillListScreen(PLAN_SKILL_POINT_CHECK, SkillCheckTrigger.CRITICAL_RACE)
+            activeTriggerContext = null
+            if (handled) {
+                // A completed session (even one that bought nothing) covers this race turn; an
+                // aborted one leaves the window open so the next turn can retry.
+                lastCriticalRaceTurnHandled = critical.raceTurn
+            } else {
+                MessageLog.w(TAG, "[WARN] performGlobalChecks:: Critical-race skill session did not complete. The 1-2 turn window allows one retry next turn.")
+            }
+            return true
+        }
+        if (skillCheck.action == SkillCheckAction.RUN_PLAN && skillCheck.trigger == SkillCheckTrigger.PLANNED_SKILL_AFFORDABLE && affordableCandidate != null) {
+            if (!checkMainScreen()) {
+                MessageLog.i(TAG, "[SKILLS] Skipping the planned-skill session for now - not confirmed on the Main screen.")
+                return false
+            }
+            val (skillName, observedPrice) = affordableCandidate
+            MessageLog.i(TAG, "[SKILLS] Planned skill '$skillName' affordable at observed $observedPrice SP (have ${trainee.skillPoints}). Locking it in...")
+            // The belt arms on the firing itself, so even an aborted or no-buy session cannot
+            // re-fire until SP grows - the bound on repeated opens.
+            plannedSkillEvidence.markAffordableFired(trainee.skillPoints)
+            activeTriggerContext =
+                SkillTriggerContext(
+                    trigger = SkillCheckTrigger.PLANNED_SKILL_AFFORDABLE,
+                    plannedSkill = skillName,
+                    plannedSkillObservedPrice = observedPrice,
+                )
+            ButtonSkills.click(game.imageUtils)
+            game.wait(1.0)
+            handleSkillListScreen(PLAN_SKILL_POINT_CHECK, SkillCheckTrigger.PLANNED_SKILL_AFFORDABLE)
+            activeTriggerContext = null
+            return true
+        }
 
         // Now check if we need to handle skills before finals.
         if (skillCheck.action == SkillCheckAction.RUN_PLAN && skillCheck.trigger == SkillCheckTrigger.SCENARIO_FINALS) {
@@ -3075,6 +3194,74 @@ abstract class Campaign(game: Game) : Task(game) {
         }
 
         return false
+    }
+
+    /**
+     * Produces this turn's [GoalDeadlineSnapshot] at most once per `date.day`, and only when the
+     * critical-race gate is open (adaptive mode + a reliability objective + not finals-adjacent).
+     * Racing's own goal read is NOT consumed here: it refreshes after this method runs and can
+     * skip turns entirely, so it would hand the skill check stale data. The goal-text OCR only
+     * runs when the countdown already reads 1-2 turns, so ordinary turns pay one small
+     * countdown read at most.
+     */
+    private fun produceGoalSnapshotIfDue(adaptive: Boolean) {
+        val gateOpen =
+            adaptive &&
+                skillSpendObjective.allowsCriticalRace() &&
+                date.day < PRE_FINALS_DAY - 1
+        if (!gateOpen || currentGoalSnapshot?.turn == date.day) return
+
+        val turnsRemaining = game.imageUtils.determineTurnsRemainingBeforeNextGoal()
+        currentGoalSnapshot =
+            if (turnsRemaining < 0) {
+                // OCR failed - inert for the whole turn, never a guess.
+                GoalDeadlineSnapshot(date.day, null, null, GoalKind.UNKNOWN, null)
+            } else if (turnsRemaining !in CRITICAL_RACE_MIN_TURNS..CRITICAL_RACE_MAX_TURNS) {
+                GoalDeadlineSnapshot(date.day, turnsRemaining, null, GoalKind.UNKNOWN, null)
+            } else {
+                val text = game.imageUtils.getGoalText()
+                val (kind, raceName) = classifyGoalText(text, goalRaceNameCandidates)
+                if (kind == GoalKind.RACE) {
+                    MessageLog.i(TAG, "[SKILLS] Critical race '$raceName' in $turnsRemaining turn(s) from goal OCR.")
+                }
+                GoalDeadlineSnapshot(date.day, turnsRemaining, text, kind, raceName)
+            }
+    }
+
+    /** A qualified critical race for this turn, or null. */
+    private data class CriticalRaceDue(val raceName: String, val raceTurn: Int, val turnsUntil: Int, val source: String)
+
+    /**
+     * Evaluates both critical-race arms. The mandatory goal-OCR arm wins over the planned-race
+     * arm when both see the same window (they share the handled key, so the same race can never
+     * fire twice regardless of which arm saw it first).
+     */
+    private fun computeCriticalRace(adaptive: Boolean): CriticalRaceDue? {
+        if (!adaptive || !skillSpendObjective.allowsCriticalRace()) return null
+        if (date.day >= PRE_FINALS_DAY - 1) return null
+        if (trainee.skillPoints < MIN_CRITICAL_SPEND) return null
+
+        // Primary: this turn's mandatory-goal snapshot (never a previous turn's).
+        val snapshot = currentGoalSnapshot?.takeIf { it.turn == date.day }
+        if (snapshot != null && snapshot.kind == GoalKind.RACE && snapshot.raceName != null) {
+            val turns = snapshot.turnsRemaining
+            if (turns != null && turns in CRITICAL_RACE_MIN_TURNS..CRITICAL_RACE_MAX_TURNS) {
+                val raceTurn = date.day + turns
+                if (lastCriticalRaceTurnHandled != raceTurn) {
+                    return CriticalRaceDue(snapshot.raceName, raceTurn, turns, "goal_ocr")
+                }
+            }
+        }
+
+        // Secondary: the configured racing plan's next optional must-win.
+        val planned =
+            racing.plannedRacesForTriggers
+                .filter { it.turnNumber - date.day in CRITICAL_RACE_MIN_TURNS..CRITICAL_RACE_MAX_TURNS }
+                .minByOrNull { it.turnNumber }
+        if (planned != null && lastCriticalRaceTurnHandled != planned.turnNumber) {
+            return CriticalRaceDue(planned.raceName, planned.turnNumber, planned.turnNumber - date.day, "racing_plan")
+        }
+        return null
     }
 
     /**

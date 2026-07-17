@@ -35,6 +35,12 @@ class SkillSpendTelemetryTest {
         threshold: Int? = null,
         tier: String? = null,
         reason: String? = null,
+        objective: String? = null,
+        criticalRace: String? = null,
+        criticalRaceSource: String? = null,
+        turnsUntilRace: Int? = null,
+        plannedSkill: String? = null,
+        plannedSkillObservedPrice: Int? = null,
     ) = SkillSpendTelemetry.buildRecord(
         timestamp = 1784213172197L,
         outcome = outcome,
@@ -53,6 +59,12 @@ class SkillSpendTelemetryTest {
         threshold = threshold,
         tier = tier,
         reason = reason,
+        objective = objective,
+        criticalRace = criticalRace,
+        criticalRaceSource = criticalRaceSource,
+        turnsUntilRace = turnsUntilRace,
+        plannedSkill = plannedSkill,
+        plannedSkillObservedPrice = plannedSkillObservedPrice,
     )
 
     @Nested
@@ -63,7 +75,7 @@ class SkillSpendTelemetryTest {
             val r = record()
             assertEquals("skill_spend", r.getString("type"))
             assertEquals(1784213172197L, r.getLong("ts"))
-            assertEquals("trigger-v2", r.getString("policy"))
+            assertEquals("trigger-v3", r.getString("policy"))
             assertEquals("committed", r.getString("outcome"))
             assertEquals("HIGH_WATER", r.getString("trigger"))
             assertEquals(PLAN_SKILL_POINT_CHECK, r.getString("plan"))
@@ -134,7 +146,7 @@ class SkillSpendTelemetryTest {
             }
             // What is always known still lands, so the record is never anonymous.
             assertEquals("skill_spend", r.getString("type"))
-            assertEquals("trigger-v2", r.getString("policy"))
+            assertEquals("trigger-v3", r.getString("policy"))
             assertTrue(r.has("ts"))
         }
 
@@ -148,12 +160,59 @@ class SkillSpendTelemetryTest {
     }
 
     @Nested
+    @DisplayName("Phase 2A fields (trigger-v3)")
+    inner class Phase2AFieldTests {
+        @Test
+        fun `a CRITICAL_RACE record carries the race rationale and the objective`() {
+            val r =
+                record(
+                    trigger = SkillCheckTrigger.CRITICAL_RACE,
+                    objective = "race_reward",
+                    criticalRace = "Kashiwa Kinen",
+                    criticalRaceSource = "goal_ocr",
+                    turnsUntilRace = 2,
+                )
+            assertEquals("CRITICAL_RACE", r.getString("trigger"))
+            assertEquals("race_reward", r.getString("objective"))
+            assertEquals("Kashiwa Kinen", r.getString("criticalRace"))
+            assertEquals("goal_ocr", r.getString("criticalRaceSource"))
+            assertEquals(2, r.getInt("turnsUntilRace"))
+            assertFalse(r.has("plannedSkill"), "affordable fields never appear on a critical-race record")
+        }
+
+        @Test
+        fun `a PLANNED_SKILL_AFFORDABLE record carries the observed-skill rationale`() {
+            val r =
+                record(
+                    trigger = SkillCheckTrigger.PLANNED_SKILL_AFFORDABLE,
+                    objective = "sparks",
+                    plannedSkill = "Swinging Maestro",
+                    plannedSkillObservedPrice = 274,
+                )
+            assertEquals("PLANNED_SKILL_AFFORDABLE", r.getString("trigger"))
+            assertEquals("sparks", r.getString("objective"))
+            assertEquals("Swinging Maestro", r.getString("plannedSkill"))
+            assertEquals(274, r.getInt("plannedSkillObservedPrice"))
+            assertFalse(r.has("criticalRace"), "critical fields never appear on an affordable record")
+        }
+
+        @Test
+        fun `objective rides on ordinary triggers too, and absent v3 fields stay omitted`() {
+            val r = record(trigger = SkillCheckTrigger.HIGH_WATER, objective = "rank")
+            assertEquals("rank", r.getString("objective"))
+            for (key in listOf("criticalRace", "criticalRaceSource", "turnsUntilRace", "plannedSkill", "plannedSkillObservedPrice")) {
+                assertFalse(r.has(key), "\"$key\" must be omitted when not passed")
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("threshold policy fields (trigger-v2)")
     inner class ThresholdPolicyTests {
         @Test
         fun `a manual-mode record carries threshold, tier and reason alongside a distinct trigger`() {
             val r = record(trigger = SkillCheckTrigger.SCENARIO_FINALS, threshold = 1000, tier = "manual", reason = "manual threshold 1000")
-            assertEquals("trigger-v2", r.getString("policy"))
+            assertEquals("trigger-v3", r.getString("policy"))
             assertEquals(1000, r.getInt("threshold"))
             assertEquals("manual", r.getString("tier"))
             assertEquals("manual threshold 1000", r.getString("reason"))

@@ -217,6 +217,14 @@ export interface SkillSpendRecord {
     threshold?: number
     tier?: string
     reason?: string
+    // trigger-v3 Phase 2A attribution: the preset objective plus trigger-specific rationale.
+    // Absent on older records.
+    objective?: string
+    criticalRace?: string
+    criticalRaceSource?: string
+    turnsUntilRace?: number
+    plannedSkill?: string
+    plannedSkillObservedPrice?: number
     file?: string
     lineNumber: number
 }
@@ -319,6 +327,12 @@ export function parseCorpus(text: string, file?: string): ParsedCorpus {
                 threshold: Number.isFinite(Number(obj.threshold)) && obj.threshold !== undefined ? Number(obj.threshold) : undefined,
                 tier: obj.tier !== undefined ? String(obj.tier) : undefined,
                 reason: obj.reason !== undefined ? String(obj.reason) : undefined,
+                objective: obj.objective !== undefined ? String(obj.objective) : undefined,
+                criticalRace: obj.criticalRace !== undefined ? String(obj.criticalRace) : undefined,
+                criticalRaceSource: obj.criticalRaceSource !== undefined ? String(obj.criticalRaceSource) : undefined,
+                turnsUntilRace: Number.isFinite(Number(obj.turnsUntilRace)) && obj.turnsUntilRace !== undefined ? Number(obj.turnsUntilRace) : undefined,
+                plannedSkill: obj.plannedSkill !== undefined ? String(obj.plannedSkill) : undefined,
+                plannedSkillObservedPrice: Number.isFinite(Number(obj.plannedSkillObservedPrice)) && obj.plannedSkillObservedPrice !== undefined ? Number(obj.plannedSkillObservedPrice) : undefined,
                 file,
                 lineNumber: i,
             })
@@ -1081,6 +1095,8 @@ export interface SkillSpendSummary {
     /** Per resolved threshold-policy tier ("manual", "developing", ...). trigger-v1 records land
      * under "pre-v2" — their governing policy is unknown, never inferred. */
     byTier: Record<string, number>
+    /** Per preset objective ("rank", "race_reward", ...). Pre-v3 records land under "pre-v3". */
+    byObjective: Record<string, number>
     /** Sessions whose commit was verified on screen. */
     committed: number
     /** Skills evidenced as bought across all sessions. */
@@ -1117,6 +1133,7 @@ export function analyzeSkillSpend(records: SkillSpendRecord[]): SkillSpendSummar
     const byPlan: Record<string, number> = {}
     const byOutcome: Record<string, number> = {}
     const byTier: Record<string, number> = {}
+    const byObjective: Record<string, number> = {}
     const armMap = new Map<string, { trainee: string; scenario: string; arm: string; sessions: number; committed: number; unspents: number[] }>()
     let unidentified = 0
     let committed = 0
@@ -1129,6 +1146,7 @@ export function analyzeSkillSpend(records: SkillSpendRecord[]): SkillSpendSummar
         bump(byPlan, r.plan ?? "unknown")
         bump(byOutcome, r.outcome)
         bump(byTier, r.tier ?? "pre-v2")
+        bump(byObjective, r.objective ?? "pre-v3")
         if (r.outcome === "committed") committed++
         if (r.confirmedIncomplete) confirmedIncomplete++
         confirmedSkills += r.confirmed.length
@@ -1159,6 +1177,7 @@ export function analyzeSkillSpend(records: SkillSpendRecord[]): SkillSpendSummar
         byPlan,
         byOutcome,
         byTier,
+        byObjective,
         committed,
         confirmedSkills,
         proposedSkills,
@@ -1205,6 +1224,7 @@ export function renderSkillSpendMarkdown(s: SkillSpendSummary): string {
     counts("By plan", s.byPlan)
     counts("By outcome", s.byOutcome)
     counts("By threshold-policy tier", s.byTier)
+    counts("By objective", s.byObjective)
     if (s.byArm.length > 0) {
         L.push("")
         L.push("| Trainee | Scenario | Arm | Sessions | Committed | Unspent p50 |")

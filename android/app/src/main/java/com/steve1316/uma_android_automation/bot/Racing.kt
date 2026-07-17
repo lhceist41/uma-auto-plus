@@ -538,6 +538,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         hasInsufficientGoalRacePtsRequirement = false
     }
 
+    /** The parsed racing plan, memoized for the Phase 2A critical-race plan arm. Respects
+     * enableRacingPlan (disabled -> empty -> the arm is structurally inert). */
+    internal val plannedRacesForTriggers: List<PlannedRace> by lazy { loadUserPlannedRaces() }
+
     /**
      * Retrieves the user's planned races from saved settings.
      *

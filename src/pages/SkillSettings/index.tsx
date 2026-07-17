@@ -14,7 +14,7 @@ import { SearchPageProvider } from "../../context/SearchPageContext"
 import { skillPlanSettingsPages } from "../SkillPlanSettings/config"
 import InfoContainer from "../../components/InfoContainer"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
-import { adaptiveThresholdLabel, type AccountTier } from "../../lib/adaptiveSkillPolicy"
+import { adaptiveThresholdLabel, objectiveLabel, type AccountTier } from "../../lib/adaptiveSkillPolicy"
 
 /**
  * The Skill Settings page.
@@ -202,6 +202,9 @@ const SkillSettings = () => {
                                 <InfoContainer>
                                     <View>
                                         <Text style={styles.infoLabel}>{adaptiveThresholdLabel(skillSettings.accountTier as AccountTier)}</Text>
+                                        <View style={styles.infoBlock}>
+                                            <Text style={styles.infoDescription}>Objective: {objectiveLabel(skillSettings.skillSpendObjective)} (from preset)</Text>
+                                        </View>
                                         <View style={styles.infoBlock}>
                                             <Text style={styles.infoDescription}>Auto — uses Developing for now. New — early account, thin supports (roughly F–E). Developing — growing roster (roughly D–B). Established — reliable roster (roughly A–S). Endgame — strong roster (roughly SS and up).</Text>
                                         </View>

@@ -1,6 +1,8 @@
 package com.steve1316.uma_android_automation.bot
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -119,6 +121,234 @@ class AdaptiveSkillPolicyTest {
             assertEquals(AccountTier.DEVELOPING, AccountTier.fromPersisted("developing"))
             assertEquals(AccountTier.ESTABLISHED, AccountTier.fromPersisted("established"))
             assertEquals(AccountTier.AUTO, AccountTier.fromPersisted("auto"))
+        }
+    }
+
+    @Nested
+    @DisplayName("Phase 2A: objective parsing and gating")
+    inner class ObjectiveTests {
+        @Test
+        fun `blank and unknown persisted values fall back to rank`() {
+            for (raw in listOf(null, "", "garbage", "RACE-REWARD", "competitive", "event_farm")) {
+                assertEquals(SkillSpendObjective.RANK, SkillSpendObjective.fromPersisted(raw), "\"$raw\"")
+            }
+        }
+
+        @Test
+        fun `known values parse case-insensitively`() {
+            assertEquals(SkillSpendObjective.RACE_REWARD, SkillSpendObjective.fromPersisted(" race_reward "))
+            assertEquals(SkillSpendObjective.SAFE_COMPLETION, SkillSpendObjective.fromPersisted("SAFE_COMPLETION"))
+            assertEquals(SkillSpendObjective.SPARKS, SkillSpendObjective.fromPersisted("sparks"))
+            assertEquals(SkillSpendObjective.RANK, SkillSpendObjective.fromPersisted("rank"))
+        }
+
+        @Test
+        fun `gates match the 2A contract exactly`() {
+            assertFalse(SkillSpendObjective.RANK.allowsCriticalRace())
+            assertFalse(SkillSpendObjective.RANK.allowsPlannedSkillAffordable())
+            assertTrue(SkillSpendObjective.SAFE_COMPLETION.allowsCriticalRace())
+            assertTrue(SkillSpendObjective.SAFE_COMPLETION.allowsPlannedSkillAffordable())
+            assertTrue(SkillSpendObjective.RACE_REWARD.allowsCriticalRace())
+            assertTrue(SkillSpendObjective.RACE_REWARD.allowsPlannedSkillAffordable())
+            assertFalse(SkillSpendObjective.SPARKS.allowsCriticalRace(), "sparks gets the critical-race arm only with 2B purity work")
+            assertTrue(SkillSpendObjective.SPARKS.allowsPlannedSkillAffordable())
+        }
+    }
+
+    @Nested
+    @DisplayName("Phase 2A: goal-text classification and race matching")
+    inner class GoalClassificationTests {
+        private val races = listOf("Kashiwa Kinen", "Japan Dirt Derby", "JBC Classic", "Japan Cup", "Tokyo Yushun (Japanese Derby)")
+
+        @Test
+        fun `the Kashiwa goal text classifies as a race with the right name`() {
+            val (kind, race) = classifyGoalText("Place top 3 in Kashiwa Kinen", races)
+            assertEquals(GoalKind.RACE, kind)
+            assertEquals("Kashiwa Kinen", race)
+        }
+
+        @Test
+        fun `OCR line breaks and punctuation normalize away`() {
+            assertEquals("Kashiwa Kinen", matchGoalRace("Place top 3 in\nKashiwa   Kinen!", races))
+            assertEquals("Tokyo Yushun (Japanese Derby)", matchGoalRace("place 5th or better in tokyo yushun japanese derby", races))
+        }
+
+        @Test
+        fun `the longest overlapping known name wins`() {
+            val overlapping = listOf("Japan Cup", "Japan Cup Trial")
+            assertEquals("Japan Cup Trial", matchGoalRace("Place top 3 in Japan Cup Trial", overlapping))
+            assertEquals("Japan Cup", matchGoalRace("Place top 3 in Japan Cup", overlapping))
+        }
+
+        @Test
+        fun `garbled partial text fails inertly instead of guessing`() {
+            assertNull(matchGoalRace("Plce top 3 in Kashwa Kinn", races))
+            assertEquals(GoalKind.OTHER, classifyGoalText("Plce top 3 in Kashwa Kinn", races).first)
+        }
+
+        @Test
+        fun `fan and Result-Pt goals are classified for their own emergencies, never as races`() {
+            assertEquals(GoalKind.FANS, classifyGoalText("Acquire 3,000 fans", races).first)
+            assertEquals(GoalKind.RESULT_PTS, classifyGoalText("Earn 60 Result Pt", races).first)
+            assertEquals(GoalKind.OTHER, classifyGoalText("Result Pt goal Achieved", listOf("Achieved Cup")).first)
+        }
+
+        @Test
+        fun `blank text is UNKNOWN and a non-race goal is OTHER`() {
+            assertEquals(GoalKind.UNKNOWN, classifyGoalText(null, races).first)
+            assertEquals(GoalKind.UNKNOWN, classifyGoalText("  ", races).first)
+            assertEquals(GoalKind.OTHER, classifyGoalText("Make your fated rival submit", races).first)
+        }
+
+        @Test
+        fun `an empty candidate list keeps the matcher inert`() {
+            assertNull(matchGoalRace("Place top 3 in Kashiwa Kinen", emptyList()))
+        }
+    }
+
+    @Nested
+    @DisplayName("Phase 2A: planned-skill evidence lifecycle")
+    inner class EvidenceTests {
+        private val plan = listOf("Professor of Curvature", "Swinging Maestro", "Groundwork")
+
+        @Test
+        fun `no trigger before the first observed parse`() {
+            val store = PlannedSkillEvidenceStore()
+            assertFalse(store.hasAnyObservation())
+            assertNull(store.affordableCandidate(plan, skillPoints = 5000))
+        }
+
+        @Test
+        fun `an observed affordable planned skill qualifies, an unaffordable one does not`() {
+            val store = PlannedSkillEvidenceStore()
+            store.recordParse(mapOf("Swinging Maestro" to 342, "Groundwork" to 120), parseTurn = 40, fromAffordableSession = false, confirmedPurchases = emptyList())
+            assertEquals("Groundwork" to 120, store.affordableCandidate(plan, skillPoints = 200))
+            assertNull(store.affordableCandidate(plan, skillPoints = 100), "119 SP cannot afford the 120 observation")
+            assertEquals("Swinging Maestro" to 342, store.affordableCandidate(plan, skillPoints = 400), "highest observed price wins when several qualify")
+        }
+
+        @Test
+        fun `a never-observed Potential-gated skill never qualifies`() {
+            val store = PlannedSkillEvidenceStore()
+            store.recordParse(mapOf("Groundwork" to 120), parseTurn = 40, fromAffordableSession = false, confirmedPurchases = emptyList())
+            assertNull(store.affordableCandidate(listOf("Chance of Victory"), skillPoints = 9999))
+        }
+
+        @Test
+        fun `a confirmed purchase removes the skill from candidacy`() {
+            val store = PlannedSkillEvidenceStore()
+            store.recordParse(mapOf("Groundwork" to 120), parseTurn = 40, fromAffordableSession = false, confirmedPurchases = emptyList())
+            store.recordParse(mapOf("Swinging Maestro" to 342), parseTurn = 41, fromAffordableSession = false, confirmedPurchases = listOf("Groundwork"))
+            assertNull(store.affordableCandidate(listOf("Groundwork"), skillPoints = 9999))
+        }
+
+        @Test
+        fun `a no-buy affordable session suppresses until an organic parse refreshes`() {
+            val store = PlannedSkillEvidenceStore()
+            store.recordParse(mapOf("Groundwork" to 120), parseTurn = 40, fromAffordableSession = false, confirmedPurchases = emptyList())
+            assertEquals("Groundwork" to 120, store.affordableCandidate(plan, skillPoints = 200))
+            // The affordable session ran and bought nothing: its own parse suppresses the skill.
+            store.recordParse(mapOf("Groundwork" to 120), parseTurn = 41, fromAffordableSession = true, confirmedPurchases = emptyList())
+            assertNull(store.affordableCandidate(plan, skillPoints = 5000))
+            // A later organic parse (any other trigger) lifts the suppression.
+            store.recordParse(mapOf("Groundwork" to 120), parseTurn = 45, fromAffordableSession = false, confirmedPurchases = emptyList())
+            assertEquals("Groundwork" to 120, store.affordableCandidate(plan, skillPoints = 5000))
+        }
+
+        @Test
+        fun `the SP-growth belt bounds repeated firings regardless of outcome`() {
+            val store = PlannedSkillEvidenceStore()
+            store.recordParse(mapOf("Groundwork" to 120), parseTurn = 40, fromAffordableSession = false, confirmedPurchases = emptyList())
+            store.markAffordableFired(skillPoints = 200)
+            assertNull(store.affordableCandidate(plan, skillPoints = 200 + AFFORDABLE_REARM_SP_GROWTH - 1))
+            assertEquals("Groundwork" to 120, store.affordableCandidate(plan, skillPoints = 200 + AFFORDABLE_REARM_SP_GROWTH))
+        }
+
+        @Test
+        fun `a later parse replaces prices - hint discounts only lower them`() {
+            val store = PlannedSkillEvidenceStore()
+            store.recordParse(mapOf("Swinging Maestro" to 342), parseTurn = 40, fromAffordableSession = false, confirmedPurchases = emptyList())
+            store.recordParse(mapOf("Swinging Maestro" to 274), parseTurn = 50, fromAffordableSession = false, confirmedPurchases = emptyList())
+            assertEquals("Swinging Maestro" to 274, store.affordableCandidate(plan, skillPoints = 300))
+        }
+
+        @Test
+        fun `a skill that unlocks later becomes eligible after the next organic parse`() {
+            val store = PlannedSkillEvidenceStore()
+            store.recordParse(mapOf("Groundwork" to 120), parseTurn = 40, fromAffordableSession = false, confirmedPurchases = emptyList())
+            assertNull(store.affordableCandidate(listOf("Swinging Maestro"), skillPoints = 9999))
+            store.recordParse(mapOf("Groundwork" to 120, "Swinging Maestro" to 342), parseTurn = 55, fromAffordableSession = false, confirmedPurchases = emptyList())
+            assertEquals("Swinging Maestro" to 342, store.affordableCandidate(listOf("Swinging Maestro"), skillPoints = 9999))
+        }
+    }
+
+    @Nested
+    @DisplayName("Phase 2A: trigger precedence in decideSkillCheck")
+    inner class Phase2ATriggerPrecedence {
+        private fun decide(
+            criticalRaceDue: Boolean = false,
+            affordableSkillDue: Boolean = false,
+            skillPoints: Int = 500,
+            threshold: Int = 1000,
+            highWaterPlanEnabled: Boolean = true,
+            day: Int = 40,
+            preFinalsPlanEnabled: Boolean = true,
+            alreadyHandledPreFinals: Boolean = false,
+        ) = decideSkillCheck(
+            skillPoints = skillPoints,
+            highWaterThreshold = threshold,
+            enableSkillPointCheck = true,
+            highWaterPlanEnabled = highWaterPlanEnabled,
+            alreadyHandledHighWater = false,
+            day = day,
+            preFinalsPlanEnabled = preFinalsPlanEnabled,
+            alreadyHandledPreFinals = alreadyHandledPreFinals,
+            criticalRaceDue = criticalRaceDue,
+            affordableSkillDue = affordableSkillDue,
+        )
+
+        @Test
+        fun `finals beats critical which beats affordable which beats high-water`() {
+            val allDue = decide(criticalRaceDue = true, affordableSkillDue = true, skillPoints = 5000, day = PRE_FINALS_DAY)
+            assertEquals(SkillCheckTrigger.SCENARIO_FINALS, allDue.trigger)
+            val critAndAffordable = decide(criticalRaceDue = true, affordableSkillDue = true, skillPoints = 5000)
+            assertEquals(SkillCheckTrigger.CRITICAL_RACE, critAndAffordable.trigger)
+            val affordableAndHighWater = decide(affordableSkillDue = true, skillPoints = 5000)
+            assertEquals(SkillCheckTrigger.PLANNED_SKILL_AFFORDABLE, affordableAndHighWater.trigger)
+            assertEquals(SkillCheckTrigger.HIGH_WATER, decide(skillPoints = 5000).trigger)
+        }
+
+        @Test
+        fun `both 2A triggers run the skillPointCheck plan`() {
+            assertEquals(PLAN_SKILL_POINT_CHECK, decide(criticalRaceDue = true).planKey)
+            assertEquals(PLAN_SKILL_POINT_CHECK, decide(affordableSkillDue = true).planKey)
+        }
+
+        @Test
+        fun `a disabled skillPointCheck plan disables both 2A triggers and keeps the breakpoint stop`() {
+            assertEquals(SkillCheckAction.NONE, decide(criticalRaceDue = true, affordableSkillDue = true, highWaterPlanEnabled = false).action)
+            val breakpoint = decide(skillPoints = 1200, highWaterPlanEnabled = false)
+            assertEquals(SkillCheckAction.BREAKPOINT_STOP, breakpoint.action)
+            assertEquals(SkillCheckTrigger.HIGH_WATER, breakpoint.trigger)
+        }
+
+        @Test
+        fun `the defaulted call reproduces V1 behavior exactly`() {
+            for (sp in listOf(0, 999, 1000, 1495)) {
+                val v1 =
+                    decideSkillCheck(
+                        skillPoints = sp,
+                        highWaterThreshold = 1000,
+                        enableSkillPointCheck = true,
+                        highWaterPlanEnabled = true,
+                        alreadyHandledHighWater = false,
+                        day = 40,
+                        preFinalsPlanEnabled = true,
+                        alreadyHandledPreFinals = false,
+                    )
+                val expected = if (sp >= 1000) SkillCheckAction.RUN_PLAN else SkillCheckAction.NONE
+                assertEquals(expected, v1.action, "sp=$sp")
+            }
         }
     }
 

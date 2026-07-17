@@ -1168,11 +1168,47 @@ chosen by `skills.skillSpendMode`:
   learn or change the tier by itself in V1.
 
 Resolution happens once per career (`bot/AdaptiveSkillPolicy.kt`, logged as
-`[SKILLS] Skill spend policy: ...`) and feeds the unchanged trigger policy in
+`[SKILLS] Skill spend policy: ...`) and feeds the trigger policy in
 `SkillCheckPolicy.kt` — finals-before-high-water ordering, the breakpoint stop when the plan is
 disabled, careerComplete, the optimizer strategies, and presets are all untouched. Unknown
-persisted values fall back to Manual + Auto. Every `skill_spend` record (`policy: trigger-v2`)
-carries the resolved `threshold`, `tier` (`manual` when no tier governs), and `reason`; the
-`trigger` field keeps recording what caused the spend itself. Presets must not set
+persisted values fall back to Manual + Auto. Presets must not set
 `skillSpendMode` or `accountTier` — like the threshold, they are the user's global choice, and
 account strength is a property of the account, not of a trainee profile.
+
+### Objective-gated triggers (Phase 2A)
+
+Presets may declare `skills.skillSpendObjective`: `rank` (default), `safe_completion`,
+`sparks`, or `race_reward`. The field is **preset-owned** -- every preset apply stamps it
+(absent → `rank`), so it can never leak from one preset to the next -- and it only gates the
+two Adaptive-mode dynamic triggers. Manual mode ignores it, and a `rank` objective keeps both
+triggers inert, which is why every unmigrated preset behaves exactly as before.
+
+- **`CRITICAL_RACE`** (`safe_completion` / `race_reward`): fires when a critical race is 1–2
+  turns away and at least 150 SP are banked, running the normal `skillPointCheck` plan before
+  the race. Two sources, recorded per firing: `goal_ocr` -- the Main screen's mandatory-goal
+  countdown and text, read fresh by Campaign each turn *before* the skill check (Racing's own
+  goal read happens later in the turn and can go stale, so it is deliberately not consumed) and
+  matched against the races table with exact normalized substring matching, longest name wins,
+  no fuzzy guessing; and `racing_plan` -- the preset's own planned races. Objectives are read
+  live rather than packaged because in-game events can redirect them mid-career. Both arms
+  share one handled-turn key, so the same race can never fire twice; OCR failure, garbled text,
+  fan/Result-Pt goals, and finals adjacency (day 71+) all fail inert. Finals stays strictly
+  above it in precedence.
+- **`PLANNED_SKILL_AFFORDABLE`** (everything except `rank`): fires when a skill from the
+  preset's plan, previously **seen on a real skill-screen parse this career**, is affordable at
+  its observed price (screen prices only fall as hint levels rise, so the bound is sound). No
+  speculative opens: a Potential-gated skill that never appears never costs a screen open, and
+  a skill that unlocks later becomes eligible after the next organic parse. A session that
+  fires and buys nothing suppresses its evidence until a non-affordable parse refreshes it,
+  and a further firing needs +120 SP over the last one -- the bounds on repeated opening.
+
+Precedence: `SCENARIO_FINALS` > `CRITICAL_RACE` > `PLANNED_SKILL_AFFORDABLE` > high-water;
+careerComplete and the debug harness keep their own contexts, and the breakpoint stop remains
+exclusively the high-water plan-disabled behavior (disabling that plan disables both new
+triggers with it).
+
+Every `skill_spend` record (`policy: trigger-v3`) carries the resolved `threshold`, `tier`
+(`manual` when no tier governs), `reason`, and `objective`; CRITICAL_RACE records add
+`criticalRace`/`criticalRaceSource`/`turnsUntilRace`, PLANNED_SKILL_AFFORDABLE records add
+`plannedSkill`/`plannedSkillObservedPrice`. The `trigger` field keeps recording what caused the
+spend itself. Older `trigger-v1`/`v2` records stay readable as-is.

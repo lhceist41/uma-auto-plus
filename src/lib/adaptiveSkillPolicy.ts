@@ -14,6 +14,30 @@ export type AccountTier = "auto" | "new" | "developing" | "established" | "endga
 export const DEFAULT_SKILL_SPEND_MODE: SkillSpendMode = "manual"
 export const DEFAULT_ACCOUNT_TIER: AccountTier = "auto"
 
+/** Phase 2A: the preset-owned career objective. "rank" is both the default and the
+ * V1-identical behavior (the adaptive dynamic triggers stay inert). */
+export type SkillSpendObjective = "safe_completion" | "rank" | "sparks" | "race_reward"
+export const DEFAULT_SKILL_SPEND_OBJECTIVE: SkillSpendObjective = "rank"
+export const SKILL_SPEND_OBJECTIVES: readonly SkillSpendObjective[] = ["safe_completion", "rank", "sparks", "race_reward"]
+
+/**
+ * The objective a preset apply must stamp: the preset's own value when it declares one, else the
+ * default. Used by BOTH real apply paths (Home preset apply and the rotation snapshot builder) -
+ * without the stamp, a preset that never sets the field would silently inherit the previous
+ * preset's objective through the category spread.
+ */
+export function presetObjectiveOf(presetSettings: unknown): SkillSpendObjective {
+    const raw = (presetSettings as { skills?: { skillSpendObjective?: unknown } } | null | undefined)?.skills?.skillSpendObjective
+    return SKILL_SPEND_OBJECTIVES.includes(raw as SkillSpendObjective) ? (raw as SkillSpendObjective) : DEFAULT_SKILL_SPEND_OBJECTIVE
+}
+
+/** Display label for the read-only objective line ("race_reward" -> "Race reward"). */
+export function objectiveLabel(objective: string): string {
+    const known = SKILL_SPEND_OBJECTIVES.includes(objective as SkillSpendObjective) ? objective : DEFAULT_SKILL_SPEND_OBJECTIVE
+    const words = known.replace(/_/g, " ")
+    return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
 /** The V1 tier table. Auto is a fixed alias for Developing (conservative middle). */
 export const ADAPTIVE_TIER_THRESHOLDS: Record<Exclude<AccountTier, "auto">, number> = {
     new: 300,

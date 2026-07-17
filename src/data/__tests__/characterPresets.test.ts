@@ -3,6 +3,7 @@ import objectives from "../character_objectives.json"
 import skills from "../skills.json"
 import { avoidAdvisoryFor, characterPresets, trainerAdvisories } from "../characterPresets"
 import { presetCharacter, presetOutfit, presetValidation } from "../presetMeta"
+import { SKILL_SPEND_OBJECTIVES } from "../../lib/adaptiveSkillPolicy"
 
 describe("avoidAdvisoryFor", () => {
     it("flags Haru Urara in Trackblazer as an avoid (turf-aptitude mismatch)", () => {
@@ -314,5 +315,22 @@ describe("Copano Rickey game data (NAR dirt patch)", () => {
         expect(unique.name_en).toBe("Luck Runs My Way")
         // Guards the advisory's claim: nothing here counts greens.
         expect(unique.condition).toBe("phase_laterhalf_random==1")
+    })
+})
+describe("skill spend objective (Phase 2A)", () => {
+    it("never declares an objective outside the known enum", () => {
+        for (const p of characterPresets) {
+            const objective = (p.settings as any)?.skills?.skillSpendObjective
+            if (objective !== undefined) {
+                expect(SKILL_SPEND_OBJECTIVES).toContain(objective)
+            }
+        }
+    })
+
+    it("no preset ever sets the user-global mode or tier", () => {
+        for (const p of characterPresets) {
+            expect((p.settings as any)?.skills?.skillSpendMode).toBeUndefined()
+            expect((p.settings as any)?.skills?.accountTier).toBeUndefined()
+        }
     })
 })

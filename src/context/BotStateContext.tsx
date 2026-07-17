@@ -2,7 +2,7 @@ import { createContext, useState, useMemo, useCallback } from "react"
 import { startTiming } from "../lib/performanceLogger"
 import racesData from "../data/races.json"
 import { skillPlanSettingsPages } from "../pages/SkillPlanSettings/config"
-import { DEFAULT_ACCOUNT_TIER, DEFAULT_SKILL_SPEND_MODE } from "../lib/adaptiveSkillPolicy"
+import { DEFAULT_ACCOUNT_TIER, DEFAULT_SKILL_SPEND_MODE, DEFAULT_SKILL_SPEND_OBJECTIVE } from "../lib/adaptiveSkillPolicy"
 
 /**
  * Configuration for an individual skill plan (e.g. preFinals, careerComplete).
@@ -107,6 +107,12 @@ export interface Settings {
         // Labels describe roster/support quality, not literal Team Rank. "auto" resolves to
         // "developing" in V1 (conservative middle); ignored entirely in manual mode.
         accountTier: string
+        // Phase 2A: what the applied preset's career is trying to achieve -
+        // "safe_completion" | "rank" | "sparks" | "race_reward". PRESET-owned, unlike mode/tier:
+        // every preset apply stamps it (absent -> "rank", the V1-identical behavior), so it can
+        // never leak from one preset to the next. Gates the adaptive-only dynamic triggers;
+        // Manual mode ignores it.
+        skillSpendObjective: string
         enableSkillPointCheck: boolean
         skillPointCheck: number
         preferredRunningStyle: string
@@ -426,6 +432,7 @@ export const defaultSettings: Settings = {
         // The constants live in lib/adaptiveSkillPolicy so the Jest suite pins the actual defaults.
         skillSpendMode: DEFAULT_SKILL_SPEND_MODE,
         accountTier: DEFAULT_ACCOUNT_TIER,
+        skillSpendObjective: DEFAULT_SKILL_SPEND_OBJECTIVE,
         enableSkillPointCheck: true,
         skillPointCheck: 350,
         preferredRunningStyle: "inherit",

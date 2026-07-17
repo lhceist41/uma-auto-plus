@@ -1,5 +1,6 @@
 import { Settings } from "../context/BotStateContext"
 import { characterPresets } from "../data/characterPresets"
+import { presetObjectiveOf } from "./adaptiveSkillPolicy"
 import { convertSettingsToBatch } from "./settingsUtils"
 
 /**
@@ -179,6 +180,10 @@ export function buildRotationSnapshotRows(base: Settings, rotation: RotationEntr
         if (merged.skills && base.skills) {
             merged.skills.skillPointCheck = base.skills.skillPointCheck
             merged.skills.enableSkillPointCheck = base.skills.enableSkillPointCheck
+            // Stamp the preset's objective on every snapshot (absent -> "rank"), mirroring the
+            // Home apply: the spread merges over the base settings, so an objective-less preset
+            // would otherwise inherit whatever objective the base happened to carry.
+            merged.skills.skillSpendObjective = presetObjectiveOf(preset.settings)
         }
 
         // The rotation entry's scenario is authoritative for which Campaign subclass runs.

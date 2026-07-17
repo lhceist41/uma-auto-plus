@@ -59,9 +59,11 @@ data class SkippedSkill(val name: String, val reason: String)
  */
 object SkillSpendTelemetry {
     /** Stamped on every record so a later policy change can be told apart in the corpus.
-     * trigger-v2 = the adaptive-threshold fields (`threshold`/`tier`/`reason`) exist; readers of
-     * trigger-v1 records must tolerate their absence rather than infer values for old records. */
-    const val POLICY_VERSION: String = "trigger-v2"
+     * trigger-v2 added the adaptive-threshold fields (`threshold`/`tier`/`reason`); trigger-v3
+     * adds `objective` plus the trigger-specific rationale fields (`criticalRace`,
+     * `criticalRaceSource`, `turnsUntilRace`, `plannedSkill`, `plannedSkillObservedPrice`).
+     * Readers of older records must tolerate absence rather than infer values. */
+    const val POLICY_VERSION: String = "trigger-v3"
 
     /** A planned skill whose live price rose above the remaining budget before it could be bought. */
     const val SKIP_UNAFFORDABLE: String = "unaffordable_drift"
@@ -89,6 +91,12 @@ object SkillSpendTelemetry {
         threshold: Int? = null,
         tier: String? = null,
         reason: String? = null,
+        objective: String? = null,
+        criticalRace: String? = null,
+        criticalRaceSource: String? = null,
+        turnsUntilRace: Int? = null,
+        plannedSkill: String? = null,
+        plannedSkillObservedPrice: Int? = null,
     ): JSONObject {
         val record = JSONObject()
         record.put("type", "skill_spend")
@@ -101,6 +109,16 @@ object SkillSpendTelemetry {
         threshold?.let { record.put("threshold", it) }
         tier?.let { record.put("tier", it) }
         reason?.let { record.put("reason", it) }
+        // Phase 2A attribution (trigger-v3): the preset objective governing trigger gating, and
+        // the trigger-specific rationale - which race made CRITICAL_RACE fire (and via which
+        // source, goal_ocr or racing_plan), or which observed planned skill made
+        // PLANNED_SKILL_AFFORDABLE fire and at what observed price.
+        objective?.let { record.put("objective", it) }
+        criticalRace?.let { record.put("criticalRace", it) }
+        criticalRaceSource?.let { record.put("criticalRaceSource", it) }
+        turnsUntilRace?.let { record.put("turnsUntilRace", it) }
+        plannedSkill?.let { record.put("plannedSkill", it) }
+        plannedSkillObservedPrice?.let { record.put("plannedSkillObservedPrice", it) }
         trigger?.let { record.put("trigger", it.name) }
         planKey?.let { record.put("plan", it) }
         strategy?.let { record.put("strategy", it) }

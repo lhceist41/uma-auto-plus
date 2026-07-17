@@ -13,6 +13,14 @@ enum class SkillCheckTrigger {
 
     /** The Debug Settings skill-buy harness. */
     MANUAL,
+
+    /** Phase 2A, adaptive-only: a critical race (mandatory goal via OCR, or a planned race) is
+     * 1-2 turns away - spend before it instead of waiting for the high-water threshold. */
+    CRITICAL_RACE,
+
+    /** Phase 2A, adaptive-only: a user-planned skill previously observed on the skill screen is
+     * affordable at its observed price - lock it in below the high-water threshold. */
+    PLANNED_SKILL_AFFORDABLE,
 }
 
 /** What the run loop does about a skill check this turn. */
@@ -68,6 +76,11 @@ data class SkillCheckDecision(
  * @param day The current career turn (1-75).
  * @param preFinalsPlanEnabled Whether the `preFinals` plan is enabled.
  * @param alreadyHandledPreFinals Whether the Pre-Finals check already ran this career.
+ * @param criticalRaceDue Phase 2A: a critical race qualified this turn (adaptive mode, objective
+ *   gate, window, SP floor, and re-arm all checked by the caller). Defaults inert so every V1
+ *   call site and test keeps its exact behavior.
+ * @param affordableSkillDue Phase 2A: an observed planned skill is affordable (evidence, belt,
+ *   and objective gate checked by the caller). Defaults inert.
  */
 fun decideSkillCheck(
     skillPoints: Int,
@@ -78,10 +91,22 @@ fun decideSkillCheck(
     day: Int,
     preFinalsPlanEnabled: Boolean,
     alreadyHandledPreFinals: Boolean,
+    criticalRaceDue: Boolean = false,
+    affordableSkillDue: Boolean = false,
 ): SkillCheckDecision {
     // Pre-Finals first: this is the original evaluation order in performGlobalChecks.
     if (!alreadyHandledPreFinals && day == PRE_FINALS_DAY && preFinalsPlanEnabled) {
         return SkillCheckDecision(SkillCheckAction.RUN_PLAN, SkillCheckTrigger.SCENARIO_FINALS, PLAN_PRE_FINALS)
+    }
+
+    // Phase 2A triggers sit between finals and high-water. Both run the skillPointCheck plan, so
+    // both are disabled with it - and neither ever breakpoint-stops: that semantic stays
+    // exclusively the high-water threshold's plan-disabled branch below.
+    if (criticalRaceDue && highWaterPlanEnabled) {
+        return SkillCheckDecision(SkillCheckAction.RUN_PLAN, SkillCheckTrigger.CRITICAL_RACE, PLAN_SKILL_POINT_CHECK)
+    }
+    if (affordableSkillDue && highWaterPlanEnabled) {
+        return SkillCheckDecision(SkillCheckAction.RUN_PLAN, SkillCheckTrigger.PLANNED_SKILL_AFFORDABLE, PLAN_SKILL_POINT_CHECK)
     }
 
     if (!alreadyHandledHighWater && enableSkillPointCheck && skillPoints >= highWaterThreshold) {

@@ -366,10 +366,39 @@ function skillSpendJson(
         threshold: number
         tier: string
         reason: string
+        objective: string
+        criticalRace: string
+        criticalRaceSource: string
+        turnsUntilRace: number
+        plannedSkill: string
+        plannedSkillObservedPrice: number
     }> = {},
 ): string {
     const record: Record<string, unknown> = { type: "skill_spend", ts: 1, policy: o.policy ?? "trigger-v1", outcome: o.outcome ?? "committed" }
-    for (const key of ["trigger", "plan", "trainee", "scenario", "fp", "turn", "spBefore", "spAfter", "unspent", "proposed", "confirmed", "skipped", "confirmedIncomplete", "threshold", "tier", "reason"] as const) {
+    for (const key of [
+        "trigger",
+        "plan",
+        "trainee",
+        "scenario",
+        "fp",
+        "turn",
+        "spBefore",
+        "spAfter",
+        "unspent",
+        "proposed",
+        "confirmed",
+        "skipped",
+        "confirmedIncomplete",
+        "threshold",
+        "tier",
+        "reason",
+        "objective",
+        "criticalRace",
+        "criticalRaceSource",
+        "turnsUntilRace",
+        "plannedSkill",
+        "plannedSkillObservedPrice",
+    ] as const) {
         if (o[key] !== undefined) record[key] = o[key]
     }
     return JSON.stringify(record)
@@ -730,6 +759,32 @@ describe("parseCorpus — skill_spend records", () => {
         expect(r.trigger).toBe("HIGH_WATER")
     })
 
+    it("parses trigger-v3 Phase 2A fields on all three trigger shapes", () => {
+        const { skillSpends } = parseCorpus(
+            [
+                skillSpendJson({ policy: "trigger-v3", trigger: "CRITICAL_RACE", objective: "race_reward", criticalRace: "Kashiwa Kinen", criticalRaceSource: "goal_ocr", turnsUntilRace: 2 }),
+                skillSpendJson({ policy: "trigger-v3", trigger: "PLANNED_SKILL_AFFORDABLE", objective: "sparks", plannedSkill: "Swinging Maestro", plannedSkillObservedPrice: 274 }),
+                skillSpendJson({ policy: "trigger-v3", trigger: "HIGH_WATER", objective: "rank" }),
+            ].join("\n") + "\n",
+            "c.jsonl",
+        )
+        expect(skillSpends[0].criticalRace).toBe("Kashiwa Kinen")
+        expect(skillSpends[0].criticalRaceSource).toBe("goal_ocr")
+        expect(skillSpends[0].turnsUntilRace).toBe(2)
+        expect(skillSpends[0].objective).toBe("race_reward")
+        expect(skillSpends[1].plannedSkill).toBe("Swinging Maestro")
+        expect(skillSpends[1].plannedSkillObservedPrice).toBe(274)
+        expect(skillSpends[2].objective).toBe("rank")
+        expect(skillSpends[2].criticalRace).toBeUndefined()
+        expect(skillSpends[2].plannedSkill).toBeUndefined()
+    })
+
+    it("leaves the v3 fields undefined on older records rather than inferring them", () => {
+        const { skillSpends } = parseCorpus(skillSpendJson({ policy: "trigger-v2", threshold: 1000, tier: "manual", reason: "manual threshold 1000" }), "c.jsonl")
+        expect(skillSpends[0].objective).toBeUndefined()
+        expect(skillSpends[0].criticalRace).toBeUndefined()
+    })
+
     it("leaves the v2 fields undefined on trigger-v1 records rather than inferring them", () => {
         const { skillSpends } = parseCorpus(skillSpendJson({ trigger: "HIGH_WATER" }), "c.jsonl")
         const r = skillSpends[0]
@@ -854,6 +909,23 @@ describe("analyzeSkillSpend", () => {
         )
         const s = analyzeSkillSpend(skillSpends)
         expect(s.byTier).toEqual({ manual: 1, established: 2, "pre-v2": 1 })
+    })
+
+    it("buckets sessions by objective, with pre-v3 records kept apart rather than inferred", () => {
+        const { skillSpends } = parseCorpus(
+            [
+                skillSpendJson({ policy: "trigger-v3", objective: "race_reward" }),
+                skillSpendJson({ policy: "trigger-v3", objective: "rank" }),
+                skillSpendJson({ policy: "trigger-v3", objective: "rank" }),
+                skillSpendJson({}), // trigger-v1: objective unknown
+            ].join("\n") + "\n",
+            "c.jsonl",
+        )
+        const s = analyzeSkillSpend(skillSpends)
+        expect(s.byObjective).toEqual({ race_reward: 1, rank: 2, "pre-v3": 1 })
+        const md = renderSkillSpendMarkdown(s)
+        expect(md).toContain("By objective")
+        expect(md).toContain("race_reward=1")
     })
 })
 
