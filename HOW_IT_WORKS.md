@@ -1250,3 +1250,11 @@ session; no knapsack required-groups are involved (an unfit required group would
 DP plan). `trigger-v4` records carry `recoveryRuleActive`/`recoveryRequired` whenever the gate
 was evaluated and `recoverySkill`/`recoveryObservedPrice` only when an injection actually
 bought something. Manual mode and the `rank`/`sparks` objectives never arm the rule.
+
+Live status: the first armed profile (Grass Wonder (Saintly Jade Cleric) Unity Cup,
+`safe_completion`, Long) completed a supervised career with the gate evaluated at five spend
+sessions: `recoveryRuleActive=true` and `recoveryRequired=false` in every record, satisfied
+once by the session's own planned selection (Deep Breaths in the working set while the plan
+bought Cooldown) and otherwise by recoveries already owned from earlier planned purchases.
+The injection-purchase arm has not fired live -- no shipped profile genuinely lacks a planned
+or owned recovery -- so that arm's coverage remains the deterministic fixture suite.

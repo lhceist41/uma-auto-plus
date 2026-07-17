@@ -250,6 +250,25 @@ describe("Grass Wonder outfit disambiguation (Saintly Jade Cleric)", () => {
         expect(deriveExcludeOutfits("Grass Wonder (Saintly Jade Cleric)")).toEqual([])
     })
 
+    it("stamps the SJC identity and safe_completion objective into a rotation snapshot", () => {
+        const base = {
+            general: { scenario: "Placeholder", enablePopupCheck: true, appliedPresetTrainee: "Stale Trainee", appliedPresetTraineeExcludes: "Stale Outfit" },
+            skills: { skillPointCheck: 750, enableSkillPointCheck: false, skillSpendObjective: "rank" },
+        } as any
+        const { rows, missing } = buildRotationSnapshotRows(base, [
+            {
+                inGameName: deriveInGameName("Grass Wonder (Saintly Jade Cleric)"),
+                presetKey: "Grass Wonder (Saintly Jade Cleric)",
+                scenario: "Unity Cup",
+                excludeOutfits: deriveExcludeOutfits("Grass Wonder (Saintly Jade Cleric)"),
+            },
+        ])
+        expect(missing).toHaveLength(0)
+        expect(rows.find((r) => r.category === "rot0_general" && r.key === "appliedPresetTrainee")?.value).toBe("[Saintly Jade Cleric] Grass Wonder")
+        expect(rows.find((r) => r.category === "rot0_general" && r.key === "appliedPresetTraineeExcludes")?.value).toBe("")
+        expect(rows.find((r) => r.category === "rot0_skills" && r.key === "skillSpendObjective")?.value).toBe("safe_completion")
+    })
+
     it("stamps the base identity, the SJC exclusion, and rank into a base Grass Wonder snapshot", () => {
         // A stale applied-SJC base would otherwise ride along; the base entry must carry its own
         // bare target plus the sibling exclusion, and must stamp rank over a leaky objective.

@@ -374,7 +374,8 @@ describe("Grass Wonder (Saintly Jade Cleric) presets", () => {
     it("matches its base-scenario preset in everything except the declared kit diffs", () => {
         // Same aptitude grid and same in-game objective chain as the base card (verified
         // 2026-07-17), so everything except the kit-driven diffs must stay a faithful clone:
-        // skill plans (her own recovery chain) and stat priorities / spark focus (growth).
+        // skill plans (her own recovery chain), stat priorities / spark focus (growth), and
+        // the Unity Cup safe_completion objective.
         for (const scenario of ["URA Finale", "Unity Cup", "Trackblazer"]) {
             const strip = (s: unknown) => {
                 const clone = JSON.parse(JSON.stringify(s))
@@ -461,10 +462,11 @@ describe("Grass Wonder (Saintly Jade Cleric) presets", () => {
 })
 
 describe("skill spend objective (Phase 2A)", () => {
-    it("exactly the 2B-1 farming set and the Copano sash profile declare objectives", () => {
-        // 2B-1 migrates the four farming profiles to sparks (planned-only spending under
-        // Adaptive); Copano URA keeps race_reward from 2A. Everything else stays implicitly
-        // "rank" (the V1-identical behavior). A new entry here must be a deliberate decision.
+    it("exactly the farming set, the Copano sash profile, and the SJC safety profile declare objectives", () => {
+        // The four farming profiles run sparks (planned-only spending under Adaptive); Copano
+        // URA keeps race_reward; Saintly Jade Cleric Unity Cup is the first safe_completion
+        // profile (arms recovery protection). Everything else stays implicitly "rank". A new
+        // entry here must be a deliberate decision.
         const declared = characterPresets
             .filter((p) => (p.settings as any)?.skills?.skillSpendObjective !== undefined)
             .map((p) => `${p.name} / ${p.scenario} -> ${(p.settings as any).skills.skillSpendObjective}`)
@@ -474,6 +476,7 @@ describe("skill spend objective (Phase 2A)", () => {
             "Copano Rickey / URA Finale -> race_reward",
             "Daiwa Scarlet (Legacy Farm) / URA Finale -> sparks",
             "El Condor Pasa (Legacy Farm) / URA Finale -> sparks",
+            "Grass Wonder (Saintly Jade Cleric) / Unity Cup -> safe_completion",
             "Super Creek (Blue Farm) / Unity Cup -> sparks",
         ])
     })
@@ -492,6 +495,13 @@ describe("skill spend objective (Phase 2A)", () => {
         undeclared("Air Groove", "URA Finale")
         undeclared("Copano Rickey", "Unity Cup")
         undeclared("Copano Rickey", "Trackblazer")
+        // The safety profile is Unity Cup only: her other scenarios and every base Grass Wonder
+        // preset stay on the implicit rank default.
+        undeclared("Grass Wonder (Saintly Jade Cleric)", "URA Finale")
+        undeclared("Grass Wonder (Saintly Jade Cleric)", "Trackblazer")
+        undeclared("Grass Wonder", "Unity Cup")
+        undeclared("Grass Wonder", "URA Finale")
+        undeclared("Grass Wonder", "Trackblazer")
     })
 
     it("never declares an objective outside the known enum", () => {

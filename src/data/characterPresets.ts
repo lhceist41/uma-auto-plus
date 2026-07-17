@@ -47774,6 +47774,12 @@ export const characterPresets: CharacterPreset[] = [
             skills: {
                 enableSkillPointCheck: true,
                 skillPointCheck: 350,
+                // Long safe-completion profile: under Adaptive mode this arms recovery
+                // protection (Long + safe_completion). Her plan already carries her own
+                // Long recovery chain (Deep Breaths -> Cooldown, hint-discounted), and her
+                // unique Superior Heal is itself recovery-class, so the deficit check reads
+                // satisfied and automatic injection stays a backstop. Inert in Manual mode.
+                skillSpendObjective: "safe_completion",
                 preferredRunningStyle: "late_surger",
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
