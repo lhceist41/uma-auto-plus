@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.automation_library.utils.SettingsHelper
+import com.steve1316.uma_android_automation.types.TrackDistance
 
 /*
  * V1 of the account-adaptive Skill Point policy: resolves the high-water threshold that
@@ -193,6 +194,57 @@ internal enum class SkillSpendObjective {
  */
 internal fun strategyTailAllowed(mode: SkillSpendMode, objective: SkillSpendObjective): Boolean =
     mode != SkillSpendMode.ADAPTIVE || objective.allowsStrategyTail()
+
+/** How a skill relates to stamina recovery, decided purely by icon family. 20021 is the white
+ * recovery family (which also contains inherited-unique recoveries - the candidate predicate,
+ * not this classifier, excludes those from injection), 20022 the gold upgrades. The 20024
+ * debuff variants and every other icon are NONE: debuffs already belong to the negative-skill
+ * machinery (iconId % 10 == 4). No description parsing anywhere. */
+internal enum class RecoveryClass {
+    NONE,
+    WHITE,
+    GOLD,
+}
+
+internal fun recoveryClassOf(iconId: Int): RecoveryClass =
+    when (iconId) {
+        20021 -> RecoveryClass.WHITE
+        20022 -> RecoveryClass.GOLD
+        else -> RecoveryClass.NONE
+    }
+
+/** Axis-free recovery skills verified safe as general injection candidates: the corner and
+ * straightaway recovery pairs (white + gold). Everything else without a matching distance,
+ * style, or surface axis is excluded - that is what keeps condition-trap skills like
+ * Triple 7s (fires only at 776-778m remaining) and Shake It Out out of injection. */
+internal val GENERAL_RECOVERY_IDS: Set<Int> =
+    setOf(
+        200352, // Corner Recovery ○
+        200351, // Swinging Maestro
+        200382, // Straightaway Recovery
+        200381, // Breath of Fresh Air
+    )
+
+/**
+ * The 2B-2 recovery-deficit gate: whether this career may inject a recovery purchase at all.
+ * Adaptive-only (Manual is always off), and armed by objective + the planner's resolved
+ * preferred distance: Long careers under safe_completion or race_reward, Medium only under
+ * safe_completion. An unresolved distance (null) fails inertly. This decides only whether the
+ * planner LOOKS for a deficit - satisfaction and candidate choice are separate, and no new
+ * trigger exists (the check runs inside sessions that already opened).
+ */
+internal fun allowsRecoveryInjection(
+    mode: SkillSpendMode,
+    objective: SkillSpendObjective,
+    preferredDistance: TrackDistance?,
+): Boolean {
+    if (mode != SkillSpendMode.ADAPTIVE) return false
+    return when (preferredDistance) {
+        TrackDistance.LONG -> objective == SkillSpendObjective.SAFE_COMPLETION || objective == SkillSpendObjective.RACE_REWARD
+        TrackDistance.MEDIUM -> objective == SkillSpendObjective.SAFE_COMPLETION
+        else -> false
+    }
+}
 
 /** Classification of the Main screen's current-goal text. */
 internal enum class GoalKind {

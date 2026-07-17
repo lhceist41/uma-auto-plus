@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.types.TrackDistance
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -186,6 +187,44 @@ class AdaptiveSkillPolicyTest {
             val parsed = SkillSpendObjective.fromPersisted("mystery")
             assertEquals(SkillSpendObjective.RANK, parsed)
             assertTrue(strategyTailAllowed(SkillSpendMode.ADAPTIVE, parsed))
+        }
+    }
+
+    @Nested
+    @DisplayName("2B-2: recovery classification and gate")
+    inner class RecoveryPolicyTests {
+        @Test
+        fun `icon families classify exactly`() {
+            assertEquals(RecoveryClass.WHITE, recoveryClassOf(20021))
+            assertEquals(RecoveryClass.GOLD, recoveryClassOf(20022))
+            assertEquals(RecoveryClass.NONE, recoveryClassOf(20024), "the debuff family is never a recovery for injection")
+            for (icon in listOf(20011, 20012, 20014, 20041, 20042, 20051, 10011, 0)) {
+                assertEquals(RecoveryClass.NONE, recoveryClassOf(icon), "icon $icon")
+            }
+        }
+
+        @Test
+        fun `the general allow-list pins exactly the verified corner and straightaway pairs`() {
+            assertEquals(setOf(200352, 200351, 200382, 200381), GENERAL_RECOVERY_IDS)
+        }
+
+        @Test
+        fun `the gate matrix matches the 2B-2 contract`() {
+            val long = TrackDistance.LONG
+            val medium = TrackDistance.MEDIUM
+            assertTrue(allowsRecoveryInjection(SkillSpendMode.ADAPTIVE, SkillSpendObjective.SAFE_COMPLETION, long))
+            assertTrue(allowsRecoveryInjection(SkillSpendMode.ADAPTIVE, SkillSpendObjective.RACE_REWARD, long))
+            assertTrue(allowsRecoveryInjection(SkillSpendMode.ADAPTIVE, SkillSpendObjective.SAFE_COMPLETION, medium))
+            assertFalse(allowsRecoveryInjection(SkillSpendMode.ADAPTIVE, SkillSpendObjective.RACE_REWARD, medium))
+            assertFalse(allowsRecoveryInjection(SkillSpendMode.ADAPTIVE, SkillSpendObjective.RANK, long))
+            assertFalse(allowsRecoveryInjection(SkillSpendMode.ADAPTIVE, SkillSpendObjective.SPARKS, long))
+            for (objective in SkillSpendObjective.entries) {
+                assertFalse(allowsRecoveryInjection(SkillSpendMode.ADAPTIVE, objective, TrackDistance.SPRINT), objective.name)
+                assertFalse(allowsRecoveryInjection(SkillSpendMode.ADAPTIVE, objective, TrackDistance.MILE), objective.name)
+                assertFalse(allowsRecoveryInjection(SkillSpendMode.ADAPTIVE, objective, null), "unknown distance, ${objective.name}")
+                assertFalse(allowsRecoveryInjection(SkillSpendMode.MANUAL, objective, long), "manual, ${objective.name}")
+                assertFalse(allowsRecoveryInjection(SkillSpendMode.MANUAL, objective, medium), "manual, ${objective.name}")
+            }
         }
     }
 

@@ -14,7 +14,7 @@ import { SearchPageProvider } from "../../context/SearchPageContext"
 import { skillPlanSettingsPages } from "../SkillPlanSettings/config"
 import InfoContainer from "../../components/InfoContainer"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
-import { adaptiveThresholdLabel, isPlannedOnlyObjective, objectiveLabel, type AccountTier } from "../../lib/adaptiveSkillPolicy"
+import { adaptiveThresholdLabel, isPlannedOnlyObjective, objectiveLabel, recoveryProtectionArms, type AccountTier } from "../../lib/adaptiveSkillPolicy"
 
 /**
  * The Skill Settings page.
@@ -209,6 +209,12 @@ const SkillSettings = () => {
                                             <View style={styles.infoBlock}>
                                                 <Text style={styles.infoDescription}>Planned-only spending: On</Text>
                                                 <Text style={styles.infoDescription}>Only planned skills and the existing inherited/negative options are considered. Leftover SP is accepted.</Text>
+                                            </View>
+                                        )}
+                                        {recoveryProtectionArms(skillSettings.skillSpendObjective, skillSettings.preferredTrackDistance) && (
+                                            <View style={styles.infoBlock}>
+                                                <Text style={styles.infoDescription}>Recovery protection: On for this profile</Text>
+                                                <Text style={styles.infoDescription}>Uses a compatible observed recovery skill when none is owned or planned.</Text>
                                             </View>
                                         )}
                                         <View style={styles.infoBlock}>

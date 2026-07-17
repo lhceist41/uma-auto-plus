@@ -1152,7 +1152,7 @@ The chosen plan is logged as `[KNAPSACK] DP plan: N skills for X SP. Skills: ...
 **A purchase is not complete until the confirmation screen is gone.** The on-screen skill-point counter
 is a selection preview, not a balance — see `docs/INCIDENTS.md`, entry 4.
 
-### Adaptive threshold (V1)
+### Adaptive threshold
 
 The mid-career high-water threshold that opens the skill screen comes from one of two sources,
 chosen by `skills.skillSpendMode`:
@@ -1160,12 +1160,12 @@ chosen by `skills.skillSpendMode`:
 - **Manual** (default): `skills.skillPointCheck`, exactly as configured. This is the pre-adaptive
   behavior bit-for-bit — existing users see no change unless they opt in.
 - **Adaptive**: a fixed table keyed by `skills.accountTier` — New 300, Developing 350,
-  Established 600, Endgame 1000, with Auto resolving to Developing in V1. Weak accounts spend
+  Established 600, Endgame 1000, with Auto currently resolving to Developing. Weak accounts spend
   earlier so mid-career races are not run skill-less; strong accounts hold for big
   knapsack-efficient buys. The tier is the user's own assessment of support/roster strength:
   the bot never reads Team Rank (the letter is a lifetime-accumulation number and a poor proxy
   for what the current deck can fund), does not inspect the support inventory, and does not
-  learn or change the tier by itself in V1.
+  learn or change the tier by itself.
 
 Resolution happens once per career (`bot/AdaptiveSkillPolicy.kt`, logged as
 `[SKILLS] Skill spend policy: ...`) and feeds the trigger policy in
@@ -1175,7 +1175,7 @@ persisted values fall back to Manual + Auto. Presets must not set
 `skillSpendMode` or `accountTier` — like the threshold, they are the user's global choice, and
 account strength is a property of the account, not of a trainee profile.
 
-### Objective-gated triggers (Phase 2A)
+### Objective-gated triggers
 
 Presets may declare `skills.skillSpendObjective`: `rank` (default), `safe_completion`,
 `sparks`, or `race_reward`. The field is **preset-owned** -- every preset apply stamps it
@@ -1213,7 +1213,7 @@ CRITICAL_RACE records add `criticalRace`/`criticalRaceSource`/`turnsUntilRace`,
 PLANNED_SKILL_AFFORDABLE records add `plannedSkill`/`plannedSkillObservedPrice`, and v4 adds
 `strategyTailAllowed` (below). The `trigger` field keeps recording what caused the spend itself.
 
-### Planned-only spending (Phase 2B-1)
+### Planned-only spending (sparks objective)
 
 A `sparks` objective changes what an Adaptive session may buy, never when it opens. The purchase
 planner always runs its common phases first (negative skills if enabled, inherited uniques if
@@ -1226,4 +1226,27 @@ exception -- a farming preset must plan its own recovery skills, and every migra
 Manual mode ignores the objective entirely and every other objective keeps the full tail, so
 nothing changes outside Adaptive sparks careers. Each record carries the decision as
 `strategyTailAllowed` (false exactly when the tail was skipped; absent when the session exited
-before planning). Recovery-deficit protection is Phase 2B-2 and not implemented yet.
+before planning).
+
+### Recovery protection
+
+Adaptive careers whose preset declares `safe_completion` or `race_reward` with a resolved Long
+preferred distance (Medium arms only under `safe_completion`) run a recovery-deficit check as a
+fourth common phase, after negatives, inherited uniques, and the user plan, and before any
+strategy tail. It never opens a session itself -- it only shapes purchases inside sessions the
+existing triggers already opened, and it changes no precedence, threshold, or breakpoint
+behavior. The deficit counts as satisfied by any compatible recovery that is owned (Obtained
+rows on the current parse, event gifts included, or purchases tracked this career, inherited
+uniques included) or that an earlier phase of the same session just bought; a planned recovery
+that has never been observable (a Potential-gated `Cooldown`) deliberately does not satisfy it,
+so a permanently absent gold can never block the fallback. When unsatisfied, the candidate set
+is exactly what the live screen shows: purchasable white or gold recoveries (icon families
+20021/20022; never inherited uniques, never the 20024 debuffs) that pass the same preference
+gate as every strategy, and that either commit to a distance, style, or surface axis or sit on
+the pinned general allow-list (the Corner/Straightaway Recovery pairs). Choice is
+deterministic: white before gold, then the lowest live screen price, then skill ID. A candidate
+that does not fit the remaining wave budget is skipped with a log and retried at the next real
+session; no knapsack required-groups are involved (an unfit required group would wipe the whole
+DP plan). `trigger-v4` records carry `recoveryRuleActive`/`recoveryRequired` whenever the gate
+was evaluated and `recoverySkill`/`recoveryObservedPrice` only when an injection actually
+bought something. Manual mode and the `rank`/`sparks` objectives never arm the rule.

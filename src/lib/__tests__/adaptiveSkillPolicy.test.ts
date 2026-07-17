@@ -9,6 +9,7 @@ import {
     isPlannedOnlyObjective,
     objectiveLabel,
     presetObjectiveOf,
+    recoveryProtectionArms,
     resolveAccountTier,
 } from "../adaptiveSkillPolicy"
 
@@ -108,5 +109,26 @@ describe("planned-only objective (2B-1)", () => {
     it("unknown values normalize to the default objective and stay full-tail", () => {
         expect(isPlannedOnlyObjective("nonsense")).toBe(false)
         expect(isPlannedOnlyObjective("")).toBe(false)
+    })
+})
+
+describe("recovery protection display gate (2B-2)", () => {
+    it("mirrors the Kotlin gate matrix exactly", () => {
+        expect(recoveryProtectionArms("safe_completion", "long")).toBe(true)
+        expect(recoveryProtectionArms("race_reward", "long")).toBe(true)
+        expect(recoveryProtectionArms("safe_completion", "medium")).toBe(true)
+        expect(recoveryProtectionArms("race_reward", "medium")).toBe(false)
+        for (const objective of ["rank", "sparks", "safe_completion", "race_reward"]) {
+            expect(recoveryProtectionArms(objective, "mile")).toBe(false)
+            expect(recoveryProtectionArms(objective, "sprint")).toBe(false)
+        }
+        expect(recoveryProtectionArms("rank", "long")).toBe(false)
+        expect(recoveryProtectionArms("sparks", "long")).toBe(false)
+    })
+
+    it("unknown objectives and distances fail inert", () => {
+        expect(recoveryProtectionArms("nonsense", "long")).toBe(false)
+        expect(recoveryProtectionArms("safe_completion", "")).toBe(false)
+        expect(recoveryProtectionArms("safe_completion", "no_preference")).toBe(false)
     })
 })

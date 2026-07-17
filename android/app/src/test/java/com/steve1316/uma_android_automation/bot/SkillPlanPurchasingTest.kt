@@ -7,11 +7,15 @@ import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.calculateCom
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.calculateOptimizeKnapsackPurchases
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.calculateOptimizeRankPurchases
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.calculateSkillPurchases
+import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.RecoveryCandidate
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.isDoubleCircleUpgrade
+import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.isRecoveryInjectionCandidate
 import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.matchesPreference
+import com.steve1316.uma_android_automation.bot.SkillPlan.Companion.pickRecoveryCandidate
 import com.steve1316.uma_android_automation.bot.SkillPlan.SkillPlanSettings
 import com.steve1316.uma_android_automation.bot.SkillPlan.SpendingStrategy
 import com.steve1316.uma_android_automation.types.RunningStyle
+import com.steve1316.uma_android_automation.types.SkillData
 import com.steve1316.uma_android_automation.types.TrackDistance
 import com.steve1316.uma_android_automation.types.TrackSurface
 import org.junit.jupiter.api.Assertions.*
@@ -754,6 +758,101 @@ class SkillPlanPurchasingTest {
                 )
             val allowed = calculateSkillPurchases(candidates, 1000, plannedOnlySettings(planned = listOf("Planned Pick")))
             assertEquals(setOf("Planned Pick", "Tail Pick"), allowed.map { it.first }.toSet())
+        }
+    }
+
+    // =========================================================================
+    // Recovery injection (2B-2): candidate predicate + deterministic picker
+    // =========================================================================
+
+    @Nested
+    @DisplayName("recovery injection candidates (2B-2)")
+    inner class RecoveryInjectionTests {
+        // Real bundled-data fixtures: ids, icons, and condition strings are verbatim from
+        // skills.json, so the axes derive through the REAL Conditions parser.
+        private fun data(id: Int, name: String, iconId: Int, condition: String, inherited: Boolean = false) =
+            SkillData(
+                id = id,
+                name = name,
+                description = "",
+                iconId = iconId,
+                cost = 160,
+                evalPt = 100,
+                condition = condition,
+                precondition = "",
+                bIsInheritedUnique = inherited,
+                communityTier = null,
+                upgrade = null,
+                downgrade = null,
+            )
+
+        private val deepBreaths = data(200742, "Deep Breaths", 20021, "distance_type==4&phase_random==1")
+        private val cooldown = data(200741, "Cooldown", 20022, "distance_type==4&phase_random==1")
+        private val hydrate = data(201352, "Hydrate", 20021, "running_style==2&phase_random==1")
+        private val beStill = data(201692, "Be Still", 20021, "running_style==3&phase_laterhalf_random==0&order_rate>=40")
+        private val cornerRecovery = data(200352, "Corner Recovery ○", 20021, "corner_random==1@corner_random==2@corner_random==3@corner_random==4")
+        private val swingingMaestro = data(200351, "Swinging Maestro", 20022, "corner_random==1@corner_random==2@corner_random==3@corner_random==4")
+        private val straightawayRecovery = data(200382, "Straightaway Recovery", 20021, "phase==1&corner==0")
+        private val breathOfFreshAir = data(200381, "Breath of Fresh Air", 20022, "phase==1&corner==0")
+        private val triple7s = data(201571, "Triple 7s", 20021, "remain_distance<=778&remain_distance>=776")
+        private val shakeItOut = data(201621, "Shake It Out", 20021, "activate_count_end_after>=3")
+        private val clearHeart = data(10451, "Clear Heart", 20021, "phase_random==1&order>=2&order_rate<=40", inherited = true)
+        private val cornerRecoveryX = data(200353, "Corner Recovery ×", 20024, "corner_random==1@corner_random==2")
+        private val familiarGround = data(202002, "Familiar Ground", 20021, "ground_type==2&phase_random==1&order_rate>=50")
+        private val paceChaserSavvy = data(201532, "Pace Chaser Savvy ○", 20011, "distance_rate>=50&order_rate<=60")
+
+        // The validation career's axes: Long / Late Surger / Turf.
+        private fun candidateUnderLongLate(skill: SkillData): Boolean =
+            isRecoveryInjectionCandidate(skill, TrackDistance.LONG, RunningStyle.LATE_SURGER, TrackSurface.TURF)
+
+        @Test
+        fun `distance and style compatible recoveries are candidates`() {
+            assertTrue(candidateUnderLongLate(deepBreaths), "white with a matching Long axis")
+            assertTrue(candidateUnderLongLate(cooldown), "gold with a matching Long axis")
+            assertTrue(candidateUnderLongLate(beStill), "white with the matching Late style axis")
+        }
+
+        @Test
+        fun `all four allow-listed general recoveries are candidates`() {
+            for (skill in listOf(cornerRecovery, swingingMaestro, straightawayRecovery, breathOfFreshAir)) {
+                assertTrue(candidateUnderLongLate(skill), skill.name)
+            }
+        }
+
+        @Test
+        fun `axis-incompatible recoveries are excluded`() {
+            assertFalse(candidateUnderLongLate(hydrate), "Pace-style recovery under a Late preference")
+            assertFalse(candidateUnderLongLate(familiarGround), "Dirt recovery under a Turf preference")
+        }
+
+        @Test
+        fun `axis-free condition traps are excluded`() {
+            assertFalse(candidateUnderLongLate(triple7s))
+            assertFalse(candidateUnderLongLate(shakeItOut))
+        }
+
+        @Test
+        fun `inherited uniques, debuffs, and non-recoveries are never candidates`() {
+            assertFalse(candidateUnderLongLate(clearHeart), "inherited unique recovery satisfies ownership but is never injected")
+            assertFalse(candidateUnderLongLate(cornerRecoveryX), "20024 debuff family")
+            assertFalse(candidateUnderLongLate(paceChaserSavvy), "non-recovery icon")
+        }
+
+        @Test
+        fun `classification still counts inherited uniques for ownership`() {
+            assertEquals(RecoveryClass.WHITE, recoveryClassOf(clearHeart.iconId))
+        }
+
+        @Test
+        fun `picker prefers white over gold, then price, then id`() {
+            val white170 = RecoveryCandidate("Corner Recovery ○", RecoveryClass.WHITE, 170, 200352)
+            val white160 = RecoveryCandidate("Deep Breaths", RecoveryClass.WHITE, 160, 200742)
+            val gold100 = RecoveryCandidate("Cooldown", RecoveryClass.GOLD, 100, 200741)
+            assertEquals(white160, pickRecoveryCandidate(listOf(white170, gold100, white160)), "cheap gold never outranks white")
+            assertEquals(gold100, pickRecoveryCandidate(listOf(gold100)), "gold injected when no white exists")
+            val twin = RecoveryCandidate("Straightaway Recovery", RecoveryClass.WHITE, 160, 200382)
+            assertEquals(twin, pickRecoveryCandidate(listOf(white160, twin)), "equal price ties break on the lower skill id (200382 < 200742)")
+            assertNull(pickRecoveryCandidate(emptyList()))
         }
     }
 }

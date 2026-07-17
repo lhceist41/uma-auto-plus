@@ -6,6 +6,7 @@ import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.types.RunningStyle
+import com.steve1316.uma_android_automation.types.SkillData
 import com.steve1316.uma_android_automation.types.SkillList
 import com.steve1316.uma_android_automation.types.SkillListEntry
 import com.steve1316.uma_android_automation.types.TrackDistance
@@ -43,6 +44,13 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
      * planner actually resolves it, so early exits that never reach the planner omit the telemetry
      * field instead of guessing. */
     private var sessionStrategyTailAllowed: Boolean? = null
+
+    /** 2B-2 recovery-protection outcome for this session, for telemetry. All null when the gate
+     * never armed (Manual, wrong objective or distance, or an exit before the planner ran). */
+    private var sessionRecoveryRuleActive: Boolean? = null
+    private var sessionRecoveryRequired: Boolean? = null
+    private var sessionRecoverySkill: String? = null
+    private var sessionRecoveryObservedPrice: Int? = null
 
     /** The original race strategy from settings. */
     private val racingSettingRunningStyleString = SettingsHelper.getStringSetting("racing", "originalRaceStrategy")
@@ -209,6 +217,57 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     prefStyle in skillInferredStyles
             return distanceOk && surfaceOk && styleOk
         }
+
+        /**
+         * Whether a skill may be auto-injected to cover a recovery deficit (2B-2). Purely
+         * structural: a purchasable white or gold recovery (never an inherited unique - those
+         * satisfy ownership but stay behind their own toggle; never a negative - the 20024
+         * debuff family already belongs to the negative phase) that the Style preference
+         * accepts AND that either explicitly commits to a distance, style, or surface axis or
+         * sits on the small verified general allow-list. Axis-free condition traps such as
+         * Triple 7s (fires only at 776-778m remaining) and Shake It Out fail the last check;
+         * inferred styles deliberately do not count as commitment (they are heuristic).
+         */
+        internal fun isRecoveryInjectionCandidate(
+            skillData: SkillData,
+            prefDistance: TrackDistance?,
+            prefStyle: RunningStyle?,
+            prefSurface: TrackSurface?,
+        ): Boolean {
+            if (recoveryClassOf(skillData.iconId) == RecoveryClass.NONE) return false
+            if (skillData.bIsInheritedUnique || skillData.bIsNegative) return false
+            if (!matchesPreference(
+                    skillData.trackDistance,
+                    skillData.runningStyle,
+                    skillData.inferredRunningStyles,
+                    skillData.trackSurface,
+                    prefDistance,
+                    prefStyle,
+                    prefSurface,
+                )
+            ) {
+                return false
+            }
+            val committed = skillData.trackDistance != null || skillData.runningStyle != null || skillData.trackSurface != null
+            return committed || skillData.id in GENERAL_RECOVERY_IDS
+        }
+
+        /** One observed recovery-injection candidate. [price] is the live cumulative screen price. */
+        internal data class RecoveryCandidate(
+            val name: String,
+            val recoveryClass: RecoveryClass,
+            val price: Int,
+            val skillId: Int,
+        )
+
+        /** Deterministic injection choice: WHITE before GOLD (survival protection wants the
+         * cheapest reliable heal, and gold does not automatically outrank white), then lowest
+         * live price, then skill ID as the stable tie-break. Budget is the caller's concern so
+         * an unaffordable best pick can be logged with the price that did not fit. */
+        internal fun pickRecoveryCandidate(candidates: List<RecoveryCandidate>): RecoveryCandidate? =
+            candidates.minWithOrNull(
+                compareBy({ it.recoveryClass != RecoveryClass.WHITE }, { it.price }, { it.skillId }),
+            )
 
         /**
          * Pure calculation function that determines which skills to buy using the Optimize Rank strategy.
@@ -860,7 +919,78 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 availableSkillPoints = availableSkillPoints - result.values.sum(),
             )
 
+        result +=
+            getRecoveryInjectionSkills(
+                skillList = skillList,
+                skillsToBuy = skillsToBuy + result.keys.toList(),
+                availableSkillPoints = availableSkillPoints - result.values.sum(),
+            )
+
         return result.toMap()
+    }
+
+    /**
+     * Phase 4 of the common checks (2B-2): recovery-deficit protection. Runs only when the
+     * adaptive gate arms for this career's objective and resolved preferred distance; it never
+     * opens a session by itself. The deficit is satisfied by any compatible recovery already
+     * owned (Obtained rows on this parse, or purchases tracked this career) or already selected
+     * by an earlier phase of THIS session - a planned recovery bought moments ago counts, while
+     * a planned-but-never-observed one deliberately does not (a Potential-gated Cooldown must
+     * never block the fallback). Otherwise the cheapest compatible observed candidate (WHITE
+     * before GOLD) is bought from the remaining wave budget; an unaffordable or absent candidate
+     * is skipped with a log and retried naturally at the next real session. Nothing is reserved
+     * across turns.
+     */
+    private fun getRecoveryInjectionSkills(skillList: SkillList, skillsToBuy: List<String>, availableSkillPoints: Int): Map<String, Int> {
+        val axes = resolvePreferredAxes()
+        if (!allowsRecoveryInjection(campaign.resolvedSkillThreshold.mode, campaign.skillSpendObjective, axes.trackDistance)) {
+            return emptyMap()
+        }
+        sessionRecoveryRuleActive = true
+
+        // Ownership and this session's earlier selections, all by name. Inherited-unique
+        // recoveries count here (a real heal is a real heal) even though they are never
+        // injection candidates themselves.
+        val satisfiedBy: String? =
+            (skillList.getObtainedSkills().keys + campaign.trainee.ownedSkillNames + skillsToBuy)
+                .firstOrNull { name ->
+                    val data: SkillData? = game.skillDatabase.getSkillData(name)
+                    data != null && recoveryClassOf(data.iconId) != RecoveryClass.NONE
+                }
+        if (satisfiedBy != null) {
+            sessionRecoveryRequired = false
+            MessageLog.i(TAG, "[SKILLS] Recovery protection satisfied by '$satisfiedBy'.")
+            return emptyMap()
+        }
+        sessionRecoveryRequired = true
+
+        val candidates: List<RecoveryCandidate> =
+            skillList.getAvailableSkills().values
+                .filter { entry ->
+                    entry.name !in skillsToBuy &&
+                        entry.bIsAvailable &&
+                        entry.screenPrice > 0 &&
+                        isRecoveryInjectionCandidate(entry.skillData, axes.trackDistance, axes.runningStyle, axes.trackSurface)
+                }
+                .map { RecoveryCandidate(it.name, recoveryClassOf(it.skillData.iconId), it.screenPrice, it.skillData.id) }
+        val choice: RecoveryCandidate? = pickRecoveryCandidate(candidates)
+        if (choice == null) {
+            MessageLog.i(TAG, "[SKILLS] Recovery protection found no compatible observed candidate.")
+            return emptyMap()
+        }
+        if (choice.price > availableSkillPoints) {
+            MessageLog.i(
+                TAG,
+                "[SKILLS] Recovery protection candidate '${choice.name}' costs ${choice.price} SP and does not fit the remaining budget ($availableSkillPoints SP).",
+            )
+            return emptyMap()
+        }
+        val entry: SkillListEntry = skillList.getAvailableSkills()[choice.name] ?: return emptyMap()
+        entry.buy()
+        sessionRecoverySkill = choice.name
+        sessionRecoveryObservedPrice = choice.price
+        MessageLog.i(TAG, "[SKILLS] Recovery protection selected '${choice.name}' at ${choice.price} SP.")
+        return mapOf(choice.name to choice.price)
     }
 
     /**
@@ -1389,9 +1519,13 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
      * @return True if the process completed successfully, false otherwise.
      */
     fun start(skillPlanName: String? = null, trigger: SkillCheckTrigger? = null): Boolean {
-        // Reset the per-session tail decision: it stays null on paths that exit before the planner
-        // runs, so those records omit the field rather than carrying a stale one.
+        // Reset the per-session tail and recovery decisions: they stay null on paths that exit
+        // before the planner runs, so those records omit the fields rather than carrying stale ones.
         sessionStrategyTailAllowed = null
+        sessionRecoveryRuleActive = null
+        sessionRecoveryRequired = null
+        sessionRecoverySkill = null
+        sessionRecoveryObservedPrice = null
 
         val bitmap: Bitmap = game.imageUtils.getSourceBitmap()
 
@@ -1676,6 +1810,10 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     plannedSkill = campaign.activeTriggerContext?.takeIf { it.trigger == trigger }?.plannedSkill,
                     plannedSkillObservedPrice = campaign.activeTriggerContext?.takeIf { it.trigger == trigger }?.plannedSkillObservedPrice,
                     strategyTailAllowed = sessionStrategyTailAllowed,
+                    recoveryRuleActive = sessionRecoveryRuleActive,
+                    recoveryRequired = sessionRecoveryRequired,
+                    recoverySkill = sessionRecoverySkill,
+                    recoveryObservedPrice = sessionRecoveryObservedPrice,
                 )
             OutcomeCorpus.append(game.myContext, record)
             MessageLog.i(

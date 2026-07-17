@@ -49,6 +49,20 @@ export function isPlannedOnlyObjective(objective: string): boolean {
     return known === "sparks"
 }
 
+/**
+ * 2B-2: whether recovery-deficit protection can arm for a profile, for the read-only Adaptive
+ * info line. Mirrors the Kotlin gate (allowsRecoveryInjection): Long careers under
+ * safe_completion or race_reward, Medium only under safe_completion, everything else inert.
+ * Unknown objectives normalize to the default first; unknown distances fail inert.
+ */
+export function recoveryProtectionArms(objective: string, preferredDistance: string): boolean {
+    const known = SKILL_SPEND_OBJECTIVES.includes(objective as SkillSpendObjective) ? (objective as SkillSpendObjective) : DEFAULT_SKILL_SPEND_OBJECTIVE
+    const distance = preferredDistance.trim().toLowerCase()
+    if (distance === "long") return known === "safe_completion" || known === "race_reward"
+    if (distance === "medium") return known === "safe_completion"
+    return false
+}
+
 /** The V1 tier table. Auto is a fixed alias for Developing (conservative middle). */
 export const ADAPTIVE_TIER_THRESHOLDS: Record<Exclude<AccountTier, "auto">, number> = {
     new: 300,

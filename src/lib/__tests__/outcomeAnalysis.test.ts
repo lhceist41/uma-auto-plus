@@ -373,6 +373,10 @@ function skillSpendJson(
         plannedSkill: string
         plannedSkillObservedPrice: number
         strategyTailAllowed: boolean
+        recoveryRuleActive: boolean
+        recoveryRequired: boolean
+        recoverySkill: string
+        recoveryObservedPrice: number
     }> = {},
 ): string {
     const record: Record<string, unknown> = { type: "skill_spend", ts: 1, policy: o.policy ?? "trigger-v1", outcome: o.outcome ?? "committed" }
@@ -400,6 +404,10 @@ function skillSpendJson(
         "plannedSkill",
         "plannedSkillObservedPrice",
         "strategyTailAllowed",
+        "recoveryRuleActive",
+        "recoveryRequired",
+        "recoverySkill",
+        "recoveryObservedPrice",
     ] as const) {
         if (o[key] !== undefined) record[key] = o[key]
     }
@@ -970,6 +978,33 @@ describe("analyzeSkillSpend", () => {
         expect(s.byObjectiveSpend["pre-v3"].unspentP50).toBeNull()
         const md = renderSkillSpendMarkdown(s)
         expect(md).toContain("| pre-v3 | 1 | 1 | 0 | n/a | 0 |")
+    })
+
+    it("summarizes recovery protection from the v4 fields only", () => {
+        const { skillSpends } = parseCorpus(
+            [
+                skillSpendJson({ policy: "trigger-v4", objective: "safe_completion", recoveryRuleActive: true, recoveryRequired: true, recoverySkill: "Deep Breaths", recoveryObservedPrice: 160 }),
+                skillSpendJson({ policy: "trigger-v4", objective: "safe_completion", recoveryRuleActive: true, recoveryRequired: false }),
+                skillSpendJson({ policy: "trigger-v4", objective: "safe_completion", recoveryRuleActive: true, recoveryRequired: true }), // required, no candidate
+                skillSpendJson({ policy: "trigger-v4", objective: "sparks", strategyTailAllowed: false }), // gate never armed
+            ].join("\n") + "\n",
+            "c.jsonl",
+        )
+        const s = analyzeSkillSpend(skillSpends)
+        expect(s.recovery).toEqual({ ruleActive: 3, required: 2, injected: 1, injectedSkills: { "Deep Breaths": 1 }, observedPrices: [160] })
+        const md = renderSkillSpendMarkdown(s)
+        expect(md).toContain("Recovery protection (trigger-v4): active=3 · required=2 · injected=1 (Deep Breaths=1) · observed prices: 160")
+    })
+
+    it("never infers recovery activation for old records, and omits the line when nothing armed", () => {
+        const { skillSpends } = parseCorpus(
+            [skillSpendJson({ policy: "trigger-v3", objective: "safe_completion" }), skillSpendJson({ policy: "trigger-v1" })].join("\n") + "\n",
+            "c.jsonl",
+        )
+        expect(skillSpends[0].recoveryRuleActive).toBeUndefined()
+        const s = analyzeSkillSpend(skillSpends)
+        expect(s.recovery).toEqual({ ruleActive: 0, required: 0, injected: 0, injectedSkills: {}, observedPrices: [] })
+        expect(renderSkillSpendMarkdown(s)).not.toContain("Recovery protection")
     })
 })
 

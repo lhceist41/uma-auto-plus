@@ -229,6 +229,13 @@ export interface SkillSpendRecord {
     // Adaptive sparks sessions (planned-only), true otherwise including Manual records; absent on
     // pre-v4 records and on sessions that exited before the planner resolved it. Never inferred.
     strategyTailAllowed?: boolean
+    // trigger-v4 (2B-2) recovery protection: present only on sessions where the recovery gate was
+    // evaluated; skill/price present only when an injection actually bought something. Absent on
+    // every earlier record - never inferred from the objective.
+    recoveryRuleActive?: boolean
+    recoveryRequired?: boolean
+    recoverySkill?: string
+    recoveryObservedPrice?: number
     file?: string
     lineNumber: number
 }
@@ -338,6 +345,10 @@ export function parseCorpus(text: string, file?: string): ParsedCorpus {
                 plannedSkill: obj.plannedSkill !== undefined ? String(obj.plannedSkill) : undefined,
                 plannedSkillObservedPrice: Number.isFinite(Number(obj.plannedSkillObservedPrice)) && obj.plannedSkillObservedPrice !== undefined ? Number(obj.plannedSkillObservedPrice) : undefined,
                 strategyTailAllowed: typeof obj.strategyTailAllowed === "boolean" ? obj.strategyTailAllowed : undefined,
+                recoveryRuleActive: typeof obj.recoveryRuleActive === "boolean" ? obj.recoveryRuleActive : undefined,
+                recoveryRequired: typeof obj.recoveryRequired === "boolean" ? obj.recoveryRequired : undefined,
+                recoverySkill: typeof obj.recoverySkill === "string" ? obj.recoverySkill : undefined,
+                recoveryObservedPrice: Number.isFinite(Number(obj.recoveryObservedPrice)) && obj.recoveryObservedPrice !== undefined ? Number(obj.recoveryObservedPrice) : undefined,
                 file,
                 lineNumber: i,
             })
@@ -1110,6 +1121,11 @@ export interface SkillSpendSummary {
     /** Per-objective spend behavior: sessions, commits, bought-skill count, median unspent SP
      * (null when no session carried the field), and how many sessions ran planned-only. */
     byObjectiveSpend: Record<string, { sessions: number; committed: number; confirmedSkills: number; unspentP50: number | null; tailDisabled: number }>
+    /** 2B-2 recovery protection: sessions whose gate was evaluated, how many found a real
+     * deficit, how many actually injected a purchase, and what was injected (name -> count,
+     * with observed prices collected). Old records without the fields count nowhere - policy
+     * activation is never inferred from the objective. */
+    recovery: { ruleActive: number; required: number; injected: number; injectedSkills: Record<string, number>; observedPrices: number[] }
     /** Sessions whose commit was verified on screen. */
     committed: number
     /** Skills evidenced as bought across all sessions. */
@@ -1148,6 +1164,7 @@ export function analyzeSkillSpend(records: SkillSpendRecord[]): SkillSpendSummar
     const byTier: Record<string, number> = {}
     const byObjective: Record<string, number> = {}
     const tailPolicy = { allowed: 0, disabled: 0, unknown: 0 }
+    const recovery = { ruleActive: 0, required: 0, injected: 0, injectedSkills: {} as Record<string, number>, observedPrices: [] as number[] }
     const objectiveSpendMap = new Map<string, { sessions: number; committed: number; confirmedSkills: number; unspents: number[]; tailDisabled: number }>()
     const armMap = new Map<string, { trainee: string; scenario: string; arm: string; sessions: number; committed: number; unspents: number[] }>()
     let unidentified = 0
@@ -1165,6 +1182,13 @@ export function analyzeSkillSpend(records: SkillSpendRecord[]): SkillSpendSummar
         if (r.strategyTailAllowed === true) tailPolicy.allowed++
         else if (r.strategyTailAllowed === false) tailPolicy.disabled++
         else tailPolicy.unknown++
+        if (r.recoveryRuleActive === true) recovery.ruleActive++
+        if (r.recoveryRequired === true) recovery.required++
+        if (r.recoverySkill !== undefined) {
+            recovery.injected++
+            bump(recovery.injectedSkills, r.recoverySkill)
+            if (r.recoveryObservedPrice !== undefined) recovery.observedPrices.push(r.recoveryObservedPrice)
+        }
         const objectiveKey = r.objective ?? "pre-v3"
         let os = objectiveSpendMap.get(objectiveKey)
         if (!os) {
@@ -1220,6 +1244,7 @@ export function analyzeSkillSpend(records: SkillSpendRecord[]): SkillSpendSummar
         byObjective,
         tailPolicy,
         byObjectiveSpend,
+        recovery,
         committed,
         confirmedSkills,
         proposedSkills,
@@ -1269,6 +1294,15 @@ export function renderSkillSpendMarkdown(s: SkillSpendSummary): string {
     counts("By objective", s.byObjective)
     L.push("")
     L.push(`Strategy tail (trigger-v4): allowed=${s.tailPolicy.allowed} · disabled=${s.tailPolicy.disabled} · unknown=${s.tailPolicy.unknown} (pre-v4 or exited before planning; a disabled tail with high leftover is the sparks policy working, not a failure)`)
+    if (s.recovery.ruleActive > 0) {
+        const skills = Object.entries(s.recovery.injectedSkills)
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .map(([k, v]) => `${k}=${v}`)
+            .join(" · ")
+        const prices = s.recovery.observedPrices.length > 0 ? ` · observed prices: ${s.recovery.observedPrices.join(", ")}` : ""
+        L.push("")
+        L.push(`Recovery protection (trigger-v4): active=${s.recovery.ruleActive} · required=${s.recovery.required} · injected=${s.recovery.injected}${skills ? ` (${skills})` : ""}${prices}`)
+    }
     const objectiveRows = Object.entries(s.byObjectiveSpend).sort((a, b) => b[1].sessions - a[1].sessions || a[0].localeCompare(b[0]))
     if (objectiveRows.length > 0) {
         L.push("")

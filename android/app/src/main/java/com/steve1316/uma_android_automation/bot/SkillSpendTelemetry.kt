@@ -64,8 +64,11 @@ object SkillSpendTelemetry {
      * `criticalRaceSource`, `turnsUntilRace`, `plannedSkill`, `plannedSkillObservedPrice`);
      * trigger-v4 adds `strategyTailAllowed` (2B-1 planned-only shaping: false on Adaptive sparks
      * sessions, true otherwise including every Manual record, absent when the session exited
-     * before the planner resolved it). Readers of older records must tolerate absence rather
-     * than infer values. */
+     * before the planner resolved it) and, still under the same version, the 2B-2 recovery
+     * fields: `recoveryRuleActive`/`recoveryRequired` on sessions where the recovery gate was
+     * evaluated, plus `recoverySkill`/`recoveryObservedPrice` only when an injection actually
+     * bought something. Readers of older records must tolerate absence rather than infer
+     * values. */
     const val POLICY_VERSION: String = "trigger-v4"
 
     /** A planned skill whose live price rose above the remaining budget before it could be bought. */
@@ -101,6 +104,10 @@ object SkillSpendTelemetry {
         plannedSkill: String? = null,
         plannedSkillObservedPrice: Int? = null,
         strategyTailAllowed: Boolean? = null,
+        recoveryRuleActive: Boolean? = null,
+        recoveryRequired: Boolean? = null,
+        recoverySkill: String? = null,
+        recoveryObservedPrice: Int? = null,
     ): JSONObject {
         val record = JSONObject()
         record.put("type", "skill_spend")
@@ -126,6 +133,14 @@ object SkillSpendTelemetry {
         // 2B-1 planner shaping (trigger-v4): whether this session's strategy tail was allowed.
         // False = planned-only (Adaptive sparks); absent = the planner never resolved it.
         strategyTailAllowed?.let { record.put("strategyTailAllowed", it) }
+        // 2B-2 recovery protection (same trigger-v4): gate evaluation and, when an injection
+        // bought something, the selected skill at its live observed price. All absent when the
+        // gate never armed; skill/price absent on satisfied, no-candidate, and unaffordable
+        // sessions (never fabricated).
+        recoveryRuleActive?.let { record.put("recoveryRuleActive", it) }
+        recoveryRequired?.let { record.put("recoveryRequired", it) }
+        recoverySkill?.let { record.put("recoverySkill", it) }
+        recoveryObservedPrice?.let { record.put("recoveryObservedPrice", it) }
         trigger?.let { record.put("trigger", it.name) }
         planKey?.let { record.put("plan", it) }
         strategy?.let { record.put("strategy", it) }

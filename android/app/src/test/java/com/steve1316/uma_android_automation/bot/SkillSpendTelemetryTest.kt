@@ -42,6 +42,10 @@ class SkillSpendTelemetryTest {
         plannedSkill: String? = null,
         plannedSkillObservedPrice: Int? = null,
         strategyTailAllowed: Boolean? = null,
+        recoveryRuleActive: Boolean? = null,
+        recoveryRequired: Boolean? = null,
+        recoverySkill: String? = null,
+        recoveryObservedPrice: Int? = null,
     ) = SkillSpendTelemetry.buildRecord(
         timestamp = 1784213172197L,
         outcome = outcome,
@@ -67,6 +71,10 @@ class SkillSpendTelemetryTest {
         plannedSkill = plannedSkill,
         plannedSkillObservedPrice = plannedSkillObservedPrice,
         strategyTailAllowed = strategyTailAllowed,
+        recoveryRuleActive = recoveryRuleActive,
+        recoveryRequired = recoveryRequired,
+        recoverySkill = recoverySkill,
+        recoveryObservedPrice = recoveryObservedPrice,
     )
 
     @Nested
@@ -245,6 +253,54 @@ class SkillSpendTelemetryTest {
             assertEquals("Hydrate", r.getString("plannedSkill"))
             assertEquals(180, r.getInt("plannedSkillObservedPrice"))
             assertFalse(r.getBoolean("strategyTailAllowed"))
+        }
+    }
+
+    @Nested
+    @DisplayName("recovery protection fields (trigger-v4, 2B-2)")
+    inner class RecoveryFieldTests {
+        @Test
+        fun `an injection session carries all four fields`() {
+            val r =
+                record(
+                    objective = "safe_completion",
+                    strategyTailAllowed = true,
+                    recoveryRuleActive = true,
+                    recoveryRequired = true,
+                    recoverySkill = "Deep Breaths",
+                    recoveryObservedPrice = 160,
+                )
+            assertTrue(r.getBoolean("recoveryRuleActive"))
+            assertTrue(r.getBoolean("recoveryRequired"))
+            assertEquals("Deep Breaths", r.getString("recoverySkill"))
+            assertEquals(160, r.getInt("recoveryObservedPrice"))
+            assertTrue(r.getBoolean("strategyTailAllowed"), "the tail field keeps its 2B-1 semantics")
+        }
+
+        @Test
+        fun `a satisfied session records required=false and no skill`() {
+            val r = record(recoveryRuleActive = true, recoveryRequired = false)
+            assertTrue(r.getBoolean("recoveryRuleActive"))
+            assertFalse(r.getBoolean("recoveryRequired"))
+            assertFalse(r.has("recoverySkill"))
+            assertFalse(r.has("recoveryObservedPrice"))
+        }
+
+        @Test
+        fun `a required session with no candidate never fabricates a skill`() {
+            val r = record(recoveryRuleActive = true, recoveryRequired = true)
+            assertTrue(r.getBoolean("recoveryRequired"))
+            assertFalse(r.has("recoverySkill"))
+            assertFalse(r.has("recoveryObservedPrice"))
+        }
+
+        @Test
+        fun `all four fields are absent when the gate never armed`() {
+            val r = record()
+            assertFalse(r.has("recoveryRuleActive"))
+            assertFalse(r.has("recoveryRequired"))
+            assertFalse(r.has("recoverySkill"))
+            assertFalse(r.has("recoveryObservedPrice"))
         }
     }
 
