@@ -225,6 +225,10 @@ export interface SkillSpendRecord {
     turnsUntilRace?: number
     plannedSkill?: string
     plannedSkillObservedPrice?: number
+    // trigger-v4 (2B-1) planner shaping: whether the session's strategy tail was allowed. False on
+    // Adaptive sparks sessions (planned-only), true otherwise including Manual records; absent on
+    // pre-v4 records and on sessions that exited before the planner resolved it. Never inferred.
+    strategyTailAllowed?: boolean
     file?: string
     lineNumber: number
 }
@@ -333,6 +337,7 @@ export function parseCorpus(text: string, file?: string): ParsedCorpus {
                 turnsUntilRace: Number.isFinite(Number(obj.turnsUntilRace)) && obj.turnsUntilRace !== undefined ? Number(obj.turnsUntilRace) : undefined,
                 plannedSkill: obj.plannedSkill !== undefined ? String(obj.plannedSkill) : undefined,
                 plannedSkillObservedPrice: Number.isFinite(Number(obj.plannedSkillObservedPrice)) && obj.plannedSkillObservedPrice !== undefined ? Number(obj.plannedSkillObservedPrice) : undefined,
+                strategyTailAllowed: typeof obj.strategyTailAllowed === "boolean" ? obj.strategyTailAllowed : undefined,
                 file,
                 lineNumber: i,
             })
@@ -1097,6 +1102,14 @@ export interface SkillSpendSummary {
     byTier: Record<string, number>
     /** Per preset objective ("rank", "race_reward", ...). Pre-v3 records land under "pre-v3". */
     byObjective: Record<string, number>
+    /** trigger-v4 planner shaping: sessions whose strategy tail was allowed vs disabled (planned-only).
+     * "unknown" = pre-v4 records and sessions that exited before the planner resolved it - never
+     * inferred. A disabled-tail session with high leftover SP is the sparks policy working as
+     * intended, not a failure. */
+    tailPolicy: { allowed: number; disabled: number; unknown: number }
+    /** Per-objective spend behavior: sessions, commits, bought-skill count, median unspent SP
+     * (null when no session carried the field), and how many sessions ran planned-only. */
+    byObjectiveSpend: Record<string, { sessions: number; committed: number; confirmedSkills: number; unspentP50: number | null; tailDisabled: number }>
     /** Sessions whose commit was verified on screen. */
     committed: number
     /** Skills evidenced as bought across all sessions. */
@@ -1134,6 +1147,8 @@ export function analyzeSkillSpend(records: SkillSpendRecord[]): SkillSpendSummar
     const byOutcome: Record<string, number> = {}
     const byTier: Record<string, number> = {}
     const byObjective: Record<string, number> = {}
+    const tailPolicy = { allowed: 0, disabled: 0, unknown: 0 }
+    const objectiveSpendMap = new Map<string, { sessions: number; committed: number; confirmedSkills: number; unspents: number[]; tailDisabled: number }>()
     const armMap = new Map<string, { trainee: string; scenario: string; arm: string; sessions: number; committed: number; unspents: number[] }>()
     let unidentified = 0
     let committed = 0
@@ -1147,6 +1162,20 @@ export function analyzeSkillSpend(records: SkillSpendRecord[]): SkillSpendSummar
         bump(byOutcome, r.outcome)
         bump(byTier, r.tier ?? "pre-v2")
         bump(byObjective, r.objective ?? "pre-v3")
+        if (r.strategyTailAllowed === true) tailPolicy.allowed++
+        else if (r.strategyTailAllowed === false) tailPolicy.disabled++
+        else tailPolicy.unknown++
+        const objectiveKey = r.objective ?? "pre-v3"
+        let os = objectiveSpendMap.get(objectiveKey)
+        if (!os) {
+            os = { sessions: 0, committed: 0, confirmedSkills: 0, unspents: [], tailDisabled: 0 }
+            objectiveSpendMap.set(objectiveKey, os)
+        }
+        os.sessions++
+        if (r.outcome === "committed") os.committed++
+        os.confirmedSkills += r.confirmed.length
+        if (r.unspent !== undefined) os.unspents.push(r.unspent)
+        if (r.strategyTailAllowed === false) os.tailDisabled++
         if (r.outcome === "committed") committed++
         if (r.confirmedIncomplete) confirmedIncomplete++
         confirmedSkills += r.confirmed.length
@@ -1171,6 +1200,17 @@ export function analyzeSkillSpend(records: SkillSpendRecord[]): SkillSpendSummar
         .map((e) => ({ trainee: e.trainee, scenario: e.scenario, arm: e.arm, sessions: e.sessions, committed: e.committed, unspentP50: percentile(e.unspents, 50) }))
         .sort((a, b) => a.trainee.localeCompare(b.trainee) || a.scenario.localeCompare(b.scenario) || a.arm.localeCompare(b.arm))
 
+    const byObjectiveSpend: Record<string, { sessions: number; committed: number; confirmedSkills: number; unspentP50: number | null; tailDisabled: number }> = {}
+    for (const [key, os] of objectiveSpendMap) {
+        byObjectiveSpend[key] = {
+            sessions: os.sessions,
+            committed: os.committed,
+            confirmedSkills: os.confirmedSkills,
+            unspentP50: os.unspents.length > 0 ? percentile(os.unspents, 50) : null,
+            tailDisabled: os.tailDisabled,
+        }
+    }
+
     return {
         sessions: records.length,
         byTrigger,
@@ -1178,6 +1218,8 @@ export function analyzeSkillSpend(records: SkillSpendRecord[]): SkillSpendSummar
         byOutcome,
         byTier,
         byObjective,
+        tailPolicy,
+        byObjectiveSpend,
         committed,
         confirmedSkills,
         proposedSkills,
@@ -1225,6 +1267,17 @@ export function renderSkillSpendMarkdown(s: SkillSpendSummary): string {
     counts("By outcome", s.byOutcome)
     counts("By threshold-policy tier", s.byTier)
     counts("By objective", s.byObjective)
+    L.push("")
+    L.push(`Strategy tail (trigger-v4): allowed=${s.tailPolicy.allowed} · disabled=${s.tailPolicy.disabled} · unknown=${s.tailPolicy.unknown} (pre-v4 or exited before planning; a disabled tail with high leftover is the sparks policy working, not a failure)`)
+    const objectiveRows = Object.entries(s.byObjectiveSpend).sort((a, b) => b[1].sessions - a[1].sessions || a[0].localeCompare(b[0]))
+    if (objectiveRows.length > 0) {
+        L.push("")
+        L.push("| Objective | Sessions | Committed | Skills bought | Unspent p50 | Planned-only sessions |")
+        L.push("|---|---:|---:|---:|---:|---:|")
+        for (const [key, o] of objectiveRows) {
+            L.push(`| ${key} | ${o.sessions} | ${o.committed} | ${o.confirmedSkills} | ${o.unspentP50 ?? "n/a"} | ${o.tailDisabled} |`)
+        }
+    }
     if (s.byArm.length > 0) {
         L.push("")
         L.push("| Trainee | Scenario | Arm | Sessions | Committed | Unspent p50 |")

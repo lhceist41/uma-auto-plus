@@ -60,10 +60,13 @@ data class SkippedSkill(val name: String, val reason: String)
 object SkillSpendTelemetry {
     /** Stamped on every record so a later policy change can be told apart in the corpus.
      * trigger-v2 added the adaptive-threshold fields (`threshold`/`tier`/`reason`); trigger-v3
-     * adds `objective` plus the trigger-specific rationale fields (`criticalRace`,
-     * `criticalRaceSource`, `turnsUntilRace`, `plannedSkill`, `plannedSkillObservedPrice`).
-     * Readers of older records must tolerate absence rather than infer values. */
-    const val POLICY_VERSION: String = "trigger-v3"
+     * added `objective` plus the trigger-specific rationale fields (`criticalRace`,
+     * `criticalRaceSource`, `turnsUntilRace`, `plannedSkill`, `plannedSkillObservedPrice`);
+     * trigger-v4 adds `strategyTailAllowed` (2B-1 planned-only shaping: false on Adaptive sparks
+     * sessions, true otherwise including every Manual record, absent when the session exited
+     * before the planner resolved it). Readers of older records must tolerate absence rather
+     * than infer values. */
+    const val POLICY_VERSION: String = "trigger-v4"
 
     /** A planned skill whose live price rose above the remaining budget before it could be bought. */
     const val SKIP_UNAFFORDABLE: String = "unaffordable_drift"
@@ -97,6 +100,7 @@ object SkillSpendTelemetry {
         turnsUntilRace: Int? = null,
         plannedSkill: String? = null,
         plannedSkillObservedPrice: Int? = null,
+        strategyTailAllowed: Boolean? = null,
     ): JSONObject {
         val record = JSONObject()
         record.put("type", "skill_spend")
@@ -119,6 +123,9 @@ object SkillSpendTelemetry {
         turnsUntilRace?.let { record.put("turnsUntilRace", it) }
         plannedSkill?.let { record.put("plannedSkill", it) }
         plannedSkillObservedPrice?.let { record.put("plannedSkillObservedPrice", it) }
+        // 2B-1 planner shaping (trigger-v4): whether this session's strategy tail was allowed.
+        // False = planned-only (Adaptive sparks); absent = the planner never resolved it.
+        strategyTailAllowed?.let { record.put("strategyTailAllowed", it) }
         trigger?.let { record.put("trigger", it.name) }
         planKey?.let { record.put("plan", it) }
         strategy?.let { record.put("strategy", it) }

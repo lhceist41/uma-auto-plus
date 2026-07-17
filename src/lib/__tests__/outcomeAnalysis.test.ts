@@ -372,6 +372,7 @@ function skillSpendJson(
         turnsUntilRace: number
         plannedSkill: string
         plannedSkillObservedPrice: number
+        strategyTailAllowed: boolean
     }> = {},
 ): string {
     const record: Record<string, unknown> = { type: "skill_spend", ts: 1, policy: o.policy ?? "trigger-v1", outcome: o.outcome ?? "committed" }
@@ -398,6 +399,7 @@ function skillSpendJson(
         "turnsUntilRace",
         "plannedSkill",
         "plannedSkillObservedPrice",
+        "strategyTailAllowed",
     ] as const) {
         if (o[key] !== undefined) record[key] = o[key]
     }
@@ -926,6 +928,48 @@ describe("analyzeSkillSpend", () => {
         const md = renderSkillSpendMarkdown(s)
         expect(md).toContain("By objective")
         expect(md).toContain("race_reward=1")
+    })
+
+    it("counts strategy-tail policy, with pre-v4 and unresolved sessions kept unknown rather than inferred", () => {
+        const { skillSpends } = parseCorpus(
+            [
+                skillSpendJson({ policy: "trigger-v4", objective: "sparks", strategyTailAllowed: false }),
+                skillSpendJson({ policy: "trigger-v4", objective: "rank", strategyTailAllowed: true }),
+                skillSpendJson({ policy: "trigger-v4", outcome: "failed" }), // exited before planning: field absent
+                skillSpendJson({ policy: "trigger-v3", objective: "race_reward" }), // pre-v4
+            ].join("\n") + "\n",
+            "c.jsonl",
+        )
+        const s = analyzeSkillSpend(skillSpends)
+        expect(s.tailPolicy).toEqual({ allowed: 1, disabled: 1, unknown: 2 })
+    })
+
+    it("summarizes spend behavior per objective, treating a disabled tail with leftovers as policy, not failure", () => {
+        const { skillSpends } = parseCorpus(
+            [
+                skillSpendJson({ policy: "trigger-v4", objective: "sparks", outcome: "committed", strategyTailAllowed: false, unspent: 400, proposed: [{ name: "Hydrate", price: 180 }], confirmed: ["Hydrate"] }),
+                skillSpendJson({ policy: "trigger-v4", objective: "sparks", outcome: "committed", strategyTailAllowed: false, unspent: 200, proposed: [{ name: "Swinging Maestro", price: 142 }], confirmed: ["Swinging Maestro"] }),
+                skillSpendJson({ policy: "trigger-v4", objective: "rank", outcome: "committed", strategyTailAllowed: true, unspent: 4, proposed: [{ name: "A", price: 1 }, { name: "B", price: 2 }], confirmed: ["A", "B"] }),
+            ].join("\n") + "\n",
+            "c.jsonl",
+        )
+        const s = analyzeSkillSpend(skillSpends)
+        expect(s.byObjectiveSpend.sparks).toEqual({ sessions: 2, committed: 2, confirmedSkills: 2, unspentP50: 200, tailDisabled: 2 })
+        expect(s.byObjectiveSpend.rank).toEqual({ sessions: 1, committed: 1, confirmedSkills: 2, unspentP50: 4, tailDisabled: 0 })
+        const md = renderSkillSpendMarkdown(s)
+        expect(md).toContain("Strategy tail (trigger-v4): allowed=1 · disabled=2 · unknown=0")
+        expect(md).toContain("| sparks | 2 | 2 | 2 | 200 | 2 |")
+        expect(md).toContain("| rank | 1 | 1 | 2 | 4 | 0 |")
+    })
+
+    it("does not infer the tail field for old records and reports missing leftovers honestly", () => {
+        const { skillSpends } = parseCorpus(skillSpendJson({ policy: "trigger-v1" }), "c.jsonl")
+        expect(skillSpends[0].strategyTailAllowed).toBeUndefined()
+        const s = analyzeSkillSpend(skillSpends)
+        expect(s.tailPolicy).toEqual({ allowed: 0, disabled: 0, unknown: 1 })
+        expect(s.byObjectiveSpend["pre-v3"].unspentP50).toBeNull()
+        const md = renderSkillSpendMarkdown(s)
+        expect(md).toContain("| pre-v3 | 1 | 1 | 0 | n/a | 0 |")
     })
 })
 

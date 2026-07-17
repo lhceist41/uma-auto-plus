@@ -38,6 +38,17 @@ export function objectiveLabel(objective: string): string {
     return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
+/**
+ * 2B-1: whether an objective buys planned skills only in Adaptive mode (the broad strategy tail
+ * is skipped and leftover SP is accepted). Mirrors the Kotlin gate
+ * (SkillSpendObjective.allowsStrategyTail): true only for "sparks". Unknown values normalize to
+ * the default objective first, matching presetObjectiveOf.
+ */
+export function isPlannedOnlyObjective(objective: string): boolean {
+    const known = SKILL_SPEND_OBJECTIVES.includes(objective as SkillSpendObjective) ? (objective as SkillSpendObjective) : DEFAULT_SKILL_SPEND_OBJECTIVE
+    return known === "sparks"
+}
+
 /** The V1 tier table. Auto is a fixed alias for Developing (conservative middle). */
 export const ADAPTIVE_TIER_THRESHOLDS: Record<Exclude<AccountTier, "auto">, number> = {
     new: 300,

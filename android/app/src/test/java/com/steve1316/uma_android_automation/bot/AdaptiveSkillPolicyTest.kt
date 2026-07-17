@@ -156,6 +156,40 @@ class AdaptiveSkillPolicyTest {
     }
 
     @Nested
+    @DisplayName("2B-1: strategy-tail gate")
+    inner class StrategyTailGateTests {
+        @Test
+        fun `sparks is the only objective without a tail`() {
+            assertFalse(SkillSpendObjective.SPARKS.allowsStrategyTail())
+            assertTrue(SkillSpendObjective.RANK.allowsStrategyTail())
+            assertTrue(SkillSpendObjective.SAFE_COMPLETION.allowsStrategyTail())
+            assertTrue(SkillSpendObjective.RACE_REWARD.allowsStrategyTail())
+        }
+
+        @Test
+        fun `manual mode always allows the tail regardless of objective`() {
+            for (objective in SkillSpendObjective.entries) {
+                assertTrue(strategyTailAllowed(SkillSpendMode.MANUAL, objective), objective.name)
+            }
+        }
+
+        @Test
+        fun `adaptive mode delegates to the objective`() {
+            assertFalse(strategyTailAllowed(SkillSpendMode.ADAPTIVE, SkillSpendObjective.SPARKS))
+            assertTrue(strategyTailAllowed(SkillSpendMode.ADAPTIVE, SkillSpendObjective.RANK))
+            assertTrue(strategyTailAllowed(SkillSpendMode.ADAPTIVE, SkillSpendObjective.SAFE_COMPLETION))
+            assertTrue(strategyTailAllowed(SkillSpendMode.ADAPTIVE, SkillSpendObjective.RACE_REWARD))
+        }
+
+        @Test
+        fun `an unknown persisted objective resolves to rank and keeps the tail`() {
+            val parsed = SkillSpendObjective.fromPersisted("mystery")
+            assertEquals(SkillSpendObjective.RANK, parsed)
+            assertTrue(strategyTailAllowed(SkillSpendMode.ADAPTIVE, parsed))
+        }
+    }
+
+    @Nested
     @DisplayName("Phase 2A: goal-text classification and race matching")
     inner class GoalClassificationTests {
         private val races = listOf("Kashiwa Kinen", "Japan Dirt Derby", "JBC Classic", "Japan Cup", "Tokyo Yushun (Japanese Derby)")

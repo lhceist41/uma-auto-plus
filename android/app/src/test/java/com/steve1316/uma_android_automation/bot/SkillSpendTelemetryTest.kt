@@ -41,6 +41,7 @@ class SkillSpendTelemetryTest {
         turnsUntilRace: Int? = null,
         plannedSkill: String? = null,
         plannedSkillObservedPrice: Int? = null,
+        strategyTailAllowed: Boolean? = null,
     ) = SkillSpendTelemetry.buildRecord(
         timestamp = 1784213172197L,
         outcome = outcome,
@@ -65,6 +66,7 @@ class SkillSpendTelemetryTest {
         turnsUntilRace = turnsUntilRace,
         plannedSkill = plannedSkill,
         plannedSkillObservedPrice = plannedSkillObservedPrice,
+        strategyTailAllowed = strategyTailAllowed,
     )
 
     @Nested
@@ -75,7 +77,7 @@ class SkillSpendTelemetryTest {
             val r = record()
             assertEquals("skill_spend", r.getString("type"))
             assertEquals(1784213172197L, r.getLong("ts"))
-            assertEquals("trigger-v3", r.getString("policy"))
+            assertEquals("trigger-v4", r.getString("policy"))
             assertEquals("committed", r.getString("outcome"))
             assertEquals("HIGH_WATER", r.getString("trigger"))
             assertEquals(PLAN_SKILL_POINT_CHECK, r.getString("plan"))
@@ -146,7 +148,7 @@ class SkillSpendTelemetryTest {
             }
             // What is always known still lands, so the record is never anonymous.
             assertEquals("skill_spend", r.getString("type"))
-            assertEquals("trigger-v3", r.getString("policy"))
+            assertEquals("trigger-v4", r.getString("policy"))
             assertTrue(r.has("ts"))
         }
 
@@ -207,12 +209,52 @@ class SkillSpendTelemetryTest {
     }
 
     @Nested
+    @DisplayName("planner shaping (trigger-v4)")
+    inner class PlannerShapingTests {
+        @Test
+        fun `a planned-only sparks session records the disabled tail`() {
+            val r = record(objective = "sparks", strategyTailAllowed = false)
+            assertFalse(r.getBoolean("strategyTailAllowed"))
+            assertEquals("sparks", r.getString("objective"))
+        }
+
+        @Test
+        fun `an allowed tail is recorded as true, including for manual-mode records`() {
+            assertTrue(record(objective = "rank", strategyTailAllowed = true).getBoolean("strategyTailAllowed"))
+            // Manual mode: the objective never gates the tail, so its records carry true.
+            assertTrue(record(tier = "manual", strategyTailAllowed = true).getBoolean("strategyTailAllowed"))
+        }
+
+        @Test
+        fun `the field is absent when the planner never resolved it`() {
+            val r = record(outcome = SkillSpendOutcome.FAILED, strategyTailAllowed = null)
+            assertFalse(r.has("strategyTailAllowed"))
+        }
+
+        @Test
+        fun `the field never disturbs the trigger or the v3 rationale`() {
+            val r =
+                record(
+                    trigger = SkillCheckTrigger.PLANNED_SKILL_AFFORDABLE,
+                    objective = "sparks",
+                    plannedSkill = "Hydrate",
+                    plannedSkillObservedPrice = 180,
+                    strategyTailAllowed = false,
+                )
+            assertEquals("PLANNED_SKILL_AFFORDABLE", r.getString("trigger"))
+            assertEquals("Hydrate", r.getString("plannedSkill"))
+            assertEquals(180, r.getInt("plannedSkillObservedPrice"))
+            assertFalse(r.getBoolean("strategyTailAllowed"))
+        }
+    }
+
+    @Nested
     @DisplayName("threshold policy fields (trigger-v2)")
     inner class ThresholdPolicyTests {
         @Test
         fun `a manual-mode record carries threshold, tier and reason alongside a distinct trigger`() {
             val r = record(trigger = SkillCheckTrigger.SCENARIO_FINALS, threshold = 1000, tier = "manual", reason = "manual threshold 1000")
-            assertEquals("trigger-v3", r.getString("policy"))
+            assertEquals("trigger-v4", r.getString("policy"))
             assertEquals(1000, r.getInt("threshold"))
             assertEquals("manual", r.getString("tier"))
             assertEquals("manual threshold 1000", r.getString("reason"))

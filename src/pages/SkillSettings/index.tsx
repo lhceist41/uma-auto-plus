@@ -14,7 +14,7 @@ import { SearchPageProvider } from "../../context/SearchPageContext"
 import { skillPlanSettingsPages } from "../SkillPlanSettings/config"
 import InfoContainer from "../../components/InfoContainer"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
-import { adaptiveThresholdLabel, objectiveLabel, type AccountTier } from "../../lib/adaptiveSkillPolicy"
+import { adaptiveThresholdLabel, isPlannedOnlyObjective, objectiveLabel, type AccountTier } from "../../lib/adaptiveSkillPolicy"
 
 /**
  * The Skill Settings page.
@@ -205,6 +205,12 @@ const SkillSettings = () => {
                                         <View style={styles.infoBlock}>
                                             <Text style={styles.infoDescription}>Objective: {objectiveLabel(skillSettings.skillSpendObjective)} (from preset)</Text>
                                         </View>
+                                        {isPlannedOnlyObjective(skillSettings.skillSpendObjective) && (
+                                            <View style={styles.infoBlock}>
+                                                <Text style={styles.infoDescription}>Planned-only spending: On</Text>
+                                                <Text style={styles.infoDescription}>Only planned skills and the existing inherited/negative options are considered. Leftover SP is accepted.</Text>
+                                            </View>
+                                        )}
                                         <View style={styles.infoBlock}>
                                             <Text style={styles.infoDescription}>Auto — uses Developing for now. New — early account, thin supports (roughly F–E). Developing — growing roster (roughly D–B). Established — reliable roster (roughly A–S). Endgame — strong roster (roughly SS and up).</Text>
                                         </View>

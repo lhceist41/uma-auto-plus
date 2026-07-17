@@ -1207,8 +1207,23 @@ careerComplete and the debug harness keep their own contexts, and the breakpoint
 exclusively the high-water plan-disabled behavior (disabling that plan disables both new
 triggers with it).
 
-Every `skill_spend` record (`policy: trigger-v3`) carries the resolved `threshold`, `tier`
-(`manual` when no tier governs), `reason`, and `objective`; CRITICAL_RACE records add
-`criticalRace`/`criticalRaceSource`/`turnsUntilRace`, PLANNED_SKILL_AFFORDABLE records add
-`plannedSkill`/`plannedSkillObservedPrice`. The `trigger` field keeps recording what caused the
-spend itself. Older `trigger-v1`/`v2` records stay readable as-is.
+Every `skill_spend` record (`policy: trigger-v4`; older versions stay readable) carries the
+resolved `threshold`, `tier` (`manual` when no tier governs), `reason`, and `objective`;
+CRITICAL_RACE records add `criticalRace`/`criticalRaceSource`/`turnsUntilRace`,
+PLANNED_SKILL_AFFORDABLE records add `plannedSkill`/`plannedSkillObservedPrice`, and v4 adds
+`strategyTailAllowed` (below). The `trigger` field keeps recording what caused the spend itself.
+
+### Planned-only spending (Phase 2B-1)
+
+A `sparks` objective changes what an Adaptive session may buy, never when it opens. The purchase
+planner always runs its common phases first (negative skills if enabled, inherited uniques if
+enabled, then the user plan with its chain substitution); with `sparks` under Adaptive mode the
+strategy-specific tail that normally spends the remaining budget (`OPTIMIZE_SKILLS`,
+`OPTIMIZE_RANK`, or the knapsack) is skipped at every spend session, careerComplete included.
+Leftover SP is accepted deliberately: unplanned filler dilutes the white-spark pool a farming
+career exists to build, and no broad leftover drain exists. There is no automatic recovery
+exception -- a farming preset must plan its own recovery skills, and every migrated profile does.
+Manual mode ignores the objective entirely and every other objective keeps the full tail, so
+nothing changes outside Adaptive sparks careers. Each record carries the decision as
+`strategyTailAllowed` (false exactly when the tail was skipped; absent when the session exited
+before planning). Recovery-deficit protection is Phase 2B-2 and not implemented yet.

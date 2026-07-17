@@ -39,6 +39,11 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     /** The preferred track distance override for training. */
     private val trainingSettingTrackDistanceString = SettingsHelper.getStringSetting("training", "preferredDistanceOverride")
 
+    /** Whether this session's strategy tail was allowed (2B-1 planned-only shaping). Null until the
+     * planner actually resolves it, so early exits that never reach the planner omit the telemetry
+     * field instead of guessing. */
+    private var sessionStrategyTailAllowed: Boolean? = null
+
     /** The original race strategy from settings. */
     private val racingSettingRunningStyleString = SettingsHelper.getStringSetting("racing", "originalRaceStrategy")
 
@@ -543,6 +548,10 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
          * @param skipDoubleCircle When true, exclude ◎ upgrades from the strategy-specific phase so the
          *   budget spreads across more ○ skills. The common phase (negative/inherited/user-planned) is
          *   intentionally unaffected — those are explicit picks, not opportunistic ratio fill.
+         * @param allowStrategyTail When false (2B-1 planned-only shaping, Adaptive + sparks), stop after
+         *   the common phases: the strategy-specific tail never runs and the leftover budget stays
+         *   unspent. The common phases are unaffected -- planned skills and the inherited/negative
+         *   toggles behave exactly as always.
          * @return Ordered list of (name, price) pairs representing all skills to buy.
          */
         fun calculateSkillPurchases(
@@ -550,6 +559,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             budget: Int,
             settings: SkillPlanSettings,
             skipDoubleCircle: Boolean = false,
+            allowStrategyTail: Boolean = true,
         ): List<Pair<String, Int>> {
             if (!settings.bIsEnabled) return emptyList()
 
@@ -560,6 +570,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             result.addAll(common)
             val spent = common.sumOf { it.second }
             val alreadyBought = common.map { it.first }
+
+            // Planned-only shaping (2B-1): the tail is skipped, leftover budget accepted.
+            if (!allowStrategyTail) return result
 
             // Strategy-specific purchases. Drop ◎ upgrades up front when the toggle is on so every
             // strategy below — including the knapsack DP that models the ○ -> ◎ chain as a group — only
@@ -1224,45 +1237,61 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 availableSkillPoints = availableSkillPoints - result.values.sum(),
             )
 
+        // Planned-only shaping (2B-1): Adaptive + sparks skips the strategy tail entirely - only
+        // the common phases above (negatives/inherited via their toggles, the user plan with its
+        // chain substitution) may buy, and the leftover budget is deliberately accepted instead of
+        // drained into spark-diluting filler. Manual mode always allows the tail (strategyTailAllowed
+        // is true for every objective there), so Manual behavior is untouched.
+        val bAllowStrategyTail: Boolean = strategyTailAllowed(campaign.resolvedSkillThreshold.mode, campaign.skillSpendObjective)
+        sessionStrategyTailAllowed = bAllowStrategyTail
+        if (!bAllowStrategyTail) {
+            MessageLog.i(
+                TAG,
+                "[SKILLS] Planned-only spending (${campaign.skillSpendObjective.token()} objective): skipping the ${skillPlanSettings.strategy.name} strategy tail.",
+            )
+        }
+
         // Execute strategy-specific checks.
-        result +=
-            when (skillPlanSettings.strategy) {
-                SpendingStrategy.DEFAULT -> {
-                    getSkillsToBuyDefaultStrategy(
-                        skillPlanSettings = skillPlanSettings,
-                        skillList = skillList,
-                        skillsToBuy = result.keys.toList(),
-                        availableSkillPoints = availableSkillPoints - result.values.sum(),
-                    )
-                }
+        if (bAllowStrategyTail) {
+            result +=
+                when (skillPlanSettings.strategy) {
+                    SpendingStrategy.DEFAULT -> {
+                        getSkillsToBuyDefaultStrategy(
+                            skillPlanSettings = skillPlanSettings,
+                            skillList = skillList,
+                            skillsToBuy = result.keys.toList(),
+                            availableSkillPoints = availableSkillPoints - result.values.sum(),
+                        )
+                    }
 
-                SpendingStrategy.OPTIMIZE_SKILLS -> {
-                    getSkillsToBuyOptimizeSkillsStrategy(
-                        skillPlanSettings = skillPlanSettings,
-                        skillList = skillList,
-                        skillsToBuy = result.keys.toList(),
-                        availableSkillPoints = availableSkillPoints - result.values.sum(),
-                    )
-                }
+                    SpendingStrategy.OPTIMIZE_SKILLS -> {
+                        getSkillsToBuyOptimizeSkillsStrategy(
+                            skillPlanSettings = skillPlanSettings,
+                            skillList = skillList,
+                            skillsToBuy = result.keys.toList(),
+                            availableSkillPoints = availableSkillPoints - result.values.sum(),
+                        )
+                    }
 
-                SpendingStrategy.OPTIMIZE_RANK -> {
-                    getSkillsToBuyOptimizeRankStrategy(
-                        skillPlanSettings = skillPlanSettings,
-                        skillList = skillList,
-                        skillsToBuy = result.keys.toList(),
-                        availableSkillPoints = availableSkillPoints - result.values.sum(),
-                    )
-                }
+                    SpendingStrategy.OPTIMIZE_RANK -> {
+                        getSkillsToBuyOptimizeRankStrategy(
+                            skillPlanSettings = skillPlanSettings,
+                            skillList = skillList,
+                            skillsToBuy = result.keys.toList(),
+                            availableSkillPoints = availableSkillPoints - result.values.sum(),
+                        )
+                    }
 
-                SpendingStrategy.OPTIMIZE_KNAPSACK -> {
-                    getSkillsToBuyOptimizeKnapsackStrategy(
-                        skillPlanSettings = skillPlanSettings,
-                        skillList = skillList,
-                        skillsToBuy = result.keys.toList(),
-                        availableSkillPoints = availableSkillPoints - result.values.sum(),
-                    )
+                    SpendingStrategy.OPTIMIZE_KNAPSACK -> {
+                        getSkillsToBuyOptimizeKnapsackStrategy(
+                            skillPlanSettings = skillPlanSettings,
+                            skillList = skillList,
+                            skillsToBuy = result.keys.toList(),
+                            availableSkillPoints = availableSkillPoints - result.values.sum(),
+                        )
+                    }
                 }
-            }
+        }
 
         MessageLog.v(TAG, "================ Skills To Buy =================")
         for ((name, price) in result) {
@@ -1360,6 +1389,10 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
      * @return True if the process completed successfully, false otherwise.
      */
     fun start(skillPlanName: String? = null, trigger: SkillCheckTrigger? = null): Boolean {
+        // Reset the per-session tail decision: it stays null on paths that exit before the planner
+        // runs, so those records omit the field rather than carrying a stale one.
+        sessionStrategyTailAllowed = null
+
         val bitmap: Bitmap = game.imageUtils.getSourceBitmap()
 
         val skillList = SkillList(game, campaign)
@@ -1642,6 +1675,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     turnsUntilRace = campaign.activeTriggerContext?.takeIf { it.trigger == trigger }?.turnsUntilRace,
                     plannedSkill = campaign.activeTriggerContext?.takeIf { it.trigger == trigger }?.plannedSkill,
                     plannedSkillObservedPrice = campaign.activeTriggerContext?.takeIf { it.trigger == trigger }?.plannedSkillObservedPrice,
+                    strategyTailAllowed = sessionStrategyTailAllowed,
                 )
             OutcomeCorpus.append(game.myContext, record)
             MessageLog.i(

@@ -6,6 +6,7 @@ import {
     SKILL_SPEND_OBJECTIVES,
     adaptiveThresholdFor,
     adaptiveThresholdLabel,
+    isPlannedOnlyObjective,
     objectiveLabel,
     presetObjectiveOf,
     resolveAccountTier,
@@ -93,5 +94,19 @@ describe("skill spend objective (Phase 2A)", () => {
         expect(objectiveLabel("safe_completion")).toBe("Safe completion")
         expect(objectiveLabel("rank")).toBe("Rank")
         expect(objectiveLabel("nonsense")).toBe("Rank")
+    })
+})
+
+describe("planned-only objective (2B-1)", () => {
+    it("only sparks is planned-only, mirroring the Kotlin strategy-tail gate", () => {
+        expect(isPlannedOnlyObjective("sparks")).toBe(true)
+        expect(isPlannedOnlyObjective("rank")).toBe(false)
+        expect(isPlannedOnlyObjective("safe_completion")).toBe(false)
+        expect(isPlannedOnlyObjective("race_reward")).toBe(false)
+    })
+
+    it("unknown values normalize to the default objective and stay full-tail", () => {
+        expect(isPlannedOnlyObjective("nonsense")).toBe(false)
+        expect(isPlannedOnlyObjective("")).toBe(false)
     })
 })

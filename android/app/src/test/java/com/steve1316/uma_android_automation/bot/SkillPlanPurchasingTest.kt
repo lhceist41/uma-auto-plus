@@ -645,4 +645,115 @@ class SkillPlanPurchasingTest {
             assertTrue(result.any { it.first == "Standard Distance ○" })
         }
     }
+
+    // =========================================================================
+    // Planned-only shaping (2B-1): allowStrategyTail = false
+    // =========================================================================
+
+    @Nested
+    @DisplayName("planned-only shaping (allowStrategyTail = false)")
+    inner class PlannedOnlyTests {
+        private fun plannedOnlySettings(
+            strategy: SpendingStrategy = SpendingStrategy.OPTIMIZE_RANK,
+            inherited: Boolean = false,
+            negatives: Boolean = false,
+            planned: List<String> = emptyList(),
+        ) = SkillPlanSettings(
+            bIsEnabled = true,
+            strategy = strategy,
+            bEnableBuyInheritedUniqueSkills = inherited,
+            bEnableBuyNegativeSkills = negatives,
+            skillNames = planned,
+        )
+
+        @Test
+        fun `planned skills are bought and the tail candidate is excluded`() {
+            val candidates =
+                listOf(
+                    SkillCandidate("Hydrate", price = 180, evaluationPoints = 120, isUserPlanned = true),
+                    // A cheap, high-ratio filler the greedy tail would take first if it ran.
+                    SkillCandidate("Triple 7s", price = 100, evaluationPoints = 300),
+                )
+            val result = calculateSkillPurchases(candidates, 1000, plannedOnlySettings(planned = listOf("Hydrate")), allowStrategyTail = false)
+            assertEquals(listOf("Hydrate" to 180), result)
+        }
+
+        @Test
+        fun `unplanned green and recovery flavored candidates stay unbought with budget to spare`() {
+            val candidates =
+                listOf(
+                    SkillCandidate("Corner Recovery ○", price = 170, evaluationPoints = 100),
+                    SkillCandidate("Right-Handed ○", price = 90, evaluationPoints = 80),
+                    SkillCandidate("Professor of Curvature", price = 200, evaluationPoints = 160, isUserPlanned = true),
+                )
+            val result = calculateSkillPurchases(candidates, 2000, plannedOnlySettings(planned = listOf("Professor of Curvature")), allowStrategyTail = false)
+            assertEquals(listOf("Professor of Curvature" to 200), result)
+        }
+
+        @Test
+        fun `planned recovery is bought like any planned skill`() {
+            val candidates = listOf(SkillCandidate("Swinging Maestro", price = 142, evaluationPoints = 130, isUserPlanned = true))
+            val result = calculateSkillPurchases(candidates, 500, plannedOnlySettings(planned = listOf("Swinging Maestro")), allowStrategyTail = false)
+            assertEquals(listOf("Swinging Maestro" to 142), result)
+        }
+
+        @Test
+        fun `inherited uniques and negatives keep their existing toggles`() {
+            val candidates =
+                listOf(
+                    SkillCandidate("Pure Heart", price = 200, evaluationPoints = 180, isInheritedUnique = true),
+                    SkillCandidate("Corner Recovery ×", price = 100, evaluationPoints = 40, isNegative = true),
+                )
+            val on = calculateSkillPurchases(candidates, 1000, plannedOnlySettings(inherited = true, negatives = true), allowStrategyTail = false)
+            assertEquals(setOf("Pure Heart", "Corner Recovery ×"), on.map { it.first }.toSet())
+            val off = calculateSkillPurchases(candidates, 1000, plannedOnlySettings(), allowStrategyTail = false)
+            assertTrue(off.isEmpty())
+        }
+
+        @Test
+        fun `an empty plan with both toggles off buys nothing and leaves the whole budget unspent`() {
+            val candidates =
+                listOf(
+                    SkillCandidate("Filler A", price = 100, evaluationPoints = 90),
+                    SkillCandidate("Filler B", price = 120, evaluationPoints = 200),
+                )
+            val result = calculateSkillPurchases(candidates, 999, plannedOnlySettings(), allowStrategyTail = false)
+            assertTrue(result.isEmpty())
+        }
+
+        @Test
+        fun `the knapsack strategy tail is skipped too`() {
+            val candidates =
+                listOf(
+                    SkillCandidate("Planned Pick", price = 150, evaluationPoints = 90, isUserPlanned = true),
+                    SkillCandidate("DP Favorite", price = 100, evaluationPoints = 400),
+                )
+            val result =
+                calculateSkillPurchases(
+                    candidates,
+                    1000,
+                    plannedOnlySettings(strategy = SpendingStrategy.OPTIMIZE_KNAPSACK, planned = listOf("Planned Pick")),
+                    allowStrategyTail = false,
+                )
+            assertEquals(listOf("Planned Pick" to 150), result)
+        }
+
+        @Test
+        fun `no duplicate purchase when a planned skill would also tempt the tail`() {
+            val candidates = listOf(SkillCandidate("Hydrate", price = 180, evaluationPoints = 500, isUserPlanned = true))
+            val result = calculateSkillPurchases(candidates, 1000, plannedOnlySettings(planned = listOf("Hydrate")), allowStrategyTail = false)
+            assertEquals(1, result.size)
+        }
+
+        @Test
+        fun `the default keeps the tail exactly as before`() {
+            val candidates =
+                listOf(
+                    SkillCandidate("Planned Pick", price = 150, evaluationPoints = 90, isUserPlanned = true),
+                    SkillCandidate("Tail Pick", price = 100, evaluationPoints = 400),
+                )
+            val allowed = calculateSkillPurchases(candidates, 1000, plannedOnlySettings(planned = listOf("Planned Pick")))
+            assertEquals(setOf("Planned Pick", "Tail Pick"), allowed.map { it.first }.toSet())
+        }
+    }
 }

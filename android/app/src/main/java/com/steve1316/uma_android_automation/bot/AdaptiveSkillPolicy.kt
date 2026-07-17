@@ -139,8 +139,8 @@ internal fun resolveSkillThresholdFromSettings(): ResolvedSkillThreshold {
  * that has not opted in - reproduces V1 adaptive behavior exactly.
  */
 
-/** What the applied preset's career is trying to achieve. Gates the Phase 2A triggers only;
- * Manual mode and the planner strategies ignore it entirely in 2A. */
+/** What the applied preset's career is trying to achieve. Gates the Phase 2A triggers and, in
+ * Adaptive mode only, the planner's strategy tail (2B-1); Manual mode ignores it entirely. */
 internal enum class SkillSpendObjective {
     /** Reliability first: spend before critical races, lock planned skills when affordable. */
     SAFE_COMPLETION,
@@ -148,8 +148,9 @@ internal enum class SkillSpendObjective {
     /** Evaluation efficiency - the default, and the V1-identical behavior (both triggers inert). */
     RANK,
 
-    /** Inheritance farming. 2A enables only the planned-skill trigger; the planned-only purity
-     * planner behavior is Phase 2B. */
+    /** Inheritance farming. 2A enables the planned-skill trigger; 2B-1 adds planned-only
+     * purchasing - the broad strategy tail is skipped so leftover SP is accepted instead of
+     * drained into spark-diluting filler. */
     SPARKS,
 
     /** A must-win race is the career's point (e.g. the Kashiwa sash). Both triggers enabled. */
@@ -162,6 +163,11 @@ internal enum class SkillSpendObjective {
 
     /** PLANNED_SKILL_AFFORDABLE gate: everything except pure rank farming. */
     fun allowsPlannedSkillAffordable(): Boolean = this != RANK
+
+    /** Strategy-tail gate (2B-1): a sparks career buys only planned skills (plus the existing
+     * inherited/negative toggles); every other objective keeps the full tail. Consulted only in
+     * Adaptive mode - see [strategyTailAllowed]. */
+    fun allowsStrategyTail(): Boolean = this != SPARKS
 
     /** Corpus token, e.g. `race_reward`. */
     fun token(): String = name.lowercase()
@@ -178,6 +184,15 @@ internal enum class SkillSpendObjective {
             }
     }
 }
+
+/**
+ * The one planner-shaping decision of 2B-1: whether this session's strategy tail may run.
+ * Manual mode always allows it (objective shaping is Adaptive-only, so Manual behavior stays
+ * bit-for-bit identical); Adaptive mode delegates to the objective. Pure so the exact semantic
+ * `mode != ADAPTIVE || objective.allowsStrategyTail()` is pinned by JUnit.
+ */
+internal fun strategyTailAllowed(mode: SkillSpendMode, objective: SkillSpendObjective): Boolean =
+    mode != SkillSpendMode.ADAPTIVE || objective.allowsStrategyTail()
 
 /** Classification of the Main screen's current-goal text. */
 internal enum class GoalKind {
