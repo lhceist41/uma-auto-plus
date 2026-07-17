@@ -13,6 +13,7 @@ export const characterBaseOutfits: Record<string, string> = {
     "Agnes Tachyon": "tach-nology",
     "Air Groove": "Empress Road",
     "Biwa Hayahide": "pf. Winning Equation...",
+    "Copano Rickey": "Eightfold☆Fortune",
     "Daiwa Scarlet": "Peak Blue",
     "El Condor Pasa": "El☆Número 1",
     "Gold Ship": "Red Strife",

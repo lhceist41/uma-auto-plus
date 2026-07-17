@@ -1001,7 +1001,19 @@ class RaceScraper(BaseScraper):
     TRACK_CODES = {
         10001: "Sapporo", 10002: "Hakodate", 10003: "Niigata", 10004: "Fukushima", 10005: "Nakayama",
         10006: "Tokyo", 10007: "Chukyo", 10008: "Kyoto", 10009: "Hanshin", 10010: "Kokura", 10101: "Ooi",
+        # NAR (dirt) tracks. Names read off each race's own factor.effect_1 in the races manifest
+        # (e.g. Kashiwa Kinen on 10104 carries 船橋レース場○), the same way Ooi/10101 was derived.
+        10103: "Kawasaki", 10104: "Funabashi", 10105: "Morioka",
     }
+
+    # GameTora tags a race with the JP history era in which it did not yet exist. That is a JP timeline
+    # marker, NOT an EN-availability flag - it only doubled as one while EN trailed JP on every era.
+    # EN received the NAR dirt update (Kashiwa Kinen, Teio Sho, M.C. Nambu Hai, Tokyo Daishoten and the
+    # Kawasaki/Funabashi/Morioka tracks) on 2026-07-17, so `pre_nar` races are live here: Copano
+    # Rickey's EN-playable career objectives reference Kashiwa Kinen, and the EN skill conditions now
+    # enumerate track ids 10103/10104. The 2.5th-anniversary Longchamp races have NOT reached EN, so
+    # they stay excluded. Add an era here only with equivalent evidence that EN actually has it.
+    ERAS_NOT_ON_EN = {"pre_2_5th_anni"}
     # Career-calendar pieces used to build the date string and turn number.
     MONTH_NAMES = {1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June",
                    7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"}
@@ -1036,11 +1048,13 @@ class RaceScraper(BaseScraper):
         first_place_fans = {entry["id"]: next((f["fans"] for f in entry["fans"] if f["order"] == 1), 0) for entry in race_fans}
 
         for instance in instances:
-            # Skip the fixed special races (Make Debut, Maiden, URA Finals, etc.) and any race not yet on the EN server.
+            # Skip the fixed special races (Make Debut, Maiden, URA Finals, etc.) and any race from an
+            # era EN has not received yet. See ERAS_NOT_ON_EN: this used to drop every flagged race,
+            # which silently excluded the whole NAR dirt calendar once EN got it.
             if instance.get("special_race"):
                 continue
             details = instance["details"]
-            if details.get("did_not_exist") is not None:
+            if details.get("did_not_exist") in self.ERAS_NOT_ON_EN:
                 continue
 
             date = f"{EVENT_CLASS_NAMES[instance['year']]} {self.MONTH_NAMES[instance['month']]}, {self.HALF_NAMES[instance['half']]}"
@@ -2051,8 +2065,10 @@ if __name__ == "__main__":
 
     run_scraper_with_retry(SupportCardScraper())
 
-    # Races are static so no need to re-scrape every time.
-    # run_scraper_with_retry(RaceScraper())
+    # Races are no longer static: EN now receives calendar additions (the 2026-07-17 NAR dirt update
+    # added Kashiwa Kinen and three racecourses), and leaving this off is why they never landed.
+    # The scraper full-rebuilds from two manifests, so re-running it every time is cheap and idempotent.
+    run_scraper_with_retry(RaceScraper())
 
     # Epithets and scraped character presets feed the upstream solver, which this fork does not
     # run - skipped so a scrape doesn't emit data files nothing consumes.

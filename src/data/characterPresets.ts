@@ -357,6 +357,65 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
         // Same grid as the base card; Stamina/Power/Guts +10% each. Research-graded (2026-07-06).
         recommended: ["URA Finale", "Trackblazer"],
     },
+    "Copano Rickey": {
+        // Dirt=A, Mile=A, Medium=A, Pace=A/Front=A, Turf=F; Power+10%/Wit+20%. Third pure dirt body
+        // after Haru Urara and Smart Falcon, and the only one built as a Pace Chaser: her unique
+        // (Luck Runs My Way) and her whole innate kit read the back half of the field
+        // (order_rate>=40 / running_style==2), which a Front build never satisfies.
+        //
+        // URA is THE profile: it ships the curated dirt agenda and exists to farm Kashiwa Kinen
+        // Winner's Sashes (t57, G1 Dirt Mile 1600m, Funabashi). Two things about it are easy to get
+        // wrong. First, the career objective only asks for 3rd or better, but a sash needs 1st -
+        // a completed career is NOT evidence the sash farm works, and the [CAREER_END] line cannot
+        // tell you which happened. Check the t57 race result and the sash count itself. Second, the
+        // agenda deliberately leaves Senior unpinned so she reaches t57 rested; more races would mean
+        // more fans and a worse Kashiwa.
+        //
+        // Observed baseline, first live career 2026-07-17 (n=1, so this proves the profile VIABLE, not
+        // repeatable): she WON Kashiwa and took the sash while arriving at t57 on
+        // Spd 657 / Sta 337 / Pow 656 / Guts 452 / Wit 413 at 43% energy, and finished the career on
+        // 850 / 479 / 838 / 645 / 625 (A rank, URA finals swept 3/3). Treat those as the only numbers
+        // with evidence behind them. Higher stats are of course better - aim for them as ceilings, not
+        // as thresholds - but nothing here requires ~900 Speed at Kashiwa or ~1050 at the end: the run
+        // that earned the sash cleared neither. Note her growth is Power +10% / Wit +20% with NO Speed
+        // growth, so Speed is the expensive stat on this body; Speed still leads the scorer (it leads
+        // every winning build here and one career is not evidence to demote it), but do not read the
+        // gap between these numbers and the old targets as a training failure.
+        //
+        // Potential gating: Chance of Victory (Lv3), Collaborative Graded Races o (Lv4) and Strong
+        // Steps (Lv5) are strong Dirt picks for her but are locked behind Potential levels the account
+        // has not reached (she is on Lv2), so they are kept OUT of the active plans. Raise her Potential
+        // and they become worth adding - Collaborative Graded Races o especially, at 70 SP with an
+        // is_dirtgrade==1 condition that covers every graded dirt race she runs.
+        //
+        // Green skills: an external guide claims her unique needs six greens for full effect. The
+        // only scaling term in the game data this repo can see is `phase_laterhalf_random==1`, which
+        // does not support that claim, so no preset here chases a green count. The greens in her plan
+        // are there because each is individually useful on a Dirt Mile Pace Chaser.
+        //
+        // Inheritance tradeoff: every extra skill she learns also enters the white-spark pool, so a
+        // wider buy dilutes the dirt whites this profile exists to farm. The plan stays compact partly
+        // for that reason.
+        //
+        // Deck archetype (advisory only - read SUPPORT_CARD_INVENTORY.md before acting on it, and
+        // remember the borrowed slot counts against the no-duplicate-character rule): Speed + Power +
+        // Wit + a dirt-hint card + one flexible slot, borrowing the strongest dirt/Speed card
+        // available. TP restoration for unattended queues is a global setting and is unrelated to the
+        // free race retries this preset enables.
+        //
+        // Research-graded (2026-07-17). Global release 2026-07-16, card 109801.
+        recommended: ["URA Finale"],
+        avoid: [
+            {
+                scenario: "Unity Cup",
+                reason: "Copano Rickey has Turf=F aptitude. Unity Cup's schedule is turf-dominant, so her dirt specialty does not carry it - the same reason Smart Falcon and Haru Urara avoid it. Her Unity Cup preset is a dirt-first ceiling build for anyone who wants it anyway; URA Finale is the profile that actually farms her dirt.",
+            },
+            {
+                scenario: "Trackblazer",
+                reason: "Copano Rickey has Turf=F aptitude. Trackblazer entry is fan-gated rather than aptitude-gated so she can enter, but the Junior pool she can win in is dirt-only, and her best turf row is unwinnable. Caution, not a ban - unvalidated until a live career says otherwise.",
+            },
+        ],
+    },
     "Smart Falcon": {
         // Dirt=A, Mile=A, Medium=A, Front=A; Speed+20%/Power+10%. Dirt specialist in the Haru
         // Urara mold: the URA preset ships a curated dirt agenda (mandatory mode) around her
@@ -27364,6 +27423,232 @@ export const characterPresets: CharacterPreset[] = [
     // is velocity+accel (no recovery), so no recovery front-loading. Skill plan is Front Runner + Mile
     // greens. 2026-07-06.
     {
+        name: "Copano Rickey",
+        scenario: "URA Finale",
+        settings: {
+            general: {
+                scenario: "URA Finale",
+                enablePopupCheck: false,
+                enableCraneGameAttempt: true,
+                enableStopBeforeFinals: false,
+                enableStopAtDate: false,
+                stopAtDates: ["Senior January Early"],
+                waitDelay: 0.5,
+                dialogWaitDelay: 0.5,
+            },
+            racing: {
+                enableFarmingFans: false,
+                ignoreConsecutiveRaceWarning: false,
+                daysToRunExtraRaces: 5,
+                disableRaceRetries: false,
+                // Free retries only. The Kashiwa sash needs a WIN, not the 3rd-place the objective
+                // accepts, so a retry is worth taking - but never on premium currency: Alarm Clock
+                // spending stays governed by the user's global alarmClockPolicy, which is a separate
+                // system from the queue's TP restoration.
+                enableFreeRaceRetry: true,
+                enableCompleteCareerOnFailure: true,
+                enableStopOnMandatoryRaces: false,
+                enableForceRacing: false,
+                enableUserInGameRaceAgenda: false,
+                limitRacesToInGameAgenda: false,
+                skipSummerTrainingForAgenda: false,
+                selectedUserAgenda: "Agenda 1",
+                customAgendaTitle: "",
+                // Curated dirt agenda in the Smart Falcon / Haru Urara mold. Her goal chain is a
+                // hybrid: nothing at all before t31, then dense from t47 (47,52,57,60,67,69,72), so
+                // the plan only fills the empty Junior/Classic half and leaves Senior to the goals.
+                // Generated with scripts/generate-racing-plan.mjs (--max-streak 1) against the
+                // refreshed dirt calendar, then trimmed: its t51 Kawasaki Kinen and t71 Champions Cup
+                // picks are dropped because both abut a goal turn, and t51 in particular would race
+                // her five turns before Kashiwa. Arriving at t57 rested outranks the extra fans -
+                // Kashiwa is the sash, and the sash is why this preset exists.
+                enableRacingPlan: true,
+                enableMandatoryRacingPlan: true,
+                racingPlan: JSON.stringify([
+                    { raceName: "Zen-Nippon Junior Yushun", date: "Junior Class December, Second Half", priority: 1, turnNumber: 24 },
+                    { raceName: "Japan Dirt Derby", date: "Classic Class July, First Half", priority: 2, turnNumber: 37 },
+                    { raceName: "M.C. Nambu Hai", date: "Classic Class October, First Half", priority: 3, turnNumber: 43 },
+                    { raceName: "JBC Classic", date: "Classic Class November, First Half", priority: 4, turnNumber: 45 },
+                ]),
+                minFansThreshold: 0,
+                preferredTerrain: "Dirt",
+                preferredGrades: ["G1", "G2", "G3"],
+                preferredDistances: ["Mile", "Medium", "Short", "Long"],
+                lookAheadDays: 10,
+                smartRacingCheckInterval: 2,
+                juniorYearRaceStrategy: "Pace",
+                originalRaceStrategy: "Pace",
+                minimumQualityThreshold: 50,
+                timeDecayFactor: 0.7,
+                improvementThreshold: 50,
+            },
+            skills: {
+                enableSkillPointCheck: true,
+                skillPointCheck: 1000,
+                preferredRunningStyle: "pace_chaser",
+                preferredTrackDistance: "mile",
+                preferredTrackSurface: "dirt",
+                plans: {
+                    // Compact and Dirt/Mile/Pace-only, and restricted to what she can actually learn
+                    // TODAY. Her Potential tree gates three otherwise-ideal picks - Chance of Victory
+                    // (Lv3), Collaborative Graded Races o (Lv4) and Strong Steps (Lv5) - and the account
+                    // is on Potential Lv2, so they are deliberately absent: the planner only buys rows
+                    // present on the skill screen, and listing locked skills just pads the plan with
+                    // entries that can never fire. Add them back when her Potential is raised.
+                    //
+                    // Deliberately NOT built to hit any fixed green count: the only scaling term in her
+                    // unique (Luck Runs My Way, 100981) that this repo can see is
+                    // `phase_laterhalf_random==1`, so the external "six greens for full effect" claim is
+                    // unsupported here and is not encoded as an invariant. Greens are in because each is
+                    // individually useful on a Dirt Mile Pace Chaser: Standard Distance covers 1600m and
+                    // Muddy/Wet cover an off-condition Kashiwa.
+                    skillPointCheck: {
+                        enabled: true,
+                        strategy: "optimize_skills",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                    },
+                    preFinals: {
+                        enabled: true,
+                        strategy: "optimize_skills",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                    },
+                    careerComplete: {
+                        enabled: true,
+                        strategy: "optimize_knapsack",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                    },
+                },
+            },
+            trainingEvent: {
+                enablePrioritizeEnergyOptions: true,
+                enableAutomaticOCRRetry: true,
+                ocrConfidence: 90,
+                enableHideOCRComparisonResults: true,
+                specialEventOverrides: {
+                    "New Year's Resolutions": {
+                        selectedOption: "Option 2: Energy +20",
+                        requiresConfirmation: false,
+                    },
+                    "New Year's Shrine Visit": {
+                        selectedOption: "Option 1: Energy +30",
+                        requiresConfirmation: false,
+                    },
+                    "Victory!": {
+                        selectedOption: "Option 2: Energy -5/-20 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    "Solid Showing": {
+                        selectedOption: "Option 1: Energy -15 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    Defeat: {
+                        selectedOption: "Option 1: Energy -25 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    "Get Well Soon!": {
+                        selectedOption: "Option 2: (Random) Mood -1 / Stat decrease / Get Practice Poor negative status",
+                        requiresConfirmation: false,
+                    },
+                    "Don't Overdo It!": {
+                        selectedOption: "Option 1: Energy +10 / Mood -2 / Stat decrease / Get Practice Poor negative status",
+                        requiresConfirmation: false,
+                    },
+                    "Extra Training": {
+                        selectedOption: "Option 2: Energy +5",
+                        requiresConfirmation: false,
+                    },
+                    "Acupuncture (Just an Acupuncturist, No Worries! ☆)": {
+                        selectedOption: "Option 3: Energy recovery + Heal all negative status effects",
+                        requiresConfirmation: false,
+                    },
+                    "Etsuko's Exhaustive Coverage": {
+                        selectedOption: "Option 2: Energy Down / Gain skill points",
+                        requiresConfirmation: false,
+                    },
+                    "A Team at Last": {
+                        selectedOption: "Default",
+                        requiresConfirmation: false,
+                    },
+                },
+                // Her 38 character events are in the scraped event DB, but the per-event optimal picks
+                // are not researched yet, so none are pinned here and the bot's option heuristics
+                // handle them - the same state Bamboo Memory's presets shipped in. Functional; a later
+                // pass can pin the ones worth steering.
+                characterEventOverrides: {},
+                supportEventOverrides: {},
+                scenarioEventOverrides: {},
+            },
+            misc: {
+                enableSettingsDisplay: false,
+                enableMessageIdDisplay: false,
+                messageLogFontSize: 8,
+                overlayButtonSizeDP: 40,
+            },
+            training: {
+                trainingBlacklist: [],
+                statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
+                maximumFailureChance: 15,
+                disableTrainingOnMaxedStat: true,
+                focusOnSparkStatTarget: ["Speed", "Power"],
+                enableRainbowTrainingBonus: false,
+                preferredDistanceOverride: "Mile",
+                mustRestBeforeSummer: true,
+                enableRiskyTraining: false,
+                riskyTrainingMinStatGain: 20,
+                riskyTrainingMaxFailureChance: 30,
+                trainWitDuringFinale: true,
+                enablePrioritizeSkillHints: true,
+                enableTrainingAnalysisValidation: false,
+                enableYoloStatDetection: false,
+            },
+            // Mile is her primary (Kashiwa is Dirt Mile 1600m); Medium mirrors it because her chain
+            // ends on Medium dirt (Teio Sho, JBC Classic, Tokyo Daishoten). Speed/Power lead the
+            // scorer to the t57 checkpoint (Spd 900+/Pwr 700+/Sta 450+/Wit 400+); Wit rides high
+            // cheaply on her +20% growth and pays for the skill points this plan spends.
+            trainingStatTarget: {
+                trainingSprintStatTarget_speedStatTarget: 1200,
+                trainingSprintStatTarget_staminaStatTarget: 400,
+                trainingSprintStatTarget_powerStatTarget: 900,
+                trainingSprintStatTarget_gutsStatTarget: 400,
+                trainingSprintStatTarget_witStatTarget: 700,
+                trainingMileStatTarget_speedStatTarget: 1200,
+                trainingMileStatTarget_staminaStatTarget: 500,
+                trainingMileStatTarget_powerStatTarget: 900,
+                trainingMileStatTarget_gutsStatTarget: 400,
+                trainingMileStatTarget_witStatTarget: 700,
+                trainingMediumStatTarget_speedStatTarget: 1200,
+                trainingMediumStatTarget_staminaStatTarget: 600,
+                trainingMediumStatTarget_powerStatTarget: 900,
+                trainingMediumStatTarget_gutsStatTarget: 400,
+                trainingMediumStatTarget_witStatTarget: 700,
+                trainingLongStatTarget_speedStatTarget: 1100,
+                trainingLongStatTarget_staminaStatTarget: 800,
+                trainingLongStatTarget_powerStatTarget: 800,
+                trainingLongStatTarget_gutsStatTarget: 300,
+                trainingLongStatTarget_witStatTarget: 600,
+            },
+            scenarioOverrides: {
+                trackblazerConsecutiveRacesLimit: 5,
+                trackblazerEnergyThreshold: 40,
+                trackblazerShopCheckGrades: ["G1"],
+                trackblazerMinStatGainForCharm: 15,
+                trackblazerMaxRetriesPerRace: 3,
+                trackblazerWhistleForcesTraining: false,
+                trackblazerRetryRacesBeforeFinalGrades: ["G1"],
+                trackblazerEnableIrregularTraining: false,
+                trackblazerIrregularTrainingMinStatGain: 20,
+                trackblazerExcludedItems: ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food", "Coaching Megaphone"],
+                trackblazerShopCheckFrequency: 3,
+            },
+        },
+    },
+    {
         name: "Smart Falcon",
         scenario: "URA Finale",
         settings: {
@@ -27568,6 +27853,201 @@ export const characterPresets: CharacterPreset[] = [
         },
     },
     {
+        name: "Copano Rickey",
+        scenario: "Unity Cup",
+        settings: {
+            general: {
+                scenario: "Unity Cup",
+                enablePopupCheck: false,
+                enableCraneGameAttempt: true,
+                enableStopBeforeFinals: false,
+                enableStopAtDate: false,
+                stopAtDates: ["Senior January Early"],
+                waitDelay: 0.5,
+                dialogWaitDelay: 0.5,
+            },
+            racing: {
+                enableFarmingFans: false,
+                ignoreConsecutiveRaceWarning: false,
+                daysToRunExtraRaces: 5,
+                disableRaceRetries: false,
+                enableFreeRaceRetry: true,
+                enableCompleteCareerOnFailure: true,
+                enableStopOnMandatoryRaces: false,
+                enableForceRacing: false,
+                enableUserInGameRaceAgenda: false,
+                limitRacesToInGameAgenda: false,
+                skipSummerTrainingForAgenda: false,
+                selectedUserAgenda: "Agenda 1",
+                customAgendaTitle: "",
+                // No curated plan here, unlike her URA preset: Unity Cup's own goal chain differs from
+                // the URA one this repo has data for, so pinning URA turns would be guesswork. Smart
+                // racing with the Dirt filter picks her races instead. See the advisory - the Turf-F
+                // body is the real constraint in this scenario, not the plan.
+                enableRacingPlan: false,
+                enableMandatoryRacingPlan: false,
+                racingPlan: "",
+                minFansThreshold: 0,
+                preferredTerrain: "Dirt",
+                preferredGrades: ["G1", "G2", "G3"],
+                preferredDistances: ["Mile", "Medium", "Short", "Long"],
+                lookAheadDays: 10,
+                smartRacingCheckInterval: 2,
+                juniorYearRaceStrategy: "Pace",
+                originalRaceStrategy: "Pace",
+                minimumQualityThreshold: 50,
+                timeDecayFactor: 0.7,
+                improvementThreshold: 50,
+            },
+            skills: {
+                enableSkillPointCheck: true,
+                skillPointCheck: 1000,
+                preferredRunningStyle: "pace_chaser",
+                preferredTrackDistance: "mile",
+                preferredTrackSurface: "dirt",
+                plans: {
+                    skillPointCheck: {
+                        enabled: true,
+                        strategy: "optimize_skills",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                    },
+                    preFinals: {
+                        enabled: true,
+                        strategy: "optimize_skills",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                    },
+                    careerComplete: {
+                        enabled: true,
+                        strategy: "optimize_knapsack",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                    },
+                },
+            },
+            trainingEvent: {
+                enablePrioritizeEnergyOptions: true,
+                enableAutomaticOCRRetry: true,
+                ocrConfidence: 90,
+                enableHideOCRComparisonResults: true,
+                specialEventOverrides: {
+                    "New Year's Resolutions": {
+                        selectedOption: "Option 2: Energy +20",
+                        requiresConfirmation: false,
+                    },
+                    "New Year's Shrine Visit": {
+                        selectedOption: "Option 1: Energy +30",
+                        requiresConfirmation: false,
+                    },
+                    "Victory!": {
+                        selectedOption: "Option 2: Energy -5/-20 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    "Solid Showing": {
+                        selectedOption: "Option 1: Energy -15 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    Defeat: {
+                        selectedOption: "Option 1: Energy -25 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    "Get Well Soon!": {
+                        selectedOption: "Option 2: (Random) Mood -1 / Stat decrease / Get Practice Poor negative status",
+                        requiresConfirmation: false,
+                    },
+                    "Don't Overdo It!": {
+                        selectedOption: "Option 1: Energy +10 / Mood -2 / Stat decrease / Get Practice Poor negative status",
+                        requiresConfirmation: false,
+                    },
+                    "Extra Training": {
+                        selectedOption: "Option 2: Energy +5",
+                        requiresConfirmation: false,
+                    },
+                    "Acupuncture (Just an Acupuncturist, No Worries! ☆)": {
+                        selectedOption: "Option 3: Energy recovery + Heal all negative status effects",
+                        requiresConfirmation: false,
+                    },
+                    "Etsuko's Exhaustive Coverage": {
+                        selectedOption: "Option 2: Energy Down / Gain skill points",
+                        requiresConfirmation: false,
+                    },
+                    "A Team at Last": {
+                        selectedOption: "Default",
+                        requiresConfirmation: false,
+                    },
+                },
+                characterEventOverrides: {},
+                supportEventOverrides: {},
+                scenarioEventOverrides: {},
+            },
+            misc: {
+                enableSettingsDisplay: false,
+                enableMessageIdDisplay: false,
+                messageLogFontSize: 8,
+                overlayButtonSizeDP: 40,
+            },
+            training: {
+                trainingBlacklist: [],
+                statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
+                maximumFailureChance: 15,
+                disableTrainingOnMaxedStat: true,
+                focusOnSparkStatTarget: ["Speed", "Power", "Wit"],
+                enableRainbowTrainingBonus: false,
+                preferredDistanceOverride: "Mile",
+                mustRestBeforeSummer: true,
+                enableRiskyTraining: false,
+                riskyTrainingMinStatGain: 20,
+                riskyTrainingMaxFailureChance: 30,
+                trainWitDuringFinale: true,
+                enablePrioritizeSkillHints: true,
+                enableTrainingAnalysisValidation: false,
+                enableYoloStatDetection: false,
+            },
+            // Ceiling build rather than the URA sash build: Unity Cup reaches higher totals, so the
+            // floors matter more than a single race. Wit joins the spark focus because her +20% growth
+            // makes it the cheapest stat on the roster to push past the blue-spark bands.
+            trainingStatTarget: {
+                trainingSprintStatTarget_speedStatTarget: 1200,
+                trainingSprintStatTarget_staminaStatTarget: 450,
+                trainingSprintStatTarget_powerStatTarget: 1000,
+                trainingSprintStatTarget_gutsStatTarget: 450,
+                trainingSprintStatTarget_witStatTarget: 900,
+                trainingMileStatTarget_speedStatTarget: 1200,
+                trainingMileStatTarget_staminaStatTarget: 600,
+                trainingMileStatTarget_powerStatTarget: 1000,
+                trainingMileStatTarget_gutsStatTarget: 450,
+                trainingMileStatTarget_witStatTarget: 900,
+                trainingMediumStatTarget_speedStatTarget: 1200,
+                trainingMediumStatTarget_staminaStatTarget: 700,
+                trainingMediumStatTarget_powerStatTarget: 1000,
+                trainingMediumStatTarget_gutsStatTarget: 450,
+                trainingMediumStatTarget_witStatTarget: 900,
+                trainingLongStatTarget_speedStatTarget: 1100,
+                trainingLongStatTarget_staminaStatTarget: 800,
+                trainingLongStatTarget_powerStatTarget: 900,
+                trainingLongStatTarget_gutsStatTarget: 300,
+                trainingLongStatTarget_witStatTarget: 700,
+            },
+            scenarioOverrides: {
+                trackblazerConsecutiveRacesLimit: 5,
+                trackblazerEnergyThreshold: 40,
+                trackblazerShopCheckGrades: ["G1"],
+                trackblazerMinStatGainForCharm: 15,
+                trackblazerMaxRetriesPerRace: 3,
+                trackblazerWhistleForcesTraining: false,
+                trackblazerRetryRacesBeforeFinalGrades: ["G1"],
+                trackblazerEnableIrregularTraining: false,
+                trackblazerIrregularTrainingMinStatGain: 20,
+                trackblazerExcludedItems: ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food", "Coaching Megaphone"],
+                trackblazerShopCheckFrequency: 3,
+            },
+        },
+    },
+    {
         name: "Smart Falcon",
         scenario: "Unity Cup",
         settings: {
@@ -27752,6 +28232,198 @@ export const characterPresets: CharacterPreset[] = [
                 trackblazerIrregularTrainingMinStatGain: 20,
                 trackblazerExcludedItems: ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food", "Coaching Megaphone", "Stamina Scroll", "Stamina Manual", "Wit Scroll", "Wit Manual"],
                 trackblazerShopCheckFrequency: 3,
+            },
+        },
+    },
+    {
+        name: "Copano Rickey",
+        scenario: "Trackblazer",
+        settings: {
+            general: {
+                scenario: "Trackblazer",
+                enablePopupCheck: false,
+                enableCraneGameAttempt: true,
+                enableStopBeforeFinals: false,
+                enableStopAtDate: false,
+                stopAtDates: ["Senior January Early"],
+                waitDelay: 0.5,
+                dialogWaitDelay: 0.5,
+            },
+            racing: {
+                enableFarmingFans: false,
+                ignoreConsecutiveRaceWarning: false,
+                daysToRunExtraRaces: 5,
+                disableRaceRetries: false,
+                enableFreeRaceRetry: true,
+                enableCompleteCareerOnFailure: true,
+                enableStopOnMandatoryRaces: false,
+                enableForceRacing: false,
+                enableUserInGameRaceAgenda: false,
+                limitRacesToInGameAgenda: false,
+                skipSummerTrainingForAgenda: false,
+                selectedUserAgenda: "Agenda 1",
+                customAgendaTitle: "",
+                // Pipeline-required trio member, shipped research/caution - see the advisory. No plan:
+                // Trackblazer entry is fan-gated rather than aptitude-gated, so she can enter, but the
+                // pool she can WIN in is dirt-only against a Turf-F body. Left on smart racing with the
+                // Dirt filter rather than inventing compensating behavior the scenario handler lacks.
+                enableRacingPlan: false,
+                enableMandatoryRacingPlan: false,
+                racingPlan: "",
+                minFansThreshold: 0,
+                preferredTerrain: "Dirt",
+                preferredGrades: ["G1", "G2", "G3"],
+                preferredDistances: ["Mile", "Medium", "Short", "Long"],
+                lookAheadDays: 10,
+                smartRacingCheckInterval: 2,
+                juniorYearRaceStrategy: "Pace",
+                originalRaceStrategy: "Pace",
+                minimumQualityThreshold: 50,
+                timeDecayFactor: 0.7,
+                improvementThreshold: 50,
+            },
+            skills: {
+                enableSkillPointCheck: true,
+                skillPointCheck: 1000,
+                preferredRunningStyle: "pace_chaser",
+                preferredTrackDistance: "mile",
+                preferredTrackSurface: "dirt",
+                plans: {
+                    skillPointCheck: {
+                        enabled: true,
+                        strategy: "optimize_skills",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                    },
+                    preFinals: {
+                        enabled: true,
+                        strategy: "optimize_skills",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                    },
+                    careerComplete: {
+                        enabled: true,
+                        strategy: "optimize_knapsack",
+                        enableBuyInheritedUniqueSkills: true,
+                        enableBuyNegativeSkills: false,
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                    },
+                },
+            },
+            trainingEvent: {
+                enablePrioritizeEnergyOptions: true,
+                enableAutomaticOCRRetry: true,
+                ocrConfidence: 90,
+                enableHideOCRComparisonResults: true,
+                specialEventOverrides: {
+                    "New Year's Resolutions": {
+                        selectedOption: "Option 2: Energy +20",
+                        requiresConfirmation: false,
+                    },
+                    "New Year's Shrine Visit": {
+                        selectedOption: "Option 1: Energy +30",
+                        requiresConfirmation: false,
+                    },
+                    "Victory!": {
+                        selectedOption: "Option 2: Energy -5/-20 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    "Solid Showing": {
+                        selectedOption: "Option 1: Energy -15 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    Defeat: {
+                        selectedOption: "Option 1: Energy -25 and random stat gain",
+                        requiresConfirmation: false,
+                    },
+                    "Get Well Soon!": {
+                        selectedOption: "Option 2: (Random) Mood -1 / Stat decrease / Get Practice Poor negative status",
+                        requiresConfirmation: false,
+                    },
+                    "Don't Overdo It!": {
+                        selectedOption: "Option 1: Energy +10 / Mood -2 / Stat decrease / Get Practice Poor negative status",
+                        requiresConfirmation: false,
+                    },
+                    "Extra Training": {
+                        selectedOption: "Option 2: Energy +5",
+                        requiresConfirmation: false,
+                    },
+                    "Acupuncture (Just an Acupuncturist, No Worries! ☆)": {
+                        selectedOption: "Option 3: Energy recovery + Heal all negative status effects",
+                        requiresConfirmation: false,
+                    },
+                    "Etsuko's Exhaustive Coverage": {
+                        selectedOption: "Option 2: Energy Down / Gain skill points",
+                        requiresConfirmation: false,
+                    },
+                    "A Team at Last": {
+                        selectedOption: "Default",
+                        requiresConfirmation: false,
+                    },
+                },
+                characterEventOverrides: {},
+                supportEventOverrides: {},
+                scenarioEventOverrides: {},
+            },
+            misc: {
+                enableSettingsDisplay: false,
+                enableMessageIdDisplay: false,
+                messageLogFontSize: 8,
+                overlayButtonSizeDP: 40,
+            },
+            training: {
+                trainingBlacklist: [],
+                statPrioritization: ["Speed", "Power", "Stamina", "Wit", "Guts"],
+                maximumFailureChance: 15,
+                disableTrainingOnMaxedStat: true,
+                focusOnSparkStatTarget: ["Speed", "Power"],
+                enableRainbowTrainingBonus: false,
+                preferredDistanceOverride: "Mile",
+                mustRestBeforeSummer: true,
+                enableRiskyTraining: false,
+                riskyTrainingMinStatGain: 20,
+                riskyTrainingMaxFailureChance: 30,
+                trainWitDuringFinale: true,
+                enablePrioritizeSkillHints: true,
+                enableTrainingAnalysisValidation: false,
+                enableYoloStatDetection: false,
+            },
+            trainingStatTarget: {
+                trainingSprintStatTarget_speedStatTarget: 1200,
+                trainingSprintStatTarget_staminaStatTarget: 400,
+                trainingSprintStatTarget_powerStatTarget: 900,
+                trainingSprintStatTarget_gutsStatTarget: 400,
+                trainingSprintStatTarget_witStatTarget: 700,
+                trainingMileStatTarget_speedStatTarget: 1200,
+                trainingMileStatTarget_staminaStatTarget: 500,
+                trainingMileStatTarget_powerStatTarget: 900,
+                trainingMileStatTarget_gutsStatTarget: 400,
+                trainingMileStatTarget_witStatTarget: 700,
+                trainingMediumStatTarget_speedStatTarget: 1200,
+                trainingMediumStatTarget_staminaStatTarget: 600,
+                trainingMediumStatTarget_powerStatTarget: 900,
+                trainingMediumStatTarget_gutsStatTarget: 400,
+                trainingMediumStatTarget_witStatTarget: 700,
+                trainingLongStatTarget_speedStatTarget: 1100,
+                trainingLongStatTarget_staminaStatTarget: 800,
+                trainingLongStatTarget_powerStatTarget: 800,
+                trainingLongStatTarget_gutsStatTarget: 300,
+                trainingLongStatTarget_witStatTarget: 600,
+            },
+            scenarioOverrides: {
+                trackblazerConsecutiveRacesLimit: 2,
+                trackblazerEnergyThreshold: 40,
+                trackblazerShopCheckGrades: ["G1", "G2", "G3"],
+                trackblazerMinStatGainForCharm: 30,
+                trackblazerMaxRetriesPerRace: 1,
+                trackblazerWhistleForcesTraining: true,
+                trackblazerRetryRacesBeforeFinalGrades: ["G1"],
+                trackblazerEnableIrregularTraining: false,
+                trackblazerIrregularTrainingMinStatGain: 20,
+                trackblazerExcludedItems: ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food", "Coaching Megaphone", "Wit Scroll", "Wit Manual"],
+                trackblazerShopCheckFrequency: 1,
             },
         },
     },

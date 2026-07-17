@@ -8,6 +8,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Copano Rickey**, the game's third pure dirt trainee, with a URA profile built to farm Kashiwa Kinen Winner's Sashes. Kashiwa is a Senior-May G1 over Dirt Mile at Funabashi, and her career objective there only asks for 3rd or better -- but a sash needs the win, so her URA preset ships a curated dirt agenda that deliberately stops racing after the Classic year and leaves the whole dense Senior half to her goal chain. She arrives at the sash race rested instead of chasing extra fans. Built as a Pace Chaser rather than a Front Runner: her unique and her entire innate kit read the back half of the field, which a front build never triggers. Her Unity Cup and Trackblazer presets ship as caution profiles -- Turf F against two turf-dominant schedules, the same advisory Haru Urara and Smart Falcon carry. Roster is now 217 presets across 71 entries; all three are research-graded until live careers say otherwise.
+
+### Fixed
+
+- **The bundled race calendar was missing the entire new dirt schedule.** The race scraper had been switched off years-of-patches ago on the assumption that races never change, and its filter also treated every race tagged with a historical era as "not on Global yet" -- which silently dropped Kashiwa Kinen, Teio Sho, M.C. Nambu Hai, Tokyo Daishoten and the rest of the dirt calendar the moment Global actually received them. Re-enabled, taught the three new racecourses (Kawasaki, Funabashi, Morioka), and narrowed the filter to only the eras Global genuinely lacks. 26 races added, none changed or removed.
+
+---
+
 ## [1.3.8] - 2026-07-13
 
 ### Added
