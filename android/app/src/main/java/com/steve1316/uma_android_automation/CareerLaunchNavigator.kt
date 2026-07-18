@@ -348,6 +348,16 @@ class CareerLaunchNavigator(private val context: Context) {
     private val borrowExcludedCharacters = mutableSetOf<String>()
     private var lastBorrowPickEntry: String? = null
 
+    // The launch's active trainee identity (bare name or "[Outfit] Name"), used to reject borrow
+    // candidates of the trainee's own character - the game refuses such a deck with a red
+    // "! Trainee" pill and a disabled Start Career, which once burned a whole queued run.
+    private var borrowLaunchTraineeTarget: String = ""
+
+    // Set when the trainee-conflict refusal was detected by the transient formation message
+    // rather than a pill template, so the next handler pass routes into the borrow replacement
+    // flow even though the pill checks missed.
+    private var forceBorrowReplacement: Boolean = false
+
     // Vertical offset from the Borrow Card list's "Remove" bar to the center of the first
     // card row. Both supported screen configs render game content at 1080px width, so this
     // dialog-internal offset is stable across them.
@@ -450,10 +460,24 @@ class CareerLaunchNavigator(private val context: Context) {
         borrowDuplicateReplacements = 0
         borrowExcludedCharacters.clear()
         lastBorrowPickEntry = null
+        forceBorrowReplacement = false
         finalizeToHomeMode = finalizeToHome
         singleRunTraineeTarget = singleRunTrainee
         singleRunTraineeTargetExcludes = singleRunTraineeExcludes
         singleRunTraineeSelectHandled = false
+
+        // Smart Borrow must never pick a support of the ACTIVE TRAINEE's character: the game
+        // refuses such a deck (red "! Trainee" pill, Start Career disabled, "Includes a
+        // character identical to the Trainee."). Seeding the exclusion set with the launch's
+        // trainee makes every candidate path reject her cards up front - the curated scan, the
+        // preferred-name pick, the validated default pick, and the replacement search all
+        // consult this set. Blank when no trainee identity is known (non-rotation launches),
+        // which leaves behavior unchanged.
+        borrowLaunchTraineeTarget = if (singleRunTrainee.isNotBlank()) singleRunTrainee else SettingsHelper.getStringSetting("queueState", "currentTrainee")
+        borrowEntryCharacter(borrowLaunchTraineeTarget).takeIf { it.isNotEmpty() }?.let {
+            borrowExcludedCharacters.add(it)
+            MessageLog.i(TAG, "[NAV] [BORROW] Active trainee \"$it\" is excluded from borrow candidates for this launch.")
+        }
 
         if (!ensureInitialised()) {
             return NavigationResult(
@@ -2188,9 +2212,25 @@ class CareerLaunchNavigator(private val context: Context) {
                     MessageLog.i(TAG, "[NAV] Borrow Card list open. Preferred card found - selecting its row at (540, ${preferredLocation.y.toInt()})...")
                     gestureUtils.tap(540.0, preferredLocation.y, "borrow_preferred_row")
                 } else {
-                    val tapY = removeLocation.y + borrowListFirstRowOffsetPx
-                    MessageLog.i(TAG, "[NAV] Borrow Card list open. Preferred card not visible - selecting the first card at (${removeLocation.x.toInt()}, ${tapY.toInt()})...")
-                    gestureUtils.tap(removeLocation.x, tapY, "borrow_card_first_row")
+                    // Validated default pick: read the visible rows and take the first one that is
+                    // neither pill-tagged nor an excluded character (the active trainee included).
+                    // The old blind first-row tap once borrowed the trainee's own card here - the
+                    // game then disables Start Career and the launch is unrecoverable by clicking.
+                    val scan = borrowRowsOnScreen(iu.getSourceBitmap())
+                    val pick = scan.rows.firstOrNull { (_, text) ->
+                        borrowExcludedCharacters.none { borrowRowMatchesPreference(text, it) }
+                    }
+                    if (pick == null) {
+                        ButtonClose.click(iu)
+                        return TransitionResult.Failed(
+                            reason = "No valid borrowed support available: every visible Borrow Card row is the active trainee's own character, already refused this launch, or blocked by the game.",
+                            transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                            recommendedAction = "Follow more trainers or borrow a card of a different character manually, then restart the queue.",
+                        )
+                    }
+                    MessageLog.i(TAG, "[NAV] Borrow Card list open. Preferred card not visible - selecting the first valid card \"${pick.second.replace("\n", " ").trim().take(60)}\" at (540, ${pick.first.toInt()})...")
+                    lastBorrowPickEntry = pick.second
+                    gestureUtils.tap(540.0, pick.first, "borrow_card_first_valid_row")
                 }
                 waitSafe(2.0)
             } else {
@@ -2202,29 +2242,52 @@ class CareerLaunchNavigator(private val context: Context) {
         // A borrowed card of a character already in the deck commits in the picker just fine -
         // the game only blocks at Start Career ("Cannot proceed with duplicate Umamusume in the
         // Support Card deck", a transient toast) while marking both clashing cards with a
-        // persistent "! Duplicate Support" pill. Clicking Start into that wall wastes the whole
-        // launch, so replace the borrow instead: reopen the picker through the slot's Friends
-        // banner, exclude the refused character, and take the next-best card.
+        // persistent "! Duplicate Support" pill. A borrowed card of the ACTIVE TRAINEE's own
+        // character behaves the same way with a red "! Trainee" pill and a DISABLED Start Career
+        // ("Includes a character identical to the Trainee."). Clicking Start into either wall
+        // wastes the whole launch, so replace the borrow instead: reopen the picker through the
+        // slot's Friends banner, exclude the refused character, and take the next-best card.
+        val duplicateDeckPill = LabelDuplicateSupportDeck.check(iu, sourceBitmap = bitmap)
+        val traineeDeckPill = !duplicateDeckPill && LabelTraineeConflictDeck.check(iu, sourceBitmap = bitmap)
         if (SettingsHelper.getBooleanSetting("runQueue", "enableSmartBorrow", true) &&
-            LabelDuplicateSupportDeck.check(iu, sourceBitmap = bitmap)
+            (duplicateDeckPill || traineeDeckPill || forceBorrowReplacement)
         ) {
+            val viaMessage = forceBorrowReplacement && !duplicateDeckPill && !traineeDeckPill
+            forceBorrowReplacement = false
             if (borrowDuplicateReplacements >= MAX_BORROW_DUPLICATE_REPLACEMENTS) {
                 return TransitionResult.Failed(
-                    reason = "The borrowed friend card duplicates a character already in the support deck, and $borrowDuplicateReplacements replacements did not resolve it.",
+                    reason =
+                        if (traineeDeckPill || viaMessage) {
+                            "INVALID_SUPPORT_FORMATION: the borrowed friend card is the active trainee's own character (the game disables Start Career), and $borrowDuplicateReplacements replacements did not resolve it. No valid borrowed support available."
+                        } else {
+                            "The borrowed friend card duplicates a character already in the support deck, and $borrowDuplicateReplacements replacements did not resolve it."
+                        },
                     transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
-                    recommendedAction = "Borrow a card of a character your deck does not contain manually, then restart the queue.",
+                    recommendedAction = "Borrow a card of a different character manually, then restart the queue.",
                 )
             }
             borrowDuplicateReplacements++
             val refused = lastBorrowPickEntry?.let { borrowEntryCharacter(it) }
             refused?.let { borrowExcludedCharacters.add(it) }
             lastBorrowPickEntry = null
-            MessageLog.w(
-                TAG,
-                "[NAV] [BORROW] The borrowed card duplicates a character already in the deck" +
-                    (refused?.let { " (\"$it\")" } ?: "") +
-                    ". Replacing it (attempt $borrowDuplicateReplacements/$MAX_BORROW_DUPLICATE_REPLACEMENTS)...",
-            )
+            if (traineeDeckPill || viaMessage) {
+                // Whatever the pick was, the game says it is the trainee's character - make sure
+                // the trainee is in the exclusion set even when the pick's OCR text was noisy.
+                borrowEntryCharacter(borrowLaunchTraineeTarget).takeIf { it.isNotEmpty() }?.let { borrowExcludedCharacters.add(it) }
+                MessageLog.w(
+                    TAG,
+                    "[NAV] [BORROW] Smart Borrow rejected candidate: game reported trainee conflict (\"! Trainee\"" +
+                        (refused?.let { ", \"$it\"" } ?: "") +
+                        "). Candidate excluded for this launch; replacing it (attempt $borrowDuplicateReplacements/$MAX_BORROW_DUPLICATE_REPLACEMENTS)...",
+                )
+            } else {
+                MessageLog.w(
+                    TAG,
+                    "[NAV] [BORROW] Smart Borrow rejected candidate: duplicate support" +
+                        (refused?.let { " (\"$it\")" } ?: "") +
+                        ". Candidate excluded for this launch; replacing it (attempt $borrowDuplicateReplacements/$MAX_BORROW_DUPLICATE_REPLACEMENTS)...",
+                )
+            }
             val (bannerLocation, _) = LabelFriendSlotBanner.find(iu)
             if (bannerLocation == null) {
                 MessageLog.w(TAG, "[NAV] [BORROW] Friend slot banner not found - re-detecting before retrying the replacement.")
@@ -2239,6 +2302,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 return TransitionResult.Continue
             }
             if (trySmartBorrowPick(replaceMode = true)) {
+                MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow selected valid replacement.")
                 waitSafe(2.0)
             } else {
                 MessageLog.w(TAG, "[NAV] [BORROW] No replacement candidate found - the next pass retries until the replacement budget runs out.")
@@ -2265,6 +2329,41 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.i(TAG, "[NAV] Deck complete or auto-fill off. Clicking Start Career! (attempt $startCareerClickAttempts)...")
             if (!ButtonStartCareer.click(iu, sourceBitmap = bitmap) && !ButtonStartCareerOffset.click(iu, sourceBitmap = bitmap)) {
                 ButtonStartCareerRight.click(iu, sourceBitmap = bitmap)
+            }
+            if (startCareerClickAttempts >= 2) {
+                // A second ineffective click means the button is rendered but the game is not
+                // accepting it. The persistent pills are handled before this block on every
+                // pass; this catches the refusal TOAST ("Includes a character identical to the
+                // Trainee.") in case the pill templates miss, and routes the next pass into the
+                // borrow replacement flow instead of hammering a disabled control (five blind
+                // taps once misdiagnosed this as dead gesture dispatch and force-rebound the
+                // accessibility service for nothing).
+                waitSafe(0.6)
+                val toast =
+                    try {
+                        val fresh = iu.getSourceBitmap()
+                        iu.performOCROnRegion(
+                            fresh,
+                            (fresh.width * 0.08).toInt(),
+                            (fresh.height * 0.38).toInt(),
+                            (fresh.width * 0.84).toInt(),
+                            (fresh.height * 0.16).toInt(),
+                            useThreshold = false,
+                            useGrayscale = true,
+                            scale = 1.5,
+                            debugName = "nav_start_career_refusal_ocr",
+                        )
+                    } catch (e: InterruptedException) {
+                        throw e
+                    } catch (_: Exception) {
+                        ""
+                    }
+                if (isTraineeConflictMessage(toast)) {
+                    MessageLog.w(TAG, "[NAV] Support formation invalid; Start Career not pressed again (the game reported a trainee conflict). Routing to borrow replacement.")
+                    forceBorrowReplacement = true
+                    startCareerClickAttempts = 0
+                    return TransitionResult.Continue
+                }
             }
             waitSafe(3.0)
             return TransitionResult.Continue
@@ -2899,10 +2998,10 @@ class CareerLaunchNavigator(private val context: Context) {
                 MessageLog.w(TAG, "[NAV] [BORROW] No borrow rows detected on the opened picker.")
                 break
             }
-            for (dupText in scan.duplicateTexts) {
+            for (dupText in scan.duplicateTexts + scan.traineeConflictTexts) {
                 priorities.forEachIndexed { idx, entry ->
                     if (borrowRowMatchesPreference(dupText, entry) && unreachable.add(idx)) {
-                        MessageLog.i(TAG, "[NAV] [BORROW] \"$entry\" is offered but would duplicate the deck - not a candidate this launch.")
+                        MessageLog.i(TAG, "[NAV] [BORROW] \"$entry\" is offered but blocked for this launch (duplicate or active-trainee conflict) - not a candidate.")
                     }
                 }
             }
@@ -2982,26 +3081,33 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /** Visible picker rows split into borrowable [rows] and the texts of rows the game tagged
-     * "! Duplicate Support" - those cannot be borrowed this launch but still identify which
-     * priority entries are blocked. */
-    private data class BorrowScan(val rows: List<Pair<Double, String>>, val duplicateTexts: List<String>)
+     * "! Duplicate Support" or "! Trainee" - those cannot be borrowed this launch but still
+     * identify which priority entries are blocked. */
+    private data class BorrowScan(val rows: List<Pair<Double, String>>, val duplicateTexts: List<String>, val traineeConflictTexts: List<String> = emptyList())
 
     /**
      * Reads the visible Borrow Card rows: each row is located by its Last Login pill and its
      * two-line card name is OCR'd from the fixed band above the pill. Rows whose name band would
      * clip the dialog header or the Filters/Close chrome are skipped. Rows the game tags
-     * "! Duplicate Support" (picking one commits but the deck then blocks Start Career) are
-     * excluded from the borrowable rows and reported separately by name.
+     * "! Duplicate Support" (picking one commits but the deck then blocks Start Career) or
+     * "! Trainee" (the active trainee's own character - picking one commits but the game
+     * DISABLES Start Career) are excluded from the borrowable rows and reported separately.
+     * Rows whose OCR text reads as an excluded character (the active trainee included) are
+     * also excluded, so an identity match protects the pick even when a pill template misses.
      */
     private fun borrowRowsOnScreen(bitmap: Bitmap): BorrowScan {
         val duplicatePills = LabelDuplicateSupport.findAll(iu, sourceBitmap = bitmap)
+        val traineePills = LabelTraineeConflict.findAll(iu, sourceBitmap = bitmap)
         val duplicateTexts = mutableListOf<String>()
+        val traineeConflictTexts = mutableListOf<String>()
         val rows = LabelBorrowLastLogin.findAll(iu, sourceBitmap = bitmap)
             .sortedBy { it.y }
             .mapNotNull { pill ->
                 val centerY = pill.y - BORROW_PILL_TO_ROW_CENTER_PX
                 if (centerY - BORROW_NAME_BAND_HALF_HEIGHT < 150 || centerY + BORROW_NAME_BAND_HALF_HEIGHT > bitmap.height - 300) return@mapNotNull null
-                val tagged = duplicatePills.any { it.y >= centerY - BORROW_DUPLICATE_PILL_MAX_OFFSET && it.y <= centerY - BORROW_DUPLICATE_PILL_MIN_OFFSET }
+                val inPillWindow = { p: org.opencv.core.Point -> p.y >= centerY - BORROW_DUPLICATE_PILL_MAX_OFFSET && p.y <= centerY - BORROW_DUPLICATE_PILL_MIN_OFFSET }
+                val taggedDuplicate = duplicatePills.any(inPillWindow)
+                val taggedTrainee = !taggedDuplicate && traineePills.any(inPillWindow)
                 val text =
                     try {
                         iu.performOCROnRegion(
@@ -3020,14 +3126,26 @@ class CareerLaunchNavigator(private val context: Context) {
                     } catch (_: Exception) {
                         ""
                     }
-                if (tagged) {
-                    MessageLog.i(TAG, "[NAV] [BORROW] Skipping \"${text.replace("\n", " ").trim().take(60)}\" - marked \"! Duplicate Support\" (its character is already in the deck).")
+                if (taggedDuplicate) {
+                    MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow rejected candidate: duplicate support (\"${text.replace("\n", " ").trim().take(60)}\" is marked \"! Duplicate Support\").")
                     duplicateTexts.add(text)
+                    return@mapNotNull null
+                }
+                if (taggedTrainee) {
+                    MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow rejected candidate: same as active trainee (\"${text.replace("\n", " ").trim().take(60)}\" is marked \"! Trainee\").")
+                    traineeConflictTexts.add(text)
+                    return@mapNotNull null
+                }
+                if (borrowLaunchTraineeTarget.isNotBlank() && borrowCandidateConflictsWithTrainee(text, borrowLaunchTraineeTarget)) {
+                    // Identity backstop for a missed pill: the row reads as the active trainee's
+                    // own character, which the game will refuse at Start Career.
+                    MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow rejected candidate: same as active trainee (\"${text.replace("\n", " ").trim().take(60)}\").")
+                    traineeConflictTexts.add(text)
                     return@mapNotNull null
                 }
                 centerY to text
             }
-        return BorrowScan(rows, duplicateTexts)
+        return BorrowScan(rows, duplicateTexts, traineeConflictTexts)
     }
 
     /** One page-advance swipe on the Borrow Card list: slow so the drag lands without inertia. */

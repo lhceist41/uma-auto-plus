@@ -57,3 +57,31 @@ internal fun borrowEntryCharacter(entry: String): String {
  */
 internal fun filterBorrowPriorities(priorities: List<String>, excludedCharacters: Collection<String>): List<String> =
     priorities.filter { entry -> excludedCharacters.none { borrowRowMatchesPreference(entry, it) } }
+
+/**
+ * Whether a borrow candidate's character is the ACTIVE TRAINEE herself. The game refuses such a
+ * deck outright ("Includes a character identical to the Trainee.", Start Career disabled), so a
+ * candidate that trips this must never be selected - a live queue burned a whole run on it.
+ *
+ * [traineeTarget] accepts every identity form the launch paths carry: a bare character
+ * ("Super Creek"), an outfit-prefixed banner ("[Saintly Jade Cleric] Grass Wonder"), or an
+ * OCR-noisy variant; the outfit/title part is stripped and the comparison runs on normalized
+ * character text, so outfits, brackets, spacing, and punctuation never matter. Distinct
+ * characters sharing a leading word ("Gold Ship" vs "Gold City") do not cross-match because the
+ * FULL character name must appear in the row.
+ */
+internal fun borrowCandidateConflictsWithTrainee(rowText: String, traineeTarget: String): Boolean {
+    val traineeCharacter = borrowEntryCharacter(traineeTarget)
+    return traineeCharacter.isNotEmpty() && borrowRowMatchesPreference(rowText, traineeCharacter)
+}
+
+/**
+ * Whether OCR text reads as the game's trainee-conflict formation message
+ * ("Includes a character identical to the Trainee."). Normalized-substring over the stable core
+ * of the sentence with the i/l glyph fold the game font forces on OCR (the same confusion
+ * TraineeNameMatcher folds), so casing, punctuation, line breaks, and I/l swaps are tolerated.
+ */
+internal fun isTraineeConflictMessage(text: String): Boolean {
+    val norm = text.lowercase().filter { it.isLetterOrDigit() }.replace('l', 'i')
+    return norm.contains("identicaitothetrainee") || norm.contains("characteridenticaitothe")
+}

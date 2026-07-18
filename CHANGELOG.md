@@ -26,6 +26,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- **Smart Borrow could borrow a support card of the very trainee you were launching.** The game refuses such a deck -- the friend slot shows a red "! Trainee" badge, the formation message says the deck includes a character identical to the trainee, and Start Career stays disabled -- and one queued run was lost to the bot picking exactly that card and then retrying the disabled button until the queue stopped. Smart Borrow now skips the trainee's own cards everywhere it looks: the badge is detected in the borrow list and on the deck, the card name is checked against the active trainee, and the curated priority list drops her entries for that launch. A conflicting borrow that slips through anyway is swapped for the next valid card the same way duplicates are already handled, the formation is verified before Start Career is pressed, and when no valid borrowed support exists the queue stops with a clear message instead of retrying.
+
 - **The bundled race calendar was missing the entire new dirt schedule.** The race scraper had been switched off years-of-patches ago on the assumption that races never change, and its filter also treated every race tagged with a historical era as "not on Global yet" -- which silently dropped Kashiwa Kinen, Teio Sho, M.C. Nambu Hai, Tokyo Daishoten and the rest of the dirt calendar the moment Global actually received them. Re-enabled, taught the three new racecourses (Kawasaki, Funabashi, Morioka), and narrowed the filter to only the eras Global genuinely lacks. 26 races added, none changed or removed.
 
 ---

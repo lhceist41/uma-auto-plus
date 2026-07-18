@@ -68,6 +68,20 @@ object LabelDuplicateSupportDeck : ComponentInterface {
     override val template = Template("components/label/duplicate_support_deck")
 }
 
+object LabelTraineeConflict : ComponentInterface {
+    // Red "! Trainee" pill straddling the top edge of a Borrow Card row whose character IS the
+    // active trainee (the game refuses such a deck: "Includes a character identical to the
+    // Trainee."). Interior-only crop, same per-context split as the Duplicate Support pills.
+    override val template = Template("components/label/trainee_conflict")
+}
+
+object LabelTraineeConflictDeck : ComponentInterface {
+    // The same "! Trainee" pill as rendered on the support deck screen's friend slot. While it
+    // is visible, Start Career is disabled and taps on it do nothing, so it must be resolved by
+    // replacing the borrow, never by retrying the button.
+    override val template = Template("components/label/trainee_conflict_deck")
+}
+
 object LabelFriendSlotBanner : ComponentInterface {
     // Pink "Friends" banner at the bottom of the FILLED friend slot on the support deck screen.
     // Used to reopen the Borrow Card picker when the slot is no longer empty (the empty-slot
