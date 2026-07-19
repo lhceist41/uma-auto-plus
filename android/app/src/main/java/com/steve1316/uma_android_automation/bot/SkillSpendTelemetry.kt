@@ -67,8 +67,9 @@ object SkillSpendTelemetry {
      * before the planner resolved it) and, still under the same version, the 2B-2 recovery
      * fields: `recoveryRuleActive`/`recoveryRequired` on sessions where the recovery gate was
      * evaluated, plus `recoverySkill`/`recoveryObservedPrice` only when an injection actually
-     * bought something. Readers of older records must tolerate absence rather than infer
-     * values. */
+     * bought something, and `careerEndFallback` (true only on sparks CAREER_COMPLETE sessions
+     * where the constrained profile-compatible fallback ran after the plan; absent otherwise).
+     * Readers of older records must tolerate absence rather than infer values. */
     const val POLICY_VERSION: String = "trigger-v4"
 
     /** A planned skill whose live price rose above the remaining budget before it could be bought. */
@@ -104,6 +105,7 @@ object SkillSpendTelemetry {
         plannedSkill: String? = null,
         plannedSkillObservedPrice: Int? = null,
         strategyTailAllowed: Boolean? = null,
+        careerEndFallback: Boolean? = null,
         recoveryRuleActive: Boolean? = null,
         recoveryRequired: Boolean? = null,
         recoverySkill: String? = null,
@@ -133,6 +135,10 @@ object SkillSpendTelemetry {
         // 2B-1 planner shaping (trigger-v4): whether this session's strategy tail was allowed.
         // False = planned-only (Adaptive sparks); absent = the planner never resolved it.
         strategyTailAllowed?.let { record.put("strategyTailAllowed", it) }
+        // Career-end constrained fallback (same trigger-v4): true only when a planned-only
+        // sparks CAREER_COMPLETE session extended into the profile-compatible knapsack after
+        // the plan was exhausted. Absent on every other session.
+        careerEndFallback?.let { record.put("careerEndFallback", it) }
         // 2B-2 recovery protection (same trigger-v4): gate evaluation and, when an injection
         // bought something, the selected skill at its live observed price. All absent when the
         // gate never armed; skill/price absent on satisfied, no-candidate, and unaffordable
@@ -186,6 +192,59 @@ object SkillSpendTelemetry {
                     }
                 },
             )
+        }
+        return record
+    }
+
+    /**
+     * Builds one append-only `type:"career_finalize"` record: the finalization guard's full
+     * decision evidence for one career, written when the verdict is armed. One record per
+     * career finalization (the FINAL decision; a used retry appears as `retryUsed`). Optional
+     * identity fields are omitted when unavailable, never fabricated - the same rules as the
+     * skill_spend records. Pure and Context-free so JUnit can pin the shape.
+     */
+    @Suppress("LongParameterList")
+    internal fun buildCareerFinalizeRecord(
+        timestamp: Long,
+        decision: String,
+        reason: String,
+        careerToken: String,
+        trainee: String?,
+        scenario: String?,
+        objective: String?,
+        queueRun: Int?,
+        verifiedRemainingSp: Int?,
+        retryUsed: Boolean,
+        evidence: FinalizeEvidence?,
+    ): JSONObject {
+        val record = JSONObject()
+        record.put("type", "career_finalize")
+        record.put("ts", timestamp)
+        record.put("policy", POLICY_VERSION)
+        record.put("finalizationDecision", decision)
+        record.put("finalizationReason", reason)
+        record.put("careerToken", careerToken)
+        record.put("retryUsed", retryUsed)
+        trainee?.let { record.put("trainee", it) }
+        scenario?.let { record.put("scenario", it) }
+        objective?.let { record.put("objective", it) }
+        queueRun?.let { record.put("queueRun", it) }
+        verifiedRemainingSp?.let { record.put("verifiedRemainingSp", it) }
+        evidence?.let { e ->
+            record.put("scanComplete", e.scanComplete)
+            record.put("plannerComplete", e.plannerComplete)
+            record.put("confirmationComplete", e.confirmationComplete)
+            record.put("constrainedFallbackAttempted", e.fallbackAttempted)
+            record.put("constrainedFallbackExhausted", e.fallbackExhausted())
+            record.put("eligibleCandidateCount", e.eligibleCandidateCount)
+            record.put("affordableEligibleCandidateCount", e.affordableEligibleCandidateCount)
+            e.cheapestAffordableEligiblePrice?.let { record.put("cheapestAffordableEligiblePrice", it) }
+            e.cheapestAffordableEligibleName?.let { record.put("cheapestAffordableEligibleName", it) }
+            e.cheapestEligiblePrice?.let { record.put("cheapestEligiblePrice", it) }
+            if (e.excludedByReason.isNotEmpty()) {
+                record.put("excludedCandidateCountsByReason", JSONObject().apply { e.excludedByReason.forEach { (k, v) -> put(k, v) } })
+            }
+            record.put("sessionOutcome", e.sessionOutcome.token())
         }
         return record
     }

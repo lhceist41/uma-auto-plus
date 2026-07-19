@@ -11,6 +11,7 @@ import com.steve1316.uma_android_automation.types.SkillList
 import com.steve1316.uma_android_automation.types.SkillListEntry
 import com.steve1316.uma_android_automation.types.TrackDistance
 import com.steve1316.uma_android_automation.types.TrackSurface
+import com.steve1316.uma_android_automation.utils.CAREER_END_SCAN_BUDGET_MS
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import org.json.JSONObject
 import org.opencv.core.Point
@@ -44,6 +45,26 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
      * planner actually resolves it, so early exits that never reach the planner omit the telemetry
      * field instead of guessing. */
     private var sessionStrategyTailAllowed: Boolean? = null
+
+    /** The trigger [start] resolved for this session, for planner decisions that depend on WHY
+     * the session is running (the career-end fallback fires only on CAREER_COMPLETE). */
+    private var sessionEffectiveTrigger: SkillCheckTrigger? = null
+
+    /** True only when the constrained career-end fallback ran this session (sparks objective at
+     * CAREER_COMPLETE). Null otherwise so the telemetry field is omitted, not guessed. */
+    private var sessionCareerEndFallback: Boolean? = null
+
+    /** Whether this session's PLANNING scan reached a confirmed end of the skill list. Null
+     * until the planning parse runs (early exits never scanned); the buy passes deliberately do
+     * not overwrite it - purchase coverage is already policed by the points-delta arbiter. */
+    private var sessionPlanningScanComplete: Boolean? = null
+
+    /** The last session's finalization evidence: outcome, scan/planner/confirmation
+     * completeness, the verified balance, and the candidate-exhaustion counts. Set on every
+     * session record independently of the corpus append - a telemetry IO failure must never
+     * blind the guard that decides whether Finish is safe. */
+    internal var lastSessionEvidence: FinalizeEvidence? = null
+        private set
 
     /** 2B-2 recovery-protection outcome for this session, for telemetry. All null when the gate
      * never armed (Manual, wrong objective or distance, or an exit before the planner ran). */
@@ -175,6 +196,14 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 get() = if (price > 0) evaluationPoints.toDouble() / price.toDouble() else 0.0
         }
 
+        /** Mid-career cannot-afford early-exit heuristic, in skill points. An upstream
+         * approximation of the cheapest useful purchase (cheapest non-negative base cost 70 at
+         * the deepest observed 40% hint discount = 42), NOT a proven universal floor: the
+         * packaged data prices purchasable negatives at 40, and discounts are screen-observed,
+         * never bounded by repository data. Used ONLY to skip pointless mid-career scans; the
+         * career-finalization guard never consults it (see SkillDataFloorTest). */
+        internal const val SKILL_POINTS_EARLY_EXIT_FLOOR = 42
+
         /**
          * Whether a skill is the ◎ (double-circle) upgrade of an ○ skill, identified by the name suffix the
          * OCR pass appends ([SkillList.getSkillListEntryTitle]). The "skip double-circle upgrades" toggle drops
@@ -217,6 +246,23 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     prefStyle in skillInferredStyles
             return distanceOk && surfaceOk && styleOk
         }
+
+        /**
+         * Whether a skill may enter the constrained career-end fallback (sparks objective at
+         * CAREER_COMPLETE). Stricter than the general knapsack candidate set on purpose:
+         * negatives and inherited uniques are ALWAYS excluded here because their existing
+         * toggles own those purchases in the common phase (toggle on = already bought before
+         * the fallback runs; toggle off = must not be bought at all), the double-circle skip
+         * toggle is honored, and the skill must pass the Style-preference axes - a
+         * wrong-distance, wrong-style, or wrong-surface skill never enters the fallback.
+         */
+        fun careerEndFallbackCandidateAllowed(
+            isNegative: Boolean,
+            isInheritedUnique: Boolean,
+            isDoubleCircle: Boolean,
+            skipDoubleCircleUpgrades: Boolean,
+            matchesAxes: Boolean,
+        ): Boolean = !isNegative && !isInheritedUnique && (!skipDoubleCircleUpgrades || !isDoubleCircle) && matchesAxes
 
         /**
          * Whether a skill may be auto-injected to cover a recovery deficit (2B-2). Purely
@@ -1341,6 +1387,100 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
+     * Constrained career-end fallback (sparks objective at CAREER_COMPLETE only): spend the
+     * balance the planned phase left on profile-compatible skills, because the game discards
+     * every unspent point at Finish. Mirrors [getSkillsToBuyOptimizeKnapsackStrategy] but with
+     * the stricter [careerEndFallbackCandidateAllowed] candidate set - no negatives, no
+     * inherited uniques (their toggles own those purchases in the common phase), the
+     * double-circle skip toggle honored, and the Style-preference axes enforced so
+     * wrong-distance, wrong-style, and wrong-surface skills never enter.
+     */
+    private fun getSkillsToBuyCareerEndFallback(
+        skillList: SkillList,
+        skillsToBuy: List<String>,
+        availableSkillPoints: Int,
+    ): Map<String, Int> {
+        val result: MutableMap<String, Int> = mutableMapOf()
+        if (availableSkillPoints <= 0) return result.toMap()
+
+        val (preferredRunningStyle, preferredTrackDistance, preferredTrackSurface) = resolvePreferredAxes()
+        val available =
+            skillList.getAvailableSkills().filterValues { entry ->
+                entry.bIsAvailable &&
+                    entry.name !in skillsToBuy &&
+                    entry.screenPrice > 0 &&
+                    careerEndFallbackCandidateAllowed(
+                        isNegative = entry.skillData.bIsNegative,
+                        isInheritedUnique = entry.skillData.bIsInheritedUnique,
+                        isDoubleCircle = isDoubleCircleUpgrade(entry.name),
+                        skipDoubleCircleUpgrades = skipDoubleCircleUpgrades,
+                        matchesAxes =
+                            matchesPreference(
+                                entry.trackDistance,
+                                entry.runningStyle,
+                                entry.inferredRunningStyles,
+                                entry.trackSurface,
+                                preferredTrackDistance,
+                                preferredRunningStyle,
+                                preferredTrackSurface,
+                            ),
+                    )
+            }
+        if (available.isEmpty()) {
+            MessageLog.i(TAG, "[KNAPSACK] Career-end fallback found no compatible skills to plan against. Budget remaining: $availableSkillPoints.")
+            return result.toMap()
+        }
+
+        val candidates: List<SkillCandidate> =
+            available.values.map { entry ->
+                SkillCandidate(
+                    name = entry.name,
+                    price = entry.screenPrice,
+                    evaluationPoints = entry.evaluationPoints,
+                    isNegative = entry.skillData.bIsNegative,
+                    isInheritedUnique = entry.skillData.bIsInheritedUnique,
+                    isUserPlanned = false,
+                    communityTier = entry.skillData.communityTier,
+                )
+            }
+        val groups =
+            buildKnapsackGroups(
+                candidates = candidates,
+                upgradeChains = game.skillDatabase.skillUpgradeChains,
+                requiredNames = emptySet(),
+            )
+        val plan: List<Pair<String, Int>> = calculateOptimizeKnapsackPurchases(groups, availableSkillPoints)
+        if (plan.isEmpty()) {
+            MessageLog.i(TAG, "[KNAPSACK] Career-end fallback DP returned empty plan (no feasible purchases under budget).")
+            return result.toMap()
+        }
+
+        val planTotal = plan.sumOf { it.second }
+        MessageLog.i(
+            TAG,
+            "[KNAPSACK] Career-end fallback plan: ${plan.size} compatible skills for $planTotal SP. Skills: ${plan.joinToString { "${it.first}(${it.second})" }}",
+        )
+
+        var remaining = availableSkillPoints
+        for ((name, price) in plan) {
+            if (price > remaining) {
+                MessageLog.w(TAG, "[KNAPSACK] Skipping \"$name\" (career-end fallback): plan price $price exceeds remaining budget $remaining.")
+                continue
+            }
+            val entry = skillList.getAvailableSkills()[name]
+            if (entry == null || !entry.bIsAvailable) {
+                MessageLog.w(TAG, "[KNAPSACK] Career-end fallback skill \"$name\" no longer available on screen. Skipping.")
+                continue
+            }
+            entry.buy()
+            result[name] = entry.screenPrice
+            remaining -= entry.screenPrice
+        }
+
+        return result.toMap()
+    }
+
+    /**
      * Retrieve all available skills to purchase based on the specified spending strategy.
      *
      * @param skillPlanSettings The [SkillPlanSettings] to follow.
@@ -1373,12 +1513,28 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         // drained into spark-diluting filler. Manual mode always allows the tail (strategyTailAllowed
         // is true for every objective there), so Manual behavior is untouched.
         val bAllowStrategyTail: Boolean = strategyTailAllowed(campaign.resolvedSkillThreshold.mode, campaign.skillSpendObjective)
+        // Career-end exception to planned-only: at CAREER_COMPLETE the game is about to DISCARD
+        // every unspent point at Finish, so a sparks session extends into the constrained
+        // profile-compatible fallback once the plan is exhausted (a live sparks career handed
+        // 716 points to the Finish click under pure planned-only). Mid-career sparks sessions
+        // stay planned-only exactly as before.
+        val bCareerEndFallback: Boolean =
+            !bAllowStrategyTail &&
+                careerEndConstrainedFallbackAllowed(campaign.resolvedSkillThreshold.mode, campaign.skillSpendObjective, sessionEffectiveTrigger)
         sessionStrategyTailAllowed = bAllowStrategyTail
+        sessionCareerEndFallback = if (bCareerEndFallback) true else null
         if (!bAllowStrategyTail) {
-            MessageLog.i(
-                TAG,
-                "[SKILLS] Planned-only spending (${campaign.skillSpendObjective.token()} objective): skipping the ${skillPlanSettings.strategy.name} strategy tail.",
-            )
+            if (bCareerEndFallback) {
+                MessageLog.i(
+                    TAG,
+                    "[SKILLS] Career-end spending (${campaign.skillSpendObjective.token()} objective): planned skills first, then profile-compatible skills (unspent points are discarded by the game at Finish).",
+                )
+            } else {
+                MessageLog.i(
+                    TAG,
+                    "[SKILLS] Planned-only spending (${campaign.skillSpendObjective.token()} objective): skipping the ${skillPlanSettings.strategy.name} strategy tail.",
+                )
+            }
         }
 
         // Execute strategy-specific checks.
@@ -1421,6 +1577,16 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                         )
                     }
                 }
+        } else if (bCareerEndFallback) {
+            // Always the knapsack, never the configured strategy: the fallback's contract is
+            // "constrained and profile-compatible", and the knapsack path is the one that
+            // enforces the Style-preference axes on its candidate set.
+            result +=
+                getSkillsToBuyCareerEndFallback(
+                    skillList = skillList,
+                    skillsToBuy = result.keys.toList(),
+                    availableSkillPoints = availableSkillPoints - result.values.sum(),
+                )
         }
 
         MessageLog.v(TAG, "================ Skills To Buy =================")
@@ -1522,6 +1688,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         // Reset the per-session tail and recovery decisions: they stay null on paths that exit
         // before the planner runs, so those records omit the fields rather than carrying stale ones.
         sessionStrategyTailAllowed = null
+        sessionCareerEndFallback = null
+        sessionEffectiveTrigger = null
+        sessionPlanningScanComplete = null
         sessionRecoveryRuleActive = null
         sessionRecoveryRequired = null
         sessionRecoverySkill = null
@@ -1533,6 +1702,10 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
 
         // Verify that the bot is currently at the skill list screen.
         val bIsCareerComplete: Boolean = skillList.checkCareerCompleteSkillListScreen(bitmap)
+        // The career-end Learn list is long enough that a full read does not fit the ordinary
+        // list budget, and the finalization guard can only approve a read it can prove reached
+        // the end - so this one caller gets the dedicated budget. Every other scan is unchanged.
+        if (bIsCareerComplete) skillList.scanBudgetMs = CAREER_END_SCAN_BUDGET_MS
         if (!bIsCareerComplete && !skillList.checkSkillListScreen(bitmap)) {
             MessageLog.e(TAG, "[ERROR] start:: Not at skill list screen. Aborting...")
             recordSkillSpend(SkillSpendOutcome.FAILED, trigger, skillPlanName, null)
@@ -1566,6 +1739,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         // (the debug harness), so the record carries the plan and omits the trigger rather than guessing.
         val resolvedPlanKey: String = skillPlanName ?: if (bIsCareerComplete) PLAN_CAREER_COMPLETE else PLAN_PRE_FINALS
         val effectiveTrigger: SkillCheckTrigger? = trigger ?: if (bIsCareerComplete) SkillCheckTrigger.CAREER_COMPLETE else null
+        sessionEffectiveTrigger = effectiveTrigger
 
         // If no purchasing options are enabled, exit early to avoid unnecessary scanning.
         if (
@@ -1592,16 +1766,31 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 skillList.detectSkillPoints(bitmap) ?: 0
             }
 
-        // Exit if the current skill points are below the minimum possible skill cost.
-        if (skillPoints < 42) {
-            MessageLog.i(TAG, "[SKILLS] Skill Points < 42. Cannot afford any skills. Aborting...")
-            recordSkillSpend(SkillSpendOutcome.NOTHING_TO_BUY, effectiveTrigger, resolvedPlanKey, skillPlanSettings, spBefore = skillPoints, spAfter = skillPoints)
-            skillList.cancelAndExit()
-            return true
+        // Mid-career early exit below the cannot-afford heuristic. 42 is upstream's
+        // approximation (the cheapest non-negative skill costs 70 before discounts and hint
+        // discounts reach 40%; purchasable negatives price at 40), NOT a proven universal
+        // floor - so the finalization guard never consumes it. Adaptive careerComplete
+        // sessions skip this exit entirely: the guard needs full candidate-exhaustion evidence
+        // (a complete scan) to approve Finish, and the balance-specific proof ("below the
+        // cheapest eligible candidate") replaces any price-floor shortcut.
+        if (skillPoints < SKILL_POINTS_EARLY_EXIT_FLOOR) {
+            val guardNeedsEvidence =
+                campaign.resolvedSkillThreshold.mode == SkillSpendMode.ADAPTIVE && effectiveTrigger == SkillCheckTrigger.CAREER_COMPLETE
+            if (!guardNeedsEvidence) {
+                MessageLog.i(TAG, "[SKILLS] Skill Points < $SKILL_POINTS_EARLY_EXIT_FLOOR. Cannot afford any skills. Aborting...")
+                recordSkillSpend(SkillSpendOutcome.NOTHING_TO_BUY, effectiveTrigger, resolvedPlanKey, skillPlanSettings, spBefore = skillPoints, spAfter = skillPoints)
+                skillList.cancelAndExit()
+                return true
+            }
+            MessageLog.i(
+                TAG,
+                "[SKILLS] Skill Points $skillPoints are below the mid-career early-exit heuristic, but the career-end session still scans so the finalization guard gets complete candidate-exhaustion evidence.",
+            )
         }
 
         // Gather and parse all skill entries from the screen.
         skillList.parseSkillListEntries(bUseMockData = USE_MOCK_DATA)
+        sessionPlanningScanComplete = if (USE_MOCK_DATA) true else skillList.lastScanComplete
         if (skillList.getAllSkills().isEmpty()) {
             MessageLog.e(TAG, "[ERROR] start:: Failed to detect skills.")
             recordSkillSpend(SkillSpendOutcome.ABORTED_PARSE, effectiveTrigger, resolvedPlanKey, skillPlanSettings, spBefore = skillPoints, spAfter = skillPoints)
@@ -1766,14 +1955,27 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         confirmed: List<String> = emptyList(),
         skillList: SkillList? = null,
     ) {
+        // The points delta is the arbiter. If it says purchases happened that the obtained set
+        // never saw, every "skipped" verdict below would be unsound - flag the gap and say nothing
+        // more, rather than name skills as unbought when the points prove otherwise. Hoisted out
+        // of the telemetry runCatching because the finalization evidence needs it too.
+        val confirmedIncomplete: Boolean =
+            SkillSpendTelemetry.confirmationIsIncomplete(proposed, confirmed.toSet(), spBefore, spAfter)
+        // The finalization gate's view of this session. Assigned before (and independent of) the
+        // corpus append below: a telemetry IO failure must never blind the guard that decides
+        // whether Finish is safe.
+        lastSessionEvidence =
+            computeFinalizeEvidence(
+                outcome = outcome,
+                trigger = trigger,
+                planKey = planKey,
+                skillList = skillList,
+                spAfter = spAfter,
+                confirmedIncomplete = confirmedIncomplete,
+            )
         runCatching {
             val livePrices: Map<String, Int> =
                 skillList?.getAllSkills()?.mapValues { it.value.screenPrice } ?: emptyMap()
-            // The points delta is the arbiter. If it says purchases happened that the obtained set
-            // never saw, every "skipped" verdict below would be unsound - flag the gap and say nothing
-            // more, rather than name skills as unbought when the points prove otherwise.
-            val confirmedIncomplete: Boolean =
-                SkillSpendTelemetry.confirmationIsIncomplete(proposed, confirmed.toSet(), spBefore, spAfter)
             val skipped =
                 if (proposed.isEmpty() || confirmedIncomplete) {
                     emptyList()
@@ -1810,6 +2012,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     plannedSkill = campaign.activeTriggerContext?.takeIf { it.trigger == trigger }?.plannedSkill,
                     plannedSkillObservedPrice = campaign.activeTriggerContext?.takeIf { it.trigger == trigger }?.plannedSkillObservedPrice,
                     strategyTailAllowed = sessionStrategyTailAllowed,
+                    careerEndFallback = sessionCareerEndFallback,
                     recoveryRuleActive = sessionRecoveryRuleActive,
                     recoveryRequired = sessionRecoveryRequired,
                     recoverySkill = sessionRecoverySkill,
@@ -1846,5 +2049,73 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         }.onFailure {
             MessageLog.w(TAG, "[SKILL_SPEND] Failed to update planned-skill evidence: $it")
         }
+    }
+
+    /**
+     * Build the finalization evidence for a finished session: completeness of the scan, the
+     * planner, and the confirmation, plus a full classification of every candidate STILL
+     * purchasable on screen under the constrained career-end rules. Classification never skips
+     * a row silently - a candidate is either ELIGIBLE (and possibly affordable against the
+     * verified remaining balance) or counted under the explicit reason that excludes it, so
+     * "exhausted" downstream is a proven statement about examined rows, backed by
+     * [SkillList.lastScanComplete] for the claim that every row WAS examined.
+     */
+    private fun computeFinalizeEvidence(
+        outcome: SkillSpendOutcome,
+        trigger: SkillCheckTrigger?,
+        planKey: String?,
+        skillList: SkillList?,
+        spAfter: Int?,
+        confirmedIncomplete: Boolean,
+    ): FinalizeEvidence {
+        val exhaustion: CandidateExhaustion =
+            if (skillList != null && spAfter != null) {
+                val axes = resolvePreferredAxes()
+                // Snapshot the live post-purchase entry state: getAllSkills so obtained and
+                // virtual rows reach the classifier as explicit freshness facts (it drops
+                // them), never as silently pre-filtered absences.
+                val candidates =
+                    skillList.getAllSkills().map { (name, entry) ->
+                        RemainingCandidate(
+                            name = name,
+                            price = entry.screenPrice,
+                            obtained = entry.bIsObtained,
+                            virtual = entry.bIsVirtual,
+                            isNegative = entry.skillData.bIsNegative,
+                            isInheritedUnique = entry.skillData.bIsInheritedUnique,
+                            isDoubleCircle = isDoubleCircleUpgrade(name),
+                            matchesAxes =
+                                matchesPreference(
+                                    entry.trackDistance,
+                                    entry.runningStyle,
+                                    entry.inferredRunningStyles,
+                                    entry.trackSurface,
+                                    axes.trackDistance,
+                                    axes.runningStyle,
+                                    axes.trackSurface,
+                                ),
+                        )
+                    }
+                classifyRemainingCandidates(candidates, spAfter, skipDoubleCircleUpgrades)
+            } else {
+                CandidateExhaustion(0, 0, null, null, null, emptyMap())
+            }
+        return FinalizeEvidence(
+            sessionOutcome = outcome,
+            trigger = trigger,
+            planKey = planKey,
+            scanComplete = sessionPlanningScanComplete == true,
+            plannerComplete = outcome == SkillSpendOutcome.COMMITTED || outcome == SkillSpendOutcome.NOTHING_TO_BUY,
+            confirmationComplete = outcome != SkillSpendOutcome.COMMIT_UNVERIFIED && !confirmedIncomplete,
+            fallbackAttempted = sessionCareerEndFallback == true,
+            verifiedRemainingSp = spAfter,
+            eligibleCandidateCount = exhaustion.eligibleCount,
+            affordableEligibleCandidateCount = exhaustion.affordableCount,
+            cheapestAffordableEligibleName = exhaustion.cheapestAffordableName,
+            cheapestAffordableEligiblePrice = exhaustion.cheapestAffordablePrice,
+            cheapestEligiblePrice = exhaustion.cheapestEligiblePrice,
+            excludedByReason = exhaustion.excludedByReason,
+            timestampMs = System.currentTimeMillis(),
+        )
     }
 }

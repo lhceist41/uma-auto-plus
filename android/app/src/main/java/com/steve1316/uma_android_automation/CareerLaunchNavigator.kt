@@ -8,8 +8,13 @@ import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.automation_library.utils.TextUtils
+import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
+import com.steve1316.uma_android_automation.bot.FinalizeVerdict
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.SparkRerollPolicy
+import com.steve1316.uma_android_automation.bot.finalizeVerdictUsable
+import com.steve1316.uma_android_automation.bot.parseRemainingSkillPoints
+import com.steve1316.uma_android_automation.bot.popupContradictsVerifiedBalance
 import com.steve1316.uma_android_automation.components.*
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
@@ -358,6 +363,15 @@ class CareerLaunchNavigator(private val context: Context) {
     // flow even though the pill checks missed.
     private var forceBorrowReplacement: Boolean = false
 
+    // The finalization-verdict token captured when this navigation began (null when none was
+    // armed). Only a verdict matching it may govern this navigation's Complete Career / Finish
+    // clicks - see CareerFinalizeGate for the lifecycle.
+    private var expectedFinalizeToken: String? = null
+
+    // Whether the finalization guard applies to this navigation (global Skill Spend Mode is
+    // Adaptive). Manual navigations keep the pre-guard behavior bit-for-bit.
+    private var finalizeGuardActive: Boolean = false
+
     // Vertical offset from the Borrow Card list's "Remove" bar to the center of the first
     // card row. Both supported screen configs render game content at 1080px width, so this
     // dialog-internal offset is stable across them.
@@ -461,6 +475,13 @@ class CareerLaunchNavigator(private val context: Context) {
         borrowExcludedCharacters.clear()
         lastBorrowPickEntry = null
         forceBorrowReplacement = false
+        // Finalization-guard context for THIS navigation: the verdict present when the
+        // navigation begins is the one career this navigation may finalize - a verdict armed
+        // later (a different career) can never match the captured token. Guard activity follows
+        // the global Skill Spend Mode: Adaptive navigations refuse to press Finish without a
+        // usable verdict, Manual navigations behave exactly as they always did.
+        expectedFinalizeToken = CareerFinalizeGate.verdict?.careerToken
+        finalizeGuardActive = SettingsHelper.getStringSetting("skills", "skillSpendMode").trim().lowercase() == "adaptive"
         finalizeToHomeMode = finalizeToHome
         singleRunTraineeTarget = singleRunTrainee
         singleRunTraineeTargetExcludes = singleRunTraineeExcludes
@@ -1236,6 +1257,13 @@ class CareerLaunchNavigator(private val context: Context) {
      * Transition: ButtonCompleteCareer.click() → leads to COMPLETE_CAREER_CONFIRMATION dialog.
      */
     private fun handleCareerSummary(): TransitionResult {
+        // Finalization guard: a BLOCK verdict from the career task means the remaining
+        // skill-point balance could not be explained (an affordable compatible skill remained,
+        // or the evidence was incomplete) after the careerComplete plan and its one retry.
+        // Completing the career would discard the points, so fail the transition here instead
+        // of walking into the Finish dialog. The career stays exactly as it is for the operator.
+        finalizeBlockFailure("CAREER_SUMMARY -> COMPLETE_CAREER_CONFIRMATION")?.let { return it }
+
         MessageLog.i(TAG, "[NAV] Career summary screen detected. Clicking 'Complete Career'...")
 
         if (ButtonCompleteCareer.click(iu)) {
@@ -1250,6 +1278,36 @@ class CareerLaunchNavigator(private val context: Context) {
         )
     }
 
+    /** The verdict allowed to govern this navigation's finalization, or null. Uses the token
+     * captured at navigate() start plus the freshness bound, so a verdict from a previous
+     * career, a previous queue run, or a later arming can never act here. */
+    private fun usableFinalizeVerdict(): FinalizeVerdict? =
+        CareerFinalizeGate.verdict?.takeIf { finalizeVerdictUsable(it, expectedFinalizeToken, System.currentTimeMillis()) }
+
+    /**
+     * The terminal transition failure that stops the completion flow, or null when advancing is
+     * allowed. Shared by every handler that could otherwise advance toward Finish. Two ways to
+     * fail: a usable BLOCK verdict (the career-side evidence says the balance is not
+     * finishable), or - guard active with NO usable verdict - a missing/stale verification
+     * (process restart, a verdict from a different career, an expired verdict). Never click
+     * Complete Career or Finish on faith in Adaptive mode; Manual mode never fails here.
+     */
+    private fun finalizeBlockFailure(transition: String): TransitionResult.Failed? {
+        val verdict = usableFinalizeVerdict()
+        if (verdict != null && verdict.approved) return null
+        if (verdict == null && !finalizeGuardActive) return null
+        val reason =
+            verdict?.reason
+                ?: ("UNSPENT_SKILL_POINTS: no usable finalization verification exists for this career " +
+                    "(missing, stale, or from a different career). Not pressing Finish.")
+        MessageLog.e(TAG, "[NAV] [FINALIZE] $reason")
+        return TransitionResult.Failed(
+            reason = reason,
+            transition = transition,
+            recommendedAction = "Open the career and spend the remaining skill points (or press Finish yourself if the balance is intentional), then restart the queue.",
+        )
+    }
+
     /**
      * COMPLETE_CAREER_CONFIRMATION: The "Complete Career" dialog with Cancel and Finish buttons.
      * This appears at the very end of a run before the post-run result screens.
@@ -1258,9 +1316,45 @@ class CareerLaunchNavigator(private val context: Context) {
      * Transition: ButtonFinish.click() (template-matched).
      */
     private fun handleCompleteCareerConfirmation(): TransitionResult {
+        // Finalization guard, second gate: never press Finish on a BLOCK verdict or without a
+        // usable verdict in Adaptive mode, even when the flow arrived here without passing the
+        // summary handler (a POST_RUN_RESULTS misclassification clicks Complete Career too).
+        finalizeBlockFailure("COMPLETE_CAREER_CONFIRMATION -> POST_RUN_RESULTS")?.let { return it }
+
+        // Approved verdict: cross-check the dialog's own "Remaining Skill Points" line against
+        // the career-side verified balance. The popup is a consistency check, never the sole
+        // source of truth: it blocks only when TWO readable fresh captures both contradict the
+        // verified balance (the same two-read rule the skill-point trigger uses against OCR
+        // ghosts). An unreadable line proceeds - the approved verdict already proves the
+        // career-side evidence was complete, and this OCR region has not been through a live
+        // career yet, so it corroborates but never overrules silently.
+        usableFinalizeVerdict()?.let { verdict ->
+            val firstRead = readCompleteCareerRemainingSp()
+            if (firstRead == null) {
+                MessageLog.w(TAG, "[NAV] [FINALIZE] Could not read the Remaining Skill Points line on the Complete Career dialog. Proceeding on the verified balance of ${verdict.verifiedRemainingSp}.")
+            } else if (firstRead != verdict.verifiedRemainingSp) {
+                MessageLog.w(TAG, "[NAV] [FINALIZE] Dialog reports $firstRead remaining skill points but the verification says ${verdict.verifiedRemainingSp}. Re-reading once...")
+                val secondRead = readCompleteCareerRemainingSp()
+                if (popupContradictsVerifiedBalance(verdict.verifiedRemainingSp, firstRead, secondRead)) {
+                    val reason =
+                        "UNSPENT_SKILL_POINTS: the Complete Career dialog reports $firstRead/$secondRead remaining skill points " +
+                            "but the career-end verification recorded ${verdict.verifiedRemainingSp}. The verification is stale. Not pressing Finish."
+                    MessageLog.e(TAG, "[NAV] [FINALIZE] $reason")
+                    return TransitionResult.Failed(
+                        reason = reason,
+                        transition = "COMPLETE_CAREER_CONFIRMATION -> POST_RUN_RESULTS",
+                        recommendedAction = "Open the career and spend the remaining skill points (or press Finish yourself if the balance is intentional), then restart the queue.",
+                    )
+                }
+            }
+        }
+
         MessageLog.i(TAG, "[NAV] Complete Career confirmation dialog detected. Clicking 'Finish'...")
 
         if (ButtonFinish.click(iu)) {
+            // The finalization verdict is spent the moment Finish is pressed - it must never
+            // leak into the next career's completion flow.
+            CareerFinalizeGate.clear()
             waitSafe(3.0)
             return TransitionResult.Continue
         }
@@ -1270,6 +1364,37 @@ class CareerLaunchNavigator(private val context: Context) {
             transition = "COMPLETE_CAREER_CONFIRMATION -> POST_RUN_RESULTS",
             recommendedAction = "Manually click 'Finish' and restart the queue.",
         )
+    }
+
+    /**
+     * OCR the "Remaining Skill Points: NNN pts" line off the Complete Career confirmation
+     * dialog, or null when the line cannot be located or parsed. The band is anchored to the
+     * matched Finish button: the game renders the dialog at fixed size on the 1080-wide game
+     * surface, with the skill-point line in the text block directly above the button row.
+     */
+    private fun readCompleteCareerRemainingSp(): Int? {
+        val (finishLocation, _) = ButtonFinish.find(iu)
+        if (finishLocation == null) return null
+        val bitmap = iu.getSourceBitmap()
+        val text =
+            try {
+                iu.performOCROnRegion(
+                    bitmap,
+                    (bitmap.width * 0.08).toInt(),
+                    (finishLocation.y.toInt() - 330).coerceAtLeast(0),
+                    (bitmap.width * 0.84).toInt(),
+                    260,
+                    useThreshold = false,
+                    useGrayscale = true,
+                    scale = 1.5,
+                    debugName = "nav_complete_career_remaining_sp",
+                )
+            } catch (e: InterruptedException) {
+                throw e
+            } catch (_: Exception) {
+                return null
+            }
+        return parseRemainingSkillPoints(text)
     }
 
     /**
@@ -1918,6 +2043,13 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.w(TAG, "[NAV] ButtonBack click failed on SkillList screen. Falling through to standard post-run handling.")
         }
 
+        // Finalization guard: the career summary screen sometimes lands here instead of
+        // CAREER_SUMMARY, and the advancement cascade below would click Complete Career. That
+        // click must not happen on a BLOCK verdict or, in Adaptive mode, without a usable one.
+        if (ButtonCompleteCareer.check(iu, sourceBitmap = bitmap)) {
+            finalizeBlockFailure("POST_RUN_RESULTS -> COMPLETE_CAREER_CONFIRMATION")?.let { return it }
+        }
+
         var clickedButton = ""
         val clicked =
             when {
@@ -2051,6 +2183,13 @@ class CareerLaunchNavigator(private val context: Context) {
      * Transition: Multi-detector click.
      */
     private fun handleHomeScreen(): TransitionResult {
+        // Reaching Home means any pending finalization is behind us (the Finish click consumed
+        // its verdict) or was resolved outside the bot. A verdict still armed here is stale by
+        // definition and must never leak into a later completion flow.
+        CareerFinalizeGate.verdict?.let {
+            MessageLog.w(TAG, "[NAV] [FINALIZE] Home reached with a leftover finalization verdict (token ${it.careerToken}); clearing it as stale.")
+            CareerFinalizeGate.clear()
+        }
         MessageLog.i(TAG, "[NAV] On home screen. Attempting to click CAREER button (multi-detector)...")
         val bitmap = iu.getSourceBitmap()
 

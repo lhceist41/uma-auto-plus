@@ -195,6 +195,24 @@ internal enum class SkillSpendObjective {
 internal fun strategyTailAllowed(mode: SkillSpendMode, objective: SkillSpendObjective): Boolean =
     mode != SkillSpendMode.ADAPTIVE || objective.allowsStrategyTail()
 
+/**
+ * Whether a planned-only session may extend into the constrained career-end fallback: buying
+ * profile-compatible skills through the knapsack once the plan is exhausted. Career end is the
+ * one moment the sparks trade-off inverts - unspent points are DISCARDED by the game at Finish,
+ * so refusing to spend protects nothing (a live sparks career handed 716 points to the Finish
+ * click this way). Only Adaptive + sparks + CAREER_COMPLETE qualifies: mid-career sparks
+ * sessions stay planned-only (2B-1), every other objective already runs the full tail, and
+ * Manual mode never consults objectives at all.
+ */
+internal fun careerEndConstrainedFallbackAllowed(
+    mode: SkillSpendMode,
+    objective: SkillSpendObjective,
+    trigger: SkillCheckTrigger?,
+): Boolean =
+    mode == SkillSpendMode.ADAPTIVE &&
+        objective == SkillSpendObjective.SPARKS &&
+        trigger == SkillCheckTrigger.CAREER_COMPLETE
+
 /** How a skill relates to stamina recovery, decided purely by icon family. 20021 is the white
  * recovery family (which also contains inherited-unique recoveries - the candidate predicate,
  * not this classifier, excludes those from injection), 20022 the gold upgrades. The 20024

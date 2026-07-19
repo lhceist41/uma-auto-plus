@@ -855,4 +855,157 @@ class SkillPlanPurchasingTest {
             assertNull(pickRecoveryCandidate(emptyList()))
         }
     }
+
+    // =========================================================================
+    // Career-end constrained fallback (sparks at CAREER_COMPLETE)
+    // =========================================================================
+
+    @Nested
+    @DisplayName("Career-End Fallback Candidate Set")
+    inner class CareerEndFallbackTests {
+        @Test
+        fun `wrong-distance candidates are excluded by the axes gate`() {
+            // A Long trainee (the 716-point career ran preferred distance Long).
+            assertFalse(
+                matchesPreference(TrackDistance.SPRINT, null, emptyList(), null, TrackDistance.LONG, null, null),
+                "a Sprint-committed skill never enters a Long career's fallback",
+            )
+            assertTrue(matchesPreference(TrackDistance.LONG, null, emptyList(), null, TrackDistance.LONG, null, null))
+        }
+
+        @Test
+        fun `wrong-style candidates are excluded by the axes gate`() {
+            assertFalse(
+                matchesPreference(null, RunningStyle.END_CLOSER, emptyList(), null, null, RunningStyle.PACE_CHASER, null),
+                "an End Closer skill never enters a Pace Chaser career's fallback",
+            )
+            assertFalse(
+                matchesPreference(null, null, listOf(RunningStyle.END_CLOSER), null, null, RunningStyle.PACE_CHASER, null),
+                "inferred-style commitment excludes too",
+            )
+            assertTrue(matchesPreference(null, RunningStyle.PACE_CHASER, emptyList(), null, null, RunningStyle.PACE_CHASER, null))
+        }
+
+        @Test
+        fun `wrong-surface candidates are excluded by the axes gate`() {
+            assertFalse(
+                matchesPreference(null, null, emptyList(), TrackSurface.DIRT, null, null, TrackSurface.TURF),
+                "a Dirt-committed skill never enters a Turf career's fallback",
+            )
+            assertTrue(matchesPreference(null, null, emptyList(), TrackSurface.TURF, null, null, TrackSurface.TURF))
+        }
+
+        @Test
+        fun `generic axis-free skills remain compatible`() {
+            assertTrue(
+                matchesPreference(null, null, emptyList(), null, TrackDistance.LONG, RunningStyle.PACE_CHASER, TrackSurface.TURF),
+                "a skill with no axis commitment is profile-compatible by definition",
+            )
+        }
+
+        @Test
+        fun `negative candidates never enter the fallback - the existing toggle owns them in the common phase`() {
+            assertFalse(
+                SkillPlan.Companion.careerEndFallbackCandidateAllowed(
+                    isNegative = true,
+                    isInheritedUnique = false,
+                    isDoubleCircle = false,
+                    skipDoubleCircleUpgrades = false,
+                    matchesAxes = true,
+                ),
+            )
+        }
+
+        @Test
+        fun `inherited unique candidates never enter the fallback - the existing setting owns them in the common phase`() {
+            assertFalse(
+                SkillPlan.Companion.careerEndFallbackCandidateAllowed(
+                    isNegative = false,
+                    isInheritedUnique = true,
+                    isDoubleCircle = false,
+                    skipDoubleCircleUpgrades = false,
+                    matchesAxes = true,
+                ),
+            )
+        }
+
+        @Test
+        fun `the double-circle skip toggle is honored`() {
+            assertFalse(
+                SkillPlan.Companion.careerEndFallbackCandidateAllowed(
+                    isNegative = false,
+                    isInheritedUnique = false,
+                    isDoubleCircle = true,
+                    skipDoubleCircleUpgrades = true,
+                    matchesAxes = true,
+                ),
+                "skip enabled: the upgrade tier is dropped",
+            )
+            assertTrue(
+                SkillPlan.Companion.careerEndFallbackCandidateAllowed(
+                    isNegative = false,
+                    isInheritedUnique = false,
+                    isDoubleCircle = true,
+                    skipDoubleCircleUpgrades = false,
+                    matchesAxes = true,
+                ),
+                "skip disabled: the upgrade tier may be planned",
+            )
+        }
+
+        @Test
+        fun `a compatible axis-passing candidate enters the fallback`() {
+            assertTrue(
+                SkillPlan.Companion.careerEndFallbackCandidateAllowed(
+                    isNegative = false,
+                    isInheritedUnique = false,
+                    isDoubleCircle = false,
+                    skipDoubleCircleUpgrades = true,
+                    matchesAxes = true,
+                ),
+            )
+        }
+
+        @Test
+        fun `planned skills stay first - the common phase buys them before the fallback plans the remainder`() {
+            // The 716-point shape: planned skills affordable at career end must be bought by the
+            // common phase, and only the remaining budget reaches the fallback knapsack.
+            val settings =
+                SkillPlanSettings(
+                    bIsEnabled = true,
+                    strategy = SpendingStrategy.OPTIMIZE_SKILLS,
+                    bEnableBuyInheritedUniqueSkills = false,
+                    bEnableBuyNegativeSkills = false,
+                    skillNames = listOf("Medium Corners ○", "Long Corners ○"),
+                )
+            val planned =
+                listOf(
+                    SkillCandidate("Medium Corners ○", price = 66, evaluationPoints = 239, isUserPlanned = true),
+                    SkillCandidate("Long Corners ○", price = 99, evaluationPoints = 239, isUserPlanned = true),
+                )
+            val common = calculateCommonPurchases(planned, 881, settings)
+            assertEquals(listOf("Medium Corners ○", "Long Corners ○"), common.map { it.first })
+            val remainingBudget = 881 - common.sumOf { it.second }
+            assertEquals(716, remainingBudget, "the incident's exact leftover reaches the fallback")
+
+            // The fallback then spends that remainder on compatible candidates via the knapsack.
+            val compatible =
+                listOf(
+                    SkillCandidate("Up-Tempo", price = 96, evaluationPoints = 239),
+                    SkillCandidate("Soft Step", price = 96, evaluationPoints = 239),
+                    SkillCandidate("Tactical Tweak", price = 108, evaluationPoints = 239),
+                    SkillCandidate("Medium Straightaways ○", price = 80, evaluationPoints = 239),
+                    SkillCandidate("Pace Chaser Savvy ○", price = 71, evaluationPoints = 191),
+                )
+            val plan = calculateOptimizeKnapsackPurchases(buildKnapsackGroups(compatible, emptyMap()), remainingBudget)
+            assertTrue(plan.isNotEmpty(), "716 points must buy compatible skills instead of being discarded")
+            assertEquals(compatible.size, plan.size, "every compatible candidate is affordable under 716")
+            assertTrue(plan.sumOf { it.second } <= remainingBudget)
+        }
+
+        @Test
+        fun `no compatible candidate yields an empty fallback plan - the safe terminal, never a crash`() {
+            assertTrue(calculateOptimizeKnapsackPurchases(buildKnapsackGroups(emptyList(), emptyMap()), 716).isEmpty())
+        }
+    }
 }

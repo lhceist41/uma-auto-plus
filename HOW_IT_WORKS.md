@@ -1219,14 +1219,87 @@ A `sparks` objective changes what an Adaptive session may buy, never when it ope
 planner always runs its common phases first (negative skills if enabled, inherited uniques if
 enabled, then the user plan with its chain substitution); with `sparks` under Adaptive mode the
 strategy-specific tail that normally spends the remaining budget (`OPTIMIZE_SKILLS`,
-`OPTIMIZE_RANK`, or the knapsack) is skipped at every spend session, careerComplete included.
-Leftover SP is accepted deliberately: unplanned filler dilutes the white-spark pool a farming
-career exists to build, and no broad leftover drain exists. There is no automatic recovery
+`OPTIMIZE_RANK`, or the knapsack) is skipped at every mid-career spend session. Leftover SP is
+accepted deliberately there: unplanned filler dilutes the white-spark pool a farming career
+exists to build, and the points remain spendable later. There is no automatic recovery
 exception -- a farming preset must plan its own recovery skills, and every migrated profile does.
 Manual mode ignores the objective entirely and every other objective keeps the full tail, so
 nothing changes outside Adaptive sparks careers. Each record carries the decision as
 `strategyTailAllowed` (false exactly when the tail was skipped; absent when the session exited
 before planning).
+
+The one exception is CAREER_COMPLETE. At career end the trade-off inverts: the game discards
+every unspent point at Finish, so refusing to spend protects nothing (a live sparks career
+handed 716 points to the Finish click under pure planned-only). A sparks careerComplete session
+therefore extends past the plan into a constrained fallback: the compatibility-filtered
+knapsack, further restricted to exclude negatives and inherited uniques outright (their toggles
+own those purchases in the common phase) and to honor the double-circle skip toggle, so only
+profile-compatible skills enter -- wrong-distance, wrong-style, and wrong-surface candidates
+never do. Sessions that ran the fallback carry `careerEndFallback: true` in their records.
+
+### Career finalization guard
+
+Adaptive careers verify the balance before the career is finished, and the decision is
+evidence, never a fixed threshold. Every careerComplete session exports a finalization
+evidence record: whether the candidate scan reached a confirmed end of the list (the scroll
+pass's own end-of-list proof, described below), whether planning concluded (`committed` or `nothing_to_buy`),
+whether purchase confirmation held up (the points-delta arbiter), the screen-verified
+remaining balance, and a full classification of every candidate still purchasable - eligible
+under the constrained career-end rules, or excluded under a recorded reason (`wrong_axes`,
+`negative`, `inherited_unique`, `double_circle`), with the cheapest eligible and cheapest
+affordable prices. Campaign then evaluates: a balance is finishable only when the evidence is
+complete, agrees with the independent Details re-read, and proves exhaustion - zero eligible
+candidates left, or every eligible candidate priced above the balance. There is deliberately
+no price-floor shortcut: the shipped data prices purchasable negatives at 40 (below the
+mid-career "< 42 cannot afford" heuristic, which derives from the cheapest non-negative skill
+at 70 under the deepest observed 40% hint discount) and never bounds discounts, so no
+scan-free floor is provable (SkillDataFloorTest pins both facts). Adaptive careerComplete
+sessions therefore always scan, even below that heuristic - the "below the cheapest eligible
+candidate" proof replaces the floor for tiny balances. An affordable compatible candidate, an incomplete scan, a failed
+parse or entry, an unverified confirmation, a missing session, or a stale balance is never
+finishable: the first such verdict re-runs the careerComplete plan once through the existing
+Learn-screen machinery, the second is terminal.
+
+**Scan completeness and the career-end budget.** A scroll pass reports one of four
+terminations: `COMPLETE` (a positive end-of-list proof: the scrollbar thumb rests at the track
+bottom on a frame that revealed no rows the previous frame had not already shown),
+`TIMED_OUT_AT_BOTTOM_UNCONFIRMED`, `TIMED_OUT_PARTIAL`, or `FAILED`. Only `COMPLETE` counts as
+a full read - a thumb sitting at the bottom is a hint, never evidence. Because a full
+career-end Learn-list read costs roughly 61-62 seconds on the reference device, just past the
+ordinary 60-second list budget, that one caller gets a dedicated 150-second budget
+(`CAREER_END_SCAN_BUDGET_MS`); every other list keeps the default. A pass that reaches its
+deadline in the same iteration that brought the thumb to the bottom is also granted exactly one
+final verification iteration, so the deadline cannot preempt a proof that is one frame away.
+The configured budget and the termination reason are logged with each skill-list scan.
+
+**Authorization lifecycle.** The verdict is scoped to the exact career: it carries a career
+token (outfit-bearing trainee identity, scenario, queue run, and a per-career nonce), the
+verified balance, and its arming time. The identity is created only by
+`CareerFinalizeGate.beginCareer(...)`, which the real career task's run loop calls when a run
+starts - **object constructors never mutate the gate**. That rule is load-bearing: the
+between-run navigator builds a throwaway `Game` (and therefore a `Campaign`) during its own
+startup, so a constructor-side clear would erase the verdict the navigator is about to consume,
+and the guard could never authorize a finish. The navigator captures the token it observes when
+its finalization navigation starts and rejects any verdict that does not match it or is older
+than 30 minutes (3x the between-run navigation deadline), so a verdict can never act across
+queue runs, trainee or scenario switches, or a later arming; a process or service restart simply
+loses the in-memory identity and verdict. In Adaptive mode a missing or unusable verdict REFUSES
+Finish rather than clicking on faith; Manual mode never arms or checks anything. The verdict is
+invalidated by exactly four explicit lifecycle events: the next real career start, any run
+result other than COMPLETE (manual stop, abort, error, breakpoint, skipped run), the navigator
+reaching Home, and the Finish click that consumes it.
+
+On an approved verdict the navigator also OCRs the Complete Career dialog's own "Remaining
+Skill Points" line as a consistency check - never as the source of truth: it blocks only when
+two readable fresh captures both contradict the verified balance (the same two-read rule the
+skill-point trigger uses against OCR ghosts), and an unreadable line proceeds on the verified
+balance, which an approved verdict has already proven complete. On a blocked verdict the
+navigator never clicks Complete Career or Finish: the transition fails with the exact
+`UNSPENT_SKILL_POINTS` reason (verified balance, the cheapest affordable candidate when one
+exists, or which stage was incomplete), the queue stops per its normal error semantics, and
+the career is left untouched for the operator. Each finalization appends one
+`type:"career_finalize"` record carrying the decision, reason, career token, retry flag, and
+the full evidence fields, so every decision can be reconstructed from the corpus.
 
 ### Recovery protection
 

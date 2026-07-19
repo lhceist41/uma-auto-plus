@@ -206,6 +206,23 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Bound for [careerEndEntryAttempts] before completing the career without the careerComplete plan. */
     private val maxCareerEndEntryAttempts: Int = 6
 
+    /** Whether the finalization guard's one controlled re-run of the careerComplete plan has
+     * been spent. Exactly one retry per career: the first large-balance verdict re-opens the
+     * Learn screen through the existing entry machinery; the second verdict is terminal. */
+    private var careerEndSpendRetryUsed: Boolean = false
+
+    /** Fallback nonce, used only when this Campaign is running outside a real career task (the
+     * debug harness, or a helper instance) and no career identity was installed at run start.
+     * The normal path reads the identity the career task created - see [careerFinalizeNonce].
+     * Deliberately NOT the primary identity: construction time is not career identity, and
+     * throwaway Campaign objects must never mint one. */
+    private val fallbackFinalizeNonce: String = java.util.UUID.randomUUID().toString().substring(0, 8)
+
+    /** This career's finalization nonce: the one the real career task installed at run start,
+     * or the local fallback when there is none. */
+    private val careerFinalizeNonce: String
+        get() = CareerFinalizeGate.context?.nonce ?: fallbackFinalizeNonce
+
     /** Consecutive process() ticks resolved ONLY by the misc back-press. A long unbroken streak
      * means the press is not changing the screen and the loop would otherwise spin forever (10+
      * minutes of back-presses observed on a wedged career-end skill screen). */
@@ -3818,6 +3835,91 @@ abstract class Campaign(game: Game) : Task(game) {
 
                 // Print the final Trainee information.
                 trainee.logInfo()
+
+                // Finalization guard (Adaptive mode only): the game DISCARDS every unspent skill
+                // point at Finish, and one sparks career handed 716 points to the Finish click
+                // because its planned-only session had already reported success. Decide here,
+                // where the balance was just re-read from the Details dialog, from EVIDENCE:
+                // the careerComplete session's scan/planner/confirmation completeness and its
+                // candidate-exhaustion counts - never from a fixed balance threshold. An
+                // unproven balance gets one controlled re-run of the careerComplete plan
+                // through the existing Learn-screen machinery; after that the gate is armed
+                // with a career-scoped verdict the between-run navigator consults before it
+                // presses Finish. Manual mode never arms the gate, so Manual finalization is
+                // unchanged.
+                if (resolvedSkillThreshold.mode == SkillSpendMode.ADAPTIVE) {
+                    val evidence =
+                        skillPlan.lastSessionEvidence?.takeIf { it.trigger == SkillCheckTrigger.CAREER_COMPLETE }
+                    val evaluation =
+                        evaluateCareerFinalization(
+                            mode = resolvedSkillThreshold.mode,
+                            detailsSp = trainee.skillPoints,
+                            evidence = evidence,
+                            retryUsed = careerEndSpendRetryUsed,
+                        )
+                    if (evaluation.decision == FinalizeDecision.RETRY_SPEND) {
+                        MessageLog.w(TAG, "[FINALIZE] ${evaluation.reason} Re-running the careerComplete skill plan once...")
+                        careerEndSpendRetryUsed = true
+                        bCareerEndSkillsHandled = false
+                        careerEndEntryAttempts = 0
+                        careerEndExitAttempts = 0
+                        return null
+                    }
+                    val approved = evaluation.decision == FinalizeDecision.FINISH
+                    if (approved) {
+                        MessageLog.i(TAG, "[FINALIZE] ${evaluation.reason} Finish is approved.")
+                    } else {
+                        MessageLog.e(TAG, "[FINALIZE] ${evaluation.reason}")
+                    }
+                    // The verdict is scoped to THIS career: the token combines the applied
+                    // preset's outfit-bearing trainee identity (falling back to the OCR'd
+                    // name), the scenario, the queue run, and the per-career construction
+                    // nonce. The navigator captures the token it observes when its
+                    // finalization navigation starts, and a verdict whose token does not match
+                    // (a previous career, a previous run, a later arming) is unusable.
+                    // Prefer the run number the career task recorded at run start; fall back to
+                    // the persisted queue cursor for paths that started without a context.
+                    val queueRun: Int =
+                        CareerFinalizeGate.context?.queueRun ?: SettingsHelper.getIntSetting("queueState", "currentRun", 0)
+                    val traineeIdentity: String =
+                        SettingsHelper.getStringSetting("general", "appliedPresetTrainee").trim().ifEmpty { trainee.name }
+                    val verdict =
+                        FinalizeVerdict(
+                            careerToken = buildCareerFinalizeToken(traineeIdentity, game.scenario, queueRun.takeIf { it > 0 }, careerFinalizeNonce),
+                            queueRun = queueRun.takeIf { it > 0 },
+                            trainee = traineeIdentity,
+                            scenario = game.scenario,
+                            objective = skillSpendObjective.token(),
+                            approved = approved,
+                            verifiedRemainingSp = evidence?.verifiedRemainingSp ?: trainee.skillPoints,
+                            sessionTimestampMs = evidence?.timestampMs,
+                            reason = evaluation.reason,
+                            armedAtMs = System.currentTimeMillis(),
+                        )
+                    CareerFinalizeGate.arm(verdict)
+                    MessageLog.i(TAG, "[FINALIZE] Verdict armed for token ${verdict.careerToken} (queueRun=${verdict.queueRun ?: "-"}).")
+                    // Durable reconstruction record: one per career finalization, best-effort.
+                    runCatching {
+                        OutcomeCorpus.append(
+                            game.myContext,
+                            SkillSpendTelemetry.buildCareerFinalizeRecord(
+                                timestamp = System.currentTimeMillis(),
+                                decision = evaluation.decision.name,
+                                reason = evaluation.reason,
+                                careerToken = verdict.careerToken,
+                                trainee = trainee.name.ifEmpty { null }?.replace(" ", "_"),
+                                scenario = game.scenario.ifEmpty { null }?.replace(" ", "_"),
+                                objective = skillSpendObjective.token(),
+                                queueRun = verdict.queueRun,
+                                verifiedRemainingSp = verdict.verifiedRemainingSp,
+                                retryUsed = careerEndSpendRetryUsed,
+                                evidence = evidence,
+                            ),
+                        )
+                    }.onFailure {
+                        MessageLog.w(TAG, "[FINALIZE] Failed to append the career_finalize record: $it")
+                    }
+                }
 
                 // Reaching here means the careerComplete plan already committed (via the
                 // checkCareerEndSkillListScreen branch on an earlier tick), was disabled, or was

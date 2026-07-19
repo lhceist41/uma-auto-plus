@@ -183,6 +183,45 @@ class AdaptiveSkillPolicyTest {
         }
 
         @Test
+        fun `the career-end fallback fires only for adaptive sparks at CAREER_COMPLETE`() {
+            assertTrue(
+                careerEndConstrainedFallbackAllowed(SkillSpendMode.ADAPTIVE, SkillSpendObjective.SPARKS, SkillCheckTrigger.CAREER_COMPLETE),
+                "the one qualifying combination",
+            )
+            // Mid-career sparks sessions stay planned-only: no fallback on any other trigger.
+            for (trigger in SkillCheckTrigger.entries.filter { it != SkillCheckTrigger.CAREER_COMPLETE }) {
+                assertFalse(
+                    careerEndConstrainedFallbackAllowed(SkillSpendMode.ADAPTIVE, SkillSpendObjective.SPARKS, trigger),
+                    "sparks at $trigger must stay planned-only",
+                )
+            }
+            assertFalse(
+                careerEndConstrainedFallbackAllowed(SkillSpendMode.ADAPTIVE, SkillSpendObjective.SPARKS, null),
+                "an unresolved trigger never extends the session",
+            )
+        }
+
+        @Test
+        fun `rank, safe_completion, and race_reward never route through the fallback - their tails are unchanged`() {
+            for (objective in listOf(SkillSpendObjective.RANK, SkillSpendObjective.SAFE_COMPLETION, SkillSpendObjective.RACE_REWARD)) {
+                for (trigger in SkillCheckTrigger.entries) {
+                    assertFalse(careerEndConstrainedFallbackAllowed(SkillSpendMode.ADAPTIVE, objective, trigger), "$objective at $trigger")
+                }
+                // Their full strategy tail remains allowed exactly as before the guard existed.
+                assertTrue(strategyTailAllowed(SkillSpendMode.ADAPTIVE, objective), "$objective tail unchanged")
+            }
+        }
+
+        @Test
+        fun `manual mode never routes through the fallback for any objective or trigger`() {
+            for (objective in SkillSpendObjective.entries) {
+                for (trigger in SkillCheckTrigger.entries) {
+                    assertFalse(careerEndConstrainedFallbackAllowed(SkillSpendMode.MANUAL, objective, trigger), "$objective at $trigger")
+                }
+            }
+        }
+
+        @Test
         fun `an unknown persisted objective resolves to rank and keeps the tail`() {
             val parsed = SkillSpendObjective.fromPersisted("mystery")
             assertEquals(SkillSpendObjective.RANK, parsed)

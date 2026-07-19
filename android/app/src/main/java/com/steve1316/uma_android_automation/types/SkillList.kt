@@ -15,6 +15,9 @@ import com.steve1316.uma_android_automation.types.SkillData
 import com.steve1316.uma_android_automation.types.SkillListEntry
 import com.steve1316.uma_android_automation.types.TrackDistance
 import com.steve1316.uma_android_automation.types.TrackSurface
+import com.steve1316.uma_android_automation.utils.CAREER_END_SCAN_BUDGET_MS
+import com.steve1316.uma_android_automation.utils.MAX_PROCESS_TIME_DEFAULT_MS
+import com.steve1316.uma_android_automation.utils.ScanTermination
 import com.steve1316.uma_android_automation.utils.ScrollList
 import com.steve1316.uma_android_automation.utils.ScrollListEntry
 import org.opencv.core.Point
@@ -91,6 +94,21 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
     /** The current amount of skill points available to spend. */
     var skillPoints: Int = 0
         private set
+
+    /** Why the most recent [parseSkillListEntries] scroll pass ended. The finalization guard
+     * needs this to distinguish "no candidates remain" from "the scan never covered the whole
+     * list"; only [ScanTermination.COMPLETE] is a positive end-of-list proof. */
+    var lastScanTermination: ScanTermination = ScanTermination.FAILED
+        private set
+
+    /** Convenience view of [lastScanTermination] for the completeness evidence. */
+    val lastScanComplete: Boolean
+        get() = lastScanTermination.isComplete()
+
+    /** Budget for a full list read, in milliseconds. Defaults to the ordinary list budget; the
+     * career-end session raises it to [CAREER_END_SCAN_BUDGET_MS] because that list is long
+     * enough to need it, and the finalization guard can only approve a proven-complete read. */
+    var scanBudgetMs: Int = MAX_PROCESS_TIME_DEFAULT_MS
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1021,6 +1039,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
         // Cache titles during the scan to optimize performance.
         val skillTitleMap = mutableMapOf<Int, String>()
         list.process(
+            maxTimeMs = scanBudgetMs,
             keyExtractor = { entry ->
                 val title = getSkillListEntryTitle(entry.bitmap)
                 if (title != null) skillTitleMap[entry.index] = title
@@ -1032,6 +1051,8 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
             // Fire the callback if provided.
             if (onEntry != null && res != null) onEntry.onEntryDetected(this, res.first, res.second) else false
         }
+        lastScanTermination = list.lastTermination
+        MessageLog.i(TAG, "[SKILLS] Skill list scan finished: termination=$lastScanTermination, budget=${scanBudgetMs}ms, entries=${entries.count { !it.value.bIsVirtual }}.")
 
         return entries
     }

@@ -27,8 +27,10 @@ import com.steve1316.automation_library.utils.MediaProjectionService
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.SettingsHelper
+import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.TaskResult
+import com.steve1316.uma_android_automation.bot.shouldClearVerdictForRunResult
 import com.steve1316.uma_android_automation.bot.TaskResultCode
 import com.steve1316.uma_android_automation.utils.LogStreamServer
 import dev.kord.common.entity.Snowflake
@@ -1493,6 +1495,19 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         MessageLog.i(TAG, "[QUEUE] ========================================\n")
                     }
 
+                    // A REAL career task is about to start: this is the one place a career
+                    // finalization identity is created. It drops any verdict the previous career
+                    // left and installs this career's nonce, which the career task's Campaign
+                    // reads when it arms its verdict. Object constructors (the throwaway Game and
+                    // Campaign the navigator builds during its own startup) deliberately do not
+                    // touch the gate - a constructor-side clear once erased the verdict the
+                    // navigator was about to consume.
+                    CareerFinalizeGate.beginCareer(
+                        nonce = java.util.UUID.randomUUID().toString().substring(0, 8),
+                        queueRun = if (enableRunQueue) i else null,
+                        nowMs = System.currentTimeMillis(),
+                    )
+
                     // Run the game.
                     val result = runSingleGame()
 
@@ -1512,6 +1527,16 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
                     if (enableRunQueue) {
                         sendQueueProgressEvent(i, totalRuns, "completed", effectiveResult.code.name, effectiveResult.message)
+                    }
+
+                    // A run that did not complete must never leave a finalization verdict armed:
+                    // the verdict describes a career whose finalization is no longer the next
+                    // thing that happens (manual stop, abort, error, breakpoint, skip). Only a
+                    // COMPLETE run's verdict survives into the finalize navigation that follows.
+                    // The decision itself is the pure shouldClearVerdictForRunResult, pinned by
+                    // JUnit across every result code.
+                    if (shouldClearVerdictForRunResult(effectiveResult.code)) {
+                        CareerFinalizeGate.clear()
                     }
 
                     // Evaluate the result.

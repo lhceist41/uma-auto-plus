@@ -15,6 +15,76 @@ import kotlin.math.abs
 /** Default maximum processing time in milliseconds. */
 const val MAX_PROCESS_TIME_DEFAULT_MS = 60000
 
+/**
+ * Dedicated budget for a FULL career-end skill-list read, in milliseconds.
+ *
+ * The career-end Learn list is the longest list the bot scrolls: on the reference emulator a
+ * complete pass costs roughly 61-62 seconds of scroll-and-read steps, which sits just past the
+ * ordinary 60s budget - so the pass was cut off one frame before it could prove it had reached
+ * the end, and a fully-read list reported as incomplete. 150s is that measured cost with enough
+ * headroom for a host running at half the reference speed (~124s) plus jitter, while still
+ * bounding a genuinely wedged list far below the between-run navigation deadline. Only the
+ * career-end skill-list scans opt in; every other list keeps [MAX_PROCESS_TIME_DEFAULT_MS].
+ */
+const val CAREER_END_SCAN_BUDGET_MS = 150000
+
+/**
+ * How a [ScrollList.process] pass ended. The Boolean return stays the "did the pass do its job"
+ * signal for existing callers; this is the precise reason, for callers (the career-finalization
+ * guard) that must distinguish a proven-complete read from one that merely looks finished.
+ */
+enum class ScanTermination {
+    /** Positive end-of-list proof: the list end was observed, not assumed. */
+    COMPLETE,
+
+    /** The budget ran out with the scrollbar thumb at the track bottom but WITHOUT the
+     * no-new-entries proof. The read probably covered everything - but "probably" is not
+     * evidence, so this never counts as complete. */
+    TIMED_OUT_AT_BOTTOM_UNCONFIRMED,
+
+    /** The budget ran out mid-list. Rows below the last frame were never read. */
+    TIMED_OUT_PARTIAL,
+
+    /** The pass aborted: unreadable frames, a list frozen mid-track, or detection failure. */
+    FAILED,
+
+    ;
+
+    /** Only a positive proof may be treated as a complete read. */
+    fun isComplete(): Boolean = this == COMPLETE
+}
+
+/** Whether the elapsed time has exhausted [budgetMs]. Pure so the budget policy is testable
+ * without a clock: the same 62s pass exceeds the ordinary budget and fits the career-end one. */
+internal fun scanDeadlineExceeded(elapsedMs: Long, budgetMs: Int): Boolean = elapsedMs >= budgetMs
+
+/**
+ * The positive end-of-list proof used by the scroll loop: the thumb rests at the bottom of its
+ * track AND the frame that put it there revealed no rows the previous frame had not already
+ * shown AND the frame actually detected rows. Extracted so the exact predicate is pinned by
+ * JUnit rather than re-derived from the loop.
+ */
+internal fun endOfListProven(atTrackBottom: Boolean, foundNewEntries: Boolean, entriesDetected: Boolean): Boolean =
+    atTrackBottom && !foundNewEntries && entriesDetected
+
+/**
+ * Whether a pass that just hit its deadline may run ONE more iteration to try to obtain the
+ * end-of-list proof. Granted only when the thumb is already at the track bottom (the proof is
+ * one frame away) and only once, so a deadline can never be extended indefinitely - it exists
+ * because stopping in the same iteration that reached the bottom is what turned a complete read
+ * into an unprovable one.
+ */
+internal fun allowDeadlineGrace(atTrackBottom: Boolean, graceAlreadyUsed: Boolean): Boolean =
+    atTrackBottom && !graceAlreadyUsed
+
+/**
+ * Classify a pass that ran out of budget. Deliberately never returns [ScanTermination.COMPLETE]:
+ * completion comes only from the in-loop positive proof (possibly obtained during the grace
+ * iteration above). A thumb sitting at the bottom is a hint, not evidence.
+ */
+internal fun classifyScanDeadlineExit(atTrackBottom: Boolean): ScanTermination =
+    if (atTrackBottom) ScanTermination.TIMED_OUT_AT_BOTTOM_UNCONFIRMED else ScanTermination.TIMED_OUT_PARTIAL
+
 /** Functional interface for a callback that is called whenever an entry is detected while processing the list. */
 fun interface OnEntryDetectedCallback {
     /**
@@ -104,6 +174,11 @@ data class ScrollListEntryDetectionConfig(
  * @param entryDetectionConfig The configuration for image detection.
  */
 class ScrollList private constructor(private val game: Game, private val bboxList: BoundingBox, entryDetectionConfig: ScrollListEntryDetectionConfig) {
+    /** Why the most recent [process] pass ended. [ScanTermination.FAILED] until a pass runs, so
+     * a caller that never scanned can never be mistaken for one that finished. */
+    var lastTermination: ScanTermination = ScanTermination.FAILED
+        private set
+
     /** The minimum height for a single entry. */
     private val defaultMinEntryHeight: Int = game.imageUtils.relHeight((SharedData.displayHeight * 0.0781).toInt()) // 150px on 1920h
 
@@ -819,8 +894,25 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
         // Stores keys from the previous frame to identify the overlap with the current frame.
         var lastFrameKeys: List<String> = emptyList()
 
+        // Deadline bookkeeping. The thumb position from the most recent end-of-list evaluation
+        // decides how a deadline exit is classified, and grants at most ONE grace iteration when
+        // the proof is a single frame away - stopping in the very iteration that reached the
+        // bottom is what once turned a fully-read list into an unprovable one.
+        var lastObservedAtTrackBottom = false
+        var deadlineGraceUsed = false
+
         var index = 0
-        while (System.currentTimeMillis() - startTime < maxTimeMsLong) {
+        while (true) {
+            if (scanDeadlineExceeded(System.currentTimeMillis() - startTime, maxTimeMs)) {
+                if (allowDeadlineGrace(lastObservedAtTrackBottom, deadlineGraceUsed)) {
+                    deadlineGraceUsed = true
+                    MessageLog.w(TAG, "[WARN] process:: Budget of ${maxTimeMs}ms reached with the thumb at the track bottom; running one final end-of-list verification.")
+                } else {
+                    lastTermination = classifyScanDeadlineExit(lastObservedAtTrackBottom)
+                    MessageLog.e(TAG, "[ERROR] process:: Timed out after ${maxTimeMs}ms (termination=$lastTermination).")
+                    return false
+                }
+            }
             var currentFrameEntries: List<ScrollListEntry> = emptyList()
             // Whether this frame revealed at least one entry not present in the previous frame.
             // Drives content-based end detection when no scrollbar is available.
@@ -886,6 +978,7 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
                         TAG,
                         "[ERROR] process:: $consecutiveEmptyFrames consecutive frames with zero detected entries - the list is empty or row detection failed (capture rendered but no rows matched). Aborting the scroll pass.",
                     )
+                    lastTermination = ScanTermination.FAILED
                     return false
                 }
             } else {
@@ -918,6 +1011,10 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
                     val entry = currentFrameEntries[i]
                     if (onEntry.onEntryDetected(this, entry)) {
                         MessageLog.d(TAG, "[DEBUG] process:: onEntry callback returned TRUE for entry ${entry.index}. Exiting loop.")
+                        // The caller found what it wanted and stopped the pass early: the list was
+                        // NOT read to its end, so this is a deliberate partial read, never a
+                        // completeness proof.
+                        lastTermination = ScanTermination.TIMED_OUT_PARTIAL
                         return true
                     }
                 }
@@ -965,6 +1062,13 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
                     // them by counting consecutive no-moves and only concluding "end" after several;
                     // each no-move falls through and re-issues the scroll, and the per-frame dedup
                     // prevents double-processing.
+                    // Track-bottom state is evaluated on EVERY frame (not only on a no-move frame)
+                    // so a deadline exit can be classified against the thumb's real position and
+                    // the grace iteration above knows whether the proof is one frame away.
+                    run {
+                        val trackBottomNow: Int? = bboxBar?.let { it.y + it.h }
+                        lastObservedAtTrackBottom = trackBottomNow == null || (bboxThumb.y + bboxThumb.h) >= trackBottomNow - 20
+                    }
                     if (prevThumbY != null && abs(bboxThumb.y - prevThumbY!!) <= thumbMoveTolerancePx) {
                         consecutiveNoMove++
                         // A thumb resting at the BOTTOM of its track is a genuine end of list; a thumb
@@ -982,8 +1086,9 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
                         // a faint or partially-rendered scrollbar can collapse the track bbox down to the
                         // thumb height and mis-fire at the TOP of a genuinely long list (would re-introduce
                         // the career-end skill-list truncation).
-                        if (bAtTrackBottom && !foundNewEntries && currentFrameEntries.isNotEmpty()) {
+                        if (endOfListProven(bAtTrackBottom, foundNewEntries, currentFrameEntries.isNotEmpty())) {
                             MessageLog.w(TAG, "[WARN] process:: Reached end of scroll list (thumb at track bottom, no new entries). Exiting loop.")
+                            lastTermination = ScanTermination.COMPLETE
                             return true
                         }
                         if (consecutiveNoMove >= maxConsecutiveNoMove) {
@@ -991,6 +1096,7 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
                             // entirely. Escalate once, then abort loudly rather than treating it as "end".
                             if (bAtTrackBottom) {
                                 MessageLog.w(TAG, "[WARN] process:: Reached end of scroll list ($consecutiveNoMove consecutive no-move reads, thumb at track bottom). Exiting loop.")
+                                lastTermination = ScanTermination.COMPLETE
                                 return true
                             }
                             if (!bEscalatedScroll) {
@@ -1006,6 +1112,7 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
                             } else {
                                 game.imageUtils.saveBitmap(filename = "scroll_list_frozen", fullRes = true)
                                 MessageLog.e(TAG, "[ERROR] process:: List frozen mid-track (thumb pinned at y=${bboxThumb.y} after escalation). Aborting the scroll pass.")
+                                lastTermination = ScanTermination.FAILED
                                 return false
                             }
                         } else {
@@ -1028,6 +1135,7 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
                         consecutiveNoNew++
                         if (consecutiveNoNew >= maxConsecutiveNoNew) {
                             MessageLog.w(TAG, "[WARN] process:: No new entries after $consecutiveNoNew scrolls and no scrollbar; treating as end of list. Exiting loop.")
+                            lastTermination = ScanTermination.COMPLETE
                             return true
                         }
                         MessageLog.w(TAG, "[WARN] process:: No new entries (no-new $consecutiveNoNew/$maxConsecutiveNoNew) and no scrollbar; re-issuing scroll.")
@@ -1035,14 +1143,13 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
                 }
                 else -> {
                     // No scrollbar and no keyExtractor to detect a content-based end: preserve the
-                    // original single-frame behavior rather than loop until the timeout.
+                    // original single-frame behavior rather than loop until the timeout. The list
+                    // was never shown to have an end, so this is not a completeness proof.
                     MessageLog.d(TAG, "[DEBUG] process:: No scrollbar thumb detected. Exiting loop.")
+                    lastTermination = ScanTermination.TIMED_OUT_AT_BOTTOM_UNCONFIRMED
                     return true
                 }
             }
         }
-
-        MessageLog.e(TAG, "[ERROR] process:: Timed out.")
-        return false
     }
 }
