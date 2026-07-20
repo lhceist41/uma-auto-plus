@@ -1331,3 +1331,114 @@ once by the session's own planned selection (Deep Breaths in the working set whi
 bought Cooldown) and otherwise by recoveries already owned from earlier planned purchases.
 The injection-purchase arm has not fired live -- no shipped profile genuinely lacks a planned
 or owned recovery -- so that arm's coverage remains the deterministic fixture suite.
+
+### Spark reroll and the selection chooser
+
+The career-end sparks flow lives in the between-run navigator (`CareerLaunchNavigator`), not
+in Campaign: by the time the SPARKS screen appears the career task has already returned. The
+spend half is the older feature: the opt-in `runQueue.enableSparkReroll` prices a 30 TP
+redraw with `SparkRerollPolicy` (verified band odds; a 2/3-star blue is never re-gambled) and
+completes the spend through the Confirm Reroll dialog, with the TP-restore ladder and the
+session cap shared with the career-start restore.
+
+Everything after the spend is the selection chooser. The game moves through four screens:
+the "Sparks Rerolled" result (the redrawn set + Next), a "Spark Selection" intro dialog, a
+two-page pager (page 1 "Rerolled Sparks", page 2 "Original Sparks", chevrons at the heading,
+page dots under it, one wide Confirm), and a final "Confirmation" dialog whose green pill
+names the set being kept ("You won't be able to change Sparks later."). Each is a dedicated
+`LaunchScreenState`, detected by raw pixel probes (`utils/SparkScreenProbes.kt`) ahead of the
+generic POST_RUN_RESULTS chain -- previously all four fell into that chain and were resolved
+by blind Next/Confirm clicks, which kept whichever page the game showed first and recorded
+nothing. Every probe coordinate and threshold is measured on the live 2026-07-08 capture set,
+mirrored under `src/test/resources/fixtures/sparks` and pinned by replay tests
+(`SparkScreenProbeFixtureTest`); the detection ordering itself is source-guarded.
+
+Reading a set is a typed complete-list scan (the same completeness discipline as the skill
+finalization scans): frames are parsed by bar color and star samples, OCR names ride along,
+overlapping scroll frames merge by content (`SparkScrollMerge`, largest-overlap alignment so
+rows can never silently duplicate), and the scan terminates as `COMPLETE_END_MARKER` (the
+end-of-list marker inside a frame), `COMPLETE_NO_PROGRESS` (a swipe provably moved nothing),
+or one of the partial terminations. Only a complete read may authorize the spend or feed the
+choice; the old fixed six-row window (which truncated a live ten-row set and under-counted
+the 3-star whites the pricing protects) is gone.
+
+The choice itself is `SparkKeepPolicy` (`bot/SparkChooser.kt`): a conservative lexicographic
+comparison with no numeric weights. First a 3-star protection vector per side ([target blue,
+desired pink, relevant white], where race sparks always count as relevant, skill whites only
+when planned, and an unreadable 3-star white protects the ORIGINAL side only), then plain
+integer tiers: target-blue stars (with target order breaking ties), matched pinks, uniques,
+relevant whites, total stars. A tie keeps the original; an incomplete read on either side
+forces keep-original, which is only acted on when the Original page and the confirmation
+header verify -- otherwise the flow blocks. The pager page is never assumed: heading OCR and
+the lit page dot must agree before anything acts on it. Page changes are dispatched as a
+horizontal swipe across the pager's central content (`SparkPagerNav`), never as a tap on the
+edge chevrons: the 2026-07-20 supervised run aimed two taps at the right chevron's own
+measured pixels and the page never moved, while every mid-screen tap in the same minute
+landed -- the thin outline is a poor dispatch target, and the floating overlay bubble rides
+the same screen edge and can swallow edge taps. The swipe lanes stay clear of both edge
+strips, the scrollbar, the header band, and the Confirm band, carry no vertical component
+(which would scroll the list instead), and follow the Scenario Select carousel's proven
+central-drag pattern. After each swipe the page must re-prove itself from a fresh capture --
+heading and dot both naming the target -- with exactly one retry on a provably-unchanged
+page and an immediate block on anything unreadable or contradictory; the settle wait is
+never proof. The final Confirm is pressed only after the confirmation pill names the chosen
+side and the listed rows do not contradict it (one Cancel-and-retry, then a safe stop). A
+stop here loses nothing: the game itself keeps the original set available until the final
+confirmation.
+
+There are **three** live pill variants on that Confirmation dialog, not two. Besides
+`Original Sparks` and `Rerolled Sparks`, the ordinary keep confirmation that every no-reroll
+career ends on carries a plain `Sparks` pill. It has its own state, `SPARKS_KEEP_CONFIRMATION`,
+because it names no side and none of the winner-header logic applies to it: confirming it is
+lossless (there is no second set), so it auto-confirms once a live transaction proves no 30 TP
+was committed and the dialog's own list has been read completely -- that read is the kept
+record, and it is cross-checked against the original read when one is complete. A plain pill
+after a confirmed spend, a side-named pill on a career that never spent, an unreadable dialog
+list, or a missing transaction all block instead. The first hardened build knew only the two
+side names, classified this dialog as "not provably Original", and stopped a completed live
+career with a message claiming the header named the rerolled set; it said `Sparks`.
+
+The whole flow runs inside a `SparkRerollGate` transaction (`bot/SparkRerollGate.kt`),
+modeled on the finalization gate but deliberately separate. It is created at the **career
+attachment boundary** -- the point in `Game.start()` immediately before the career task is
+dispatched -- and nowhere else (source-guarded). That is the first moment a real career is
+proven: exactly one of "already on the training menu", "started on a career-end screen", or
+"auto-navigation reported reaching the training menu" holds there, and misc tasks (Daily
+Races, Team Trials) are excluded because they are not careers. Arming any earlier is wrong:
+the queue run loop used to arm it before `Game.start()` ran the cold-start launch navigation,
+whose legitimate pass across the game's Home screen then cleared the brand-new transaction as
+stale, and a whole live career ran without one (2026-07-19). The Home clear is now phase-aware
+as well, which independently defuses the same class of bug and the daily-reset lobby bounce
+mid-career: only a post-spend or terminal transaction is destroyed at Home, because a
+pre-spend transaction can authorize nothing destructive, while a post-spend one at Home is
+genuinely stale. The transaction is token-bound to the exact career
+(trainee|scenario|run|nonce), single-spend and single-confirmation by construction,
+invalidated by any non-COMPLETE run result, an interrupted navigation, the next career
+attachment, and a Home return once it has spent or finished, and stale after 30 minutes.
+
+Spend-decline diagnostics report each prerequisite independently (`SparkSpendDiagnostics`)
+with an explicit blocker precedence -- transaction, stats snapshot, scan attempted, scan
+complete, layout -- so a log line can never claim a downstream stage failed when it was never
+reached. The live decline that exposed the arming defect read "spark rows: unexpected layout,
+scan: missing, transaction: missing"; only the last clause was true. A selection screen with no drivable transaction
+(process restart, hand-played career) blocks instead of guessing; the one deliberate
+asymmetry is a headerless fallback: a confirmation naming the ORIGINAL set with no
+transaction falls through to the generic keep-original flow, because confirming the original
+can never lose anything. On success the corpus gains the `rerolled` and `kept` sets plus one
+`type:"spark_choice"` record (career token, transaction id, both score breakdowns, chosen
+side, verified header, read completeness, spend facts); older sparks records keep their
+schema untouched.
+
+Live status: implemented against the capture set and fully replay-tested offline, with two
+supervised careers behind it. The first (2026-07-19) never reached the chooser -- the
+transaction had been destroyed by the launch-Home clear described above -- but proved the
+fail-safes. The second (2026-07-20), on the corrected lifecycle, proved the spend path end
+to end: the transaction survived the launch's Home pass, the original set was read
+completely, the EV gate priced and spent exactly 30 TP through the verified Confirm Reroll
+dialog, the rerolled set was read completely, and every dedicated state detected in order.
+It then exposed the chevron-tap defect at the pager (two aimed taps, zero page changes) and
+blocked exactly as designed: no Confirm, no Cancel, dialog preserved, records correct. That
+defect is what the swipe navigation above replaces. Still unproven live: the swipe's actual
+page change, winner scoring on live data, the verified-winner Confirm, the confirmation-pill
+check, the kept and choice records on a spend career, and the no-spend keep confirmation --
+all supervised territory for the next career.

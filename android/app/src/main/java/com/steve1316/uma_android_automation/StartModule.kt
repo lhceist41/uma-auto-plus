@@ -29,9 +29,11 @@ import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.SparkRerollGate
 import com.steve1316.uma_android_automation.bot.TaskResult
-import com.steve1316.uma_android_automation.bot.shouldClearVerdictForRunResult
 import com.steve1316.uma_android_automation.bot.TaskResultCode
+import com.steve1316.uma_android_automation.bot.shouldClearSparkTransactionForRunResult
+import com.steve1316.uma_android_automation.bot.shouldClearVerdictForRunResult
 import com.steve1316.uma_android_automation.utils.LogStreamServer
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.Kord
@@ -1240,6 +1242,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         } catch (e: InterruptedException) {
             // Clear the interrupt flag so queue teardown (log saving, events) is not poisoned.
             Thread.interrupted()
+            // An interrupted navigation may have died anywhere in the career-end flow, including
+            // mid-Spark-Selection. The transaction no longer describes what is on screen, so it
+            // is invalidated: a later restart then blocks on the selection screens instead of
+            // resuming a choice it cannot verify.
+            SparkRerollGate.invalidate("between-run navigation interrupted")
             // Attribute the interrupt by its ACTUAL source, not by guessing from queueStopRequested.
             // Three cases, in order of certainty:
             //  - deadlineFired: the NavDeadline thread genuinely tripped the 10-minute budget. The
@@ -1508,6 +1515,14 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         nowMs = System.currentTimeMillis(),
                     )
 
+                    // The spark reroll transaction is deliberately NOT armed here. Run start is
+                    // not proof that a career exists: Game.start() still has to run the
+                    // cold-start launch navigation, whose legitimate pass through the game's
+                    // Home screen destroyed a transaction armed at this point and left a whole
+                    // live career unable to price its redraw (2026-07-19). It is armed at the
+                    // career attachment boundary inside Game.start() instead; this loop only
+                    // invalidates it below, on any non-COMPLETE result.
+
                     // Run the game.
                     val result = runSingleGame()
 
@@ -1537,6 +1552,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     // JUnit across every result code.
                     if (shouldClearVerdictForRunResult(effectiveResult.code)) {
                         CareerFinalizeGate.clear()
+                    }
+                    // The spark transaction follows the identical rule (pure, JUnit-pinned):
+                    // only a COMPLETE career's spark flow is the next thing on screen.
+                    if (shouldClearSparkTransactionForRunResult(effectiveResult.code)) {
+                        SparkRerollGate.invalidate("run result ${effectiveResult.code.name}")
                     }
 
                     // Evaluate the result.

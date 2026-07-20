@@ -7,19 +7,68 @@ import com.steve1316.automation_library.utils.BotService
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.SettingsHelper
-import com.steve1316.automation_library.utils.TextUtils
 import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
 import com.steve1316.uma_android_automation.bot.FinalizeVerdict
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.SPARK_UNREADABLE_NAME
+import com.steve1316.uma_android_automation.bot.SparkChooserProfile
+import com.steve1316.uma_android_automation.bot.SparkConfirmationPill
+import com.steve1316.uma_android_automation.bot.SparkSpendDiagnostics
+import com.steve1316.uma_android_automation.bot.SparkKeepPolicy
+import com.steve1316.uma_android_automation.bot.SparkPagerResolution
+import com.steve1316.uma_android_automation.bot.SparkRerollGate
 import com.steve1316.uma_android_automation.bot.SparkRerollPolicy
+import com.steve1316.uma_android_automation.bot.SparkRerollTransaction
+import com.steve1316.uma_android_automation.bot.SparkRowFact
+import com.steve1316.uma_android_automation.bot.SparkRowKind
+import com.steve1316.uma_android_automation.bot.SparkScanTermination
+import com.steve1316.uma_android_automation.bot.SparkScrollMerge
+import com.steve1316.uma_android_automation.bot.SparkSetReading
+import com.steve1316.uma_android_automation.bot.SparkSetSide
+import com.steve1316.uma_android_automation.bot.SparkSideBreakdown
+import com.steve1316.uma_android_automation.bot.SparkTextNorm
+import com.steve1316.uma_android_automation.bot.SparkTxState
+import com.steve1316.uma_android_automation.bot.SparkWhiteClass
 import com.steve1316.uma_android_automation.bot.finalizeVerdictUsable
 import com.steve1316.uma_android_automation.bot.parseRemainingSkillPoints
 import com.steve1316.uma_android_automation.bot.popupContradictsVerifiedBalance
+import com.steve1316.uma_android_automation.bot.SparkPagerAction
+import com.steve1316.uma_android_automation.bot.SparkPagerNav
+import com.steve1316.uma_android_automation.bot.SparkPagerRepaint
+import com.steve1316.uma_android_automation.bot.classifySparkPagerRepaint
+import com.steve1316.uma_android_automation.bot.resolvePagerSide
+import com.steve1316.uma_android_automation.bot.sparkPagerDotSide
+import com.steve1316.uma_android_automation.bot.sparkSelectionDrivable
 import com.steve1316.uma_android_automation.components.*
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
+import com.steve1316.uma_android_automation.utils.SPARKS_CONFIRM_GEOMETRY
+import com.steve1316.uma_android_automation.utils.SPARKS_SCREEN_GEOMETRY
+import com.steve1316.uma_android_automation.utils.SPARK_CONFIRMATION_CANCEL_X
+import com.steve1316.uma_android_automation.utils.SPARK_CONFIRMATION_CANCEL_Y
+import com.steve1316.uma_android_automation.utils.SPARK_CONFIRMATION_CONFIRM_X
+import com.steve1316.uma_android_automation.utils.SPARK_CONFIRMATION_CONFIRM_Y
+import com.steve1316.uma_android_automation.utils.SPARK_CONFIRMATION_SET_NAME_OCR_REGION
+import com.steve1316.uma_android_automation.utils.SPARK_INTRO_BUTTON_X
+import com.steve1316.uma_android_automation.utils.SPARK_INTRO_BUTTON_Y
+import com.steve1316.uma_android_automation.utils.SPARK_INTRO_TITLE_OCR_REGION
+import com.steve1316.uma_android_automation.utils.SPARK_PAGER_CONFIRM_X
+import com.steve1316.uma_android_automation.utils.SPARK_PAGER_CONFIRM_Y
+import com.steve1316.uma_android_automation.utils.SPARK_PAGER_GEOMETRY
+import com.steve1316.uma_android_automation.utils.SPARK_PAGER_HEADING_OCR_REGION
+import com.steve1316.uma_android_automation.utils.SPARK_REROLLED_TITLE_OCR_REGION
+import com.steve1316.uma_android_automation.utils.SparkListGeometry
+import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.SparkRowCell
 import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
 import com.steve1316.uma_android_automation.utils.TraineePositionStore
+import com.steve1316.uma_android_automation.utils.parseSparkRowCells
+import com.steve1316.uma_android_automation.utils.parseSparkRowCellsAligned
+import com.steve1316.uma_android_automation.utils.sparkConfirmationStructurePresent
+import com.steve1316.uma_android_automation.utils.sparkIntroStructurePresent
+import com.steve1316.uma_android_automation.utils.sparkPagerActiveDotIndex
+import com.steve1316.uma_android_automation.utils.sparkPagerStructurePresent
+import com.steve1316.uma_android_automation.utils.sparkRerolledStructurePresent
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -97,6 +146,16 @@ class CareerLaunchNavigator(private val context: Context) {
          * correct on both supported resolutions. */
         private const val EVENT_BOOST_CHECKBOX_DX = -245.0
         private const val EVENT_BOOST_CHECKBOX_DY = -4.0
+
+        /** Spark-list complete-read bounds. Sets top out around a dozen rows (1 blue + 1 pink +
+         * 1 unique + whites), each swipe advances ~4 rows, so 6 swipes covers well past any
+         * observed set; the wall clock bounds a wedged capture, and hitting either bound is a
+         * typed TIMED_OUT_PARTIAL that never authorizes a spend or a choice. */
+        private const val SPARK_SCAN_MAX_SCROLLS = 6
+        private const val SPARK_SCAN_BUDGET_MS = 45_000L
+
+        /** Horizontal center of the spark lists, the swipe axis for the complete read. */
+        private const val SPARK_LIST_SCROLL_X = 540f
 
         /** Event Boost checkbox state read by colour (template match can't tell OFF from ON - they
          * differ only in colour, which it normalises away). Sample a box of this half-size around
@@ -221,6 +280,32 @@ class CareerLaunchNavigator(private val context: Context) {
 
         /** Career-end SPARKS screen: the generated spark set with "Reroll Sparks" + Confirm. */
         SPARKS_SCREEN,
+
+        /** "Confirm Reroll" spend dialog ("Spend 30 TP to reroll Sparks?"). Detected only while
+         * this career's transaction holds an approved spend, as a recovery net for a missed
+         * inline spend click; its green button is the spend and must never be pressed blind. */
+        CONFIRM_REROLL_DIALOG,
+
+        /** "Sparks Rerolled" result screen after a successful spend: the redrawn set + Next. */
+        SPARKS_REROLLED_RESULT,
+
+        /** "Spark Selection" intro dialog ("Select which Sparks to keep.") + Next. */
+        SPARK_SELECTION_INTRO,
+
+        /** The Spark Selection pager: page 1 "Rerolled Sparks", page 2 "Original Sparks", with
+         * chevrons, page dots, and a Confirm that irreversibly commits the visible page. */
+        SPARK_SELECTION_PAGER,
+
+        /** The Spark Selection "Confirmation" dialog: a green header naming the chosen set, the
+         * full list, and Cancel/Confirm ("You won't be able to change Sparks later."). */
+        SPARK_SELECTION_CONFIRMATION,
+
+        /** The ORDINARY keep confirmation raised by Confirm on the SPARKS screen: the same
+         * dialog chrome but a plain "Sparks" pill instead of a chosen-side name, and no reroll
+         * in play. Every no-reroll career ends on it. Distinct from the post-reroll selection
+         * confirmation on purpose - it names no side, so the winner-header logic must never
+         * run against it. */
+        SPARKS_KEEP_CONFIRMATION,
 
         /** "Career Complete" dialog with "To Home" / "Edit Team" buttons. */
         CAREER_COMPLETE_DIALOG,
@@ -464,7 +549,11 @@ class CareerLaunchNavigator(private val context: Context) {
      */
     fun navigate(reuseLastLaunchSetup: Boolean, finalizeToHome: Boolean = false, singleRunTrainee: String = "", singleRunTraineeExcludes: String = ""): NavigationResult {
         val autoFillSupports = SettingsHelper.getBooleanSetting("runQueue", "autoFillSupports", false)
-        MessageLog.i(TAG, "[NAV] Starting between-run navigation. reuseLastLaunchSetup=$reuseLastLaunchSetup, autoFillSupports=$autoFillSupports, finalizeToHome=$finalizeToHome" + if (singleRunTrainee.isNotBlank()) ", singleRunTrainee=$singleRunTrainee" else "")
+        MessageLog.i(
+            TAG,
+            "[NAV] Starting between-run navigation. reuseLastLaunchSetup=$reuseLastLaunchSetup, autoFillSupports=$autoFillSupports, finalizeToHome=$finalizeToHome" +
+                if (singleRunTrainee.isNotBlank()) ", singleRunTrainee=$singleRunTrainee" else "",
+        )
 
         // Reset session-scoped flags for this navigation run.
         autoFillAlreadyDone = false
@@ -939,6 +1028,81 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.RECOVER_TP_QUANTITY
         }
 
+        // Post-spend Spark Selection screens. These MUST precede the generic POST_RUN_RESULTS
+        // chain below: all four carry a green Next or Confirm that the generic handler would
+        // click blind, and that is exactly how ten live reroll spends had their keep-original-
+        // vs-rerolled choice resolved by button position instead of a comparison (zero
+        // "rerolled" corpus records existed despite ten spends). The pager's Confirm and the
+        // Confirmation dialog's Confirm are irreversible ("You won't be able to change Sparks
+        // later."), so the generic handler must never own these screens.
+        //
+        // Cost control: the structural probes are raw pixel samples (no OpenCV scan), gated on
+        // the capture being the supported 1080x1920 game surface; OCR runs only after a
+        // structural match. The spend dialog check is template-based but gated on this
+        // career's transaction holding an approved, unconfirmed spend, so every other
+        // navigation pays nothing for it.
+        val sparkTransaction = SparkRerollGate.transaction
+        if (sparkTransaction?.state == SparkTxState.SPEND_APPROVED && ButtonRerollSparksConfirm.check(iu, sourceBitmap = bitmap)) {
+            return LaunchScreenState.CONFIRM_REROLL_DIALOG
+        }
+        if (bitmap.width >= 1080 && bitmap.height >= 1840) {
+            val sparkSampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
+            val sparkDrivable = sparkSelectionDrivable(sparkTransaction, System.currentTimeMillis())
+            if (sparkConfirmationStructurePresent(sparkSampler)) {
+                // Three live pill variants share this dialog chrome: "Original Sparks" and
+                // "Rerolled Sparks" belong to the post-reroll selection, while a plain "Sparks"
+                // pill is the ORDINARY keep confirmation every no-reroll career ends on. The
+                // transaction is the stronger signal where it exists - a career that never
+                // confirmed a 30 TP spend cannot be looking at a selection dialog - and the pill
+                // decides when it does not.
+                val pill = SparkTextNorm.confirmationPill(readSparkOcrRegion(bitmap, SPARK_CONFIRMATION_SET_NAME_OCR_REGION, "spark_conf_pill"))
+                val noSpendOnThisCareer = sparkTransaction != null && !sparkTransaction.spendEverConfirmed
+                if (noSpendOnThisCareer || pill == SparkConfirmationPill.PLAIN) {
+                    // Ordinary keep confirmation. Its handler cross-checks the pill against the
+                    // transaction and blocks on a contradiction (a plain pill after a confirmed
+                    // spend, or a side-named pill on a career that never spent).
+                    return LaunchScreenState.SPARKS_KEEP_CONFIRMATION
+                }
+                if (sparkDrivable) {
+                    return LaunchScreenState.SPARK_SELECTION_CONFIRMATION
+                }
+                // No live transaction (process restart mid-selection, or a hand-played reroll).
+                // Only a header that PROVABLY names the Original set may fall through to the
+                // generic keep-original flow, which cannot lose the career's own set. A
+                // "Rerolled Sparks" header - or an UNREADABLE one, which could itself be
+                // Rerolled - claims the state so the handler blocks: the generic Confirm must
+                // never commit a rerolled set the bot never chose.
+                if (pill != SparkConfirmationPill.ORIGINAL) {
+                    return LaunchScreenState.SPARK_SELECTION_CONFIRMATION
+                }
+            }
+            if (sparkIntroStructurePresent(sparkSampler)) {
+                if (sparkDrivable) {
+                    return LaunchScreenState.SPARK_SELECTION_INTRO
+                }
+                val title = readSparkOcrRegion(bitmap, SPARK_INTRO_TITLE_OCR_REGION, "spark_intro_title")
+                if (SparkTextNorm.isSparkSelectionTitle(title)) {
+                    return LaunchScreenState.SPARK_SELECTION_INTRO
+                }
+            }
+            if (sparkPagerStructurePresent(sparkSampler)) {
+                // The pager's structure (both chevrons + exactly one lit page dot + a spark
+                // list + the wide Confirm) exists nowhere else, so it claims the state even
+                // without a transaction - the handler then blocks instead of letting the
+                // generic chain confirm whatever page is showing.
+                return LaunchScreenState.SPARK_SELECTION_PAGER
+            }
+            if (sparkRerolledStructurePresent(sparkSampler)) {
+                if (sparkTransaction?.state == SparkTxState.SPEND_CONFIRMED) {
+                    return LaunchScreenState.SPARKS_REROLLED_RESULT
+                }
+                val title = readSparkOcrRegion(bitmap, SPARK_REROLLED_TITLE_OCR_REGION, "spark_rerolled_title")
+                if (SparkTextNorm.isSparksRerolledTitle(title)) {
+                    return LaunchScreenState.SPARKS_REROLLED_RESULT
+                }
+            }
+        }
+
         // POST_RUN_RESULTS - generic post-run / between-screens dialog with Next, OK, Confirm,
         // or Close (wide or compact-pill style) as the primary advance button. This is the most
         // common state during between-run navigation (10-20 iterations per career), so we check it early.
@@ -1164,6 +1328,12 @@ class CareerLaunchNavigator(private val context: Context) {
                 )
             LaunchScreenState.COMPLETE_CAREER_CONFIRMATION -> handleCompleteCareerConfirmation()
             LaunchScreenState.SPARKS_SCREEN -> handleSparksScreen()
+            LaunchScreenState.CONFIRM_REROLL_DIALOG -> handleConfirmRerollDialog()
+            LaunchScreenState.SPARKS_REROLLED_RESULT -> handleSparksRerolledResult()
+            LaunchScreenState.SPARK_SELECTION_INTRO -> handleSparkSelectionIntro()
+            LaunchScreenState.SPARK_SELECTION_PAGER -> handleSparkSelectionPager()
+            LaunchScreenState.SPARK_SELECTION_CONFIRMATION -> handleSparkSelectionConfirmation()
+            LaunchScreenState.SPARKS_KEEP_CONFIRMATION -> handleSparksKeepConfirmation()
             LaunchScreenState.POST_RUN_RESULTS -> handlePostRunResults()
             LaunchScreenState.VETERAN_UMAMUSUME_MAX -> handleVeteranUmamusumeMax()
             LaunchScreenState.CAREER_COMPLETE_DIALOG -> handleCareerCompleteDialog()
@@ -1298,8 +1468,10 @@ class CareerLaunchNavigator(private val context: Context) {
         if (verdict == null && !finalizeGuardActive) return null
         val reason =
             verdict?.reason
-                ?: ("UNSPENT_SKILL_POINTS: no usable finalization verification exists for this career " +
-                    "(missing, stale, or from a different career). Not pressing Finish.")
+                ?: (
+                    "UNSPENT_SKILL_POINTS: no usable finalization verification exists for this career " +
+                        "(missing, stale, or from a different career). Not pressing Finish."
+                )
         MessageLog.e(TAG, "[NAV] [FINALIZE] $reason")
         return TransitionResult.Failed(
             reason = reason,
@@ -1331,7 +1503,10 @@ class CareerLaunchNavigator(private val context: Context) {
         usableFinalizeVerdict()?.let { verdict ->
             val firstRead = readCompleteCareerRemainingSp()
             if (firstRead == null) {
-                MessageLog.w(TAG, "[NAV] [FINALIZE] Could not read the Remaining Skill Points line on the Complete Career dialog. Proceeding on the verified balance of ${verdict.verifiedRemainingSp}.")
+                MessageLog.w(
+                    TAG,
+                    "[NAV] [FINALIZE] Could not read the Remaining Skill Points line on the Complete Career dialog. Proceeding on the verified balance of ${verdict.verifiedRemainingSp}.",
+                )
             } else if (firstRead != verdict.verifiedRemainingSp) {
                 MessageLog.w(TAG, "[NAV] [FINALIZE] Dialog reports $firstRead remaining skill points but the verification says ${verdict.verifiedRemainingSp}. Re-reading once...")
                 val secondRead = readCompleteCareerRemainingSp()
@@ -1412,50 +1587,60 @@ class CareerLaunchNavigator(private val context: Context) {
      * missed Confirm click re-entering the screen cannot append a duplicate corpus record. */
     private var sparksSetRecorded = false
 
-    /** True only when the 30 TP spend actually clicked - distinguishes "keeping the redrawn set"
-     * from "the dialog declined the spend and the original set is still up" in the exit logs. */
-    private var sparksRerollExecuted = false
-
     /**
      * Handles the career-end SPARKS screen.
      *
      * Default (setting off): click Confirm and keep the generated set - the pre-reroll behavior.
-     * With the opt-in `runQueue.enableSparkReroll`, the redraw is priced by [SparkRerollPolicy]
-     * from the verified band odds: a 2/3-star blue is always kept; a 1-star blue rerolls when
-     * the expected fresh blue (uniform stat pick over the five final stats) beats the pink/
-     * unique/3-star-white holdings a redraw would forfeit. With TP < 30 the game swaps
-     * the spend dialog for a Restore-TP prompt; when item restore is enabled the bot restores
-     * (same ladder and session cap as the career-start restore) and retries the spend once,
-     * because a confirmed set can never be rerolled. The reroll is a pure independent redraw; the
-     * bot keeps the redrawn set (it only rerolls sets that failed the gate) and saves a
-     * screenshot of the post-reroll state - the keep-original toggle is uncaptured, so choosing
-     * the better of the two sets is a follow-up once those pixels exist.
+     * With the opt-in `runQueue.enableSparkReroll`, the COMPLETE original set is read first
+     * (scrolling when the list runs past the 9 visible rows - the old 6-row cap under-counted
+     * 3-star whites and biased the gate toward spending), then the redraw is priced by
+     * [SparkRerollPolicy] from the verified band odds: a 2/3-star blue is always kept; a 1-star
+     * blue rerolls when the expected fresh blue (uniform stat pick over the five final stats)
+     * beats the pink/unique/3-star-white holdings a redraw would forfeit. An incomplete read
+     * never authorizes the spend. With TP < 30 the game swaps the spend dialog for a Restore-TP
+     * prompt; when item restore is enabled the bot restores (same ladder and session cap as the
+     * career-start restore) and retries the spend once, because a confirmed set can never be
+     * rerolled.
+     *
+     * After a successful spend the game moves through Sparks Rerolled, the Spark Selection
+     * intro, the two-page pager, and the Confirmation dialog - all dedicated states with their
+     * own handlers driving [SparkRerollGate]'s transaction; this screen never reappears
+     * post-spend (live-proven; an earlier "post-reroll re-entry" branch here was dead code).
      */
     private fun handleSparksScreen(): TransitionResult {
         val bitmap = iu.getSourceBitmap()
         val enableReroll = SettingsHelper.getBooleanSetting("runQueue", "enableSparkReroll", false)
-
-        // Read and record the career's rolled spark set exactly once, independent of the reroll
-        // setting - this is ledger enrichment (which sparks each career produced), not reroll logic.
-        if (!sparksSetRecorded) {
-            sparksSetRecorded = true
-            recordSparkSet(bitmap, "original")
-        }
+        val transaction = SparkRerollGate.transaction
 
         if (sparksRerollAttempted) {
-            if (sparksRerollExecuted) {
-                // Post-reroll: log + archive what the redraw produced, then Confirm to keep it.
-                runCatching {
-                    iu.saveBitmap(filename = "reroll_result_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}", fullRes = true)
-                }
-                val rerolled = readSparkStatRow(bitmap)
-                MessageLog.i(TAG, "[REROLL] Rerolled stat spark: ${rerolled?.let { "${it.first} ${it.second}-star" } ?: "unreadable"}. Keeping the redrawn set.")
-                recordSparkSet(bitmap, "rerolled")
-            } else {
-                MessageLog.i(TAG, "[REROLL] The spend was declined earlier - the original set is still up. Confirming it.")
-            }
+            // The spend was declined earlier (or its dialog never opened) - the original set is
+            // still up; Confirm it.
+            MessageLog.i(TAG, "[REROLL] The spend was declined earlier - the original set is still up. Confirming it.")
             return confirmSparks(bitmap)
         }
+
+        // Read and record the career's rolled spark set exactly once, independent of the reroll
+        // setting - this is ledger enrichment (which sparks each career produced), not reroll
+        // logic. The read is the COMPLETE scrolled set whenever a career transaction exists,
+        // whether or not the reroll is enabled: the spend decision and the chooser both need
+        // every row, and the old visible-window read silently truncated longer sets in the
+        // ledger too (a live 11-spark career recorded only its first 9). A set that fits the
+        // window terminates on its own end marker and costs no extra swipe.
+        var originalReading: SparkSetReading? = transaction?.originalRead
+        if (!sparksSetRecorded) {
+            sparksSetRecorded = true
+            if (transaction != null) {
+                originalReading = readCompleteSparkSet(SPARKS_SCREEN_GEOMETRY, "original")
+                recordSparkRows(originalReading.rows, "original", originalReading)
+                val captured = transaction.captureOriginal(originalReading, StartModule.lastCareerEndTrainee, StartModule.lastCareerEndScenario)
+                if (!captured.ok) {
+                    MessageLog.w(TAG, "[SPARKS] ${captured.reason}")
+                }
+            } else {
+                recordSparkSet(bitmap, "original")
+            }
+        }
+
         if (!enableReroll) {
             return confirmSparks(bitmap)
         }
@@ -1465,31 +1650,54 @@ class CareerLaunchNavigator(private val context: Context) {
         // careers. Star counts come from the row color samples, so no OCR is involved; the
         // final stats come from the ledger-time snapshot (the Campaign instance is gone by
         // the time the navigator runs).
+        //
+        // Every prerequisite is reported independently: an earlier live decline logged
+        // "spark rows: unexpected layout, scan: missing" when in truth the transaction was
+        // gone and neither the scan nor the layout had ever been looked at.
         val finalStats = StartModule.lastCareerEndStats
-        val rows = readSparkRows(bitmap)
-        val rowsLeadCorrectly = rows.size >= 3 && rows[0].kind == "stat" && rows[1].kind == "aptitude" && rows[2].kind == "unique"
-        if (finalStats == null || finalStats.size < 5 || !rowsLeadCorrectly) {
-            MessageLog.w(
-                TAG,
-                "[REROLL] Cannot price the redraw (stats snapshot: ${finalStats?.size ?: "missing"}, spark rows: ${if (rowsLeadCorrectly) "ok" else "unexpected layout"}). Keeping the original sparks.",
+        val rows = originalReading?.rows ?: emptyList()
+        val diagnostics =
+            SparkSpendDiagnostics(
+                transactionPresent = transaction != null,
+                statsSnapshotSize = finalStats?.size,
+                scanTermination = originalReading?.termination,
+                readComplete = originalReading?.complete == true,
+                rowCount = rows.size,
+                leadsCorrectly = rows.size >= 3 && rows[0].kind == SparkRowKind.STAT && rows[1].kind == SparkRowKind.APTITUDE && rows[2].kind == SparkRowKind.UNIQUE,
             )
+        if (!diagnostics.spendAllowed) {
+            MessageLog.w(TAG, "[REROLL] Not pricing the redraw: ${diagnostics.format()}. Keeping the original sparks.")
+            transaction?.declineSpend("not priced (${diagnostics.blocker.wire})")
             return confirmSparks(bitmap)
         }
+        // spendAllowed proves both of these are present; the compiler cannot see through the
+        // diagnostics data class, so they are re-bound explicitly rather than re-tested.
+        val pricedStats = finalStats!!
+        val liveTransaction = transaction!!
         val verdict =
             SparkRerollPolicy.decide(
-                blueStars = rows[0].goldStars,
-                pinkStars = rows[1].goldStars,
-                uniqueStars = rows[2].goldStars,
-                visibleWhiteThreeStars = rows.drop(3).count { it.kind == "skill" && it.goldStars >= 3 },
-                finalStats = finalStats.values,
+                blueStars = rows[0].stars,
+                pinkStars = rows[1].stars,
+                uniqueStars = rows[2].stars,
+                visibleWhiteThreeStars = rows.drop(3).count { it.kind == SparkRowKind.WHITE && it.stars >= 3 },
+                finalStats = pricedStats.values,
             )
         MessageLog.i(TAG, "[REROLL] EV gate: ${verdict.reason}")
         if (!verdict.reroll) {
+            liveTransaction.declineSpend(verdict.reason)
+            return confirmSparks(bitmap)
+        }
+        val approved = liveTransaction.approveSpend(verdict.reason)
+        if (!approved.ok) {
+            // A spend was already confirmed on this career (or the transaction is out of
+            // order): never spend twice. Keep whatever is up.
+            MessageLog.w(TAG, "[REROLL] ${approved.reason}. Keeping the original set.")
             return confirmSparks(bitmap)
         }
 
         if (!ButtonRerollSparks.click(iu, sourceBitmap = bitmap)) {
             MessageLog.w(TAG, "[REROLL] Failed to click Reroll Sparks. Keeping the original set.")
+            liveTransaction.declineSpend("Reroll Sparks click failed")
             return confirmSparks(bitmap)
         }
         waitSafe(1.5)
@@ -1509,36 +1717,641 @@ class CareerLaunchNavigator(private val context: Context) {
             // confirmed set can never be rerolled, so declining here saves nothing.
             if (tryRestoreTpForReroll() && retryRerollSpend()) {
                 MessageLog.i(TAG, "[REROLL] Spent 30 TP to reroll sparks after restoring TP (${verdict.reason}).")
+                liveTransaction.confirmSpend(System.currentTimeMillis(), restoreSource = "item_restore")
                 sparksRerollAttempted = true
-                sparksRerollExecuted = true
                 waitSafe(4.0)
                 captureRerollChoiceScreen()
                 return TransitionResult.Continue
             }
             MessageLog.w(TAG, "[REROLL] The spend was not available (dialog never opened, or TP is short with item restore off/exhausted). Keeping the original set.")
             ButtonCancel.click(iu)
+            liveTransaction.declineSpend("spend unavailable (no dialog, or TP short with restore off/exhausted)")
             sparksRerollAttempted = true
             waitSafe(1.0)
             return TransitionResult.Continue
         }
         MessageLog.i(TAG, "[REROLL] Spent 30 TP to reroll sparks (${verdict.reason}).")
+        liveTransaction.confirmSpend(System.currentTimeMillis())
         sparksRerollAttempted = true
-        sparksRerollExecuted = true
         waitSafe(4.0)
         captureRerollChoiceScreen()
         return TransitionResult.Continue
     }
 
     /**
-     * Photographs whatever the game shows right after a successful reroll spend. The spend
-     * dialog's own note confirms Global offers a keep-original-vs-rerolled CHOICE, but its
-     * layout and button labels have never been seen live - the first successful spend lands
-     * here and hands over the pixels the choice handler will be built from.
+     * Photographs whatever the game shows right after a successful reroll spend, as forensic
+     * material alongside the dedicated selection-screen handling.
      */
     private fun captureRerollChoiceScreen() {
         runCatching {
             iu.saveBitmap(filename = "reroll_choice_screen_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}", fullRes = true)
-            MessageLog.i(TAG, "[REROLL] Post-spend screen captured (reroll_choice_screen_*.png) - first-contact material for the keep-original/keep-new choice.")
+            MessageLog.i(TAG, "[REROLL] Post-spend screen captured (reroll_choice_screen_*.png).")
+        }
+    }
+
+    /**
+     * CONFIRM_REROLL_DIALOG: the "Spend 30 TP to reroll Sparks?" dialog, reached through
+     * detection only when this career's transaction holds an approved spend whose inline click
+     * path did not resolve (the state is transaction-gated). Completes the approved spend; in
+     * any other situation the dialog is cancelled - its green button is the spend and is never
+     * pressed without an approved verdict.
+     */
+    private fun handleConfirmRerollDialog(): TransitionResult {
+        val transaction = SparkRerollGate.transaction
+        if (transaction?.state == SparkTxState.SPEND_APPROVED) {
+            if (ButtonRerollSparksConfirm.click(iu, tries = 2)) {
+                MessageLog.i(TAG, "[REROLL] Spent 30 TP to reroll sparks from the recovered spend dialog (${transaction.spendReason}).")
+                transaction.confirmSpend(System.currentTimeMillis())
+                sparksRerollAttempted = true
+                waitSafe(4.0)
+                captureRerollChoiceScreen()
+            } else {
+                MessageLog.w(TAG, "[REROLL] The spend dialog is up but the spend click failed. Cancelling and keeping the original set.")
+                ButtonCancel.click(iu)
+                transaction.declineSpend("spend dialog present but the spend click failed")
+                sparksRerollAttempted = true
+                waitSafe(1.0)
+            }
+            return TransitionResult.Continue
+        }
+        // No approved spend: never spend. Cancel out and let detection continue.
+        MessageLog.w(TAG, "[REROLL] Spend dialog detected without an approved spend - cancelling it.")
+        ButtonCancel.click(iu)
+        waitSafe(1.0)
+        return TransitionResult.Continue
+    }
+
+    /** OCR one fixed spark-screen text region ([x, y, w, h]); null on failure. */
+    private fun readSparkOcrRegion(bitmap: Bitmap, region: IntArray, debugName: String): String? =
+        try {
+            iu.performOCROnRegion(
+                bitmap,
+                region[0],
+                region[1],
+                region[2],
+                region[3],
+                useThreshold = false,
+                useGrayscale = true,
+                ocrEngine = "mlkit",
+                debugName = debugName,
+            ).trim().ifEmpty { null }
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+
+    /** The terminal failure for a selection screen that cannot be driven safely. The career is
+     * left exactly as it is: the game's own fallback keeps the original set, so a blocked
+     * selection loses nothing except the operator's attention. */
+    private fun sparkSelectionBlocked(transition: String, transaction: SparkRerollTransaction?, why: String): TransitionResult.Failed {
+        transaction?.block(why)
+        MessageLog.e(TAG, "[SPARKS] [CHOOSER] $why")
+        return TransitionResult.Failed(
+            reason = "SPARK_SELECTION blocked: $why",
+            transition = transition,
+            recommendedAction = "Finish the Spark Selection by hand (keeping the original set is always safe), then restart the queue.",
+        )
+    }
+
+    /**
+     * SPARKS_REROLLED_RESULT: the "Sparks Rerolled" screen after a successful spend. Reads and
+     * records the COMPLETE rerolled set (the chooser's second input), then presses Next. An
+     * incomplete read is captured as-is: the keep policy treats it as uncertainty and the
+     * chooser then only accepts the verified keep-original path.
+     */
+    private fun handleSparksRerolledResult(): TransitionResult {
+        val transaction = SparkRerollGate.transaction
+        if (!sparkSelectionDrivable(transaction, System.currentTimeMillis())) {
+            return sparkSelectionBlocked(
+                "SPARKS_REROLLED_RESULT -> SPARK_SELECTION_INTRO",
+                transaction,
+                "the Sparks Rerolled screen is up without a live reroll transaction (process restart or stale career); not advancing a selection the bot cannot verify",
+            )
+        }
+        transaction!!
+        if (transaction.rerolledRead == null) {
+            runCatching {
+                iu.saveBitmap(filename = "reroll_result_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}", fullRes = true)
+            }
+            val reading = readCompleteSparkSet(SPARKS_SCREEN_GEOMETRY, "rerolled")
+            recordSparkRows(reading.rows, "rerolled", reading)
+            val captured = transaction.captureRerolled(reading)
+            if (!captured.ok) {
+                MessageLog.w(TAG, "[SPARKS] ${captured.reason}")
+            }
+        }
+        val bitmap = iu.getSourceBitmap()
+        if (!ButtonNext.click(iu, sourceBitmap = bitmap)) {
+            MessageLog.w(TAG, "[SPARKS] Next not clickable on the Sparks Rerolled screen. Re-detecting...")
+        }
+        waitSafe(2.0)
+        return TransitionResult.Continue
+    }
+
+    /**
+     * SPARK_SELECTION_INTRO: the "Select which Sparks to keep." dialog. Marks the transaction
+     * and advances; the pager that follows owns every real decision.
+     */
+    private fun handleSparkSelectionIntro(): TransitionResult {
+        val transaction = SparkRerollGate.transaction
+        if (!sparkSelectionDrivable(transaction, System.currentTimeMillis())) {
+            return sparkSelectionBlocked(
+                "SPARK_SELECTION_INTRO -> SPARK_SELECTION_PAGER",
+                transaction,
+                "the Spark Selection intro is up without a live reroll transaction (process restart or stale career); leaving the selection for the operator",
+            )
+        }
+        transaction!!.introPassed()
+        val bitmap = iu.getSourceBitmap()
+        val advanced =
+            ButtonNext.click(iu, sourceBitmap = bitmap) ||
+                ButtonClose.click(iu, sourceBitmap = bitmap) ||
+                ButtonOk.click(iu, sourceBitmap = bitmap)
+        if (!advanced) {
+            // The intro's single bottom button sits at a fixed position on the card.
+            gestureUtils.tap(SPARK_INTRO_BUTTON_X.toDouble(), SPARK_INTRO_BUTTON_Y.toDouble(), "spark_intro_advance")
+        }
+        waitSafe(2.0)
+        return TransitionResult.Continue
+    }
+
+    /** The pager page currently on screen, from BOTH signals (heading OCR + lit page dot), with
+     * one fresh-capture retry. Null means unreadable or contradictory after the retry. */
+    private fun resolveCurrentPagerSide(): SparkSetSide? {
+        repeat(2) { attempt ->
+            val bitmap = iu.getSourceBitmap()
+            val heading = SparkTextNorm.headingSide(readSparkOcrRegion(bitmap, SPARK_PAGER_HEADING_OCR_REGION, "spark_pager_heading"))
+            val dot = sparkPagerActiveDotIndex(sparkSampler(bitmap))
+            when (val resolution = resolvePagerSide(heading, dot)) {
+                is SparkPagerResolution.Resolved -> return resolution.side
+                SparkPagerResolution.Contradictory ->
+                    MessageLog.w(TAG, "[SPARKS] [CHOOSER] Pager heading ($heading) and page dot ($dot) disagree (attempt ${attempt + 1}).")
+                SparkPagerResolution.Unreadable ->
+                    MessageLog.w(TAG, "[SPARKS] [CHOOSER] Pager page unreadable: heading=$heading dot=$dot (attempt ${attempt + 1}).")
+            }
+            waitSafe(1.5)
+        }
+        return null
+    }
+
+    /** Outcome of one pager navigation attempt. [Unchanged] is the only retryable failure:
+     * the screen is still provably on the starting page, so one more swipe is safe. Anything
+     * the bot cannot read blocks immediately instead of dispatching more gestures at a
+     * screen it cannot prove. */
+    private sealed class PagerNavOutcome {
+        object Verified : PagerNavOutcome()
+
+        object Unchanged : PagerNavOutcome()
+
+        data class Unverifiable(val reason: String) : PagerNavOutcome()
+    }
+
+    /**
+     * Drives the pager from [current] to [target] with a verified central swipe.
+     *
+     * Edge-chevron taps are deliberately not dispatched here: the 2026-07-20 supervised run
+     * aimed two taps at the right chevron's own measured pixels (990, 228) and the page never
+     * moved, while every mid-screen tap in the same minute landed. The thin outline is a poor
+     * dispatch target and the floating overlay bubble rides the same screen edge; the
+     * Scenario Select carousel already pages with a central drag for the same reason (see
+     * selectScenario). Success requires a FRESH post-settle capture whose heading OCR and lit
+     * page dot BOTH name the target page -- the settle wait is never proof by itself.
+     */
+    private fun navigateToPagerPage(current: SparkSetSide, target: SparkSetSide, attempt: Int): PagerNavOutcome {
+        if (current == target) return PagerNavOutcome.Verified
+        val bitmap = iu.getSourceBitmap()
+        val plan = SparkPagerNav.plan(current, target, attempt, bitmap.width, bitmap.height)
+        if (plan.action == SparkPagerAction.NONE) return PagerNavOutcome.Verified
+        MessageLog.i(
+            TAG,
+            "[SPARKS] Pager navigation: current=${current.name} target=${target.name} attempt=$attempt " +
+                "action=${plan.action.name.lowercase()} start=(${plan.startX.toInt()}, ${plan.startY.toInt()}) " +
+                "end=(${plan.endX.toInt()}, ${plan.endY.toInt()})",
+        )
+        gestureUtils.swipe(plan.startX, plan.startY, plan.endX, plan.endY, duration = plan.durationMs)
+        waitSafe(1.5) // animation settle only; the fresh captures below are the proof
+        var lastHeading = "unreadable"
+        var lastDots = "unreadable"
+        repeat(2) { read ->
+            val shot = iu.getSourceBitmap()
+            val heading = SparkTextNorm.headingSide(readSparkOcrRegion(shot, SPARK_PAGER_HEADING_OCR_REGION, "spark_pager_heading"))
+            val dotIndex = sparkPagerActiveDotIndex(sparkSampler(shot))
+            lastHeading = heading?.name ?: "unreadable"
+            lastDots = sparkPagerDotSide(dotIndex)?.name ?: "unreadable"
+            when (classifySparkPagerRepaint(heading, dotIndex, current, target)) {
+                SparkPagerRepaint.VERIFIED -> {
+                    MessageLog.i(TAG, "[SPARKS] Pager repaint verified: heading=$lastHeading dots=$lastDots")
+                    return PagerNavOutcome.Verified
+                }
+                SparkPagerRepaint.UNCHANGED -> {
+                    MessageLog.w(TAG, "[SPARKS] Pager navigation did not repaint after attempt $attempt: heading=$lastHeading dots=$lastDots")
+                    return PagerNavOutcome.Unchanged
+                }
+                SparkPagerRepaint.HEADING_UNREADABLE,
+                SparkPagerRepaint.DOTS_UNREADABLE,
+                SparkPagerRepaint.CONTRADICTION,
+                -> {
+                    MessageLog.w(
+                        TAG,
+                        "[SPARKS] Pager page not provable after attempt $attempt (read ${read + 1}/2): heading=$lastHeading dots=$lastDots",
+                    )
+                    // One transient re-read: a capture taken mid-frame must not block alone.
+                    if (read == 0) waitSafe(1.5)
+                }
+            }
+        }
+        return PagerNavOutcome.Unverifiable(
+            "the pager page cannot be proven after the swipe (heading=$lastHeading, dots=$lastDots); never confirming an unverified page",
+        )
+    }
+
+    /**
+     * SPARK_SELECTION_PAGER: the two-page keep-original-vs-rerolled chooser.
+     *
+     * Never assumes the displayed page: every entry re-resolves the page from the heading OCR
+     * AND the lit page dot, and a contradiction blocks. Reads BOTH pages in full on the pager
+     * itself (the authoritative display), scores them with [SparkKeepPolicy], swipes to the
+     * winner, and presses Confirm only on the verified winner page. The FSM loop drives the
+     * multi-step flow: each entry does one step and continues, so a missed gesture re-resolves
+     * instead of compounding.
+     */
+    private fun handleSparkSelectionPager(): TransitionResult {
+        val transition = "SPARK_SELECTION_PAGER -> SPARK_SELECTION_CONFIRMATION"
+        val transaction = SparkRerollGate.transaction
+        if (!sparkSelectionDrivable(transaction, System.currentTimeMillis())) {
+            return sparkSelectionBlocked(
+                transition,
+                transaction,
+                "the Spark Selection pager is on screen without a live reroll transaction (process restart or stale career); never confirming a page blind",
+            )
+        }
+        transaction!!
+        transaction.introPassed()
+
+        val side =
+            resolveCurrentPagerSide()
+                ?: return sparkSelectionBlocked(transition, transaction, "the pager page cannot be resolved (heading and page dot unreadable or contradictory)")
+
+        // Read the page on screen once, in full.
+        if (transaction.pagerRead(side) == null) {
+            val reading = readCompleteSparkSet(SPARK_PAGER_GEOMETRY, "pager ${side.wire}")
+            transaction.recordPagerRead(side, reading)
+            crossCheckPagerRead(side, reading, transaction)
+        }
+
+        // Both pages must be read before any decision.
+        val missing = SparkSetSide.entries.firstOrNull { transaction.pagerRead(it) == null }
+        if (transaction.winner == null && missing != null) {
+            val attempt = if (transaction.pagerNavRetryUsed) 2 else 1
+            when (val nav = navigateToPagerPage(side, missing, attempt)) {
+                PagerNavOutcome.Verified -> return TransitionResult.Continue
+                PagerNavOutcome.Unchanged -> {
+                    if (transaction.usePagerNavRetry()) {
+                        MessageLog.w(TAG, "[SPARKS] [CHOOSER] Retrying the pager swipe once.")
+                        return TransitionResult.Continue
+                    }
+                    return sparkSelectionBlocked(
+                        transition,
+                        transaction,
+                        "the pager swipe to the ${missing.wire} page did not repaint and no retry budget remains; never confirming an unverified page",
+                    )
+                }
+                is PagerNavOutcome.Unverifiable -> return sparkSelectionBlocked(transition, transaction, nav.reason)
+            }
+        }
+
+        if (transaction.winner == null) {
+            transaction.setsVerified()
+            val original = transaction.pagerRead(SparkSetSide.ORIGINAL)!!
+            val rerolled = transaction.pagerRead(SparkSetSide.REROLLED)!!
+            val choice = SparkKeepPolicy.choose(original, rerolled, buildSparkChooserProfile())
+            if (!choice.certain && !original.complete) {
+                // Not even the keep-original fallback is verifiable: the original page itself
+                // could not be read in full.
+                return sparkSelectionBlocked(
+                    transition,
+                    transaction,
+                    "neither set could be read completely (original ${original.termination.name}, rerolled ${rerolled.termination.name}); no choice is safe",
+                )
+            }
+            val selected = transaction.selectWinner(choice)
+            if (!selected.ok) {
+                return sparkSelectionBlocked(transition, transaction, selected.reason)
+            }
+            MessageLog.i(TAG, "[SPARKS] [CHOOSER] ${choice.reason}")
+            MessageLog.i(
+                TAG,
+                "[SPARKS] [CHOOSER] Original: ${summarizeBreakdown(choice.original)} | Rerolled: ${summarizeBreakdown(choice.rerolled)}",
+            )
+        }
+
+        val winner = transaction.winner!!
+        if (side != winner) {
+            val attempt = if (transaction.pagerNavRetryUsed) 2 else 1
+            when (val nav = navigateToPagerPage(side, winner, attempt)) {
+                PagerNavOutcome.Verified -> return TransitionResult.Continue
+                PagerNavOutcome.Unchanged -> {
+                    if (transaction.usePagerNavRetry()) {
+                        MessageLog.w(TAG, "[SPARKS] [CHOOSER] Retrying the pager swipe to the winner once.")
+                        return TransitionResult.Continue
+                    }
+                    return sparkSelectionBlocked(
+                        transition,
+                        transaction,
+                        "the pager swipe to the winning ${winner.wire} page did not repaint and no retry budget remains; never confirming the wrong page",
+                    )
+                }
+                is PagerNavOutcome.Unverifiable -> return sparkSelectionBlocked(transition, transaction, nav.reason)
+            }
+        }
+
+        // On the verified winner page, at the top: commit. The Confirmation dialog that opens
+        // re-verifies the chosen side by name before the final Confirm.
+        MessageLog.i(TAG, "[SPARKS] [CHOOSER] Confirming the ${winner.wire} page.")
+        val bitmap = iu.getSourceBitmap()
+        if (!ButtonConfirm.click(iu, sourceBitmap = bitmap)) {
+            gestureUtils.tap(SPARK_PAGER_CONFIRM_X.toDouble(), SPARK_PAGER_CONFIRM_Y.toDouble(), "spark_pager_confirm")
+        }
+        waitSafe(2.0)
+        return TransitionResult.Continue
+    }
+
+    /** Log-only comparison of a pager page read against the earlier capture of the same set
+     * (SPARKS screen for the original, the result screen for the rerolled). The pager is
+     * authoritative for the choice; a disagreement is surfaced for the log, not acted on. */
+    private fun crossCheckPagerRead(side: SparkSetSide, pagerReading: SparkSetReading, transaction: SparkRerollTransaction) {
+        val earlier = if (side == SparkSetSide.ORIGINAL) transaction.originalRead else transaction.rerolledRead
+        if (earlier == null || !earlier.complete || !pagerReading.complete) return
+        if (!SparkScrollMerge.rowsAlign(earlier.rows, pagerReading.rows)) {
+            MessageLog.w(
+                TAG,
+                "[SPARKS] [CHOOSER] The ${side.wire} pager page (${pagerReading.rows.size} rows) disagrees with its earlier capture (${earlier.rows.size} rows); trusting the pager.",
+            )
+        }
+    }
+
+    private fun summarizeBreakdown(b: SparkSideBreakdown): String =
+        "blue ${b.rawBlueStars}* (target rank ${b.blueTargetRank}), pink ${b.rawPinkStars}* (${b.matchedPinkStars} matched), " +
+            "unique ${b.uniqueStars}*, relevant whites ${b.relevantWhiteStars}*, total ${b.totalStars}* over ${b.rowCount} rows" +
+            if (b.complete) "" else " (INCOMPLETE)"
+
+    /**
+     * SPARK_SELECTION_CONFIRMATION: the final "Keep this set of Sparks?" dialog whose green
+     * header names the side being kept. The header must agree with the chosen winner and the
+     * listed rows must not contradict the winner's read; only then are the kept-set and choice
+     * records written and the final Confirm pressed. A mismatch or unreadable header cancels
+     * back to the pager once, then blocks - never confirms.
+     */
+    private fun handleSparkSelectionConfirmation(): TransitionResult {
+        val transition = "SPARK_SELECTION_CONFIRMATION -> POST_RUN_RESULTS"
+        val transaction = SparkRerollGate.transaction
+        // COMPLETE is admitted alongside the drivable states: a missed final Confirm leaves a
+        // completed transaction with the dialog still up, and the re-entry below re-verifies
+        // the header and re-clicks without re-recording anything.
+        if (!sparkSelectionDrivable(transaction, System.currentTimeMillis()) && transaction?.state != SparkTxState.COMPLETE) {
+            return sparkSelectionBlocked(
+                transition,
+                transaction,
+                "the Spark Selection confirmation names the rerolled set but no live reroll transaction exists (process restart or stale career); never confirming it blind",
+            )
+        }
+        transaction!!
+        val winner =
+            transaction.winner
+                ?: return sparkSelectionBlocked(transition, transaction, "the confirmation dialog appeared before a winner was chosen; not confirming")
+
+        val bitmap = iu.getSourceBitmap()
+        val pillSide = SparkTextNorm.headingSide(readSparkOcrRegion(bitmap, SPARK_CONFIRMATION_SET_NAME_OCR_REGION, "spark_conf_set_name"))
+        if (pillSide == null || pillSide != winner) {
+            val problem =
+                if (pillSide == null) {
+                    "the confirmation header is unreadable"
+                } else {
+                    "the confirmation header names the ${pillSide.wire} set but the chooser selected the ${winner.wire} set"
+                }
+            if (transaction.useConfirmationRetry()) {
+                MessageLog.w(TAG, "[SPARKS] [CHOOSER] $problem - cancelling back to the pager for one retry.")
+                clickSparkConfirmationCancel(bitmap)
+                waitSafe(2.0)
+                return TransitionResult.Continue
+            }
+            clickSparkConfirmationCancel(bitmap)
+            return sparkSelectionBlocked(transition, transaction, "$problem (retry already used)")
+        }
+
+        // The dialog lists the kept set; its visible rows must not contradict the winner's read
+        // (kind or stars at any shared index). The dialog can clip a long set, so a shorter
+        // dialog list is tolerated once the header matched.
+        val winnerRead = transaction.pagerRead(winner) ?: if (winner == SparkSetSide.ORIGINAL) transaction.originalRead else transaction.rerolledRead
+        val dialogRows = readSparkRows(bitmap, SPARKS_CONFIRM_GEOMETRY)
+        val expectedRows = winnerRead?.rows ?: emptyList()
+        val comparable = minOf(dialogRows.size, expectedRows.size)
+        val contradiction =
+            (0 until comparable).firstOrNull { i ->
+                dialogRows[i].kind != expectedRows[i].kind || dialogRows[i].stars != expectedRows[i].stars
+            }
+        if (contradiction != null) {
+            clickSparkConfirmationCancel(bitmap)
+            return sparkSelectionBlocked(
+                transition,
+                transaction,
+                "confirmation row ${contradiction + 1} (${dialogRows[contradiction].kind.wire}/${dialogRows[contradiction].stars}*) contradicts the chosen ${winner.wire} set (${expectedRows[contradiction].kind.wire}/${expectedRows[contradiction].stars}*)",
+            )
+        }
+
+        if (transaction.state != SparkTxState.COMPLETE) {
+            transaction.verifyFinalConfirmation()
+            if (!transaction.keptRecorded) {
+                // The winner's complete pager read IS the kept set; the dialog may clip.
+                val keptRows = if (expectedRows.size >= dialogRows.size) expectedRows else dialogRows
+                recordSparkRows(keptRows, "kept", winnerRead)
+                transaction.markKeptRecorded()
+            }
+            if (!transaction.choiceRecorded) {
+                appendSparkChoiceRecord(transaction, pillSide)
+                transaction.markChoiceRecorded()
+            }
+        }
+        MessageLog.i(TAG, "[SPARKS] [CHOOSER] Confirmation header verified (${pillSide.wire}); pressing the final Confirm.")
+        if (!ButtonConfirm.click(iu, sourceBitmap = bitmap)) {
+            gestureUtils.tap(SPARK_CONFIRMATION_CONFIRM_X.toDouble(), SPARK_CONFIRMATION_CONFIRM_Y.toDouble(), "spark_conf_confirm")
+        }
+        val completed = transaction.complete()
+        if (!completed.ok) {
+            MessageLog.w(TAG, "[SPARKS] ${completed.reason}")
+        }
+        waitSafe(2.5)
+        return TransitionResult.Continue
+    }
+
+    /**
+     * SPARKS_KEEP_CONFIRMATION: the ORDINARY "Keep this set of Sparks?" dialog, raised by
+     * Confirm on the SPARKS screen when no reroll was performed. Its green pill reads a plain
+     * "Sparks" - it names no side - so none of the post-reroll winner-header logic applies.
+     *
+     * Confirming here is lossless by construction: there is no second set to lose, only the
+     * set the career actually rolled. The handler therefore auto-confirms once it can prove
+     * the situation is what it looks like: a live transaction that never confirmed a 30 TP
+     * spend, plus a complete read of the dialog's own list (which is the authoritative full
+     * set and becomes the kept record). A plain pill after a confirmed spend is contradictory
+     * and blocks; a missing transaction blocks rather than guessing.
+     *
+     * This screen was previously owned by the generic POST_RUN_RESULTS Confirm, and then - for
+     * one build - misclassified as the post-reroll selection confirmation, which blocked a
+     * completed no-spend career with a message claiming the header named the rerolled set
+     * (2026-07-19). It names nothing of the sort; it says "Sparks".
+     */
+    private fun handleSparksKeepConfirmation(): TransitionResult {
+        val transition = "SPARKS_KEEP_CONFIRMATION -> POST_RUN_RESULTS"
+        val transaction = SparkRerollGate.transaction
+        val bitmap = iu.getSourceBitmap()
+        val pill = SparkTextNorm.confirmationPill(readSparkOcrRegion(bitmap, SPARK_CONFIRMATION_SET_NAME_OCR_REGION, "spark_keep_pill"))
+
+        if (transaction == null) {
+            return sparkSelectionBlocked(
+                transition,
+                null,
+                "the keep confirmation (pill: ${pill.name.lowercase()}) is on screen with no live career transaction " +
+                    "(process restart or a hand-played career); not confirming a set the bot cannot account for",
+            )
+        }
+        if (transaction.spendEverConfirmed) {
+            return sparkSelectionBlocked(
+                transition,
+                transaction,
+                "this career confirmed a 30 TP reroll, so the selection dialog must name a side - but the pill reads " +
+                    "\"${pill.name.lowercase()}\". Contradictory; not confirming",
+            )
+        }
+        if (pill == SparkConfirmationPill.REROLLED) {
+            return sparkSelectionBlocked(
+                transition,
+                transaction,
+                "the pill names the rerolled set although this career never confirmed a spend. Contradictory; not confirming",
+            )
+        }
+
+        // Read the dialog's own list in full: it is the complete kept set (the SPARKS screen
+        // list can be longer than its visible window) and the record written from it.
+        if (transaction.state != SparkTxState.COMPLETE && !transaction.keptRecorded) {
+            val dialogReading = readCompleteSparkSet(SPARKS_CONFIRM_GEOMETRY, "keep confirmation")
+            if (!dialogReading.complete || dialogReading.rows.isEmpty()) {
+                return sparkSelectionBlocked(
+                    transition,
+                    transaction,
+                    "the keep dialog's set could not be read completely (${dialogReading.termination.name}, ${dialogReading.rows.size} rows); " +
+                        "not confirming a set that cannot be recorded",
+                )
+            }
+            // Cross-check against the original read when one exists and is complete. A
+            // contradiction means the dialog is not showing the set this career rolled.
+            val original = transaction.originalRead
+            if (original != null && original.complete) {
+                val comparable = minOf(original.rows.size, dialogReading.rows.size)
+                val contradiction =
+                    (0 until comparable).firstOrNull { i ->
+                        original.rows[i].kind != dialogReading.rows[i].kind || original.rows[i].stars != dialogReading.rows[i].stars
+                    }
+                if (contradiction != null) {
+                    return sparkSelectionBlocked(
+                        transition,
+                        transaction,
+                        "keep-dialog row ${contradiction + 1} (${dialogReading.rows[contradiction].kind.wire}/${dialogReading.rows[contradiction].stars}*) " +
+                            "contradicts the original set read on the SPARKS screen " +
+                            "(${original.rows[contradiction].kind.wire}/${original.rows[contradiction].stars}*); not confirming",
+                    )
+                }
+            }
+            recordSparkRows(dialogReading.rows, "kept", dialogReading)
+            transaction.markKeptRecorded()
+            sparksFullSetRecorded = true
+            MessageLog.i(TAG, "[SPARKS] Keep confirmation verified (pill: ${pill.name.lowercase()}, ${dialogReading.rows.size} rows); confirming the rolled set.")
+        }
+
+        if (!ButtonConfirm.click(iu, sourceBitmap = bitmap)) {
+            gestureUtils.tap(SPARK_CONFIRMATION_CONFIRM_X.toDouble(), SPARK_CONFIRMATION_CONFIRM_Y.toDouble(), "spark_keep_confirm")
+        }
+        // No reroll happened on this career: the transaction's work is done. declineSpend is
+        // idempotent for an already-terminal transaction, so a re-entry cannot double-record.
+        if (!transaction.terminal) {
+            transaction.declineSpend("no reroll performed; kept the rolled set")
+        }
+        waitSafe(2.5)
+        return TransitionResult.Continue
+    }
+
+    private fun clickSparkConfirmationCancel(bitmap: Bitmap) {
+        if (!ButtonCancel.click(iu, sourceBitmap = bitmap)) {
+            gestureUtils.tap(SPARK_CONFIRMATION_CANCEL_X.toDouble(), SPARK_CONFIRMATION_CANCEL_Y.toDouble(), "spark_conf_cancel")
+        }
+    }
+
+    /** The keep policy's profile, from the same settings the skill machinery reads: ordered
+     * blue targets, the Style-preference axes, the adaptive objective, and the enabled skill
+     * plans' names. Missing values degrade to null/empty and the policy stays conservative. */
+    private fun buildSparkChooserProfile(): SparkChooserProfile {
+        val blueTargets = runCatching { SettingsHelper.getStringArraySetting("training", "focusOnSparkStatTarget") }.getOrDefault(emptyList())
+        val style =
+            SettingsHelper.getStringSetting("skills", "preferredRunningStyle").trim().ifEmpty {
+                SettingsHelper.getStringSetting("racing", "originalRaceStrategy").trim()
+            }
+        val plannedNames = mutableListOf<String>()
+        runCatching {
+            val plansString = SettingsHelper.getStringSetting("skills", "plans")
+            if (plansString.isNotEmpty()) {
+                val plans = JSONObject(plansString)
+                plans.keys().forEach { planName ->
+                    val plan = plans.optJSONObject(planName) ?: return@forEach
+                    if (!plan.optBoolean("enabled", false)) return@forEach
+                    plan.optString("plan", "").split(",").mapNotNull { it.trim().toIntOrNull() }.forEach { id ->
+                        tempGame?.skillDatabase?.getSkillName(id)?.let { plannedNames.add(it) }
+                    }
+                }
+            }
+        }
+        return SparkChooserProfile(
+            traineeIdentity = StartModule.lastCareerEndTrainee,
+            objective = SettingsHelper.getStringSetting("skills", "skillSpendObjective", "rank"),
+            blueTargetsOrdered = blueTargets,
+            preferredDistance = SettingsHelper.getStringSetting("skills", "preferredTrackDistance").trim().ifEmpty { null },
+            preferredStyle = SparkTextNorm.canonicalStyleName(style),
+            preferredSurface = SettingsHelper.getStringSetting("skills", "preferredTrackSurface").trim().ifEmpty { null },
+            plannedSkillNames = plannedNames,
+        )
+    }
+
+    /**
+     * Appends the first-class type="spark_choice" record: exact career identity, transaction
+     * id, both score breakdowns, the chosen side, the verified confirmation header, read
+     * completeness, and the spend facts. The kept set itself is the adjacent type="sparks"
+     * phase="kept" record - the choice record is the decision's audit trail.
+     */
+    private fun appendSparkChoiceRecord(transaction: SparkRerollTransaction, verifiedHeader: SparkSetSide) {
+        runCatching {
+            val choice = transaction.choice ?: return
+            val record = JSONObject()
+            record.put("type", "spark_choice")
+            record.put("ts", System.currentTimeMillis())
+            StartModule.lastCareerEndTrainee?.let { record.put("trainee", it) }
+            StartModule.lastCareerEndScenario?.let { record.put("scenario", it) }
+            StartModule.lastCareerEndFp?.let { record.put("fp", it) }
+            transaction.careerToken?.let { record.put("career", it) }
+            record.put("tx", transaction.careerNonce)
+            transaction.queueRun?.let { record.put("run", it) }
+            record.put("chosen", choice.side.wire)
+            record.put("decided_by", choice.decidedBy)
+            record.put("reason", choice.reason)
+            record.put("certain", choice.certain)
+            record.put("confirmed_header", verifiedHeader.wire)
+            record.put("original", JSONObject(choice.original.toRecordMap()))
+            record.put("rerolled", JSONObject(choice.rerolled.toRecordMap()))
+            record.put("tp_spent", 30)
+            transaction.tpRestoreSource?.let { record.put("tp_restore_source", it) }
+            transaction.spendConfirmedAtMs?.let { record.put("spend_ts", it) }
+            OutcomeCorpus.append(context, record)
+        }.onFailure {
+            MessageLog.w(TAG, "[SPARKS] Failed to append the spark_choice record: $it")
         }
     }
 
@@ -1605,159 +2418,218 @@ class CareerLaunchNavigator(private val context: Context) {
 
     /** Clicks Confirm on the SPARKS screen; falls back to re-detection when the click misses.
      * The click raises the "Keep this set of Sparks?" confirmation, which lists EVERY spark on
-     * one screen (the sparks list itself shows only 6 unscrolled) - the kept set is recorded in
-     * full from it before the generic dialog handling confirms it away. */
+     * one screen (the sparks list itself shows at most 9 unscrolled) - the kept set is recorded
+     * in full from it before the generic dialog handling confirms it away. */
     private fun confirmSparks(bitmap: Bitmap): TransitionResult {
         if (!ButtonConfirm.click(iu, sourceBitmap = bitmap)) {
             MessageLog.w(TAG, "[NAV] Confirm not clickable on the SPARKS screen. Re-detecting...")
         }
         waitSafe(1.5)
-        if (!sparksFullSetRecorded) {
+        // The keep dialog this raises is owned by SPARKS_KEEP_CONFIRMATION, which reads the
+        // complete set and writes the kept record. This legacy read stays only as a fallback
+        // for a frame that state cannot claim (an unsupported capture size), and shares the
+        // transaction's keptRecorded token so the two can never both append.
+        val transaction = SparkRerollGate.transaction
+        if (!sparksFullSetRecorded && transaction?.keptRecorded != true) {
             runCatching {
                 val dialogBitmap = iu.getSourceBitmap()
-                val rows = readSparkRows(dialogBitmap, sparksConfirmGeometry)
+                val rows = readSparkRows(dialogBitmap, SPARKS_CONFIRM_GEOMETRY)
                 // Sanity gate: a real spark list always leads stat/aptitude/unique. Anything else
                 // means the dialog is not up (missed click, layout drift) - skip silently and keep
-                // the 6-row record as coverage.
-                if (rows.size >= 3 && rows[0].kind == "stat" && rows[1].kind == "aptitude" && rows[2].kind == "unique") {
+                // the visible-window record as coverage.
+                val leads = rows.size >= 3 && rows[0].kind == SparkRowKind.STAT && rows[1].kind == SparkRowKind.APTITUDE && rows[2].kind == SparkRowKind.UNIQUE
+                if (leads && transaction == null) {
                     sparksFullSetRecorded = true
-                    recordSparkSet(dialogBitmap, "kept", sparksConfirmGeometry)
+                    recordSparkRows(rows, "kept")
                 }
             }
         }
         return TransitionResult.Continue
     }
 
-    /**
-     * Reads the stat spark (row 1 of the SPARKS list, the blue bar): OCR'd name + gold star
-     * count. Fixed top-anchored geometry measured on 1080-wide captures; the star slots sit at
-     * known x offsets and classify by color (gold vs grey). Returns null when row 1 is not the
-     * expected blue bar (layout drift, wrong screen) so callers keep the original set.
-     */
-    private fun readSparkStatRow(bitmap: Bitmap): Pair<String, Int>? {
-        fun meanChannel(cx: Int, cy: Int, extract: (Int) -> Int): Int {
-            var sum = 0
-            for (dy in -2..2) for (dx in -2..2) sum += extract(bitmap.getPixel(cx + dx, cy + dy))
-            return sum / 25
-        }
-        if (bitmap.width < 1000 || bitmap.height < 400) return null
-        // Row-1 bar sample right of the name, left of the stars: blue-dominant on the stat row.
-        val barB = meanChannel(770, 307, Color::blue)
-        val barR = meanChannel(770, 307, Color::red)
-        if (barB <= 180 || barR >= 140) return null
-
-        val goldStars =
-            listOf(846, 894, 941).count { x ->
-                meanChannel(x, 307, Color::red) > 200 && meanChannel(x, 307, Color::blue) < 120
-            }
-        val name =
-            iu.performOCROnRegion(
-                bitmap,
-                110,
-                265,
-                650,
-                84,
-                useThreshold = false,
-                useGrayscale = true,
-                ocrEngine = "mlkit",
-                debugName = "sparkStatRow",
-            ).trim()
-        if (name.isEmpty()) return null
-        // Canonicalize OCR fuzz to a stat name where possible ("Spccd" -> "Speed") so the gate's
-        // name comparison is not at the mercy of a single misread glyph; keep the raw read for
-        // non-stat rows so the log stays informative.
-        val canonical = TextUtils.matchStringInList(name, listOf("Speed", "Stamina", "Power", "Guts", "Wit")) ?: name
-        return Pair(canonical, goldStars)
-    }
-
-    /** One spark row read off the career-end SPARKS screen. */
-    private data class SparkRowRead(val name: String, val goldStars: Int, val kind: String)
-
-    /** Pixel geometry of a spark list on 1080-wide captures: first row center, max visible rows,
-     * and the three star-slot sample centers (row pitch is 119 on both known layouts). */
-    private data class SparkListGeometry(val firstRowY: Int, val maxRows: Int, val starXs: List<Int>, val debugPrefix: String)
-
-    /** The career-end SPARKS screen list: shows at most 6 rows without scrolling. */
-    private val sparksScreenGeometry = SparkListGeometry(firstRowY = 307, maxRows = 6, starXs = listOf(846, 894, 941), debugPrefix = "sparkRow")
-
-    /** The "Keep this set of Sparks?" confirmation dialog: lists EVERY spark on one screen
-     * (measured on a live 10-row capture: rows from y=315, stars ~9px right of the list's). */
-    private val sparksConfirmGeometry = SparkListGeometry(firstRowY = 315, maxRows = 11, starXs = listOf(855, 901, 947), debugPrefix = "sparkKeepRow")
+    /** Wraps the capture for the pure pixel probes (kind classification, star counting, screen
+     * structure) shared with the fixture tests. */
+    private fun sparkSampler(bitmap: Bitmap): SparkPixelSampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
 
     /**
      * Reads every visible spark row of a spark list: OCR'd name, gold-star count, and the row
      * kind from its bar color - blue = stat, pink = aptitude, green = unique, grey = white skill.
-     * Fixed top-anchored [geometry] measured on 1080-wide captures (the SPARKS screen shares its
-     * anchors with [readSparkStatRow]); an all-white bar sample means the grid ended. Best-effort:
-     * an unreadable name is recorded as such rather than dropped, so the record stays honest
-     * about what was on screen.
+     * The pixel work (bar classification, star sampling, the pure-white end-of-grid break) lives
+     * in the shared probe layer so the fixture tests pin it; the OCR name and the name-based
+     * termination stay here. Best-effort: an unreadable name is recorded as such rather than
+     * dropped, so the record stays honest about what was on screen.
      */
-    private fun readSparkRows(bitmap: Bitmap, geometry: SparkListGeometry = sparksScreenGeometry): List<SparkRowRead> {
+    private fun readSparkRows(bitmap: Bitmap, geometry: SparkListGeometry = SPARKS_SCREEN_GEOMETRY): List<SparkRowFact> {
         if (bitmap.width < 1000 || bitmap.height < 1000) return emptyList()
-        fun meanChannel(cx: Int, cy: Int, extract: (Int) -> Int): Int {
-            var sum = 0
-            for (dy in -2..2) for (dx in -2..2) sum += extract(bitmap.getPixel(cx + dx, cy + dy))
-            return sum / 25
-        }
-        val rows = mutableListOf<SparkRowRead>()
-        for (i in 0 until geometry.maxRows) {
-            val y = geometry.firstRowY + i * 119
-            if (y + 3 >= bitmap.height) break
-            val barR = meanChannel(770, y, Color::red)
-            val barG = meanChannel(770, y, Color::green)
-            val barB = meanChannel(770, y, Color::blue)
-            // Rows are contiguous; a pure-white sample (no bar, no grey row body - measured 255
-            // vs the white-skill row's 224) means the grid ended.
-            if (barR >= 245 && barG >= 245 && barB >= 245) break
-            val kind =
-                when {
-                    barB > 240 && barR < 150 -> "stat"
-                    barR > 240 && barG < 180 && barB > 160 -> "aptitude"
-                    barG > 200 && barB < 100 -> "unique"
-                    else -> "skill"
-                }
-            val goldStars =
-                geometry.starXs.count { x ->
-                    meanChannel(x, y, Color::red) > 200 && meanChannel(x, y, Color::blue) < 150
-                }
+        return nameSparkCells(bitmap, parseSparkRowCells(sparkSampler(bitmap), geometry, bitmap.height), geometry)
+    }
+
+    /** OCR names onto parsed cells, applying the phantom-tail break. */
+    private fun nameSparkCells(bitmap: Bitmap, cells: List<SparkRowCell>, geometry: SparkListGeometry): List<SparkRowFact> {
+        val rows = mutableListOf<SparkRowFact>()
+        for (cell in cells) {
             val name =
                 iu.performOCROnRegion(
                     bitmap,
                     110,
-                    y - 42,
+                    cell.rowY - 42,
                     650,
                     84,
                     useThreshold = false,
                     useGrayscale = true,
                     ocrEngine = "mlkit",
-                    debugName = "${geometry.debugPrefix}$i",
+                    debugName = "${geometry.debugPrefix}${cell.index}",
                 ).trim()
             // Every real spark shows at least 1 gold star. A starless, textless slot is past the
             // end of the list: the keep-set dialog shrink-wraps to the set size and its body is
-            // not the pure white the break above expects, so the slots below the real set used to
+            // not the pure white the grid break expects, so the slots below the real set used to
             // be recorded as phantom "unreadable" 0-star skill rows (53 of 165 kept-phase rows in
             // the corpus, always contiguous at the tail).
-            if (goldStars == 0 && name.isEmpty()) break
-            rows.add(SparkRowRead(name.ifEmpty { "unreadable" }, goldStars, kind))
+            if (cell.stars == 0 && name.isEmpty()) break
+            val resolvedName = name.ifEmpty { SPARK_UNREADABLE_NAME }
+            rows.add(SparkRowFact(resolvedName, cell.stars, cell.kind, resolveSparkWhiteClass(cell.kind, resolvedName)))
         }
         return rows
     }
 
+    /** Race-vs-skill refinement for a white row, from the packaged skill catalog: a known skill
+     * name is a skill spark; anything else readable is a race spark; unreadable stays unknown
+     * (uncertainty, handled conservatively by the keep policy). */
+    private fun resolveSparkWhiteClass(kind: SparkRowKind, name: String): SparkWhiteClass? {
+        if (kind != SparkRowKind.WHITE) return null
+        if (name == SPARK_UNREADABLE_NAME || name.isBlank()) return SparkWhiteClass.UNKNOWN
+        val known = runCatching { tempGame?.skillDatabase?.getSkillData(name) != null }.getOrDefault(false)
+        return if (known) SparkWhiteClass.SKILL else SparkWhiteClass.RACE
+    }
+
+    /** One parsed frame of a scrolled spark list read. */
+    private data class SparkFrame(val rows: List<SparkRowFact>, val endMarkerSeen: Boolean)
+
+    private fun readSparkFrame(bitmap: Bitmap, geometry: SparkListGeometry): SparkFrame? {
+        if (bitmap.width < 1000 || bitmap.height < 1000) return null
+        // A swipe does not settle on pixel-exact row multiples, so scrolled frames re-anchor
+        // the grid on the detected band offset before parsing; the unscrolled first frame
+        // measures within 3 px of the fixed grid (fixture-pinned), so this is a no-op there.
+        val cells = parseSparkRowCellsAligned(sparkSampler(bitmap), geometry, bitmap.height) ?: return null
+        val rows = nameSparkCells(bitmap, cells, geometry)
+        // The parse stops early on the pure-white grid break; the row read additionally stops on
+        // a starless, textless slot. Either one is positive proof the visible window contains
+        // the end of the list.
+        val endMarkerSeen = cells.size < geometry.maxRows || rows.size < cells.size
+        return SparkFrame(rows, endMarkerSeen)
+    }
+
     /**
-     * Logs one greppable `[SPARKS]` line for the visible spark set and appends a type="sparks"
-     * record to the outcome corpus. The career's own outcome record precedes it in the same file
-     * and the trainee snapshot makes the record self-contained. [phase] is "original" for the set
-     * the career rolled, "rerolled" for the redraw after a 30 TP spend - the last [SPARKS] line
-     * before Confirm is the set that was kept. Best-effort: a failure here must never disturb the
-     * career-end navigation.
+     * Reads a COMPLETE spark list, scrolling as needed and merging overlapping frames by
+     * content ([SparkScrollMerge]). Completion requires positive proof: the end-of-list marker
+     * inside a frame, or a scroll attempt that provably moved nothing (two identical parses
+     * around a swipe). A scrollbar thumb alone is never proof. Anything else terminates as a
+     * typed partial result that must not authorize a spend or an automatic choice. The list is
+     * scrolled back to the top afterwards (the pager must only be paged from the top, and a
+     * later Confirm must commit the page as the game presents it).
      */
-    private fun recordSparkSet(bitmap: Bitmap, phase: String, geometry: SparkListGeometry = sparksScreenGeometry) {
-        val rows = readSparkRows(bitmap, geometry)
+    private fun readCompleteSparkSet(
+        geometry: SparkListGeometry,
+        label: String,
+        maxScrolls: Int = SPARK_SCAN_MAX_SCROLLS,
+        budgetMs: Long = SPARK_SCAN_BUDGET_MS,
+    ): SparkSetReading {
+        val startMs = System.currentTimeMillis()
+        var merged = listOf<SparkRowFact>()
+        var previousRows: List<SparkRowFact>? = null
+        var scrolls = 0
+        var result: SparkSetReading? = null
+        while (result == null) {
+            // A user Stop or queue-stop mid-scan: bail as a partial read (never complete) so the
+            // caller keeps the original set. A hard interrupt throws out of waitSafe below and is
+            // handled by the FSM; this covers the soft-stop flags waitSafe only returns on.
+            if (!BotService.isRunning || StartModule.queueStopRequested) {
+                result = SparkSetReading(merged, if (merged.isEmpty()) SparkScanTermination.FAILED else SparkScanTermination.TIMED_OUT_PARTIAL, scrolls)
+                break
+            }
+            var frame = readSparkFrame(iu.getSourceBitmap(), geometry)
+            if ((frame == null || frame.rows.isEmpty()) && merged.isNotEmpty()) {
+                // A mid-settle capture can miss the grid entirely; one extra settle beat before
+                // declaring the scan partial.
+                waitSafe(1.0)
+                frame = readSparkFrame(iu.getSourceBitmap(), geometry)
+            }
+            if (frame == null || frame.rows.isEmpty()) {
+                result =
+                    if (merged.isEmpty()) {
+                        SparkSetReading(emptyList(), SparkScanTermination.FAILED, scrolls)
+                    } else {
+                        SparkSetReading(merged, SparkScanTermination.TIMED_OUT_PARTIAL, scrolls)
+                    }
+                break
+            }
+            // No-progress is checked BEFORE the merge: a post-swipe frame identical to the
+            // pre-swipe frame proves the list cannot move (it is at its bottom), regardless of
+            // whether the frame's rows are repetitive enough to make the content merge ambiguous.
+            // Checking it here keeps a bottom-of-list of look-alike whites a COMPLETE read rather
+            // than letting the hardened (ambiguity-refusing) merge downgrade it to ALIGNMENT_FAILED.
+            if (previousRows != null && previousRows.size == frame.rows.size && SparkScrollMerge.rowsAlign(previousRows, frame.rows)) {
+                result = SparkSetReading(merged, SparkScanTermination.COMPLETE_NO_PROGRESS, scrolls)
+                break
+            }
+            val mergedNext = SparkScrollMerge.merge(merged, frame.rows)
+            if (mergedNext == null) {
+                result = SparkSetReading(merged, SparkScanTermination.ALIGNMENT_FAILED, scrolls)
+                break
+            }
+            merged = mergedNext
+            if (frame.endMarkerSeen) {
+                result = SparkSetReading(merged, SparkScanTermination.COMPLETE_END_MARKER, scrolls)
+                break
+            }
+            if (scrolls >= maxScrolls || System.currentTimeMillis() - startMs > budgetMs) {
+                result = SparkSetReading(merged, SparkScanTermination.TIMED_OUT_PARTIAL, scrolls)
+                break
+            }
+            previousRows = frame.rows
+            scrolls++
+            gestureUtils.swipe(SPARK_LIST_SCROLL_X, 1100f, SPARK_LIST_SCROLL_X, 1100f - geometry.rowPitch * 4f, duration = 900L)
+            waitSafe(1.0)
+        }
+        if (scrolls > 0) {
+            restoreSparkListTop(geometry, merged.firstOrNull(), scrolls)
+        }
+        MessageLog.i(
+            TAG,
+            "[SPARKS] Scan ($label): ${result!!.rows.size} rows, ${result.termination.name}, $scrolls scroll(s), ${result.unreadableRowCount} unreadable name(s).",
+        )
+        return result
+    }
+
+    /** Scrolls a spark list back to its top and verifies the first merged row is visible again.
+     * Best-effort: a failed restore is logged, and the callers re-resolve the screen before
+     * acting anyway. */
+    private fun restoreSparkListTop(geometry: SparkListGeometry, expectedFirst: SparkRowFact?, scrollsUsed: Int) {
+        repeat(scrollsUsed + 1) {
+            gestureUtils.swipe(SPARK_LIST_SCROLL_X, 700f, SPARK_LIST_SCROLL_X, 700f + geometry.rowPitch * 4f, duration = 900L)
+            waitSafe(0.8)
+        }
+        val frame = readSparkFrame(iu.getSourceBitmap(), geometry)
+        val first = frame?.rows?.firstOrNull()
+        if (expectedFirst == null || first == null || first.kind != expectedFirst.kind || first.stars != expectedFirst.stars) {
+            MessageLog.w(TAG, "[SPARKS] List top not verified after restore (saw ${first?.kind}/${first?.stars} vs ${expectedFirst?.kind}/${expectedFirst?.stars}).")
+        }
+    }
+
+    /**
+     * Logs one greppable `[SPARKS]` line for a read spark set and appends a type="sparks"
+     * record to the outcome corpus. The career's own outcome record precedes it in the same file
+     * and the trainee snapshot makes the record self-contained. [phase] is "original" for the
+     * set the career rolled, "rerolled" for the redraw after a 30 TP spend, "kept" for the set
+     * that survives. The reroll transaction's identity fields ride along additively (older
+     * records without them stay readable, and the base schema is untouched).
+     */
+    private fun recordSparkRows(rows: List<SparkRowFact>, phase: String, reading: SparkSetReading? = null) {
         if (rows.isEmpty()) {
             MessageLog.w(TAG, "[SPARKS] Could not read any spark rows ($phase set) - geometry drift or a mid-transition frame.")
             return
         }
-        MessageLog.i(TAG, "[SPARKS] ${phase.replaceFirstChar { it.uppercase() }} set: " + rows.joinToString(" | ") { "${it.name} ${it.goldStars}-star (${it.kind})" })
+        MessageLog.i(TAG, "[SPARKS] ${phase.replaceFirstChar { it.uppercase() }} set: " + rows.joinToString(" | ") { "${it.name} ${it.stars}-star (${it.kind.wire})" })
         runCatching {
             val record = JSONObject()
             record.put("type", "sparks")
@@ -1776,17 +2648,31 @@ class CareerLaunchNavigator(private val context: Context) {
                         put(
                             JSONObject().apply {
                                 put("name", row.name)
-                                put("stars", row.goldStars)
-                                put("kind", row.kind)
+                                put("stars", row.stars)
+                                put("kind", row.kind.wire)
                             },
                         )
                     }
                 },
             )
+            reading?.let {
+                record.put("scan", it.termination.name)
+                record.put("scan_complete", it.complete)
+            }
+            SparkRerollGate.transaction?.let { tx ->
+                tx.careerToken?.let { record.put("career", it) }
+                record.put("tx", tx.careerNonce)
+            }
             OutcomeCorpus.append(context, record)
         }.onFailure {
             MessageLog.w(TAG, "[SPARKS] Failed to append the sparks record: $it")
         }
+    }
+
+    /** Reads the rows off [bitmap] and records them; the pre-chooser call shape kept for the
+     * visible-window paths (reroll off, keep-set dialog). */
+    private fun recordSparkSet(bitmap: Bitmap, phase: String, geometry: SparkListGeometry = SPARKS_SCREEN_GEOMETRY) {
+        recordSparkRows(readSparkRows(bitmap, geometry), phase)
     }
 
     /**
@@ -2190,6 +3076,18 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.w(TAG, "[NAV] [FINALIZE] Home reached with a leftover finalization verdict (token ${it.careerToken}); clearing it as stale.")
             CareerFinalizeGate.clear()
         }
+        // The spark transaction is cleared here only when it has already committed 30 TP or
+        // reached a terminal state - those are the survivors that could wrongly govern a later
+        // career's selection screens. A pre-spend transaction deliberately survives: Home is
+        // also crossed on the way INTO a career and by the daily-reset bounce back to the
+        // lobby mid-career, and clearing it there is exactly what left a live career unable to
+        // price its redraw (2026-07-19).
+        SparkRerollGate.transaction?.let { tx ->
+            val state = tx.state
+            if (SparkRerollGate.clearOnHome()) {
+                MessageLog.i(TAG, "[SPARKS] Home reached; clearing the finished reroll transaction (state $state).")
+            }
+        }
         MessageLog.i(TAG, "[NAV] On home screen. Attempting to click CAREER button (multi-detector)...")
         val bitmap = iu.getSourceBitmap()
 
@@ -2356,9 +3254,10 @@ class CareerLaunchNavigator(private val context: Context) {
                     // The old blind first-row tap once borrowed the trainee's own card here - the
                     // game then disables Start Career and the launch is unrecoverable by clicking.
                     val scan = borrowRowsOnScreen(iu.getSourceBitmap())
-                    val pick = scan.rows.firstOrNull { (_, text) ->
-                        borrowExcludedCharacters.none { borrowRowMatchesPreference(text, it) }
-                    }
+                    val pick =
+                        scan.rows.firstOrNull { (_, text) ->
+                            borrowExcludedCharacters.none { borrowRowMatchesPreference(text, it) }
+                        }
                     if (pick == null) {
                         ButtonClose.click(iu)
                         return TransitionResult.Failed(
@@ -2367,7 +3266,13 @@ class CareerLaunchNavigator(private val context: Context) {
                             recommendedAction = "Follow more trainers or borrow a card of a different character manually, then restart the queue.",
                         )
                     }
-                    MessageLog.i(TAG, "[NAV] Borrow Card list open. Preferred card not visible - selecting the first valid card \"${pick.second.replace("\n", " ").trim().take(60)}\" at (540, ${pick.first.toInt()})...")
+                    MessageLog.i(
+                        TAG,
+                        "[NAV] Borrow Card list open. Preferred card not visible - selecting the first valid card \"${pick.second.replace(
+                            "\n",
+                            " ",
+                        ).trim().take(60)}\" at (540, ${pick.first.toInt()})...",
+                    )
                     lastBorrowPickEntry = pick.second
                     gestureUtils.tap(540.0, pick.first, "borrow_card_first_valid_row")
                 }
@@ -3097,6 +4002,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * Detection: ButtonAutoSelect template match.
      * Transition: ButtonAutoSelect.click() -> [opt-in: Checkbox.click() x N] -> ButtonOk.click() -> ButtonNext (next iteration).
      */
+
     /**
      * Scans the open Borrow Card list page by page for the highest-priority Smart Borrow card
      * and taps it. Rows are located by their Last Login pill (findAll), which keeps the scan
@@ -3239,51 +4145,52 @@ class CareerLaunchNavigator(private val context: Context) {
         val traineePills = LabelTraineeConflict.findAll(iu, sourceBitmap = bitmap)
         val duplicateTexts = mutableListOf<String>()
         val traineeConflictTexts = mutableListOf<String>()
-        val rows = LabelBorrowLastLogin.findAll(iu, sourceBitmap = bitmap)
-            .sortedBy { it.y }
-            .mapNotNull { pill ->
-                val centerY = pill.y - BORROW_PILL_TO_ROW_CENTER_PX
-                if (centerY - BORROW_NAME_BAND_HALF_HEIGHT < 150 || centerY + BORROW_NAME_BAND_HALF_HEIGHT > bitmap.height - 300) return@mapNotNull null
-                val inPillWindow = { p: org.opencv.core.Point -> p.y >= centerY - BORROW_DUPLICATE_PILL_MAX_OFFSET && p.y <= centerY - BORROW_DUPLICATE_PILL_MIN_OFFSET }
-                val taggedDuplicate = duplicatePills.any(inPillWindow)
-                val taggedTrainee = !taggedDuplicate && traineePills.any(inPillWindow)
-                val text =
-                    try {
-                        iu.performOCROnRegion(
-                            bitmap,
-                            (bitmap.width * 0.21).toInt(),
-                            (centerY - BORROW_NAME_BAND_HALF_HEIGHT).toInt(),
-                            (bitmap.width * 0.52).toInt(),
-                            BORROW_NAME_BAND_HALF_HEIGHT * 2,
-                            useThreshold = false,
-                            useGrayscale = true,
-                            scale = 2.0,
-                            debugName = "nav_borrow_row_ocr",
-                        )
-                    } catch (e: InterruptedException) {
-                        throw e
-                    } catch (_: Exception) {
-                        ""
+        val rows =
+            LabelBorrowLastLogin.findAll(iu, sourceBitmap = bitmap)
+                .sortedBy { it.y }
+                .mapNotNull { pill ->
+                    val centerY = pill.y - BORROW_PILL_TO_ROW_CENTER_PX
+                    if (centerY - BORROW_NAME_BAND_HALF_HEIGHT < 150 || centerY + BORROW_NAME_BAND_HALF_HEIGHT > bitmap.height - 300) return@mapNotNull null
+                    val inPillWindow = { p: org.opencv.core.Point -> p.y >= centerY - BORROW_DUPLICATE_PILL_MAX_OFFSET && p.y <= centerY - BORROW_DUPLICATE_PILL_MIN_OFFSET }
+                    val taggedDuplicate = duplicatePills.any(inPillWindow)
+                    val taggedTrainee = !taggedDuplicate && traineePills.any(inPillWindow)
+                    val text =
+                        try {
+                            iu.performOCROnRegion(
+                                bitmap,
+                                (bitmap.width * 0.21).toInt(),
+                                (centerY - BORROW_NAME_BAND_HALF_HEIGHT).toInt(),
+                                (bitmap.width * 0.52).toInt(),
+                                BORROW_NAME_BAND_HALF_HEIGHT * 2,
+                                useThreshold = false,
+                                useGrayscale = true,
+                                scale = 2.0,
+                                debugName = "nav_borrow_row_ocr",
+                            )
+                        } catch (e: InterruptedException) {
+                            throw e
+                        } catch (_: Exception) {
+                            ""
+                        }
+                    if (taggedDuplicate) {
+                        MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow rejected candidate: duplicate support (\"${text.replace("\n", " ").trim().take(60)}\" is marked \"! Duplicate Support\").")
+                        duplicateTexts.add(text)
+                        return@mapNotNull null
                     }
-                if (taggedDuplicate) {
-                    MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow rejected candidate: duplicate support (\"${text.replace("\n", " ").trim().take(60)}\" is marked \"! Duplicate Support\").")
-                    duplicateTexts.add(text)
-                    return@mapNotNull null
+                    if (taggedTrainee) {
+                        MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow rejected candidate: same as active trainee (\"${text.replace("\n", " ").trim().take(60)}\" is marked \"! Trainee\").")
+                        traineeConflictTexts.add(text)
+                        return@mapNotNull null
+                    }
+                    if (borrowLaunchTraineeTarget.isNotBlank() && borrowCandidateConflictsWithTrainee(text, borrowLaunchTraineeTarget)) {
+                        // Identity backstop for a missed pill: the row reads as the active trainee's
+                        // own character, which the game will refuse at Start Career.
+                        MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow rejected candidate: same as active trainee (\"${text.replace("\n", " ").trim().take(60)}\").")
+                        traineeConflictTexts.add(text)
+                        return@mapNotNull null
+                    }
+                    centerY to text
                 }
-                if (taggedTrainee) {
-                    MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow rejected candidate: same as active trainee (\"${text.replace("\n", " ").trim().take(60)}\" is marked \"! Trainee\").")
-                    traineeConflictTexts.add(text)
-                    return@mapNotNull null
-                }
-                if (borrowLaunchTraineeTarget.isNotBlank() && borrowCandidateConflictsWithTrainee(text, borrowLaunchTraineeTarget)) {
-                    // Identity backstop for a missed pill: the row reads as the active trainee's
-                    // own character, which the game will refuse at Start Career.
-                    MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow rejected candidate: same as active trainee (\"${text.replace("\n", " ").trim().take(60)}\").")
-                    traineeConflictTexts.add(text)
-                    return@mapNotNull null
-                }
-                centerY to text
-            }
         return BorrowScan(rows, duplicateTexts, traineeConflictTexts)
     }
 

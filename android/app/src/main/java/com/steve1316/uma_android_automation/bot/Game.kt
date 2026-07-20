@@ -796,6 +796,28 @@ class Game(val myContext: Context) {
             }
             DiscordUtils.queue.add("```diff\n+ ${MessageLog.getSystemTimeString()} Bot run started! Scenario: $scenario```$logViewerString")
         }
+        // CAREER ATTACHMENT: the bot is about to hand control to the career task, which is the
+        // first point that proves a real career exists - exactly one of "already on the training
+        // menu", "started on a career-end screen", or "auto-navigation reported reaching the
+        // training menu" holds here. This is the ONLY place a spark reroll transaction is
+        // created. Arming any earlier (the queue run loop used to) puts the transaction on the
+        // wrong side of the cold-start launch navigation, whose legitimate pass through the
+        // game's Home screen then destroyed it and left a whole live career unable to price its
+        // redraw (2026-07-19). Misc tasks are not careers and never arm.
+        if (!isMiscTask) {
+            val queueRun =
+                if (SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", false)) {
+                    SettingsHelper.getIntSetting("queueState", "currentRun", 0)
+                } else {
+                    null
+                }
+            SparkRerollGate.beginCareer(
+                nonce = java.util.UUID.randomUUID().toString().substring(0, 8),
+                queueRun = queueRun,
+                nowMs = System.currentTimeMillis(),
+            )
+        }
+
         // Read the per-run safety timeout from the run queue settings. Defaults to 180 min
         // (3 hours), matching the TS-side default. Single-run sessions (queue disabled)
         // also use this same setting since they call Game.start() the same way.

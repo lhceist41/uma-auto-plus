@@ -290,8 +290,11 @@ export interface Settings {
         // On the career-end SPARKS screen, spend 30 TP to reroll the set once when it prices
         // below a fresh redraw (SparkRerollPolicy.kt): a 2/3-star stat spark is always kept; a
         // 1-star stat spark is redrawn unless every stat finished under 600 (a redraw can't roll
-        // a 3-star there) or the set holds 3-star aptitude/skill sparks worth protecting. The
-        // redrawn set is kept. OFF by default - it spends TP.
+        // a 3-star there) or the set holds 3-star aptitude/skill sparks worth protecting. After
+        // the spend, both sets are read in full on the game's Spark Selection pager and the
+        // better one is kept (SparkChooser.kt); an unverifiable selection stops safely with the
+        // original set recoverable by hand. OFF by default - it spends TP; supervise it until
+        // the selection has been watched live.
         enableSparkReroll: boolean
         // Tick "Include Guests" on the Confirm Auto-Select legacy dialog so Auto-Select may borrow a
         // guest (rental) parent. Borrowing a guest costs in-game monies. OFF by default -> Auto-Select
