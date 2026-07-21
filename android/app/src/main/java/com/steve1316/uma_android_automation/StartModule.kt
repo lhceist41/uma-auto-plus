@@ -629,6 +629,18 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     // Interaction with the Start / Stop button.
 
     /** This is called when the Start button is pressed back at the Javascript frontend and starts up the MediaProjection service along with the BotService attached to it. */
+    /**
+     * Stores the launch identity the React Start barrier just verified on disk (the
+     * preset-apply revision plus the content hash). The bot session entry re-reads the
+     * revision from SQLite and aborts before any game interaction if it no longer matches --
+     * a write landing between React's verification and the Kotlin load would otherwise launch
+     * a configuration nobody verified. Single-use; consumed by the session's verdict.
+     */
+    @ReactMethod
+    fun setVerifiedLaunchIdentity(revision: Double, hash: String) {
+        com.steve1316.uma_android_automation.bot.LaunchIdentityGate.setExpected(revision.toInt(), hash)
+    }
+
     @ReactMethod
     fun start() {
         if (readyCheck()) {
@@ -1344,6 +1356,32 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
                 // Reset the log stream mute to ensure logs for the new run are broadcasted.
                 LogStreamServer.resetMute()
+
+                // Launch-identity gate: the React Start barrier verified a specific settings
+                // revision on disk and handed it over via setVerifiedLaunchIdentity. Re-read the
+                // revision here -- BEFORE any settings-consuming decision or game interaction --
+                // and abort the session on a mismatch: a write landed in the window between
+                // React's verification and this load, so this configuration was never verified.
+                // Sessions started without an identity (non-UI entries) warn and proceed.
+                val expectedIdentity = com.steve1316.uma_android_automation.bot.LaunchIdentityGate.current
+                val loadedRevision = SettingsHelper.getIntSetting("general", "settingsRevision", 0)
+                when (com.steve1316.uma_android_automation.bot.LaunchIdentityGate.verdict(loadedRevision)) {
+                    com.steve1316.uma_android_automation.bot.LaunchIdentityGate.Verdict.MISMATCH -> {
+                        MessageLog.e(
+                            TAG,
+                            "[START] launch identity mismatch: settings revision $loadedRevision on disk, expected " +
+                                "${expectedIdentity?.revision} (hash ${expectedIdentity?.hash}). A settings write landed after " +
+                                "verification; aborting before any game interaction. Press Start again.",
+                        )
+                        return
+                    }
+                    com.steve1316.uma_android_automation.bot.LaunchIdentityGate.Verdict.PASS -> {
+                        MessageLog.i(TAG, "[START] launch identity verified: revision=$loadedRevision hash=${expectedIdentity?.hash}")
+                    }
+                    com.steve1316.uma_android_automation.bot.LaunchIdentityGate.Verdict.NOT_SET -> {
+                        MessageLog.w(TAG, "[START] session started without a verified launch identity (non-UI entry); revision on disk: $loadedRevision.")
+                    }
+                }
 
                 // Read queue settings from SQLite.
                 val enableRunQueue = SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", false)

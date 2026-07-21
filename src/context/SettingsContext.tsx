@@ -1,5 +1,6 @@
 import React, { createContext, useContext, ReactNode } from "react"
 import { useSettingsManager } from "../hooks/useSettingsManager"
+import { LaunchBarrierResult } from "../lib/launchConfig"
 
 /**
  * Context value interface for the Settings provider.
@@ -10,6 +11,12 @@ interface SettingsContextType {
     saveSettings: (newSettings?: any) => Promise<void>
     /** Saves settings immediately without debouncing. */
     saveSettingsImmediate: (newSettings?: any) => Promise<void>
+    /**
+     * The Start persistence barrier: flush pending writes, read the launch-critical rows back
+     * out of SQLite, and verify they match the intended configuration. The caller launches the
+     * bot only when the result is `ok`.
+     */
+    flushAndVerifyLaunchConfig: (newSettings?: any) => Promise<LaunchBarrierResult>
     /** Loads settings from persistent storage. */
     loadSettings: (skipInitializationCheck?: boolean) => Promise<void>
     /** Imports settings from a file at the given URI. Returns true on success. */

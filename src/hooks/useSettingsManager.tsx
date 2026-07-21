@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext, useMemo, useRef } from "react"
+import { useState, useEffect, useContext, useMemo, useRef, useCallback } from "react"
 import * as Application from "expo-application"
 import * as FileSystem from "expo-file-system"
 import * as Sharing from "expo-sharing"
@@ -9,6 +9,11 @@ import { startTiming } from "../lib/performanceLogger"
 import { logWithTimestamp, logErrorWithTimestamp } from "../lib/logger"
 import { deepMerge, convertSettingsToBatch, applyMigrations } from "../lib/settingsUtils"
 import { buildRotationSnapshotRows, BuildRotationResult } from "../lib/rotationSnapshots"
+import { LaunchBarrierResult, launchConfigIdentity, identityFromRows, verifyLaunchConfigPersisted } from "../lib/launchConfig"
+
+/** Flush-stall ceiling for the Start barrier. Generous enough for a healthy write, short
+ * enough that a stalled writer surfaces a retryable failure instead of a frozen Start. */
+const LAUNCH_FLUSH_TIMEOUT_MS = 8000
 
 export { deepMerge, convertSettingsToBatch, applyMigrations }
 
@@ -133,6 +138,57 @@ export const useSettingsManager = () => {
             setIsSaving(false)
         }
     }
+
+    /**
+     * The Start persistence barrier: flush the pending settings write, read the persisted rows
+     * back in ONE atomic snapshot, and verify they match the intended configuration. Returns ok
+     * only when the intended preset is provably on disk. The caller launches BotService only on ok.
+     *
+     * `intended` defaults to the current in-memory settings (what the UI shows). The read-back
+     * uses `loadSettingsRowsSnapshot` -- a single SELECT (one consistent SQLite snapshot, never
+     * a row-by-row read a landing commit could interleave with) that returns RAW stored strings,
+     * the same storage form the identity hashes on both sides. A stalled flush times out into a
+     * fail-closed writer state (queued writes rejected, no forced reset of a possibly in-flight
+     * transaction), and even a silently-failed write is caught because the read-back won't match.
+     */
+    // useCallback (only stable refs/module-level values used) so this stays a stable member of the
+    // exposed API object, unlike the render-fresh sibling savers.
+    const flushAndVerifyLaunchConfig = useCallback(async (intended?: Settings): Promise<LaunchBarrierResult> => {
+        const endTiming = startTiming("settings_manager_launch_barrier", "settings")
+        const target = intended ? intended : settingsRef.current
+        const intendedIdentity = launchConfigIdentity(target)
+        try {
+            const result = await verifyLaunchConfigPersisted({
+                intended: intendedIdentity,
+                // Self-contained durable write (not the render-scoped saveSettingsImmediate closure,
+                // so this callback can stay stable). initialize() is idempotent and awaits any
+                // in-flight open; the batch awaits its own transaction commit.
+                flush: async () => {
+                    await databaseManager.initialize()
+                    await databaseManager.saveSettingsBatch(convertSettingsToBatch(target))
+                    // The intended content is now durably persisted; a still-pending debounced
+                    // auto-save would only rewrite the same rows AFTER verification (or, worse,
+                    // rewrite different rows if state changed). Cancel it so no settings write
+                    // remains scheduled behind a passed barrier.
+                    if (autoSaveTimerRef.current) {
+                        clearTimeout(autoSaveTimerRef.current)
+                        autoSaveTimerRef.current = null
+                    }
+                },
+                readback: async () => identityFromRows(await databaseManager.loadSettingsRowsSnapshot()),
+                recover: () => databaseManager.failStalledWriter("saving the preset did not finish in time (the settings writer stalled)"),
+                timeoutMs: LAUNCH_FLUSH_TIMEOUT_MS,
+                schedule: (fn, ms) => setTimeout(fn, ms),
+                cancel: (t) => clearTimeout(t),
+            })
+            endTiming({ status: result.ok ? "passed" : "blocked", stage: result.stage })
+            return result
+        } catch (error) {
+            // Never let an unexpected barrier error fall through to a launch.
+            endTiming({ status: "error", error: error instanceof Error ? error.message : String(error) })
+            return { ok: false, stage: "flush", reason: `barrier failed: ${error instanceof Error ? error.message : String(error)}`, intended: intendedIdentity, persisted: null }
+        }
+    }, [])
 
     /**
      * Load settings from `SQLite` database.
@@ -514,6 +570,7 @@ export const useSettingsManager = () => {
         () => ({
             saveSettings,
             saveSettingsImmediate,
+            flushAndVerifyLaunchConfig,
             loadSettings,
             importSettings,
             exportSettings,
@@ -522,6 +579,6 @@ export const useSettingsManager = () => {
             prepareTraineeRotation,
             isSaving: isSaving || isSQLiteSaving,
         }),
-        [saveSettings, saveSettingsImmediate, loadSettings, importSettings, exportSettings, resetSettings, openDataDirectory, prepareTraineeRotation, isSaving, isSQLiteSaving]
+        [saveSettings, saveSettingsImmediate, flushAndVerifyLaunchConfig, loadSettings, importSettings, exportSettings, resetSettings, openDataDirectory, prepareTraineeRotation, isSaving, isSQLiteSaving]
     )
 }

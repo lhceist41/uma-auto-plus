@@ -57,6 +57,10 @@ export interface Settings {
         // the game's sticky preselection. Not user-facing controls.
         appliedPresetTrainee: string
         appliedPresetTraineeExcludes: string
+        // Internal: monotonic launch-config revision, bumped on every preset apply. The Start
+        // barrier reads this row back out of SQLite to prove the selected preset persisted
+        // before launching (a stale read once launched the wrong trainee). Not a user control.
+        settingsRevision: number
     }
 
     // Racing settings
@@ -367,6 +371,7 @@ export const defaultSettings: Settings = {
         enableRecreationCatchUp: true,
         appliedPresetTrainee: "",
         appliedPresetTraineeExcludes: "",
+        settingsRevision: 0,
     },
     racing: {
         enableFarmingFans: false,

@@ -18,6 +18,7 @@ import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 import SelectButton from "../../components/SelectButton"
 import PresetPicker from "../../components/PresetPicker"
 import { avoidAdvisoryFor, characterPresets, trainerAdvisories } from "../../data/characterPresets"
+import { bumpSettingsRevision, createSingleFlight } from "../../lib/launchConfig"
 import { presetCharacter, presetOutfit } from "../../data/presetMeta"
 import { deriveInGameName, deriveExcludeOutfits } from "../../lib/rotationSnapshots"
 import { presetObjectiveOf } from "../../lib/adaptiveSkillPolicy"
@@ -98,6 +99,9 @@ const Home = () => {
     const [showNotReadyDialog, setShowNotReadyDialog] = useState<boolean>(false)
     const [snackbarOpen, setSnackbarOpen] = useState<boolean>(false)
     const [snackbarMessage, setSnackbarMessage] = useState<string>("")
+    // Preset persistence state for the Home row + Start gate: a preset shows as launch-ready only
+    // once its write is confirmed on disk, so Start can never launch a not-yet-saved selection.
+    const [presetSaveState, setPresetSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle")
     const [deviceMetrics, setDeviceMetrics] = useState<{ width: number; height: number; dpi: number } | null>(null)
     const [unsupportedReason, setUnsupportedReason] = useState<string | null>(null)
     const [showAccessibilityDialog, setShowAccessibilityDialog] = useState<boolean>(false)
@@ -115,7 +119,12 @@ const Home = () => {
 
     const bsc = useContext(BotStateContext)
     const mlc = useContext(MessageLogContext)
-    const { saveSettings, prepareTraineeRotation } = useSettings()
+    const { flushAndVerifyLaunchConfig, prepareTraineeRotation } = useSettings()
+
+    // Single-flight gate for Start: at most one barrier+launch sequence in flight; re-entrant
+    // presses are ignored, and a cancel (Stop, preset change, unmount) refuses a launch even if
+    // the in-flight barrier later verifies. Held in a ref so it survives re-renders.
+    const startGate = useRef(createSingleFlight()).current
 
     const pulseAnim = useRef(new Animated.Value(1)).current
 
@@ -147,6 +156,14 @@ const Home = () => {
             animation?.stop()
         }
     }, [unsupportedReason])
+
+    // Refuse an in-flight Start launch if this screen unmounts mid-barrier, so a verified launch
+    // cannot fire after the component is gone.
+    useEffect(() => {
+        return () => {
+            startGate.cancel()
+        }
+    }, [startGate])
 
     useEffect(() => {
         const mediaProjectionSubscription = DeviceEventEmitter.addListener("MediaProjectionService", (data) => {
@@ -248,11 +265,14 @@ const Home = () => {
      */
     const startButtonLabel: string | undefined = useMemo(() => {
         if (isRunning) return "Stop"
+        // While the selected preset is being persisted, the launch is gated (handleButtonPress
+        // ignores the press) and the label says so, so a user cannot launch a not-yet-saved preset.
+        if (presetSaveState === "saving") return "Saving preset..."
         const scenario = bsc.settings.general.scenario
         if (!scenario) return undefined
         if (bsc.settings.runQueue.enableRunQueue) return `Start Queue (${bsc.settings.runQueue.totalRuns} runs)`
         return `Start · ${scenario}`
-    }, [isRunning, bsc.settings.general.scenario, bsc.settings.runQueue.enableRunQueue, bsc.settings.runQueue.totalRuns])
+    }, [isRunning, presetSaveState, bsc.settings.general.scenario, bsc.settings.runQueue.enableRunQueue, bsc.settings.runQueue.totalRuns])
 
     /**
      * Applies a character preset's settings to the current configuration.
@@ -283,7 +303,7 @@ const Home = () => {
         const preservedEnableSkillPointCheck = bsc.settings.skills.enableSkillPointCheck
 
         // Deep merge preset settings with current settings
-        const merged = { ...bsc.settings }
+        let merged = { ...bsc.settings }
         for (const [category, values] of Object.entries(preset.settings)) {
             // Device/user-level categories are never per-trainee tuning; skip them so a preset
             // can't clobber the user's Debug Mode or Discord webhook (mirrors the rotation
@@ -347,12 +367,31 @@ const Home = () => {
         merged.general.appliedPresetTrainee = deriveInGameName(presetName)
         merged.general.appliedPresetTraineeExcludes = deriveExcludeOutfits(presetName).join("\n")
 
+        // A preset change invalidates any Start launch already in flight: it was verifying a
+        // different configuration. Refuse that launch so it cannot start the just-replaced preset.
+        startGate.cancel()
+
+        // Bump the launch-config revision so the Start barrier can prove THIS apply reached disk
+        // (a prior apply's stale revision would then fail the read-back and block launch).
+        merged = bumpSettingsRevision(merged)
+
         bsc.setSettings(merged)
-        // Pass merged explicitly: settingsRef only syncs after the state update re-renders, so a
-        // no-arg save here read the STALE pre-preset settings and persisted those instead.
-        await saveSettings(merged)
-        logWithTimestamp(`[Home] Applied preset: ${presetName} (${scenario})`)
-        setSnackbarMessage(`Preset "${presetName}" applied`)
+        // Persist and CONFIRM before calling the preset launch-ready: the row shows "Saving..."
+        // until the write is verified on disk, so Start (gated on this) can never launch a
+        // not-yet-saved selection. Pass merged explicitly -- settingsRef only syncs after the
+        // state update re-renders, so a no-arg save here read the STALE pre-preset settings.
+        setPresetSaveState("saving")
+        logWithTimestamp(`[SETTINGS] preset_apply_requested preset="${presetName}" scenario="${scenario}" revision=${merged.general.settingsRevision}`)
+        const result = await flushAndVerifyLaunchConfig(merged)
+        if (result.ok) {
+            setPresetSaveState("saved")
+            logWithTimestamp(`[SETTINGS] readback_verified preset="${presetName}" trainee="${result.persisted?.trainee}" revision=${result.persisted?.revision} hash=${result.persisted?.hash}`)
+            setSnackbarMessage(`Preset "${presetName}" applied`)
+        } else {
+            setPresetSaveState("failed")
+            logErrorWithTimestamp(`[SETTINGS] persistence failed at ${result.stage}: ${result.reason}`)
+            setSnackbarMessage(`Could not save preset "${presetName}": ${result.reason}. Tap the preset again to retry.`)
+        }
         setSnackbarOpen(true)
     }
 
@@ -414,8 +453,21 @@ const Home = () => {
         return []
     }
 
-    /** Runs the actual start sequence: accessibility gate → save settings → rotation snapshots → start. */
+    /** Runs the actual start sequence: accessibility gate → save settings → rotation snapshots → start.
+     * Single-flight: every caller (button press and the avoid-dialog "Start anyway") enters the gate
+     * here, so a re-entrant call while one is in flight is ignored and a cancel refuses the launch. */
     const proceedToStart = async () => {
+        if (!startGate.begin()) {
+            return
+        }
+        try {
+            await runStartSequence()
+        } finally {
+            startGate.end()
+        }
+    }
+
+    const runStartSequence = async () => {
         // Check accessibility status first.
         try {
             const status = await StartModule.getAccessibilityStatus()
@@ -432,21 +484,39 @@ const Home = () => {
             logErrorWithTimestamp("[Home] Failed to check accessibility status:", error)
         }
 
-        // Save settings before starting the bot.
-        // Also has the added benefit of only writing to the SQLite database when the bot is started instead of every time the settings are changed.
-        logWithTimestamp("[Home] Saving settings before starting bot...")
-        try {
-            await saveSettings()
-            logWithTimestamp("[Home] Settings saved successfully, starting bot...")
-        } catch (error) {
-            logErrorWithTimestamp("[Home] Failed to save settings:", error)
-            setSnackbarMessage(`Failed to save settings before starting: ${error}`)
+        // Start persistence barrier: flush the pending settings write, read the launch-critical
+        // rows back OUT of SQLite, and verify they match what the UI intends. Launch only on an
+        // exact match. A plain awaited save is not enough -- the save path swallows errors and a
+        // resolved promise never proved the intended values reached disk, so a stalled write once
+        // let Start read stale rows and launch the wrong trainee. On any block, do NOT start:
+        // surface a retryable error and leave the game untouched.
+        logWithTimestamp("[START] launch_barrier_waiting")
+        setPresetSaveState("saving")
+        const barrier = await flushAndVerifyLaunchConfig()
+        if (!barrier.ok) {
+            setPresetSaveState("failed")
+            logErrorWithTimestamp(`[START] launch_barrier_blocked stage=${barrier.stage} reason=${barrier.reason}`)
+            setSnackbarMessage(`Could not start: ${barrier.reason}. Your preset is kept -- press Start to try again.`)
             setSnackbarOpen(true)
+            return
         }
+        // A cancel (Stop / preset change / unmount) during the barrier await refuses the launch,
+        // even though verification passed -- the user is no longer asking for this run.
+        if (!startGate.mayLaunch()) {
+            setPresetSaveState("idle")
+            logWithTimestamp("[START] launch cancelled before service start (Stop, preset change, or navigation).")
+            return
+        }
+        setPresetSaveState("saved")
+        logWithTimestamp(
+            `[START] launch_barrier_passed trainee="${barrier.persisted?.trainee}" scenario="${barrier.persisted?.scenario}" objective="${barrier.persisted?.objective}" revision=${barrier.persisted?.revision} hash=${barrier.persisted?.hash}`
+        )
 
         // Precompute the per-trainee rotation snapshots from the just-saved settings. Block start
         // on an unresolved preset or a persistence failure rather than let the queue hit a switch
         // boundary it can't satisfy — match-or-stop applies at config time, not just in-game.
+        // These write only Kotlin-owned rot* rows, which are excluded from the verified identity,
+        // so they never invalidate the revision the Kotlin gate re-checks.
         if (bsc.settings.runQueue.enableTraineeRotation) {
             // Mixed scenarios are supported: each snapshot carries its entry's scenario and the
             // navigator pages the Scenario Select carousel to it before confirming the launch.
@@ -467,12 +537,31 @@ const Home = () => {
             await prepareTraineeRotation()
         }
 
+        // Re-check cancellation after the rotation writes (another await point).
+        if (!startGate.mayLaunch()) {
+            setPresetSaveState("idle")
+            logWithTimestamp("[START] launch cancelled after rotation prep.")
+            return
+        }
+
+        // Hand the verified identity (the revision + content hash React just confirmed on disk)
+        // to Kotlin. The bot session re-reads the revision and aborts before any game interaction
+        // if a write landed in the meantime -- closing the time-of-check to time-of-use window.
+        StartModule.setVerifiedLaunchIdentity(barrier.persisted!.revision, barrier.persisted!.hash)
         StartModule.start()
     }
 
     const handleButtonPress = async () => {
         if (isRunning) {
+            // Stopping cancels any in-flight Start barrier so a race between Stop and a
+            // just-verifying launch cannot start the bot after the user asked it to stop.
+            startGate.cancel()
             StartModule.stop()
+            return
+        }
+        // Gate: while a preset apply is still persisting, do not launch -- the barrier would read
+        // an incomplete config. Stopping (above) is always allowed. The label reads "Saving preset...".
+        if (presetSaveState === "saving" || startGate.busy) {
             return
         }
         if (!bsc.readyStatus) {

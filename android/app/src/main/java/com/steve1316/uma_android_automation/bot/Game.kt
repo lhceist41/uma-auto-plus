@@ -816,6 +816,11 @@ class Game(val myContext: Context) {
                 queueRun = queueRun,
                 nowMs = System.currentTimeMillis(),
             )
+            // Capture the launch-critical config identity for this career. The React Start barrier
+            // verified this same settingsRevision on disk before launching; logging it here makes
+            // the cross-layer identity explicit, so a mid-career settings drift is visible.
+            val runConfig = RunConfigSnapshot.armFromSettings(System.currentTimeMillis())
+            MessageLog.i(TAG, "[CONFIG_DRIFT] [KOTLIN] loaded_run_config ${RunConfigSnapshot.describe(runConfig)}")
         }
 
         // Read the per-run safety timeout from the run queue settings. Defaults to 180 min

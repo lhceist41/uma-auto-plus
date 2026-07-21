@@ -1442,3 +1442,75 @@ defect is what the swipe navigation above replaces. Still unproven live: the swi
 page change, winner scoring on live data, the verified-winner Confirm, the confirmation-pill
 check, the kept and choice records on a spend career, and the no-spend keep confirmation --
 all supervised territory for the next career.
+
+### The Start persistence barrier
+
+Applying a preset on Home updates React state immediately (the preset row shows the new
+trainee at once) but persists asynchronously: `saveSettings` batches every row through one
+serialized SQLite write queue (`database.ts` `executeWithQueue`). Two properties of that path
+made a resolved save promise a lie about durability -- the save methods swallow their errors
+(catch-and-log, no rethrow), and the queue has no stall ceiling, so after a bot-service
+session the writer has been seen to stop making progress. On 2026-07-20 a Super Creek apply's
+row write did not land for ~2 minutes; Start read the still-stale Mejiro McQueen rows, the
+wrong trainee launched, and the delayed write then flipped the live-read skill objective to
+`sparks` mid-career. A plain `await saveSettings()` never caught it: the promise resolved, so
+Start proceeded.
+
+The fix has three enforced layers: a persistence barrier, cross-layer identity enforcement,
+and a (still partial) run-configuration freeze.
+
+**Layer 1 -- the persistence barrier** (`launchConfig.ts`, pure and dependency-injected). Every
+preset apply bumps a monotonic `general.settingsRevision` (`bumpSettingsRevision`). Before
+BotService starts, the Home Start path runs `flushAndVerifyLaunchConfig`:
+
+1. **Flush** the pending write, bounded by an 8s timeout. A stall does NOT force-reset the shared
+   write queue (the hung operation still owns the native transaction; a ROLLBACK under an
+   in-flight statement could interleave a retry's transaction with the old writer). Instead it
+   is *fail-closed*: `failStalledWriter` rejects every queued write and marks the writer stalled
+   so new writes fail fast, and Start blocks with a retryable error until the writer recovers or
+   the app restarts. `executeWithQueue` now rejects queued operations on any failure rather than
+   abandoning their promises.
+2. **Read back** the persisted rows in ONE atomic snapshot -- `loadSettingsRowsSnapshot`, a
+   single `SELECT` returning the raw stored strings. One statement is one consistent SQLite
+   snapshot, so a commit landing mid-read-back can never yield a mixed old-trainee/new-objective
+   identity: the barrier observes the complete old config (and blocks) or the complete new one
+   (and passes).
+3. **Verify** the read-back identity against what the UI intends. The identity is the revision,
+   the human-legible trainee/scenario/objective/mode/tier, and a stable FNV-1a hash over every
+   launch-critical row. Coverage is by CATEGORY (`LAUNCH_CRITICAL_CATEGORIES` = general,
+   training, trainingEvent, skills, racing, runQueue), not a hand-kept key list, so a new field
+   in any of those categories is hashed automatically. Both sides are normalized through
+   `storageForm` (the exact string SQLite persists) so a value held in memory as a parsed object
+   and on disk as its JSON string compare equal instead of false-mismatching.
+
+Start launches only on an exact match. Any stall, read failure, or mismatch blocks the launch,
+keeps the game untouched, shows a retryable message, and preserves the selected preset -- never
+a silent fallback. The Home button reads "Saving preset..." during an apply, and a single-flight
+gate (`createSingleFlight`) makes Start re-entrant-safe: a double-press launches once, and a
+Stop, preset change, or screen unmount during the barrier await cancels the launch even if
+verification then passes. The structured diagnostics (`[SETTINGS] preset_apply_requested` /
+`readback_verified`, `[START] launch_barrier_waiting` / `_passed` / `_blocked`) carry the
+preset, trainee, revision, and hash. `settingsRevision` is a preset-apply nonce, not a global
+settings version -- a manual single-field edit does not bump it; content equality is the hash's
+job, and the two together make a stale launch impossible.
+
+**Layer 2 -- cross-layer identity enforcement.** On a passed barrier, React hands the verified
+revision and hash to Kotlin (`setVerifiedLaunchIdentity`) and only then calls `StartModule.start()`.
+The bot session entry (`onStartEvent`) re-reads `settingsRevision` from SQLite and asks
+`LaunchIdentityGate` for a verdict BEFORE it reads any run settings or touches the game: a
+MISMATCH (a write landed in the time-of-check to time-of-use window) aborts the session with no
+game interaction; PASS proceeds; a session with no handed-over identity (a non-UI entry) warns
+and proceeds. The expectation is single-use, so a stale identity cannot validate a later session.
+This is an enforced comparison, not a log line.
+
+**Layer 3 -- run configuration, and the remaining live reads.** At the career-attachment boundary
+in `Game.start()` (the same point the spark gate arms, gated `!isMiscTask`), `RunConfigSnapshot`
+captures the launch-critical identity and logs `[CONFIG_DRIFT] [KOTLIN] loaded_run_config`.
+Layers 1 and 2 guarantee that the configuration on disk at launch is exactly what the UI
+verified, so the proven delayed-write mixture cannot recur. What is NOT yet done is freezing the
+scattered live `SettingsHelper` readers against a mid-career write: `Campaign` reads
+`skillSpendObjective` at construction, `AdaptiveSkillPolicy` reads mode/tier live, and
+`CareerLaunchNavigator` reads the preferred axes and plan live. A genuine settings edit made
+DURING an active career could still change such a live read -- the residual gap. Routing every
+run-scoped reader through the immutable `RunConfigSnapshot` (a full frozen envelope) is the
+documented follow-up; until then, run settings should not be edited mid-career.

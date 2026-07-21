@@ -30,6 +30,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- **Start now waits until your selected preset is actually saved.** Applying a preset updated the Home screen instantly, but the write to storage happens in the background and could lag behind -- so pressing Start right after switching presets could launch the previous trainee (with the new preset's settings landing partway through the career). Start now confirms the selected preset is on disk before it launches: the button briefly reads "Saving preset..." and, if the save cannot be confirmed, the launch is blocked with a clear message and your selection is kept so you can simply press Start again. The trainee shown is now the trainee that launches.
+
 - **Careers where the auto-reroll spent no longer lose their spark records.** The run history was silently missing the kept set (and the redrawn set) for every career where the reroll fired -- exactly the careers the feature acted on. Both are recorded now, alongside the choice itself. The reroll's pricing is also stricter about what it reads: the redraw is only priced from a complete read of the original set, and a read that cannot prove it saw every row keeps the set instead of spending 30 TP on partial information.
 
 - **Every career's spark record is now the complete set.** The sparks screen shows only its first rows without scrolling, so a career with more sparks than fit the window recorded a truncated list (an 11-spark career recorded 9). The bot now scrolls the list to its end before recording, whether or not the auto-reroll is enabled. Sets that already fit are unaffected and cost no extra time.

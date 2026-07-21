@@ -107,7 +107,15 @@ export class DatabaseManager {
     private isInitializing = false
     private initializationPromise: Promise<void> | null = null
     private isTransactionActive = false
-    private transactionQueue: (() => Promise<void>)[] = []
+    // Queued (not-yet-started) write operations. Each entry carries its caller's reject so a
+    // failed or stalled writer REJECTS pending writes instead of abandoning their promises.
+    private transactionQueue: { run: () => void; reject: (error: Error) => void }[] = []
+    // Set when a flush timeout declared the ACTIVE write stalled. While the stalled operation
+    // is still (possibly) in flight, new writes fail fast instead of queueing behind the hang;
+    // if the hung native call ever settles, its finally clears this and the writer is usable
+    // again. Never force-reset: issuing ROLLBACK under a possibly-in-flight statement could
+    // let a retry's transaction interleave with the old writer's statements (order corruption).
+    private writerStalled = false
 
     /**
      * Serialize a value to a string for storage.
@@ -468,8 +476,16 @@ export class DatabaseManager {
         return new Promise((resolve, reject) => {
             const executeOperation = async () => {
                 if (this.isTransactionActive) {
-                    // If a transaction is already active, queue this operation.
-                    this.transactionQueue.push(executeOperation)
+                    if (this.writerStalled) {
+                        // Fail-closed: the active writer was declared stalled. Queueing behind it
+                        // would hang this caller too; reject visibly and let the caller retry
+                        // after the writer recovers (or after an app restart).
+                        reject(new Error("the settings writer is stalled; retry once it recovers or restart the app"))
+                        return
+                    }
+                    // A write is in flight: queue this operation with its reject so a failure
+                    // or stall REJECTS it instead of abandoning its promise.
+                    this.transactionQueue.push({ run: executeOperation, reject: (e) => reject(e) })
                     return
                 }
 
@@ -479,18 +495,21 @@ export class DatabaseManager {
                     const result = await operation()
                     resolve(result)
                 } catch (error) {
-                    // Clear the transaction queue on error to prevent cascading failures.
-                    this.clearTransactionQueue()
+                    // Reject every queued operation too: they were waiting behind a failed
+                    // writer, and silently abandoning their promises hangs their callers.
+                    this.rejectQueuedWrites(error instanceof Error ? error : new Error(String(error)))
                     reject(error)
                 } finally {
                     this.isTransactionActive = false
+                    // The writer settled (success or failure), so it is provably alive again.
+                    this.writerStalled = false
 
                     // Process the next queued operation if any.
                     if (this.transactionQueue.length > 0) {
                         const nextOperation = this.transactionQueue.shift()
                         if (nextOperation) {
                             // Use setTimeout to avoid stack overflow with recursive calls.
-                            setTimeout(() => nextOperation(), 0)
+                            setTimeout(() => nextOperation.run(), 0)
                         }
                     }
                 }
@@ -821,9 +840,63 @@ export class DatabaseManager {
     /**
      * Clear the transaction queue and reset transaction state (for error recovery).
      */
-    private clearTransactionQueue(): void {
-        this.transactionQueue = []
-        this.isTransactionActive = false
+    /** Reject and drop every QUEUED (not-yet-started) write operation. */
+    private rejectQueuedWrites(error: Error): void {
+        const queued = this.transactionQueue.splice(0)
+        for (const op of queued) {
+            op.reject(error)
+        }
+    }
+
+    /**
+     * Fail-closed handling for a stalled settings writer, called when the Start barrier's
+     * flush times out.
+     *
+     * The write queue serializes every batch behind a single `isTransactionActive` flag with
+     * no stall ceiling; after a bot-service session the underlying writer has been observed to
+     * stop making progress. This does NOT force-reset that shared state: the hung operation
+     * still owns the native transaction, and issuing ROLLBACK (or clearing the active flag)
+     * while its statements may still be in flight would let a retry's new transaction
+     * interleave with the old writer's statements -- database-order corruption to save a
+     * button press. Instead: reject every queued write (their callers see the failure), and
+     * mark the writer stalled so new writes fail fast rather than hang. If the stalled native
+     * call ever settles, its own finally clears the marker and the writer is usable again;
+     * until then Start stays blocked with a visible, retryable error.
+     */
+    async failStalledWriter(reason: string): Promise<void> {
+        if (this.isTransactionActive) {
+            this.writerStalled = true
+            logErrorWithTimestamp(`[DB] Settings writer marked stalled (fail-closed, no forced reset): ${reason}`)
+        }
+        this.rejectQueuedWrites(new Error(reason))
+    }
+
+    /**
+     * Read every settings row in ONE statement, returning the RAW stored value strings keyed
+     * "category.key". Used by the Start barrier's read-back: a single SELECT is one consistent
+     * SQLite snapshot, so a commit landing mid-read-back can never produce a mixed old/new row
+     * set -- and raw strings are exactly the storage form the barrier hashes on both sides
+     * (deserializing here would re-introduce the parse asymmetry for strings that look like
+     * JSON, e.g. appliedRacingSnapshot). Excludes the Kotlin-owned rot-snapshot and queueState
+     * categories, mirroring loadAllSettings.
+     */
+    async loadSettingsRowsSnapshot(): Promise<Record<string, string>> {
+        const endTiming = startTiming("database_load_settings_snapshot", "database")
+        this.ensureInitialized()
+        try {
+            const results = await this.db!.getAllAsync<DatabaseSettings>(
+                `SELECT category, key, value FROM ${this.TABLE_SETTINGS} WHERE category NOT GLOB 'rot[0-9]*' AND category != 'queueState'`
+            )
+            const rows: Record<string, string> = {}
+            for (const result of results) {
+                rows[`${result.category}.${result.key}`] = result.value
+            }
+            endTiming({ status: "success", rowCount: results.length })
+            return rows
+        } catch (error) {
+            endTiming({ status: "error", error: error instanceof Error ? error.message : String(error) })
+            throw error
+        }
     }
 
     // ============================================================================
