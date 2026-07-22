@@ -99,6 +99,16 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         var queueSkipRequested: Boolean = false
 
         /**
+         * Set by the campaign when a run stops because the game could not be recovered to a driveable
+         * state (it crashed/was killed and a relaunch never brought it back, or a live screen is
+         * genuinely un-driveable). The queue then PAUSES after this run regardless of stopOnError:
+         * launching the next run onto a dead or foreign screen can only fail. Reset at the start of
+         * every session. Distinct from a generic per-run error, which stopOnError governs as before.
+         */
+        @Volatile
+        var gameRecoveryFailed: Boolean = false
+
+        /**
          * Wall-clock budget for one between-run navigation. Normal navigation (career summary
          * through deck setup to the training menu, cinematic included) takes 2-5 minutes; a
          * navigate() call that hasn't returned by this deadline is wedged below the FSM loop,
@@ -1345,6 +1355,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 queueStopRequested = false
                 queueStopReason = null
                 queueSkipRequested = false
+                gameRecoveryFailed = false
 
                 // Reset rotation boundary tracking so the first launched run of this session always
                 // (re)loads its trainee snapshot, even within the same app process as a prior queue.
@@ -1625,6 +1636,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         }
                         else -> {
                             // Error, timeout, connection error, etc.
+                            if (gameRecoveryFailed) {
+                                // The game could not be recovered to a driveable state this run (a crash
+                                // or kill with no successful relaunch, or a genuinely un-driveable
+                                // screen). Continuing the queue would launch the next run onto a dead or
+                                // foreign screen, which can only fail - so pause regardless of stopOnError
+                                // and leave the game where it is for the user to look at.
+                                MessageLog.e(TAG, "[QUEUE] Run $i stopped because the game could not be recovered. Pausing the queue instead of starting the next run on a dead or foreign screen.")
+                                break
+                            }
                             if (stopOnError) {
                                 MessageLog.e(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Stopping queue (stopOnError=true).")
                                 break

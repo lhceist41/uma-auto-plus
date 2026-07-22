@@ -320,3 +320,44 @@ banner is misread.
 **Files.** `CareerLaunchNavigator.kt`, `StartModule.kt`.
 
 **Status.** Working as designed. Memory topic: `trainee-position-store`.
+
+---
+
+## 17. The last-resort game relaunch killed the live game
+
+**Symptom.** Daily reset, 2026-07-21 17:00 local. The game survived the reset and sat alive and
+foreground on a post-reset Home screen the bot could not drive (all CAREER-button detectors missed).
+The unknown-screen ladder escalated to its last-resort game relaunch; seconds later the game process
+died (system log: `com.cygames.umamusume ... has died: fg TOP`) and never came back. A file manager
+that was behind the game surfaced, the bot OCR'd it for ~2 minutes to the 25-cycle stop, and the
+queue then logged `Continuing queue (stopOnError=false)` toward a doomed next run. The career was
+safe server-side (turn 18) but the night was over.
+
+**Confirmed cause.** `Game.restartGame` fired the launcher intent with `FLAG_ACTIVITY_CLEAR_TASK`
+from the `BotService` (a background context). `CLEAR_TASK` tore the live game task down, but the
+follow-up cold start from a background service did not land, so the game was closed and never
+reopened. Three compounding gaps: `restartGame` returned true on intent *dispatch*, not on the game
+actually returning; the rung was budgeted to one relaunch per stuck episode, so it could not retry a
+dropped launch and instead waited out a fresh 25-cycle window on the now-foreign screen before
+stopping; and the queue's error branch continued under `stopOnError=false` even though the game was
+gone.
+
+**Fix.** `restartGame` now uses `NEW_TASK | RESET_TASK_IF_NEEDED`, never `CLEAR_TASK`: it re-fronts a
+live game or cold-starts a dead one, but never tears down a live task. The relaunch rung is bounded to
+`maxGameRestartAttempts` (3) per episode instead of one, so a dropped or racing relaunch is retried,
+each attempt getting a fresh unknown-screen budget for a cold boot to land. When the stop cap is still
+reached after a relaunch was attempted, the run sets `StartModule.gameRecoveryFailed` and the queue
+pauses regardless of `stopOnError` rather than launching the next run onto a dead or foreign screen.
+The two decisions (`shouldRelaunchGame`, `stopIsGameUnrecoverable`) are pure and unit-tested; source
+guards pin the no-`CLEAR_TASK` relaunch and the queue-pause ordering.
+
+**Not fixed here.** The first cause -- why the post-reset Home's CAREER button missed all three
+detectors (template x2 + OCR) -- is a separate detection-tuning issue. This entry is about the
+recovery converting a recoverable state into an unrecoverable one, and the queue marching on.
+
+**Files.** `Game.kt`, `Campaign.kt`, `UnknownScreenRecovery.kt`, `StartModule.kt`.
+
+**Status.** Fixed and live-validated 2026-07-22: an `adb shell am force-stop` of the game 12 minutes
+into a queued career replayed the death. The relaunch fired at stuck-cycle 22 (attempt 1/3), the cold
+start landed in ~23 seconds, and the career resumed via Continue Career -- under 8 minutes end to end
+with no human touch.

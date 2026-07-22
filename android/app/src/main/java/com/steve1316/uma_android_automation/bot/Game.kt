@@ -621,19 +621,27 @@ class Game(val myContext: Context) {
     }
 
     /**
-     * Relaunches the Umamusume game from scratch as a last-resort recovery from a screen no handler
-     * can identify or advance (e.g. the game itself soft-locking, distinct from MuMu's gesture death
-     * which [forceRebindAccessibilityService] handles). Fires the game's launcher intent with
-     * CLEAR_TASK so the framework tears down the existing (wedged) task and recreates the entry
-     * Activity, then waits for the title/loading screens to settle. Career progress is saved
-     * server-side each turn, so the game comes back on its Continue-Career flow, which the campaign's
-     * lobby re-entry path resumes in place - no career is lost (validated manually 2026-07-11 via an
-     * adb force-stop + relaunch that resumed El Condor's career).
+     * Relaunches the Umamusume game as a last-resort recovery from a screen no handler can identify
+     * or advance (e.g. the game itself soft-locking, distinct from MuMu's gesture death which
+     * [forceRebindAccessibilityService] handles). Career progress is saved server-side each turn, so
+     * the game comes back on its Continue-Career flow, which the campaign's lobby re-entry path
+     * resumes in place - no career is lost (validated manually 2026-07-11 via an adb force-stop +
+     * relaunch that resumed El Condor's career).
+     *
+     * Uses NEW_TASK | RESET_TASK_IF_NEEDED, NOT CLEAR_TASK. This deliberately does NOT tear the
+     * game's task down: a live task is brought back to its front door, and a dead one is cold-started.
+     * The earlier CLEAR_TASK variant killed a still-alive foreground game from this background service
+     * without the follow-up cold start ever landing (a background activity launch after the task
+     * teardown gets dropped) - a daily-reset run on 2026-07-21 went from an alive-but-unrecognized
+     * lobby to a dead game with a foreign app on top, which the bot then stared at until it stopped.
+     * Re-fronting is non-destructive, so a relaunch that does not help simply leaves the game where it
+     * was rather than destroying it.
      *
      * An ordinary app cannot force-stop another package without root, so this is a best-effort
      * relaunch rather than a hard kill; it recovers a UI/task soft-lock but may not reset a crashed
      * native renderer. Falls through (returns false) if the launcher intent cannot be resolved, so
-     * the caller's normal stop still applies - no new dead-end.
+     * the caller's normal stop still applies - no new dead-end. The caller verifies whether the game
+     * actually came back (a recognized game screen returning); a dispatched intent is not proof.
      *
      * @param waitAfterLaunch Seconds to wait after firing the intent for the game to come up.
      * @return True if the relaunch intent was dispatched, false if it could not be resolved.
@@ -645,9 +653,12 @@ class Game(val myContext: Context) {
             return false
         }
         return try {
-            // CLEAR_TASK | NEW_TASK: destroy the existing (wedged) task and start the entry Activity fresh.
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK)
-            MessageLog.w(TAG, "[RECOVERY] Relaunching the game ($GAME_PACKAGE) from scratch to recover from an unrecognized/soft-locked screen. The career resumes via Continue Career.")
+            // NEW_TASK is required to start an Activity from this (non-Activity) service context;
+            // RESET_TASK_IF_NEEDED lands on the task's entry Activity if it is resumed from history.
+            // No CLEAR_TASK: never tear down a live game task (that killed the game on 2026-07-21) -
+            // re-front a live game, cold-start a dead one.
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+            MessageLog.w(TAG, "[RECOVERY] Relaunching the game ($GAME_PACKAGE) to recover from an unrecognized/soft-locked screen. The career resumes via Continue Career.")
             myContext.startActivity(launchIntent)
             wait(waitAfterLaunch, skipWaitingForLoading = true)
             true

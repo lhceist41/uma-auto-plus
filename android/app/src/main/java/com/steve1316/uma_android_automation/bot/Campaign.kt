@@ -501,12 +501,19 @@ abstract class Campaign(game: Game) : Task(game) {
     private val gameRestartThreshold: Int = 22
 
     /**
-     * Guards [Game.restartGame] to one attempt per stuck episode. Reset to false whenever a known
-     * screen is handled (progress made), so a later, distinct wedge can restart again, but a restart
-     * that did NOT clear the current wedge cannot loop into a relaunch storm - the episode falls
-     * through to the normal stop instead.
+     * How many [Game.restartGame] attempts this stuck episode has already used. Reset to 0 whenever a
+     * known screen is handled (progress made). Bounded by [maxGameRestartAttempts] so a relaunch that
+     * does not restore a driveable screen cannot loop into a relaunch storm - once the budget is spent
+     * the episode falls through to the stop, which is then flagged game-unrecoverable so the queue
+     * pauses instead of marching the next run onto a dead/foreign screen. A retry (rather than the old
+     * one-shot) exists because the first relaunch can be dropped or race the game's own teardown; each
+     * attempt gets a fresh unknown-screen budget (the counter resets on relaunch), i.e. ~a minute+ for
+     * a cold boot to land before the next attempt.
      */
-    private var gameRestartAttemptedThisEpisode: Boolean = false
+    private var gameRestartAttemptsThisEpisode: Int = 0
+
+    /** Max [Game.restartGame] attempts per stuck episode before the run stops as game-unrecoverable. */
+    private val maxGameRestartAttempts: Int = 3
 
     /**
      * Cap on [consecutiveUnknownScreenCount] while a story-event intro cutscene is being tapped
@@ -4006,7 +4013,7 @@ abstract class Campaign(game: Game) : Task(game) {
             if (detectedKnownScreen) {
                 consecutiveUnknownScreenCount = 0
                 lobbyReentryAttempts = 0
-                gameRestartAttemptedThisEpisode = false
+                gameRestartAttemptsThisEpisode = 0
             }
             if (!bMiscBackPressedThisTick) {
                 consecutiveMiscBackPresses = 0
@@ -4208,21 +4215,30 @@ abstract class Campaign(game: Game) : Task(game) {
             game.forceRebindAccessibilityService()
         }
 
-        // Last resort before the stop: relaunch the whole game. The gesture rebinds above cover MuMu's
+        // Last resort before the stop: relaunch the game. The gesture rebinds above cover MuMu's
         // dead-dispatch mode; this covers a GAME-side soft-lock (an un-driveable screen that a rebind
-        // cannot fix - e.g. the game wedged on a first-time race). Gated to a career actually in
-        // progress (careerScreenObservedThisTask) so a bot parked at the lobby never relaunches, and
-        // to one attempt per stuck episode so a restart that does not clear the wedge falls through to
-        // the stop instead of looping. The career is server-saved and resumes via the lobby re-entry
-        // path (Continue Career) on the next ticks.
-        if (count == gameRestartThreshold && careerScreenObservedThisTask && !gameRestartAttemptedThisEpisode) {
-            gameRestartAttemptedThisEpisode = true
-            MessageLog.w(TAG, "[RECOVERY] Stuck for $count cycles and gesture rebinds did not help - relaunching the game as a last resort before stopping.")
+        // cannot fix - e.g. the game wedged on a first-time race) or a game that has actually gone
+        // away (a crash/kill leaving a foreign app on top). Gated to a career actually in progress
+        // (careerScreenObservedThisTask) so a bot parked at the lobby never relaunches, and bounded to
+        // [maxGameRestartAttempts] per episode. Retrying (not a single shot) matters because the first
+        // relaunch can be dropped or race the game's own teardown; each attempt gets a fresh
+        // unknown-screen budget (the counter resets below), so a cold boot has a minute+ to land before
+        // the next attempt. The career is server-saved and resumes via the lobby re-entry path
+        // (Continue Career) once a game screen is back.
+        if (shouldRelaunchGame(count, gameRestartThreshold, gameRestartAttemptsThisEpisode, maxGameRestartAttempts, careerScreenObservedThisTask)) {
+            gameRestartAttemptsThisEpisode++
+            MessageLog.w(
+                TAG,
+                "[RECOVERY] Stuck for $count cycles and gesture rebinds did not help - relaunching the game " +
+                    "(attempt $gameRestartAttemptsThisEpisode/$maxGameRestartAttempts) before stopping.",
+            )
             if (game.restartGame()) {
                 // Give the relaunch a fresh window: the next ticks land on the game's title/lobby,
                 // which the lobby re-entry branch above resumes into the interrupted career. The
                 // re-entry budget resets too - the relaunched game is a fresh lobby, not the one any
-                // earlier failed re-entries were fighting.
+                // earlier failed re-entries were fighting. If the game did NOT actually come back, the
+                // counter simply climbs to the threshold again and the next attempt fires (up to the
+                // cap), because a recognized game screen never returns to reset it to 0.
                 consecutiveUnknownScreenCount = 0
                 lobbyReentryAttempts = 0
                 return
@@ -4252,6 +4268,19 @@ abstract class Campaign(game: Game) : Task(game) {
 
         if (count >= maxUnknownScreenBeforeStop) {
             game.imageUtils.saveBitmap(filename = "unknown_screen_stuck", fullRes = true)
+            // If a relaunch was tried this episode and a game screen still never came back, the game
+            // could not be recovered to a state the bot can drive (it crashed/was killed, or a live
+            // screen is genuinely un-driveable). Flag it so the queue PAUSES instead of launching the
+            // next run onto a dead/foreign screen, regardless of stopOnError. A plain stuck-screen stop
+            // with no relaunch attempted stays a generic error (the queue's normal stopOnError rules).
+            if (stopIsGameUnrecoverable(gameRestartAttemptsThisEpisode)) {
+                StartModule.gameRecoveryFailed = true
+                MessageLog.e(
+                    TAG,
+                    "[RECOVERY] The game could not be recovered after $gameRestartAttemptsThisEpisode relaunch " +
+                        "attempt(s); the bot is on an unrecognized screen. Pausing the queue.",
+                )
+            }
             throw InterruptedException(
                 "Bot stuck on an unrecognized screen for $count consecutive cycles. Stopping. " +
                     "A screenshot was saved to the temp folder as unknown_screen_stuck.",
