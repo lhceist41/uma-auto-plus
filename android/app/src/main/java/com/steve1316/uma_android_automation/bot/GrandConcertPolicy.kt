@@ -245,7 +245,6 @@ object GrandConcertPolicy {
             val cat = GrandConcertSongCatalog.match(card.title)
             when {
                 cat == null -> notes.add("no catalog match for \"${card.title}\"; scoring fell back to the on-card text")
-                cat.costConflicted -> notes.add("catalog cost for \"${cat.title}\" is conflicted across sources; the live cost governs")
                 card.cost.fullyKnown && cat.cost != card.cost -> notes.add("live cost for \"${cat.title}\" differs from the catalog; the live cost governs")
             }
         }
@@ -312,13 +311,26 @@ object GrandConcertPolicy {
             MasteryBonusType.GUTS_TRAINING_1 to 25.0,
         )
 
-    /** Point scarcity on the standard Speed/Wit deck: Speed pays Dance/Visual and Wit pays
-     * Composure/Passion, so Vocal is the bottleneck and Dance/Composure overflow. */
+    /**
+     * Point scarcity on the standard Speed/Wit deck: Speed pays Dance/Visual and Wit pays
+     * Composure/Passion, so Vocal is the bottleneck and Dance/Composure overflow.
+     *
+     * Vocal is scarce on SUPPLY, not demand. The client's own song table demands the LEAST Vocal of
+     * any token (Da 252 / Pa 201 / Vo 150 / Vi 275 / Co 196 across all 21 songs), but Vocal is only
+     * ever Power's primary token or Stamina's secondary, and a Speed/Wit deck trains neither: its
+     * first-token share stays at 3.33% whatever the Speed-to-Wit split, against a demand share near
+     * 14%. Both research passes confirmed Vocal as the genuine bottleneck and both flagged that the
+     * game actively repairs it, since a friendship training's second token and Light Hello's event
+     * both top up whichever type is currently lowest. Lowered 1.50 -> 1.30 on that basis: the deck
+     * now runs Light Hello, whose top-up disproportionately lands on Vocal. Raise it back toward
+     * 1.5 for a deck without her, and treat these as a prior to be replaced by measured shadow
+     * prices once enough careers have logged which token actually blocked a purchase.
+     */
     private val SCARCITY: Map<PerformancePointType, Double> =
         mapOf(
             PerformancePointType.DANCE to 0.85,
             PerformancePointType.PASSION to 1.10,
-            PerformancePointType.VOCAL to 1.50,
+            PerformancePointType.VOCAL to 1.30,
             PerformancePointType.VISUAL to 1.00,
             PerformancePointType.COMPOSURE to 0.85,
         )
@@ -408,18 +420,39 @@ object GrandConcertPolicy {
             ConcertSegment.UNKNOWN -> 0.6
         }
 
-    /** Per-post-activation-turn value of each concert-bonus family. Support Chain acceleration
-     * only matters while chains are unfinished, so it decays hard after the first cycles. */
+    /**
+     * Per-post-activation-turn value of each concert-bonus family.
+     *
+     * Recalibrated 2026-07-25 against two independent research passes, which agreed on the ranking
+     * Friendship > Specialty > Support Chain but put the gaps far wider than these weights did:
+     *
+     * - **Friendship** is the only queued bonus that scales the full stat and Skill Point output of
+     *   every rainbow, so it stays the yardstick at its face percentage.
+     * - **Specialty Priority +5** was 3.5, i.e. 70% of a Friendship +5%. It is not remotely that
+     *   strong: +5 is an additive placement WEIGHT, and four such songs move a card's chance of
+     *   appearing on its specialty facility by roughly 1 to 3 percentage points in total. It buys a
+     *   slightly better chance of seeing a rainbow, not a bigger rainbow.
+     * - **Support Chain** was 4.0 in the first cycle, nearly matching Friendship. A JP data-miner
+     *   measured the baseline support-chain trigger rate at 32.43% +/- 1.87% over 2400 turns and
+     *   found Level 3 statistically indistinguishable from it at 31.50% +/- 4.45%, concluding under
+     *   +1 percentage point per level. Both reports independently rate it last and confirm that the
+     *   first validated career finishing at Level 0 was correct, not a miss. It is now a token
+     *   nonzero while chains can still complete, and zero once they cannot.
+     *
+     * Songs are still scored as a whole bundle, so this only prices the queued tail: the songs that
+     * carry Support Chain remain top-tier when their mastery effect is (Grow Up and Shine! and Zero
+     * Is Where the Center Stands! are bought for the compounding gain, never for the chain).
+     */
     private fun concertPerTurn(type: ConcertBonusType?, segment: ConcertSegment): Double =
         when (type) {
             ConcertBonusType.FRIENDSHIP_10 -> 10.0
             ConcertBonusType.FRIENDSHIP_5 -> 5.0
-            ConcertBonusType.SPECIALTY_PRIORITY_5 -> 3.5
+            ConcertBonusType.SPECIALTY_PRIORITY_5 -> 1.5
             ConcertBonusType.SUPPORT_CHAIN_1 ->
                 when (segment) {
-                    ConcertSegment.BEFORE_PROMO_1 -> 4.0
-                    ConcertSegment.BEFORE_PROMO_2 -> 2.0
-                    else -> 0.8
+                    ConcertSegment.BEFORE_PROMO_1 -> 0.5
+                    ConcertSegment.BEFORE_PROMO_2 -> 0.3
+                    else -> 0.0
                 }
             ConcertBonusType.NONE, null -> 0.0
         }

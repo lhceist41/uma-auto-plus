@@ -22,12 +22,12 @@ class GrandConcertSongCatalogTest {
     inner class TitleMatching {
         @Test
         fun `an exact title matches`() {
-            assertEquals("Run For Our Dream", GrandConcertSongCatalog.match("Run For Our Dream")?.title)
+            assertEquals("Run for Our Dream!", GrandConcertSongCatalog.match("Run For Our Dream")?.title)
         }
 
         @Test
         fun `punctuation and case drift folds away`() {
-            assertEquals("Believe in Miracles", GrandConcertSongCatalog.match("believe in miracles!")?.title)
+            assertEquals("Believe in Miracles!", GrandConcertSongCatalog.match("believe in miracles!")?.title)
             assertEquals("Full Speed Ahead! Umadol Power", GrandConcertSongCatalog.match("Full Speed Ahead! Umadol Power☆")?.title)
         }
 
@@ -43,7 +43,7 @@ class GrandConcertSongCatalogTest {
 
         @Test
         fun `a truncated card title matches by prefix - the observed failure mode`() {
-            assertEquals("Zero is Where the Center Stands", GrandConcertSongCatalog.match("Zero is Where the Cent")?.title)
+            assertEquals("Zero Is Where the Center Stands!", GrandConcertSongCatalog.match("Zero is Where the Cent")?.title)
         }
 
         @Test
@@ -54,7 +54,7 @@ class GrandConcertSongCatalogTest {
 
         @Test
         fun `a one-character OCR slip still matches`() {
-            assertEquals("Run For Our Dream", GrandConcertSongCatalog.match("Run Fer Our Dream")?.title)
+            assertEquals("Run for Our Dream!", GrandConcertSongCatalog.match("Run Fer Our Dream")?.title)
         }
 
         @Test
@@ -87,7 +87,7 @@ class GrandConcertSongCatalogTest {
         @Test
         fun `the research's buy-on-sight songs carry the flag`() {
             val alwaysBuy = GrandConcertSongCatalog.songs.filter { it.alwaysBuy }.map { it.title }.toSet()
-            assertEquals(setOf("Make Debut!", "Run For Our Dream", "Grow Up and Shine!", "GIRLS' LEGEND U"), alwaysBuy)
+            assertEquals(setOf("Make Debut!", "Run for Our Dream!", "Grow Up and Shine!", "GIRLS' LEGEND U"), alwaysBuy)
         }
 
         @Test
@@ -103,10 +103,31 @@ class GrandConcertSongCatalogTest {
         }
 
         @Test
-        fun `the known source conflicts are flagged`() {
-            assertTrue(GrandConcertSongCatalog.match("Sunbeam Cheer")?.masteryConflicted == true)
-            assertTrue(GrandConcertSongCatalog.match("Seven Colors Scenery")?.costConflicted == true)
-            assertTrue(GrandConcertSongCatalog.match("Dream Sky")?.costConflicted == true)
+        fun `the three former source conflicts now carry the client's own values`() {
+            // These were flagged as "sources disagree" until master.mdb settled them on 2026-07-25.
+            // Guides variously showed Sunbeam Cheer as Wit +3 and disputed the other two cost
+            // vectors; the shipped client says otherwise, so the flags are gone and these are the
+            // values to defend.
+            assertEquals(MasteryBonusType.WIT_TRAINING_2, GrandConcertSongCatalog.match("Sunbeam Cheer")?.mastery)
+            assertEquals(PerformancePointVector.of(0, 42, 0, 0, 21), GrandConcertSongCatalog.match("Sunbeam Cheer")?.cost)
+            assertEquals(PerformancePointVector.of(0, 0, 21, 0, 42), GrandConcertSongCatalog.match("Seven Colors Scenery")?.cost)
+            assertEquals(PerformancePointVector.of(0, 22, 0, 0, 22), GrandConcertSongCatalog.match("Dream Sky")?.cost)
+        }
+
+        @Test
+        fun `the client's exact song titles all match themselves`() {
+            // Regression guard for the class of bug that hid Precious Treasure Box: a catalog entry
+            // under a JP romanization folds too far from the shipped title to ever match a live
+            // read. Every title below is the string master.mdb ships.
+            val shipped =
+                listOf(
+                    "Make Debut!", "Believe in Miracles!", "Zero Is Where the Center Stands!", "Getaway! Fallin' Love",
+                    "Go This Way", "Ring Ring Diary", "Here Comes Our Time", "Run n' Run!", "Full Speed Ahead! Umadol Power",
+                    "Run for Our Dream!", "Hey, Guess What!", "Our Blue Bird Days", "Grow Up and Shine!", "Sunbeam Cheer",
+                    "Hoppity Sunny Days", "Seven Colors Scenery", "Dream Sky", "Present March", "Precious Treasure Box",
+                    "The World's at Our Whim", "Sky-Blue Spring", "Fanfare for the Future!",
+                )
+            for (title in shipped) assertEquals(title, GrandConcertSongCatalog.match(title)?.title, "no self-match for \"$title\"")
         }
     }
 

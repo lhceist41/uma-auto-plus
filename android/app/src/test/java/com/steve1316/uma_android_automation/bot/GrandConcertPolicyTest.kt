@@ -210,15 +210,15 @@ class GrandConcertPolicyTest {
         fun `the catalog supplies the bonus types, so garbled bonus text does not change a known song's score`() {
             val ctx = LessonScoreContext(segment = ConcertSegment.BEFORE_PROMO_2)
             val cost = v(0, 21, 0, 21, 0)
-            val garbled = songScore("Run For Our Dream", "#!#@", "#!#@", cost, ctx)
-            val clean = songScore("Run For Our Dream", "Training Skill Pt Gain +2", "Specialty Priority +5", cost, ctx)
+            val garbled = songScore("Run for Our Dream!", "#!#@", "#!#@", cost, ctx)
+            val clean = songScore("Run for Our Dream!", "Training Skill Pt Gain +2", "Specialty Priority +5", cost, ctx)
             assertEquals(clean, garbled)
         }
 
         @Test
         fun `a compounding skill point song outranks an immediate stat song mid-career`() {
             val ctx = LessonScoreContext(segment = ConcertSegment.BEFORE_PROMO_2)
-            val runForOurDream = songScore("Run For Our Dream", null, null, v(0, 21, 0, 21, 0), ctx)
+            val runForOurDream = songScore("Run for Our Dream!", null, null, v(0, 21, 0, 21, 0), ctx)
             val hereComesOurTime = songScore("Here Comes Our Time", null, null, v(0, 0, 32, 0, 12), ctx)
             assertTrue(runForOurDream > hereComesOurTime, "$runForOurDream vs $hereComesOurTime")
         }
@@ -226,8 +226,8 @@ class GrandConcertPolicyTest {
         @Test
         fun `a queued friendship bonus is worth more right before the fourth concert than before bonds exist`() {
             val cost = v(42, 0, 0, 26, 0)
-            val early = songScore("My Favourite Treasure Box", null, null, cost, LessonScoreContext(segment = ConcertSegment.BEFORE_PROMO_1))
-            val late = songScore("My Favourite Treasure Box", null, null, cost, LessonScoreContext(segment = ConcertSegment.BEFORE_PROMO_4))
+            val early = songScore("Precious Treasure Box", null, null, cost, LessonScoreContext(segment = ConcertSegment.BEFORE_PROMO_1))
+            val late = songScore("Precious Treasure Box", null, null, cost, LessonScoreContext(segment = ConcertSegment.BEFORE_PROMO_4))
             assertTrue(late > early, "$late vs $early")
         }
 
@@ -290,7 +290,7 @@ class GrandConcertPolicyTest {
 
             // The Friendship +10% queued bonus can never activate after the final concert, so the
             // song is worth only its immediate Speed here (it scored ~200 before the 4th concert).
-            val treasureBoxAtEnd = songScore("My Favourite Treasure Box", null, null, v(42, 0, 0, 26, 0), end)
+            val treasureBoxAtEnd = songScore("Precious Treasure Box", null, null, v(42, 0, 0, 26, 0), end)
             assertTrue(treasureBoxAtEnd < 40, "$treasureBoxAtEnd")
 
             // Recovered energy has no training turns left to protect; a plain stat still counts.
@@ -300,14 +300,18 @@ class GrandConcertPolicyTest {
         }
 
         @Test
-        fun `describeLessonOffer surfaces catalog discrepancies while the live cost governs`() {
+        fun `describeLessonOffer flags a live cost that diverges from the catalog and stays quiet when it agrees`() {
+            // The "sources disagree about this song" note was dropped once master.mdb settled every
+            // cost, and it had been actively harmful: it short-circuited the live-vs-catalog
+            // comparison, so on the songs it covered a genuine cost change would have been reported
+            // as a stale-sources warning instead of the actual delta.
             val balances = PerformancePointVector.of(100, 100, 100, 100, 100)
-            val conflicted = LessonListCard(0, "Dream Sky", LessonCardKind.SONG, "Wit +22", "Friendship Training Effectiveness +5%", v(0, 22, 0, 0, 22), learnable = true, scheduled = false)
-            val divergent = LessonListCard(1, "Zero is Where the Center Stands", LessonCardKind.SONG, "Training Speed Gain +1", "Support Chain Event Frequency +1 level", v(24, 0, 0, 24, 0), learnable = true, scheduled = false)
-            val list = LessonList(balances, listOf(conflicted, divergent), hasFullStats = true, hasConcertInfo = true)
+            val agreeing = LessonListCard(0, "Dream Sky", LessonCardKind.SONG, "Wit +22", "Friendship Training Effectiveness +5%", v(0, 22, 0, 0, 22), learnable = true, scheduled = false)
+            val divergent = LessonListCard(1, "Zero Is Where the Center Stands!", LessonCardKind.SONG, "Training Speed Gain +1", "Support Chain Event Frequency +1 level", v(24, 0, 0, 24, 0), learnable = true, scheduled = false)
+            val list = LessonList(balances, listOf(agreeing, divergent), hasFullStats = true, hasConcertInfo = true)
             val r = GrandConcertPolicy.describeLessonOffer(list, HypeTier.UNKNOWN, LessonScoreContext())
-            assertTrue(r.notes.any { it.contains("conflicted") && it.contains("Dream Sky") }, r.notes.toString())
-            assertTrue(r.notes.any { it.contains("differs") && it.contains("Zero is Where the Center Stands") }, r.notes.toString())
+            assertTrue(r.notes.any { it.contains("differs") && it.contains("Zero Is Where the Center Stands!") }, r.notes.toString())
+            assertFalse(r.notes.any { it.contains("Dream Sky") }, r.notes.toString())
         }
     }
 

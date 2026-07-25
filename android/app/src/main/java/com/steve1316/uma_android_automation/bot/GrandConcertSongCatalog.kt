@@ -7,13 +7,14 @@ package com.steve1316.uma_android_automation.bot
  * mastery/concert bonus lines frequently come back garbled. The catalog turns a good title read
  * into the song's bonus TYPES so the decider can score by type instead of trusting mangled text.
  * The live shop stays authoritative for costs: the vectors here are defaults for planning and
- * cross-checking only, three of them are flagged as conflicted across sources, and any live vs
- * catalog disagreement is reported, never fought.
+ * cross-checking only, and any live vs catalog disagreement is reported, never fought.
  *
- * Data source: the consolidated strategy research (grand-concert-research/STRATEGY_DECIDER_SPEC.md
- * and the two reports behind it). Which song carries which bonus is CONFIRMED from current
- * Global-facing sources; how much a bonus is WORTH is a tunable hypothesis and lives in
- * [GrandConcertPolicy], not here.
+ * Data source: the Global client's own `master.mdb` (`single_mode_live_square` joined to
+ * `single_mode_live_song_list` and `text_data`), extracted 2026-07-25. Titles, costs, mastery
+ * effects and concert bonuses below are the shipped values and supersede every community table:
+ * guides were wrong on this scenario repeatedly, including a song this catalog itself had under a
+ * JP-romanized name that could never have matched a live read. How much a bonus is WORTH is a
+ * tunable hypothesis and lives in [GrandConcertPolicy], not here.
  */
 
 /**
@@ -69,10 +70,6 @@ data class CatalogSong(
     val phase: Int,
     val free: Boolean = false,
     val alwaysBuy: Boolean = false,
-    /** Current sources disagree on the cost vector; trust only the live shop for this song. */
-    val costConflicted: Boolean = false,
-    /** Current sources disagree on the mastery magnitude; the type itself is agreed. */
-    val masteryConflicted: Boolean = false,
     /** Observed or plausible alternate spellings of the Global title. */
     val aliases: List<String> = emptyList(),
 )
@@ -83,8 +80,8 @@ object GrandConcertSongCatalog {
     val songs: List<CatalogSong> =
         listOf(
             CatalogSong("Make Debut!", MasteryBonusType.FREE_ALL, ConcertBonusType.SPECIALTY_PRIORITY_5, v(0, 0, 0, 0, 0), phase = 1, free = true, alwaysBuy = true),
-            CatalogSong("Believe in Miracles", MasteryBonusType.WIT_TRAINING_1, ConcertBonusType.SPECIALTY_PRIORITY_5, v(0, 21, 0, 0, 21), phase = 1),
-            CatalogSong("Zero is Where the Center Stands", MasteryBonusType.SPEED_TRAINING_1, ConcertBonusType.SUPPORT_CHAIN_1, v(21, 0, 0, 21, 0), phase = 1),
+            CatalogSong("Believe in Miracles!", MasteryBonusType.WIT_TRAINING_1, ConcertBonusType.SPECIALTY_PRIORITY_5, v(0, 21, 0, 0, 21), phase = 1),
+            CatalogSong("Zero Is Where the Center Stands!", MasteryBonusType.SPEED_TRAINING_1, ConcertBonusType.SUPPORT_CHAIN_1, v(21, 0, 0, 21, 0), phase = 1),
             // Observed live 2026-07-24: the Global client titles the reports' "Run Away! Fallin'
             // Love" (JP nuance) "Getaway! Fallin' Love".
             CatalogSong("Getaway! Fallin' Love", MasteryBonusType.GUTS_TRAINING_1, ConcertBonusType.SUPPORT_CHAIN_1, v(21, 0, 0, 21, 0), phase = 1, aliases = listOf("Run Away! Fallin' Love")),
@@ -94,23 +91,28 @@ object GrandConcertSongCatalog {
             // The research reports render this title "RUNxRUN"; the launch-night capture reads "Run n' Run!".
             CatalogSong("Run n' Run!", MasteryBonusType.IMMEDIATE_SKILL_POINTS, ConcertBonusType.FRIENDSHIP_5, v(14, 0, 0, 16, 14), phase = 1, aliases = listOf("RUNxRUN")),
             CatalogSong("Full Speed Ahead! Umadol Power", MasteryBonusType.IMMEDIATE_SPEED_22, ConcertBonusType.FRIENDSHIP_5, v(32, 0, 0, 12, 0), phase = 1),
-            CatalogSong("Run For Our Dream", MasteryBonusType.SKILL_POINT_TRAINING_2, ConcertBonusType.SPECIALTY_PRIORITY_5, v(0, 21, 0, 21, 0), phase = 2, alwaysBuy = true),
+            CatalogSong("Run for Our Dream!", MasteryBonusType.SKILL_POINT_TRAINING_2, ConcertBonusType.SPECIALTY_PRIORITY_5, v(0, 21, 0, 21, 0), phase = 2, alwaysBuy = true),
             // Observed live 2026-07-23: the Global client titles the reports' "A NO NE" (JP song
             // name) "Hey, Guess What!" - same bonus profile (Guts +2, Specialty +5, Da 42 / Vi 21).
             CatalogSong("Hey, Guess What!", MasteryBonusType.GUTS_TRAINING_2, ConcertBonusType.SPECIALTY_PRIORITY_5, v(42, 0, 0, 21, 0), phase = 2, aliases = listOf("A NO NE")),
-            CatalogSong("Our Bluebird Days", MasteryBonusType.SPEED_TRAINING_2, ConcertBonusType.SPECIALTY_PRIORITY_5, v(21, 0, 0, 42, 0), phase = 2),
+            CatalogSong("Our Blue Bird Days", MasteryBonusType.SPEED_TRAINING_2, ConcertBonusType.SPECIALTY_PRIORITY_5, v(21, 0, 0, 42, 0), phase = 2),
             // Observed live 2026-07-24 (album art): the Global title is "Grow Up and Shine!", not
             // the reports' "Grow Up, Shine!".
             CatalogSong("Grow Up and Shine!", MasteryBonusType.SKILL_POINT_TRAINING_3, ConcertBonusType.SUPPORT_CHAIN_1, v(21, 0, 21, 0, 21), phase = 3, alwaysBuy = true, aliases = listOf("Grow Up, Shine!")),
-            CatalogSong("Sunbeam Cheer", MasteryBonusType.WIT_TRAINING_2, ConcertBonusType.SUPPORT_CHAIN_1, v(0, 42, 0, 0, 21), phase = 3, masteryConflicted = true),
+            CatalogSong("Sunbeam Cheer", MasteryBonusType.WIT_TRAINING_2, ConcertBonusType.SUPPORT_CHAIN_1, v(0, 42, 0, 0, 21), phase = 3),
             CatalogSong("Hoppity Sunny Days", MasteryBonusType.STAMINA_TRAINING_2, ConcertBonusType.SPECIALTY_PRIORITY_5, v(0, 42, 21, 0, 0), phase = 3),
-            CatalogSong("Seven Colors Scenery", MasteryBonusType.POWER_TRAINING_2, ConcertBonusType.SPECIALTY_PRIORITY_5, v(0, 0, 21, 0, 42), phase = 3, costConflicted = true),
-            CatalogSong("Dream Sky", MasteryBonusType.IMMEDIATE_WIT_22, ConcertBonusType.FRIENDSHIP_5, v(0, 22, 0, 0, 22), phase = 4, costConflicted = true),
+            CatalogSong("Seven Colors Scenery", MasteryBonusType.POWER_TRAINING_2, ConcertBonusType.SPECIALTY_PRIORITY_5, v(0, 0, 21, 0, 42), phase = 3),
+            CatalogSong("Dream Sky", MasteryBonusType.IMMEDIATE_WIT_22, ConcertBonusType.FRIENDSHIP_5, v(0, 22, 0, 0, 22), phase = 4),
             CatalogSong("Present March", MasteryBonusType.IMMEDIATE_POWER_22, ConcertBonusType.FRIENDSHIP_5, v(0, 0, 22, 0, 22), phase = 4),
-            CatalogSong("My Favourite Treasure Box", MasteryBonusType.IMMEDIATE_SPEED_26, ConcertBonusType.FRIENDSHIP_10, v(42, 0, 0, 26, 0), phase = 4),
+            // The client ships this as "Precious Treasure Box". It was catalogued under the JP
+            // romanization "My Favourite Treasure Box", which folds 9 edits away from the real
+            // title against a cap of 2, so a live read could NEVER match it and one of the two
+            // best songs in the shop (Speed +26 plus the only other Friendship +10%) scored as an
+            // unknown. Found by diffing the catalog against master.mdb on 2026-07-25.
+            CatalogSong("Precious Treasure Box", MasteryBonusType.IMMEDIATE_SPEED_26, ConcertBonusType.FRIENDSHIP_10, v(42, 0, 0, 26, 0), phase = 4, aliases = listOf("My Favourite Treasure Box", "Daisuki no Takarabako")),
             CatalogSong("The World's at Our Whim", MasteryBonusType.IMMEDIATE_STAMINA_22, ConcertBonusType.FRIENDSHIP_5, v(0, 32, 12, 0, 0), phase = 4),
-            CatalogSong("Sky-blue Spring", MasteryBonusType.IMMEDIATE_GUTS_22, ConcertBonusType.FRIENDSHIP_5, v(12, 0, 0, 32, 0), phase = 4),
-            CatalogSong("Fanfare For The Future!", MasteryBonusType.IMMEDIATE_GUTS_26, ConcertBonusType.FRIENDSHIP_10, v(26, 0, 0, 42, 0), phase = 4),
+            CatalogSong("Sky-Blue Spring", MasteryBonusType.IMMEDIATE_GUTS_22, ConcertBonusType.FRIENDSHIP_5, v(12, 0, 0, 32, 0), phase = 4),
+            CatalogSong("Fanfare for the Future!", MasteryBonusType.IMMEDIATE_GUTS_26, ConcertBonusType.FRIENDSHIP_10, v(26, 0, 0, 42, 0), phase = 4),
             CatalogSong("GIRLS' LEGEND U", MasteryBonusType.FREE_ALL, ConcertBonusType.FRIENDSHIP_10, v(0, 0, 0, 0, 0), phase = 5, free = true, alwaysBuy = true),
         )
 
@@ -188,29 +190,56 @@ object GrandConcertSongCatalog {
     private val SECONDARY_STATS = listOf("stamina", "guts")
 
     /**
-     * Observed Global technique titles -> effect identity. The effect text on the lesson list is
-     * frequently garbled by OCR while titles read reliably (the same asymmetry the song catalog
-     * works around), so on a garbled effect line the TITLE identifies the technique. Observed
-     * live 2026-07-23/24; the naming pattern is "Basics" = tier I and "Intermediate Class" =
-     * tier II, and the Skill Points line names concert audiences by career stage.
+     * Global technique titles -> effect identity. The effect text on the lesson list is frequently
+     * garbled by OCR while titles read reliably (the same asymmetry the song catalog works around),
+     * so on a garbled effect line the TITLE identifies the technique. Titles and effects below come
+     * from the client's own `master.mdb` (`single_mode_live_square`, square_type 1 and 3). The
+     * naming pattern is "Basics" / "Intermediate Class" / "Advanced Class" for tiers I to III.
+     *
+     * INCOMPLETE BY DESIGN: the client ships 36 technique families and this covers the 8 whose
+     * shape the current [TechniqueRead] models exactly. The remainder are two-stat families
+     * (Acting, Harmony, Rap, Jazz Dance, Isolation, Flexibility, Expression, Vocal Expression,
+     * Dancing and Singing), stat-plus-Skill-Point families (Formation, Yoga, Vocal Theory,
+     * Visuals Research, Idol History) and six RANGE families whose effect is written "+3 to 7"
+     * (Rhythm, Abdominal Breathing, Fan Interaction, Hair Styling, Solo Performance, Autograph).
+     * The range ones need a magnitude range rather than a single Int, so adding them is a model
+     * change, not a data fill, and inventing a midpoint would be fabricating a number the client
+     * does not state. Unlisted titles fall through to effect-text and cost-signature parsing,
+     * which is the pre-existing behaviour, so this is a coverage gap and not a regression.
      */
     private val TECHNIQUE_TITLES: Map<String, TechniqueRead> =
         mapOf(
+            // Energy: three tiers, 25/30/35 of a single type for +20/+30/+40.
             "Facial-Slimming Massage" to TechniqueRead(TechniqueEffectKind.ENERGY, 20),
             "Relaxing Body Massage" to TechniqueRead(TechniqueEffectKind.ENERGY, 30),
+            "Full-Body Detox" to TechniqueRead(TechniqueEffectKind.ENERGY, 40),
+            // Skill Points: each tier exists once per cost type, so the type is the shop's choice
+            // rather than a property of the technique.
             "Watch an Up-and-Coming Idol's Concert" to TechniqueRead(TechniqueEffectKind.SKILL_POINTS, 5),
             "Watch a Mid-Career Idol's Concert" to TechniqueRead(TechniqueEffectKind.SKILL_POINTS, 8),
             "Watch a Top-Tier Idol's Concert" to TechniqueRead(TechniqueEffectKind.SKILL_POINTS, 12),
+            // Single-stat families, one per token: Dance pays Speed, Passion Stamina, Vocal Power,
+            // Visual Guts, Composure Wit, at 10/16/24 for +5/+8/+12.
+            "Dance Step Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = true),
+            "Dance Step Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = true),
+            "Dance Step Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = true),
             "Audience Involvement Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = false),
             "Audience Involvement Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = false),
             "Audience Involvement Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = false),
+            "Vocal Training Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = true),
+            "Vocal Training Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = true),
+            "Vocal Training Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = true),
+            "Makeup Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = false),
+            "Makeup Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = false),
+            "Makeup Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = false),
             "Composure Training Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = true),
             "Composure Training Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = true),
             "Composure Training Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = true),
-            "Vocal Training Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = true),
-            "Makeup Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = false),
-            "Dance Step Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = true),
+            // Two-stat family observed live; the rest of the two-stat and range-effect families are
+            // catalogued in master.mdb but not yet here (see the note above this map).
+            "Mic Performance Basics" to TechniqueRead(TechniqueEffectKind.TWO_STATS, 4, coreStat = true),
             "Mic Performance Intermediate Class" to TechniqueRead(TechniqueEffectKind.TWO_STATS, 6, coreStat = true),
+            "Mic Performance Advanced Class" to TechniqueRead(TechniqueEffectKind.TWO_STATS, 8, coreStat = true),
             "Group Lesson Basics" to TechniqueRead(TechniqueEffectKind.SKILL_HINT, 1),
             "Group Lesson Intermediate" to TechniqueRead(TechniqueEffectKind.SKILL_HINT, 2),
             "Group Lesson Advanced" to TechniqueRead(TechniqueEffectKind.SKILL_HINT, 3),
