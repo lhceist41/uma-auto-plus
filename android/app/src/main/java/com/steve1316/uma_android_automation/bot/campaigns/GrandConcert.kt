@@ -38,6 +38,9 @@ import com.steve1316.uma_android_automation.utils.grandConcertLessonSlotState
 import com.steve1316.uma_android_automation.utils.grandConcertOnStagePresent
 import com.steve1316.uma_android_automation.utils.grandConcertPlaybackSkipPresent
 import com.steve1316.uma_android_automation.utils.grandConcertResultNextPresent
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 /**
  * Handles the Grand Concert scenario ("Brighter Together Our Grand Concert", community name
@@ -363,7 +366,25 @@ class GrandConcert(game: Game) : Campaign(game) {
         game.wait(1.5)
         val list = readLessonListSettled()
         if (list == null) {
-            MessageLog.w(TAG, "[GRAND_CONCERT] [CAREER_COMPLETE] The Lessons list did not open from the Complete Career screen; leaving it manual.")
+            // "Did not open" is an inference from an empty read, and the two causes need opposite
+            // fixes: a tap that missed the button, or a list that opened but this layout cannot be
+            // parsed. Nothing distinguished them on 2026-07-25, when the drain gave up with 0/3
+            // cards readable on all three attempts and 300 points expired unspent. Capture the frame
+            // so the next occurrence answers it instead of costing another career's leftovers.
+            val shot =
+                try {
+                    val filename = "gc_drain_no_lessons_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}"
+                    game.imageUtils.saveBitmap(filename = filename, fullRes = true)
+                    "$filename.png"
+                } catch (e: Exception) {
+                    "unsaved (${e.message})"
+                }
+            MessageLog.w(
+                TAG,
+                "[GRAND_CONCERT] [CAREER_COMPLETE] The Lessons list did not open from the Complete Career screen " +
+                    "(tapped ${GrandConcertCareerComplete.LESSONS_X}, ${GrandConcertCareerComplete.LESSONS_Y}); " +
+                    "leaving it manual. Frame: $shot",
+            )
             exitLessonShop()
             return 0
         }
