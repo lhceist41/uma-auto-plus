@@ -101,9 +101,9 @@ describe("Copano Rickey presets", () => {
     const ura = trio.find((p) => p.scenario === "URA Finale")!
     const plannedRaces: { raceName: string; date: string; turnNumber: number }[] = JSON.parse(ura.settings.racing!.racingPlan as string)
 
-    it("ships exactly the pipeline trio, one preset per scenario", () => {
-        expect(trio).toHaveLength(3)
-        expect(trio.map((p) => p.scenario).sort()).toEqual(["Trackblazer", "URA Finale", "Unity Cup"])
+    it("ships one preset per scenario, including the derived Grand Concert twin", () => {
+        expect(trio).toHaveLength(4)
+        expect(trio.map((p) => p.scenario).sort()).toEqual(["Grand Concert", "Trackblazer", "URA Finale", "Unity Cup"])
     })
 
     it("keeps every preset key unique across the whole roster", () => {
@@ -518,5 +518,116 @@ describe("skill spend objective (Phase 2A)", () => {
             expect((p.settings as any)?.skills?.skillSpendMode).toBeUndefined()
             expect((p.settings as any)?.skills?.accountTier).toBeUndefined()
         }
+    })
+})
+
+describe("Grand Concert derived presets", () => {
+    // Intended Speed target per twin. Sprint/Mile take the scenario's full 1600 cap, Medium takes
+    // 1400, and Long stayers take no raise at all: a stat target is a WEIGHT, not a ceiling, so
+    // lifting Speed on a stayer starves the Stamina its 3000m+ goals need.
+    const EXPECTED_SPEED: Record<string, number | undefined> = {
+        "Agnes Tachyon": 1400,
+        "Mihono Bourbon": 1400,
+        Vodka: 1400,
+        "Sakura Bakushin O": 1600,
+        "King Halo": 1600,
+        "Maruzensky (Formula R)": 1600,
+        "Daiwa Scarlet": 1600,
+        "Copano Rickey": 1600,
+        "Super Creek": undefined,
+        "Gold Ship": undefined,
+    }
+    const SPEED_KEY: Record<string, string> = {
+        Sprint: "trainingSprintStatTarget_speedStatTarget",
+        Mile: "trainingMileStatTarget_speedStatTarget",
+        Medium: "trainingMediumStatTarget_speedStatTarget",
+        Long: "trainingLongStatTarget_speedStatTarget",
+    }
+    const gc = (name: string) => characterPresets.find((p) => p.name === name && p.scenario === "Grand Concert")!
+    const ura = (name: string) => characterPresets.find((p) => p.name === name && p.scenario === "URA Finale")!
+    const derived = Object.keys(EXPECTED_SPEED)
+
+    it("ships a Grand Concert twin for every trainee in the batch, plus the hand-written Taiki build", () => {
+        for (const name of derived) expect(gc(name)).toBeDefined()
+        const all = characterPresets.filter((p) => p.scenario === "Grand Concert").map((p) => p.name)
+        expect(all.sort()).toEqual([...derived, "Taiki Shuttle"].sort())
+    })
+
+    it("locks the roster totals the docs quote", () => {
+        // The docs used to be checked with `grep -c '^        scenario: "'`, which no longer works:
+        // derived twins are not literals, and grandConcertFrom's own return adds a matching line.
+        // This assertion is the authoritative count now. Update the docs whenever it changes.
+        expect(characterPresets.length).toBe(231)
+        expect(characterPresets.filter((p) => p.scenario === "Grand Concert")).toHaveLength(11)
+        expect(new Set(characterPresets.map((p) => `${p.name}|${p.scenario}`)).size).toBe(characterPresets.length)
+    })
+
+    it("carries the scenario in both places so applying it switches the scenario", () => {
+        for (const name of derived) {
+            expect(gc(name).scenario).toBe("Grand Concert")
+            expect(gc(name).settings.general!.scenario).toBe("Grand Concert")
+        }
+    })
+
+    it("uses smart racing, never a URA curated agenda", () => {
+        for (const name of derived) {
+            expect(gc(name).settings.racing!.enableRacingPlan).toBe(false)
+            expect(gc(name).settings.racing!.enableMandatoryRacingPlan).toBe(false)
+            expect(gc(name).settings.racing!.racingPlan).toBe("")
+        }
+    })
+
+    it("drops the URA-specific skill-spend objective", () => {
+        for (const name of derived) expect((gc(name).settings as any).skills?.skillSpendObjective).toBeUndefined()
+    })
+
+    it("raises Speed exactly as intended and leaves stayers alone", () => {
+        for (const name of derived) {
+            const distance = ura(name).settings.training!.preferredDistanceOverride as string
+            const key = SPEED_KEY[distance]
+            const got = (gc(name).settings.trainingStatTarget as any)[key]
+            const uraValue = (ura(name).settings.trainingStatTarget as any)[key]
+            expect(got).toBe(EXPECTED_SPEED[name] ?? uraValue)
+        }
+    })
+
+    it("never sets a target above a Grand Concert stat cap", () => {
+        const caps: Record<string, number> = { speed: 1600, guts: 1500, stamina: 1300, power: 1300, wit: 1300 }
+        for (const name of derived) {
+            for (const [k, v] of Object.entries(gc(name).settings.trainingStatTarget ?? {})) {
+                const stat = k.match(/StatTarget_(\w+?)StatTarget$/)?.[1]?.toLowerCase()
+                if (stat !== undefined && caps[stat] !== undefined) expect(v as number).toBeLessThanOrEqual(caps[stat])
+            }
+        }
+    })
+
+    it("differs from its URA source ONLY in the scenario, racing and Speed-target fields", () => {
+        const allowed = new Set(["general.scenario", "racing.enableRacingPlan", "racing.enableMandatoryRacingPlan", "racing.racingPlan", "skills.skillSpendObjective"])
+        for (const name of derived) {
+            const a = ura(name).settings as any
+            const b = gc(name).settings as any
+            const speedKey = SPEED_KEY[a.training.preferredDistanceOverride as string]
+            for (const category of new Set([...Object.keys(a), ...Object.keys(b)])) {
+                for (const key of new Set([...Object.keys(a[category] ?? {}), ...Object.keys(b[category] ?? {})])) {
+                    const path = `${category}.${key}`
+                    if (allowed.has(path) || (category === "trainingStatTarget" && key === speedKey)) continue
+                    expect({ path, value: JSON.stringify(b[category]?.[key]) }).toEqual({ path, value: JSON.stringify(a[category]?.[key]) })
+                }
+            }
+        }
+    })
+
+    it("is a deep copy - mutating a twin cannot reach back into its URA source", () => {
+        // Guards the JSON round-trip in grandConcertFrom. A spread would leave the two sharing
+        // nested category objects, so a future edit to one would silently corrupt the other.
+        const twin = gc("Super Creek")
+        const source = ura("Super Creek")
+        expect(twin.settings.training).not.toBe(source.settings.training)
+        expect(twin.settings.trainingStatTarget).not.toBe(source.settings.trainingStatTarget)
+        expect(twin.settings.skills).not.toBe(source.settings.skills)
+        const before = source.settings.training!.preferredDistanceOverride
+        ;(twin.settings.training as any).preferredDistanceOverride = "MUTATED"
+        expect(source.settings.training!.preferredDistanceOverride).toBe(before)
+        ;(twin.settings.training as any).preferredDistanceOverride = before
     })
 })

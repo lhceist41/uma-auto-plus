@@ -6,7 +6,7 @@ This document explains how built-in character presets work in UMA Auto+, how the
 
 ## Overview
 
-UMA Auto+ ships with **221 built-in character presets** (72 character entries x 3 scenarios, plus three URA-only Legacy Farm variants, one Unity Cup Blue Farm variant, and the first Grand Concert preset). Trainees are picked in the searchable trainee picker on the Home page -- one row per character/outfit with per-scenario advisory chips and a validation badge -- and applying a preset sets its scenario together with its settings.
+UMA Auto+ ships with **231 built-in character presets** (72 character entries x 3 scenarios, plus three URA-only Legacy Farm variants, one Unity Cup Blue Farm variant, and eleven Grand Concert presets). Trainees are picked in the searchable trainee picker on the Home page -- one row per character/outfit with per-scenario advisory chips and a validation badge -- and applying a preset sets its scenario together with its settings.
 
 The 2026-06-11 batch added seven entries from the June banner research pass: Sweep Tosho, Mihono Bourbon, Mejiro Palmer, El Condor Pasa (Kukulkan Warrior), Tosen Jordan, Super Creek, and Matikanetannhauser. Their URA presets ship curated racing plans (see "Curated racing plans in presets" below); Tosen Jordan's presets enable negative-skill buying so the buy pass clears her 3D Nail Art speed debuff. Symboli Rudolf (Emperor's Path) was added 2026-06-18 — a Late Surger Medium built around her late-overtake unique; URA and Trackblazer are her recommended scenarios. Biwa Hayahide (Pace Chaser, built as a Long stayer) and Mejiro Ryan (Late Surger Medium) were added 2026-06-21 to make two owned-but-unpresetted Medium/Long-A turf bodies farmable hands-off; both fill the Medium/Long Team-Trials slots and are URA + Trackblazer recommended.
 
@@ -30,9 +30,40 @@ The second 2026-07-17 addition is **Grass Wonder (Saintly Jade Cleric)**, the ro
 
 The 2026-07-24 addition opens the **Grand Concert** preset lane with Taiki Shuttle, the scenario's first validated profile: her career completed fully hands-off at A+ rank the same day, covering the Lesson shop, all five concerts, and the end-of-career spending. The preset carries the exact configuration that ran that career (her Mile build with Speed/Power/Wit priorities and smart racing), with one change: the Mile Speed target is raised to 1600 to use the scenario's higher Speed cap. Applying it sets the scenario to Grand Concert together with the settings, so no manual scenario switching is needed. Other trainees show no Grand Concert card in the picker yet; their presets land as the lane grows.
 
+The 2026-07-25 addition fills that lane with ten more, chosen as a pre-release test batch rather than
+a best-of list. The scenario's concert system is trainee-agnostic: the result tier is set purely by
+how many songs were learned in the current cycle, with no stat or aptitude check and no fail state,
+so a batch of ten similar Speed builds would only re-test one path. These cover what does vary
+between trainees instead: goal chains, distance, surface, and the Senior lyric event. **Agnes
+Tachyon** and **Mihono Bourbon** are scenario-link characters, so running either as the trainee
+upgrades that event's skill hint from white to gold. **Sakura Bakushin O** and **King Halo** are
+Sprint, **Maruzensky (Formula R)** and **Daiwa Scarlet** are Mile, **Copano Rickey** is the first
+dirt body to enter the scenario, **Vodka** is Medium, and **Super Creek** and **Gold Ship** are
+stayers, whose Stamina ceiling is actually lower here (1300) than in URA Finale (1400).
+
+These ten are **derived from each character's URA Finale build** rather than written out again,
+because Grand Concert differs from URA Finale in exactly one way a preset cares about: its stat caps.
+Deriving keeps the twins in lockstep, so fixing a URA build can no longer leave a hand-copied Grand
+Concert clone quietly stale. Three things change in the derivation:
+
+- The scenario is set in both places, so applying the preset switches scenario with it.
+- The Speed target rises for Sprint and Mile builds (to the scenario's 1600 cap) and for Medium
+  builds (to 1400), but **not** for stayers. A stat target is a weight, not a ceiling: training
+  scores a stat by how far behind its target it sits, so raising Speed on a stayer would pull
+  training away from the Stamina its 3000m+ goal races need.
+- Any curated mandatory racing plan and any declared skill-spend objective are dropped, matching what
+  every other non-URA preset does. A curated plan is tuned to the URA goal chain, and in
+  mandatory-plan mode voluntary races only happen on planned turns, so a plan that does not fit the
+  scenario cannot recover from a fan shortfall.
+
+All ten stay research-graded until a live career completes. Because derived presets are not literals
+in the file, the roster total can no longer be counted by grepping `scenario:` lines; the count is
+asserted in `src/data/__tests__/characterPresets.test.ts` instead, which is the authority to update
+when it changes.
+
 ### Currently included characters
 
-The table below covers the three original scenarios. Grand Concert presets are listed in their own lane for now: **Taiki Shuttle** (validated).
+The table below covers the three original scenarios. Grand Concert presets are listed in their own lane for now: **Taiki Shuttle** (validated), plus **Agnes Tachyon**, **Mihono Bourbon**, **Sakura Bakushin O**, **King Halo**, **Maruzensky (Formula R)**, **Daiwa Scarlet**, **Copano Rickey**, **Vodka**, **Super Creek** and **Gold Ship** (all research-graded).
 
 | Character | Trackblazer | Unity Cup | URA Finale |
 |-----------|:-----------:|:---------:|:----------:|

@@ -715,7 +715,11 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
  */
 export const avoidAdvisoryFor = (presetName: string, scenario: string): ScenarioAdvisory | null => trainerAdvisories[presetName]?.avoid?.find((a) => a.scenario === scenario) ?? null
 
-export const characterPresets: CharacterPreset[] = [
+/**
+ * The hand-written presets. Exported as `characterPresets` below, together with the Grand Concert
+ * twins derived from them; nothing outside this file should use `basePresets` directly.
+ */
+const basePresets: CharacterPreset[] = [
     {
         name: "Agnes Tachyon",
         scenario: "Trackblazer",
@@ -48380,3 +48384,102 @@ export const characterPresets: CharacterPreset[] = [
         },
     },
 ]
+
+/** Maps a `preferredDistanceOverride` to its Speed target key in the `trainingStatTarget` block. */
+const SPEED_TARGET_KEY: Record<string, keyof Settings["trainingStatTarget"]> = {
+    Sprint: "trainingSprintStatTarget_speedStatTarget",
+    Mile: "trainingMileStatTarget_speedStatTarget",
+    Medium: "trainingMediumStatTarget_speedStatTarget",
+    Long: "trainingLongStatTarget_speedStatTarget",
+}
+
+/**
+ * Derives a Grand Concert preset from a character's own URA Finale build.
+ *
+ * Grand Concert differs from URA Finale in exactly one way a preset cares about: its stat caps.
+ * Speed rises to 1600 where URA is a flat 1400, while Stamina, Power and Wit drop to 1300.
+ * Everything else a preset carries -- racing plan, skill plans, event picks, stat priorities,
+ * failure thresholds -- applies unchanged, which is why these are derived rather than copied: a
+ * hand-cloned twin silently rots the first time someone fixes the URA build.
+ *
+ * `speedTarget` is optional and raises the Speed target for the preset's own preferred distance.
+ * Pass it ONLY for builds that genuinely want Speed maximised. A stat target is not a ceiling, it
+ * is a weight: `Training.kt`'s `calculateStatEfficiencyScore` scores a stat by how far
+ * current/target is behind, 5.0x while under 30% of target down to 0.3x once well over, and the
+ * stat-priority list is only a tiebreaker inside a 10% completion window. So raising Speed on a
+ * stayer pulls training away from the Stamina its 3000m+ goals need. Omit it for those and only
+ * the scenario fields change.
+ */
+const grandConcertFrom = (uraName: string, speedTarget?: number): CharacterPreset => {
+    const base = basePresets.find((p) => p.name === uraName && p.scenario === "URA Finale")
+    if (base === undefined) throw new Error(`grandConcertFrom: no URA Finale preset named "${uraName}"`)
+
+    // JSON round-trip rather than structuredClone: preset settings are plain JSON-safe data and
+    // this has to run under Hermes, where structuredClone is not dependable. A deep copy is
+    // required, not a spread, or the twin would share nested category objects with its URA source.
+    const settings = JSON.parse(JSON.stringify(base.settings)) as DeepPartial<Settings>
+    settings.general = { ...settings.general, scenario: "Grand Concert" }
+
+    // Smart racing, never the URA curated agenda. Every non-URA preset in this file does the same:
+    // a curated mandatory plan is tuned to the URA goal chain, and in mandatory-plan mode voluntary
+    // races happen ONLY on planned turns, so a plan that does not fit the scenario cannot recover
+    // from a fan shortfall. That is precisely what ended the third Grand Concert career, 618 fans
+    // short. The trio is set explicitly so a preset switch can never drag a previous plan across.
+    settings.racing = { ...settings.racing, enableRacingPlan: false, enableMandatoryRacingPlan: false, racingPlan: "" }
+
+    // A declared skill-spend objective is a per-scenario intent, not a property of the trainee:
+    // Copano Rickey's URA build declares `race_reward` to chase the Kashiwa Kinen Winner's Sash,
+    // which has no counterpart here. Dropping it lets Grand Concert fall back to the rank objective.
+    if (settings.skills !== undefined) delete settings.skills.skillSpendObjective
+
+    if (speedTarget !== undefined) {
+        const distance = base.settings.training?.preferredDistanceOverride
+        const key = distance === undefined ? undefined : SPEED_TARGET_KEY[distance]
+        if (key === undefined) throw new Error(`grandConcertFrom: "${uraName}" has no Speed target key for distance "${distance}"`)
+        settings.trainingStatTarget = { ...settings.trainingStatTarget, [key]: speedTarget }
+    }
+
+    return {
+        name: base.name,
+        ...(base.traineeName === undefined ? {} : { traineeName: base.traineeName }),
+        scenario: "Grand Concert",
+        settings,
+    }
+}
+
+/**
+ * Grand Concert test batch. The scenario's own concert system is trainee-agnostic (result tier is
+ * set solely by songs learned this cycle, with no stat or aptitude check and no fail state), so
+ * these are chosen to cover what DOES vary between trainees: goal chains, distance, surface, and
+ * the Senior lyric event's scenario-link bonus.
+ *
+ * Speed target rationale, per the weight-not-ceiling note on `grandConcertFrom`:
+ *   - Sprint and Mile Speed-primary builds take the full 1600 cap.
+ *   - Medium builds take 1400, using the headroom URA's flat cap denied them without starving
+ *     the Stamina their goal races still need.
+ *   - Long stayers take no Speed change at all; Stamina is their bottleneck and Grand Concert
+ *     already caps it at 1300, below URA's 1400.
+ *
+ * All are research-graded until a live career completes. Taiki Shuttle's Grand Concert preset is a
+ * hand-written literal above because it predates this helper and is the one validated build.
+ */
+const grandConcertPresets: CharacterPreset[] = [
+    // Scenario-link trainees: present as the trainee, the Senior Early Nov lyric event upgrades its
+    // skill hint from white to gold (Tachyon -> Come What May, Bourbon -> Concentration).
+    grandConcertFrom("Agnes Tachyon", 1400),
+    grandConcertFrom("Mihono Bourbon", 1400),
+    // Sprint and Mile: where the 1600 Speed cap actually pays.
+    grandConcertFrom("Sakura Bakushin O", 1600),
+    grandConcertFrom("King Halo", 1600),
+    grandConcertFrom("Maruzensky (Formula R)", 1600),
+    grandConcertFrom("Daiwa Scarlet", 1600),
+    // Dirt: the surface no Grand Concert career has run yet.
+    grandConcertFrom("Copano Rickey", 1600),
+    // Medium.
+    grandConcertFrom("Vodka", 1400),
+    // Long stayers: deliberately no Speed raise (see above).
+    grandConcertFrom("Super Creek"),
+    grandConcertFrom("Gold Ship"),
+]
+
+export const characterPresets: CharacterPreset[] = [...basePresets, ...grandConcertPresets]
