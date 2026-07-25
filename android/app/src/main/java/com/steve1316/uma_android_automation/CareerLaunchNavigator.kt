@@ -3165,7 +3165,8 @@ class CareerLaunchNavigator(private val context: Context) {
      * Uses a multi-detector strategy to click the CAREER button:
      * 1. Primary: ButtonCareerHome (full button, lowered confidence 0.6)
      * 2. Secondary: ButtonCareerHomeText (text-only crop, confidence 0.55)
-     * 3. Tertiary: OCR scan for the CAREER/Event label at the button position
+     * 3. Tertiary: ButtonCareerHomeTextActive (wordmark as it renders mid-career, confidence 0.6)
+     * 4. Quaternary: OCR scan for the CAREER/Event label at the button position
      *
      * Transition: Multi-detector click.
      */
@@ -3220,10 +3221,27 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.i(TAG, "[NAV] [HOME] Detector 2 did not match.")
         }
 
-        // Detector 3: OCR scan for the CAREER/Event label at the button's known position
+        // Detector 3: In-progress wordmark. Detectors 1 and 2 were both cut from the button as it
+        // looks with NO career running; while one IS running the game swaps in the active trainee's
+        // portrait and both miss (0.220 and 0.283 on a measured live frame). Since a mid-career
+        // lobby bounce is exactly when re-entry needs this button, that gap is the whole failure.
+        MessageLog.i(TAG, "[NAV] [HOME] Trying detector 3: ButtonCareerHomeTextActive (in-progress wordmark, confidence 0.6)...")
+        if (ButtonCareerHomeTextActive.check(iu, sourceBitmap = bitmap)) {
+            MessageLog.i(TAG, "[NAV] [HOME] Detector 3 matched. Clicking...")
+            if (ButtonCareerHomeTextActive.click(iu, sourceBitmap = bitmap)) {
+                MessageLog.i(TAG, "[NAV] [HOME] Detector 3 click succeeded.")
+                waitSafe(3.0)
+                return TransitionResult.Continue
+            }
+            MessageLog.w(TAG, "[NAV] [HOME] Detector 3 matched but click failed.")
+        } else {
+            MessageLog.i(TAG, "[NAV] [HOME] Detector 3 did not match.")
+        }
+
+        // Detector 4: OCR scan for the CAREER/Event label at the button's known position
         // (region bounds and word rules documented on ocrCareerLabelAtHomePosition, which the
         // deep home probe in detectScreenState shares).
-        MessageLog.i(TAG, "[NAV] [HOME] Trying detector 3: OCR scan for 'CAREER' text...")
+        MessageLog.i(TAG, "[NAV] [HOME] Trying detector 4: OCR scan for 'CAREER' text...")
         val matchedWord = ocrCareerLabelAtHomePosition(bitmap)
         if (matchedWord != null) {
             MessageLog.i(TAG, "[NAV] [HOME] OCR found '$matchedWord'. Tapping CAREER button area...")
@@ -3241,7 +3259,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // All detectors failed
         val screenshotPath = captureFailureScreenshot("HOME_SCREEN_career_click")
         return TransitionResult.Failed(
-            reason = "HOME_SCREEN detected but all CAREER button detectors failed (template x2, OCR x1). Screenshot: $screenshotPath",
+            reason = "HOME_SCREEN detected but all CAREER button detectors failed (template x3, OCR x1). Screenshot: $screenshotPath",
             transition = "HOME_SCREEN -> CAREER_ENTRY",
             isRecoverable = true,
             recommendedAction = "The CAREER button template may not match your game version. Provide a fresh screenshot of the home screen CAREER button area.",

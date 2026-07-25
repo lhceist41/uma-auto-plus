@@ -127,6 +127,25 @@ object ButtonCareerHomeText : ButtonInterface {
     override val template = Template("components/button/career_home_text", region = Region.bottomHalf, confidence = 0.55)
 }
 
+/**
+ * The CAREER button's wordmark as it renders while a career is IN PROGRESS.
+ *
+ * The two templates above were both cut from the no-career-in-progress button, which shows two fixed
+ * chibi trainees. Once a career is running the game swaps that art for the ACTIVE trainee's portrait
+ * and adds a date pill, so neither matches: measured against a live frame on 2026-07-25 they scored
+ * 0.220 and 0.283 against thresholds of 0.60 and 0.55. That is why the daily-reset lobby re-entry
+ * could never click CAREER, which is the one situation where it is needed, and it cost a career at
+ * turn 49.
+ *
+ * Cropped to the wordmark alone, starting past the portrait, because the portrait is trainee-specific
+ * and a template containing it would only ever match the one trainee it was cut from. The wordmark
+ * itself does not move with the trainee. Scored 1.000 on the frame it came from and at most 0.284 on
+ * lobby frames with no career running, so 0.6 sits in a wide gap rather than near either population.
+ */
+object ButtonCareerHomeTextActive : ButtonInterface {
+    override val template = Template("components/button/career_home_text_active", region = Region.bottomHalf, confidence = 0.6)
+}
+
 object ButtonHomeSpecialMissions : ButtonInterface {
     override val template = Template("components/button/home_special_missions")
 }
