@@ -36,8 +36,10 @@ If you use the run queue's trainee rotation and it stops with `Trainee '...' not
 
 For Grand Concert you start the career yourself in game, then press Start. The bot cannot page the
 scenario carousel to Grand Concert yet, so a run that begins on the lobby stops with an unsupported
-scenario message rather than picking the wrong scenario. Once the career is running, everything in it
-is automated, lessons and concerts included.
+scenario message rather than picking the wrong scenario. Once the career is running, the lessons and
+all five concerts are automated along with everything the bot normally handles. The one screen left
+for you is the final **Complete Career** tap: the bot spends any leftover lesson points first, then
+stops there and asks you to finish.
 
 For the same reason the run queue, trainee rotation, and automatic TP restore do not apply while
 Grand Concert is selected. Those settings are not rewritten, just not honored for this scenario, and

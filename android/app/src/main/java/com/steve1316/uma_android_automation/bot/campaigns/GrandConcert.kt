@@ -54,11 +54,11 @@ import com.steve1316.uma_android_automation.utils.grandConcertResultNextPresent
  * reads the trio and balances, scores them with the researched strategy weights
  * ([GrandConcertPolicy]), and buys through a verify-or-cancel gate that taps Learn only when the
  * confirmation dialog names exactly the intended card ([attemptLearn]). On the Complete Career
- * screen it drains the leftover points the same way before stopping. Concerts and the remaining
- * career-end steps (the Skills purchase, the Complete Career tap) are still manual: those
- * screens stop the run with a career-preserving handoff rather than let a generic
- * Confirm/Next/OK fall through onto them - a stray tap there can spend points or skip a
- * concert, and neither is recoverable.
+ * screen it drains the leftover points the same way before stopping. Concerts are driven by
+ * [runConcertEscort]; the Complete Career tap is still manual, and a concert screen the escort
+ * does not recognize falls back to the same manual handoff. Those stops preserve the career
+ * rather than let a generic Confirm/Next/OK fall through onto them - a stray tap there can
+ * spend points or skip a concert, and neither is recoverable.
  *
  * The handoff boundary is also why this class exists at all rather than reusing [UraFinale]:
  * a scenario whose unknown screens are LIVE needs its unknown-screen response to be "stop and
@@ -113,10 +113,10 @@ class GrandConcert(game: Game) : Campaign(game) {
         announcedSupportLevel = true
         MessageLog.w(
             TAG,
-            "[GRAND_CONCERT] Experimental supervised support: training, races, events, skills, and the Lesson shop " +
-                "(with a verify-before-Learn purchase gate) are automated; the concerts and the final career-completion " +
-                "steps are not. The run stops safely and asks for manual input on those screens, and the career is " +
-                "preserved so Start can resume it.",
+            "[GRAND_CONCERT] Experimental supervised support: training, races, events, skills, the Lesson shop " +
+                "(with a verify-before-Learn purchase gate), and the concerts are automated; the final " +
+                "career-completion step is not. The run stops safely and asks for manual input on that screen, and on " +
+                "any concert screen the escort does not recognize, with the career preserved so Start can resume it.",
         )
     }
 

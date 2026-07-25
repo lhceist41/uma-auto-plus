@@ -12,9 +12,10 @@ import com.steve1316.uma_android_automation.types.StatName
  *
  * Support status: the shared career loop (dates, training scoring, racing plan, events, skill
  * buying) drives a Grand Concert career exactly as it drives URA Finale. The scenario's own
- * systems - the Lesson shop, the five performance point types, and the concerts - are NOT
- * automated. They are read about here so the bot can reason and report, and they reach the
- * manual-handoff boundary rather than being clicked blind.
+ * systems - the Lesson shop, the five performance point types, and the concerts - are automated
+ * on top of that by the campaign class. What remains manual is the final Complete Career tap,
+ * plus any concert screen the escort does not recognize, which reaches the manual-handoff
+ * boundary rather than being clicked blind.
  *
  * Data provenance is tracked per fact ([Provenance]) because this file mixes three very
  * different evidence classes: strings pulled from the Global client's own master database,
