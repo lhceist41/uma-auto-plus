@@ -2039,7 +2039,13 @@ class CareerLaunchNavigator(private val context: Context) {
         if (transaction.winner == null && missing != null) {
             val attempt = if (transaction.pagerNavRetryUsed) 2 else 1
             when (val nav = navigateToPagerPage(side, missing, attempt)) {
-                PagerNavOutcome.Verified -> return TransitionResult.Continue
+                PagerNavOutcome.Verified -> {
+                    // Heading and dots both agreed we landed on this page. Remember it: the
+                    // keep-original fallback below can only trust a partial read of a page whose
+                    // identity was established independently of that read.
+                    transaction.markPagerPageVerified(missing)
+                    return TransitionResult.Continue
+                }
                 PagerNavOutcome.Unchanged -> {
                     if (transaction.usePagerNavRetry()) {
                         MessageLog.w(TAG, "[SPARKS] [CHOOSER] Retrying the pager swipe once.")
@@ -2061,12 +2067,38 @@ class CareerLaunchNavigator(private val context: Context) {
             val rerolled = transaction.pagerRead(SparkSetSide.REROLLED)!!
             val choice = SparkKeepPolicy.choose(original, rerolled, buildSparkChooserProfile())
             if (!choice.certain && !original.complete) {
-                // Not even the keep-original fallback is verifiable: the original page itself
-                // could not be read in full.
-                return sparkSelectionBlocked(
-                    transition,
-                    transaction,
-                    "neither set could be read completely (original ${original.termination.name}, rerolled ${rerolled.termination.name}); no choice is safe",
+                // The pager read of the Original page came up short. That used to end the queue,
+                // which is a harsh outcome for a choice that always has a safe answer: keeping the
+                // original is never a loss, because it is the set the career already earned.
+                //
+                // Confirm it anyway when three independent things line up. The pre-pager scan of the
+                // Original set was COMPLETE (it has to be, or the 30 TP would never have been spent),
+                // so the set's content is already known. The pager's own heading and dots confirmed
+                // which page is on screen, independently of any row read. And every row the short
+                // pager read did capture agrees with the leading rows of that known set, so nothing
+                // observed contradicts it. Known content, confirmed page, no contradiction.
+                //
+                // Anything less still blocks: an unverified page, a contradicted row, or no complete
+                // pre-pager read. The comparison itself never runs on partial data and the rerolled
+                // set is never confirmed this way, so this can only ever keep the original.
+                val known = transaction.originalRead
+                val corroborated =
+                    known != null &&
+                        known.complete &&
+                        transaction.pagerPageVerified(SparkSetSide.ORIGINAL) &&
+                        SparkScrollMerge.rowsAreConsistentPrefix(known.rows, original.rows)
+                if (!corroborated) {
+                    return sparkSelectionBlocked(
+                        transition,
+                        transaction,
+                        "neither set could be read completely (original ${original.termination.name}, rerolled ${rerolled.termination.name}); no choice is safe",
+                    )
+                }
+                MessageLog.w(
+                    TAG,
+                    "[SPARKS] [CHOOSER] The original pager page read short (${original.termination.name}, " +
+                        "${original.rows.size} of ${known!!.rows.size} rows), but it agrees with the complete " +
+                        "pre-pager capture on a verified ORIGINAL page. Keeping the original.",
                 )
             }
             val selected = transaction.selectWinner(choice)

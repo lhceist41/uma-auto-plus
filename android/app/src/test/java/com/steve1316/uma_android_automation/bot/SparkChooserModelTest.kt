@@ -300,4 +300,85 @@ class SparkChooserModelTest {
             assertEquals(SparkPagerResolution.Unreadable, resolvePagerSide(SparkSetSide.ORIGINAL, 3))
         }
     }
+
+    /**
+     * The corroboration test behind the keep-original fallback. A short pager read may only ever
+     * confirm a set that was already read completely, never define or extend one, so the rule is
+     * deliberately one-directional.
+     */
+    @Nested
+    @DisplayName("partial-read corroboration")
+    inner class ConsistentPrefix {
+        // The nine-row Original set from the 2026-07-25 Daiwa Scarlet career, whose pager re-read
+        // returned ALIGNMENT_FAILED and ended the queue.
+        private val known =
+            listOf(
+                row(SparkRowKind.STAT, 1, "Stamina"),
+                row(SparkRowKind.APTITUDE, 2, "Medium"),
+                row(SparkRowKind.UNIQUE, 2, "Resplendent Red Ace"),
+                white("Shuka Sho", 1),
+                white("Competitive Spirit O", 2),
+                white("Unyielding Spirit", 1),
+                white("Front Runner Corners O", 1),
+                white("Leader's Pride", 1),
+                white("Playtime's Over!", 2),
+            )
+
+        @Test
+        fun `a leading slice of the known set corroborates it`() {
+            assertTrue(SparkScrollMerge.rowsAreConsistentPrefix(known, known.take(8)))
+            assertTrue(SparkScrollMerge.rowsAreConsistentPrefix(known, known.take(1)))
+        }
+
+        @Test
+        fun `the complete set corroborates itself`() {
+            assertTrue(SparkScrollMerge.rowsAreConsistentPrefix(known, known))
+        }
+
+        @Test
+        fun `an empty partial read proves nothing`() {
+            assertFalse(SparkScrollMerge.rowsAreConsistentPrefix(known, emptyList()))
+        }
+
+        @Test
+        fun `a partial read longer than the known set is rejected`() {
+            assertFalse(SparkScrollMerge.rowsAreConsistentPrefix(known, known + white("Extra", 3)))
+        }
+
+        @Test
+        fun `a contradicted star count is rejected`() {
+            val contradicted = known.take(5).toMutableList()
+            contradicted[4] = white("Competitive Spirit O", 3)
+            assertFalse(SparkScrollMerge.rowsAreConsistentPrefix(known, contradicted))
+        }
+
+        @Test
+        fun `a contradicted name is rejected`() {
+            val contradicted = known.take(4).toMutableList()
+            contradicted[3] = white("Some Other Skill", 1)
+            assertFalse(SparkScrollMerge.rowsAreConsistentPrefix(known, contradicted))
+        }
+
+        @Test
+        fun `a contradicted kind is rejected`() {
+            val contradicted = known.take(3).toMutableList()
+            contradicted[1] = row(SparkRowKind.STAT, 2, "Medium")
+            assertFalse(SparkScrollMerge.rowsAreConsistentPrefix(known, contradicted))
+        }
+
+        @Test
+        fun `rows in the right set but the wrong order are rejected`() {
+            // Same content, shuffled: a suffix or reordering is not a prefix, so it cannot confirm.
+            assertFalse(SparkScrollMerge.rowsAreConsistentPrefix(known, known.drop(1).take(4)))
+        }
+
+        @Test
+        fun `an unreadable name still corroborates when kind and stars agree`() {
+            // The reader marks a row unreadable rather than guessing; rowsAlign already tolerates
+            // that, and the prefix rule inherits it so one garbled row cannot veto the fallback.
+            val partial = known.take(4).toMutableList()
+            partial[3] = SparkRowFact(SPARK_UNREADABLE_NAME, 1, SparkRowKind.WHITE, SparkWhiteClass.SKILL)
+            assertTrue(SparkScrollMerge.rowsAreConsistentPrefix(known, partial))
+        }
+    }
 }

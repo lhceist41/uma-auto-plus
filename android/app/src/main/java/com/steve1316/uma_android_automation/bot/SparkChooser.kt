@@ -142,6 +142,20 @@ object SparkScrollMerge {
         }
     }
 
+    /**
+     * True when [partial] agrees with the leading rows of [known] and adds nothing new.
+     *
+     * The spark list is read top-down, so a scan that dies partway through still holds the rows it
+     * did capture in list order. That makes "is this a prefix of the set I already read completely"
+     * the exact question worth asking: it can only ever confirm, never extend, so a partial read can
+     * corroborate a known set without ever being trusted to define one. An empty [partial] proves
+     * nothing and is rejected.
+     */
+    fun rowsAreConsistentPrefix(known: List<SparkRowFact>, partial: List<SparkRowFact>): Boolean {
+        if (partial.isEmpty() || partial.size > known.size) return false
+        return rowsAlign(known.subList(0, partial.size), partial)
+    }
+
     /** Merge [next] onto [merged], or null when no overlap aligns (no shared content) or more
      * than one aligns (ambiguous - the frames fit lists of different lengths). */
     fun merge(merged: List<SparkRowFact>, next: List<SparkRowFact>): List<SparkRowFact>? {

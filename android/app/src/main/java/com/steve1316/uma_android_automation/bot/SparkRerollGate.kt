@@ -129,6 +129,7 @@ internal class SparkRerollTransaction internal constructor(
 
     /** Sets read off the pager pages themselves (authoritative for the choice). */
     private val pagerReads = mutableMapOf<SparkSetSide, SparkSetReading>()
+    private val pagerPagesVerified = mutableSetOf<SparkSetSide>()
 
     var choice: SparkChoice? = null
         private set
@@ -184,6 +185,18 @@ internal class SparkRerollTransaction internal constructor(
         get() = !spendEverConfirmed && !terminal
 
     fun pagerRead(side: SparkSetSide): SparkSetReading? = pagerReads[side]
+
+    /**
+     * Records that the pager was independently confirmed to be showing [side], by both the heading
+     * OCR and the page dots agreeing. Only the swipe path can establish this, so it is a fact about
+     * navigation rather than about any read, and the keep-original fallback needs it: knowing WHICH
+     * page is on screen is what makes confirming a set from a partial read safe.
+     */
+    fun markPagerPageVerified(side: SparkSetSide) {
+        pagerPagesVerified.add(side)
+    }
+
+    fun pagerPageVerified(side: SparkSetSide): Boolean = side in pagerPagesVerified
 
     fun captureOriginal(read: SparkSetReading, traineeIdentity: String?, scenario: String?): SparkTxResult {
         if (state == SparkTxState.ORIGINAL_CAPTURED) return SparkTxResult(true, "already captured")
