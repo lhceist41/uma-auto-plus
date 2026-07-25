@@ -1216,7 +1216,13 @@ training events, skills, career end) plus both scenario systems:
   exist there and missed six times before this override was added).
 
 The **manual handoff** (`GrandConcertHandoff`) survives as the safety net rather than the normal
-path. It is a typed stop that is deliberately *not* an error: the game is alive, so the
+path. A career now runs start to finish without it: on 2026-07-25 a Taiki Shuttle career reached
+turn 75 (A+, estimated score 14176) and the career-end sequence drained four lessons with the
+leftover points, spent 492 SP down to 26 on the `careerComplete` knapsack plan, took the finalize
+gate's FINISH verdict, chose and confirmed the spark set, and walked the post-run screens back to
+Home with zero input. None of the navigator's post-run states are scenario-gated, which is why that
+tail comes for free. The handoff is a typed stop that is deliberately *not* an error: the game is
+alive, so the
 unknown-screen ladder's relaunch rung must not fire, no generic Confirm/Next/OK may be clicked, the
 career is left exactly where it is, and Start reattaches to it afterwards with no additional TP.
 Any escort state the machine does not recognise, any budget exhaustion, and any verification

@@ -77,8 +77,8 @@ export const scenarioCapabilities = (raw: string | null | undefined): ScenarioCa
 
 /** Player-facing explanation for why the queue features are unavailable. Shown on Home. */
 export const GRAND_CONCERT_WARNING =
-    "Grand Concert support is experimental and needs supervision. Training, races, events, skills, the Lesson shop, " +
-    "and the concerts are automated. The final Complete Career screen is not: the bot spends leftover lesson points " +
-    "first, then stops safely and asks you to finish there. It also stops safely if a concert reaches a screen it " +
-    "does not know. Either way the career is preserved, so you handle that screen in game and press Start to resume. " +
-    "Run queues, trainee rotation, and automatic TP restore are unavailable for this scenario."
+    "Grand Concert support is experimental and needs supervision. You start the career yourself, then press Start " +
+    "and the bot plays it through: training, races, events, skills, the Lesson shop, the concerts, and the career-end " +
+    "sequence back to the home screen. If a Lesson or concert screen reaches a state it does not recognize, it stops " +
+    "safely with the career preserved, so you handle that screen in game and press Start to resume. Run queues, " +
+    "trainee rotation, and automatic TP restore are unavailable for this scenario."
