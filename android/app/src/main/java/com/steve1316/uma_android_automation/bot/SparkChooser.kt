@@ -230,6 +230,105 @@ object SparkTextNorm {
     }
 
     fun nameInList(name: String?, list: Collection<String>): Boolean = list.any { namesEqual(name, it) }
+
+    /**
+     * Same-row name comparison for two reads OF THE SAME LIST (SPARKS screen vs the keep
+     * dialog). Tolerant one step past [namesEqual]: an unreadable side matches anything (the
+     * merge's rule), and one folded form containing the other counts as the same name when the
+     * shorter form is long enough to be distinctive. That absorbs single-glyph OCR fuzz such
+     * as the live "Unity CupP" vs "Unity Cup" (2026-07-21) without letting a genuinely
+     * different name pass: two different sparks in the same row position never differ by a
+     * contained prefix alone.
+     */
+    fun namesCompatible(a: String?, b: String?): Boolean {
+        if (a.isNullOrBlank() || b.isNullOrBlank()) return true
+        if (a == SPARK_UNREADABLE_NAME || b == SPARK_UNREADABLE_NAME) return true
+        val fa = fold(a).filter { it.isLetterOrDigit() }
+        val fb = fold(b).filter { it.isLetterOrDigit() }
+        if (fa.isEmpty() || fb.isEmpty()) return true
+        if (fa == fb) return true
+        val shorter = if (fa.length <= fb.length) fa else fb
+        val longer = if (fa.length <= fb.length) fb else fa
+        return shorter.length >= 5 && longer.contains(shorter)
+    }
+}
+
+/** Per-row star evidence the keep-dialog read carries alongside its facts: the counted stars
+ * plus how many slots were too ambiguous to classify. Kept probe-free so the verdict stays a
+ * pure function. */
+data class SparkStarEvidence(val stars: Int, val ambiguousSlots: Int)
+
+/** Outcome of one keep-dialog verification pass. */
+sealed class SparkKeepVerdict {
+    /** Every row matches the original read exactly: confirm. */
+    object Confirm : SparkKeepVerdict()
+
+    /** Names, kinds, order, and count all match and the only unresolved differences are star
+     * counts on rows whose evidence was ambiguous after every retry: confirm, logging the star
+     * check as corroborative. [rows] are the 1-based rows confirmed on semantics. */
+    data class ConfirmCorroborative(val rows: List<Int>) : SparkKeepVerdict()
+
+    /** A star mismatch with retry budget left: rescan a fresh frame before judging. */
+    object Retry : SparkKeepVerdict()
+
+    /** A proven contradiction: never confirm. [reason] is the exact block message. */
+    data class Block(val reason: String) : SparkKeepVerdict()
+}
+
+/**
+ * Evidence-fusion verdict for the ordinary keep confirmation (SPARKS_KEEP_CONFIRMATION only:
+ * the plain-"Sparks" dialog cannot switch sides, and the original set was already read
+ * completely on the SPARKS screen, so row names, kinds, order, and count are the primary
+ * confirmation evidence and star counts corroborate).
+ *
+ * Semantic evidence is judged first and blocks outright: a different row count, a kind
+ * mismatch, or a readable-name mismatch means the dialog is not showing the set this career
+ * rolled. Star mismatches alone are retried on fresh frames ([SparkKeepVerdict.Retry]) while
+ * budget remains - a single frame's star read has a proven transient failure mode (the
+ * 2026-07-21 Medium 3*-as-2* block) - and only a mismatch that REPRODUCES after every retry
+ * with unambiguous slot evidence blocks. A mismatch whose rows still carry ambiguous slots
+ * after the retries confirms corroboratively instead: names, order, kinds, and count match a
+ * set this career provably rolled, and the game offers no second set a keep could lose.
+ *
+ * The selected-side Original-vs-Rerolled confirmation deliberately does NOT use this rule:
+ * there a star misread can select the wrong side, so its strict verification stays.
+ */
+fun keepDialogVerdict(
+    original: List<SparkRowFact>,
+    dialog: List<SparkRowFact>,
+    evidence: List<SparkStarEvidence>?,
+    retriesUsed: Int,
+    maxRetries: Int,
+): SparkKeepVerdict {
+    if (dialog.size != original.size) {
+        return SparkKeepVerdict.Block(
+            "the keep dialog lists ${dialog.size} row(s) but the complete SPARKS screen read had ${original.size}; not confirming",
+        )
+    }
+    for (i in original.indices) {
+        if (original[i].kind != dialog[i].kind) {
+            return SparkKeepVerdict.Block(
+                "keep-dialog row ${i + 1} (${dialog[i].kind.wire}) contradicts the original set read on the SPARKS screen " +
+                    "(${original[i].kind.wire}); not confirming",
+            )
+        }
+        if (!SparkTextNorm.namesCompatible(original[i].name, dialog[i].name)) {
+            return SparkKeepVerdict.Block(
+                "keep-dialog row ${i + 1} (\"${dialog[i].name}\") contradicts the original set read on the SPARKS screen " +
+                    "(\"${original[i].name}\"); not confirming",
+            )
+        }
+    }
+    val starMismatches = original.indices.filter { original[it].stars != dialog[it].stars }
+    if (starMismatches.isEmpty()) return SparkKeepVerdict.Confirm
+    if (retriesUsed < maxRetries) return SparkKeepVerdict.Retry
+    val allAmbiguous = starMismatches.all { (evidence?.getOrNull(it)?.ambiguousSlots ?: 0) > 0 }
+    if (allAmbiguous) return SparkKeepVerdict.ConfirmCorroborative(starMismatches.map { it + 1 })
+    val i = starMismatches.first { (evidence?.getOrNull(it)?.ambiguousSlots ?: 0) == 0 }
+    return SparkKeepVerdict.Block(
+        "keep-dialog row ${i + 1} (${dialog[i].kind.wire}/${dialog[i].stars}*) contradicts the original set read on the SPARKS screen " +
+            "(${original[i].kind.wire}/${original[i].stars}*) with unambiguous star evidence on every retry; not confirming",
+    )
 }
 
 /** The pager page the bot is actually looking at, resolved from BOTH signals. */

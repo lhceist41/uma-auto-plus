@@ -47,8 +47,16 @@ val SPARKS_SCREEN_GEOMETRY = SparkListGeometry(firstRowY = 307, rowPitch = 119, 
 /** The "Keep this set of Sparks?" / Spark Selection Confirmation dialog list: shrink-wraps to
  * the set and lists it on one screen (measured live at 10 and at 11 rows from y=315). The
  * window allows one slot past the largest observed set so an 11-row set proves its own end
- * marker inside the first frame instead of spending a swipe to prove the list cannot move. */
-val SPARKS_CONFIRM_GEOMETRY = SparkListGeometry(firstRowY = 315, rowPitch = 119, maxRows = 12, starXs = listOf(855, 901, 947), debugPrefix = "sparkKeepRow")
+ * marker inside the first frame instead of spending a swipe to prove the list cannot move.
+ *
+ * starXs are the measured CENTERS of the three star glyphs (gold runs 835..856 / 881..902 /
+ * 926..947 on every confirmation-family capture, including the 2026-07-21 live-failure frame).
+ * The first calibration used 855/901/947 - the glyphs' last gold column - so a filled star's
+ * 5x5 mean was half background (third slot read r=220 against the r>200 gold test, vs 255 at
+ * center) and one live settle/glint frame undercounted Medium 3* as 2*, hard-blocking a
+ * finished no-spend career (2026-07-21 21:12). Centered sampling reads filled (255,216,78)
+ * vs empty (231,227,223): the blue channel alone separates by ~145. */
+val SPARKS_CONFIRM_GEOMETRY = SparkListGeometry(firstRowY = 315, rowPitch = 119, maxRows = 12, starXs = listOf(845, 891, 936), debugPrefix = "sparkKeepRow")
 
 /** The Spark Selection pager list: 8 full rows per page, 120 px pitch, stars on the SPARKS
  * screen's columns. A 10-row set shows 8 full + 1 clipped, so pages must scroll to read. */
@@ -111,6 +119,33 @@ fun classifySparkBar(r: Int, g: Int, b: Int): SparkRowKind? =
  * slots and every bar color (pink fails on blue >= 150, blue/green fail on red). */
 private fun isGoldStar(r: Int, b: Int): Boolean = r > 200 && b < 150
 
+/** How confidently one star slot reads. The bands come from the measured slot means on the
+ * confirmation captures: a filled glyph center is (255, 216, 78) and an empty slot is
+ * (231, 227, 223), so a comfortable filled read keeps b low and a comfortable empty read
+ * keeps b high. Everything between - edge-of-glyph means, mid-fade dims, glint frames - is
+ * AMBIGUOUS: evidence for a retry, never a silent lower count. */
+enum class SparkSlotRead { FILLED, EMPTY, AMBIGUOUS }
+
+fun classifyStarSlot(r: Int, b: Int): SparkSlotRead =
+    when {
+        r >= 235 && b <= 120 -> SparkSlotRead.FILLED
+        b >= 185 -> SparkSlotRead.EMPTY
+        else -> SparkSlotRead.AMBIGUOUS
+    }
+
+/** One star slot's raw evidence: the smoothed sample and its classification. */
+data class SparkSlotEvidence(val slot: Int, val r: Int, val g: Int, val b: Int, val read: SparkSlotRead)
+
+/** One parsed row with per-slot star evidence instead of a bare count. [filledCount] is the
+ * high-confidence star count; [ambiguousCount] > 0 marks a row whose count cannot be trusted
+ * from this frame alone. */
+data class SparkRowCellEvidence(val index: Int, val rowY: Int, val kind: SparkRowKind, val slots: List<SparkSlotEvidence>) {
+    val filledCount: Int get() = slots.count { it.read == SparkSlotRead.FILLED }
+    val ambiguousCount: Int get() = slots.count { it.read == SparkSlotRead.AMBIGUOUS }
+
+    fun toCell(): SparkRowCell = SparkRowCell(index, rowY, kind, filledCount)
+}
+
 /** One row slot as the pixels describe it; the caller adds the OCR name. */
 data class SparkRowCell(val index: Int, val rowY: Int, val kind: SparkRowKind, val stars: Int)
 
@@ -134,6 +169,26 @@ fun parseSparkRowCells(sampler: SparkPixelSampler, geometry: SparkListGeometry, 
         cells.add(SparkRowCell(i, y, kind, stars))
     }
     return cells
+}
+
+/** [parseSparkRowCells] with per-slot confidence evidence. Same walk, same bar-kind
+ * termination; the star slots carry their smoothed samples and three-way classification so
+ * the keep-confirmation verifier can tell a proven star count from a frame artifact. */
+fun parseSparkRowCellsWithEvidence(sampler: SparkPixelSampler, geometry: SparkListGeometry, frameHeight: Int): List<SparkRowCellEvidence> {
+    val rows = mutableListOf<SparkRowCellEvidence>()
+    for (i in 0 until geometry.maxRows) {
+        val y = geometry.firstRowY + i * geometry.rowPitch
+        if (y + 3 >= frameHeight) break
+        val (r, g, b) = meanRgb(sampler, SPARK_BAR_SAMPLE_X, y)
+        val kind = classifySparkBar(r, g, b) ?: break
+        val slots =
+            geometry.starXs.mapIndexed { slot, x ->
+                val (sr, sg, sb) = meanRgb(sampler, x, y)
+                SparkSlotEvidence(slot, sr, sg, sb, classifyStarSlot(sr, sb))
+            }
+        rows.add(SparkRowCellEvidence(i, y, kind, slots))
+    }
+    return rows
 }
 
 /**

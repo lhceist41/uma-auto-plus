@@ -48,6 +48,8 @@ class SparkScreenProbeFixtureTest {
             "umamusume_details",
             "rating_record",
             "keep_confirmation_plain",
+            "keep_confirmation_medium3",
+            "keep_confirmation_guts2",
         )
 
     @Nested
@@ -114,6 +116,173 @@ class SparkScreenProbeFixtureTest {
     }
 
     @Nested
+    @DisplayName("the 2026-07-21 star-undercount false block (keep_confirmation_medium3)")
+    inner class KeepConfirmationMedium3 {
+        /** The 6-row set the live career rolled and kept, in order (see PROVENANCE.md). */
+        private val liveSet =
+            listOf(
+                SparkRowKind.STAT to 2,
+                SparkRowKind.APTITUDE to 3,
+                SparkRowKind.UNIQUE to 2,
+                SparkRowKind.WHITE to 1,
+                SparkRowKind.WHITE to 1,
+                SparkRowKind.WHITE to 1,
+            )
+
+        @Test
+        fun `the Medium row reads three stars - the exact count the live scan dropped`() {
+            val cells = parseSparkRowCells(sampler("keep_confirmation_medium3"), SPARKS_CONFIRM_GEOMETRY, image("keep_confirmation_medium3").height)
+            assertEquals(SparkRowKind.APTITUDE to 3, cells[1].kind to cells[1].stars, "the 2026-07-21 block undercounted this row as 2*")
+        }
+
+        @Test
+        fun `all six rows match the screenshot, with the phantom tail past the set starless`() {
+            val cells = parseSparkRowCells(sampler("keep_confirmation_medium3"), SPARKS_CONFIRM_GEOMETRY, image("keep_confirmation_medium3").height)
+            assertEquals(liveSet, cells.take(6).map { it.kind to it.stars })
+            assertTrue(cells.size > 6 && cells[6].stars == 0, "the shrink-wrapped dialog body past the real set must stay starless")
+        }
+
+        @Test
+        fun `every slot of the live set reads with high confidence - no ambiguity on a settled frame`() {
+            val rows = parseSparkRowCellsWithEvidence(sampler("keep_confirmation_medium3"), SPARKS_CONFIRM_GEOMETRY, image("keep_confirmation_medium3").height)
+            assertEquals(listOf(2, 3, 2, 1, 1, 1), rows.take(6).map { it.filledCount })
+            assertEquals(0, rows.take(6).sumOf { it.ambiguousCount }, "centered sampling must leave no slot ambiguous on a settled frame")
+            assertEquals(listOf(SparkSlotRead.FILLED, SparkSlotRead.FILLED, SparkSlotRead.FILLED), rows[1].slots.map { it.read })
+        }
+
+        @Test
+        fun `the fixture is straight RGB, not a BGR-swapped bot save`() {
+            // The STAT bar is sky blue: blue-dominant in RGB. A BGR-swapped file (what the
+            // bot's own nav_failure camera writes) would read it red-dominant and fail here.
+            val p = image("keep_confirmation_medium3").getRGB(770, 315)
+            val r = (p shr 16) and 0xFF
+            val b = p and 0xFF
+            assertTrue(b > 240 && r < 150, "expected a blue-dominant STAT bar in RGB order, got r=$r b=$b")
+        }
+
+        @Test
+        fun `it wears the confirmation chrome and no other probe fires`() {
+            val s = sampler("keep_confirmation_medium3")
+            assertTrue(sparkConfirmationStructurePresent(s))
+            assertFalse(sparkPagerStructurePresent(s))
+            assertFalse(sparkIntroStructurePresent(s))
+            assertFalse(sparkRerolledStructurePresent(s))
+        }
+    }
+
+    @Nested
+    @DisplayName("the 2026-07-25 Grand Concert keep block (keep_confirmation_guts2)")
+    inner class KeepConfirmationGuts2 {
+        /**
+         * The 3-row set a failed Grand Concert career rolled, captured by adb while the live bot sat
+         * blocked on this dialog. The Sparks screen had already read it as Guts 2* / Pace Chaser 1* /
+         * Shooting for Victory! 1*, but the keep dialog's own read returned the first row as 0 stars,
+         * so the chooser refused to confirm and the run stopped with the career unfinalized. A short
+         * 3-row set shrink-wraps the dialog body, which is the geometry that undercount favours.
+         */
+        private val liveSet =
+            listOf(
+                SparkRowKind.STAT to 2,
+                SparkRowKind.APTITUDE to 1,
+                SparkRowKind.UNIQUE to 1,
+            )
+
+        @Test
+        fun `the Guts row reads two stars - the exact count the live block dropped to zero`() {
+            val cells = parseSparkRowCells(sampler("keep_confirmation_guts2"), SPARKS_CONFIRM_GEOMETRY, image("keep_confirmation_guts2").height)
+            assertEquals(SparkRowKind.STAT to 2, cells[0].kind to cells[0].stars, "the live block read this row as stat/0*")
+        }
+
+        @Test
+        fun `all three rows match the screenshot, with the shrink-wrapped tail starless`() {
+            val cells = parseSparkRowCells(sampler("keep_confirmation_guts2"), SPARKS_CONFIRM_GEOMETRY, image("keep_confirmation_guts2").height)
+            assertEquals(liveSet, cells.take(3).map { it.kind to it.stars })
+            assertTrue(cells.size > 3 && cells[3].stars == 0, "the empty dialog body past a 3-row set must stay starless")
+        }
+
+        @Test
+        fun `every slot of the live set reads with high confidence - no ambiguity on a settled frame`() {
+            val rows = parseSparkRowCellsWithEvidence(sampler("keep_confirmation_guts2"), SPARKS_CONFIRM_GEOMETRY, image("keep_confirmation_guts2").height)
+            assertEquals(listOf(2, 1, 1), rows.take(3).map { it.filledCount })
+            assertEquals(0, rows.take(3).sumOf { it.ambiguousCount }, "centered sampling must leave no slot ambiguous on a settled frame")
+        }
+
+        @Test
+        fun `the fixture is straight RGB, not a BGR-swapped bot save`() {
+            val p = image("keep_confirmation_guts2").getRGB(770, 315)
+            val r = (p shr 16) and 0xFF
+            val b = p and 0xFF
+            assertTrue(b > 200 && r < 150, "expected a blue-dominant STAT bar in RGB order, got r=$r b=$b")
+        }
+
+        @Test
+        fun `it wears the confirmation chrome and no other probe fires`() {
+            val s = sampler("keep_confirmation_guts2")
+            assertTrue(sparkConfirmationStructurePresent(s))
+            assertFalse(sparkPagerStructurePresent(s))
+            assertFalse(sparkIntroStructurePresent(s))
+            assertFalse(sparkRerolledStructurePresent(s))
+        }
+    }
+
+    @Nested
+    @DisplayName("star-slot centering and confidence")
+    inner class StarSlots {
+        /** Gold-run centers along one row's star band, using the production gold thresholds
+         * on raw pixels. */
+        private fun goldRunCenters(name: String, rowY: Int): List<Int> {
+            val img = image(name)
+            val centers = mutableListOf<Int>()
+            var start = -1
+            for (x in 810..1004) {
+                val p = img.getRGB(x, rowY)
+                val gold = ((p shr 16) and 0xFF) > 200 && (p and 0xFF) < 150
+                if (gold && start < 0) start = x
+                if (!gold && start >= 0) {
+                    if (x - start >= 8) centers.add((start + x - 1) / 2)
+                    start = -1
+                }
+            }
+            return centers
+        }
+
+        @Test
+        fun `the confirmation star columns sit on the measured glyph centers, on every confirmation-family fixture`() {
+            // The original calibration sampled the glyphs' last gold column (855/901/947), so
+            // a filled star's smoothed mean was half background and one live frame undercounted
+            // Medium 3* as 2* (2026-07-21). This pins the columns to the measured run centers.
+            val threeStarRows =
+                listOf(
+                    "keep_confirmation_medium3" to (SPARKS_CONFIRM_GEOMETRY.firstRowY + 1 * SPARKS_CONFIRM_GEOMETRY.rowPitch),
+                    "confirmation_original" to (SPARKS_CONFIRM_GEOMETRY.firstRowY + 4 * SPARKS_CONFIRM_GEOMETRY.rowPitch),
+                )
+            for ((fixture, rowY) in threeStarRows) {
+                val centers = goldRunCenters(fixture, rowY)
+                assertEquals(3, centers.size, "$fixture: expected a 3-star row at y=$rowY")
+                for ((center, configured) in centers.zip(SPARKS_CONFIRM_GEOMETRY.starXs)) {
+                    assertTrue(kotlin.math.abs(center - configured) <= 3, "$fixture: configured column $configured is off the measured glyph center $center")
+                }
+            }
+            val twoStar = goldRunCenters("keep_confirmation_plain", SPARKS_CONFIRM_GEOMETRY.firstRowY + 7 * SPARKS_CONFIRM_GEOMETRY.rowPitch)
+            assertEquals(2, twoStar.size, "keep_confirmation_plain: expected a 2-star row")
+            for ((center, configured) in twoStar.zip(SPARKS_CONFIRM_GEOMETRY.starXs)) {
+                assertTrue(kotlin.math.abs(center - configured) <= 3, "keep_confirmation_plain: configured column $configured vs measured center $center")
+            }
+        }
+
+        @Test
+        fun `slot classification separates the measured populations with an ambiguous band between`() {
+            // Measured means: filled glyph center (255,216,78); empty slot (231,227,223); the
+            // 2026-07-21 edge-of-glyph read (220,186,88); a dimmed filled center.
+            assertEquals(SparkSlotRead.FILLED, classifyStarSlot(255, 78))
+            assertEquals(SparkSlotRead.EMPTY, classifyStarSlot(231, 223))
+            assertEquals(SparkSlotRead.EMPTY, classifyStarSlot(202, 197))
+            assertEquals(SparkSlotRead.AMBIGUOUS, classifyStarSlot(220, 88), "the live edge read must grade as evidence for a retry, never a silent lower count")
+            assertEquals(SparkSlotRead.AMBIGUOUS, classifyStarSlot(229, 70), "a dimmed filled center must not read as a confident empty")
+        }
+    }
+
+    @Nested
     @DisplayName("state classification: each screen matches exactly its own structural probe")
     inner class Classification {
         private fun matrix(name: String): List<Boolean> {
@@ -142,6 +311,8 @@ class SparkScreenProbeFixtureTest {
                     // Shares the confirmation chrome with the post-reroll selection dialog on
                     // purpose: only the pill text and the transaction separate the two.
                     "keep_confirmation_plain" to listOf(false, true, false, false),
+                    "keep_confirmation_medium3" to listOf(false, true, false, false),
+                    "keep_confirmation_guts2" to listOf(false, true, false, false),
                 )
             for (name in allFixtures) {
                 assertEquals(expected[name], matrix(name), "probe matrix (pager/confirmation/intro/rerolled) for $name")

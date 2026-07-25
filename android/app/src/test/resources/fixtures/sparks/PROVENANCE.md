@@ -43,3 +43,24 @@ The 11 rows in this capture, in order, matching the career log exactly: Guts 1* 
 Turf 2* (aptitude), Presents from X 1* (unique), then the whites Japanese Derby 1*,
 Takarazuka Kinen 1*, Hakodate Racecourse 1*, Homestretch Haste 1*, Passing Pro 2*,
 Tactical Tweak 1*, Ignited Spirit PWR 2*, Unity Cup 2*.
+
+## Third capture: the 2026-07-21 star-undercount false block
+
+The scanner read this exact dialog's Medium row as 2-star (the SPARKS screen had correctly
+read 3-star seconds earlier) and hard-blocked a finished no-spend career. The frame is the
+regression fixture for the star-slot recalibration: the old star columns (855/901/947) sat on
+the glyphs' last gold column, and this capture is one of the three frames the corrected
+centers (845/891/936) were measured on.
+
+| Fixture | Source | Shows |
+|---|---|---|
+| keep_confirmation_guts2.png | adb screencap 2026-07-25 01:52 | The keep confirmation of a FAILED Grand Concert career (Taiki Shuttle, C rank): a 3-row set, Guts 2* (stat) / Pace Chaser 1* (aptitude) / Shooting for Victory! 1* (unique). Captured while the live bot sat blocked on it: the Sparks screen had read Guts as 2*, the keep dialog's own read returned 0*, and the chooser refused to confirm, leaving the career unfinalized. A 3-row set shrink-wraps the dialog body, the geometry the undercount favours. |
+| keep_confirmation_medium3.png | MuMu-20260721-211251-976.png | "Confirmation" dialog, plain green `Sparks` pill, the 6-row kept set with Medium at three filled stars, Cancel + Confirm |
+
+Byte-identical copy of the maintainer's MuMu screenshot (native RGB, 1080x1920), taken
+2026-07-21 21:12 local while the blocked dialog sat on screen. SHA-256
+`79b9f985cb7bb7e48d72e7f508dc27e1c969aa0836caa2446b1bb006ac655570`.
+
+The 6 rows, in order, matching the career log exactly: Speed 2* (stat), Medium 3*
+(aptitude), Behold Thine Emperor's Divine Might 2* (unique), then the whites Arima Kinen 1*,
+Ramp Up 1*, Unity Cup 1*.
