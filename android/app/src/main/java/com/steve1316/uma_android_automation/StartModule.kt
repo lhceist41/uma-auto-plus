@@ -29,6 +29,7 @@ import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.GrandConcertScenario
 import com.steve1316.uma_android_automation.bot.SparkRerollGate
 import com.steve1316.uma_android_automation.bot.TaskResult
 import com.steve1316.uma_android_automation.bot.TaskResultCode
@@ -335,6 +336,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          */
         fun loadRotationConfig(): RotationConfig {
             if (!SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false)) {
+                return RotationConfig(false, 1, emptyList())
+            }
+            // Rotation is a queue feature, and the queue is unavailable for Grand Concert (see
+            // the capability gate at the queue setup). Disabling it here as well keeps the two
+            // decisions from disagreeing: a rotation cycle with no queue to advance it would
+            // re-apply presets for a career that only ever runs once.
+            if (GrandConcertScenario.matches(SettingsHelper.getStringSetting("general", "scenario"))) {
                 return RotationConfig(false, 1, emptyList())
             }
             val switchEvery = maxOf(1, SettingsHelper.getIntSetting("runQueue", "switchEveryNRuns", 3))
@@ -1395,7 +1403,23 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 }
 
                 // Read queue settings from SQLite.
-                val enableRunQueue = SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", false)
+                //
+                // Grand Concert is capability-gated to a single supervised run: its Lesson and
+                // concert screens are not automated and stop for manual input, so a queue would
+                // stall on its first career with nobody watching, and trainee rotation and the
+                // TP-restore budget both exist only to keep a queue fed. The user's stored queue
+                // settings are NOT rewritten - they are simply not honored for this scenario, and
+                // Home says so - so switching back to another scenario restores them intact.
+                val scenarioForQueue = GrandConcertScenario.normalizeScenarioKey(SettingsHelper.getStringSetting("general", "scenario"))
+                val queueSupported = !GrandConcertScenario.matches(scenarioForQueue)
+                val enableRunQueue = SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", false) && queueSupported
+                if (!queueSupported && SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", false)) {
+                    MessageLog.w(
+                        TAG,
+                        "[QUEUE] Grand Concert runs as a single supervised career: the run queue, trainee rotation, and " +
+                            "automatic TP restore are unavailable for this scenario. Running one career instead.",
+                    )
+                }
                 val totalRuns = if (enableRunQueue) SettingsHelper.getIntSetting("runQueue", "totalRuns", 2) else 1
                 val delayBetweenRuns = SettingsHelper.getIntSetting("runQueue", "delayBetweenRunsSeconds", 15)
                 val stopOnError = SettingsHelper.getBooleanSetting("runQueue", "stopOnError", false)

@@ -15,6 +15,7 @@ import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.GrandConcertScenario
 import com.steve1316.uma_android_automation.bot.SKILL_POINTS_UNREADABLE
 import com.steve1316.uma_android_automation.bot.parseSkillPointsText
 import com.steve1316.uma_android_automation.components.ButtonRaceListFullStats
@@ -2085,12 +2086,22 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @return The number of turns remaining, or -1 if detection fails.
      */
     fun determineTurnsRemainingBeforeNextGoal(): Int {
+        // Grand Concert: the turn-box "N turns left" digit misreads under threshold OCR (live: a single
+        // "8" read as "38"), which is worse than a safe standdown, and the URA region otherwise lands on
+        // GC's "Concert in N" banner. Return -1 (stands down the deadline/fan-emergency racing logic).
+        // When GC racing matters, derive turns-to-goal from the now-working date + concert schedule
+        // instead of this indicator; that is more reliable than OCRing the gradient digits.
+        if (GrandConcertScenario.matches(game.scenario)) return -1
+
         val (energyTextLocation, sourceBitmap) = LabelEnergy.find(this)
 
         if (energyTextLocation != null) {
             // Determine crop region based on the current scenario.
+            // Grand Concert's turn-box "N turns left" sits where Unity Cup's does (both add top-left
+            // panels URA lacks); the URA region (-246,-100) instead lands on GC's "Concert in N" banner
+            // and read the label, not a number. Share the Unity Cup region, which frames the digits.
             val (offsetX, offsetY, width, height) =
-                if (game.scenario == "Unity Cup") {
+                if (game.scenario == "Unity Cup" || GrandConcertScenario.matches(game.scenario)) {
                     listOf(-260, -137, relWidth(100), relHeight(80))
                 } else {
                     listOf(-246, -100, relWidth(140), relHeight(95))
@@ -2187,8 +2198,11 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
 
         // Main screen detection path.
         val (energyLocation, sourceBitmap) = LabelEnergy.find(this)
+        // Grand Concert shifts the date banner right of the Energy label (its top-left carries the Hype
+        // panel, turn box, and goal), so the URA offset (-268) window ends mid-date and OCR read only
+        // "Classic". The Unity Cup -40 offset already spans the full date, so Grand Concert shares it.
         val offsetX =
-            if (game.scenario == "Unity Cup") {
+            if (game.scenario == "Unity Cup" || GrandConcertScenario.matches(game.scenario)) {
                 -40
             } else {
                 -268

@@ -22,6 +22,7 @@ import { bumpSettingsRevision, createSingleFlight } from "../../lib/launchConfig
 import { presetCharacter, presetOutfit } from "../../data/presetMeta"
 import { deriveInGameName, deriveExcludeOutfits } from "../../lib/rotationSnapshots"
 import { presetObjectiveOf } from "../../lib/adaptiveSkillPolicy"
+import { GRAND_CONCERT_KEY, GRAND_CONCERT_WARNING, isGrandConcert, scenarioCapabilities } from "../../lib/scenarioKey"
 import { useNavigation } from "@react-navigation/native"
 
 const styles = StyleSheet.create({
@@ -61,6 +62,11 @@ const scenarios = [
     {
         value: "Trackblazer",
         label: "Trackblazer",
+        disabled: false,
+    },
+    {
+        value: GRAND_CONCERT_KEY,
+        label: "Grand Concert (experimental)",
         disabled: false,
     },
     {
@@ -270,7 +276,13 @@ const Home = () => {
         if (presetSaveState === "saving") return "Saving preset..."
         const scenario = bsc.settings.general.scenario
         if (!scenario) return undefined
-        if (bsc.settings.runQueue.enableRunQueue) return `Start Queue (${bsc.settings.runQueue.totalRuns} runs)`
+        // Capability gate, applied at READ time rather than by rewriting the user's settings:
+        // Grand Concert runs supervised (its Lesson and concert screens stop for manual input),
+        // so a multi-run queue would just stall on run 1 with nobody watching. The stored
+        // queue settings are left untouched for every other scenario.
+        if (bsc.settings.runQueue.enableRunQueue && scenarioCapabilities(scenario).runQueue) {
+            return `Start Queue (${bsc.settings.runQueue.totalRuns} runs)`
+        }
         return `Start · ${scenario}`
     }, [isRunning, presetSaveState, bsc.settings.general.scenario, bsc.settings.runQueue.enableRunQueue, bsc.settings.runQueue.totalRuns])
 
@@ -777,6 +789,27 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                         </View>
                         <ChevronRight size={18} color={colors.foreground} opacity={0.5} />
                     </TouchableOpacity>
+                    {isGrandConcert(bsc.settings.general.scenario) && (
+                        <View
+                            style={{
+                                flexDirection: "row",
+                                alignItems: "flex-start",
+                                marginTop: 6,
+                                paddingHorizontal: 10,
+                                paddingVertical: 8,
+                                backgroundColor: "rgba(234, 179, 8, 0.15)",
+                                borderLeftWidth: 3,
+                                borderLeftColor: "#eab308",
+                                borderRadius: 6,
+                            }}
+                        >
+                            <AlertTriangle size={16} color="#eab308" style={{ marginRight: 6, marginTop: 2 }} />
+                            <Text style={{ flex: 1, fontSize: 12, color: colors.foreground, lineHeight: 16 }}>
+                                <Text style={{ fontWeight: "700", color: "#eab308" }}>Supervision needed: </Text>
+                                {GRAND_CONCERT_WARNING}
+                            </Text>
+                        </View>
+                    )}
                     {presetAdvisory?.kind === "avoid" && (
                         <View
                             style={{

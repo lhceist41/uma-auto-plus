@@ -12,6 +12,7 @@ import com.steve1316.uma_android_automation.components.ButtonAgenda
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonChangeRunningStyle
 import com.steve1316.uma_android_automation.components.ButtonClose
+import com.steve1316.uma_android_automation.components.ButtonInterface
 import com.steve1316.uma_android_automation.components.ButtonMyAgendas
 import com.steve1316.uma_android_automation.components.ButtonNext
 import com.steve1316.uma_android_automation.components.ButtonNextRaceEnd
@@ -22,6 +23,7 @@ import com.steve1316.uma_android_automation.components.ButtonRaceExclamation
 import com.steve1316.uma_android_automation.components.ButtonRaceListFullStats
 import com.steve1316.uma_android_automation.components.ButtonRaceManual
 import com.steve1316.uma_android_automation.components.ButtonRaces
+import com.steve1316.uma_android_automation.components.ButtonRacesGrandConcert
 import com.steve1316.uma_android_automation.components.ButtonSkip
 import com.steve1316.uma_android_automation.components.ButtonTryAgainAlt
 import com.steve1316.uma_android_automation.components.ButtonViewResults
@@ -68,6 +70,14 @@ import kotlin.math.abs
  * @property campaign A reference to the current [Campaign] instance.
  */
 class Racing(private val game: Game, private val campaign: Campaign) {
+    /**
+     * The career screen's Races button for the active scenario. Grand Concert restyles it, so the
+     * stock template misses there and every voluntary race silently became impossible. Resolved per
+     * access rather than cached because the scenario is read from live game state.
+     */
+    private val racesButton: ButtonInterface
+        get() = if (GrandConcertScenario.matches(game.scenario)) ButtonRacesGrandConcert else ButtonRaces
+
     /** Whether to enable farming fans through extra races. */
     private val enableFarmingFans = SettingsHelper.getBooleanSetting("racing", "enableFarmingFans")
 
@@ -653,14 +663,14 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Navigate to the race selection screen.
         // We only proceed if the button is enabled AND we successfully click it.
         // Everything else returns from this function.
-        when (ButtonRaces.checkDisabled(game.imageUtils)) {
+        when (racesButton.checkDisabled(game.imageUtils)) {
             true -> {
                 MessageLog.i(TAG, "[RACE] Races button is disabled. Skipping loading the race agenda.")
                 return
             }
 
             false -> {
-                if (ButtonRaces.click(game.imageUtils)) {
+                if (racesButton.click(game.imageUtils)) {
                     MessageLog.i(TAG, "[RACE] Clicked the Races button. Proceeding to load the race agenda...")
                 } else {
                     MessageLog.w(TAG, "[WARN] loadUserRaceAgenda:: Detected the Races button but failed to click it. Skipping loading the race agenda.")
@@ -1229,7 +1239,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             } else if (campaign.date.isSummer() && !(skipSummerTrainingForAgenda && enableUserInGameRaceAgenda)) {
                 MessageLog.i(TAG, "[RACE] It is currently Summer right now. Stopping extra race check.")
                 return false
-            } else if (ButtonRaces.checkDisabled(game.imageUtils) == true) {
+            } else if (racesButton.checkDisabled(game.imageUtils) == true) {
                 MessageLog.i(TAG, "[RACE] Extra Races button is currently locked. Stopping extra race check.")
                 return false
             }
@@ -2794,7 +2804,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         MessageLog.v(TAG, "[RACE] Starting Racing process on ${campaign.date}.")
 
         // If the races button exists AND is disabled, we can exit early since we know that we're at the home screen and the bot cannot race.
-        if (ButtonRaces.checkDisabled(game.imageUtils) == true) {
+        if (racesButton.checkDisabled(game.imageUtils) == true) {
             MessageLog.v(TAG, "[RACE] Races are locked. Canceling the racing process and doing something else.")
             clearRacingRequirementFlags()
             MessageLog.v(TAG, "********************")
@@ -2821,12 +2831,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             // Check for the consecutive race dialog before proceeding.
             campaign.handleDialogs(args = mapOf("overrideIgnoreConsecutiveRaceWarning" to true))
             return handleMandatoryRace()
-        } else if (!campaign.trainee.bHasCompletedMaidenRace && !isScheduledRace && ButtonRaces.click(game.imageUtils)) {
+        } else if (!campaign.trainee.bHasCompletedMaidenRace && !isScheduledRace && racesButton.click(game.imageUtils)) {
             game.wait(1.0, skipWaitingForLoading = true)
             // Check for the consecutive race dialog before proceeding.
             campaign.handleDialogs(args = mapOf("overrideIgnoreConsecutiveRaceWarning" to true))
             return handleMaidenRace()
-        } else if ((!campaign.date.bIsPreDebut && ButtonRaces.click(game.imageUtils)) || isScheduledRace) {
+        } else if ((!campaign.date.bIsPreDebut && racesButton.click(game.imageUtils)) || isScheduledRace) {
             var overrideIgnore = false
             if (isScheduledRace || hasFanRequirement || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement) {
                 MessageLog.v(TAG, "[RACE] Racing requirement is active. Ignoring consecutive race warning.")

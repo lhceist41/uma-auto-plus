@@ -4,6 +4,7 @@ import { Divider } from "react-native-paper"
 import { useTheme } from "../../context/ThemeContext"
 import { BotStateContext } from "../../context/BotStateContext"
 import { SearchPageProvider } from "../../context/SearchPageContext"
+import CustomSelect from "../../components/CustomSelect"
 import CustomSlider from "../../components/CustomSlider"
 import CustomCheckbox from "../../components/CustomCheckbox"
 import CustomTitle from "../../components/CustomTitle"
@@ -450,6 +451,25 @@ const ScenarioOverridesSettings = () => {
                                 </View>
                             </View>
                         </View>
+                    </View>
+
+                    <Divider className="my-4" />
+
+                    <View className="m-1">
+                        <CustomTitle title="Grand Concert Overrides" description="Specific overrides for the Grand Concert scenario." />
+                        <CustomSelect
+                            label="Quick Mode"
+                            description="Which option the bot picks on the Quick Mode Settings dialog when a Grand Concert career starts. Quick Mode only shortens event presentation; it does not change training or rewards."
+                            searchId="grand-concert-quick-mode"
+                            value={scenarioOverrides.grandConcertQuickMode}
+                            onValueChange={(value) => value && updateOverrideSetting("grandConcertQuickMode", value)}
+                            options={[
+                                { value: "dont_use", label: "Don't use Quick Mode" },
+                                { value: "shorten_all", label: "Shorten all events" },
+                                { value: "scenario_only", label: "Only shorten scenario events" },
+                                { value: "trainee_only", label: "Only shorten trainee events" },
+                            ]}
+                        />
                     </View>
                 </ScrollView>
             </SearchPageProvider>

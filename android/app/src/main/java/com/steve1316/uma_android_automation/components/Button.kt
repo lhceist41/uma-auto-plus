@@ -551,12 +551,49 @@ object ButtonTrainingWit : ButtonInterface {
     override val template = Template("components/button/training_wit", region = Region.bottomHalf)
 }
 
+// Grand Concert restyles the five facility buttons (smaller circles, a "Lvl N" sublabel, and an
+// animated performance-type badge), so the URA button-label templates above score ~0.62-0.75 there
+// and every goToStat/executeTraining click silently found nothing (the bot then rested every turn).
+// These variants are cut from live Grand Concert captures: the facility-name strip inside the
+// circle, below the badge zone and excluding the mutable "Lvl N" line. They match the unselected
+// and the enlarged selected state of their button, and nothing else on the screen.
+
+object ButtonTrainingSpeedGrandConcert : ButtonInterface {
+    override val template = Template("components/button/training_speed_grandconcert", region = Region.bottomHalf)
+}
+
+object ButtonTrainingStaminaGrandConcert : ButtonInterface {
+    override val template = Template("components/button/training_stamina_grandconcert", region = Region.bottomHalf)
+}
+
+object ButtonTrainingPowerGrandConcert : ButtonInterface {
+    override val template = Template("components/button/training_power_grandconcert", region = Region.bottomHalf)
+}
+
+object ButtonTrainingGutsGrandConcert : ButtonInterface {
+    override val template = Template("components/button/training_guts_grandconcert", region = Region.bottomHalf)
+}
+
+object ButtonTrainingWitGrandConcert : ButtonInterface {
+    override val template = Template("components/button/training_wit_grandconcert", region = Region.bottomHalf)
+}
+
 object ButtonTraining : ButtonInterface {
     override val template = Template("components/button/training", region = Region.bottomHalf)
 }
 
 object ButtonRaces : ButtonInterface {
     override val template = Template("components/button/races", region = Region.bottomHalf)
+}
+
+// Grand Concert restyles the career screen's Races button (different label weight and pink), so the
+// stock template scores 0.707 on it - just under the 0.80 bar. Every voluntary race goes through a
+// click on this button, so the miss made maiden races, extra races and the fan-shortfall safety net
+// silently impossible: a Taiki run died in the Classic year 618 fans short of its goal while the
+// bot retried a race it could never enter. Mandatory races were unaffected (they enter via the
+// race-day ribbon), which is why it stayed hidden for two full careers.
+object ButtonRacesGrandConcert : ButtonInterface {
+    override val template = Template("components/button/races_grandconcert", region = Region.bottomHalf)
 }
 
 object ButtonHomeFansInfo : ButtonInterface {

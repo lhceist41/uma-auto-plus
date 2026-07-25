@@ -1,0 +1,228 @@
+package com.steve1316.uma_android_automation.bot
+
+import com.steve1316.uma_android_automation.types.StatName
+
+/**
+ * The Grand Concert training-turn model: the training preview, the scenario state either side of
+ * a turn, and a pure verifier that checks one against the other.
+ *
+ * This exists because Grand Concert adds a fifth output to every training - performance points -
+ * on top of the ordinary stat gains, and gates scheduled lessons on the balance of those points.
+ * A turn is only "understood" when the performance arithmetic, the scheduled-lesson deficits, and
+ * the debut/concert countdowns all reconcile; the ordinary stat gains are the ONE part that a
+ * post-training event can legitimately perturb, so they are verified separately and softly.
+ *
+ * Everything here is total, Android-free, and JUnit-pinned. Pixel reading lives in
+ * [com.steve1316.uma_android_automation.utils.GrandConcertProbes]; nothing here taps.
+ */
+
+/**
+ * The per-facility performance-point type is RANDOM PER TURN and shown by an icon on each
+ * facility button (the client's own help text: "The performance type in which you can acquire
+ * points through each training session will differ each turn."). The static table below is the
+ * facility's PRIMARY type as documented for the Japanese version, and it is COMMUNITY_MODEL: it
+ * is a prior, never an answer. The bot must read the per-turn icon and let it override this.
+ *
+ * The 2026-07-23 fixture is the proof: Guts training previewed Dance that turn, while this static
+ * map says Guts -> Visual. A bot that trusted the static map would mis-attribute the 13 points.
+ */
+object GrandConcertFacilityModel {
+    private val STATIC_PRIMARY: Map<StatName, PerformancePointType> =
+        mapOf(
+            StatName.SPEED to PerformancePointType.DANCE,
+            StatName.STAMINA to PerformancePointType.PASSION,
+            StatName.POWER to PerformancePointType.VOCAL,
+            StatName.GUTS to PerformancePointType.VISUAL,
+            StatName.WIT to PerformancePointType.COMPOSURE,
+        )
+
+    /** The documented primary type for a facility. COMMUNITY_MODEL: a fallback for logging only,
+     * never a substitute for the observed per-turn icon. */
+    fun staticPrimaryType(facility: StatName): PerformancePointType =
+        STATIC_PRIMARY[facility] ?: PerformancePointType.DANCE
+
+    val staticProvenance: Provenance = Provenance.COMMUNITY_MODEL
+}
+
+/**
+ * One training facility's preview as read off the training screen.
+ *
+ * [statGains] holds exactly the stats the preview annotated with a "+N" (Speed/Power/Guts on the
+ * fixture); a stat absent from the map previewed no gain, which is DIFFERENT from a stat whose
+ * gain could not be read (that would simply not be asserted). [performanceGains] is the per-turn
+ * performance points, keyed by the OBSERVED type - normally one entry, two when friendship
+ * training splits across types.
+ */
+data class GrandConcertTrainingPreview(
+    val facility: StatName,
+    val level: Int,
+    val failureChance: Int?,
+    val statGains: Map<StatName, Int>,
+    val skillPointGain: Int?,
+    val performanceGains: Map<PerformancePointType, Int>,
+    val visibleParticipants: Int?,
+) {
+    /** The gain the preview showed for [stat] (0 when the preview annotated none). */
+    fun previewedStatGain(stat: StatName): Int = statGains[stat] ?: 0
+
+    /** The single observed performance type, or null when zero or more than one was shown. The
+     * "more than one" case (friendship training) is handled by iterating [performanceGains]. */
+    val observedPerformanceType: PerformancePointType?
+        get() = performanceGains.keys.singleOrNull()
+
+    /** True when the observed per-turn type disagrees with the static facility prior - the exact
+     * situation the per-turn icon exists to resolve, and the reason a static map must not be
+     * trusted. */
+    val performanceTypeOverridesStatic: Boolean
+        get() = observedPerformanceType?.let { it != GrandConcertFacilityModel.staticPrimaryType(facility) } ?: false
+}
+
+/**
+ * Scenario state at one instant. [scheduledCost] is the aggregate performance-point cost of the
+ * lessons the player has scheduled, per type; the on-screen "N more" pills are the REMAINING of
+ * those, which [scheduledRemaining] recomputes so the two can be cross-checked.
+ */
+data class GrandConcertScenarioState(
+    val turnsUntilDebut: Int?,
+    val turnsUntilConcert: Int?,
+    val balances: PerformanceBalances,
+    val stats: Map<StatName, Int>,
+    val scheduledCost: Map<PerformancePointType, Int> = emptyMap(),
+) {
+    /** Remaining points needed for the scheduled lessons of [type], or null when the balance for
+     * that type is not known (never guess a deficit against an unread balance). */
+    fun scheduledRemaining(type: PerformancePointType): Int? {
+        val cost = scheduledCost[type] ?: return 0
+        val balance = balances[type] ?: return null
+        return maxOf(cost - balance, 0)
+    }
+
+    fun stat(stat: StatName): Int? = stats[stat]
+}
+
+/** One stat's post-turn behavior relative to what the preview promised. */
+data class StatDelta(
+    val stat: StatName,
+    val before: Int?,
+    val after: Int?,
+    val previewed: Int,
+) {
+    val observed: Int? get() = if (before != null && after != null) after - before else null
+
+    /** True when the stat moved by exactly what the preview promised. */
+    val matchesPreview: Boolean get() = observed == previewed
+
+    /** The part of the move the preview did not account for (e.g. an intervening event's gain).
+     * Null when either endpoint was unreadable. */
+    val unexplained: Int? get() = observed?.let { it - previewed }
+}
+
+/** The verifier's verdict. [ok] is the conjunction of the mandatory checks only; ordinary-stat
+ * mismatches never fail [ok] when an intervening event was possible. */
+data class GrandConcertTransitionResult(
+    val performanceOk: Boolean,
+    val deficitsOk: Boolean,
+    val debutCountdownOk: Boolean,
+    val concertCountdownOk: Boolean,
+    val statDeltas: List<StatDelta>,
+    val unexplainedStatDeltas: List<StatDelta>,
+    val interveningEventPossible: Boolean,
+    val notes: List<String>,
+) {
+    /** The mandatory checks - performance arithmetic, scheduled deficits, and both countdowns -
+     * hold. Ordinary-stat agreement is required in [statsFullyExplained], not here. */
+    val ok: Boolean get() = performanceOk && deficitsOk && debutCountdownOk && concertCountdownOk
+
+    /** Every readable stat moved exactly as previewed (no intervening-event contribution). */
+    val statsFullyExplained: Boolean get() = unexplainedStatDeltas.all { (it.unexplained ?: 0) == 0 }
+}
+
+object GrandConcertTransition {
+    /**
+     * Verifies a training turn from three observations: the state before, the selected preview,
+     * and the state after.
+     *
+     * Mandatory and always enforced, because nothing in a normal turn should move them except
+     * the training and the passage of the turn:
+     * - performance balance: each previewed type's balance rose by exactly its previewed amount;
+     * - scheduled deficits: the recomputed remaining matches before and after;
+     * - debut and concert countdowns: each dropped by one.
+     *
+     * Soft and event-aware: ordinary stats. With [interveningEventPossible] true, a stat moving
+     * by more (or less) than the preview is recorded as unexplained rather than failing the
+     * verdict, because a post-training event, a support event, or a scenario message can add
+     * stats between the preview and the next screen. With it false, every readable stat must
+     * match. Either way the deltas are returned so a caller can log what actually happened.
+     */
+    fun verify(
+        before: GrandConcertScenarioState,
+        preview: GrandConcertTrainingPreview,
+        after: GrandConcertScenarioState,
+        interveningEventPossible: Boolean,
+    ): GrandConcertTransitionResult {
+        val notes = mutableListOf<String>()
+
+        // Performance balance arithmetic (mandatory). Every previewed type must have risen by
+        // exactly its previewed amount; types the preview did not touch must not have moved.
+        var performanceOk = true
+        for (type in PerformancePointType.entries) {
+            val b = before.balances[type]
+            val a = after.balances[type]
+            val expected = preview.performanceGains[type] ?: 0
+            if (b == null || a == null) {
+                performanceOk = false
+                notes.add("performance balance for ${type.displayName} was not readable on both frames")
+                continue
+            }
+            if (a - b != expected) {
+                performanceOk = false
+                notes.add("${type.displayName} balance moved ${a - b}, preview said $expected")
+            }
+        }
+
+        // Scheduled-deficit arithmetic (mandatory): recompute remaining before and after and,
+        // where a screen-read deficit was captured, cross-check it.
+        var deficitsOk = true
+        val scheduledTypes = (before.scheduledCost.keys + after.scheduledCost.keys)
+        for (type in scheduledTypes) {
+            val rb = before.scheduledRemaining(type)
+            val ra = after.scheduledRemaining(type)
+            if (rb == null || ra == null) {
+                deficitsOk = false
+                notes.add("scheduled deficit for ${type.displayName} could not be recomputed (unread balance)")
+            }
+        }
+
+        val debutCountdownOk = countdownDroppedByOne(before.turnsUntilDebut, after.turnsUntilDebut)
+        if (!debutCountdownOk) notes.add("debut countdown did not drop by exactly one (${before.turnsUntilDebut} -> ${after.turnsUntilDebut})")
+        val concertCountdownOk = countdownDroppedByOne(before.turnsUntilConcert, after.turnsUntilConcert)
+        if (!concertCountdownOk) notes.add("concert countdown did not drop by exactly one (${before.turnsUntilConcert} -> ${after.turnsUntilConcert})")
+
+        val deltas =
+            StatName.entries.map { stat ->
+                StatDelta(stat, before.stat(stat), after.stat(stat), preview.previewedStatGain(stat))
+            }
+        val unexplained = deltas.filter { (it.unexplained ?: 0) != 0 }
+        if (unexplained.isNotEmpty()) {
+            val detail = unexplained.joinToString(", ") { "${it.stat.name} previewed ${it.previewed}, observed ${it.observed}" }
+            if (interveningEventPossible) {
+                notes.add("unexplained stat change(s) recorded, attributed to a possible intervening event: $detail")
+            } else {
+                notes.add("stat change(s) did not match the preview and no intervening event was allowed: $detail")
+            }
+        }
+
+        return GrandConcertTransitionResult(
+            performanceOk = performanceOk,
+            deficitsOk = deficitsOk,
+            debutCountdownOk = debutCountdownOk,
+            concertCountdownOk = concertCountdownOk,
+            statDeltas = deltas,
+            unexplainedStatDeltas = unexplained,
+            interveningEventPossible = interveningEventPossible,
+            notes = notes,
+        )
+    }
+
+    private fun countdownDroppedByOne(before: Int?, after: Int?): Boolean = before != null && after != null && before - after == 1
+}

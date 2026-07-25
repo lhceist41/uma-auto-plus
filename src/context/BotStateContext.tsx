@@ -342,6 +342,10 @@ export interface Settings {
         trackblazerShopCheckFrequency: number
         trackblazerPreferredDistances: string[]
         trackblazerPreferredSurfaces: string[]
+        // Which option the bot picks on the Grand Concert "Quick Mode Settings" dialog that the
+        // game shows when a Grand Concert career starts. Wire values: "dont_use", "shorten_all",
+        // "scenario_only", "trainee_only".
+        grandConcertQuickMode: string
     }
 }
 
@@ -799,6 +803,9 @@ export const defaultSettings: Settings = {
         // these per-trainee where a focused build wants to lock to e.g. ["Sprint","Mile"] only.
         trackblazerPreferredDistances: [],
         trackblazerPreferredSurfaces: [],
+        // "Don't use Quick Mode" preserves the event presentation every validated career ran
+        // with; shortening is an opt-in. The bot taps this choice on the dialog at career start.
+        grandConcertQuickMode: "dont_use",
     },
 }
 

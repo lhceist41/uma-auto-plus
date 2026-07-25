@@ -15,6 +15,7 @@ import com.steve1316.uma_android_automation.bot.SparkChooserProfile
 import com.steve1316.uma_android_automation.bot.SparkConfirmationPill
 import com.steve1316.uma_android_automation.bot.SparkSpendDiagnostics
 import com.steve1316.uma_android_automation.bot.SparkKeepPolicy
+import com.steve1316.uma_android_automation.bot.SparkKeepVerdict
 import com.steve1316.uma_android_automation.bot.SparkPagerResolution
 import com.steve1316.uma_android_automation.bot.SparkRerollGate
 import com.steve1316.uma_android_automation.bot.SparkRerollPolicy
@@ -26,10 +27,12 @@ import com.steve1316.uma_android_automation.bot.SparkScrollMerge
 import com.steve1316.uma_android_automation.bot.SparkSetReading
 import com.steve1316.uma_android_automation.bot.SparkSetSide
 import com.steve1316.uma_android_automation.bot.SparkSideBreakdown
+import com.steve1316.uma_android_automation.bot.SparkStarEvidence
 import com.steve1316.uma_android_automation.bot.SparkTextNorm
 import com.steve1316.uma_android_automation.bot.SparkTxState
 import com.steve1316.uma_android_automation.bot.SparkWhiteClass
 import com.steve1316.uma_android_automation.bot.finalizeVerdictUsable
+import com.steve1316.uma_android_automation.bot.keepDialogVerdict
 import com.steve1316.uma_android_automation.bot.parseRemainingSkillPoints
 import com.steve1316.uma_android_automation.bot.popupContradictsVerifiedBalance
 import com.steve1316.uma_android_automation.bot.SparkPagerAction
@@ -40,8 +43,16 @@ import com.steve1316.uma_android_automation.bot.resolvePagerSide
 import com.steve1316.uma_android_automation.bot.sparkPagerDotSide
 import com.steve1316.uma_android_automation.bot.sparkSelectionDrivable
 import com.steve1316.uma_android_automation.components.*
+import com.steve1316.uma_android_automation.bot.QuickModeAction
+import com.steve1316.uma_android_automation.bot.QuickModePlanner
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
+import com.steve1316.uma_android_automation.utils.QuickModeGeometry
+import com.steve1316.uma_android_automation.utils.QuickModeOption
+import com.steve1316.uma_android_automation.utils.grandConcertCareerCompleteScreenPresent
+import com.steve1316.uma_android_automation.utils.grandConcertConcertPendingScreenPresent
+import com.steve1316.uma_android_automation.utils.quickModeDialogPresent
+import com.steve1316.uma_android_automation.utils.quickModeSelectedIndex
 import com.steve1316.uma_android_automation.utils.SPARKS_CONFIRM_GEOMETRY
 import com.steve1316.uma_android_automation.utils.SPARKS_SCREEN_GEOMETRY
 import com.steve1316.uma_android_automation.utils.SPARK_CONFIRMATION_CANCEL_X
@@ -64,6 +75,7 @@ import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
 import com.steve1316.uma_android_automation.utils.TraineePositionStore
 import com.steve1316.uma_android_automation.utils.parseSparkRowCells
 import com.steve1316.uma_android_automation.utils.parseSparkRowCellsAligned
+import com.steve1316.uma_android_automation.utils.parseSparkRowCellsWithEvidence
 import com.steve1316.uma_android_automation.utils.sparkConfirmationStructurePresent
 import com.steve1316.uma_android_automation.utils.sparkIntroStructurePresent
 import com.steve1316.uma_android_automation.utils.sparkPagerActiveDotIndex
@@ -1175,6 +1187,15 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.CINEMATIC_INTRO
         }
 
+        // The Grand Concert concert-pending screen also shows the Skip pill and previously fell
+        // through to TAP_TO_CONTINUE, body-tapping until the launch failed (observed 2026-07-24 on
+        // the 4th Concert: 30 taps then TASK_RESULT_QUEUE_NAVIGATION_FAILED). It is a drivable
+        // in-career state: navigation is complete there and the campaign's concert escort owns it.
+        if (grandConcertConcertPendingScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })) {
+            MessageLog.i(TAG, "[NAV] Grand Concert concert-pending screen -> ACTIVE_TRAINING_MENU (the campaign's concert escort owns it).")
+            return LaunchScreenState.ACTIVE_TRAINING_MENU
+        }
+
         // Bottom-left Skip pill (Skip Off / Skip > / Skip >>): template match, then an OCR fallback
         // for "SKIP" in the pill band. This pill is shared by the career-launch Quick Mode prompt AND
         // every in-career "tap to continue" screen (scenario cutscenes, goal/race intros). The launch
@@ -1212,6 +1233,19 @@ class CareerLaunchNavigator(private val context: Context) {
             }
             MessageLog.i(TAG, "[NAV] Skip pill with skip already maxed -> TAP_TO_CONTINUE (in-career tap-to-continue screen).")
             return LaunchScreenState.TAP_TO_CONTINUE
+        }
+
+        // The Grand Concert Complete Career screen also shows a Complete Career button, but on a
+        // run START it still holds unspent value (the Lessons drain) that the campaign must run
+        // first, so it routes to the campaign instead of the summary flow (observed 2026-07-24:
+        // classifying it as CAREER_SUMMARY ended the run before the drain hook ever got a tick).
+        // During the finalize-to-home pass the campaign has already drained and approved Finish,
+        // and this screen must fall through to CAREER_SUMMARY so the finalize actually presses
+        // Complete Career (the first finalize run declared "navigation complete" here and left
+        // the career unfinished).
+        if (!finalizeToHomeMode && grandConcertCareerCompleteScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })) {
+            MessageLog.i(TAG, "[NAV] Grand Concert Complete Career screen -> ACTIVE_TRAINING_MENU (the campaign's Lessons drain owns it).")
+            return LaunchScreenState.ACTIVE_TRAINING_MENU
         }
 
         // Career summary screen - "Complete Career" button visible (the button to initiate completion).
@@ -2234,38 +2268,105 @@ class CareerLaunchNavigator(private val context: Context) {
 
         // Read the dialog's own list in full: it is the complete kept set (the SPARKS screen
         // list can be longer than its visible window) and the record written from it.
+        //
+        // Verification is EVIDENCE-FUSED on this dialog and this dialog only: the plain pill
+        // cannot switch sides and the original set was already read completely, so row names,
+        // kinds, order, and count are the primary evidence and star counts corroborate. A
+        // single frame's star read has a proven transient failure mode - the 2026-07-21 block
+        // undercounted a filled third star sampled on its glyph edge - so star mismatches are
+        // retried on fresh frames and only a reproduced, unambiguous contradiction blocks
+        // ([keepDialogVerdict] carries the full rule; the selected-side confirmation keeps its
+        // strict check).
         if (transaction.state != SparkTxState.COMPLETE && !transaction.keptRecorded) {
-            val dialogReading = readCompleteSparkSet(SPARKS_CONFIRM_GEOMETRY, "keep confirmation")
-            if (!dialogReading.complete || dialogReading.rows.isEmpty()) {
-                return sparkSelectionBlocked(
-                    transition,
-                    transaction,
-                    "the keep dialog's set could not be read completely (${dialogReading.termination.name}, ${dialogReading.rows.size} rows); " +
-                        "not confirming a set that cannot be recorded",
-                )
-            }
-            // Cross-check against the original read when one exists and is complete. A
-            // contradiction means the dialog is not showing the set this career rolled.
             val original = transaction.originalRead
-            if (original != null && original.complete) {
-                val comparable = minOf(original.rows.size, dialogReading.rows.size)
-                val contradiction =
-                    (0 until comparable).firstOrNull { i ->
-                        original.rows[i].kind != dialogReading.rows[i].kind || original.rows[i].stars != dialogReading.rows[i].stars
-                    }
-                if (contradiction != null) {
+            val maxStarRetries = 2
+            var retries = 0
+            var dialogReading: SparkSetReading
+            while (true) {
+                if (!BotService.isRunning || StartModule.queueStopRequested) {
                     return sparkSelectionBlocked(
                         transition,
                         transaction,
-                        "keep-dialog row ${contradiction + 1} (${dialogReading.rows[contradiction].kind.wire}/${dialogReading.rows[contradiction].stars}*) " +
-                            "contradicts the original set read on the SPARKS screen " +
-                            "(${original.rows[contradiction].kind.wire}/${original.rows[contradiction].stars}*); not confirming",
+                        "a stop was requested during keep-dialog verification; not confirming",
                     )
+                }
+                val frame = iu.getSourceBitmap()
+                val evidenceCells = parseSparkRowCellsWithEvidence(sparkSampler(frame), SPARKS_CONFIRM_GEOMETRY, frame.height)
+                val named = nameSparkCells(frame, evidenceCells.map { it.toCell() }, SPARKS_CONFIRM_GEOMETRY)
+                val endMarkerSeen = evidenceCells.size < SPARKS_CONFIRM_GEOMETRY.maxRows || named.size < evidenceCells.size
+                val evidence = evidenceCells.take(named.size).map { SparkStarEvidence(it.filledCount, it.ambiguousCount) }
+                MessageLog.i(
+                    TAG,
+                    "[SPARKS] keep_confirmation_scan rows=${named.size} endMarker=$endMarkerSeen " +
+                        "ambiguousRows=${evidence.count { it.ambiguousSlots > 0 }} retry=$retries/$maxStarRetries",
+                )
+                dialogReading =
+                    if (endMarkerSeen && named.isNotEmpty()) {
+                        SparkSetReading(named, SparkScanTermination.COMPLETE_END_MARKER, 0)
+                    } else {
+                        // A set past the single-frame window (never observed; the window holds
+                        // one slot past the largest live set) or an unparseable frame: the
+                        // scrolling reader takes over. It carries no per-slot evidence, so the
+                        // verdict below stays strict for it.
+                        readCompleteSparkSet(SPARKS_CONFIRM_GEOMETRY, "keep confirmation")
+                    }
+                if (!dialogReading.complete || dialogReading.rows.isEmpty()) {
+                    return sparkSelectionBlocked(
+                        transition,
+                        transaction,
+                        "the keep dialog's set could not be read completely (${dialogReading.termination.name}, ${dialogReading.rows.size} rows); " +
+                            "not confirming a set that cannot be recorded",
+                    )
+                }
+                // No complete original read exists (partial SPARKS scan): nothing to fuse
+                // against. The dialog read alone is the record, as before.
+                if (original == null || !original.complete) break
+                val verdict =
+                    keepDialogVerdict(
+                        original.rows,
+                        dialogReading.rows,
+                        if (endMarkerSeen) evidence else null,
+                        retries,
+                        maxStarRetries,
+                    )
+                when (verdict) {
+                    is SparkKeepVerdict.Confirm -> break
+                    is SparkKeepVerdict.ConfirmCorroborative -> {
+                        MessageLog.w(
+                            TAG,
+                            "[SPARKS] keep_confirmation_star_ambiguous rows=${verdict.rows} decision=corroborative_confirm " +
+                                "(names, kinds, order, and count all match the complete SPARKS read; the star check stayed " +
+                                "ambiguous after $retries retries and is corroborative on this dialog)",
+                        )
+                        break
+                    }
+                    is SparkKeepVerdict.Retry -> {
+                        val mismatches =
+                            original.rows.indices.filter { original.rows[it].stars != dialogReading.rows[it].stars }
+                        val detail =
+                            mismatches.joinToString(" ") { i ->
+                                val slots =
+                                    evidenceCells.getOrNull(i)?.slots?.joinToString(",") { s -> "${s.read.name.first()}(${s.r},${s.g},${s.b})" }
+                                "row=${i + 1} expected=${original.rows[i].stars} observed=${dialogReading.rows[i].stars} slots=[$slots]"
+                            }
+                        MessageLog.w(TAG, "[SPARKS] keep_confirmation_retry $detail retry=${retries + 1}/$maxStarRetries")
+                        retries++
+                        waitSafe(0.8)
+                        continue
+                    }
+                    is SparkKeepVerdict.Block -> {
+                        MessageLog.e(TAG, "[SPARKS] keep_confirmation_blocked reason=\"${verdict.reason}\"")
+                        return sparkSelectionBlocked(transition, transaction, verdict.reason)
+                    }
                 }
             }
             recordSparkRows(dialogReading.rows, "kept", dialogReading)
             transaction.markKeptRecorded()
             sparksFullSetRecorded = true
+            MessageLog.i(
+                TAG,
+                "[SPARKS] keep_confirmation_verified pill=${pill.name.lowercase()} rows=${dialogReading.rows.size} retriesUsed=$retries",
+            )
             MessageLog.i(TAG, "[SPARKS] Keep confirmation verified (pill: ${pill.name.lowercase()}, ${dialogReading.rows.size} rows); confirming the rolled set.")
         }
 
@@ -4477,8 +4578,40 @@ class CareerLaunchNavigator(private val context: Context) {
 
         skipToggleAlreadyDone = true
 
-        // Click Confirm on the Quick Mode Settings dialog if present.
-        if (ButtonConfirm.check(iu)) {
+        // Apply the configured Quick Mode choice when the settings dialog reads as itself. The
+        // old behavior was a blind Confirm, which silently locked in whatever row the game
+        // remembered; the planner selects the configured row and verifies the radio moved before
+        // confirming. The blind Confirm remains as the fallback for the non-dialog variants of
+        // this screen.
+        val dialogBitmap = iu.getSourceBitmap()
+        val dialogSampler = SparkPixelSampler { x, y -> dialogBitmap.getPixel(x, y) }
+        if (quickModeDialogPresent(dialogSampler)) {
+            val configured = SettingsHelper.getStringSetting("scenarioOverrides", "grandConcertQuickMode", "dont_use")
+            when (val action = QuickModePlanner.plan(configured, quickModeSelectedIndex(dialogSampler))) {
+                is QuickModeAction.Select -> {
+                    MessageLog.i(TAG, "[NAV] Quick Mode: selecting \"${QuickModeOption.entries[action.rowIndex].label}\".")
+                    gestureUtils.tap(QuickModeGeometry.RADIO_X.toDouble(), QuickModeGeometry.ROW_YS[action.rowIndex].toDouble(), "quickmode_select")
+                    waitSafe(0.8)
+                    val verifyBitmap = iu.getSourceBitmap()
+                    if (quickModeSelectedIndex(SparkPixelSampler { x, y -> verifyBitmap.getPixel(x, y) }) == action.rowIndex) {
+                        gestureUtils.tap(QuickModeGeometry.CONFIRM_X.toDouble(), QuickModeGeometry.CONFIRM_Y.toDouble(), "quickmode_confirm")
+                        waitSafe(2.0)
+                    } else {
+                        MessageLog.w(TAG, "[NAV] Quick Mode: the selection did not take; not confirming this tick.")
+                    }
+                }
+                QuickModeAction.ConfirmOnly -> {
+                    MessageLog.i(TAG, "[NAV] Quick Mode: configured option already selected; confirming.")
+                    gestureUtils.tap(QuickModeGeometry.CONFIRM_X.toDouble(), QuickModeGeometry.CONFIRM_Y.toDouble(), "quickmode_confirm")
+                    waitSafe(2.0)
+                }
+                is QuickModeAction.HandOff -> {
+                    // Only an unreadable selection lands here now that the setting ships a
+                    // default. Confirm nothing; the stuck counter escalates safely.
+                    MessageLog.w(TAG, "[NAV] Quick Mode: ${action.handoff.playerMessage()}")
+                }
+            }
+        } else if (ButtonConfirm.check(iu)) {
             MessageLog.i(TAG, "[NAV] Clicking Confirm on Quick Mode Settings dialog...")
             ButtonConfirm.click(iu)
             waitSafe(2.0)

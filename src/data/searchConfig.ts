@@ -596,6 +596,12 @@ const searchConfig: SearchOption[] = [
     // Scenario Overrides Settings
     // ============================================================
     {
+        id: "grand-concert-quick-mode",
+        title: "Grand Concert Quick Mode",
+        description: "Which option the bot picks on the Quick Mode Settings dialog when a Grand Concert career starts.",
+        page: "ScenarioOverridesSettings",
+    },
+    {
         id: "trackblazer-consecutive-races-limit",
         title: "Trackblazer Consecutive Races Limit",
         description: "Sets the maximum number of consecutive races the bot is allowed to run in the Trackblazer scenario before stopping.",

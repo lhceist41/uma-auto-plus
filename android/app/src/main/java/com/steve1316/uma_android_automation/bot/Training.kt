@@ -11,10 +11,15 @@ import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.components.ButtonTraining
 import com.steve1316.uma_android_automation.components.ButtonTrainingGuts
+import com.steve1316.uma_android_automation.components.ButtonTrainingGutsGrandConcert
 import com.steve1316.uma_android_automation.components.ButtonTrainingPower
+import com.steve1316.uma_android_automation.components.ButtonTrainingPowerGrandConcert
 import com.steve1316.uma_android_automation.components.ButtonTrainingSpeed
+import com.steve1316.uma_android_automation.components.ButtonTrainingSpeedGrandConcert
 import com.steve1316.uma_android_automation.components.ButtonTrainingStamina
+import com.steve1316.uma_android_automation.components.ButtonTrainingStaminaGrandConcert
 import com.steve1316.uma_android_automation.components.ButtonTrainingWit
+import com.steve1316.uma_android_automation.components.ButtonTrainingWitGrandConcert
 import com.steve1316.uma_android_automation.components.ComponentInterface
 import com.steve1316.uma_android_automation.components.IconStatSkillHint
 import com.steve1316.uma_android_automation.components.IconTrainingHeaderGuts
@@ -529,6 +534,16 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         StatName.STAMINA -> 1900
                         StatName.WIT -> 1500
                         else -> 1200
+                    }
+                // Read off the Global Trainee Select and career-screen denominators on
+                // 2026-07-23. These are the BASE caps; blue inheritance sparks raise them per
+                // career (1641 Speed was observed on a linked run), so the live screen may show
+                // more and the OCR rejection guard must not treat that as a misread.
+                GrandConcertScenario.matches(scenario) ->
+                    when (statName) {
+                        StatName.SPEED -> 1600
+                        StatName.GUTS -> 1500
+                        else -> 1300
                     }
                 else -> 1200
             }
@@ -1309,14 +1324,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             MessageLog.v(TAG, "\n[TRAINING] Now starting process to analyze all 5 Trainings.")
         }
 
-        val trainingButtons: Map<StatName, ComponentInterface> =
-            mapOf(
-                StatName.SPEED to ButtonTrainingSpeed,
-                StatName.STAMINA to ButtonTrainingStamina,
-                StatName.POWER to ButtonTrainingPower,
-                StatName.GUTS to ButtonTrainingGuts,
-                StatName.WIT to ButtonTrainingWit,
-            )
+        val trainingButtons: Map<StatName, ComponentInterface> = trainingButtonsForScenario()
 
         val iconTrainingHeaders: Map<StatName, ComponentInterface> =
             mapOf(
@@ -1609,6 +1617,11 @@ class Training(private val game: Game, private val campaign: Campaign) {
 
                 // Get bitmaps and locations before starting threads to make them safe for parallel processing.
                 val sourceBitmap = game.imageUtils.getSourceBitmap()
+                // [GC_TELEMETRY] Dev-only, read-only: on a Grand Concert exploration career, persist this
+                // facility's analysis frame (its per-type performance "+N" is visible here) so the point-income
+                // formula can be measured offline. Debug-gated, taps nothing, does not touch scoring; uses the
+                // frame already captured above, so no extra screenshot is taken.
+                GrandConcertTelemetry.captureTrainingFacility(game, statName, sourceBitmap)
                 val skillPointsLocation = LabelStatTableHeaderSkillPoints.find(game.imageUtils).first
                 val failureChanceLocation = LabelTrainingFailureChance.find(game.imageUtils).first
 
@@ -2881,6 +2894,35 @@ class Training(private val game: Game, private val campaign: Campaign) {
      *
      * @param trainingSelected The name of the training to execute.
      */
+    /**
+     * The five facility-button components for the current scenario.
+     *
+     * Grand Concert restyles the facility buttons (smaller circles, a "Lvl N" sublabel, an animated
+     * performance-type badge), so the URA templates score ~0.62-0.75 there: below the match bar,
+     * meaning [goToStat] and [executeTraining] clicks silently found nothing, every facility switch
+     * timed out, and the bot rested every turn. The Grand Concert variants are cut from live
+     * captures and verified at 1.00 on every facility in both button states. The header icons are
+     * unchanged in Grand Concert (they match at 0.99+), so only the buttons swap.
+     */
+    private fun trainingButtonsForScenario(): Map<StatName, ComponentInterface> =
+        if (GrandConcertScenario.matches(game.scenario)) {
+            mapOf(
+                StatName.SPEED to ButtonTrainingSpeedGrandConcert,
+                StatName.STAMINA to ButtonTrainingStaminaGrandConcert,
+                StatName.POWER to ButtonTrainingPowerGrandConcert,
+                StatName.GUTS to ButtonTrainingGutsGrandConcert,
+                StatName.WIT to ButtonTrainingWitGrandConcert,
+            )
+        } else {
+            mapOf(
+                StatName.SPEED to ButtonTrainingSpeed,
+                StatName.STAMINA to ButtonTrainingStamina,
+                StatName.POWER to ButtonTrainingPower,
+                StatName.GUTS to ButtonTrainingGuts,
+                StatName.WIT to ButtonTrainingWit,
+            )
+        }
+
     fun executeTraining(trainingSelected: StatName?) {
         MessageLog.v(TAG, "[TRAINING] Now starting process to execute $trainingSelected training...")
 
@@ -2902,14 +2944,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 }
             }
 
-            val trainingButtons: Map<StatName, ComponentInterface> =
-                mapOf(
-                    StatName.SPEED to ButtonTrainingSpeed,
-                    StatName.STAMINA to ButtonTrainingStamina,
-                    StatName.POWER to ButtonTrainingPower,
-                    StatName.GUTS to ButtonTrainingGuts,
-                    StatName.WIT to ButtonTrainingWit,
-                )
+            val trainingButtons: Map<StatName, ComponentInterface> = trainingButtonsForScenario()
 
             // These values are hardcoded and exhaustive. A KeyError would be a programmer error.
             val trainingButton: ComponentInterface = trainingButtons[trainingSelected]!!

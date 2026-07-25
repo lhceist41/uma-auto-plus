@@ -18,6 +18,7 @@ import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.bot.SkillDatabase
 import com.steve1316.uma_android_automation.bot.Task
+import com.steve1316.uma_android_automation.bot.campaigns.GrandConcert
 import com.steve1316.uma_android_automation.bot.campaigns.Trackblazer
 import com.steve1316.uma_android_automation.bot.campaigns.UnityCup
 import com.steve1316.uma_android_automation.bot.campaigns.UraFinale
@@ -68,8 +69,11 @@ class Game(val myContext: Context) {
     /** The formatter for decimal values. */
     val decimalFormat = DecimalFormat("#.##")
 
-    /** The current campaign scenario (e.g., "URA Finale", "Unity Cup", "Trackblazer"). */
-    val scenario: String = SettingsHelper.getStringSetting("general", "scenario")
+    /** The current campaign scenario (e.g., "URA Finale", "Unity Cup", "Trackblazer").
+     * Normalized on read so every accepted Grand Concert spelling ("Grand Live", the punctuated
+     * title variants, the client's own "Our Grand Concert") dispatches, persists, and logs under
+     * the one canonical key. Other scenario strings pass through untouched. */
+    val scenario: String = GrandConcertScenario.normalizeScenarioKey(SettingsHelper.getStringSetting("general", "scenario"))
 
     /** Whether debug mode is enabled for additional logging and saving debugging images to storage. */
     val debugMode: Boolean = SettingsHelper.getBooleanSetting("debug", "enableDebugMode")
@@ -89,6 +93,7 @@ class Game(val myContext: Context) {
             "URA Finale" -> UraFinale(this)
             "Unity Cup" -> UnityCup(this)
             "Trackblazer" -> Trackblazer(this)
+            GrandConcertScenario.KEY -> GrandConcert(this)
             "Daily Races" -> com.steve1316.uma_android_automation.bot.misc.DailyRaceTask(this)
             "Team Trials" -> com.steve1316.uma_android_automation.bot.misc.TeamTrialsTask(this)
             else -> throw InterruptedException("Invalid scenario: $scenario")

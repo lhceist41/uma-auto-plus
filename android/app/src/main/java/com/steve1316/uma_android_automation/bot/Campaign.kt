@@ -1187,6 +1187,16 @@ abstract class Campaign(game: Game) : Task(game) {
     }
 
     /**
+     * Opens the career-end skill purchase screen from the career-end result screen. The default
+     * is the URA-style Learn button; a campaign whose career-end layout differs (Grand Concert's
+     * Complete Career screen) overrides this with its own entry, and may run scenario steps that
+     * must precede the skill spend.
+     */
+    open fun openCareerEndSkillScreen() {
+        ButtonCareerEndSkills.click(game.imageUtils)
+    }
+
+    /**
      * Handles campaign-specific Training Events.
      */
     open fun handleTrainingEvent() {
@@ -3751,7 +3761,7 @@ abstract class Campaign(game: Game) : Task(game) {
                             "[INFO] Career end reached. Opening the Learn skill screen for the careerComplete plan (attempt $careerEndEntryAttempts/$maxCareerEndEntryAttempts)...",
                         )
                         game.wait(0.5)
-                        ButtonCareerEndSkills.click(game.imageUtils)
+                        openCareerEndSkillScreen()
                         game.wait(1.0)
                         // Let the next tick detect the Learn screen and buy. If the click did not
                         // navigate (still on the result screen), this branch fires again and retries.
