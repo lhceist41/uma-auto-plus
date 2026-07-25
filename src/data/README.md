@@ -1,7 +1,8 @@
 # Bundled game data
 
-This directory holds the game data the app ships with, the character preset sources, and one
-coordinate-finding utility. The scrapers that regenerate the JSON no longer live here.
+This directory holds the game data the app ships with, the character preset sources, the settings
+search registry, and one coordinate-finding utility. The scrapers that regenerate the JSON no longer
+live here.
 
 ## Data files
 
@@ -14,6 +15,9 @@ coordinate-finding utility. The scrapers that regenerate the JSON no longer live
 
 `characterPresets.ts` and `presetMeta.ts` are the preset sources. They are the authority for the
 preset inventory; `PRESETS_GUIDE.md` is their documented view and must be updated in the same change.
+
+`searchConfig.ts` is the registry the in-app settings search reads. A new setting has to be listed
+there or it cannot be found from the search box, even though it works everywhere else.
 
 ## Refreshing the data
 

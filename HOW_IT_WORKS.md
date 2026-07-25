@@ -65,7 +65,7 @@ current.
 |---|---|
 | `Game.kt` | Top-level orchestrator. Owns the `Campaign` instance and drives the tick loop |
 | `Task.kt` | Bot lifecycle — start, stop, runtime cap |
-| `Campaign.kt` | Open base class for one career. Owns `Trainee`, `Racing`, `Training`, `SkillPlan`, the date, deck validation, the mood floor, and dialog dispatch |
+| `Campaign.kt` | Abstract base class for one career. Owns `Trainee`, `Racing`, `Training`, `SkillPlan`, the date, deck validation, the mood floor, and dialog dispatch |
 | `StartModule.kt` | The JavaScript ↔ Kotlin bridge (start/stop, accessibility status) **and** the run queue |
 | `CareerLaunchNavigator.kt` | The between-career state machine: career summary → home → set up and start the next run. Distinct from the in-career loop |
 | `DialogHandler.kt` | Cross-cutting dialog dispatch for dialogs shared by all scenarios |
@@ -195,7 +195,7 @@ sequenceDiagram
 
     Note over Bot: Date changed → reset daily flags
 
-    par 9 parallel OCR threads (10s timeout)
+    par 9 parallel OCR threads (5s timeout)
         Bot->>OCR: Read Speed stat
         Bot->>OCR: Read Stamina stat
         Bot->>OCR: Read Power stat
@@ -218,7 +218,7 @@ sequenceDiagram
 
 ### 4.1 Parallel Turn-Start Updates
 
-Every time the date changes, the bot reads the trainee's current state using **9 parallel OCR threads** coordinated by a `CountDownLatch` with a **10-second timeout**:
+Every time the date changes, the bot reads the trainee's current state using **9 parallel OCR threads** coordinated by a `CountDownLatch` with a **5-second timeout**:
 
 | Thread | Reads | Method |
 |--------|-------|--------|
@@ -228,10 +228,10 @@ Every time the date changes, the bot reads the trainee's current state using **9
 | 8 | Racing requirements (fans/trophies) | `racing.checkRacingRequirements()` |
 | 9 | Energy (bar position) | `trainee.updateEnergy()` |
 
-Thread 8 (racing requirements) is **skipped during summer** since no races are available. Logging output is temporarily disabled during parallel reads to avoid garbled messages, then re-enabled after all threads complete.
+Thread 8 (racing requirements) is **skipped during summer** since no races are available, leaving 8 threads. The one exception is a user in-game race agenda with summer training skipped: that combination can still race in summer, so the thread stays. Logging output is temporarily disabled during parallel reads to avoid garbled messages, then re-enabled after all threads complete.
 
 > [!WARNING]
-> If any thread fails to complete within the 10-second timeout, the bot logs an error and continues with whatever data it managed to read. Stat values that timed out retain their previous values.
+> If any thread fails to complete within the 5-second timeout, the bot logs an error and continues with whatever data it managed to read. Stat values that timed out retain their previous values. The bound exists only to cap a hung thread; the whole set normally finishes in well under two seconds.
 
 ### 4.2 Global Checks
 
@@ -278,23 +278,27 @@ The `decideNextAction()` method determines what the bot should do this turn. It 
 
 ```mermaid
 flowchart TD
-    Start["decideNextAction()"] --> A{"Mandatory or\nScheduled Race?"}
+    Start["decideNextAction()"] --> A{"Mandatory Race?"}
     A -->|Yes| RACE["→ RACE"]
     A -->|No| B{"Racing popup\nencountered?"}
     B -->|Yes| RACE
-    B -->|No| C{"Force Racing\nenabled?"}
+    B -->|No| R{"Pinned recreation\nouting today?"}
+    R -->|Yes| DATE["→ DATE"]
+    R -->|No| S{"Scheduled Race?"}
+    S -->|Yes| RACE
+    S -->|No| C{"Force Racing\nenabled?"}
     C -->|Yes| RACE
     C -->|No| D{"Maiden race\nnot completed?"}
     D -->|Yes| RACE
-    D -->|No| E{"Pre-Summer prep?\n(June Late, Classic/Senior)"}
+    D -->|No| F{"Fan, Trophy, or goal-point\nrequirement active?"}
+    F -->|Yes| RACE
+    F -->|No| E{"Pre-Summer prep?\n(June Late, Classic/Senior)"}
     E -->|Yes| PreSummer{"Energy < 70%?"}
     PreSummer -->|Yes| REST["→ REST"]
     PreSummer -->|No| MoodCheck{"Mood < Great?"}
     MoodCheck -->|Yes| RECOVER["→ RECOVER_MOOD"]
     MoodCheck -->|No| WIT["→ TRAIN (forced Wit)"]
-    E -->|No| F{"Fan or Trophy\nrequirement active?"}
-    F -->|Yes| RACE
-    F -->|No| G{"Injury detected?\n(skipped in Finale)"}
+    E -->|No| G{"Injury detected?\n(skipped in Finale)"}
     G -->|Yes| NONE["→ NONE\n(injury handled internally)"]
     G -->|No| H{"Mood recovery\nneeded?"}
     H -->|Yes| RECOVER
@@ -305,21 +309,23 @@ flowchart TD
 
 **Priority explanations:**
 
-1. **Mandatory/Scheduled Race:** If the game shows a race ribbon or scheduled race label, the bot must race. No choice here.
+1. **Mandatory Race:** If the game shows a career-goal race ribbon, the bot must race. No choice here.
 2. **Racing popup:** If a previous race selection triggered a popup that wasn't fully resolved, continue with racing.
-3. **Force Racing:** User setting that bypasses all other logic and forces racing every turn.
-4. **Maiden Race:** The first race of the campaign must be completed before regular training resumes.
-5. **Pre-Summer Prep (June Late):** On the last turn before Summer training, the bot ensures energy is high (≥70%) and mood is Great. If energy is low, it rests. If mood is low, it recovers mood. If both are fine, it trains Wit (which recovers some energy in preparation for Summer Training).[^1]
+3. **Pinned recreation outing:** A recreation turn pinned by the dating schedule. It sits between the two race checks deliberately: a mandatory career-goal race still outranks it, but it outranks a scheduled in-game agenda race. With the dating schedule off this is a settings-only check that costs nothing.
+4. **Scheduled Race:** A race the user's in-game agenda has scheduled for this turn.
+5. **Force Racing:** User setting that bypasses all other logic and forces racing every turn.
+6. **Maiden Race:** The first race of the campaign must be completed before regular training resumes.
+7. **Fan/Trophy/Goal-point Requirements:** If the game requires a minimum fan count, trophy count, or goal race points, the bot prioritizes racing to meet it. This deliberately outranks the pre-summer prep below, because the forced rest or mood turn would otherwise eat the very turn the requirement needed. If no race turns out to be available, the flags reset and the turn falls back to training.
+8. **Pre-Summer Prep (June Late):** On the last turn before Summer training, the bot ensures energy is high (≥70%) and mood is Great. If energy is low, it rests. If mood is low, it recovers mood. If both are fine, it trains Wit (which recovers some energy in preparation for Summer Training).[^1]
+9. **Injury Check:** If an injury is detected, the bot handles it (usually by resting). This check is **skipped during Finale turns** since those races are mandatory.
+10. **Mood Recovery:** If mood has dropped to Normal or below, the bot recovers before training (bad mood penalizes training gains).
+11. **Extra Racing:** If the bot is eligible for extra races (based on farming fans, racing plan, or smart racing logic), it races.
+12. **Default: Train.** If nothing else applies, the bot trains.
 
 [^1]: Wit is chosen as the "throwaway" training because it recovers some energy, helping the trainee enter Summer Training in better condition.
-6. **Fan/Trophy Requirements:** If the game requires a minimum fan count or trophy count, the bot prioritizes racing to meet it.
-7. **Injury Check:** If an injury is detected, the bot handles it (usually by resting). This check is **skipped during Finale turns** since those races are mandatory.
-8. **Mood Recovery:** If mood has dropped to Normal or below, the bot recovers before training (bad mood penalizes training gains).
-9. **Extra Racing:** If the bot is eligible for extra races (based on farming fans, racing plan, or smart racing logic), it races.
-10. **Default: Train.** If nothing else applies, the bot trains.
 
 > [!NOTE]
-> **Trackblazer override:** Before calling the base decision logic, Trackblazer's `decideNextAction()` first checks for **Irregular Training** — evaluating whether a high-value training opportunity exists that's worth skipping a race for. See [Section 11.6](#116-irregular-training) for details.
+> **Trackblazer override:** Trackblazer's `decideNextAction()` layers several hijacks over the base waterfall before delegating to it: summer training, finale training, a pinned recreation outing, the post-debut bond window, and a low-energy guard, and last of all **Irregular Training**: evaluating whether a high-value training opportunity exists that's worth skipping a race for. See [Section 11.6](#116-irregular-training) for details.
 
 ### 5.1 Outcome Measurement
 
@@ -347,7 +353,7 @@ When `analyzeTrainings()` is called:
 3. **Results are cached** for the current turn in `cachedAnalysisResults` to avoid re-reading if the training screen is visited multiple times.
 4. **Filtering:** Trainings exceeding the maximum failure chance threshold (default 20%) are excluded, unless risky training mode or Good-Luck Charm overrides are active.
 
-**YOLO Stat Detection:** When `enableYoloStatDetection` is enabled, stat gain digits are detected using a **YOLOv8 nano** model (`best.onnx`) instead of template matching. The model is trained to detect 11 classes (digits 0–9 and the '+' symbol) in small 130x50 pixel crop regions for each stat. It runs via ONNX Runtime with a confidence threshold of 0.8 and IoU threshold of 0.45 for NMS. The `YoloDetector` is loaded once as a singleton and kept in memory. Both detection methods coexist — the setting controls which one is used at runtime. The YOLO training pipeline and model export tools live in the [yolo/](yolo/) directory.
+**YOLO Stat Detection:** When `enableYoloStatDetection` is enabled, stat gain digits are detected using a **YOLOv8 nano** model (`best.onnx`) instead of template matching. The model is trained to detect 11 classes (digits 0–9 and the '+' symbol) in small crops around each stat's gain number (130x50 in the training set; the runtime crop is sized from the live row). It runs via ONNX Runtime with a confidence threshold of 0.8 and IoU threshold of 0.45 for NMS. The `YoloDetector` is loaded once as a singleton and kept in memory. Both detection methods coexist; the setting controls which one is used at runtime. The YOLO training pipeline and model export tools live in the [yolo/](yolo/) directory.
 
 ### 6.2 Scoring Algorithm
 
@@ -368,10 +374,10 @@ $$\text{Score} = \bigl(\text{StatEfficiency} \times w_{\text{stat}} + \text{Rela
 
 Rainbow training is heavily favored because it improves overall stat ratio balance. Applied only from Classic Year onward.
 
-**Anticipatory rainbow bonus:** From Year 2 onward, a training that has no rainbow yet but shows multiple support bars close to maximum friendship (blue or green, about to turn rainbow) receives a smaller rainbow-style multiplier, scaled by how close those bars are and capped well below a real rainbow. It nudges the bot toward a room that is one turn away from rainbowing instead of spending that turn elsewhere. Gated on the `enablePrioritizeNearMaxFriendship` setting (on by default).
+**Anticipatory rainbow bonus:** From Year 2 onward, a training that has no rainbow yet but shows at least one support bar heading toward maximum friendship (blue or green, past 10% fill) receives a smaller rainbow-style multiplier, scaled by how full those bars are and capped at 1.6x, well below a real rainbow. It nudges the bot toward a room that is one turn away from rainbowing instead of spending that turn elsewhere. Gated on the `enablePrioritizeNearMaxFriendship` setting (on by default).
 
 > [!IMPORTANT]
-> **Stat Cap Awareness:** If a stat is at or above the effective cap (absolute cap - 100 buffer), training for that stat scores **0** and is skipped. The one exception is a **one-time rainbow allowance** — a stat can be trained past the buffer if it's a rainbow training and that stat hasn't used this allowance yet.
+> **Stat Cap Awareness:** If a stat is at or above the effective cap, training for that stat scores **0** and is skipped. The effective cap is the absolute cap less a 100-point buffer, less a reserve for the stats the remaining finale races will still award (15 per race, so 45 for any turn up to 72, shrinking to 0 by the last turn). The one exception is a **one-time rainbow allowance**: a stat can be trained past the buffer if it's a rainbow training and that stat hasn't used this allowance yet.
 
 ### 6.3 Special Training Modes
 
@@ -379,8 +385,8 @@ Rainbow training is heavily favored because it improves overall stat ratio balan
 <summary><strong>Risky Training</strong></summary>
 
 When enabled, the bot will accept trainings with higher failure chances if the stat gain is large enough:
-- **Minimum stat gain:** Configurable (default 20)
-- **Maximum failure chance:** Configurable (default 30%)
+- **Minimum stat gain:** Configurable (default 30)
+- **Maximum failure chance:** Configurable (default 25%)
 
 This overrides the normal failure chance filter for trainings that meet both thresholds.
 </details>
@@ -410,13 +416,13 @@ When enabled, the bot adds bonus weight to trainings that offer skill hints, mak
 
 | Setting | Default | Effect |
 |---------|---------|--------|
-| Stat Prioritization | Speed, Stamina, Power, Guts, Wit | Order determines scoring weight for stat gains |
+| Stat Prioritization | Wit, Speed, Power, Stamina, Guts | Order determines scoring weight for stat gains |
 | Training Blacklist | (empty) | Stats in this list are never selected |
 | Max Failure Chance | 20% | Trainings above this are filtered out |
 | Disable on Maxed Stat | true | Skip training for stats at/above buffer |
-| Rainbow Training Bonus | false | 2.0x multiplier for rainbow trainings |
+| Rainbow Training Bonus | true | 2.0x multiplier for rainbow trainings |
 | Train Wit During Finale | false | Wit training instead of resting during finale |
-| Risky Training | false | Accept higher failure for larger gains |
+| Risky Training | true | Accept higher failure for larger gains |
 
 ---
 
@@ -461,7 +467,7 @@ When the bot decides to race:
 
 Once a race is selected:
 
-1. **Strategy Selection:** The bot selects a running strategy (Front Runner, Stalker, Betweener, or Chaser) based on the trainee's aptitudes.
+1. **Strategy Selection:** The bot selects a running strategy (Front Runner, Pace Chaser, Late Surger, or End Closer) based on the trainee's aptitudes.
 2. **Skip or Manual:** If the "skip" button is available, the bot skips the race animation. Otherwise, it watches and fast-forwards.
 3. **Retries:** If a race is lost and retries are enabled, the bot can retry the race (free retry available once per campaign if enabled). Mandatory races additionally retry toward 1st place while a retry is available — bounded by the free-retry count and re-checking the Congratulations banner on a fresh capture first, so a race that was already won is never retried.
 4. **Complete Career on Failure:** If a mandatory race is lost and this setting is enabled, the bot continues the campaign anyway rather than stopping.
@@ -526,11 +532,13 @@ The option with the **highest total weight** is selected.
 
 ## 9. Scenario: URA Finale
 
-URA Finale is the **simplest scenario** — it uses almost entirely the base `Campaign` logic with only one minor override:
+URA Finale is the **simplest scenario**. It uses the base `Campaign` logic almost unchanged, with three overrides:
 
-- **`openFansDialog()`:** Uses a different button location (`ButtonHomeFansInfo` in the top half of the screen) to open the fans information panel. This is the only code difference from the base campaign.
+- **`openFansDialog()`:** Uses a different button location (`ButtonHomeFansInfo` in the top half of the screen) to open the fans information panel.
+- **`capturesFinaleWins`:** Set to `true`, so finale race results are recorded for the career outcome.
+- **`checkCampaignSpecificConditions()`:** Dispatches the **URA Duel** handler, the one scenario screen URA Finale adds on top of the shared loop. It OCRs the header band for "Contest of", picks the trainee's highest stat to duel with, pages the option carousel until that stat is showing (capped at six taps, since the duel offers five stats plus energy), and confirms. It then re-reads the header: if the duel screen is still up, the confirm tap missed, and it hands back to unknown-screen recovery rather than reporting success and blinding the stall watchdog.
 
-Everything else — decision logic, training, racing, events, and finale handling — uses the standard base implementation described in sections 3–8.
+Everything else, decision logic, training, racing, events, and finale handling, uses the standard base implementation described in sections 3–8.
 
 > [!TIP]
 > If you're new to the bot, URA Finale is the best scenario to start with since its behavior is entirely described by the shared systems in sections 3–8 with no scenario-specific complexity.
@@ -561,18 +569,18 @@ When a Unity Cup race is triggered, the bot enters an opponent selection screen 
 stateDiagram-v2
     [*] --> TapOpponent1
     TapOpponent1 --> AnalyzePredictions1: Confirmation dialog opens
-    AnalyzePredictions1 --> RaceConfirmed: ≥3 double circles ✓
-    AnalyzePredictions1 --> TapOpponent2: < 3 double circles ✗
+    AnalyzePredictions1 --> RaceConfirmed: score ≥ 6 ✓
+    AnalyzePredictions1 --> TapOpponent2: score < 6 ✗
 
     TapOpponent2 --> AnalyzePredictions2: Confirmation dialog opens
-    AnalyzePredictions2 --> RaceConfirmed: ≥3 double circles ✓
-    AnalyzePredictions2 --> TapOpponent3: < 3 double circles ✗
+    AnalyzePredictions2 --> RaceConfirmed: score ≥ 6 ✓
+    AnalyzePredictions2 --> TapOpponent3: score < 6 ✗
 
     TapOpponent3 --> AnalyzePredictions3: Confirmation dialog opens
-    AnalyzePredictions3 --> RaceConfirmed: ≥3 double circles ✓
-    AnalyzePredictions3 --> ForceFallback: < 3 double circles ✗
+    AnalyzePredictions3 --> RaceConfirmed: score ≥ 6 ✓
+    AnalyzePredictions3 --> BestSoFar: score < 6 ✗
 
-    ForceFallback --> RaceConfirmed: Force select Opponent 2
+    BestSoFar --> RaceConfirmed: Race the highest-scoring opponent
     RaceConfirmed --> [*]
 ```
 
@@ -580,13 +588,13 @@ stateDiagram-v2
 
 1. The bot detects 3 opponent positions via `LabelUnityCupOpponentSelectionLaurel`.
 2. Starting with Opponent 1, it taps the opponent and then the "Select Opponent" button.
-3. A confirmation dialog opens showing race predictions. The bot counts **double circle icons** (`IconDoubleCircle`) in the middle region of the screen.
-4. If **3 or more double circles** are found → the matchup is favorable. The bot confirms the selection.
-5. If fewer than 3 → the bot closes the dialog and tries the next opponent.
-6. **Fallback:** If all 3 opponents fail the threshold, the bot **forces selection of Opponent 2** as a compromise.
+3. A confirmation dialog opens showing race predictions. The bot counts both **double circles** (`IconDoubleCircle`) and **single circles** (`IconSingleCircle`) in the middle region of the screen, then scores the matchup as `doubles * 2 + singles`. This is a weighted score, not a raw circle count: two doubles plus two singles scores 6, the same as three doubles.
+4. If the score reaches **6 or higher** → the matchup is favorable. The bot confirms the selection.
+5. If it falls short → the bot closes the dialog and tries the next opponent, remembering the best score seen so far.
+6. **Fallback:** If no opponent clears the bar, the bot races the **highest-scoring** opponent of the three.
 
-> [!CAUTION]
-> The fallback always picks Opponent 2 regardless of prediction quality. If all opponents are unfavorable, the race may be lost.
+> [!NOTE]
+> Because the counts come from template matches, an implausible read (more than five circles across five slots) clamps the single-circle count and logs a warning, so a false-matching template cannot inflate a matchup into a confident win.
 
 ### 10.3 Race Execution
 
@@ -602,7 +610,7 @@ After selecting an opponent:
 
 Unity Cup uses a modified training scoring mode during Junior and Classic years that factors in the **Spirit Gauge** mechanic:
 
-- **Spirit Burst Bonus:** +800 base + 400 per additional gauge ready to burst
+- **Spirit Burst Bonus:** +800 base + 400 per gauge ready to burst (so one ready gauge is worth 1200)
 - **Facility Preference:** +200 for Speed/Wit facilities; conditional for Stamina/Power/Guts
 - **Gauge Fill Bonus:** +300 base + 100 per fillable gauge, with +200 bonus in the early game
 - **Relationship:** 1.5x scaled relationship score
@@ -625,8 +633,14 @@ flowchart TD
     Summer -->|Yes| TRAIN["→ TRAIN\n(Summer training)"]
     Summer -->|No| Finale{"Finale turns\n73-75?"}
     Finale -->|Yes| TRAIN2["→ TRAIN\n(Finale training)"]
-    Finale -->|No| EnergyGuard{"Energy ≤ 10% AND\n3+ consecutive races\nAND no Charm?"}
-    EnergyGuard -->|Yes| REST["→ REST\n(avoid -30 stat penalty)"]
+    Finale -->|No| Recreation{"Pinned recreation\nouting today?"}
+    Recreation -->|Yes| DATE["→ DATE"]
+    Recreation -->|No| BondWindow{"Post-debut bond window?\n(Junior July, turns 13-14)"}
+    BondWindow -->|Yes| TRAIN4["→ TRAIN\n(build support bonds)"]
+    BondWindow -->|No| EnergyGuard{"Energy ≤ 10% AND\n3+ consecutive races\nAND no Charm?"}
+    EnergyGuard -->|Yes| TryItem["Try a conserved\nenergy item"]
+    TryItem -->|Recovered| Irregular
+    TryItem -->|None left| REST["→ REST\n(avoid -30 stat penalty)"]
     EnergyGuard -->|No| Irregular{"Irregular Training\nenabled + not checked?"}
     Irregular -->|Yes| EvalTraining["Open training screen\nAnalyze all 5 trainings"]
     EvalTraining --> ValidFound{"High-value training\nfound?"}
@@ -641,7 +655,9 @@ flowchart TD
 
 **Race fallback behavior:** If a non-mandatory race attempt fails (e.g. the consecutive race limit is reached after selecting a race), Trackblazer backs out of the race dialogs and falls back to training for the turn instead of erroring out. Mandatory races are not affected — those always proceed normally.
 
-**Race-commitment override:** A scheduled, mandatory, or goal-ribbon race this turn (checked by `isRaceCommitmentTurn()`, from the turn-start cached flags or a live ribbon read) outranks both the summer-training hijack and the low-energy rest guard shown above. On such a turn the summer branch defers to the base race flow instead of camp-training, and the low-energy guard returns RACE instead of REST — a skipped agenda race costs more than one camp training or the -30 low-energy penalty those branches exist to protect. (The flowchart is simplified and does not draw these two override edges.)
+**Race-commitment override:** A scheduled, mandatory, or goal-ribbon race this turn (checked by `isRaceCommitmentTurn()`, from the turn-start cached flags or a live ribbon read) outranks both the summer-training hijack and the low-energy rest guard shown above. On such a turn the summer branch defers to the base race flow instead of camp-training, and the low-energy guard returns RACE instead of REST: a skipped agenda race costs more than one camp training or the -30 low-energy penalty those branches exist to protect. (The flowchart does not draw these two override edges.)
+
+**Post-debut bond window:** Rival Races unlock in Junior Early August, so the two turns right after the June debut (turns 13–14) have only OP-grade races available. Trackblazer trains through them instead, pushing support bonds toward orange before the graded calendar starts. Turn 15 is excluded, and a scheduled in-game agenda race still wins.
 
 ### 11.2 Shop System
 
@@ -650,7 +666,7 @@ The Trackblazer shop allows purchasing items with coins earned from races. The b
 #### Shop Visit Triggers
 
 - **After qualifying races:** When a race of the configured grade (default: G1, G2, G3) is completed and the shop check frequency counter is reached.
-- **Shop check frequency:** Configurable (default 3). The bot visits the shop every N turns after the first qualifying race, not after every single race.
+- **Shop check frequency:** Configurable (default 1, so every qualifying race). Raising it to N makes the bot visit the shop only every N turns after the first qualifying race. Every bundled Trackblazer preset also sets this to 1.
 - **First-time check:** The bot performs an initial shop check the first time it has the opportunity.
 
 #### Buying Priority List
@@ -737,26 +753,28 @@ Below is every item in the Trackblazer shop, organized by category. For each ite
 3. The item is the **optimal choice** according to the greedy energy algorithm
 
 **The greedy energy algorithm (`isBestEnergyItemToUse()`):**
-1. Collect all available energy items (from inventory + items not yet scanned in this pass).
+1. Collect the energy items still available this scan pass, **minus one reserved unit**. The lowest-tier energy item still owned (Energy Drink MAX first, then Vita 20, Vita 40, Vita 65) is held back for emergency race recovery unless a force-override is active.
 2. Sort by gain descending (65 → 40 → 20).
-3. Greedily pick items that fit without exceeding 100% energy.
+3. Greedily take items while simulated energy stays within a **soft cap of 110%**. The 10-point overshoot is deliberate: it prefers Vita 65 + Vita 40 (105) over Vita 65 + Vita 20 (85) rather than leaving 15% on the table.
 4. If the current item was in the picked set → use it. Otherwise → skip it.
 
-**Example:** Trainee has 35% energy with Vita 65, Vita 40, and Vita 20 available.
-- 35 + 65 = 100 → pick Vita 65. Remaining space: 0.
-- Vita 40 and Vita 20 don't fit → skip them.
-- Result: Use only Vita 65.
+**Example:** Trainee at 35% energy owning one each of Vita 65, Vita 40, and Vita 20.
+- The Vita 20 is the reserved unit, so the pool is {65, 40}.
+- 35 + 65 = 100, within the cap → pick Vita 65.
+- 100 + 40 = 140, over the cap → skip Vita 40.
+- Result: use Vita 65.
 
-**Example:** Trainee has 50% energy with Vita 65, Vita 40, and Vita 20 available.
-- 50 + 65 = 115 → exceeds 100, skip Vita 65.
-- 50 + 40 = 90 → pick Vita 40. Remaining space: 10.
-- 90 + 20 = 110 → exceeds 100, skip Vita 20.
-- Result: Use only Vita 40.
+**Example:** Trainee at 50% energy owning one each of Vita 65, Vita 40, and Vita 20.
+- The Vita 20 is the reserved unit, so the pool is {65, 40}.
+- 50 + 65 = 115, over the cap → skip Vita 65.
+- 50 + 40 = 90, within the cap → pick Vita 40.
+- Result: use Vita 40.
 
 **When NOT used:**
 - Energy is above the threshold (default 40%).
-- A Good-Luck Charm is being used this turn (Charm sets failure to 0%, making energy irrelevant for training — using energy items would waste them since the energy cost is deducted after training).
-- Using this item would overshoot 100% when a smaller item would be more efficient.
+- A Good-Luck Charm is being used this turn (Charm sets failure to 0%, making energy irrelevant for training, and using energy items would waste them since the energy cost is deducted after training).
+- Using this item would push past the 110% soft cap when a smaller item would be more efficient.
+- The item is the last copy of the conserved lowest-tier energy item, which is held for emergency race recovery.
 
 **Special Royal Kale Juice priority:** When energy ≤ 20%, the bot checks if Royal Kale Juice is available. If it is, all Vita items are skipped in favor of Kale Juice, since any Vita used first would be partially wasted by the Kale Juice's full restore.
 
@@ -796,12 +814,12 @@ Royal Kale Juice is handled separately from Vita items because of its mood penal
 | **Energy Drink MAX** | 30 coins | Maximum energy +4, Energy +5 |
 | **Energy Drink MAX EX** | 50 coins | Maximum energy +8 |
 
-**When used:** These are marked as **quick-use** items. They are used immediately on sight during the inventory scan, every turn they are available. Energy Drink MAX also adds +5 to current energy as a side effect.
+**When used:** Neither is a quick-use item (`isQuickUsage = false` for both). **Energy Drink MAX** is treated as an ordinary energy item: it enters the greedy energy pool above alongside the Vitas, and it is first in the conservation order, so the last copy is held back for emergency race recovery.
 
-**When NOT used:**
-- Turn is before 13.
+> [!WARNING]
+> **Energy Drink MAX EX is purchased but never consumed.** It appears in the Tier 7 buy list, but it is not in the energy item table, the stat item list, the bad-condition heal list, or any inline-usage branch, so nothing ever uses it. At 50 coins it is currently wasted spend. Treat this as a known defect, not intended behavior.
 
-**Shop priority:** These are in Tier 7 (low priority) — purchased only after most other items. The max energy increase is a long-term investment that pays off over many turns.
+**Shop priority:** These are in Tier 7 (low priority), purchased only after most other items. The max energy increase is a long-term investment that pays off over many turns.
 
 </details>
 
@@ -914,6 +932,8 @@ The first cupcake encountered during the scan is used. Berry Sweet Cupcake raise
 1. No megaphone is currently active (`megaphoneTurnCounter == 0`)
 2. A training has been selected for this turn (`trainingSelected != null`)
 3. No **better** megaphone is available in inventory
+4. The turn is not being conserved (see the conservation gate below)
+5. The selected training clears that megaphone tier's own minimum-gain threshold, so a high-tier megaphone is not burned on a weak training
 
 **Megaphone priority logic:** The bot always uses the **best available** megaphone, not just the first one encountered during scanning. When it encounters a megaphone:
 - It checks if a higher-tier megaphone exists in inventory that hasn't been scanned yet or is known to be enabled.
@@ -925,6 +945,10 @@ The first cupcake encountered during the scan is used. Berry Sweet Cupcake raise
 - A megaphone effect is already active (turns remaining > 0). The bot decrements the counter each turn after an action is taken.
 - No training is selected this turn (e.g., the bot is racing or resting).
 - A better megaphone is available in inventory.
+- The conservation gate fires (below).
+
+> [!IMPORTANT]
+> **Conservation gate (`shouldConserveTrainingEffectItems`).** Megaphones and the Good-Luck Charm are both skipped when the trainee's mood is **below Normal** *and* the selected training's main stat gain is **below the low-gain floor** (default 15, configurable). Both conditions must hold. The point is to avoid spending a limited training-effect item on a turn that is already compromised: a bad mood suppresses gains, so a weak training under a bad mood is the worst possible turn to burn one on.
 
 **Duration tracking:** After use, the bot sets `megaphoneTurnCounter` to 2/3/4 depending on the megaphone type. This counter is decremented by 1 at the end of each turn where an action was taken.
 
@@ -944,7 +968,7 @@ The first cupcake encountered during the scan is used. Berry Sweet Cupcake raise
 **When NOT used:**
 - No training is selected this turn.
 - The Ankle Weights are for a different stat than the selected training.
-- Wit Ankle Weights: technically exist in the shop but are **never purchased** by the default priority list (only Speed/Stamina/Power/Guts weights for the top 3 prioritized stats are bought).
+- Wit Ankle Weights: they exist in the shop but are **never purchased and never used**. The buy list only covers Speed/Stamina/Power/Guts weights for the top 3 prioritized stats, and the usage lookup maps Wit to no item at all, so even a Wit Ankle Weights obtained some other way would sit unused on a Wit training turn.
 
 > **Warning:** Ankle Weights increase energy consumption by 20% for that turn. The bot does not factor this into the energy threshold check — if the trainee is at low energy and Ankle Weights are used, the training may consume more energy than expected.
 
@@ -963,6 +987,7 @@ The first cupcake encountered during the scan is used. Berry Sweet Cupcake raise
 1. A training has been selected for this turn
 2. The selected training's failure chance is **≥ 20%**
 3. A Charm has **not already been used** this turn (`bUsedCharmToday == false`)
+4. The conservation gate does not fire: the Charm is skipped when mood is below Normal *and* the selected training's main gain is below the low-gain floor (see the megaphone section above)
 
 **When NOT used:**
 - No training is selected this turn.
@@ -1035,6 +1060,10 @@ The bot checks for this interaction before evaluating any energy item. It consid
 
 </details>
 
+### 11.4 Race Item Usage
+
+The three race items are the one group that does **not** flow through the training item pass above. They have their own usage path on the Race Prep screen, with their own conservation rules built around the Twinkle Star Climax.
+
 <details>
 <summary><strong>Races — Master Cleat Hammer, Artisan Cleat Hammer, Glow Sticks</strong></summary>
 
@@ -1049,13 +1078,14 @@ The bot checks for this interaction before evaluating any energy item. It consid
 **Master Cleat Hammer — when used:**
 - The upcoming race is **G1 grade**.
 - The item is available in inventory.
-- **Finale conservation:** During turns 73 and 74 (Qualifier and Semi-Final), the bot only uses this item if it has **2 or more copies**, saving the last one for turn 75 (Finals). On turn 75, all remaining copies are used freely.
+- **Finale conservation:** A sliding threshold across the climax: turn 73 needs **3 or more** copies, turn 74 needs **2 or more**, turn 75 needs **1**. That chain guarantees one hammer for each of the three Twinkle Star Climax races.
+- **Pre-climax reserve:** On every turn before 73 the bot needs **more than 3** copies to spend one, hoarding three for the climax races, which have the highest stat return per hammer in the run. With 1-3 in inventory, a regular G1 uses none.
 
 **Artisan Cleat Hammer — when used:**
 - The upcoming race is **G2 or G3 grade**.
 - OR the race is G1 but no Master Cleat Hammer is available (fallback).
 - The item is available in inventory.
-- **Finale conservation:** Same 2-copy rule as Master Cleat Hammer during turns 73–74.
+- **Finale conservation:** Turn 73 needs **2 or more** copies, saving one for the Semi-Final and Final. Turns 74 and 75 carry no reserve; any copy is spent.
 
 **Glow Sticks — when used:**
 - The upcoming race is **G1 grade**.
@@ -1092,7 +1122,7 @@ Trackblazer tracks how many races the trainee has performed consecutively:
 
 Irregular Training is an optional feature that evaluates whether a high-value training opportunity is worth skipping a race for:
 
-1. **When checked:** On non-mandatory, non-scheduled race days during Classic and Senior years. **Skipped entirely** when energy is ≤ 10% with 3+ consecutive races and no Good-Luck Charm available — the bot rests instead to avoid the -30 stat penalty (see [11.1 flowchart](#111-overview-and-flow-differences)).
+1. **When checked:** On non-mandatory, non-scheduled race days during Classic and Senior years. When energy is ≤ 10% with 3+ consecutive races and no Good-Luck Charm available, the bot first tries a conserved energy item for emergency recovery: if that lifts energy above 10%, it falls through to the normal flow and irregular training is still evaluated. Only when no conserved item is left, or recovery fails, does it rest to avoid the -30 stat penalty (see [11.1 flowchart](#111-overview-and-flow-differences)).
 2. **Process:**
    - The bot opens the training screen and runs a full analysis of all 5 training options.
    - If a Good-Luck Charm is available, failure chance is ignored during evaluation.

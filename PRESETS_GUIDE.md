@@ -14,11 +14,11 @@ The 2026-07-05 tuning pass put Stamina first in the URA Finale and Unity Cup pre
 
 The 2026-07-06 batch added the six top-tier cards the community asked for: Kitasan Black, Nishino Flower, Seiun Sky, Maruzensky (Hot☆Summer Night), Oguri Cap, and Oguri Cap (Ashen Miracle). All six are research-graded — built from verified per-card aptitude/objective data (career objective chains are shared across a character's outfits, so the two Oguri cards share one racing plan) and cloned from the nearest validated archetype, but none has completed a live career on the maintainer's account yet; the picker shows them with the Research badge. Kitasan and Seiun train Stamina first (Long goal chains), Nishino is a Sprint/Mile speed build with a participation-only Oaks gate, and both recovery-gated uniques (summer Maruzensky, Ashen Miracle Oguri) ship skill plans that front-load the recovery skills their uniques need.
 
-The second 2026-07-06 batch completed the community S-tier list with 17 more cards: ten new characters (Silence Suzuka, Manhattan Cafe, Narita Taishin, Tamamo Cross, Mejiro Dober, Special Week, Smart Falcon, Meisho Doto, Tokai Teio, T.M. Opera O in her New Year outfit) plus alternate outfits for Special Week, Tokai Teio, Seiun Sky, Mayano Top Gun, Gold Ship, King Halo, and Taiki Shuttle. All research-graded, same pipeline as the first batch: cloned from the nearest validated archetype, per-card grids and growths verified, racing plans checked against the race database and each card's goal turns. Notables: Smart Falcon is the second dirt specialist after Haru Urara -- his URA preset ships a curated dirt agenda whose three Junior entries exist to satisfy the turn-25 two-win goal (mandatory plans race planned turns only, so a plan that starts too late force-ends the career). Narita Taishin is the roster's first End Closer, with his archetype's Late-Surger skills swapped to End counterparts. Silence Suzuka is Front-forced (her unique needs a clear lead) and Medium-primary despite the Mile-A grid, because her goal chain is almost entirely Medium. Trackblazer avoid advisories ship for the narrow-Junior-pool bodies (Manhattan Cafe, Tamamo Cross, Meisho Doto, both Teio cards) and for Smart Falcon's Turf E.
+The second 2026-07-06 batch completed the community S-tier list with 17 more cards: ten new characters (Silence Suzuka, Manhattan Cafe, Narita Taishin, Tamamo Cross, Mejiro Dober, Special Week, Smart Falcon, Meisho Doto, Tokai Teio, T.M. Opera O in her New Year outfit) plus alternate outfits for Special Week, Tokai Teio, Seiun Sky, Mayano Top Gun, Gold Ship, King Halo, and Taiki Shuttle. All research-graded, same pipeline as the first batch: cloned from the nearest validated archetype, per-card grids and growths verified, racing plans checked against the race database and each card's goal turns. Notables: Smart Falcon is the second dirt specialist after Haru Urara -- his URA preset ships a curated dirt agenda whose three Junior entries exist to satisfy the turn-25 two-win goal (mandatory plans race planned turns only, so a plan that starts too late force-ends the career). Narita Taishin runs End Closer (joining Gold Ship, Hishi Amazon, and Sweep Tosho), with his archetype's Late-Surger skills swapped to End counterparts. Silence Suzuka is Front-forced (her unique needs a clear lead) and Medium-primary despite the Mile-A grid, because her goal chain is almost entirely Medium. Trackblazer avoid advisories ship for the narrow-Junior-pool bodies (Manhattan Cafe, Tamamo Cross, Meisho Doto, both Teio cards) and for Smart Falcon's Turf E.
 
-The 2026-07-10 batch closed the remaining global-roster gaps with 18 characters: Admire Vega, Agnes Digital, Air Shakur, Bamboo Memory, Curren Chan, Eishin Flash, Fine Motion, Fuji Kiseki, Hishi Akebono, Inari One, Ines Fujin, Mejiro Ardan, Mejiro Bright, Narita Brian, Rice Shower, Sakura Chiyono O, Satono Diamond, and Yaeno Muteki. Same research-graded pipeline: verified grids, growths, and goal chains; racing plans validated entry-by-entry against the race database; event pins verified against the character event data. Notables: Inari One joins the dirt roster as an End Closer whose skill plan carries a surface-agnostic recovery for her dirt-to-turf Arima pivot; Ines Fujin is Front Runner-locked like Silence Suzuka; the sprinters with thin fan-gated Junior pools (Curren Chan, Hishi Akebono) carry Trackblazer avoid advisories; goal-sparse or gate-heavy bodies (Agnes Digital's unscheduled turn-47-60 G1 window, Rice Shower's near-empty Junior, Mejiro Ardan's 6,000-fan wall at turn 30, Hishi Akebono's early fan checkpoints) all ship curated racing plans. Bamboo Memory postdates the bundled game data: her presets ship empty event overrides until the next characters.json sync, so her story events fall back to the OCR stat-option heuristic.
+The 2026-07-10 batch closed the remaining global-roster gaps with 18 characters: Admire Vega, Agnes Digital, Air Shakur, Bamboo Memory, Curren Chan, Eishin Flash, Fine Motion, Fuji Kiseki, Hishi Akebono, Inari One, Ines Fujin, Mejiro Ardan, Mejiro Bright, Narita Brian, Rice Shower, Sakura Chiyono O, Satono Diamond, and Yaeno Muteki. Same research-graded pipeline: verified grids, growths, and goal chains; racing plans validated entry-by-entry against the race database; event pins verified against the character event data. Notables: Inari One joins the dirt roster as an End Closer whose skill plan carries a surface-agnostic recovery for her dirt-to-turf Arima pivot; Ines Fujin is Front Runner-locked like Silence Suzuka; the sprinters with thin fan-gated Junior pools (Curren Chan, Hishi Akebono) carry Trackblazer avoid advisories; goal-sparse or gate-heavy bodies (Agnes Digital's unscheduled turn-47-60 G1 window, Rice Shower's near-empty Junior, Mejiro Ardan's 6,000-fan wall at turn 30, Hishi Akebono's early fan checkpoints) all ship curated racing plans. Bamboo Memory is in the bundled character data, and her URA Finale preset ships explicit character event overrides; her Unity Cup and Trackblazer presets leave the override map empty, so those two fall back to the OCR stat-option heuristic for story events.
 
-The 2026-07-11 additions are the first **Legacy Farm** variants: Daiwa Scarlet, El Condor Pasa, and Air Groove parent-farming editions (URA only). Each clones the character's regular URA preset and swaps in a generated G1-dense mandatory racing plan — 17, 20, and 14 G1 entries per career respectively — spaced so the run never exceeds the consecutive-race limit the plan itself must guard (mandatory-plan mode overrides the in-game warning). Built for breeding parents: more racing and fewer training turns, so they are deliberately not recommended for badge or rating chasing. Generated with `scripts/generate-racing-plan.mjs`, which any future parent candidate can be run through.
+The 2026-07-11 additions are the first **Legacy Farm** variants: Daiwa Scarlet, El Condor Pasa, and Air Groove parent-farming editions (URA only). Each clones the character's regular URA preset and swaps in a generated G1-dense mandatory racing plan (10, 15, and 7 G1 entries per career respectively) spaced so the run never exceeds the consecutive-race limit the plan itself must guard (mandatory-plan mode overrides the in-game warning). Built for breeding parents: more racing and fewer training turns, so they are deliberately not recommended for badge or rating chasing. Generated with `scripts/generate-racing-plan.mjs`, which any future parent candidate can be run through.
 
 The 2026-07-17 addition is **Copano Rickey**, the third pure dirt body after Haru Urara and Smart Falcon, and the first built as a Pace Chaser — her unique (`Luck Runs My Way`) and her whole innate kit read the back half of the field, so a Front build never triggers them. Her URA preset is the Kashiwa sash profile: Kashiwa Kinen is a Senior-May G1 over Dirt Mile 1600m at Funabashi, and the objective accepts 3rd while a Winner's Sash needs 1st, so its curated dirt agenda covers only the empty Junior/Classic half of her chain (t24/t37/t43/t45) and hands the dense Senior half to her goal races. The generator also offered t51 and t71 entries; both were dropped because they abut goal turns and t51 would race her five turns before Kashiwa — arriving rested beats the extra fans. Her Unity Cup and Trackblazer presets carry Turf F caution advisories, the same call Haru Urara and Smart Falcon get against turf-dominant schedules. An external guide claims her unique needs six green skills for full effect; the game data this repo bundles shows the unique gated only on `phase_laterhalf_random==1`, so no preset chases a green count and the greens in her plan are there on their own merits. Her plans also deliberately omit Chance of Victory, Collaborative Graded Races ○ and Strong Steps: all three are strong Dirt picks but sit behind Potential Lv3/Lv4/Lv5, and listing skills a trainee cannot learn only pads the plan with entries that never fire — add them once her Potential is raised. All three research-graded, and shipping alongside the race-scraper fix that finally brought the Global dirt calendar (Kashiwa included) into `races.json`.
 
@@ -122,14 +122,14 @@ The table below covers the three original scenarios. Grand Concert presets are l
 1. User opens UMA Auto+ and taps the **trainee preset card** on the Home page (or picks a scenario first from the center-button dropdown — both orders work).
 2. The **trainee picker** opens: searchable, one row per character/outfit, with URA/UC/TB/GC advisory chips, a Validated/Research badge per scenario, and starred favorites pinned on top. Favorites are per outfit: starring one outfit does not star the character's other outfits.
 3. User expands a trainee and taps **Apply** on one of her scenario cards (e.g., "El Condor Pasa" — Trackblazer). The scenario is set together with the preset.
-4. The preset's settings are **deep-merged** into the current app configuration, overwriting every settings category it ships.
+4. The preset's settings are merged into the current app configuration **one category at a time, with a shallow spread**: within a category the preset's keys win, but keys it does not ship keep their current values. Three things are deliberately excluded: the `debug` and `discord` categories are skipped entirely so a preset can never clobber a Debug Mode or Discord webhook, and the skill-point check settings plus the two event-override maps are captured before the merge and restored after it.
 5. Settings are **saved to SQLite immediately** so the Kotlin backend reads the correct values.
 6. A green confirmation snackbar appears: `Preset "El Condor Pasa" applied`.
 7. The bot is now configured with that character's optimized settings and ready to start.
 
 ### Scenario filtering
 
-Only presets matching the selected scenario are shown. When the user changes scenario, the preset selection resets. This prevents accidentally using a Trackblazer preset for a URA Finale run.
+The picker lists one row per preset name (that is, per outfit), not per scenario. Each row carries chips for the scenarios that name has a preset for, and the list filters only on the search box and your favorites. The applied preset survives a scenario switch and an app restart, so it does not reset on its own.
 
 ### What gets applied
 
@@ -143,7 +143,7 @@ Each preset contains a **complete settings snapshot** covering:
 | `racing` | Fan farming, race retries, force racing, racing plan, preferred terrain/grades/distances, smart racing |
 | `skills` | Skill point threshold, preferred running style/distance/surface, skill plans for each phase (skillPointCheck, preFinals, careerComplete) |
 | `trainingEvent` | Energy prioritization, OCR confidence, special/character/support/scenario event overrides |
-| `scenarioOverrides` | Trackblazer-specific: consecutive race limit, energy threshold, shop check grades, irregular training, excluded items |
+| `scenarioOverrides` | Per-scenario tuning. Mostly Trackblazer (consecutive race limit, energy threshold, shop check grades, irregular training, excluded items), plus the Grand Concert quick-mode preference |
 
 ### What is NOT included in presets
 
@@ -184,7 +184,8 @@ import { Settings } from "../context/BotStateContext"
 export interface CharacterPreset {
     name: string              // Display name (e.g., "El Condor Pasa")
     scenario: string          // Scenario (e.g., "Trackblazer")
-    settings: DeepPartial<Settings>  // Full settings object
+    traineeName?: string      // In-game trainee to select, when it differs from the display name
+    settings: DeepPartial<Settings>  // Partial settings, merged over the defaults
 }
 
 export const characterPresets: CharacterPreset[] = [
@@ -201,7 +202,7 @@ export const characterPresets: CharacterPreset[] = [
             scenarioOverrides: { ... },
         }
     },
-    // ... 44 more presets
+    // ... the remaining presets
 ]
 ```
 
@@ -209,26 +210,18 @@ export const characterPresets: CharacterPreset[] = [
 
 In `src/pages/Home/index.tsx`:
 
-```typescript
-// Filter presets by currently selected scenario
-const filteredPresets = characterPresets
-    .filter((p) => p.scenario === bsc.settings.general.scenario)
-    .map((p) => ({ value: p.name, label: p.name }))
+The entry point is `handlePresetChange(presetName, scenarioOverride?)`. The picker supplies the scenario alongside the name, so a preset applies its own scenario rather than being filtered against the currently selected one. Its core is the per-category merge:
 
-// When user picks a preset, deep-merge its settings
-const handlePresetChange = async (presetName) => {
-    const preset = characterPresets.find(
-        (p) => p.name === presetName && p.scenario === bsc.settings.general.scenario
-    )
-    // Merge each settings category
-    const merged = { ...bsc.settings }
-    for (const [category, values] of Object.entries(preset.settings)) {
-        merged[category] = { ...merged[category], ...values }
-    }
-    bsc.setSettings(merged)
-    await saveSettings()  // Persist to SQLite
+```typescript
+const merged = { ...bsc.settings }
+for (const [category, values] of Object.entries(preset.settings)) {
+    // Device/user-level categories are never per-trainee tuning.
+    if (category === "debug" || category === "discord") continue
+    merged[category] = { ...merged[category], ...values }
 }
 ```
+
+The real function does more around that loop: it captures the skill-point check settings and the two event-override maps beforehand and restores them afterwards, applies the scenario, persists to SQLite, and records the applied snapshot so the selection survives a restart. Read the function rather than relying on this excerpt.
 
 ---
 
@@ -237,7 +230,7 @@ const handlePresetChange = async (presetName) => {
 ### Prerequisites
 
 - A fully configured settings export for the character (JSON file)
-- The character must be configured for a specific scenario (Trackblazer, Unity Cup, or URA Finale)
+- The character must be configured for a specific scenario (URA Finale, Unity Cup, Trackblazer, or Grand Concert)
 - Each scenario requires a separate preset (the same character plays differently in each scenario)
 
 ### Method 1: Export from the app (recommended)
@@ -345,6 +338,7 @@ scenarios = {
     "Trackblazer": "Trackblazer",
     "Unity-Cup": "Unity Cup",
     "URA-Finale": "URA Finale",
+    "Grand-Concert": "Grand Concert",
 }
 
 presets = []
@@ -421,7 +415,7 @@ Source JSON files must follow this pattern:
 | Part | Format | Examples |
 |------|--------|---------|
 | Character name | kebab-case (lowercase, hyphens) | `el-condor-pasa`, `special-week`, `tokai-teio` |
-| Scenario | kebab-case matching folder name | `trackblazer`, `unity-cup`, `ura-finale` |
+| Scenario | kebab-case matching folder name | `ura-finale`, `unity-cup`, `trackblazer`, `grand-concert` |
 
 The script converts the character name from kebab-case to Title Case:
 - `el-condor-pasa` becomes `El Condor Pasa`
@@ -489,12 +483,12 @@ At minimum, each character preset should define:
 ## Troubleshooting
 
 ### Preset doesn't appear in the dropdown
-- Verify the `scenario` field exactly matches one of: `"Trackblazer"`, `"Unity Cup"`, `"URA Finale"` (case-sensitive).
+- Verify the `scenario` field exactly matches one of: `"URA Finale"`, `"Unity Cup"`, `"Trackblazer"`, `"Grand Concert"` (case-sensitive).
 - Verify the preset was added to the `characterPresets` array in `characterPresets.ts`.
 - Rebuild the JS bundle and APK after changes.
 
 ### Preset applies wrong settings
-- Check that the correct scenario variant is selected (each character has 3 separate presets).
+- Check that the correct scenario variant is selected. Most characters ship 3 presets (URA Finale, Unity Cup, Trackblazer); Taiki Shuttle also has a Grand Concert one, and the Legacy Farm and Blue Farm variants ship a single preset each.
 - Verify the JSON source file was exported while the correct scenario was active.
 
 ### Character name displays incorrectly

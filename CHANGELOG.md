@@ -301,7 +301,7 @@ The headline feature: the bot can now grind a whole **rotation of different trai
 
 ---
 
-## [1.2.5] - 2026-04-22
+## 1.2.5 - 2026-04-22
 
 A pile of stability fixes for stuff that was silently sabotaging runs, plus some real speed wins. Fourteen bugs squashed across the bot loop, settings, and UI, and the bot is noticeably faster on the hot path.
 
@@ -335,7 +335,7 @@ A pile of stability fixes for stuff that was silently sabotaging runs, plus some
 
 ---
 
-## [1.2.0] - 2026-04-17
+## 1.2.0 - 2026-04-17
 
 A big reliability + content release. The bot is dramatically more stable on MuMu (no more random mid-queue crashes), handles the new Trackblazer Racing Carnival event end-to-end, no longer gets stuck after the game's recent UI color refresh, and is measurably snappier on every loop tick. Every single one of the 17 baked-in character presets has been overhauled with proper distances, styles, stat targets, skill priorities, and event picks. Fresh installs now ship with skill buying enabled and a strong starting build for every character.
 
@@ -397,7 +397,7 @@ A big reliability + content release. The bot is dramatically more stable on MuMu
 
 ---
 
-## [1.1.0] - 2026-04-14
+## 1.1.0 - 2026-04-14
 
 ### Added
 - **Configurable per-run time limit.** A new `Max Runtime Per Run` slider in **Run Queue Settings** controls how long a single career may take before the bot gives up on it. Range 30–360 minutes, default **180**. It used to be fixed at 90 minutes, which was too tight for Unity Cup / URA Finale runs on slower devices.
@@ -423,7 +423,7 @@ A big reliability + content release. The bot is dramatically more stable on MuMu
 
 ---
 
-## [1.0.2] - 2026-04-14
+## 1.0.2 - 2026-04-14
 
 ### Changed
 - **Release builds hardened for public distribution.** Releases are now always properly signed (a build that can't be signed fails instead of shipping wrong), and only release-appropriate network rules ship in the release APK.
@@ -433,7 +433,7 @@ A big reliability + content release. The bot is dramatically more stable on MuMu
 
 ---
 
-## [1.0.1] - 2026-04-13
+## 1.0.1 - 2026-04-13
 
 ### Fixed
 - **Crash on first launch.** The icon library the app used could crash it the very first time it opened; every icon was swapped to a different library that doesn't.
@@ -441,7 +441,7 @@ A big reliability + content release. The bot is dramatically more stable on MuMu
 
 ---
 
-## [1.0.0] - 2026-04-13
+## 1.0.0 - 2026-04-13
 
 ### Added
 - **Rebrand to UMA Auto+** - new app name, package identity (`com.lhceist41.uma_auto_plus` so it can live side-by-side with the upstream app), app icon, and splash.
@@ -454,7 +454,7 @@ A big reliability + content release. The bot is dramatically more stable on MuMu
 
 ---
 
-## [5.5.1] - 2026-04-13
+## 5.5.1 - 2026-04-13
 
 ### Added
 - **Crash resilience for the multi-run queue.** Queue progress is saved continuously, so if the app crashes mid-queue you're told about it on the next launch and can pick up where it left off. Logging load during long runs was also reduced.
@@ -464,7 +464,7 @@ A big reliability + content release. The bot is dramatically more stable on MuMu
 
 ---
 
-## [5.5.0] - 2026-04-13
+## 5.5.0 - 2026-04-13
 
 ### Added
 - **First public GitHub release** of the fork.
@@ -519,10 +519,13 @@ The fork already differed substantially from upstream v5.4.8 on day one. The lis
 
 ---
 
-[1.2.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.2.0
-[1.1.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.1.0
-[1.0.2]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.0.2
-[1.0.1]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.0.1
-[1.0.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.0.0
-[5.5.1]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v5.5.1
-[5.5.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v5.5.0
+[1.3.8]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.8
+[1.3.7]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.7
+[1.3.6]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.6
+[1.3.5]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.5
+[1.3.4]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.4
+[1.3.3]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.3
+[1.3.2]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.2
+[1.3.1]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.1
+[1.3.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.0
+[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.3.8...main

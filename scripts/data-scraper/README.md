@@ -15,7 +15,7 @@ pip install lxml                                       # parser used by the skil
 python update.py            # from the repo root; delta mode, only new/changed entries
 ```
 
-Outputs land in `src/data/`: `characters.json`, `supports.json`, `skills.json`, and `character_objectives.json` (goal turns per character; read by `scripts/generate-racing-plan.mjs`, never bundled into the app). Races are static and not re-scraped. The epithet and scraped-preset outputs feed the upstream project's solver and are disabled here.
+Outputs land in `src/data/`: `characters.json`, `supports.json`, `skills.json`, `races.json`, and `character_objectives.json` (goal turns per character; read by `scripts/generate-racing-plan.mjs`, never bundled into the app). Races are a full rebuild rather than a delta, because EN keeps receiving calendar additions; the rebuild is idempotent, so running it every time is cheap. The epithet and scraped-preset outputs feed the upstream project's solver and are disabled here.
 
 ## Shipping a data refresh
 

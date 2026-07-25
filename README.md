@@ -20,11 +20,11 @@ steve1316 built the bot engine. This fork is a substantial body of work on top o
 **Hands-off, multi-run grinding**
 
 - **Multi-run queue** -- queue 2-20 consecutive careers so the bot grinds unattended, with configurable run count, inter-run delay, and stop-on-error.
-- **Trainee rotation** -- queue several different trainees and the bot cycles through them, each run under her own preset, switching automatically between careers (off by default). Scenarios mix freely: the bot pages the Scenario Select carousel to each trainee's scenario between runs.
+- **Trainee rotation** -- queue several different trainees and the bot cycles through them, each run under her own preset, switching automatically between careers (off by default). URA Finale, Unity Cup, and Trackblazer mix freely: the bot pages the Scenario Select carousel to each trainee's scenario between runs. Grand Concert is the exception and cannot be queued or rotated yet -- start those careers yourself.
 - **Between-run navigation** -- the bot walks back through the post-career menus and launches the next run by itself, and stops with a clear message instead of looping when it hits a screen it can't handle.
 - **Verified preset launch** -- Start waits until the preset you selected is confirmed saved before it launches, so the trainee shown on Home is always the trainee that runs. If the save can't be confirmed, the launch is blocked with a clear message and your selection is kept -- just press Start again.
 - **Overnight resilience** -- the bot keeps the screen awake, restarts itself if it freezes, resumes the queue after a crash, gives up on a stuck run after a time limit you set, restores TP from whatever is available (Toughness, then Star Fruit, then a Carats refill), rides out brief connection outages and the daily reset's bounce back to the lobby without losing the career, and repairs its own Accessibility service when an emulator like MuMu silently kills it mid-run. Each of these came from a real overnight queue that died early.
-- **Fast trainee switching** -- the bot remembers where each trainee sits in the roster grid, so a queue switching trainees jumps straight to her instead of scanning the whole roster (about 30 seconds instead of 90), and it always verifies the name on screen before advancing.
+- **Fast trainee switching** -- the bot remembers where each trainee sits in the roster grid, so a queue switching trainees jumps straight to her instead of scanning the whole roster (measured at roughly ten seconds once the grid is anchored, against about ninety for a full scan), and it always verifies the name on screen before advancing.
 - **Career-end spark reroll** -- opt-in, off by default: spends 30 TP once to redraw a career's spark set when the set is weak. The decision is priced from measured spark odds: a 2-star or better stat spark is always kept, a 1-star one is redrawn unless a 3-star spark elsewhere in the set would be put at risk, and TP is refilled with items if it is short. After the spend, the bot reads both the original and the redrawn set on the game's selection screen and keeps the better one, verifying the named set on the final confirmation before committing; anything it cannot verify stops safely for you to finish by hand. The selection step is new and experimental -- supervise it.
 
 **Pick-and-go presets**
@@ -87,7 +87,7 @@ My work extends that engine's *decisions* and wraps it in a hands-off distributi
 
 A few common questions, answered plainly:
 
-- **Does the bot change my support deck?** No. The queue reuses whatever deck you built, career after career, and never swaps a card you placed. The optional **Auto-Fill Support Deck** setting (off by default) only fills slots you left *empty* -- it never touches existing cards.
+- **Does the bot change my support deck?** No. The queue reuses whatever deck you built, career after career, and never swaps a card you placed. The optional **Auto-Fill Support Deck** setting (on by default) only fills slots you left *empty* -- it never touches existing cards.
 - **Can I set everything up myself like in the original?** Yes. Build your deck, pick your parents, start the career, and press Start once you're on the training screen -- the bot plays from there and never sees a setup screen, exactly like the upstream project.
 - **What about the borrowed friend card?** That one the game itself forces: the borrow resets every career, and Start Career silently does nothing while the slot is empty. So on unattended queue runs the bot has to pick one -- Smart Borrow (on by default) scrolls down through the borrow list and takes the best card it finds from a curated list of great picks, skipping any card that would duplicate a character already in your deck and any card of the trainee you are about to run (the game refuses both kinds of deck), and falling back to your strong friend card or the first valid row. The formation is verified before Start Career is pressed, a conflicting borrow gets swapped for the next valid card, and the queue stops with a clear message when no valid borrowed support exists. Follow trainers with strong cards to give it good options, or turn Smart Borrow off to keep the plain top-row pick.
 - **Is there a racing plan?** Yes -- the same Race Planner the upstream project has, plus more: every preset ships a hand-curated racing plan for its trainee, the smart-racing scheduler fills fan gaps dynamically, and the parent-farming presets run generated G1-dense schedules.
@@ -101,7 +101,7 @@ This project is purely for educational purposes to learn about Android automatio
 # Requirements
 
 - Android Device or Emulator (Nougat 7.0+)
-    - Hard requirement for Android phones is 1080p and 240 DPI or 450 DPI (for Samsung phones). If your device do not meet these, you can try the `Basic Template Matching Test` in the Settings under the `Debug Tests` section to determine the best scale to use in the `Custom Scale for Template Matching` setting. If not, then you can also try the [To set the phone's resolution to 1080p (faster and more accurate)](#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate) section to forcibly set the display resolution and DPI of your Android phone. Note that may come with the side-effect of your device UI being scrunched in or zoomed out.
+    - Hard requirement for Android phones is 1080p and 240 DPI or 450 DPI (for Samsung phones). If your device do not meet these, you can try the `Basic Template Matching Test` in the Settings under the `Debug Tests` section to determine the best scale to use in the `Set the Custom Image Scale for Template Matching` setting. If not, then you can also try the [To set the phone's resolution to 1080p (faster and more accurate)](#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate) section to forcibly set the display resolution and DPI of your Android phone. Note that may come with the side-effect of your device UI being scrunched in or zoomed out.
     - Tested emulators are Bluestacks 5 (Pie 64-bit, but other versions should work) and MuMu. The following setup is required:
         - Portrait Mode needs to be forced on always.
         - Bluestacks itself needs to be updated to the latest version to avoid Uma Musume crashing.
@@ -216,19 +216,18 @@ Alternatively, you can do the same on a computer if you cannot get the above to 
 This project is separated into a React Native frontend configured via Expo and an extensive Kotlin/OpenCV backend.
 
 1. Download and extract the repository.
-2. Download OpenCV for Android (v4.12.0) from `https://opencv.org/releases/`. Create `/android/opencv` and copy the extracted `/OpenCV-android-sdk/sdk/` contents into it.
-3. The project uses a YOLOv8 model for stat gain detection. Ensure the `best.onnx` model file is present in the `android/app/src/main/assets/` directory.
+2. The project uses a YOLOv8 model for stat gain detection. Ensure the `best.onnx` model file is present in the `android/app/src/main/assets/` directory.
 
 > [!IMPORTANT]
 > Without the ONNX model file, the YOLO stat detection feature will not work. Template matching will still function as a fallback.
 
-4. The project utilizes Expo. Run `yarn install` from the root directory to install frontend dependencies.
-5. The dev environment is ready. Run `yarn start` or `npx expo start` to run the Metro HTTP server.
-6. To ensure code consistency, developers should format and lint the codebase using the following commands:
-    - `yarn format`: Formats both TypeScript/TSX files (via **Prettier**) and Kotlin files (via **Ktlint**).
-    - `yarn format:tsx`: Formats only TypeScript and TSX files using **Prettier**.
+3. The project utilizes Expo. Run `yarn install` from the root directory to install frontend dependencies.
+4. The dev environment is ready. Run `yarn start` or `npx expo start` to run the Metro HTTP server.
+5. To ensure code consistency, developers should format and lint the codebase using the following commands:
+    - `yarn format`: Runs both formatters below.
+    - `yarn format:tsx`: Formats `.tsx` files using **Prettier**. Note it globs `**/*.tsx` only, so plain `.ts` files are not covered.
     - `yarn format:kt`: Formats only Kotlin files using **Ktlint** (following settings in [android/.editorconfig](./android/.editorconfig)).
-7. To test Android builds, execute `yarn android` to compile and install the application directly on your device. Use `yarn build` for release APK generation.
+6. To test Android builds, execute `yarn android` to compile and install the application directly on your device. Use `yarn build` for release APK generation.
 
 > [!NOTE]
 > Do not run the React Native shell app directly from Android Studio. Always rely on the Expo Metro bundler for correct bridging.
