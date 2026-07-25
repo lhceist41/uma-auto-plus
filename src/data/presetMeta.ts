@@ -86,6 +86,8 @@ export const validatedPresets: ReadonlySet<string> = new Set([
     "Mejiro Ryan|URA Finale",
     "Mihono Bourbon|URA Finale",
     "Mejiro Palmer|URA Finale",
+    // A+ 12,611 on 2026-07-24: the Grand Concert scenario's first fully automated completion.
+    "Taiki Shuttle|Grand Concert",
 ])
 
 /**
