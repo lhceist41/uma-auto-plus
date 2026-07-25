@@ -32,6 +32,21 @@ If you use the run queue's trainee rotation and it stops with `Trainee '...' not
 - You actually **own** that trainee — the rotation picks from your in-game roster, not from the preset list.
 - The trainee's name in the rotation matches the in-game name.
 
+## Grand Concert: the bot won't start the career from the lobby
+
+For Grand Concert you start the career yourself in game, then press Start. The bot cannot page the
+scenario carousel to Grand Concert yet, so a run that begins on the lobby stops with an unsupported
+scenario message rather than picking the wrong scenario. Once the career is running, everything in it
+is automated, lessons and concerts included.
+
+For the same reason the run queue, trainee rotation, and automatic TP restore do not apply while
+Grand Concert is selected. Those settings are not rewritten, just not honored for this scenario, and
+they come back when you switch to another one.
+
+If the bot does stop mid-career on a lesson or concert screen, it says which screen it was looking at
+and leaves the career untouched. Handle that screen in game, return to the career screen, and press
+Start to resume the same career. Nothing is spent and no career is lost when that happens.
+
 ## Skills aren't bought, or the wrong event option is picked
 
 Apply a **preset** for the character you're running: **Home → pick a scenario → pick the character**. The presets carry the skill-purchase plans and per-event choices. Without one, the bot falls back to generic scoring.

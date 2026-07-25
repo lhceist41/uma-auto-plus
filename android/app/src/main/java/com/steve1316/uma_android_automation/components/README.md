@@ -23,6 +23,17 @@ The only exception is if you want to add a dialog, in which case there is one ex
 
 For `ComplexComponentInterface` and `MultiStateButtonInterface`, the only difference is that you need to add a list of `Template`. See `Button.kt::ButtonMenuBarHome` for an example of a `MultiStateButtonInterface`.
 
+### Scenario-specific variants
+
+A scenario can restyle a button the rest of the game shares, and the stock template then scores just
+under the match threshold instead of failing loudly, so the click silently finds nothing. When that
+happens, add a separate component with its own template cut from a live capture of that scenario
+(`ButtonRacesGrandConcert` and the five `ButtonTraining*GrandConcert` entries are the current
+examples) and pick between them at the call site on the active scenario. Do not lower the confidence
+threshold to make one template cover both: that widens every other match too. Verify a new variant
+scores near 1.0 on captures of the scenario it targets and clearly below the threshold on screens it
+must not match.
+
 ## Button.kt
 
 Clickable button elements.

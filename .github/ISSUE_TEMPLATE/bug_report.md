@@ -18,7 +18,7 @@ Pull the most recent one (`adb pull "..." .`) and attach it. This is by far the 
 - Device / emulator: <!-- e.g. MuMu Player 12, Samsung SM-G7810 -->
 - Resolution / DPI: <!-- e.g. 1080x1920 @ 240 -->
 - App version: <!-- the release you installed -->
-- Scenario: <!-- URA Finale / Unity Cup / Trackblazer -->
+- Scenario: <!-- URA Finale / Unity Cup / Trackblazer / Grand Concert -->
 - Character preset: <!-- which one, or "none" -->
 
 **Screenshots**

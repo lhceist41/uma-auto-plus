@@ -1150,7 +1150,8 @@ program has nothing to optimise.
 The chosen plan is logged as `[KNAPSACK] DP plan: N skills for X SP. Skills: ...`.
 
 **A purchase is not complete until the confirmation screen is gone.** The on-screen skill-point counter
-is a selection preview, not a balance — see `docs/INCIDENTS.md`, entry 4.
+is a selection preview, not a balance: it drops as soon as a skill is ticked, so a buy is only counted
+once the screen has closed and the balance is re-read.
 
 ### Adaptive threshold
 
@@ -1442,6 +1443,155 @@ defect is what the swipe navigation above replaces. Still unproven live: the swi
 page change, winner scoring on live data, the verified-winner Confirm, the confirmation-pill
 check, the kept and choice records on a spend career, and the no-spend keep confirmation --
 all supervised territory for the next career.
+
+### Grand Concert
+
+Grand Concert ("Brighter Together Our Grand Concert", community name "Grand Live") was added to
+Global on 2026-07-22 22:00 UTC. This fork drives it end to end: the shared campaign loop handles
+everything it handles in the other scenarios, and the scenario's own two systems (the Lesson shop
+and the five concerts) are automated on top of that. A career runs unattended from the first turn
+to the spark screen, with one exception noted under the capability gate below: the launch navigator
+cannot page the Scenario Select carousel to Grand Concert yet, so the player starts the career.
+
+**Canonical key and aliases.** The persistence key is `Grand Concert`. Six spellings normalize
+onto it (`Grand Concert`, `Grand Live`, `Our Grand Concert`, and the three punctuation variants
+of the rendered title), folded on letters and digits only, so casing and punctuation cannot
+split one scenario into two. Normalization is applied on the Kotlin side at
+`Game.scenario` (before dispatch, and therefore before the launch-identity comparison and every
+log line) and on the React side in `src/lib/scenarioKey.ts`, which the launch-config hash and
+the Home picker share. The two alias lists are mirrors and are pinned by tests on both sides.
+The mirroring matters: a career persisted under one spelling and dispatched under another is
+exactly the drift the Start persistence barrier exists to catch, and it would catch it as a
+*mismatch abort* rather than doing the right thing.
+
+**Caps.** Speed 1600, Guts 1500, Stamina/Power/Wit 1300, read straight off the Global screen
+denominators rather than from a guide. These are the base: blue inheritance sparks raise them
+per career (1641 Speed was observed on a linked run), so `getScenarioStatCap` returns the floor
+and the stat reader's `maxOf(scenarioCap, manualCap)` rejection guard must never be tightened
+onto it.
+
+**Capability gate.** Run queues, trainee rotation, and automatic TP restore are unavailable for
+this scenario, enforced in `StartModule` (queue setup and `loadRotationConfig`) and mirrored in
+Home's button label. The gate is applied at READ time and never rewrites the user's stored
+settings, so switching scenarios restores them intact. The reason is not that a queue would crash:
+it is that `handleScenarioSelect` maps only URA Finale, Unity Cup, and Trackblazer onto a logo
+template and returns a non-recoverable failure for anything else, so the navigator cannot launch a
+second Grand Concert career. Lifting the gate means adding a `scenario_select_grandconcert` template
+and its branch; nothing else about a queued Grand Concert career is known to be missing.
+
+**What is automated.** Everything shared (date and turn reading, training scoring, the racing plan,
+training events, skills, career end) plus both scenario systems:
+
+- **The Lesson shop.** `onBeforeMainScreenUpdate` opens Lessons whenever the button is unlocked,
+  reads the three-card offer, scores it, and runs a guarded spend loop. See the spend loop below.
+- **The concerts.** All five (four Promo Concerts plus the Grand) run through `runConcertEscort`,
+  a state machine over the pending screen, the start confirmation, playback, both result screens,
+  the bonuses notice, the activated-bonuses panel, and the finale's on-stage interstitial.
+- **The career-end drain.** Before the skill purchase, `openCareerEndSkillScreen`'s Grand Concert
+  override spends leftover performance points through the Complete Career screen's own Lessons
+  button, then opens the skill screen from that layout (the shared Learn-button template does not
+  exist there and missed six times before this override was added).
+
+The **manual handoff** (`GrandConcertHandoff`) survives as the safety net rather than the normal
+path. It is a typed stop that is deliberately *not* an error: the game is alive, so the
+unknown-screen ladder's relaunch rung must not fire, no generic Confirm/Next/OK may be clicked, the
+career is left exactly where it is, and Start reattaches to it afterwards with no additional TP.
+Any escort state the machine does not recognise, any budget exhaustion, and any verification
+mismatch route here instead of guessing.
+
+**Theme and OCR.** The career screen paints its stat-table *label* row pink. The stat *value*
+cells stay white with dark digits, which is why the shared grayscale stat OCR needed no change.
+That is asserted by a fixture test (`grandConcertStatValueCellsAreLight`) rather than assumed,
+so a future patch that does tint the cells fails a test instead of a career. The stat block itself
+is located by a template match on the Skill Pts header, which no offline fixture can exercise;
+live careers have since confirmed the anchor matches.
+
+The scenario also restyles buttons the rest of the game shares, and the stock templates land just
+under the match threshold rather than failing loudly. The five facility buttons scored 0.62 to 0.75
+(the bot rested every turn until dedicated templates were cut), and the career screen's **Races**
+button scores 0.707, which silently made every voluntary race impossible: maiden races, extra races,
+and the fan-shortfall safety net all go through a click on it, while mandatory races enter via the
+race-day ribbon and were therefore unaffected. That combination cost a career in the Classic year,
+618 fans short of a fan-gated goal, while the safety net retried a race it could never enter.
+`ButtonRacesGrandConcert` and the five `ButtonTraining*GrandConcert` templates are selected per
+scenario in `Racing.racesButton` and `Training.trainingButtonsForScenario`.
+
+**Quick Mode.** Career start now raises a mandatory "Quick Mode Settings" dialog with four
+options. It is a general game feature rather than a Grand Concert one, but this is where the bot
+first meets it. The dialog is recognised structurally (green title band, black backdrop, four
+radio rows, wide green Confirm) and its current selection is read back from the radio colour,
+which is what makes a verify-after-tap possible. The choice comes from a setting
+(`scenarioOverrides.grandConcertQuickMode`, default `dont_use`) rather than a built-in default,
+because the options change how much of the game the player sees. `QuickModePlanner` maps the setting
+to an action and `handleQuickModePrompt` executes it: tap the configured row, verify the radio
+actually moved before confirming, then confirm. A setting the planner cannot honor hands off before
+the career starts, which costs nothing because no TP has been spent yet. This path is still
+live-unproven, because the navigator cannot reach a Grand Concert career start yet.
+
+**Decision engine.** `GrandConcertPolicy` scores an offer and picks what to buy. A song is valued on
+its immediate mastery bonus, its concert bonus multiplied by the turns that remain *after* the bonus
+activates (a bonus queued near the Grand is worth almost nothing), a per-type scarcity weight
+(Vocal 1.5 on a Speed and Wit build), and a per-cycle deadline term that escalates as a concert
+approaches. `chooseSpend` takes the best affordable card at or above `SPEND_MIN_SCORE`;
+`chooseGateAdvance` is the fallback for a trio of junk techniques, buying the cheapest one purely to
+force a restock so the song gate keeps moving, under a cost cap that widens when the cycle's
+three-song floor is unmet and the concert is close. At career end the model changes: costs go flat
+(scarcity is meaningless on points that expire), compounding and concert terms collapse, and the
+stop line drops to 1, because anything with positive value beats losing the points.
+
+Its refusals are still the point: an unreadable card is never recommended, affordability is never
+claimed against an unknown cost or an unknown balance, and a scoring tie yields no recommendation.
+
+**The spend loop.** `spendVisit` is greedy with a stop rule, and every purchase is transactional.
+`attemptLearn` taps the card, reads the confirmation dialog, and commits **only** on
+`EXACT_MATCH` against the card it intended; a Schedule dialog (the card was not actually
+affordable), an unreadable dialog, or a title or kind mismatch all cancel instead. After each buy the
+list is re-read and the balances checked against the cost. Purchases are bounded per visit and per
+run, and a visit that bought nothing (or bought only a gate advance) blocks further visits on the
+same turn, so a misbehaving scorer cannot drain a career.
+
+**Data provenance.** Every seeded fact carries a `Provenance` label. The distinction is load
+bearing here because the sources genuinely disagree: the Global client's own master database
+(read from the Steam client install) says the fifth performance point type is **Composure** and
+that an unaffordable lesson is "scheduled for later", while several Global guide sites say
+"Mental" and "Reserve". The client data wins; the guide spellings are accepted on input only.
+Song names come from the client too, and differ from pre-launch translations in almost every
+case ("Run n' Run!", "Getaway! Fallin' Love", "Precious Treasure Box", "Girls' Legend U").
+
+**Lesson and concert screen detection (read-only).** The full launch-night lesson flow is now
+captured and pinned: the Lesson list (technique cards carry a green header, song cards a purple
+one; affordability is read from the cost-strip brightness and the gold "Learnable!" marker), the
+two confirmation dialogs (a red "Not enough performance points" band is what separates the
+unaffordable Schedule dialog from the affordable Learn dialog), the Scheduling Complete
+acknowledgement, and the Concert Info screen (concert index, Hype tier, songs learned, the three
+concert-bonus panels with their before/after values, and the set list). The unlocked Lessons
+button is detected in all four states -- `LOCKED` / `UNLOCKED` / `UNLOCKED_SCHEDULED` / `UNKNOWN`
+-- with the pink "Scheduled" badge and the song-note marker read independently. The models
+(`bot/GrandConcertLessons.kt`) keep the one distinction that matters: **scheduling is inert**
+(spends nothing, applies no Mastery, queues no Concert Bonus, adds no hype, counts no song),
+while learning is the only transition that applies effects, and a scheduled song is never counted
+toward a concert's song target.
+
+`LessonScreenGuard` still routes any lesson or concert screen the campaign itself is not driving to
+the manual handoff, so a generic Confirm/Close/Next/OK handler can never act on one. The campaign
+acts first on the screens it owns; the guard catches everything else.
+
+**Titles are matched against a catalog, not trusted from OCR.** Song and technique effect text
+garbles badly on the list (mastery and concert lines worse than titles), so identity comes from a
+fuzzy match against a 23-song catalog and a technique-title table: exact fold, then a unique prefix
+of at least eight characters, then a bounded edit distance. Global renamed most songs from their
+pre-launch translations, and live OCR routinely returns "ldol" for "Idol" and "SIimming" for
+"Slimming", which the fold absorbs. Stat techniques are additionally identified deterministically
+from a single-type cost: the granting stat's primary token with tiers 10, 16, and 24 mapping to +5,
++8, and +12. Hint and energy costs are never cost-inferred, because they collide with those tiers.
+Text parsing wins when it is unambiguous, then the title catalog, then the cost signature.
+
+**Known open items.** The career-end drain occasionally reads the shop as absent and skips, which
+costs nothing when the leftovers cannot afford the offer but is not understood yet. Cost and balance
+cells are OCR'd at a threshold of 230, which erases the digits on the grey cost strip an unaffordable
+card renders (measured: the saved threshold dump is solid black while the crop is legible), so those
+cells get a second read at a lower cutoff. Queued Grand Concert careers need the scenario-select
+template described above.
 
 ### The Start persistence barrier
 
