@@ -785,10 +785,16 @@ export const defaultSettings: Settings = {
         trackblazerRetryRacesBeforeFinalGrades: ["G1", "G2", "G3"],
         trackblazerEnableIrregularTraining: false,
         trackblazerIrregularTrainingMinStatGain: 30,
-        // Reserve top-tier energy items (Energy Drink MAX/MAX EX) for the Twinkle Star Climax
-        // races on days 73-75, where +50 energy from a single drink can rescue a critical
-        // training pass. Yummy Cat Food is excluded for the same reason — its mood-restore +
-        // energy combination is a Finale-tier item that's wasted earlier in the run.
+        // The two Energy Drinks are the worst energy-per-coin in the shop and are excluded on
+        // that basis, NOT reserved for later: this setting blocks the purchase outright, so an
+        // excluded item is never owned at all. Energy Drink MAX is 30 coins for Energy +5 (0.17
+        // per coin, against Vita 20's 0.57 and Vita 65's 0.87), and Energy Drink MAX EX gives no
+        // immediate energy whatsoever, only Maximum energy +8. Their sole real value is the
+        // permanent max-energy raise, and at buy-list position 32 of 37 the coins would come out
+        // of stat scrolls and race hammers, which convert straight into score. Whether the cap
+        // raises stack across copies is unverified; research that before reconsidering.
+        // Yummy Cat Food is excluded separately: its mood-restore plus energy combination is a
+        // Finale-tier item that's wasted earlier in the run.
         // Coaching Megaphone is the trainer guide's "trap" item — its 5-turn skill-point bonus
         // doesn't pay back in Trackblazer's compressed schedule and burns a shop slot the bot
         // would otherwise spend on a stat scroll or hint book that converts directly to gains.

@@ -681,7 +681,7 @@ Items are purchased in strict priority order. The bot buys the highest-priority 
 | **4. Training Effects** | Empowering/Motivating Megaphone, Ankle Weights (top 3 stats), Coaching Megaphone, Reset Whistle | Training bonuses |
 | **5. Bad Condition Heals** | Fluffy Pillow, Pocket Planner, Smart Scale, Aroma Diffuser, Practice Drills DVD | Heal negative statuses |
 | **6. Training Facilities** | Training Applications (top 3 stats) | Facility level boosts |
-| **7. Other Energy** | Energy Drink MAX, Energy Drink MAX EX | Additional energy items |
+| **7. Other Energy** | Energy Drink MAX | Additional energy item (excluded from buying by default) |
 | **8. Good Conditions** | Pretty Mirror, Reporter's Binoculars, Master Practice Guide, Scholar's Hat | Positive status effects |
 
 **Inventory limits:** Most items are capped at 5 copies. Condition-related items (good/bad) are typically capped at 1 (except Rich Hand Cream and Miracle Cure at 5).
@@ -814,12 +814,11 @@ Royal Kale Juice is handled separately from Vita items because of its mood penal
 | **Energy Drink MAX** | 30 coins | Maximum energy +4, Energy +5 |
 | **Energy Drink MAX EX** | 50 coins | Maximum energy +8 |
 
-**When used:** Neither is a quick-use item (`isQuickUsage = false` for both). **Energy Drink MAX** is treated as an ordinary energy item: it enters the greedy energy pool above alongside the Vitas, and it is first in the conservation order, so the last copy is held back for emergency race recovery.
+**Both are excluded from buying by default,** and every bundled Trackblazer preset excludes them too, so a stock run never owns either one. They are the worst energy-per-coin in the shop: Energy Drink MAX is 0.17 energy per coin against Vita 20's 0.57 and Vita 65's 0.87, and Energy Drink MAX EX gives no immediate energy at all. Their only real value is the permanent max-energy raise, and at buy-list position 32 of 37 the coins would otherwise go to stat scrolls and race hammers, which convert directly into score.
 
-> [!WARNING]
-> **Energy Drink MAX EX is purchased but never consumed.** It appears in the Tier 7 buy list, but it is not in the energy item table, the stat item list, the bad-condition heal list, or any inline-usage branch, so nothing ever uses it. At 50 coins it is currently wasted spend. Treat this as a known defect, not intended behavior.
+**If un-excluded:** neither is a quick-use item (`isQuickUsage = false` for both). **Energy Drink MAX** then behaves as an ordinary energy item worth 5: it enters the greedy energy pool above alongside the Vitas, and it is first in the conservation order, so the last copy is held for emergency race recovery. Note that makes an emergency recovery worth only +5 while a copy is owned.
 
-**Shop priority:** These are in Tier 7 (low priority), purchased only after most other items. The max energy increase is a long-term investment that pays off over many turns.
+**Energy Drink MAX EX cannot be bought at all.** It was removed from the buy list because nothing consumes it: it is absent from the energy item table, the stat item list, the bad-condition heal list, and every inline-usage branch, so a purchased copy would sit in the bag forever. Wire up a usage path before adding it back.
 
 </details>
 
@@ -1159,9 +1158,13 @@ Three deliberate deviations from the generic engine, all specific to this scenar
   extra relationship-score weight, layered on top of the generic trainer-support bonus. This acts as
   a proxy for the scenario's point gain, because the relevant UI screen has no template asset yet.
   Implemented in `Training.kt`.
-- **Energy-item reservation.** Presets reserve the high-value energy items (Energy Drink MAX and its
-  EX variant, Yummy Cat Food, Coaching Megaphone) from early- and mid-game shop spending via
-  `trackblazerExcludedItems`, so they remain available for the climax.
+- **Excluded shop items.** `trackblazerExcludedItems` drops four items from buying, by default and in
+  every bundled preset: both Energy Drinks, Yummy Cat Food, and the Coaching Megaphone. This is an
+  outright purchase block, not a reservation: an excluded item is never owned, so it is not being
+  saved for the climax. The drinks go because they are the worst energy-per-coin in the shop (and the
+  EX variant has no usage path at all); the Coaching Megaphone goes because its 5-turn skill-point
+  bonus does not pay back in Trackblazer's compressed schedule and burns a shop slot that a stat
+  scroll converts directly into gains.
 - **Shop interaction every turn** (`trackblazerShopCheckFrequency: 1`), unlike other scenarios which
   visit the shop rarely or not at all.
 

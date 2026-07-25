@@ -1351,8 +1351,12 @@ class Trackblazer(game: Game) : Campaign(game) {
         }
 
         // 7. Other Energy Items.
+        // Energy Drink MAX EX is deliberately absent: nothing consumes it. It is not in
+        // energyItemNames or energyGains, it is not a stat or heal item, and no handleInlineUsage
+        // branch matches it, so a bought copy sits in the bag forever. Listing it here only mattered
+        // while trackblazerExcludedItems hid it by default; anyone editing that list would have
+        // bought up to 5 at 50 coins for nothing. Wire up a usage path before adding it back.
         priorityList.add("Energy Drink MAX")
-        priorityList.add("Energy Drink MAX EX")
 
         // 8. Good Condition Items
         priorityList.add("Pretty Mirror")
