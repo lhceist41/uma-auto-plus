@@ -1,6 +1,7 @@
 const { getDefaultConfig } = require("expo/metro-config")
 const { withNativeWind } = require("nativewind/metro")
 const path = require("path")
+const fs = require("fs")
 
 /**
  * Metro configuration
@@ -24,5 +25,19 @@ config.resolver.blockList = [
     /android\/app\/build\/.*/,
     /android\/build\/.*/,
 ]
+
+// This checkout's node_modules is a symlink to the primary checkout (isolated worktree). Metro
+// resolves modules against the project root and rejects the symlink target as "outside the
+// project", so point resolution and the watch scope at the real directory. Build-time only.
+let realNodeModules = path.resolve(__dirname, "node_modules")
+try {
+    realNodeModules = fs.realpathSync(realNodeModules)
+} catch (e) {
+    // Not a symlink (normal checkout): leave the default resolution alone.
+}
+if (realNodeModules !== path.resolve(__dirname, "node_modules")) {
+    config.watchFolders = [...(config.watchFolders || []), realNodeModules]
+    config.resolver.nodeModulesPaths = [path.resolve(__dirname, "node_modules"), realNodeModules]
+}
 
 module.exports = withNativeWind(config, { input: "./global.css", inlineRem: 16 })
