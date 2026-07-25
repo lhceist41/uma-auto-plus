@@ -5,13 +5,14 @@ import { Text } from "../ui/text"
 import { useTheme } from "../../context/ThemeContext"
 import { characterPresets, trainerAdvisories } from "../../data/characterPresets"
 import { presetCharacter, presetOutfit, presetValidation } from "../../data/presetMeta"
-import { useFavoriteCharacters } from "../../lib/uiPrefs"
+import { useFavoritePresets } from "../../lib/uiPrefs"
 
 /** Career scenarios in display order, with the short labels used on the scenario chips. */
 const SCENARIOS: { name: string; short: string }[] = [
     { name: "URA Finale", short: "URA" },
     { name: "Unity Cup", short: "UC" },
     { name: "Trackblazer", short: "TB" },
+    { name: "Grand Concert", short: "GC" },
 ]
 
 const GREEN = "#22c55e"
@@ -82,7 +83,7 @@ const PresetPicker: React.FC<PresetPickerProps> = ({ visible, onClose, onApply }
     const { colors } = useTheme()
     const [query, setQuery] = useState("")
     const [expandedPreset, setExpandedPreset] = useState<string | null>(null)
-    const [favorites, toggleFavorite] = useFavoriteCharacters()
+    const [favorites, toggleFavorite] = useFavoritePresets()
 
     // One row per preset name (= per outfit), with the scenarios that name has presets for.
     const allRows = useMemo<PickerRow[]>(() => {
@@ -104,7 +105,8 @@ const PresetPicker: React.FC<PresetPickerProps> = ({ visible, onClose, onApply }
     const sections = useMemo(() => {
         const q = query.trim().toLowerCase()
         const matches = q.length === 0 ? allRows : allRows.filter((r) => r.character.toLowerCase().includes(q) || r.outfit.toLowerCase().includes(q))
-        const favoriteRows = matches.filter((r) => favorites.includes(r.character))
+        // Per-preset favorites: only the starred outfit's row pins, never the whole character.
+        const favoriteRows = matches.filter((r) => favorites.includes(r.presetName))
         const result: { title: string; data: PickerRow[] }[] = []
         if (favoriteRows.length > 0) result.push({ title: "Favorites", data: favoriteRows })
         result.push({ title: "All Trainees", data: matches })
@@ -199,7 +201,7 @@ const PresetPicker: React.FC<PresetPickerProps> = ({ visible, onClose, onApply }
 
     const renderRow = ({ item }: { item: PickerRow }) => {
         const expanded = expandedPreset === item.presetName
-        const isFavorite = favorites.includes(item.character)
+        const isFavorite = favorites.includes(item.presetName)
 
         return (
             <View style={{ paddingHorizontal: 12, paddingVertical: 2 }}>
@@ -242,7 +244,7 @@ const PresetPicker: React.FC<PresetPickerProps> = ({ visible, onClose, onApply }
                                 </View>
                             )
                         })}
-                        <TouchableOpacity onPress={() => toggleFavorite(item.character)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginLeft: 8 }}>
+                        <TouchableOpacity onPress={() => toggleFavorite(item.presetName)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ marginLeft: 8 }}>
                             <Star size={18} color={isFavorite ? AMBER : colors.border} fill={isFavorite ? AMBER : "transparent"} />
                         </TouchableOpacity>
                     </View>

@@ -8,13 +8,15 @@ import * as FileSystem from "expo-file-system"
  * shared through a module-level store so every consumer sees the same state without a provider.
  */
 interface UiPrefs {
-    /** Characters starred in the preset picker. Character names, not preset names. */
-    favoriteCharacters: string[]
+    /** Presets starred in the preset picker, keyed by PRESET name (one entry per outfit).
+     * Favorites used to be keyed by character, which starred every outfit of a trainee at
+     * once - wrong for accounts that do not own every outfit variant. */
+    favoritePresets: string[]
 }
 
 const PREFS_FILE = FileSystem.documentDirectory + "uiPrefs.json"
 
-let prefs: UiPrefs = { favoriteCharacters: [] }
+let prefs: UiPrefs = { favoritePresets: [] }
 let loadStarted = false
 const listeners = new Set<() => void>()
 
@@ -28,8 +30,11 @@ const ensureLoaded = () => {
         .then((info) => (info.exists ? FileSystem.readAsStringAsync(PREFS_FILE) : "{}"))
         .then((raw) => {
             const parsed = JSON.parse(raw)
-            if (Array.isArray(parsed.favoriteCharacters)) {
-                prefs = { favoriteCharacters: parsed.favoriteCharacters.filter((c: unknown) => typeof c === "string") }
+            // Migration: the legacy key stored bare character names, which happen to equal the
+            // base outfit's preset name, so carrying them over keeps the base-outfit star lit.
+            const stored = Array.isArray(parsed.favoritePresets) ? parsed.favoritePresets : parsed.favoriteCharacters
+            if (Array.isArray(stored)) {
+                prefs = { favoritePresets: stored.filter((c: unknown) => typeof c === "string") }
                 emit()
             }
         })
@@ -52,21 +57,21 @@ const subscribe = (listener: () => void) => {
     }
 }
 
-const getFavorites = () => prefs.favoriteCharacters
+const getFavorites = () => prefs.favoritePresets
 
 /**
- * Hook exposing the favorite characters list and a toggle. Favorites are keyed by CHARACTER
- * name (one star covers all of a character's outfits and scenarios).
+ * Hook exposing the favorite presets list and a toggle. Favorites are keyed by PRESET name, so
+ * starring one outfit never stars a trainee's other outfits (the account may not own them).
  * @returns A tuple of the current favorites and a toggle function.
  */
-export function useFavoriteCharacters(): [string[], (character: string) => void] {
+export function useFavoritePresets(): [string[], (presetName: string) => void] {
     ensureLoaded()
     const favorites = useSyncExternalStore(subscribe, getFavorites)
 
-    const toggleFavorite = useCallback((character: string) => {
-        const current = prefs.favoriteCharacters
+    const toggleFavorite = useCallback((presetName: string) => {
+        const current = prefs.favoritePresets
         prefs = {
-            favoriteCharacters: current.includes(character) ? current.filter((c) => c !== character) : [...current, character],
+            favoritePresets: current.includes(presetName) ? current.filter((c) => c !== presetName) : [...current, presetName],
         }
         emit()
         persist()
