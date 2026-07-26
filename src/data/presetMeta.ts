@@ -88,6 +88,23 @@ export const validatedPresets: ReadonlySet<string> = new Set([
     "Mejiro Palmer|URA Finale",
     // A+ 12,611 on 2026-07-24: the Grand Concert scenario's first fully automated completion.
     "Taiki Shuttle|Grand Concert",
+    // Three full-arc completions by 2026-07-26, two of them on the same day's queue (A+ 13,352
+    // and an A+ turn-75 with a Power 3-star spark) with the whole career-end pipeline unattended.
+    "Copano Rickey|Grand Concert",
+    // Six URA full-arc completions in the ledger, including the Kashiwa Kinen win the sash
+    // profile was built for, plus two Unity Cup completions. Single preset per scenario, so the
+    // trainee-name ledger maps unambiguously.
+    "Copano Rickey|URA Finale",
+    "Copano Rickey|Unity Cup",
+    // Completed 2026-07-26 after the mid-career daily-reset interruption was fixed; the career
+    // resumed from turn 49 and finished its full arc.
+    "Daiwa Scarlet|Grand Concert",
+    // Unity Cup and Trackblazer completions map unambiguously to the base presets: the Legacy
+    // Farm arm is URA-only, so it cannot be the source of either. Her URA ledger mixes the base
+    // build with Legacy Farm careers and stays unpromoted until the corpus refresh resolves it
+    // by config fingerprint.
+    "Daiwa Scarlet|Unity Cup",
+    "Daiwa Scarlet|Trackblazer",
 ])
 
 /**

@@ -120,8 +120,14 @@ describe("Copano Rickey presets", () => {
         expect(presetCharacter("Copano Rickey")).toBe("Copano Rickey")
     })
 
-    it("stays research-graded in every scenario until a live career says otherwise", () => {
-        for (const p of trio) expect(presetValidation(p.name, p.scenario)).toBe("research")
+    it("is live-validated in URA, Unity Cup, and Grand Concert - the ledger holds full-arc completions for each", () => {
+        // URA (6 completions incl. the Kashiwa Kinen sash win), Unity Cup (2), and Grand
+        // Concert (3, two on the 2026-07-26 queue). One Copano preset per scenario, so the
+        // trainee-name ledger maps unambiguously.
+        for (const scenario of ["URA Finale", "Unity Cup", "Grand Concert"]) {
+            expect(presetValidation("Copano Rickey", scenario)).toBe("validated")
+        }
+        expect(presetValidation("Copano Rickey", "Trackblazer")).toBe("research")
     })
 
     it("carries the Dirt / Mile / Pace Chaser identity in all three presets", () => {
