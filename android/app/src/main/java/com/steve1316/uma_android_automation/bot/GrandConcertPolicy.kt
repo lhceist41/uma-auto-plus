@@ -236,6 +236,7 @@ object GrandConcertPolicy {
                     scheduled = card.scheduled == true,
                     score = lessonScore(card, context),
                     weightedCost = weightedCost(card.cost),
+                    rawCostTotal = card.cost.total(),
                 )
             }.sortedByDescending { it.score }
 
@@ -356,12 +357,55 @@ object GrandConcertPolicy {
     private const val CAREER_END_COST_WEIGHT = 0.02
 
     /**
+     * The technique reserve, in raw points summed across all five types. While a future concert
+     * remains, a technique purchase may not drop the total balance below this floor: the
+     * 2026-07-26 A+ career entered its Grand finale with ZERO new songs because the 48-61 cycle
+     * bought four techniques after its own songs and started the last cycle broke. Sized from
+     * master.mdb's own lesson-cost table (single_mode_live_square, square_type 4 = songs:
+     * median 44, p75 63, max 68 total) as one expensive song plus margin; per-turn point income
+     * covers the rest of a cycle's three songs. Songs are never reserve-blocked, gate advances
+     * are exempt (they exist to roll the offer toward songs and are capped cheap), and the
+     * career-end drain never activates the reserve because expiring points have nothing to be
+     * reserved FOR.
+     */
+    const val TECH_RESERVE_TOTAL = 70
+
+    /**
      * Picks the purchase the spend loop should make from a ranked offer report, or null to stop
      * buying. Pure and deliberately strict: only a provably affordable, unscheduled card at or
      * above [minScore] qualifies, and the ranking order already encodes the strategy weights.
+     *
+     * When [reserveActive] is true and [totalBalance] is known, a TECHNIQUE whose raw cost would
+     * drop the total balance below [TECH_RESERVE_TOTAL] is skipped so the pool stays spendable
+     * on songs; a technique with an unreadable cost is skipped under the same rule (fail toward
+     * the reserve, never through it). Songs are never reserve-blocked.
      */
-    fun chooseSpend(report: GrandConcertLessonReport, minScore: Int = SPEND_MIN_SCORE): LessonOfferLine? =
-        report.ranked.firstOrNull { it.affordable == true && !it.scheduled && it.score >= minScore }
+    fun chooseSpend(
+        report: GrandConcertLessonReport,
+        minScore: Int = SPEND_MIN_SCORE,
+        totalBalance: Int? = null,
+        reserveActive: Boolean = false,
+    ): LessonOfferLine? =
+        report.ranked.firstOrNull { line ->
+            line.affordable == true && !line.scheduled && line.score >= minScore &&
+                !(
+                    reserveActive && line.kind == LessonCardKind.TECHNIQUE && totalBalance != null &&
+                        (line.rawCostTotal == null || totalBalance - line.rawCostTotal < TECH_RESERVE_TOTAL)
+                )
+        }
+
+    /**
+     * The song-first pick: while the cycle is below the [GREAT_SUCCESS_SONG_FLOOR], an offered,
+     * provably affordable, unscheduled song is ALWAYS worth buying, score notwithstanding. The
+     * measured alternative was worse on every 2026-07-26 career: roughly two of five concerts
+     * missed the three-song Great Success condition while affordable songs sat below the score
+     * floor or behind higher-ranked techniques. Ranking order still decides among multiple
+     * songs; the fourth-plus song of a cycle goes back through normal scoring.
+     */
+    fun chooseSongFirst(report: GrandConcertLessonReport, songsLearnedThisCycle: Int?): LessonOfferLine? {
+        if (songsLearnedThisCycle == null || songsLearnedThisCycle >= GREAT_SUCCESS_SONG_FLOOR.value) return null
+        return report.ranked.firstOrNull { it.kind == LessonCardKind.SONG && it.affordable == true && !it.scheduled }
+    }
 
     /** A gate-advance purchase may cost at most this much weighted-cost: cheap tier-I techniques
      * qualify, expensive ones do not. Under concert-deadline pressure the cap doubles, because a
@@ -662,6 +706,9 @@ data class LessonOfferLine(
     val scheduled: Boolean,
     val score: Int,
     val weightedCost: Double = 0.0,
+    /** Raw sum of the card's per-type point costs, unweighted. The technique reserve compares
+     * this against the live balance total; null when any cost cell was unreadable. */
+    val rawCostTotal: Int? = null,
 )
 
 /** The report-only result of comparing a lesson offer. Never actionable. */

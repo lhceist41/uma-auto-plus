@@ -428,6 +428,54 @@ class GrandConcertPolicyTest {
         }
 
         @Test
+        fun `song-first buys any affordable song while the cycle is under the Great Success floor`() {
+            // The measured 2026-07-26 failure class: roughly two of five concerts missed the
+            // three-song condition while affordable songs sat below the score floor.
+            val lowScoreSong = LessonOfferLine(0, "cheap song", LessonCardKind.SONG, true, false, 12, 30.0, rawCostTotal = 44)
+            val bigTech = LessonOfferLine(1, "shiny tech", LessonCardKind.TECHNIQUE, true, false, 90, 10.0, rawCostTotal = 16)
+            val r = GrandConcertLessonReport(listOf(bigTech, lowScoreSong), emptyList(), emptyList())
+            assertEquals(0, GrandConcertPolicy.chooseSongFirst(r, 0)?.slot, "a 12-score song beats no song at 0/3")
+            assertEquals(0, GrandConcertPolicy.chooseSongFirst(r, 2)?.slot, "still under the floor at 2/3")
+            assertNull(GrandConcertPolicy.chooseSongFirst(r, 3), "at the floor the normal ranking takes over")
+            assertNull(GrandConcertPolicy.chooseSongFirst(r, null), "an unknown count never forces a buy")
+        }
+
+        @Test
+        fun `song-first never buys an unaffordable, unproven, or scheduled song`() {
+            val unaffordable = LessonOfferLine(0, "song A", LessonCardKind.SONG, false, false, 200, 60.0, rawCostTotal = 63)
+            val unknown = LessonOfferLine(1, "song B", LessonCardKind.SONG, null, false, 150, 55.0, rawCostTotal = 50)
+            val scheduled = LessonOfferLine(2, "song C", LessonCardKind.SONG, true, true, 100, 45.0, rawCostTotal = 42)
+            val r = GrandConcertLessonReport(listOf(unaffordable, unknown, scheduled), emptyList(), emptyList())
+            assertNull(GrandConcertPolicy.chooseSongFirst(r, 0))
+        }
+
+        @Test
+        fun `the technique reserve blocks a technique that would drain the pool below the floor`() {
+            // Tonight's starvation shape: the 48-61 cycle bought techniques after its own songs
+            // and the Grand finale's cycle started broke. Balance 80, technique costing 20 would
+            // leave 60, below the 70 reserve.
+            val tech = LessonOfferLine(0, "tech", LessonCardKind.TECHNIQUE, true, false, 60, 12.0, rawCostTotal = 20)
+            val r = GrandConcertLessonReport(listOf(tech), emptyList(), emptyList())
+            assertNull(
+                GrandConcertPolicy.chooseSpend(r, totalBalance = 80, reserveActive = true),
+                "80 - 20 = 60 < ${GrandConcertPolicy.TECH_RESERVE_TOTAL}",
+            )
+            assertEquals(0, GrandConcertPolicy.chooseSpend(r, totalBalance = 80, reserveActive = false)?.slot, "reserve off (career end or after the Grand)")
+            assertEquals(0, GrandConcertPolicy.chooseSpend(r, totalBalance = 120, reserveActive = true)?.slot, "120 - 20 = 100 stays above the floor")
+            assertNull(
+                GrandConcertPolicy.chooseSpend(r.copy(ranked = listOf(tech.copy(rawCostTotal = null))), totalBalance = 120, reserveActive = true),
+                "an unreadable cost fails toward the reserve, never through it",
+            )
+        }
+
+        @Test
+        fun `the technique reserve never blocks a song`() {
+            val song = LessonOfferLine(0, "song", LessonCardKind.SONG, true, false, 90, 45.0, rawCostTotal = 63)
+            val r = GrandConcertLessonReport(listOf(song), emptyList(), emptyList())
+            assertEquals(0, GrandConcertPolicy.chooseSpend(r, totalBalance = 75, reserveActive = true)?.slot, "songs are what the reserve is FOR")
+        }
+
+        @Test
         fun `gate advance never fires when a song is offered or a normal pick exists`() {
             val withSong =
                 GrandConcertLessonReport(

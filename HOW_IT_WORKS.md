@@ -1270,12 +1270,22 @@ live-unproven, because the navigator cannot reach a Grand Concert career start y
 its immediate mastery bonus, its concert bonus multiplied by the turns that remain *after* the bonus
 activates (a bonus queued near the Grand is worth almost nothing), a per-type scarcity weight
 (Vocal 1.5 on a Speed and Wit build), and a per-cycle deadline term that escalates as a concert
-approaches. `chooseSpend` takes the best affordable card at or above `SPEND_MIN_SCORE`;
-`chooseGateAdvance` is the fallback for a trio of junk techniques, buying the cheapest one purely to
-force a restock so the song gate keeps moving, under a cost cap that widens when the cycle's
-three-song floor is unmet and the concert is close. At career end the model changes: costs go flat
-(scarcity is meaningless on points that expire), compounding and concert terms collapse, and the
-stop line drops to 1, because anything with positive value beats losing the points.
+approaches. Two concert-protection rules run ahead of the plain greedy pick, both added after the
+2026-07-26 songs-per-cycle measurement showed roughly two of five concerts missing the three-song
+Great Success condition (one career entered its Grand finale with zero new songs).
+`chooseSongFirst` buys any affordable, unscheduled song while the cycle is under the three-song
+floor, score notwithstanding: under the floor, count beats quality. And `chooseSpend`'s technique
+reserve refuses a technique that would drop the total point balance below `TECH_RESERVE_TOTAL`
+(70, sized from master.mdb's own song-cost table: square_type 4 songs run 42-68 total, median 44)
+while any future concert remains, because the measured failure was techniques draining the pool a
+cycle BEFORE the starved one. Otherwise `chooseSpend` takes the best affordable card at or above
+`SPEND_MIN_SCORE`; `chooseGateAdvance` is the fallback for a trio of junk techniques, buying the
+cheapest one purely to force a restock so the song gate keeps moving, under a cost cap that widens
+when the cycle's three-song floor is unmet and the concert is close (gate advances are exempt from
+the reserve: they serve the songs it protects). At career end the model changes: costs go flat
+(scarcity is meaningless on points that expire), compounding and concert terms collapse, the
+reserve deactivates, and the stop line drops to 1, because anything with positive value beats
+losing the points. Every concert entry logs the cycle's new-song count against the floor.
 
 Its refusals are still the point: an unreadable card is never recommended, affordability is never
 claimed against an unknown cost or an unknown balance, and a scoring tie yields no recommendation.

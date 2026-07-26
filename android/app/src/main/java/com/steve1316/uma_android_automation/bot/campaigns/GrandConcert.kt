@@ -206,6 +206,14 @@ class GrandConcert(game: Game) : Campaign(game) {
      * handler, so meeting a Training Event screen is a successful exit, not an anomaly.
      */
     private fun runConcertEscort(): Boolean {
+        // The one number that decides the result tier, logged where the analysis scripts can
+        // find it: the 2026-07-26 careers missed Great Success on roughly two of five concerts
+        // and the count had to be reconstructed from purchase logs to even see it.
+        MessageLog.i(
+            TAG,
+            "[GRAND_CONCERT] [CONCERT] Entering the concert with $songsBoughtThisCycle new song(s) this cycle " +
+                "(Great Success needs ${GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value}).",
+        )
         game.tap(GrandConcertEscort.CONCERT_BUTTON_X.toDouble(), GrandConcertEscort.CONCERT_BUTTON_Y.toDouble(), "gc_concert_open")
         game.wait(1.2)
 
@@ -517,9 +525,13 @@ class GrandConcert(game: Game) : Campaign(game) {
      * offer at or above [minScore], re-reads the refreshed trio, and repeats until the stop rule
      * fires, a purchase attempt aborts, or [maxPurchases] is reached.
      *
-     * Known v1 gap, deliberate and logged rather than guessed at: no reserve floors yet (the
-     * scarcity weights are the only bottleneck protection). The technique-only-trio stall the
-     * first live run hit is handled by [GrandConcertPolicy.chooseGateAdvance].
+     * Two concert-protection rules sit ahead of the plain greedy pick (both added 2026-07-26
+     * after the songs-per-cycle measurement showed two of five concerts missing Great Success):
+     * [GrandConcertPolicy.chooseSongFirst] buys any affordable song while the cycle is below the
+     * three-song floor, and [GrandConcertPolicy.chooseSpend]'s technique reserve keeps the point
+     * pool from being drained below [GrandConcertPolicy.TECH_RESERVE_TOTAL] while a future
+     * concert remains. The technique-only-trio stall the first live run hit is handled by
+     * [GrandConcertPolicy.chooseGateAdvance].
      */
     private fun spendVisit(initialList: LessonList, context: LessonScoreContext, maxPurchases: Int, minScore: Int): SpendVisitOutcome {
         var purchases = 0
@@ -542,8 +554,24 @@ class GrandConcert(game: Game) : Campaign(game) {
             val urgent =
                 (context.songsLearnedThisCycle ?: 0) < GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value &&
                     (context.turnsUntilConcert ?: Int.MAX_VALUE) <= 5
+            // The technique reserve holds whenever a future concert remains and this is not the
+            // career-end drain: mid-career techniques must not spend the pool below what the
+            // next songs need. Song purchases and gate advances are exempt by design.
+            val reserveActive = !context.careerComplete && context.turnsUntilConcert != null
             var gateAdvance = false
-            var pick = GrandConcertPolicy.chooseSpend(report, minScore)
+            val songPick = GrandConcertPolicy.chooseSongFirst(report, context.songsLearnedThisCycle)
+            if (songPick != null) {
+                MessageLog.i(
+                    TAG,
+                    "[GRAND_CONCERT] [LESSON_BUY] Song-first: ${context.songsLearnedThisCycle}/" +
+                        "${GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value} new songs this cycle, so \"${songPick.title}\" " +
+                        "is bought regardless of its score (${songPick.score}).",
+                )
+            }
+            var pick = songPick
+            if (pick == null) {
+                pick = GrandConcertPolicy.chooseSpend(report, minScore, list.balances.total(), reserveActive)
+            }
             if (pick == null) {
                 pick = GrandConcertPolicy.chooseGateAdvance(report, minScore, urgent)
                 gateAdvance = pick != null

@@ -51,6 +51,17 @@ data class PerformancePointVector(val values: Map<PerformancePointType, Int?> = 
     /** True when any readable component is negative (the shortfall the Schedule dialog shows). */
     val hasNegative: Boolean get() = values.values.any { it != null && it < 0 }
 
+    /** Raw sum across all five types, or null when any component is unread: a partial sum would
+     * understate a cost or a balance, and both consumers (the technique reserve) must fail open
+     * on unknowns rather than act on an understatement. */
+    fun total(): Int? {
+        var sum = 0
+        for (type in PerformancePointType.entries) {
+            sum += values[type] ?: return null
+        }
+        return sum
+    }
+
     /**
      * Affordability of this vector-as-a-cost against [balances], as a three-valued answer: true,
      * false, or null when any relevant component is unread. Never collapses unknown to false.
