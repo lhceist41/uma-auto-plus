@@ -609,9 +609,20 @@ class CareerLaunchNavigator(private val context: Context) {
         // character identical to the Trainee."). Seeding the exclusion set with the launch's
         // trainee makes every candidate path reject her cards up front - the curated scan, the
         // preferred-name pick, the validated default pick, and the replacement search all
-        // consult this set. Blank when no trainee identity is known (non-rotation launches),
-        // which leaves behavior unchanged.
-        borrowLaunchTraineeTarget = if (singleRunTrainee.isNotBlank()) singleRunTrainee else SettingsHelper.getStringSetting("queueState", "currentTrainee")
+        // consult this set. Blank when no trainee identity is known, which leaves behavior
+        // unchanged.
+        //
+        // queueState.currentTrainee is a ROTATION artifact: only the rotation machinery writes
+        // it, so on a reuse queue it can hold a trainee from an old rotation and aim this guard
+        // at the wrong character (live 2026-07-26: "El Condor Pasa" excluded during a Copano
+        // Rickey launch). The applied preset is the launch identity everywhere rotation is off.
+        borrowLaunchTraineeTarget =
+            when {
+                singleRunTrainee.isNotBlank() -> singleRunTrainee
+                SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false) ->
+                    SettingsHelper.getStringSetting("queueState", "currentTrainee")
+                else -> SettingsHelper.getStringSetting("general", "appliedPresetTrainee")
+            }
         borrowEntryCharacter(borrowLaunchTraineeTarget).takeIf { it.isNotEmpty() }?.let {
             borrowExcludedCharacters.add(it)
             MessageLog.i(TAG, "[NAV] [BORROW] Active trainee \"$it\" is excluded from borrow candidates for this launch.")
