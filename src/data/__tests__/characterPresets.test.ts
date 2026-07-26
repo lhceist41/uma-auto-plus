@@ -332,9 +332,9 @@ describe("Grass Wonder (Saintly Jade Cleric) presets", () => {
             .filter(Boolean)
             .map(Number)
 
-    it("ships exactly the pipeline trio, one preset per scenario", () => {
-        expect(trio).toHaveLength(3)
-        expect(trio.map((p) => p.scenario).sort()).toEqual(["Trackblazer", "URA Finale", "Unity Cup"])
+    it("ships one preset per scenario - the pipeline trio plus the derived Grand Concert twin", () => {
+        expect(trio).toHaveLength(4)
+        expect(trio.map((p) => p.scenario).sort()).toEqual(["Grand Concert", "Trackblazer", "URA Finale", "Unity Cup"])
     })
 
     it("selects by its real-outfit name - no traineeName indirection on either Grass Wonder row", () => {
@@ -522,9 +522,11 @@ describe("skill spend objective (Phase 2A)", () => {
 })
 
 describe("Grand Concert derived presets", () => {
-    // Intended Speed target per twin. Sprint/Mile take the scenario's full 1600 cap, Medium takes
-    // 1400, and Long stayers take no raise at all: a stat target is a WEIGHT, not a ceiling, so
-    // lifting Speed on a stayer starves the Stamina its 3000m+ goals need.
+    // Intended Speed target per twin. Sprint/Mile Speed-primary builds take the scenario's full
+    // 1600 cap, Sprint/Mile builds whose URA Speed target sits below the 1200 norm are tempered
+    // to 1400, Medium takes 1400, and Long stayers take no raise at all: a stat target is a
+    // WEIGHT, not a ceiling, so lifting Speed on a stayer starves the Stamina its 3000m+ goals
+    // need. The three Legacy Farm arms are deliberately absent (URA-only farm specializations).
     const EXPECTED_SPEED: Record<string, number | undefined> = {
         "Agnes Tachyon": 1400,
         "Mihono Bourbon": 1400,
@@ -536,6 +538,71 @@ describe("Grand Concert derived presets", () => {
         "Copano Rickey": 1600,
         "Super Creek": undefined,
         "Gold Ship": undefined,
+        // Full-roster port: Sprint.
+        "Curren Chan": 1600,
+        "King Halo (Cheerleader in Noble White)": 1600,
+        "Nishino Flower": 1600,
+        "Haru Urara": 1400,
+        "Hishi Akebono": 1400,
+        // Mile.
+        "Bamboo Memory": 1600,
+        "El Condor Pasa": 1600,
+        "Maruzensky (Hot☆Summer Night)": 1600,
+        "Oguri Cap": 1600,
+        "Oguri Cap (Ashen Miracle)": 1600,
+        "Taiki Shuttle (Bubblegum☆Memories)": 1600,
+        "Agnes Digital": 1400,
+        "Fuji Kiseki": 1400,
+        "Gold City (Autumn Cosmos)": 1400,
+        "Smart Falcon": 1400,
+        // Medium.
+        "Admire Vega": 1400,
+        "Air Groove": 1400,
+        "Air Shakur": 1400,
+        "Eishin Flash": 1400,
+        "El Condor Pasa (Kukulkan Warrior)": 1400,
+        "Fine Motion": 1400,
+        "Hishi Amazon": 1400,
+        "Inari One": 1400,
+        "Ines Fujin": 1400,
+        "Kitasan Black": 1400,
+        "Meisho Doto": 1400,
+        "Mejiro Ardan": 1400,
+        "Mejiro Dober": 1400,
+        "Mejiro Ryan": 1400,
+        "Narita Taishin": 1400,
+        "Nice Nature": 1400,
+        "Sakura Chiyono O": 1400,
+        "Seiun Sky": 1400,
+        "Seiun Sky (Soirée des Chatons)": 1400,
+        "Silence Suzuka": 1400,
+        "Special Week": 1400,
+        "Special Week (Hopp'n♪Happy Heart)": 1400,
+        "Sweep Tosho": 1400,
+        "Symboli Rudolf (Emperor's Path)": 1400,
+        "T.M. Opera O (New Year, Same Radiance!)": 1400,
+        "Tokai Teio": 1400,
+        "Tokai Teio (Beyond the Horizon)": 1400,
+        "Tosen Jordan": 1400,
+        "Winning Ticket (Get to Winning!)": 1400,
+        "Yaeno Muteki": 1400,
+        // Long stayers.
+        "Biwa Hayahide": undefined,
+        "Gold Ship (RUN! RUIN! LAUNCHER!)": undefined,
+        "Grass Wonder": undefined,
+        "Grass Wonder (Saintly Jade Cleric)": undefined,
+        "Manhattan Cafe": undefined,
+        Matikanefukukitaru: undefined,
+        Matikanetannhauser: undefined,
+        "Mayano Top Gun": undefined,
+        "Mayano Top Gun (Sunlight Bouquet)": undefined,
+        "Mejiro Bright": undefined,
+        "Mejiro McQueen (Frontline Elegance)": undefined,
+        "Mejiro Palmer": undefined,
+        "Narita Brian": undefined,
+        "Rice Shower": undefined,
+        "Satono Diamond": undefined,
+        "Tamamo Cross": undefined,
     }
     const SPEED_KEY: Record<string, string> = {
         Sprint: "trainingSprintStatTarget_speedStatTarget",
@@ -557,8 +624,8 @@ describe("Grand Concert derived presets", () => {
         // The docs used to be checked with `grep -c '^        scenario: "'`, which no longer works:
         // derived twins are not literals, and grandConcertFrom's own return adds a matching line.
         // This assertion is the authoritative count now. Update the docs whenever it changes.
-        expect(characterPresets.length).toBe(231)
-        expect(characterPresets.filter((p) => p.scenario === "Grand Concert")).toHaveLength(11)
+        expect(characterPresets.length).toBe(292)
+        expect(characterPresets.filter((p) => p.scenario === "Grand Concert")).toHaveLength(72)
         expect(new Set(characterPresets.map((p) => `${p.name}|${p.scenario}`)).size).toBe(characterPresets.length)
     })
 

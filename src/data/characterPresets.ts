@@ -48448,24 +48448,34 @@ const grandConcertFrom = (uraName: string, speedTarget?: number): CharacterPrese
 }
 
 /**
- * Grand Concert test batch. The scenario's own concert system is trainee-agnostic (result tier is
- * set solely by songs learned this cycle, with no stat or aptitude check and no fail state), so
- * these are chosen to cover what DOES vary between trainees: goal chains, distance, surface, and
- * the Senior lyric event's scenario-link bonus.
+ * Grand Concert coverage: a derived twin for every URA build in the roster. The scenario's own
+ * concert system is trainee-agnostic (result tier is set solely by songs learned this cycle, with
+ * no stat or aptitude check and no fail state), so what varies between twins is exactly what the
+ * URA builds already encode: goal chains, distance, surface, and stat weighting.
  *
  * Speed target rationale, per the weight-not-ceiling note on `grandConcertFrom`:
- *   - Sprint and Mile Speed-primary builds take the full 1600 cap.
+ *   - Sprint and Mile Speed-primary builds (URA Speed target at the 1200 norm) take the full
+ *     1600 cap.
+ *   - Sprint and Mile builds whose URA Speed target sits BELOW the 1200 norm deliberately temper
+ *     Speed (wit- or stamina-led kits, caution profiles); they take 1400, keeping the raised-cap
+ *     headroom without repointing a build that never chased Speed to begin with.
  *   - Medium builds take 1400, using the headroom URA's flat cap denied them without starving
  *     the Stamina their goal races still need.
  *   - Long stayers take no Speed change at all; Stamina is their bottleneck and Grand Concert
  *     already caps it at 1300, below URA's 1400.
  *
+ * The three Legacy Farm arms (Daiwa Scarlet, El Condor Pasa, Air Groove) are deliberately NOT
+ * ported: they are URA-specific farm specializations whose `sparks` objective this helper strips,
+ * which would gut their reason to exist. Their base outfits all have twins.
+ *
  * All are research-graded until a live career completes. Taiki Shuttle's Grand Concert preset is a
  * hand-written literal above because it predates this helper and is the one validated build.
  */
 const grandConcertPresets: CharacterPreset[] = [
-    // Scenario-link trainees: present as the trainee, the Senior Early Nov lyric event upgrades its
-    // skill hint from white to gold (Tachyon -> Come What May, Bourbon -> Concentration).
+    // The original validated test batch, chosen to cover every distance and both surfaces.
+    // Scenario-link trainees first: present as the trainee, the Senior Early Nov lyric event
+    // upgrades its skill hint from white to gold (Tachyon -> Come What May, Bourbon ->
+    // Concentration).
     grandConcertFrom("Agnes Tachyon", 1400),
     grandConcertFrom("Mihono Bourbon", 1400),
     // Sprint and Mile: where the 1600 Speed cap actually pays.
@@ -48480,6 +48490,74 @@ const grandConcertPresets: CharacterPreset[] = [
     // Long stayers: deliberately no Speed raise (see above).
     grandConcertFrom("Super Creek"),
     grandConcertFrom("Gold Ship"),
+
+    // Full-roster port. Sprint, Speed-primary: the full 1600 cap.
+    grandConcertFrom("Curren Chan", 1600),
+    grandConcertFrom("King Halo (Cheerleader in Noble White)", 1600),
+    grandConcertFrom("Nishino Flower", 1600),
+    // Sprint, tempered builds (URA Speed target below the 1200 norm).
+    grandConcertFrom("Haru Urara", 1400),
+    grandConcertFrom("Hishi Akebono", 1400),
+    // Mile, Speed-primary.
+    grandConcertFrom("Bamboo Memory", 1600),
+    grandConcertFrom("El Condor Pasa", 1600),
+    grandConcertFrom("Maruzensky (Hot☆Summer Night)", 1600),
+    grandConcertFrom("Oguri Cap", 1600),
+    grandConcertFrom("Oguri Cap (Ashen Miracle)", 1600),
+    grandConcertFrom("Taiki Shuttle (Bubblegum☆Memories)", 1600),
+    // Mile, tempered builds.
+    grandConcertFrom("Agnes Digital", 1400),
+    grandConcertFrom("Fuji Kiseki", 1400),
+    grandConcertFrom("Gold City (Autumn Cosmos)", 1400),
+    grandConcertFrom("Smart Falcon", 1400),
+    // Medium: the uniform 1400 headroom raise.
+    grandConcertFrom("Admire Vega", 1400),
+    grandConcertFrom("Air Groove", 1400),
+    grandConcertFrom("Air Shakur", 1400),
+    grandConcertFrom("Eishin Flash", 1400),
+    grandConcertFrom("El Condor Pasa (Kukulkan Warrior)", 1400),
+    grandConcertFrom("Fine Motion", 1400),
+    grandConcertFrom("Hishi Amazon", 1400),
+    grandConcertFrom("Inari One", 1400),
+    grandConcertFrom("Ines Fujin", 1400),
+    grandConcertFrom("Kitasan Black", 1400),
+    grandConcertFrom("Meisho Doto", 1400),
+    grandConcertFrom("Mejiro Ardan", 1400),
+    grandConcertFrom("Mejiro Dober", 1400),
+    grandConcertFrom("Mejiro Ryan", 1400),
+    grandConcertFrom("Narita Taishin", 1400),
+    grandConcertFrom("Nice Nature", 1400),
+    grandConcertFrom("Sakura Chiyono O", 1400),
+    grandConcertFrom("Seiun Sky", 1400),
+    grandConcertFrom("Seiun Sky (Soirée des Chatons)", 1400),
+    grandConcertFrom("Silence Suzuka", 1400),
+    grandConcertFrom("Special Week", 1400),
+    grandConcertFrom("Special Week (Hopp'n♪Happy Heart)", 1400),
+    grandConcertFrom("Sweep Tosho", 1400),
+    grandConcertFrom("Symboli Rudolf (Emperor's Path)", 1400),
+    grandConcertFrom("T.M. Opera O (New Year, Same Radiance!)", 1400),
+    grandConcertFrom("Tokai Teio", 1400),
+    grandConcertFrom("Tokai Teio (Beyond the Horizon)", 1400),
+    grandConcertFrom("Tosen Jordan", 1400),
+    grandConcertFrom("Winning Ticket (Get to Winning!)", 1400),
+    grandConcertFrom("Yaeno Muteki", 1400),
+    // Long stayers: no Speed raise, exactly like Super Creek and Gold Ship above.
+    grandConcertFrom("Biwa Hayahide"),
+    grandConcertFrom("Gold Ship (RUN! RUIN! LAUNCHER!)"),
+    grandConcertFrom("Grass Wonder"),
+    grandConcertFrom("Grass Wonder (Saintly Jade Cleric)"),
+    grandConcertFrom("Manhattan Cafe"),
+    grandConcertFrom("Matikanefukukitaru"),
+    grandConcertFrom("Matikanetannhauser"),
+    grandConcertFrom("Mayano Top Gun"),
+    grandConcertFrom("Mayano Top Gun (Sunlight Bouquet)"),
+    grandConcertFrom("Mejiro Bright"),
+    grandConcertFrom("Mejiro McQueen (Frontline Elegance)"),
+    grandConcertFrom("Mejiro Palmer"),
+    grandConcertFrom("Narita Brian"),
+    grandConcertFrom("Rice Shower"),
+    grandConcertFrom("Satono Diamond"),
+    grandConcertFrom("Tamamo Cross"),
 ]
 
 export const characterPresets: CharacterPreset[] = [...basePresets, ...grandConcertPresets]

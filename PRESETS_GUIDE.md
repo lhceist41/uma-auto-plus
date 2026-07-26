@@ -6,7 +6,7 @@ This document explains how built-in character presets work in UMA Auto+, how the
 
 ## Overview
 
-UMA Auto+ ships with **231 built-in character presets** (72 character entries x 3 scenarios, plus three URA-only Legacy Farm variants, one Unity Cup Blue Farm variant, and eleven Grand Concert presets). Trainees are picked in the searchable trainee picker on the Home page -- one row per character/outfit with per-scenario advisory chips and a validation badge -- and applying a preset sets its scenario together with its settings.
+UMA Auto+ ships with **292 built-in character presets** (72 character entries x 4 scenarios, plus three URA-only Legacy Farm variants and one Unity Cup Blue Farm variant). Every character entry has a preset for every scenario, Grand Concert included. Trainees are picked in the searchable trainee picker on the Home page -- one row per character/outfit with per-scenario advisory chips and a validation badge -- and applying a preset sets its scenario together with its settings.
 
 The 2026-06-11 batch added seven entries from the June banner research pass: Sweep Tosho, Mihono Bourbon, Mejiro Palmer, El Condor Pasa (Kukulkan Warrior), Tosen Jordan, Super Creek, and Matikanetannhauser. Their URA presets ship curated racing plans (see "Curated racing plans in presets" below); Tosen Jordan's presets enable negative-skill buying so the buy pass clears her 3D Nail Art speed debuff. Symboli Rudolf (Emperor's Path) was added 2026-06-18 — a Late Surger Medium built around her late-overtake unique; URA and Trackblazer are her recommended scenarios. Biwa Hayahide (Pace Chaser, built as a Long stayer) and Mejiro Ryan (Late Surger Medium) were added 2026-06-21 to make two owned-but-unpresetted Medium/Long-A turf bodies farmable hands-off; both fill the Medium/Long Team-Trials slots and are URA + Trackblazer recommended.
 
@@ -28,7 +28,7 @@ The 2026-07-15 addition is the first **Blue Farm** variant: Super Creek (Blue Fa
 
 The second 2026-07-17 addition is **Grass Wonder (Saintly Jade Cleric)**, the roster's second Grass Wonder outfit with its own research-graded trio. She keeps the base card's aptitude grid and the same eight-goal chain (Asahi Hai Futurity Stakes through the Senior Arima Kinen win), so the trio mirrors the proven base configuration; what changes is the body and the kit. Her growth leans Stamina/Wit (+15% each), so training priorities promote Stamina over Power, and her skill plans center her own recovery line -- Deep Breaths upgrading into the Cooldown gold, plus A Small Breather -- in place of the base card's Be Still line, which this outfit has no hint discount for. Two kit skills sit behind Potential levels the account has not reached (Late Surger Savvy ○ at Lv4, Relax at Lv5) and are deliberately left out of every plan until her Potential is raised. Her Unity Cup preset is also the first profile to declare the `safe_completion` spending objective: under Adaptive mode it arms recovery protection, and because the plan already carries her own recovery chain the protection acts as a backstop rather than the plan. With two owned outfits of one character, the trainee picker now shows two Grass Wonder rows, and in-game trainee selection targets the exact outfit banner: the base presets skip the Saintly Jade Cleric card, and the new presets accept only it.
 
-The 2026-07-24 addition opens the **Grand Concert** preset lane with Taiki Shuttle, the scenario's first validated profile: her career completed fully hands-off at A+ rank the same day, covering the Lesson shop, all five concerts, and the end-of-career spending. The preset carries the exact configuration that ran that career (her Mile build with Speed/Power/Wit priorities and smart racing), with one change: the Mile Speed target is raised to 1600 to use the scenario's higher Speed cap. Applying it sets the scenario to Grand Concert together with the settings, so no manual scenario switching is needed. Other trainees show no Grand Concert card in the picker yet; their presets land as the lane grows.
+The 2026-07-24 addition opened the **Grand Concert** preset lane with Taiki Shuttle, the scenario's first validated profile: her career completed fully hands-off at A+ rank the same day, covering the Lesson shop, all five concerts, and the end-of-career spending. The preset carries the exact configuration that ran that career (her Mile build with Speed/Power/Wit priorities and smart racing), with one change: the Mile Speed target is raised to 1600 to use the scenario's higher Speed cap. Applying it sets the scenario to Grand Concert together with the settings, so no manual scenario switching is needed. As of 2026-07-26, **every character entry has a Grand Concert preset**, derived from its own URA build: Speed-primary Sprint and Mile builds target the full 1600 Speed cap, tempered Sprint/Mile and all Medium builds target 1400, and Long stayers keep their URA Speed weighting so training stays pointed at the Stamina their goals need. The three Legacy Farm variants stay URA-only on purpose.
 
 The 2026-07-25 addition fills that lane with ten more, chosen as a pre-release test batch rather than
 a best-of list. The scenario's concert system is trainee-agnostic: the result tier is set purely by
@@ -63,7 +63,7 @@ when it changes.
 
 ### Currently included characters
 
-The table below covers the three original scenarios. Grand Concert presets are listed in their own lane for now: **Taiki Shuttle** (validated), plus **Agnes Tachyon**, **Mihono Bourbon**, **Sakura Bakushin O**, **King Halo**, **Maruzensky (Formula R)**, **Daiwa Scarlet**, **Copano Rickey**, **Vodka**, **Super Creek** and **Gold Ship** (all research-graded).
+The table below covers the three original scenarios. Every entry in it also has a Grand Concert preset derived from its URA build. Validated Grand Concert profiles so far: **Taiki Shuttle** and **Copano Rickey**; every other Grand Concert preset is research-graded until a live career completes.
 
 | Character | Trackblazer | Unity Cup | URA Finale |
 |-----------|:-----------:|:---------:|:----------:|
@@ -519,7 +519,7 @@ At minimum, each character preset should define:
 - Rebuild the JS bundle and APK after changes.
 
 ### Preset applies wrong settings
-- Check that the correct scenario variant is selected. Most characters ship 3 presets (URA Finale, Unity Cup, Trackblazer); Taiki Shuttle also has a Grand Concert one, and the Legacy Farm and Blue Farm variants ship a single preset each.
+- Check that the correct scenario variant is selected. Every character ships 4 presets (URA Finale, Unity Cup, Trackblazer, Grand Concert); the Legacy Farm and Blue Farm variants ship a single preset each.
 - Verify the JSON source file was exported while the correct scenario was active.
 
 ### Character name displays incorrectly
