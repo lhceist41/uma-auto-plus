@@ -313,6 +313,52 @@ class GrandConcertPolicyTest {
             assertTrue(r.notes.any { it.contains("differs") && it.contains("Zero Is Where the Center Stands!") }, r.notes.toString())
             assertFalse(r.notes.any { it.contains("Dream Sky") }, r.notes.toString())
         }
+
+        /**
+         * The two cards a live Copano Rickey career refused at career end, leaving 213 points to
+         * expire. Both are real: an Energy technique costing 25 Vocal and a Skill Hint costing 30
+         * Dance, each scored -10 under half-cost pricing.
+         */
+        @Test
+        fun `a career-end technique stays purchasable even when its cost dwarfs its value`() {
+            val end = LessonScoreContext(careerComplete = true)
+            val energy = techScore("Energy +20", v(0, 0, 25, 0, 0), end)
+            val hint = techScore("Skill Hint Lvl +3", v(30, 0, 0, 0, 0), end)
+            assertTrue(energy >= GrandConcertPolicy.SPEND_MIN_SCORE_CAREER_COMPLETE, "energy scored $energy")
+            assertTrue(hint >= GrandConcertPolicy.SPEND_MIN_SCORE_CAREER_COMPLETE, "skill hint scored $hint")
+        }
+
+        @Test
+        fun `mid-career pricing is unchanged, so an overpriced technique is still refused`() {
+            // The same energy card mid-career at full energy: cost must still be able to veto it,
+            // because mid-career points have somewhere better to go.
+            val mid = LessonScoreContext(energyPercent = 100)
+            assertTrue(techScore("Energy +20", v(0, 0, 60, 0, 0), mid) < 1)
+        }
+
+        @Test
+        fun `career end still ranks a stat technique above a filler one`() {
+            val end = LessonScoreContext(careerComplete = true)
+            val stat = techScore("Speed +12", v(0, 0, 0, 0, 30), end)
+            val filler = techScore("Energy +20", v(0, 0, 25, 0, 0), end)
+            assertTrue(stat > filler, "stat=$stat filler=$filler")
+        }
+
+        @Test
+        fun `career end prefers the cheaper of two otherwise identical cards`() {
+            val end = LessonScoreContext(careerComplete = true)
+            val cheap = techScore("Speed +12", v(10, 0, 0, 0, 0), end)
+            val dear = techScore("Speed +12", v(200, 0, 0, 0, 0), end)
+            assertTrue(cheap > dear, "cheap=$cheap dear=$dear")
+        }
+
+        @Test
+        fun `the career-end floor never rescues a card the reader could not classify`() {
+            // UNKNOWN kind short-circuits before scoreTechnique, so the floor cannot make an
+            // unclassifiable card look purchasable.
+            val end = LessonScoreContext(careerComplete = true)
+            assertEquals(0, GrandConcertPolicy.scoreLesson(LessonCardKind.UNKNOWN, null, null, null, null, v(0, 0, 25, 0, 0), end))
+        }
     }
 
     @Nested

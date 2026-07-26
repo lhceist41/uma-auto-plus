@@ -350,6 +350,11 @@ object GrandConcertPolicy {
     const val SPEND_MIN_SCORE = 25
     const val SPEND_MIN_SCORE_CAREER_COMPLETE = 1
 
+    /** How much a technique's cost counts once the career is over and the points expire. Small on
+     * purpose: enough to prefer the cheaper of two equal cards, since cheap buys more re-rolls, but
+     * never enough to price a positive-value card out of a budget that is about to be destroyed. */
+    private const val CAREER_END_COST_WEIGHT = 0.02
+
     /**
      * Picks the purchase the spend loop should make from a ranked offer report, or null to stop
      * buying. Pure and deliberately strict: only a provably affordable, unscheduled card at or
@@ -566,7 +571,24 @@ object GrandConcertPolicy {
                 GrandConcertSongCatalog.TechniqueEffectKind.UNKNOWN -> 15.0
             }
         // Technique costs weigh half: they are the cheap gate currency, not the song budget.
-        return (base - weightedCost(cost, flat = ctx.careerComplete) * 0.5).roundToInt()
+        if (!ctx.careerComplete) return (base - weightedCost(cost) * 0.5).roundToInt()
+
+        // At career end the points are DESTROYED at Finish, so charging for them is backwards.
+        // Half-cost pricing here refused two affordable cards on a live career (Energy +20 scored
+        // 2.0 - 12.5 = -10, a Skill Hint +3 scored 5.0 - 15.0 = -10) and 213 points expired. Worse
+        // than the cards themselves: the shop re-rolls after every purchase along a deterministic
+        // gate, so declining one card freezes the sequence and forfeits every stat technique behind
+        // it. A stat technique is worth 30-40 base and feeds rank directly, so stopping early is the
+        // expensive move, not buying badly.
+        //
+        // Cost still carries a small weight rather than none, because a cheap card leaves budget for
+        // more re-rolls, and the floor keeps any positive-value card at or above the stop line so it
+        // stays purchasable. Ranking is unchanged where it matters: a 40-base stat technique still
+        // outranks a 2-base energy one, so the loop buys the best card first and only reaches the
+        // dregs when nothing better is affordable.
+        return (base - weightedCost(cost, flat = true) * CAREER_END_COST_WEIGHT)
+            .roundToInt()
+            .coerceAtLeast(SPEND_MIN_SCORE_CAREER_COMPLETE)
     }
 
     /** Maps a readable mastery line to its bonus type. Handles both observed formats
