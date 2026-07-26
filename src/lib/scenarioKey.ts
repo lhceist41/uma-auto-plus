@@ -70,15 +70,16 @@ export interface ScenarioCapabilities {
     singleRun: boolean
 }
 
-export const scenarioCapabilities = (raw: string | null | undefined): ScenarioCapabilities =>
-    isGrandConcert(raw)
-        ? { runQueue: false, rotation: false, tpRestore: false, singleRun: true }
-        : { runQueue: true, rotation: true, tpRestore: true, singleRun: true }
+export const scenarioCapabilities = (_raw: string | null | undefined): ScenarioCapabilities => ({
+    runQueue: true,
+    rotation: true,
+    tpRestore: true,
+    singleRun: true,
+})
 
-/** Player-facing explanation for why the queue features are unavailable. Shown on Home. */
+/** Player-facing note shown on Home while Grand Concert is selected. */
 export const GRAND_CONCERT_WARNING =
-    "Grand Concert support is experimental and needs supervision. You start the career yourself, then press Start " +
-    "and the bot plays it through: training, races, events, skills, the Lesson shop, the concerts, and the career-end " +
-    "sequence back to the home screen. If a Lesson or concert screen reaches a state it does not recognize, it stops " +
-    "safely with the career preserved, so you handle that screen in game and press Start to resume. Run queues, " +
-    "trainee rotation, and automatic TP restore are unavailable for this scenario."
+    "Grand Concert plays unattended: training, races, events, skills, the Lesson shop, all five concerts, the " +
+    "career-end sequence, and the spark selection. Run queues, trainee rotation, and automatic TP restore all work " +
+    "here as they do in the other scenarios. If a Lesson or concert screen ever reaches a state it does not " +
+    "recognize, it stops safely with the career preserved, so you handle that screen in game and press Start to resume."

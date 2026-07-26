@@ -242,6 +242,20 @@ class GrandConcertScenarioTest {
             error("could not locate the Kotlin source root")
         }
 
+        /** Resolves a path under the app's assets directory, so a test can assert a template the
+         * code references is actually shipped rather than only declared. */
+        private fun assetFile(relative: String): File {
+            var dir: File? = File(System.getProperty("user.dir") ?: ".")
+            repeat(5) {
+                val a = File(dir, "src/main/assets")
+                if (a.isDirectory) return File(a, relative)
+                val b = File(dir, "android/app/src/main/assets")
+                if (b.isDirectory) return File(b, relative)
+                dir = dir?.parentFile
+            }
+            error("could not locate the assets root")
+        }
+
         @Test
         fun `the scenario dispatches to its own campaign class under the canonical key`() {
             val game = source("bot/Game.kt")
@@ -258,17 +272,36 @@ class GrandConcertScenarioTest {
             assertTrue(game.contains("else -> throw InterruptedException(\"Invalid scenario:"), "unknown-scenario abort was removed")
         }
 
+        /**
+         * The queue and rotation gates were removed once the scenario stopped needing a supervisor:
+         * careers play the Lesson shop, all five concerts, the career-end sequence and the spark
+         * selection unattended, and the navigator pages the carousel to Grand Concert like any other
+         * scenario. This asserts they stay removed, and that the carousel branch they depend on is
+         * still present, so the queue can never be re-enabled without a way to launch the career.
+         */
         @Test
-        fun `the queue and rotation are both gated for this scenario`() {
+        fun `the queue and rotation gates are gone and the carousel can reach this scenario`() {
             val start = source("StartModule.kt")
-            assertTrue(start.contains("val queueSupported = !GrandConcertScenario.matches(scenarioForQueue)"), "queue gate missing")
-            assertTrue(
-                start.contains("&& queueSupported"),
-                "enableRunQueue must be ANDed with the capability gate",
-            )
+            assertFalse(start.contains("queueSupported"), "the queue capability gate is back")
             val rotationIdx = start.indexOf("fun loadRotationConfig()")
-            val gateIdx = start.indexOf("GrandConcertScenario.matches", rotationIdx)
-            assertTrue(rotationIdx in 0 until gateIdx, "rotation must be gated inside loadRotationConfig")
+            assertTrue(rotationIdx >= 0, "loadRotationConfig went missing")
+            val rotationBody = start.substring(rotationIdx, minOf(start.length, rotationIdx + 1200))
+            assertFalse(rotationBody.contains("GrandConcertScenario.matches"), "the rotation gate is back")
+
+            val nav = source("CareerLaunchNavigator.kt")
+            assertTrue(
+                nav.contains("GrandConcertScenario.matches(target) -> LabelScenarioSelectGrandConcert"),
+                "the scenario carousel has no Grand Concert branch, so a queue could never launch one",
+            )
+        }
+
+        @Test
+        fun `the scenario select label points at a template that actually ships`() {
+            val label = source("components/Label.kt")
+            assertTrue(label.contains("object LabelScenarioSelectGrandConcert"), "the carousel label is missing")
+            val asset = assetFile("images/components/label/scenario_select_grand_concert.png")
+            assertTrue(asset.isFile, "carousel template asset is missing at ${asset.path}")
+            assertTrue(asset.length() > 0, "carousel template asset is empty")
         }
 
         @Test

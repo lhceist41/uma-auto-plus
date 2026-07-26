@@ -10,6 +10,7 @@ import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
 import com.steve1316.uma_android_automation.bot.FinalizeVerdict
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.GrandConcertScenario
 import com.steve1316.uma_android_automation.bot.SPARK_UNREADABLE_NAME
 import com.steve1316.uma_android_automation.bot.SparkChooserProfile
 import com.steve1316.uma_android_automation.bot.SparkConfirmationPill
@@ -4695,23 +4696,27 @@ class CareerLaunchNavigator(private val context: Context) {
      * SCENARIO_SELECT: pages the scenario carousel to the run's target scenario, then advances.
      *
      * The game opens this screen on whatever scenario was last played, so a same-scenario queue
-     * passes with a single Next tap. A cross-scenario rotation pages the 3-entry cyclic carousel
-     * (URA Finale -> Unity Cup -> Trackblazer) with the right arrow until the target scenario's
-     * logo shows. Bounded at one full cycle plus a settle re-check so a misread cannot loop.
+     * passes with a single Next tap. A cross-scenario rotation pages the cyclic carousel
+     * (URA Finale -> Unity Cup -> Trackblazer -> Grand Concert) with the right arrow until the
+     * target scenario's logo shows. Bounded at 6 swipes, which still clears a full cycle plus a
+     * settle re-check now that the carousel carries four entries, so a misread cannot loop.
      */
     private fun handleScenarioSelect(): TransitionResult {
         val target = SettingsHelper.getStringSetting("general", "scenario")
         val targetLogo =
-            when (target) {
-                "URA Finale" -> LabelScenarioSelectUra
-                "Unity Cup" -> LabelScenarioSelectUnityCup
-                "Trackblazer" -> LabelScenarioSelectTrackblazer
+            when {
+                target == "URA Finale" -> LabelScenarioSelectUra
+                target == "Unity Cup" -> LabelScenarioSelectUnityCup
+                target == "Trackblazer" -> LabelScenarioSelectTrackblazer
+                // Matched through the scenario key rather than a literal, so the stored setting's
+                // exact spelling cannot desync this from every other Grand Concert check.
+                GrandConcertScenario.matches(target) -> LabelScenarioSelectGrandConcert
                 else ->
                     return TransitionResult.Failed(
                         reason = "Scenario Select reached with unsupported target scenario \"$target\".",
                         transition = "SCENARIO_SELECT -> TRAINEE_SETUP",
                         isRecoverable = false,
-                        recommendedAction = "Select a career scenario (URA Finale, Unity Cup, or Trackblazer) in the app and restart the queue.",
+                        recommendedAction = "Select a career scenario (URA Finale, Unity Cup, Trackblazer, or Grand Concert) in the app and restart the queue.",
                     )
             }
 

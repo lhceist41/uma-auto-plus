@@ -53,13 +53,13 @@ describe("scenario key normalization", () => {
 })
 
 describe("scenario capabilities", () => {
-    it("blocks the queue, rotation, and TP restore for Grand Concert under every alias", () => {
+    // Grand Concert was queue-gated while its Lesson and concert screens still stopped for manual
+    // input. They no longer do, and the navigator pages the carousel to it like any other
+    // scenario, so it is now capable across the board and must stay that way under every alias.
+    it("gives Grand Concert the full queue capability set under every alias", () => {
         for (const alias of GRAND_CONCERT_ALIASES) {
             const caps = scenarioCapabilities(alias)
-            expect(caps.runQueue).toBe(false)
-            expect(caps.rotation).toBe(false)
-            expect(caps.tpRestore).toBe(false)
-            expect(caps.singleRun).toBe(true)
+            expect(caps).toEqual({ runQueue: true, rotation: true, tpRestore: true, singleRun: true })
         }
     })
 
@@ -70,10 +70,12 @@ describe("scenario capabilities", () => {
         }
     })
 
-    it("explains the restriction in player-facing words without internal labels", () => {
-        expect(GRAND_CONCERT_WARNING).toMatch(/experimental/i)
+    it("describes Grand Concert in player-facing words without internal labels", () => {
+        expect(GRAND_CONCERT_WARNING).toMatch(/unattended/i)
         expect(GRAND_CONCERT_WARNING).toMatch(/Lesson/)
-        expect(GRAND_CONCERT_WARNING).toMatch(/press Start|resume|supervis/i)
+        expect(GRAND_CONCERT_WARNING).toMatch(/press Start|resume/i)
+        // It must no longer claim the queue features are unavailable.
+        expect(GRAND_CONCERT_WARNING).not.toMatch(/unavailable|experimental/i)
         // No planning vocabulary may leak into player-facing text.
         expect(GRAND_CONCERT_WARNING).not.toMatch(/layer|phase|batch|task \d|scaffold/i)
     })
