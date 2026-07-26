@@ -322,13 +322,21 @@ object GrandConcertLessonGeometry {
 /** Bright green dialog header, measured (130, 206, 11): green dominant, red mid, blue near zero. */
 private fun isLessonDialogGreen(r: Int, g: Int, b: Int): Boolean = g >= 170 && g - r >= 55 && g - b >= 130
 
-/** True when the Lesson list is on screen: the dark-blue top band plus a card header that reads as
- * either a technique (green) or song (purple) card. */
+/** True when the Lesson list is on screen: the dark-blue top band plus ANY card header that reads
+ * as a technique (green) or song (purple) card.
+ *
+ * Any of the three headers proves the list; requiring specifically card 0 cost a real career-end
+ * drain twice on 2026-07-26. The career-end list greys out a whole unaffordable card (header
+ * included), card 0 happened to be unaffordable, its header read UNKNOWN, and "the list did not
+ * open" fired with the list fully painted and a Learnable card sitting in slot 2
+ * (fixture technique_list_career_end_dimmed). */
 fun grandConcertLessonListPresent(sampler: SparkPixelSampler): Boolean {
     val (tr, tg, tb) = mean(sampler, GrandConcertLessonGeometry.LIST_TOP_BAND_X, GrandConcertLessonGeometry.LIST_TOP_BAND_Y)
     val darkBlueTop = tb >= 100 && tb - tr >= 40 && tb - tg >= 30 && tr < 120
     if (!darkBlueTop) return false
-    return grandConcertLessonCardKind(sampler, 0) != LessonCardKind.UNKNOWN
+    return GrandConcertLessonGeometry.CARD_HEADER_YS.indices.any {
+        grandConcertLessonCardKind(sampler, it) != LessonCardKind.UNKNOWN
+    }
 }
 
 /** True when a full-screen lesson/concert dialog (Confirmation / Schedule / Concert Info) is up:
@@ -403,6 +411,15 @@ fun grandConcertLessonCardKind(sampler: SparkPixelSampler, cardIndex: Int): Less
     return when {
         g >= 170 && g - b >= 60 && g - r >= 20 -> LessonCardKind.TECHNIQUE
         b >= 190 && b - g >= 20 && r >= 140 -> LessonCardKind.SONG
+        // Career-end grey-out tiers: the career-end list dims a whole unaffordable card to
+        // roughly 0.6x brightness with the hue preserved, which drops the header below the
+        // absolute gates above while the channel differences survive. Measured dim technique
+        // headers (101,138,65) and (97,137,58) against bright 215-222 on the same frame
+        // (fixture technique_list_career_end_dimmed). The dim song tier is scaled from the
+        // bright song numbers (172,144,235), not yet observed dim in the wild. Both tiers
+        // hold zero false positives across every grandconcert fixture (2026-07-26 sweep).
+        g in 110..169 && g - b >= 45 && g - r >= 25 -> LessonCardKind.TECHNIQUE
+        b in 110..189 && b - g >= 10 && b - r >= 25 && r >= 80 -> LessonCardKind.SONG
         else -> LessonCardKind.UNKNOWN
     }
 }

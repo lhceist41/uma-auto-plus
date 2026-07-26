@@ -144,6 +144,23 @@ event following Late Dec concerts, which belongs to the ordinary event handler, 
 | grand_confirm_unchecked.png | MuMu-20260724-183643-965.png | The Grand finale's start confirmation: Hype Level banner (Great Hype) and the "Skip the Grand Concert cutscene" checkbox UNCHECKED (gray glyph), captured while the second validation career's escort waited on it |
 | grand_confirm_checked.png | MuMu-20260724-183711-056.png | Same dialog with the cutscene-skip checkbox CHECKED (green glyph), after the maintainer tapped it |
 
+## Seventh capture: the career-end Lesson list with greyed-out cards (2026-07-26 17:10)
+
+Saved automatically by the drain-failure capture in `drainLessonsAtCareerComplete` during the
+first Copano Rickey queue career on 2026-07-26 (`gc_drain_no_lessons_20260726_171013.png`), then
+channel-swapped into the fixture orientation: the bot's `saveBitmap` PNGs store the opposite R/B
+order from these fixture files, so the raw pull is unusable for colour probes until swapped.
+
+| Fixture | Original file | Screen |
+|---|---|---|
+| technique_list_career_end_dimmed.png | on-device `files/temp/gc_drain_no_lessons_20260726_171013.png` (R/B-swapped) | Career-end Lesson list, balances Da 8 / Pa 33 / Vo 41 / Vi 85 / Co 10: cards 0-1 (Dance Step Advanced Class Da 24, Group Lesson Basics Da 15) greyed out whole because they are unaffordable, card 2 (Acting Intermediate Class, Pa 12 + Vi 12) bright with the gold Learnable! marker |
+
+This frame is the regression lock for the 2026-07-26 incident: the career-end list greys the
+ENTIRE unaffordable card (header included), the old presence rule keyed on card 0's bright
+header alone, and two career-end drains aborted with "the list did not open" while roughly 177
+performance points expired. It pins the dim-tier card-kind thresholds and the any-card presence
+rule, and proves dim = unaffordable / bright = Learnable stays readable on this layout.
+
 ## Screens still needed before further automation
 
 1. The lesson list immediately after a successful LEARN (the refresh; we have only after-schedule)

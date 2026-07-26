@@ -36,6 +36,7 @@ class GrandConcertProbeFixtureTest {
         listOf(
             "quickmode_dont_use", "quickmode_shorten_all", "career_main_turn1", "final_confirmation",
             "training_guts_before", "career_after_training", "technique_list", "song_list", "song_list_scheduled",
+            "technique_list_career_end_dimmed",
             "learn_confirm_technique", "schedule_confirm_technique", "schedule_confirm_song", "scheduling_complete",
             "concert_info", "career_scheduled", "career_complete", "concert_pending",
             "concert_confirm", "concert_playback", "concert_success_banner", "concert_overview",
@@ -326,6 +327,27 @@ class GrandConcertProbeFixtureTest {
             assertTrue(grandConcertLessonListPresent(sampler("technique_list")))
             assertTrue(grandConcertLessonListPresent(sampler("song_list")))
             assertTrue(grandConcertLessonListPresent(sampler("song_list_scheduled")))
+        }
+
+        @Test
+        fun `the career-end list with greyed-out unaffordable cards is still recognised`() {
+            // Live regression 2026-07-26: the career-end list greys out whole unaffordable cards.
+            // Cards 0 and 1 were dim (Da 24 / Da 15 against a Da 8 balance), card 2 was Learnable,
+            // and the old card-0-only presence rule reported "the list did not open" twice, expiring
+            // roughly 177 performance points across the two drains.
+            val s = sampler("technique_list_career_end_dimmed")
+            assertTrue(grandConcertLessonListPresent(s))
+            for (i in 0..2) {
+                assertEquals(LessonCardKind.TECHNIQUE, grandConcertLessonCardKind(s, i), "dimmed-list card $i")
+            }
+            // The dim state carries meaning: greyed cards read unaffordable and unmarked, the
+            // bright card reads affordable with the Learnable marker.
+            assertFalse(grandConcertCardAffordable(s, 0))
+            assertFalse(grandConcertCardAffordable(s, 1))
+            assertTrue(grandConcertCardAffordable(s, 2))
+            assertFalse(grandConcertCardLearnableMarker(s, 0))
+            assertFalse(grandConcertCardLearnableMarker(s, 1))
+            assertTrue(grandConcertCardLearnableMarker(s, 2))
         }
 
         @Test
