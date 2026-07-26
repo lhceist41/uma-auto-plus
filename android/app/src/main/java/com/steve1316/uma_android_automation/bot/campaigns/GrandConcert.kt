@@ -550,7 +550,12 @@ class GrandConcert(game: Game) : Campaign(game) {
             if (intended.kind == LessonCardKind.SONG) songsBoughtThisCycle++
 
             game.wait(1.2)
-            val next = lessonReader.readLessonList(game.imageUtils.getSourceBitmap())
+            // Re-read through the same settle loop the visit's first read uses. A single read here
+            // ended a whole career-end drain after ONE purchase on 2026-07-26, leaving 461 points to
+            // expire: the list repaints top-down after a buy, so a read taken too early returns
+            // nothing and the visit gave up rather than waiting. That is the exact failure the
+            // settle helper was written for, and it was guarding only the way in.
+            val next = readLessonListSettled()
             if (next == null) {
                 MessageLog.w(TAG, "[GRAND_CONCERT] [LESSON_BUY] The list did not return after learning; ending the visit.")
                 break
