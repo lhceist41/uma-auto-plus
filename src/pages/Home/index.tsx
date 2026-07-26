@@ -805,7 +805,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                         >
                             <AlertTriangle size={16} color="#eab308" style={{ marginRight: 6, marginTop: 2 }} />
                             <Text style={{ flex: 1, fontSize: 12, color: colors.foreground, lineHeight: 16 }}>
-                                <Text style={{ fontWeight: "700", color: "#eab308" }}>Supervision needed: </Text>
+                                <Text style={{ fontWeight: "700", color: "#eab308" }}>Grand Concert: </Text>
                                 {GRAND_CONCERT_WARNING}
                             </Text>
                         </View>
