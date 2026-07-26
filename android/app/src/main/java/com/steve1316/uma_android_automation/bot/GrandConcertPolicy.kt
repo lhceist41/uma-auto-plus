@@ -692,10 +692,9 @@ enum class GrandConcertHandoffReason(val playerText: String) {
     CONCERT_NOT_AUTOMATED("Concert screens are not automated yet."),
     QUICK_MODE_UNCONFIGURED("Quick Mode has not been configured in UMA Auto+."),
     QUICK_MODE_UNREADABLE("The Quick Mode dialog could not be read reliably."),
-    CAREER_COMPLETE_NOT_AUTOMATED(
-        "The career reached its Complete Career screen. Spend the remaining performance points via " +
-            "Lessons and buy skills before pressing Complete Career, or the points are lost.",
-    ),
+    // CAREER_COMPLETE_NOT_AUTOMATED was removed 2026-07-26: the Complete Career screen is owned
+    // by the shared career-end path (GrandConcert.checkEndScreen recognises it by template or
+    // pixel probe), so no handoff for it can fire anymore.
 }
 
 /**

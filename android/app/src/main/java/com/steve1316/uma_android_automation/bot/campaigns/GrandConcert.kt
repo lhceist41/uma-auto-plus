@@ -138,17 +138,36 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     /**
-     * Campaign-specific screen check, reached once every shared screen check has missed. This is
-     * what keeps a finished Grand Concert career out of the unknown-screen ladder: the Complete
-     * Career screen matches none of the shared checks (the URA career-end template scores ~0.55
-     * on it), so before this check the run spiraled here (observed 2026-07-23, twelve consecutive
-     * unknown-screen ticks).
+     * Career-end detection includes the scenario's own Complete Career pixel probe alongside the
+     * shared complete_career button template. The two detectors race on the screen's fade-in: the
+     * probe reads the banner and icon cells before the button template clears its 0.8 confidence
+     * gate (measured 2026-07-26: the template scored 0.963 on the settled frame but missed 1.2s
+     * earlier, while the probe hit). When the probe won that race it used to reach the
+     * campaign-specific fallback below, which drained lessons and then handed the career to the
+     * player with 1132 skill points unspent. Routing both detectors through this check sends
+     * every career-end frame down the one good path: drain, careerComplete plan, finalize gate,
+     * navigator.
+     */
+    override fun checkEndScreen(): Boolean {
+        if (super.checkEndScreen()) return true
+        val bitmap = game.imageUtils.getSourceBitmap()
+        val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
+        if (grandConcertCareerCompleteScreenPresent(sampler)) {
+            MessageLog.i(TAG, "[GRAND_CONCERT] [CAREER_COMPLETE] Complete Career screen recognised by the scenario probe (button template not yet matched).")
+            return true
+        }
+        return false
+    }
+
+    /**
+     * Campaign-specific screen check, reached once every shared screen check has missed. Owns the
+     * concert-pending screen: the escort runs the concert, and any unrecognized state inside that
+     * flow ends in a career-preserving handoff.
      *
-     * On detection the campaign first drains the remaining performance points through the Lessons
-     * shop (the maintainer confirmed Lessons keeps working here, and unspent points die with the
-     * career, exactly like the unspent-skill-point incident this repository already recorded
-     * once), then stops with a career-preserving breakpoint: the Skills purchase and the Complete
-     * Career tap stay manual until their own flows are captured and automated.
+     * The Complete Career screen is deliberately NOT handled here anymore: [checkEndScreen]
+     * recognises it (template or pixel probe) earlier in the main loop, so the shared career-end
+     * path owns it end to end. The old fallback here could win the fade-in race against the
+     * button template and hand the career off with every skill point unspent (2026-07-26).
      */
     override fun checkCampaignSpecificConditions(): Boolean {
         val bitmap = game.imageUtils.getSourceBitmap()
@@ -171,15 +190,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             return true
         }
 
-        if (!grandConcertCareerCompleteScreenPresent(sampler)) return false
-        MessageLog.i(TAG, "[GRAND_CONCERT] [CAREER_COMPLETE] Complete Career screen detected; draining leftover performance points via Lessons.")
-        val spent = drainLessonsAtCareerComplete()
-        val handoff =
-            handOffToPlayer(
-                GrandConcertHandoffReason.CAREER_COMPLETE_NOT_AUTOMATED,
-                if (spent > 0) "$spent lesson(s) were learned with the leftover points first" else "no leftover lesson was worth learning",
-            )
-        throw CampaignBreakpointException(handoff.playerMessage())
+        return false
     }
 
     /**
@@ -314,9 +325,14 @@ class GrandConcert(game: Game) : Campaign(game) {
             return
         }
         if (!careerEndDrainDone) {
-            careerEndDrainDone = true
             MessageLog.i(TAG, "[GRAND_CONCERT] [CAREER_COMPLETE] Draining leftover performance points before the skill purchase.")
-            drainLessonsAtCareerComplete()
+            val spent = drainLessonsAtCareerComplete()
+            // A drain that never saw the list leaves the flag unset: with the probe now part of
+            // checkEndScreen, the first entry attempt can run on a fade-in frame where the
+            // Lessons tap lands on nothing, and the bounded career-end entry retry in
+            // Campaign.process deserves a real second drain instead of a silent skip that
+            // expires the leftover points.
+            careerEndDrainDone = spent >= 0
             game.wait(1.0)
         }
         MessageLog.i(TAG, "[GRAND_CONCERT] [CAREER_COMPLETE] Opening the skill screen via the Complete Career layout's Skills button.")
@@ -360,6 +376,10 @@ class GrandConcert(game: Game) : Campaign(game) {
      * scoring mode (compounding and queued bonuses are residual, deadlines moot) and with the
      * stop line at 1: expiring points have zero opportunity cost, so anything with positive value
      * beats losing them. Always claws back to the Complete Career screen afterwards.
+     *
+     * Returns the number of lessons learned, or [DRAIN_LIST_NEVER_SEEN] when the list never
+     * appeared at all - the caller uses that to keep its drain retryable rather than treating a
+     * missed tap as a completed drain.
      */
     private fun drainLessonsAtCareerComplete(): Int {
         game.tap(GrandConcertCareerComplete.LESSONS_X.toDouble(), GrandConcertCareerComplete.LESSONS_Y.toDouble(), "gc_career_complete_lessons")
@@ -383,10 +403,10 @@ class GrandConcert(game: Game) : Campaign(game) {
                 TAG,
                 "[GRAND_CONCERT] [CAREER_COMPLETE] The Lessons list did not open from the Complete Career screen " +
                     "(tapped ${GrandConcertCareerComplete.LESSONS_X}, ${GrandConcertCareerComplete.LESSONS_Y}); " +
-                    "leaving it manual. Frame: $shot",
+                    "the drain stays retryable. Frame: $shot",
             )
             exitLessonShop()
-            return 0
+            return DRAIN_LIST_NEVER_SEEN
         }
         val context = LessonScoreContext(careerComplete = true, energyPercent = trainee.energy)
         lessonReader.logLessonList(list)
@@ -714,6 +734,10 @@ class GrandConcert(game: Game) : Campaign(game) {
          * Sized for the worst observed leftover (227 of one type funds nine cheap techniques);
          * this is a runaway backstop, not a target - the stop rule ends real drains. */
         private const val MAX_PURCHASES_CAREER_COMPLETE = 30
+
+        /** [drainLessonsAtCareerComplete] sentinel: the Lessons list never appeared, so the drain
+         * did not happen at all and the caller must keep it retryable. */
+        private const val DRAIN_LIST_NEVER_SEEN = -1
 
         /** Escort loop budget: playback plus a handful of result screens fits well inside this. */
         private const val MAX_ESCORT_TICKS = 40
