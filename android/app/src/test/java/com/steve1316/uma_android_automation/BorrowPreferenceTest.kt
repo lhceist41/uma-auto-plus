@@ -47,4 +47,31 @@ class BorrowPreferenceTest {
         assertFalse(borrowRowMatchesPreference("[Fire at My Heels]\nKitasan Black", ""))
         assertFalse(borrowRowMatchesPreference("[Fire at My Heels]\nKitasan Black", "   "))
     }
+
+    /**
+     * Real OCR reads of the SAME card from one 2026-07-26 borrow scan. The picker's bracket glyphs
+     * are unstable, and only some of these reach the curated entry, which is why the selection step
+     * must re-scan for the card rather than trust the page it was first seen on.
+     */
+    @Test
+    @DisplayName("Bracket OCR noise decides whether a row matches, so selection cannot assume a stable read")
+    fun testBracketOcrVariants() {
+        val entry = "[Fire at My Heels] Kitasan Black"
+        // Opening bracket read as "(" : the paren is stripped as punctuation, so this still matches.
+        assertTrue(borrowRowMatchesPreference("(Fire at My Heels] Kitasan Black", entry))
+        // Closing bracket read as "l" : "l" is a letter, survives the strip, and breaks the match.
+        assertFalse(borrowRowMatchesPreference("[Fire at My Heelsl Kitasan Black", entry))
+        // The character name alone still matches either way, which is the safety net.
+        assertTrue(borrowRowMatchesPreference("[Fire at My Heelsl Kitasan Black", "Kitasan Black"))
+    }
+
+    @Test
+    @DisplayName("A music note in an entry is stripped from both sides, but an OCR letter in its place is not")
+    fun testMusicNoteVariants() {
+        val entry = "[Touching Sleeves Is Good Luck! ♪] Matikanefukukitaru"
+        assertTrue(borrowRowMatchesPreference("[Touching Sleeves Is Good Luck! ♪] Matikanefukukitaru", entry))
+        // Observed live: the note OCR'd as "D1", which inserts letters and digits mid-string.
+        assertFalse(borrowRowMatchesPreference("[Touching Sleeves Is Good Luck! D1 Matikanefukukitaru", entry))
+        assertTrue(borrowRowMatchesPreference("[Touching Sleeves Is Good Luck! D1 Matikanefukukitaru", "Matikanefukukitaru"))
+    }
 }

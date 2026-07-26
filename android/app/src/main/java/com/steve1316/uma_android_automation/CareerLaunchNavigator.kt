@@ -4196,8 +4196,17 @@ class CareerLaunchNavigator(private val context: Context) {
      */
     private fun trySmartBorrowPick(replaceMode: Boolean = false): Boolean {
         val allPriorities = mutableListOf<String>()
-        SettingsHelper.getStringSetting("runQueue", "preferredBorrowName").trim().takeIf { it.isNotEmpty() }?.let { allPriorities.add(it) }
+        val pinnedName = SettingsHelper.getStringSetting("runQueue", "preferredBorrowName").trim().takeIf { it.isNotEmpty() }
+        pinnedName?.let { allPriorities.add(it) }
         allPriorities.addAll(SmartBorrowList.priority)
+        // A pin occupies entry 0 and shifts the curated list down, which changes which find counts
+        // as "the best still-reachable card" and therefore whether the early tap can fire at all.
+        // A pin that never appears in the player's list holds entry 0 open for the whole scan, so
+        // every page is walked before anything is chosen. That is correct but not obvious, and its
+        // absence from the log cost real time diagnosing a 2026-07-26 borrow failure.
+        if (pinnedName != null) {
+            MessageLog.i(TAG, "[NAV] [BORROW] Pinned preference \"$pinnedName\" takes priority 0; the curated list follows it.")
+        }
         // Characters the deck already refused this launch are out, whatever the outfit.
         val priorities = filterBorrowPriorities(allPriorities, borrowExcludedCharacters)
 
@@ -4268,24 +4277,45 @@ class CareerLaunchNavigator(private val context: Context) {
             return false
         }
 
-        // Reopen to reset the list to the top deterministically, then rescroll to the best page.
-        MessageLog.i(TAG, "[NAV] [BORROW] Best available card is \"${priorities[bestEntry]}\" on page $bestPage. Reopening the picker to select it...")
+        // Reopen to reset the list to the top deterministically, then SEARCH for the card again
+        // rather than trusting the page number it was seen on.
+        //
+        // Trusting the number lost a correctly chosen priority-1 Kitasan Black on 2026-07-26 and
+        // dropped the queue onto "first valid card", which took a Group card. Two independent
+        // reasons a remembered page can be wrong, both present in that run's log:
+        //   - the picker is ordered by the friends' last login, so it genuinely reorders between
+        //     the scan and the reopen;
+        //   - the row text is OCR, and the bracket glyphs are unstable. The same card read as
+        //     "(Fire at My Heels] Kitasan Black" on one page and "[Fire at My Heelsl Kitasan
+        //     Black" on another, and only the first of those normalizes to a match. A re-read of
+        //     the same page can therefore miss a card that is sitting right there.
+        // Re-scanning from the top costs one extra pass and survives both.
+        MessageLog.i(TAG, "[NAV] [BORROW] Best available card is \"${priorities[bestEntry]}\" (first seen on page $bestPage). Reopening the picker to select it...")
         ButtonClose.click(iu)
         waitSafe(1.5)
         if (!reopenBorrowPicker(replaceMode)) return false
         waitSafe(2.0)
-        repeat(bestPage) {
-            swipeBorrowList(iu.getSourceBitmap())
-        }
-        for ((centerY, text) in borrowRowsOnScreen(iu.getSourceBitmap()).rows) {
-            if (borrowRowMatchesPreference(text, priorities[bestEntry])) {
-                MessageLog.i(TAG, "[NAV] [BORROW] Selecting \"${priorities[bestEntry]}\" at (540, ${centerY.toInt()}).")
-                lastBorrowPickEntry = priorities[bestEntry]
-                gestureUtils.tap(540.0, centerY, "borrow_smart_row")
-                return true
+        var searchPage = 0
+        val searchSeen = HashSet<String>()
+        while (searchPage <= MAX_BORROW_SCAN_PAGES) {
+            if (!BotService.isRunning || StartModule.queueStopRequested) break
+            val searchBitmap = iu.getSourceBitmap()
+            val searchRows = borrowRowsOnScreen(searchBitmap).rows
+            for ((centerY, text) in searchRows) {
+                if (borrowRowMatchesPreference(text, priorities[bestEntry])) {
+                    MessageLog.i(TAG, "[NAV] [BORROW] Selecting \"${priorities[bestEntry]}\" on page $searchPage at (540, ${centerY.toInt()}).")
+                    lastBorrowPickEntry = priorities[bestEntry]
+                    gestureUtils.tap(540.0, centerY, "borrow_smart_row")
+                    return true
+                }
             }
+            // Stop at the end of the list: a page whose rows were all seen already is the tail.
+            val fresh = searchRows.count { searchSeen.add(it.second.lowercase().filter { c -> c.isLetterOrDigit() }) }
+            if (fresh == 0 || searchPage == MAX_BORROW_SCAN_PAGES) break
+            swipeBorrowList(searchBitmap)
+            searchPage++
         }
-        MessageLog.w(TAG, "[NAV] [BORROW] Could not relocate \"${priorities[bestEntry]}\" after reopening (the list order may have shifted). Falling back.")
+        MessageLog.w(TAG, "[NAV] [BORROW] Could not find \"${priorities[bestEntry]}\" again after reopening and re-scanning the list. Falling back.")
         ButtonClose.click(iu)
         return false
     }
