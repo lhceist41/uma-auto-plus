@@ -405,6 +405,14 @@ class CareerLaunchNavigator(private val context: Context) {
      * instead of launching another career (set per navigate() call). */
     private var finalizeToHomeMode: Boolean = false
 
+    /**
+     * True when the career that was on screen has already finished and been recorded, so no campaign
+     * is coming back to drive its end screens. Set by the queue's between-run navigation. Distinct
+     * from [finalizeToHomeMode], which also implies no campaign but stops at Home instead of
+     * launching the next career.
+     */
+    private var previousCareerCompleteMode: Boolean = false
+
     /** Single-run trainee expectation (set per navigate() call by Game.kt's auto-navigation from
      * general.appliedPresetTrainee). When non-blank, the Trainee Select gate arms and the handler
      * verifies/hunts THIS name - never queueState.currentTrainee, whose stale leftover from an
@@ -560,7 +568,13 @@ class CareerLaunchNavigator(private val context: Context) {
      *   newline-joined (same convention as queueState.currentTraineeExcludes).
      * @return A [NavigationResult] indicating success or failure with diagnostics.
      */
-    fun navigate(reuseLastLaunchSetup: Boolean, finalizeToHome: Boolean = false, singleRunTrainee: String = "", singleRunTraineeExcludes: String = ""): NavigationResult {
+    fun navigate(
+        reuseLastLaunchSetup: Boolean,
+        finalizeToHome: Boolean = false,
+        singleRunTrainee: String = "",
+        singleRunTraineeExcludes: String = "",
+        previousCareerComplete: Boolean = false,
+    ): NavigationResult {
         val autoFillSupports = SettingsHelper.getBooleanSetting("runQueue", "autoFillSupports", false)
         MessageLog.i(
             TAG,
@@ -585,6 +599,7 @@ class CareerLaunchNavigator(private val context: Context) {
         expectedFinalizeToken = CareerFinalizeGate.verdict?.careerToken
         finalizeGuardActive = SettingsHelper.getStringSetting("skills", "skillSpendMode").trim().lowercase() == "adaptive"
         finalizeToHomeMode = finalizeToHome
+        previousCareerCompleteMode = previousCareerComplete
         singleRunTraineeTarget = singleRunTrainee
         singleRunTraineeTargetExcludes = singleRunTraineeExcludes
         singleRunTraineeSelectHandled = false
@@ -1240,11 +1255,19 @@ class CareerLaunchNavigator(private val context: Context) {
         // run START it still holds unspent value (the Lessons drain) that the campaign must run
         // first, so it routes to the campaign instead of the summary flow (observed 2026-07-24:
         // classifying it as CAREER_SUMMARY ended the run before the drain hook ever got a tick).
-        // During the finalize-to-home pass the campaign has already drained and approved Finish,
-        // and this screen must fall through to CAREER_SUMMARY so the finalize actually presses
-        // Complete Career (the first finalize run declared "navigation complete" here and left
-        // the career unfinished).
-        if (!finalizeToHomeMode && grandConcertCareerCompleteScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })) {
+        //
+        // That routing is only correct while a campaign is actually coming back for this screen.
+        // Both no-campaign passes must fall through to CAREER_SUMMARY instead, because
+        // ACTIVE_TRAINING_MENU is a terminal success state and stopping here leaves the career
+        // unfinished:
+        //   - the finalize-to-home pass, where the campaign has already drained and approved
+        //     Finish (the first finalize run declared "navigation complete" here);
+        //   - the queue's BETWEEN-RUN pass, where the previous career is already complete and
+        //     recorded. Missing that case cost a whole queued run on 2026-07-26: navigation
+        //     returned success without launching anything, run 2 attached to the finished career
+        //     instead, and wrote a phantom CAREER_END at turn=1 carrying run 1's exact stats.
+        val campaignWillDriveThisScreen = !finalizeToHomeMode && !previousCareerCompleteMode
+        if (campaignWillDriveThisScreen && grandConcertCareerCompleteScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })) {
             MessageLog.i(TAG, "[NAV] Grand Concert Complete Career screen -> ACTIVE_TRAINING_MENU (the campaign's Lessons drain owns it).")
             return LaunchScreenState.ACTIVE_TRAINING_MENU
         }

@@ -1216,6 +1216,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         reuseLastLaunchSetup: Boolean,
         navigator: CareerLaunchNavigator = CareerLaunchNavigator(context),
         finalizeToHome: Boolean = false,
+        previousCareerComplete: Boolean = false,
     ): NavigationResult {
         val navDone = java.util.concurrent.atomic.AtomicBoolean(false)
         // Set true ONLY when the deadline thread itself interrupts the queue thread. The catch
@@ -1261,7 +1262,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         deadlineThread.start()
 
         return try {
-            navigator.navigate(reuseLastLaunchSetup, finalizeToHome)
+            navigator.navigate(reuseLastLaunchSetup, finalizeToHome, previousCareerComplete = previousCareerComplete)
         } catch (e: InterruptedException) {
             // Clear the interrupt flag so queue teardown (log saving, events) is not poisoned.
             Thread.interrupted()
@@ -1733,7 +1734,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         } else {
                             MessageLog.i(TAG, "[QUEUE] Navigating back to career start for next run...")
 
-                            val navResult = navigateWithDeadline(nextReuse)
+                            // The career this pass starts from is finished and already recorded, so
+                            // no campaign is coming back for its end screens. Without this the Grand
+                            // Concert Complete Career screen routes to the campaign and navigation
+                            // reports success without having launched anything.
+                            val navResult = navigateWithDeadline(nextReuse, previousCareerComplete = true)
 
                             if (!navResult.success) {
                                 logNavigationFailure(navResult)

@@ -295,6 +295,43 @@ class GrandConcertScenarioTest {
             )
         }
 
+        /**
+         * The Complete Career screen routes to the campaign so its Lessons drain can run, but
+         * ACTIVE_TRAINING_MENU is a terminal success state, so that routing is only safe while a
+         * campaign is actually coming back for the screen. Two passes have no campaign behind them:
+         * the finalize-to-home pass and the queue's between-run pass. Missing the second cost a whole
+         * queued run on 2026-07-26 (navigation reported success without launching, run 2 attached to
+         * the finished career and wrote a phantom CAREER_END at turn=1 with run 1's exact stats).
+         */
+        @Test
+        fun `the Complete Career routing is gated on a campaign actually driving it`() {
+            val nav = source("CareerLaunchNavigator.kt")
+            assertTrue(
+                nav.contains("val campaignWillDriveThisScreen = !finalizeToHomeMode && !previousCareerCompleteMode"),
+                "the Complete Career routing must require BOTH no-campaign flags to be clear",
+            )
+            assertTrue(
+                nav.contains("if (campaignWillDriveThisScreen && grandConcertCareerCompleteScreenPresent("),
+                "the routing no longer consults the combined guard",
+            )
+        }
+
+        @Test
+        fun `the queue tells the navigator when the previous career is already finished`() {
+            val start = source("StartModule.kt")
+            assertTrue(
+                start.contains("navigateWithDeadline(nextReuse, previousCareerComplete = true)"),
+                "the between-run navigation must declare that the previous career is complete",
+            )
+            // The cold-start pass must NOT claim it: a career launched there is driven by a campaign
+            // afterwards, and the Lessons drain on a resumed end screen still belongs to it.
+            val coldStart = start.substringAfter("navigateWithDeadline(coldStartReuse")
+            assertFalse(
+                coldStart.take(80).contains("previousCareerComplete"),
+                "the cold-start pass must not declare the previous career complete",
+            )
+        }
+
         @Test
         fun `the scenario select label points at a template that actually ships`() {
             val label = source("components/Label.kt")
