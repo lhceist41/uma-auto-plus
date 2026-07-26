@@ -404,6 +404,10 @@ class GrandConcertScenarioTest {
         fun `the skill session re-plans after refused taps instead of concluding satisfied`() {
             val plan = source("bot/SkillPlan.kt")
             assertTrue(plan.contains("for (planRound in 1..maxPlanRounds)"), "the plan-round loop is gone")
+            assertTrue(
+                plan.contains("if (!bIsCareerComplete) break"),
+                "extra plan rounds must stay career-end only - mid-career leftover SP is deliberate reserve, not a defect",
+            )
             val deadTapFilters = Regex("""!in skillList\.deadTapSkills""").findAll(plan).count()
             assertTrue(
                 deadTapFilters >= 4,

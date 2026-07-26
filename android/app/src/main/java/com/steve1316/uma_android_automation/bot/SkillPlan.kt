@@ -1022,6 +1022,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     entry.name !in skillsToBuy &&
                         entry.bIsAvailable &&
                         entry.screenPrice > 0 &&
+                        // Same dead-tap exclusion as every other candidate source: a row the game
+                        // already refused this session must not be injected again.
+                        entry.name !in skillList.deadTapSkills &&
                         isRecoveryInjectionCandidate(entry.skillData, axes.trackDistance, axes.runningStyle, axes.trackSurface)
                 }
                 .map { RecoveryCandidate(it.name, recoveryClassOf(it.skillData.iconId), it.screenPrice, it.skillData.id) }
@@ -1929,9 +1932,13 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             }
 
             if (planRound >= maxPlanRounds) break
-            // Re-plan only when the same classifier the finalization guard runs still counts an
-            // affordable compatible candidate - that alignment is the point: the plan must not
-            // conclude while the guard would refuse Finish over money it can see.
+            // Extra rounds are CAREER-END ONLY. There the points expire at Finish and the
+            // finalization guard refuses to Finish over spendable money, so the session must not
+            // conclude while the guard's classifier still counts an affordable candidate.
+            // Mid-career the opposite holds: leftover SP is deliberate reserve for better skills
+            // later, a single plan is the long-standing behavior, and spending down to zero at
+            // every skill check would be a regression, not a fix.
+            if (!bIsCareerComplete) break
             val liveSp: Int = skillList.skillPoints
             val stillAffordable: Int =
                 classifyRemainingCandidates(buildRemainingCandidates(skillList), liveSp, skipDoubleCircleUpgrades).affordableCount
