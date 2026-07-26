@@ -4703,6 +4703,14 @@ class CareerLaunchNavigator(private val context: Context) {
      */
     private fun handleScenarioSelect(): TransitionResult {
         val target = SettingsHelper.getStringSetting("general", "scenario")
+        // Every card the carousel can show, for naming the current page in the miss log.
+        val carouselLogos =
+            listOf(
+                "URA Finale" to LabelScenarioSelectUra,
+                "Unity Cup" to LabelScenarioSelectUnityCup,
+                "Trackblazer" to LabelScenarioSelectTrackblazer,
+                "Grand Concert" to LabelScenarioSelectGrandConcert,
+            )
         val targetLogo =
             when {
                 target == "URA Finale" -> LabelScenarioSelectUra
@@ -4740,14 +4748,30 @@ class CareerLaunchNavigator(private val context: Context) {
                     )
                 }
             }
-            MessageLog.i(TAG, "[NAV] Scenario Select is not showing \"$target\" (page check ${attempt + 1}/6). Swiping the carousel to the next scenario.")
+            // Name the card actually on screen, not just "not the target". A blind miss log hid a
+            // swipe that paged two entries at a time for as long as the carousel had three cards;
+            // with the page named, the alternation is obvious on the first two lines.
+            val showing =
+                carouselLogos.firstOrNull { (_, logo) -> logo.check(iu, sourceBitmap = bitmap) }?.first
+                    ?: "unrecognised"
+            MessageLog.i(
+                TAG,
+                "[NAV] Scenario Select shows \"$showing\", wanted \"$target\" (page check ${attempt + 1}/6). " +
+                    "Swiping the carousel to the next scenario.",
+            )
             // Swipe the card rather than tapping the arrow chevron. The chevron is a thin outline over
             // per-scenario background art and template-matches unreliably (it stalled the queue at ~0.55,
             // under the 0.6 gate). A horizontal drag across the card pages regardless of the arrow, and the
-            // carousel wraps, so consistently dragging one direction cycles through every scenario within
-            // the 6 attempts. Drag right-to-left across the card's upper-mid band (clear of the buttons).
+            // carousel wraps, so consistently dragging one direction cycles through every scenario.
+            //
+            // The drag must page exactly ONE entry. A wider, faster drag flings two at a time, which was
+            // invisible while the carousel held three scenarios (stepping by two around an odd cycle still
+            // visits every entry) and became a dead end the moment Grand Concert made it four: an even
+            // cycle stepped by two only ever reaches half of it, so the queue alternated between URA
+            // Finale and Trackblazer forever. Observed live on 2026-07-26. Shorter distance and a slower
+            // drag keep it below the fling threshold so each gesture advances a single card.
             val swipeY = bitmap.height * 0.42f
-            gestureUtils.swipe(bitmap.width * 0.80f, swipeY, bitmap.width * 0.20f, swipeY, duration = 450L)
+            gestureUtils.swipe(bitmap.width * 0.68f, swipeY, bitmap.width * 0.36f, swipeY, duration = 900L)
             waitSafe(1.5)
         }
         return TransitionResult.Failed(
