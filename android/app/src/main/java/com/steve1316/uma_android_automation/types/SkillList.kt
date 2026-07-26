@@ -95,6 +95,14 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
     var skillPoints: Int = 0
         private set
 
+    /** Skills whose Skill Up tap ran [buySkill]'s full retry budget this session without Skill
+     * Points ever moving. The game refused the purchase: the row is owned, disabled, or not
+     * genuinely on offer (the career-end scan listed four already-owned skills as buyable on
+     * 2026-07-26, and every one of them dead-tapped). The planner must not plan these again
+     * this session, and the finalization evidence excludes them under an explicit reason
+     * instead of counting them as spendable candidates forever. */
+    val deadTapSkills: MutableSet<String> = mutableSetOf()
+
     /** Why the most recent [parseSkillListEntries] scroll pass ended. The finalization guard
      * needs this to distinguish "no candidates remain" from "the scan never covered the whole
      * list"; only [ScanTermination.COMPLETE] is a positive end-of-list proof. */
@@ -1161,10 +1169,11 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
 
         if (!spDropped) {
             skillPoints = spBefore // miss -> budget unchanged
+            deadTapSkills.add(name)
             MessageLog.e(
                 TAG,
                 "[ERROR] buySkill:: \"$name\" tap at (${tapTarget.x.toInt()}, ${tapTarget.y.toInt()}) did NOT register after $maxAttempts attempts — " +
-                    "Skill Points did not drop ($spBefore -> ${spAfter ?: "unreadable"}). NOT counted as bought.",
+                    "Skill Points did not drop ($spBefore -> ${spAfter ?: "unreadable"}). NOT counted as bought; excluded from re-planning this session.",
             )
             return null
         }

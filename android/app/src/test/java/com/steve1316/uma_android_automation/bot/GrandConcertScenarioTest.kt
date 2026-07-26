@@ -354,5 +354,69 @@ class GrandConcertScenarioTest {
                 assertFalse(campaign.contains(forbidden), "the campaign must not tap anything yet, found: $forbidden")
             }
         }
+
+        /**
+         * The 2026-07-26 career-end incident, part 1: the Complete Career screen fades in, the
+         * scenario pixel probe recognises it before the complete_career button template clears
+         * its confidence gate, and the campaign-specific fallback used to win that race and hand
+         * the career off with every skill point unspent. The probe must feed checkEndScreen (so
+         * both detectors reach the one good path), and the fallback handoff must stay deleted.
+         */
+        @Test
+        fun `career-end detection runs through checkEndScreen and the fallback handoff stays deleted`() {
+            val campaign = source("bot/campaigns/GrandConcert.kt")
+            val endScreenIdx = campaign.indexOf("override fun checkEndScreen()")
+            assertTrue(endScreenIdx >= 0, "the campaign no longer overrides checkEndScreen")
+            val endScreenBody = campaign.substring(endScreenIdx, minOf(campaign.length, endScreenIdx + 700))
+            assertTrue(
+                endScreenBody.contains("grandConcertCareerCompleteScreenPresent"),
+                "checkEndScreen must consult the scenario probe alongside the shared template",
+            )
+            assertFalse(
+                source("bot/GrandConcertPolicy.kt").contains("CAREER_COMPLETE_NOT_AUTOMATED("),
+                "the Complete Career handoff reason is back - the fade-in race would stall careers again",
+            )
+        }
+
+        /**
+         * Part 2: the drain itself must stay retryable. A drain that never saw the Lessons list
+         * (fade-in frame, tap landed on nothing) must not consume the once-per-career flag,
+         * because a skipped drain expires the leftover performance points at Finish.
+         */
+        @Test
+        fun `a drain that never saw the list does not consume the once-only flag`() {
+            val campaign = source("bot/campaigns/GrandConcert.kt")
+            assertTrue(
+                campaign.contains("careerEndDrainDone = spent >= 0"),
+                "the drain flag must key on the list actually having been seen",
+            )
+            assertTrue(campaign.contains("DRAIN_LIST_NEVER_SEEN = -1"), "the never-seen sentinel is gone")
+        }
+
+        /**
+         * Part 3: the plan-and-buy rounds. The scan can list an already-owned skill as buyable;
+         * the DP then plans that phantom, its taps die, and a single-plan session used to end
+         * "satisfied" while real candidates sat unbought - which the finalization guard then
+         * correctly refused to Finish over, stalling the queue. The session must re-plan over
+         * the live budget with dead-tapped names excluded from every candidate source.
+         */
+        @Test
+        fun `the skill session re-plans after refused taps instead of concluding satisfied`() {
+            val plan = source("bot/SkillPlan.kt")
+            assertTrue(plan.contains("for (planRound in 1..maxPlanRounds)"), "the plan-round loop is gone")
+            val deadTapFilters = Regex("""!in skillList\.deadTapSkills""").findAll(plan).count()
+            assertTrue(
+                deadTapFilters >= 4,
+                "dead-tapped names must be excluded from the knapsack, the fallback, the buy callback, and the pass filter (found $deadTapFilters)",
+            )
+            assertTrue(
+                plan.contains("deadTapExhausted = name in skillList.deadTapSkills"),
+                "the finalization evidence no longer records dead-tapped rows",
+            )
+            assertTrue(
+                source("types/SkillList.kt").contains("deadTapSkills.add(name)"),
+                "buySkill no longer records refused taps",
+            )
+        }
     }
 }

@@ -415,7 +415,8 @@ class CareerFinalizeGateTest {
             inherited: Boolean = false,
             doubleCircle: Boolean = false,
             matchesAxes: Boolean = true,
-        ) = RemainingCandidate(name, price, obtained, virtual, negative, inherited, doubleCircle, matchesAxes)
+            deadTap: Boolean = false,
+        ) = RemainingCandidate(name, price, obtained, virtual, negative, inherited, doubleCircle, matchesAxes, deadTap)
 
         @Test
         fun `confirmed purchases disappear from the remaining eligible set`() {
@@ -505,6 +506,76 @@ class CareerFinalizeGateTest {
             assertEquals(1, result.eligibleCount)
             assertEquals(4, result.excludedByReason.values.sum())
             assertEquals(setOf("negative", "inherited_unique", "double_circle", "wrong_axes"), result.excludedByReason.keys)
+        }
+
+        @Test
+        fun `a dead-tapped candidate is excluded as unbuyable, not counted as spendable money`() {
+            // The 2026-07-26 stall: the scan listed already-owned "Focus" as buyable at 98, its
+            // taps ran the full retry budget with zero SP movement, and the guard then counted it
+            // (and blocked Finish) forever. The refusal itself is the evidence of unspendability.
+            val result =
+                classifyRemainingCandidates(
+                    listOf(candidate("Focus", 98, deadTap = true)),
+                    remainingSp = 98,
+                    skipDoubleCircleUpgrades = false,
+                )
+            assertEquals(0, result.eligibleCount)
+            assertEquals(0, result.affordableCount)
+            assertEquals(mapOf("unbuyable_dead_tap" to 1), result.excludedByReason)
+        }
+
+        @Test
+        fun `a dead-tapped row does not shield a genuinely buyable candidate from blocking`() {
+            // Mid-recovery state of the same incident: Focus refused, Sympathy still purchasable.
+            // The guard must still refuse Finish - the money can really buy Sympathy.
+            val result =
+                classifyRemainingCandidates(
+                    listOf(candidate("Focus", 98, deadTap = true), candidate("Sympathy", 63)),
+                    remainingSp = 98,
+                    skipDoubleCircleUpgrades = false,
+                )
+            assertEquals(1, result.affordableCount)
+            assertEquals("Sympathy", result.cheapestAffordableName)
+        }
+
+        @Test
+        fun `the dead-tap exclusion outranks every other reason for the same row`() {
+            val result =
+                classifyRemainingCandidates(
+                    listOf(candidate("Refused Negative", 40, negative = true, deadTap = true)),
+                    remainingSp = 716,
+                    skipDoubleCircleUpgrades = false,
+                )
+            assertEquals(mapOf("unbuyable_dead_tap" to 1), result.excludedByReason, "the attempted refusal is the strongest statement about the row")
+        }
+
+        @Test
+        fun `the recovered incident finishes - refused phantom excluded, real candidate bought, nothing affordable left`() {
+            // End state after the re-plan rounds buy Sympathy: Focus stays refused, Sympathy is
+            // obtained, 35 SP remain. Zero eligible candidates -> the evidence supports Finish
+            // with the dead-tap exclusion recorded, which is exactly what unsticks the queue.
+            val exhaustion =
+                classifyRemainingCandidates(
+                    listOf(candidate("Focus", 98, deadTap = true), candidate("Sympathy", 63, obtained = true)),
+                    remainingSp = 35,
+                    skipDoubleCircleUpgrades = false,
+                )
+            assertEquals(0, exhaustion.affordableCount)
+            assertEquals(0, exhaustion.eligibleCount)
+            val verdict =
+                eval(
+                    detailsSp = 35,
+                    ev =
+                        evidence(
+                            sp = 35,
+                            eligible = exhaustion.eligibleCount,
+                            affordable = exhaustion.affordableCount,
+                            excluded = exhaustion.excludedByReason,
+                        ),
+                    retryUsed = true,
+                )
+            assertEquals(FinalizeDecision.FINISH, verdict.decision)
+            assertTrue("unbuyable_dead_tap=1" in verdict.reason, verdict.reason)
         }
     }
 

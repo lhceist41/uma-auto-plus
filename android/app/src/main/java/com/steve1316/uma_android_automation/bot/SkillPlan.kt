@@ -73,6 +73,12 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     private var sessionRecoverySkill: String? = null
     private var sessionRecoveryObservedPrice: Int? = null
 
+    /** Names whose purchase was VERIFIED this session (Skill Points moved). The plan-round loop
+     * preserves these through each round's simulation reset, and progress tracking uses the
+     * count so a round that bought nothing and dead-tapped nothing ends the session instead of
+     * re-planning against a stuck screen. */
+    private val sessionVerifiedBuys: MutableSet<String> = mutableSetOf()
+
     /** The original race strategy from settings. */
     private val racingSettingRunningStyleString = SettingsHelper.getStringSetting("racing", "originalRaceStrategy")
 
@@ -1305,6 +1311,11 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 entry.bIsAvailable &&
                     entry.name !in skillsToBuy &&
                     entry.screenPrice > 0 &&
+                    // Never re-plan a skill whose taps the game already refused this session: the
+                    // scan can list an owned skill as buyable, and planning it again just burns
+                    // the budget slot a real candidate needed (2026-07-26: the DP chose a phantom
+                    // "Focus" at 98 over a purchasable "Sympathy" at 63, and the queue stalled).
+                    entry.name !in skillList.deadTapSkills &&
                     // Drop ◎ upgrades before buildKnapsackGroups runs, otherwise the ○ -> ◎ chain group still
                     // offers the [○, ◎] combo and the DP buys the ◎ — the toggle would no-op on the one
                     // strategy every preset uses at careerComplete.
@@ -1409,6 +1420,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 entry.bIsAvailable &&
                     entry.name !in skillsToBuy &&
                     entry.screenPrice > 0 &&
+                    // Same dead-tap exclusion as the knapsack strategy: a row the game already
+                    // refused this session is not a candidate, whatever the scan model says.
+                    entry.name !in skillList.deadTapSkills &&
                     careerEndFallbackCandidateAllowed(
                         isNegative = entry.skillData.bIsNegative,
                         isInheritedUnique = entry.skillData.bIsInheritedUnique,
@@ -1619,7 +1633,11 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         // once each planned skill is either owned or priced beyond the remaining budget. A
         // candidate entry skips these checks entirely: it must always get its buy attempt first
         // (its recorded price may run stale-high while the live row is buyable).
-        val bIsBuyCandidate = !entry.bIsObtained && !entry.bIsVirtual && entry.name in skillsToBuy
+        val bIsBuyCandidate =
+            !entry.bIsObtained && !entry.bIsVirtual && entry.name in skillsToBuy &&
+                // A dead-tapped row already ran the full tap-retry budget this session; meeting it
+                // again on a later pass must not spend another tap batch on it.
+                entry.name !in skillList.deadTapSkills
         if (!bIsBuyCandidate) {
             val outstandingSkills: List<String> = skillsToBuy.filter { it !in skillList.getObtainedSkills() }
             if (outstandingSkills.isEmpty()) {
@@ -1629,9 +1647,10 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             val bAnyStillBuyable =
                 outstandingSkills.any { name ->
                     // An unknown price means the row has not been seen this scan - it may appear
-                    // further down the list, so the scroll must continue.
+                    // further down the list, so the scroll must continue. Dead-tapped names never
+                    // justify more scrolling.
                     val livePrice: Int? = skillList.getAllSkills()[name]?.screenPrice
-                    livePrice == null || livePrice <= skillList.skillPoints
+                    name !in skillList.deadTapSkills && (livePrice == null || livePrice <= skillList.skillPoints)
                 }
             if (!bAnyStillBuyable) {
                 MessageLog.i(TAG, "[SKILLS] No remaining planned skill fits the ${skillList.skillPoints} SP budget (outstanding: ${outstandingSkills.joinToString(", ")}). Exiting the pass early...")
@@ -1652,6 +1671,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     MessageLog.i(TAG, "[INFO] Buying \"${purchaseResult.name}\" for ${purchaseResult.price} pts")
                     // Track the purchase so the estimated rank stays current without re-reading the Details Skills tab.
                     campaign.trainee.ownedSkillNames.add(purchaseResult.name)
+                    sessionVerifiedBuys.add(purchaseResult.name)
                 }
             }
         } else {
@@ -1660,6 +1680,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 MessageLog.i(TAG, "[INFO] Buying \"${purchaseResult.name}\" for ${purchaseResult.price} pts")
                 // Track the purchase so the estimated rank stays current without re-reading the Details Skills tab.
                 campaign.trainee.ownedSkillNames.add(purchaseResult.name)
+                sessionVerifiedBuys.add(purchaseResult.name)
             }
         }
 
@@ -1695,6 +1716,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         sessionRecoveryRequired = null
         sessionRecoverySkill = null
         sessionRecoveryObservedPrice = null
+        sessionVerifiedBuys.clear()
 
         val bitmap: Bitmap = game.imageUtils.getSourceBitmap()
 
@@ -1806,7 +1828,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         val ownedAtParse: Set<String> = skillList.getObtainedSkills().keys
 
         // Calculate the list of skills to purchase based on settings and points.
-        val skillsToPurchase: Map<String, Int> =
+        var skillsToPurchase: Map<String, Int> =
             getSkillsToBuy(
                 skillPlanSettings = skillPlanSettings,
                 skillList = skillList,
@@ -1821,75 +1843,122 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             return true
         }
 
-        // Planner output, snapshotted before execution can mutate the live entries. This is the
-        // `proposed` set: what the ranking decided to buy, at the price it planned against.
-        val proposedSkills: List<ProposedSkill> = skillsToPurchase.map { (name, price) -> ProposedSkill(name, price) }
+        // Planner output across every plan round, deduplicated by name at the first planned
+        // price. This is the `proposed` telemetry set: what the ranking decided to buy.
+        val proposedByName: LinkedHashMap<String, ProposedSkill> = LinkedHashMap()
+        val allPlannedNames: MutableSet<String> = mutableSetOf()
 
-        // Reset the in-memory purchase simulation from planning, preserving screen-confirmed ownership.
-        skillList.sellAllSkills(preserve = ownedAtParse)
-
-        // Iterate through the list again and perform the confirmed purchases.
-        //
-        // A single scroll pass is not trusted to cover the whole list: the end-of-list heuristics
-        // can conclude "done" early (dropped swipes, or purchases reflowing rows mid-pass), stranding
-        // planned skills unbought. Re-run from the top while planned skills remain. Re-runs are safe:
-        // obtained entries are skipped in the callback, and already-selected rows no longer present a
-        // matchable Skill Up button.
-        val maxBuyPasses = 3
+        // The plan-and-buy rounds. One planning pass is not enough at career end: the scan can
+        // list an already-owned skill as buyable, the DP then burns budget on that phantom, its
+        // taps die, and a single-plan session ends "satisfied" with real candidates unbought -
+        // which is exactly the disagreement that made the finalization guard stall a queue on
+        // 2026-07-26 (phantom "Focus" planned at 98 SP while "Sympathy" at 63 sat unbought).
+        // Each round re-plans over the live budget with dead-tapped names excluded, so the
+        // candidate pool strictly shrinks and the loop converges.
+        val maxPlanRounds = 3
         var totalEntriesSeen = 0
-        for (buyPass in 1..maxBuyPasses) {
-            // Heal a wiped Accessibility grant between passes - the most common mid-buy failure
-            // (the emulator drops the service and every tap/swipe silently stops registering).
-            game.ensureAccessibilityService()
-            var entriesSeenThisPass = 0
-            skillList.parseSkillListEntries { currentList: SkillList, entry: SkillListEntry, point: Point ->
-                entriesSeenThisPass++
-                onSkillListEntryDetected(
-                    entry = entry,
-                    point = point,
-                    skillsToBuy = skillsToPurchase.keys.toList(),
-                    skillList = currentList,
-                )
+        for (planRound in 1..maxPlanRounds) {
+            for (skill in skillsToPurchase) {
+                proposedByName.putIfAbsent(skill.key, ProposedSkill(skill.key, skill.value))
             }
-            totalEntriesSeen += entriesSeenThisPass
+            allPlannedNames += skillsToPurchase.keys
+            val verifiedBuysBeforeRound: Int = sessionVerifiedBuys.size
+            val deadTapsBeforeRound: Int = skillList.deadTapSkills.size
 
-            val unbought: List<String> = skillsToPurchase.keys.filter { it !in skillList.getObtainedSkills() }
-            // Drop what the current budget can no longer cover — re-scrolling the whole list for a
-            // skill that cannot be bought is pure waste. Prices can drift between parse and buy, so
-            // evaluate against the live screenPrice where known.
-            val remaining: List<String> =
-                unbought.filter { name ->
-                    val price: Int = skillList.getAllSkills()[name]?.screenPrice ?: skillsToPurchase[name] ?: Int.MAX_VALUE
-                    price <= skillList.skillPoints
+            // Reset the in-memory purchase simulation from planning, preserving screen-confirmed
+            // ownership and every purchase already verified this session.
+            skillList.sellAllSkills(preserve = ownedAtParse + sessionVerifiedBuys)
+
+            // Iterate through the list again and perform the confirmed purchases.
+            //
+            // A single scroll pass is not trusted to cover the whole list: the end-of-list heuristics
+            // can conclude "done" early (dropped swipes, or purchases reflowing rows mid-pass), stranding
+            // planned skills unbought. Re-run from the top while planned skills remain. Re-runs are safe:
+            // obtained entries are skipped in the callback, and already-selected rows no longer present a
+            // matchable Skill Up button.
+            val maxBuyPasses = 3
+            for (buyPass in 1..maxBuyPasses) {
+                // Heal a wiped Accessibility grant between passes - the most common mid-buy failure
+                // (the emulator drops the service and every tap/swipe silently stops registering).
+                game.ensureAccessibilityService()
+                var entriesSeenThisPass = 0
+                skillList.parseSkillListEntries { currentList: SkillList, entry: SkillListEntry, point: Point ->
+                    entriesSeenThisPass++
+                    onSkillListEntryDetected(
+                        entry = entry,
+                        point = point,
+                        skillsToBuy = skillsToPurchase.keys.toList(),
+                        skillList = currentList,
+                    )
                 }
-            val droppedUnaffordable: List<String> = unbought - remaining.toSet()
-            if (droppedUnaffordable.isNotEmpty()) {
-                MessageLog.w(TAG, "[WARN] Dropping ${droppedUnaffordable.size} planned skill(s) no longer affordable with ${skillList.skillPoints} SP: ${droppedUnaffordable.joinToString(", ")}.")
+                totalEntriesSeen += entriesSeenThisPass
+
+                val unbought: List<String> = skillsToPurchase.keys.filter { it !in skillList.getObtainedSkills() }
+                // Drop what the current budget can no longer cover -- re-scrolling the whole list for a
+                // skill that cannot be bought is pure waste. Prices can drift between parse and buy, so
+                // evaluate against the live screenPrice where known. Dead-tapped names are dropped too:
+                // their taps already ran the full retry budget this session.
+                val remaining: List<String> =
+                    unbought.filter { name ->
+                        val price: Int = skillList.getAllSkills()[name]?.screenPrice ?: skillsToPurchase[name] ?: Int.MAX_VALUE
+                        price <= skillList.skillPoints && name !in skillList.deadTapSkills
+                    }
+                val droppedUnaffordable: List<String> = unbought - remaining.toSet()
+                if (droppedUnaffordable.isNotEmpty()) {
+                    MessageLog.w(TAG, "[WARN] Dropping ${droppedUnaffordable.size} planned skill(s) no longer buyable with ${skillList.skillPoints} SP: ${droppedUnaffordable.joinToString(", ")}.")
+                }
+                if (remaining.isEmpty()) {
+                    if (buyPass > 1 || droppedUnaffordable.isNotEmpty()) {
+                        MessageLog.i(TAG, "[SKILLS] Nothing further to buy after $buyPass buy pass(es). Proceeding.")
+                    }
+                    break
+                }
+                if (entriesSeenThisPass == 0) {
+                    // The pass saw NOTHING - the list is unreadable or input is blocked (popup, stale
+                    // capture, emulator input outage), not merely incomplete. Try to clear a blocking
+                    // dialog before the next pass.
+                    MessageLog.e(TAG, "[ERROR] Buy pass $buyPass processed zero entries - screen unreadable or input blocked. Attempting dialog recovery before retry.")
+                    campaign.handleDialogs()
+                    game.wait(1.0, skipWaitingForLoading = true)
+                }
+                if (buyPass < maxBuyPasses) {
+                    MessageLog.w(TAG, "[WARN] Buy pass $buyPass ended with ${remaining.size} planned skill(s) unbought: ${remaining.joinToString(", ")}. Re-running the buy pass...")
+                } else {
+                    MessageLog.w(TAG, "[WARN] ${remaining.size} planned skill(s) still unbought after $maxBuyPasses buy passes: ${remaining.joinToString(", ")}. Confirming what was bought.")
+                }
             }
-            if (remaining.isEmpty()) {
-                if (buyPass > 1 || droppedUnaffordable.isNotEmpty()) {
-                    MessageLog.i(TAG, "[SKILLS] Nothing further to buy after $buyPass buy pass(es). Proceeding to confirm.")
-                }
+
+            if (planRound >= maxPlanRounds) break
+            // Re-plan only when the same classifier the finalization guard runs still counts an
+            // affordable compatible candidate - that alignment is the point: the plan must not
+            // conclude while the guard would refuse Finish over money it can see.
+            val liveSp: Int = skillList.skillPoints
+            val stillAffordable: Int =
+                classifyRemainingCandidates(buildRemainingCandidates(skillList), liveSp, skipDoubleCircleUpgrades).affordableCount
+            if (stillAffordable == 0) break
+            val roundProgress: Boolean =
+                sessionVerifiedBuys.size > verifiedBuysBeforeRound || skillList.deadTapSkills.size > deadTapsBeforeRound
+            if (!roundProgress) {
+                MessageLog.w(TAG, "[WARN] Plan round $planRound made no progress ($stillAffordable affordable candidate(s) remain with $liveSp SP); not re-planning against a stuck screen.")
                 break
             }
-            if (entriesSeenThisPass == 0) {
-                // The pass saw NOTHING - the list is unreadable or input is blocked (popup, stale
-                // capture, emulator input outage), not merely incomplete. Try to clear a blocking
-                // dialog before the next pass.
-                MessageLog.e(TAG, "[ERROR] Buy pass $buyPass processed zero entries - screen unreadable or input blocked. Attempting dialog recovery before retry.")
-                campaign.handleDialogs()
-                game.wait(1.0, skipWaitingForLoading = true)
+            val nextPlan: Map<String, Int> =
+                getSkillsToBuy(
+                    skillPlanSettings = skillPlanSettings,
+                    skillList = skillList,
+                    availableSkillPoints = liveSp,
+                )
+            if (nextPlan.isEmpty()) {
+                MessageLog.i(TAG, "[SKILLS] The classifier counts $stillAffordable affordable candidate(s) but the planner returned no plan under $liveSp SP (strategy filters differ); proceeding to confirm.")
+                break
             }
-            if (buyPass < maxBuyPasses) {
-                MessageLog.w(TAG, "[WARN] Buy pass $buyPass ended with ${remaining.size} planned skill(s) unbought: ${remaining.joinToString(", ")}. Re-running the buy pass...")
-            } else {
-                MessageLog.w(TAG, "[WARN] ${remaining.size} planned skill(s) still unbought after $maxBuyPasses buy passes: ${remaining.joinToString(", ")}. Confirming what was bought.")
-            }
+            skillsToPurchase = nextPlan
+            MessageLog.i(TAG, "[SKILLS] Plan round ${planRound + 1}: re-planning $stillAffordable remaining affordable candidate(s) under $liveSp SP.")
         }
 
         // If every pass was blind AND nothing new got bought, the screen state is unknown - do not
         // blind-confirm (a misplaced Confirm/Back sequence is how selections get silently lost).
-        val boughtAny: Boolean = skillsToPurchase.keys.any { it in skillList.getObtainedSkills() && it !in ownedAtParse }
+        val boughtAny: Boolean = allPlannedNames.any { it in skillList.getObtainedSkills() && it !in ownedAtParse }
         if (!boughtAny && totalEntriesSeen == 0) {
             MessageLog.e(TAG, "[ERROR] start:: All buy passes processed zero entries and nothing was bought. Not confirming; aborting the skill plan.")
             recordSkillSpend(
@@ -1899,8 +1968,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                 skillPlanSettings,
                 spBefore = skillPoints,
                 spAfter = skillList.skillPoints,
-                proposed = proposedSkills,
-                confirmed = confirmedPurchases(skillList, skillsToPurchase.keys, ownedAtParse),
+                proposed = proposedByName.values.toList(),
+                confirmed = confirmedPurchases(skillList, allPlannedNames, ownedAtParse),
                 skillList = skillList,
             )
             campaign.trainee.skillPoints = skillList.skillPoints
@@ -1920,8 +1989,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             skillPlanSettings,
             spBefore = skillPoints,
             spAfter = skillList.skillPoints,
-            proposed = proposedSkills,
-            confirmed = confirmedPurchases(skillList, skillsToPurchase.keys, ownedAtParse),
+            proposed = proposedByName.values.toList(),
+            confirmed = confirmedPurchases(skillList, allPlannedNames, ownedAtParse),
             skillList = skillList,
         )
         campaign.trainee.skillPoints = skillList.skillPoints
@@ -2052,6 +2121,39 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     }
 
     /**
+     * Snapshot the live post-purchase entry state into classifier candidates: getAllSkills so
+     * obtained and virtual rows reach [classifyRemainingCandidates] as explicit freshness facts
+     * (it drops them), never as silently pre-filtered absences. Shared between the finalization
+     * evidence and the buy-round loop in [start] so both answer "what remains spendable" with
+     * the same rules, including the dead-tap exclusion.
+     */
+    private fun buildRemainingCandidates(skillList: SkillList): List<RemainingCandidate> {
+        val axes = resolvePreferredAxes()
+        return skillList.getAllSkills().map { (name, entry) ->
+            RemainingCandidate(
+                name = name,
+                price = entry.screenPrice,
+                obtained = entry.bIsObtained,
+                virtual = entry.bIsVirtual,
+                isNegative = entry.skillData.bIsNegative,
+                isInheritedUnique = entry.skillData.bIsInheritedUnique,
+                isDoubleCircle = isDoubleCircleUpgrade(name),
+                matchesAxes =
+                    matchesPreference(
+                        entry.trackDistance,
+                        entry.runningStyle,
+                        entry.inferredRunningStyles,
+                        entry.trackSurface,
+                        axes.trackDistance,
+                        axes.runningStyle,
+                        axes.trackSurface,
+                    ),
+                deadTapExhausted = name in skillList.deadTapSkills,
+            )
+        }
+    }
+
+    /**
      * Build the finalization evidence for a finished session: completeness of the scan, the
      * planner, and the confirmation, plus a full classification of every candidate STILL
      * purchasable on screen under the constrained career-end rules. Classification never skips
@@ -2070,33 +2172,7 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     ): FinalizeEvidence {
         val exhaustion: CandidateExhaustion =
             if (skillList != null && spAfter != null) {
-                val axes = resolvePreferredAxes()
-                // Snapshot the live post-purchase entry state: getAllSkills so obtained and
-                // virtual rows reach the classifier as explicit freshness facts (it drops
-                // them), never as silently pre-filtered absences.
-                val candidates =
-                    skillList.getAllSkills().map { (name, entry) ->
-                        RemainingCandidate(
-                            name = name,
-                            price = entry.screenPrice,
-                            obtained = entry.bIsObtained,
-                            virtual = entry.bIsVirtual,
-                            isNegative = entry.skillData.bIsNegative,
-                            isInheritedUnique = entry.skillData.bIsInheritedUnique,
-                            isDoubleCircle = isDoubleCircleUpgrade(name),
-                            matchesAxes =
-                                matchesPreference(
-                                    entry.trackDistance,
-                                    entry.runningStyle,
-                                    entry.inferredRunningStyles,
-                                    entry.trackSurface,
-                                    axes.trackDistance,
-                                    axes.runningStyle,
-                                    axes.trackSurface,
-                                ),
-                        )
-                    }
-                classifyRemainingCandidates(candidates, spAfter, skipDoubleCircleUpgrades)
+                classifyRemainingCandidates(buildRemainingCandidates(skillList), spAfter, skipDoubleCircleUpgrades)
             } else {
                 CandidateExhaustion(0, 0, null, null, null, emptyMap())
             }

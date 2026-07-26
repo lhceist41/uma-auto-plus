@@ -195,6 +195,12 @@ internal data class RemainingCandidate(
     val isInheritedUnique: Boolean,
     val isDoubleCircle: Boolean,
     val matchesAxes: Boolean,
+    /** True when this session's buy attempts on the row ran the full tap-retry budget without
+     * Skill Points ever moving ([com.steve1316.uma_android_automation.types.SkillList.deadTapSkills]).
+     * The game itself refused the purchase, so the row is not actually spendable no matter what
+     * the scan claims - counting it as an affordable candidate stalled a queue on 2026-07-26
+     * when the scan listed an already-owned skill as buyable. */
+    val deadTapExhausted: Boolean = false,
 )
 
 /** The classifier's output: the candidate-exhaustion counts the finalization decision runs on. */
@@ -231,6 +237,10 @@ internal fun classifyRemainingCandidates(
         if (candidate.obtained || candidate.virtual || candidate.price <= 0) continue
         val exclusionReason: String? =
             when {
+                // Strongest exclusion first: the purchase was ATTEMPTED this session and the game
+                // refused it (zero SP movement across the full tap-retry budget), so the row is
+                // provably unspendable regardless of what the scan model claims about it.
+                candidate.deadTapExhausted -> "unbuyable_dead_tap"
                 candidate.isNegative -> "negative"
                 candidate.isInheritedUnique -> "inherited_unique"
                 skipDoubleCircleUpgrades && candidate.isDoubleCircle -> "double_circle"

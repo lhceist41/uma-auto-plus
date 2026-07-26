@@ -264,8 +264,9 @@ core `Campaign` members, which define the turn itself:
 | `handleMainScreen()` | Decides the next action while on the Home training screen |
 | `handleRaceEvents(isScheduledRace)` | Scenario-specific race entry. Trackblazer, for example, restricts which prediction tiers it will enter |
 | `handleDialogs(args)` | Dialog dispatch; cascades to `DialogHandler` for dialogs shared across scenarios |
-| `checkCampaignSpecificConditions()` | Screen detection a scenario owns. Unity Cup: the opponent selection screen. Grand Concert: the concert-pending and Complete Career screens |
-| `openCareerEndSkillScreen()` | How the career-end skill screen is reached. The default clicks the shared Learn button; Grand Concert drains leftover performance points first, then uses the Complete Career layout's own Skills button, because the shared template does not exist on that screen |
+| `checkCampaignSpecificConditions()` | Screen detection a scenario owns. Unity Cup: the opponent selection screen. Grand Concert: the concert-pending screen (its Complete Career screen is recognised by `checkEndScreen` instead, so the shared career-end path owns it) |
+| `checkEndScreen()` | Career-end detection. The default matches the shared Complete Career button template; Grand Concert also accepts its own pixel probe, because the probe recognises the screen mid-fade before the template clears its confidence gate, and losing that race once stranded a career with every skill point unspent (2026-07-26) |
+| `openCareerEndSkillScreen()` | How the career-end skill screen is reached. The default clicks the shared Learn button; Grand Concert drains leftover performance points first, then uses the Complete Career layout's own Skills button, because the shared template does not exist on that screen. A drain that never saw the Lessons list stays retryable rather than counting as done |
 | `shouldRecoverMood(sourceBitmap)` | Mood-floor check, configurable through the `moodFloor` setting |
 | `recoverMood(...)` / `performMoodRecovery(...)` | The mood-recovery action paths |
 | `runDeckValidation()` | One-shot check at career start. Warns when preferred-distance or preferred-style aptitude is below the floor, then warns on prediction visibility when the best distance aptitude is below B. Informational — it does not block |
@@ -1216,7 +1217,12 @@ training events, skills, career end) plus both scenario systems:
 - **The career-end drain.** Before the skill purchase, `openCareerEndSkillScreen`'s Grand Concert
   override spends leftover performance points through the Complete Career screen's own Lessons
   button, then opens the skill screen from that layout (the shared Learn-button template does not
-  exist there and missed six times before this override was added).
+  exist there and missed six times before this override was added). The list reader understands
+  the career-end grey-out: the game dims a whole unaffordable card, header included, and a dim
+  top card once made the reader report "the list did not open" while a Learnable card sat in
+  slot 2 (2026-07-26, fixture `technique_list_career_end_dimmed`). Any of the three card headers
+  now proves the list, dim tiers included, and a drain that never saw the list at all keeps its
+  once-per-career flag unset so the bounded career-end entry retry gets a real second attempt.
 
 The **manual handoff** (`GrandConcertHandoff`) survives as the safety net rather than the normal
 path. A career now runs start to finish without it: on 2026-07-25 a Taiki Shuttle career reached
@@ -1443,8 +1449,11 @@ pass's own end-of-list proof, described below), whether planning concluded (`com
 whether purchase confirmation held up (the points-delta arbiter), the screen-verified
 remaining balance, and a full classification of every candidate still purchasable - eligible
 under the constrained career-end rules, or excluded under a recorded reason (`wrong_axes`,
-`negative`, `inherited_unique`, `double_circle`), with the cheapest eligible and cheapest
-affordable prices. Campaign then evaluates: a balance is finishable only when the evidence is
+`negative`, `inherited_unique`, `double_circle`, `unbuyable_dead_tap`), with the cheapest
+eligible and cheapest affordable prices. The dead-tap reason is the strongest of them: the buy
+was ATTEMPTED this session and the game refused it (the full tap-retry budget ran with zero SP
+movement), which is what a scan-listed-but-already-owned row looks like - counting such a row
+as spendable money stalled a queue on 2026-07-26. Campaign then evaluates: a balance is finishable only when the evidence is
 complete, agrees with the independent Details re-read, and proves exhaustion - zero eligible
 candidates left, or every eligible candidate priced above the balance. There is deliberately
 no price-floor shortcut: the shipped data prices purchasable negatives at 40 (below the
@@ -1456,6 +1465,18 @@ candidate" proof replaces the floor for tiny balances. An affordable compatible 
 parse or entry, an unverified confirmation, a missing session, or a stale balance is never
 finishable: the first such verdict re-runs the careerComplete plan once through the existing
 Learn-screen machinery, the second is terminal.
+
+**Plan rounds.** The session's own spend loop is aligned with the guard by construction: after
+each plan-and-buy round it runs the same remaining-candidate classifier the guard runs, and
+while an affordable compatible candidate remains (dead-tapped rows excluded) it re-plans the
+live budget and buys again, up to three rounds. One planning pass was not enough at career
+end - the scan can list an already-owned skill as buyable, the DP then burns the budget slot
+on that phantom, its taps die, and a single-plan session ended "satisfied" while a genuinely
+purchasable skill sat unbought, which the guard then correctly refused to Finish over
+(2026-07-26: phantom "Focus" planned at 98 SP over purchasable "Sympathy" at 63; the session
+ended with 98 SP, and the guard's block stopped the queue). Each round strictly shrinks the
+candidate pool (a verified purchase or a new dead-tap exclusion), so the loop converges, and a
+round with neither ends the session rather than re-planning against a stuck screen.
 
 **Scan completeness and the career-end budget.** A scroll pass reports one of four
 terminations: `COMPLETE` (a positive end-of-list proof: the scrollbar thumb rests at the track
