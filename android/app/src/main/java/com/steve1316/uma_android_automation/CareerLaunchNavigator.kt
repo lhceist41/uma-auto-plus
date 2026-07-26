@@ -4759,19 +4759,19 @@ class CareerLaunchNavigator(private val context: Context) {
                 "[NAV] Scenario Select shows \"$showing\", wanted \"$target\" (page check ${attempt + 1}/6). " +
                     "Swiping the carousel to the next scenario.",
             )
-            // Swipe the card rather than tapping the arrow chevron. The chevron is a thin outline over
-            // per-scenario background art and template-matches unreliably (it stalled the queue at ~0.55,
-            // under the 0.6 gate). A horizontal drag across the card pages regardless of the arrow, and the
-            // carousel wraps, so consistently dragging one direction cycles through every scenario.
+            // Tap the carousel's own right chevron rather than dragging the card. A drag has to land
+            // between two thresholds that are not ours to control: wide and fast flings TWO cards,
+            // narrow and slow falls under the paging threshold and springs back to the same card.
+            // Both failure modes were observed live on 2026-07-26, in that order. The two-card fling
+            // had been there all along and stayed invisible while the carousel held three scenarios,
+            // because stepping by two around an odd cycle still visits every entry; Grand Concert made
+            // it four and the queue alternated between URA Finale and Trackblazer forever.
             //
-            // The drag must page exactly ONE entry. A wider, faster drag flings two at a time, which was
-            // invisible while the carousel held three scenarios (stepping by two around an odd cycle still
-            // visits every entry) and became a dead end the moment Grand Concert made it four: an even
-            // cycle stepped by two only ever reaches half of it, so the queue alternated between URA
-            // Finale and Trackblazer forever. Observed live on 2026-07-26. Shorter distance and a slower
-            // drag keep it below the fling threshold so each gesture advances a single card.
-            val swipeY = bitmap.height * 0.42f
-            gestureUtils.swipe(bitmap.width * 0.68f, swipeY, bitmap.width * 0.36f, swipeY, duration = 900L)
+            // The chevron is the game's own paging control, so one tap is exactly one card with no
+            // threshold to straddle. Its POSITION is fixed on this screen, which is all we need; the
+            // earlier note about the chevron matching unreliably at ~0.55 was about DETECTING it as a
+            // template, and we do not have to detect what we can simply tap.
+            gestureUtils.tap(bitmap.width * 0.949, bitmap.height * 0.458, "scenario_carousel_next")
             waitSafe(1.5)
         }
         return TransitionResult.Failed(
