@@ -71,6 +71,7 @@ import com.steve1316.uma_android_automation.utils.SPARK_PAGER_HEADING_OCR_REGION
 import com.steve1316.uma_android_automation.utils.SPARK_REROLLED_TITLE_OCR_REGION
 import com.steve1316.uma_android_automation.utils.SparkListGeometry
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.TraineeGridScroll
 import com.steve1316.uma_android_automation.utils.SparkRowCell
 import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
 import com.steve1316.uma_android_automation.utils.TraineePositionStore
@@ -3975,11 +3976,18 @@ class CareerLaunchNavigator(private val context: Context) {
         if (remembered != null) {
             val (rPage, rCol, rRow) = remembered
             MessageLog.i(TAG, "[ROTATION] Trying remembered position page=$rPage cell=($rCol,$rRow) for '$target'.")
+            // Measured page swipes: an unverified drag the list physics ate used to land the jump
+            // a page short, guaranteeing the preview mismatch and the 90-second fallback scan.
+            // With each swipe verified to have moved, the page arithmetic actually holds.
             var jumpBitmap = iu.getSourceBitmap()
-            repeat(rPage) {
-                swipeTraineeGrid(jumpBitmap, pageDown = true)
-                waitSafe(1.2)
-                jumpBitmap = iu.getSourceBitmap()
+            for (i in 1..rPage) {
+                val swipe = swipeTraineeGridMeasured(pageDown = true)
+                jumpBitmap = swipe.after
+                val moved = swipe.deltaPx == null || Math.abs(swipe.deltaPx) >= jumpBitmap.height * traineeRowStepFraction * 0.4f
+                if (!moved) {
+                    MessageLog.i(TAG, "[ROTATION] Roster stopped moving $i page(s) into the jump; the stored page is stale.")
+                    break
+                }
             }
             gestureUtils.tap(
                 (jumpBitmap.width * traineeColFractions[rCol]).toDouble(),
@@ -4005,14 +4013,20 @@ class CareerLaunchNavigator(private val context: Context) {
             anchorTraineeGridTop()?.let { return it }
         }
 
-        // Single top-down pass from the anchored top. The page swipe spans less than the scan band
-        // (see swipeTraineeGrid), so consecutive pages overlap by a row rather than skip; the name
-        // dedup makes the re-scan free. Stop when a page reveals no new trainee (bottom reached) or
-        // on a confident match.
+        // Single top-down pass from the anchored top. Each page swipe is MEASURED (see
+        // swipeTraineeGridMeasured): the scan knows how many rows actually advanced, so it taps
+        // only the genuinely new rows, re-swipes when the list did not move instead of re-reading
+        // the same rows, and stops the moment the list stops moving (the bottom). The name dedup
+        // and the no-new-trainee page heuristic stay as backstops for the unmeasurable case.
+        // Every trainee read on the way is remembered in TraineePositionStore, so the NEXT
+        // queue's different target jumps straight to its cell instead of scanning.
+        val discoveredCells = HashMap<String, String>()
+        var scanBitmap = iu.getSourceBitmap()
+        var startRow = 0
         for (page in 0..traineeMaxSwipes) {
-            val bitmap = iu.getSourceBitmap()
+            val bitmap = scanBitmap
             var newThisPage = 0
-            for (row in 0 until traineeGridRows) {
+            for (row in startRow until traineeGridRows) {
                 for (col in traineeColFractions.indices) {
                     if (!BotService.isRunning || StartModule.queueStopRequested) {
                         return TransitionResult.Failed(
@@ -4030,6 +4044,9 @@ class CareerLaunchNavigator(private val context: Context) {
                     val norm = preview.lowercase().replace(Regex("[^a-z0-9]"), "")
                     if (norm.isEmpty()) continue
                     if (!seen.add(norm)) continue // already scored on an earlier (overlapping) page.
+                    // Remember every trainee read on the way, not just the target: the next
+                    // queue's different target then jumps directly instead of scanning.
+                    discoveredCells[norm] = "$page,$col,$row"
                     // Skip a sibling-outfit banner: a bare base-name target is outfit-insensitive and
                     // would otherwise match an owned outfit ("[Kukulkan Warrior] El Condor Pasa").
                     if (excludeOutfits.any { TraineeNameMatcher.hasOutfit(preview, it) }) {
@@ -4045,10 +4062,15 @@ class CareerLaunchNavigator(private val context: Context) {
                     }
                     if (score >= traineeMatchThreshold) {
                         MessageLog.i(TAG, "[ROTATION] Match: '$preview' (${"%.3f".format(score)}). Selecting and advancing.")
-                        // Remember where she was found so the next switch to her can jump here
-                        // directly instead of re-scanning the grid cell by cell.
-                        if (TraineePositionStore.put(context, posKey, "$page,$col,$row")) {
-                            MessageLog.i(TAG, "[ROTATION] Saved position page=$page cell=($col,$row) for '$target'.")
+                        // Remember where she was found (plus everyone read on the way) so the
+                        // next switch jumps directly instead of re-scanning cell by cell.
+                        discoveredCells[posKey] = "$page,$col,$row"
+                        if (TraineePositionStore.putAll(context, discoveredCells)) {
+                            MessageLog.i(
+                                TAG,
+                                "[ROTATION] Saved position page=$page cell=($col,$row) for '$target' " +
+                                    "(plus ${discoveredCells.size - 1} other trainee position(s) from the scan).",
+                            )
                         } else {
                             MessageLog.w(TAG, "[ROTATION] Could not save the grid position for '$target' (file write failed).")
                         }
@@ -4066,12 +4088,40 @@ class CareerLaunchNavigator(private val context: Context) {
                 }
             }
             // No new trainees on this page = bottom reached (or the list won't scroll). Stop paging.
-            if (page > 0 && newThisPage == 0) break
+            if (page > 0 && newThisPage == 0 && startRow < traineeGridRows) break
             if (page < traineeMaxSwipes) {
-                swipeTraineeGrid(bitmap, pageDown = true)
-                waitSafe(1.2)
+                val swipe = swipeTraineeGridMeasured(pageDown = true)
+                scanBitmap = swipe.after
+                val rowPx = scanBitmap.height * traineeRowStepFraction
+                val delta = swipe.deltaPx
+                if (delta == null) {
+                    // Unmeasurable movement: the old conservative behavior. Scan every row and
+                    // let the name dedup absorb any overlap.
+                    startRow = 0
+                } else if (Math.abs(delta) < rowPx * 0.4f) {
+                    // Still parked after the retries: the roster bottom. Stop without paying a
+                    // page of taps to discover it.
+                    MessageLog.i(TAG, "[ROTATION] Roster stopped moving (bottom reached after ${seen.size} unique trainee(s)).")
+                    break
+                } else {
+                    val advancedRows = Math.round(delta / rowPx)
+                    if (advancedRows > traineeGridRows) {
+                        MessageLog.w(
+                            TAG,
+                            "[ROTATION] Roster advanced $advancedRows rows in one swipe (more than the $traineeGridRows-row scan " +
+                                "band); some rows were skipped and the scan may need a second pass to find the target.",
+                        )
+                    }
+                    // Rows still on screen from the previous page start the next pass lower: an
+                    // advance of 1 row with a 2-row band means row 0 was already read.
+                    startRow = (traineeGridRows - advancedRows).coerceIn(0, traineeGridRows)
+                }
             }
         }
+
+        // The target was not found, but the roster read is still worth keeping: remember every
+        // trainee the scan saw so the next launch starts from jumps, not scans.
+        TraineePositionStore.putAll(context, discoveredCells)
 
         return TransitionResult.Failed(
             reason = "Trainee '$target' not found after scanning ${seen.size} unique roster trainee(s); best was '$bestLabel' @ ${"%.3f".format(
@@ -4175,6 +4225,52 @@ class CareerLaunchNavigator(private val context: Context) {
         } else {
             gestureUtils.swipe(x, top, x, bottom, duration = 850L)
         }
+    }
+
+    /** One measured page swipe: the outcome the scan and the remembered-position jump act on. */
+    private data class MeasuredSwipe(
+        /** Content movement in pixels (positive = advanced down-roster), or null when the
+         * cross-frame measurement was not confident. */
+        val deltaPx: Int?,
+        /** The frame captured after the last swipe attempt, so callers scan exactly what was
+         * measured instead of re-capturing a possibly-different frame. */
+        val after: Bitmap,
+    )
+
+    /**
+     * Swipes the roster one page and measures how far the content ACTUALLY moved, retrying when
+     * the list's touch physics ate the drag. The short page drag sits at the gesture-recognition
+     * edge, so an unverified swipe sometimes moves nothing and the old scan re-tapped the exact
+     * rows it had just read; with the measurement the caller knows the truth: moved (and by how
+     * many rows), still at the same position after [attempts] tries (the bottom, or a wedged
+     * list), or unmeasurable (fall back to scanning every visible row).
+     */
+    private fun swipeTraineeGridMeasured(pageDown: Boolean, attempts: Int = 3): MeasuredSwipe {
+        var before = iu.getSourceBitmap()
+        val minMovePx = before.height * traineeRowStepFraction * 0.4f
+        var last = MeasuredSwipe(0, before)
+        for (attempt in 1..attempts) {
+            swipeTraineeGrid(before, pageDown)
+            waitSafe(1.2)
+            val after = iu.getSourceBitmap()
+            val delta =
+                TraineeGridScroll.measureDeltaPx(
+                    SparkPixelSampler { x, y -> before.getPixel(x, y) },
+                    SparkPixelSampler { x, y -> after.getPixel(x, y) },
+                    after.width,
+                    after.height,
+                )
+            last = MeasuredSwipe(delta, after)
+            if (delta == null) {
+                MessageLog.i(TAG, "[ROTATION] Roster swipe (attempt $attempt): movement unmeasurable; falling back to a full-row scan.")
+                return last
+            }
+            MessageLog.i(TAG, "[ROTATION] Roster swipe (attempt $attempt): content moved ${delta}px.")
+            if (Math.abs(delta) >= minMovePx) return last
+            // The drag was eaten (measured ~0): swipe again from the fresh frame.
+            before = after
+        }
+        return last
     }
 
     /**

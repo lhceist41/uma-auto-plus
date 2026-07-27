@@ -71,11 +71,20 @@ object TraineePositionStore {
      * Stores one trainee's position. Best-effort and atomic: written to a temp file and renamed
      * over the original, so a mid-write kill can't corrupt existing entries.
      */
-    fun put(context: Context, normalizedName: String, value: String): Boolean =
-        try {
+    fun put(context: Context, normalizedName: String, value: String): Boolean = putAll(context, mapOf(normalizedName to value))
+
+    /**
+     * Stores many positions in one atomic write. The scan path uses this to remember EVERY
+     * trainee it read on the way to its target, not just the target itself, so the next queue's
+     * different trainee gets a direct jump instead of a fresh scan. Same temp-file-and-rename
+     * discipline as [put].
+     */
+    fun putAll(context: Context, positions: Map<String, String>): Boolean {
+        if (positions.isEmpty()) return true
+        return try {
             val f = file(context)
             val entries = if (f.exists()) parse(f.readText()) else mutableMapOf()
-            entries[normalizedName] = value
+            entries.putAll(positions)
             val tmp = File(f.parentFile, "$FILE_NAME.tmp")
             tmp.writeText(serialize(entries))
             if (!tmp.renameTo(f)) {
@@ -87,4 +96,5 @@ object TraineePositionStore {
         } catch (_: Exception) {
             false
         }
+    }
 }
