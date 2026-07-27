@@ -356,6 +356,29 @@ class GrandConcertScenarioTest {
         }
 
         /**
+         * The concert escort must accept a mandatory race day as a successful exit: Sakura
+         * Bakushin O's CBC Sho landed on the turn her turn-60 concert ended (2026-07-26 23:45),
+         * the Race Day banner replaced the Training layout, checkMainScreen missed the variant,
+         * and the escort handed a perfectly healthy career to the player after burning its
+         * whole budget. The main loop owns race days.
+         */
+        @Test
+        fun `the concert escort exits successfully onto a mandatory race day`() {
+            val campaign = source("bot/campaigns/GrandConcert.kt")
+            val escortIdx = campaign.indexOf("private fun runConcertEscort()")
+            assertTrue(escortIdx >= 0, "the escort went missing")
+            val escortBody = campaign.substring(escortIdx, minOf(campaign.length, escortIdx + 6000))
+            assertTrue(
+                escortBody.contains("IconRaceDayRibbon.check"),
+                "the escort no longer recognises the race-day career screen as an exit",
+            )
+            assertTrue(
+                escortBody.contains("a mandatory race day follows and the main loop owns it"),
+                "the race-day exit must return the turn to the main loop",
+            )
+        }
+
+        /**
          * The 2026-07-26 career-end incident, part 1: the Complete Career screen fades in, the
          * scenario pixel probe recognises it before the complete_career button template clears
          * its confidence gate, and the campaign-specific fallback used to win that race and hand

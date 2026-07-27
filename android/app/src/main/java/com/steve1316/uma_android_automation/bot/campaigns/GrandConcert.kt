@@ -20,6 +20,7 @@ import com.steve1316.uma_android_automation.bot.PerformancePointType
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonClose
+import com.steve1316.uma_android_automation.components.IconRaceDayRibbon
 import com.steve1316.uma_android_automation.utils.GrandConcertCareerComplete
 import com.steve1316.uma_android_automation.utils.GrandConcertEscort
 import com.steve1316.uma_android_automation.utils.GrandCutsceneCheckbox
@@ -280,6 +281,18 @@ class GrandConcert(game: Game) : Campaign(game) {
                 }
                 checkTrainingEventScreen() -> {
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Concert complete; a trainee event follows and the main loop owns it.")
+                    return true
+                }
+                IconRaceDayRibbon.check(game.imageUtils, sourceBitmap = bitmap) -> {
+                    // A mandatory race day can land on the very turn a concert ends: Sakura
+                    // Bakushin O's CBC Sho followed her turn-60 concert (2026-07-26 23:45), the
+                    // career screen swapped its Training layout for the Race Day banner,
+                    // checkMainScreen missed that variant, and the escort burned its whole
+                    // budget on a perfectly ordinary screen before handing off. The main loop
+                    // owns race days, so this is a successful exit exactly like the Training
+                    // Event one. The icon check is used directly because the full
+                    // checkMandatoryRacePrepScreen can tap Back as a side effect.
+                    MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Concert complete; a mandatory race day follows and the main loop owns it.")
                     return true
                 }
                 else -> game.wait(1.0)
