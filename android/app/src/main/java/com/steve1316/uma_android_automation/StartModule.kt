@@ -376,20 +376,40 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
                 try {
                     val prefix = "rot${index}_"
-                    val rows = mutableListOf<Triple<String, String, String>>()
-                    db.rawQuery(
-                        "SELECT category, key, value FROM settings WHERE category GLOB ?",
-                        arrayOf("rot${index}_*"),
-                    ).use { cursor ->
-                        while (cursor.moveToNext()) {
-                            rows.add(
-                                Triple(
-                                    cursor.getString(0).substring(prefix.length),
-                                    cursor.getString(1),
-                                    cursor.getString(2) ?: "",
-                                ),
-                            )
+                    fun readRows(): List<Triple<String, String, String>> {
+                        val out = mutableListOf<Triple<String, String, String>>()
+                        db.rawQuery(
+                            "SELECT category, key, value FROM settings WHERE category GLOB ?",
+                            arrayOf("rot${index}_*"),
+                        ).use { cursor ->
+                            while (cursor.moveToNext()) {
+                                out.add(
+                                    Triple(
+                                        cursor.getString(0).substring(prefix.length),
+                                        cursor.getString(1),
+                                        cursor.getString(2) ?: "",
+                                    ),
+                                )
+                            }
                         }
+                        return out
+                    }
+
+                    var rows = readRows()
+                    // The frontend persists settings on a debounce, so a queue started right after
+                    // configuring the rotation can read the slots before the snapshot flush lands
+                    // (live 2026-07-27: "set up and started" died before run 1 on an empty rot0_).
+                    // A short settle-retry outlasts the debounce; a genuinely unconfigured slot
+                    // still fails, just a few seconds later.
+                    var attempt = 0
+                    while (rows.isEmpty() && attempt < 3) {
+                        attempt++
+                        MessageLog.w(
+                            TAG,
+                            "[ROTATION] No snapshot rows for index $index yet; waiting for the settings flush (attempt $attempt/3).",
+                        )
+                        Thread.sleep(2000)
+                        rows = readRows()
                     }
                     if (rows.isEmpty()) {
                         MessageLog.e(TAG, "[ROTATION] No snapshot rows for index $index (prefix '$prefix'). Cannot switch trainee.")
