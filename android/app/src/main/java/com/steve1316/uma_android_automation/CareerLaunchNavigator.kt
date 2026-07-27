@@ -4272,7 +4272,9 @@ class CareerLaunchNavigator(private val context: Context) {
                 )
             last = MeasuredSwipe(delta, after)
             if (delta == null) {
-                MessageLog.i(TAG, "[ROTATION] Roster swipe (attempt $attempt): movement unmeasurable; falling back to a full-row scan.")
+                // Caller-neutral wording: the scan responds by reading every visible row, the
+                // jump by assuming the swipe landed; both are their conservative paths.
+                MessageLog.i(TAG, "[ROTATION] Roster swipe (attempt $attempt): movement unmeasurable; continuing on the conservative path.")
                 return last
             }
             MessageLog.i(TAG, "[ROTATION] Roster swipe (attempt $attempt): content moved ${delta}px.")
