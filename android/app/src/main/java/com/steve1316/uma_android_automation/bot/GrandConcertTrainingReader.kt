@@ -47,7 +47,9 @@ class GrandConcertTrainingReader(private val game: Game) {
         val gains = LinkedHashMap<PerformancePointType, Int?>()
         for (row in selectedTrainingPerformanceRows(sampler)) {
             val amount = ocrNumber(sourceBitmap, GrandConcertTrainingGeometry.perfGainAmountOcrRegion(row), "gc_train_gain_$row")
-            gains[GrandConcertTrainingGeometry.PERF_ROW_TYPES[row]] = amount?.takeIf { it in 1..99 }
+            // Observed per-training gains run 7..30; the first live run OCR'd a "+99" out of glyph
+            // noise, so the sanity band stays just above the plausible ceiling, not at two digits.
+            gains[GrandConcertTrainingGeometry.PERF_ROW_TYPES[row]] = amount?.takeIf { it in 1..40 }
         }
         return FacilityPanelRead(balances = balances, gains = gains)
     }

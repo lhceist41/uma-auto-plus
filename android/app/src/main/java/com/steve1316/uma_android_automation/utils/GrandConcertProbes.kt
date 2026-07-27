@@ -520,7 +520,12 @@ object GrandConcertTrainingGeometry {
     val FAILURE_OCR_REGION = intArrayOf(640, 1392, 180, 60)
     val SELECTED_FACILITY_BANNER_OCR_REGION = intArrayOf(150, 300, 620, 48)
 
-    fun perfBalanceOcrRegion(rowIndex: Int): IntArray = intArrayOf(80, PERF_ROW_YS[rowIndex] - 34, 120, 62)
+    /** The balance VALUE digits only. The "/N" cap line sits directly below (measured: value
+     * digits span rowY-38..rowY+10, the cap line rowY+15..rowY+45), and the original 62-tall
+     * region caught both: a small value like "5" OCR'd as the cap ("200"), which zeroed every
+     * deficit the training bias needed and disarmed the point steering on the 2026-07-27
+     * validation run. The region now ends at rowY+6, clear of the cap line by 9 px. */
+    fun perfBalanceOcrRegion(rowIndex: Int): IntArray = intArrayOf(72, PERF_ROW_YS[rowIndex] - 38, 108, 44)
 
     fun perfMorePillOcrRegion(rowIndex: Int): IntArray = intArrayOf(70, PERF_ROW_YS[rowIndex] - 72, 130, 40)
 

@@ -323,6 +323,21 @@ class GrandConcertScenarioTest {
                 campaign.contains("purchasedFloor = GrandConcertPolicy.songTargetForCycle(concertsPassed)"),
                 "the point-bias context no longer chases the milestone target",
             )
+            // Strictly-before boundary: the concert turn belongs to the ENDING cycle. The <=
+            // variant reset the song counter on the concert day before the concert ran (live,
+            // 2026-07-27: entered logging 0 songs with 2 bought).
+            assertTrue(
+                campaign.contains("CONCERT_TURNS.lastOrNull { it < day }"),
+                "the cycle boundary regressed to including the concert day",
+            )
+            assertFalse(
+                campaign.contains("CONCERT_TURNS.lastOrNull { it <= day }"),
+                "the early-reset cycle boundary is back",
+            )
+            assertFalse(
+                campaign.contains("CONCERT_TURNS.count { it <= day }"),
+                "a concert-count site regressed to including the concert day",
+            )
         }
 
         /**

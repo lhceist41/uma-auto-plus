@@ -541,7 +541,11 @@ class GrandConcert(game: Game) : Campaign(game) {
         if (day <= 1) {
             return LessonScoreContext(songsLearnedThisCycle = songsBoughtThisCycle, energyPercent = trainee.energy)
         }
-        val boundary = CONCERT_TURNS.lastOrNull { it <= day } ?: 0
+        // STRICTLY-before: the concert turn itself still belongs to the ENDING cycle. With <=,
+        // the first context built on the concert day (the training recommendation runs before
+        // the concert fires) reset the counter early, and the 09:50 validation concert entered
+        // logging "0 new song(s)" with 2 actually bought.
+        val boundary = CONCERT_TURNS.lastOrNull { it < day } ?: 0
         if (boundary != lastConcertBoundary) {
             lastConcertBoundary = boundary
             songsBoughtThisCycle = 0
@@ -558,7 +562,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             }
         return LessonScoreContext(
             songsLearnedThisCycle = songsBoughtThisCycle,
-            cycleSongTarget = GrandConcertPolicy.songTargetForCycle(CONCERT_TURNS.count { it <= day }),
+            cycleSongTarget = GrandConcertPolicy.songTargetForCycle(CONCERT_TURNS.count { it < day }),
             turnsUntilConcert = nextConcert?.let { it - day },
             turnsAfterNextConcert = nextConcert?.let { (CAREER_END_TURN - it).coerceAtLeast(0) },
             segment = segment,
@@ -578,7 +582,9 @@ class GrandConcert(game: Game) : Campaign(game) {
         val lessonContext = buildLessonContext()
         val day = date.day
         if (day <= 1) return null
-        val concertsPassed = CONCERT_TURNS.count { it <= day }
+        // Strictly-before, matching buildLessonContext: on the concert day itself the caps have
+        // not risen yet and the cycle target is still the ending cycle's.
+        val concertsPassed = CONCERT_TURNS.count { it < day }
         val caps = PerformancePointType.entries.associateWith { 200 + 50 * concertsPassed }
         val balancesMap = balances ?: emptyMap()
         val deficit = LinkedHashMap<PerformancePointType, Int>()
