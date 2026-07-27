@@ -237,6 +237,7 @@ object GrandConcertPolicy {
                     score = lessonScore(card, context),
                     weightedCost = weightedCost(card.cost),
                     rawCostTotal = card.cost.total(),
+                    rawCost = card.cost,
                 )
             }.sortedByDescending { it.score }
 
@@ -387,24 +388,50 @@ object GrandConcertPolicy {
      * buying. Pure and deliberately strict: only a provably affordable, unscheduled card at or
      * above [minScore] qualifies, and the ranking order already encodes the strategy weights.
      *
-     * When [reserveActive] is true and [totalBalance] is known, a TECHNIQUE whose raw cost would
-     * drop the total balance below [TECH_RESERVE_TOTAL] is skipped so the pool stays spendable
-     * on songs; a technique with an unreadable cost is skipped under the same rule (fail toward
-     * the reserve, never through it). Songs are never reserve-blocked.
+     * When [reserveActive] is true, TECHNIQUES are reserve-checked; songs never are. With the
+     * next song's cost vector known ([songTargetCost] plus [balances]), the check is TYPE-AWARE:
+     * a technique may not spend a type below what that song still needs from it, because the
+     * total-only rule provably fails - a live cycle held 101 total points (above the 70 floor)
+     * with 69 of them Vocal, and both the next song and every gate technique were unaffordable
+     * in the types that actually mattered (2026-07-27, two straight two-song cycles). Types the
+     * song does not cost stay freely spendable. Without the vectors, the total rule is the
+     * fallback: total balance minus the technique's cost must stay at or above
+     * [TECH_RESERVE_TOTAL]; unreadable costs fail toward the reserve, never through it.
      */
     fun chooseSpend(
         report: GrandConcertLessonReport,
         minScore: Int = SPEND_MIN_SCORE,
         totalBalance: Int? = null,
         reserveActive: Boolean = false,
+        songTargetCost: PerformancePointVector? = null,
+        balances: PerformancePointVector? = null,
     ): LessonOfferLine? =
         report.ranked.firstOrNull { line ->
             line.affordable == true && !line.scheduled && line.score >= minScore &&
-                !(
-                    reserveActive && line.kind == LessonCardKind.TECHNIQUE && totalBalance != null &&
-                        (line.rawCostTotal == null || totalBalance - line.rawCostTotal < TECH_RESERVE_TOTAL)
-                )
+                !(reserveActive && line.kind == LessonCardKind.TECHNIQUE && reserveBlocksTechnique(line, totalBalance, songTargetCost, balances))
         }
+
+    /** The reserve check for one technique line; see [chooseSpend] for the rule. */
+    private fun reserveBlocksTechnique(
+        line: LessonOfferLine,
+        totalBalance: Int?,
+        songTargetCost: PerformancePointVector?,
+        balances: PerformancePointVector?,
+    ): Boolean {
+        if (songTargetCost != null && balances != null) {
+            val cost = line.rawCost ?: return true // unreadable cost fails toward the reserve.
+            for (type in PerformancePointType.entries) {
+                val needed = songTargetCost[type] ?: continue
+                if (needed <= 0) continue
+                val balance = balances[type] ?: return true // unreadable balance: do not risk it.
+                val spend = cost[type] ?: return true
+                if (spend > 0 && balance - spend < needed) return true
+            }
+            return false
+        }
+        if (totalBalance == null) return false
+        return line.rawCostTotal == null || totalBalance - line.rawCostTotal < TECH_RESERVE_TOTAL
+    }
 
     /**
      * The song-first pick: while the cycle is below the [GREAT_SUCCESS_SONG_FLOOR], an offered,
@@ -738,6 +765,10 @@ data class LessonOfferLine(
     /** Raw sum of the card's per-type point costs, unweighted. The technique reserve compares
      * this against the live balance total; null when any cost cell was unreadable. */
     val rawCostTotal: Int? = null,
+    /** The card's full per-type cost vector, for the type-aware reserve: a wallet can satisfy
+     * the total reserve while being broke in exactly the types the next song needs (measured
+     * live 2026-07-27: 101 points held, 69 of them Vocal, song and gate both starved). */
+    val rawCost: PerformancePointVector? = null,
 )
 
 /** The report-only result of comparing a lesson offer. Never actionable. */

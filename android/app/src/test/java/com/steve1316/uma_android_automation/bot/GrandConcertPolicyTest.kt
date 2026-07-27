@@ -495,6 +495,45 @@ class GrandConcertPolicyTest {
         }
 
         @Test
+        fun `the type-aware reserve protects the next song's types and frees the rest`() {
+            // The live 2026-07-27 shape: 101 total points (above the 70 floor) but 69 of them
+            // Vocal, while the next song needed Da/Pa/Vi. The total rule let techniques keep
+            // spending the scarce types; the type-aware rule must block exactly those and leave
+            // the Vocal pile spendable.
+            val songCost = PerformancePointVector.of(21, 19, 0, 21, 0)
+            val balances = PerformancePointVector.of(2, 2, 69, 6, 22)
+            val paTech =
+                LessonOfferLine(
+                    0, "eats Passion", LessonCardKind.TECHNIQUE, true, false, 60, 10.0,
+                    rawCostTotal = 10, rawCost = PerformancePointVector.of(0, 10, 0, 0, 0),
+                )
+            val voTech =
+                LessonOfferLine(
+                    1, "eats Vocal", LessonCardKind.TECHNIQUE, true, false, 50, 12.0,
+                    rawCostTotal = 24, rawCost = PerformancePointVector.of(0, 0, 24, 0, 0),
+                )
+            val r = GrandConcertLessonReport(listOf(paTech, voTech), emptyList(), emptyList())
+            val pick = GrandConcertPolicy.chooseSpend(r, totalBalance = 101, reserveActive = true, songTargetCost = songCost, balances = balances)
+            assertEquals(1, pick?.slot, "the Vocal-costed technique is free to buy; the Passion-costed one deepens the song's deficit")
+            // A technique whose cost vector is unreadable fails toward the reserve.
+            val unreadable = paTech.copy(rawCost = null)
+            assertNull(
+                GrandConcertPolicy.chooseSpend(
+                    GrandConcertLessonReport(listOf(unreadable), emptyList(), emptyList()),
+                    totalBalance = 101, reserveActive = true, songTargetCost = songCost, balances = balances,
+                ),
+            )
+            // Without the vectors the total rule still governs (the fallback).
+            assertNull(
+                GrandConcertPolicy.chooseSpend(
+                    GrandConcertLessonReport(listOf(paTech.copy(rawCostTotal = 40)), emptyList(), emptyList()),
+                    totalBalance = 100, reserveActive = true,
+                ),
+                "100 - 40 = 60 breaks the 70 total floor when no song vector is known",
+            )
+        }
+
+        @Test
         fun `the technique reserve never blocks a song`() {
             val song = LessonOfferLine(0, "song", LessonCardKind.SONG, true, false, 90, 45.0, rawCostTotal = 63)
             val r = GrandConcertLessonReport(listOf(song), emptyList(), emptyList())

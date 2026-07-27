@@ -678,7 +678,15 @@ class GrandConcert(game: Game) : Campaign(game) {
             }
             var pick = songPick
             if (pick == null) {
-                pick = GrandConcertPolicy.chooseSpend(report, minScore, list.balances.total(), reserveActive)
+                pick =
+                    GrandConcertPolicy.chooseSpend(
+                        report,
+                        minScore,
+                        list.balances.total(),
+                        reserveActive,
+                        songTargetCost = lastSongTargetCost,
+                        balances = list.balances,
+                    )
             }
             if (pick == null) {
                 pick = GrandConcertPolicy.chooseGateAdvance(report, minScore, urgent)

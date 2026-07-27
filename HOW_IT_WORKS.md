@@ -1285,7 +1285,12 @@ progress resets at the concert regardless. And `chooseSpend`'s technique
 reserve refuses a technique that would drop the total point balance below `TECH_RESERVE_TOTAL`
 (70, sized from master.mdb's own song-cost table: square_type 4 songs run 42-68 total, median 44)
 while any future concert remains, because the measured failure was techniques draining the pool a
-cycle BEFORE the starved one. Otherwise `chooseSpend` takes the best affordable card at or above
+cycle BEFORE the starved one. When the remembered song target's cost vector and the live balances
+are both readable, the reserve upgrades to TYPE-AWARE: a technique may not spend a type below
+what the next song still needs from it, while types the song does not cost stay freely spendable.
+The total-only rule provably fails, and a live cycle showed how: 101 points held (above the 70
+floor) with 69 of them Vocal, and both the next song and every gate technique were unaffordable
+in the types that mattered (2026-07-27, two consecutive two-song cycles). Otherwise `chooseSpend` takes the best affordable card at or above
 `SPEND_MIN_SCORE`; `chooseGateAdvance` is the fallback for a trio of junk techniques, buying the
 cheapest one purely to force a restock so the song gate keeps moving, under a cost cap that widens
 when the cycle's three-song floor is unmet and the concert is close (gate advances are exempt from
