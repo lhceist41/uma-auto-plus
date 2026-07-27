@@ -306,6 +306,26 @@ class GrandConcertScenarioTest {
         }
 
         /**
+         * The spend loop's two cadence behaviors: the pre-concert hold (a revealed song carries
+         * across the concert as next cycle's first lesson credit, and any purchase would refresh
+         * it away) and the milestone song target feeding both the song-first pick and the
+         * point-bias context. Single lines a refactor could silently drop.
+         */
+        @Test
+        fun `the spend loop holds before a concert and chases the milestone cadence`() {
+            val campaign = source("bot/campaigns/GrandConcert.kt")
+            assertTrue(campaign.contains("Pre-concert hold"), "the pre-concert purchase hold left spendVisit")
+            assertTrue(
+                campaign.contains("cycleSongTarget = GrandConcertPolicy.songTargetForCycle"),
+                "the lesson context no longer carries the cycle's milestone target",
+            )
+            assertTrue(
+                campaign.contains("purchasedFloor = GrandConcertPolicy.songTargetForCycle(concertsPassed)"),
+                "the point-bias context no longer chases the milestone target",
+            )
+        }
+
+        /**
          * The queue and rotation gates were removed once the scenario stopped needing a supervisor:
          * careers play the Lesson shop, all five concerts, the career-end sequence and the spark
          * selection unattended, and the navigator pages the carousel to Grand Concert like any other

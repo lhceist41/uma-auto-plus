@@ -102,6 +102,10 @@ class GrandConcert(game: Game) : Campaign(game) {
      * deadline term can only overestimate urgency, never suppress it. */
     private var songsBoughtThisCycle = 0
 
+    /** Songs BOUGHT by the spend loop across the whole career, for the 16/18-song milestone
+     * telemetry. Same restart blindness as the cycle counter: a floor on the true total. */
+    private var songsBoughtThisCareer = 0
+
     /** The concert boundary [songsBoughtThisCycle] was last reset at, from [CONCERT_TURNS]. */
     private var lastConcertBoundary = 0
 
@@ -222,7 +226,8 @@ class GrandConcert(game: Game) : Campaign(game) {
         MessageLog.i(
             TAG,
             "[GRAND_CONCERT] [CONCERT] Entering the concert with $songsBoughtThisCycle new song(s) this cycle " +
-                "(Great Success needs ${GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value}).",
+                "(Great Success needs ${GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value}; career purchased total " +
+                "$songsBoughtThisCareer).",
         )
         game.tap(GrandConcertEscort.CONCERT_BUTTON_X.toDouble(), GrandConcertEscort.CONCERT_BUTTON_Y.toDouble(), "gc_concert_open")
         game.wait(1.2)
@@ -553,6 +558,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             }
         return LessonScoreContext(
             songsLearnedThisCycle = songsBoughtThisCycle,
+            cycleSongTarget = GrandConcertPolicy.songTargetForCycle(CONCERT_TURNS.count { it <= day }),
             turnsUntilConcert = nextConcert?.let { it - day },
             turnsAfterNextConcert = nextConcert?.let { (CAREER_END_TURN - it).coerceAtLeast(0) },
             segment = segment,
@@ -589,7 +595,9 @@ class GrandConcert(game: Game) : Campaign(game) {
             caps = caps,
             deficit = deficit,
             songsBoughtThisCycle = songsBoughtThisCycle,
-            purchasedFloor = GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value,
+            // The bias chases the cycle's milestone target (3-4-4-3-3), not just the Great
+            // Success floor: wanting a fourth song means wanting the income for it too.
+            purchasedFloor = GrandConcertPolicy.songTargetForCycle(concertsPassed),
             turnsUntilConcert = lessonContext.turnsUntilConcert,
             songTargetTitle = lastSongTargetTitle,
         )
@@ -609,6 +617,23 @@ class GrandConcert(game: Game) : Campaign(game) {
      * [GrandConcertPolicy.chooseGateAdvance].
      */
     private fun spendVisit(initialList: LessonList, context: LessonScoreContext, maxPurchases: Int, minScore: Int): SpendVisitOutcome {
+        // Pre-concert hold: with the cycle's Great Success songs secured and the concert next
+        // turn, buying anything is a net loss. A revealed song left unbought survives the concert
+        // and counts as the new cycle's first lesson credit ("song-saving", research-confirmed),
+        // while any purchase refreshes the whole trio away; and un-revealed technique progress
+        // resets at the concert regardless, so a last technique buys nothing that survives.
+        if (!context.careerComplete &&
+            (context.songsLearnedThisCycle ?: 0) >= GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value &&
+            (context.turnsUntilConcert ?: Int.MAX_VALUE) <= 1
+        ) {
+            MessageLog.i(
+                TAG,
+                "[GRAND_CONCERT] [LESSON_BUY] Pre-concert hold: ${context.songsLearnedThisCycle} song(s) secured and the concert " +
+                    "is next turn, so this visit buys nothing (a revealed song carries across the concert; a purchase would " +
+                    "refresh it away).",
+            )
+            return SpendVisitOutcome(0, 0)
+        }
         var purchases = 0
         var gateAdvances = 0
         var list = initialList
@@ -634,13 +659,15 @@ class GrandConcert(game: Game) : Campaign(game) {
             // next songs need. Song purchases and gate advances are exempt by design.
             val reserveActive = !context.careerComplete && context.turnsUntilConcert != null
             var gateAdvance = false
-            val songPick = GrandConcertPolicy.chooseSongFirst(report, context.songsLearnedThisCycle)
+            val cycleTarget = context.cycleSongTarget ?: GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value
+            val songPick = GrandConcertPolicy.chooseSongFirst(report, context.songsLearnedThisCycle, cycleTarget, list.balances.total())
             if (songPick != null) {
+                val milestone = (context.songsLearnedThisCycle ?: 0) >= GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value
                 MessageLog.i(
                     TAG,
-                    "[GRAND_CONCERT] [LESSON_BUY] Song-first: ${context.songsLearnedThisCycle}/" +
-                        "${GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value} new songs this cycle, so \"${songPick.title}\" " +
-                        "is bought regardless of its score (${songPick.score}).",
+                    "[GRAND_CONCERT] [LESSON_BUY] Song-first: ${context.songsLearnedThisCycle}/$cycleTarget new songs this cycle" +
+                        (if (milestone) " (milestone extra; the technique reserve stays intact)" else "") +
+                        ", so \"${songPick.title}\" is bought regardless of its score (${songPick.score}).",
                 )
             }
             var pick = songPick
@@ -670,7 +697,10 @@ class GrandConcert(game: Game) : Campaign(game) {
             if (!attemptLearn(intended, pick.score)) break
             purchases++
             if (gateAdvance) gateAdvances++
-            if (intended.kind == LessonCardKind.SONG) songsBoughtThisCycle++
+            if (intended.kind == LessonCardKind.SONG) {
+                songsBoughtThisCycle++
+                songsBoughtThisCareer++
+            }
 
             game.wait(1.2)
             // Re-read through the same settle loop the visit's first read uses. A single read here

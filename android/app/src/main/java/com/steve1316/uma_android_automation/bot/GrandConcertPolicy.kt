@@ -370,6 +370,18 @@ object GrandConcertPolicy {
      */
     const val TECH_RESERVE_TOTAL = 70
 
+    /** Purchased-song targets per concert cycle (index = concerts already performed). The floor
+     * of [GREAT_SUCCESS_SONG_FLOOR] secures every concert's gauge; the raised mid-cycle targets
+     * follow the community 3-4-4-3-3 cadence whose sum (17 purchased, 18 total with the free
+     * "Make Debut!") unlocks the 16-song lyric event and the 18-song special finale. The extras
+     * above the floor are conditional in [chooseSongFirst]: they must provably leave the
+     * technique reserve intact, so the milestone chase can never starve the NEXT cycle's floor,
+     * the exact failure both strategy reports warn pure greed produces. */
+    val PURCHASED_SONG_TARGETS = listOf(3, 4, 4, 3, 3)
+
+    /** The purchased-song target for the cycle entered after [concertsPassed] concerts. */
+    fun songTargetForCycle(concertsPassed: Int): Int = PURCHASED_SONG_TARGETS.getOrElse(concertsPassed) { GREAT_SUCCESS_SONG_FLOOR.value }
+
     /**
      * Picks the purchase the spend loop should make from a ranked offer report, or null to stop
      * buying. Pure and deliberately strict: only a provably affordable, unscheduled card at or
@@ -399,12 +411,26 @@ object GrandConcertPolicy {
      * provably affordable, unscheduled song is ALWAYS worth buying, score notwithstanding. The
      * measured alternative was worse on every 2026-07-26 career: roughly two of five concerts
      * missed the three-song Great Success condition while affordable songs sat below the score
-     * floor or behind higher-ranked techniques. Ranking order still decides among multiple
-     * songs; the fourth-plus song of a cycle goes back through normal scoring.
+     * floor or behind higher-ranked techniques. Ranking order still decides among multiple songs.
+     *
+     * Between the floor and [cycleTarget] (the 3-4-4-3-3 milestone cadence), the extra song is
+     * conditional: it is bought only when the balance and the song's raw cost are both readable
+     * and the purchase provably leaves [TECH_RESERVE_TOTAL] in the pool, so chasing the 17-song
+     * total can never starve the next cycle's three-song floor. At or above the target, null:
+     * the normal ranking takes over.
      */
-    fun chooseSongFirst(report: GrandConcertLessonReport, songsLearnedThisCycle: Int?): LessonOfferLine? {
-        if (songsLearnedThisCycle == null || songsLearnedThisCycle >= GREAT_SUCCESS_SONG_FLOOR.value) return null
-        return report.ranked.firstOrNull { it.kind == LessonCardKind.SONG && it.affordable == true && !it.scheduled }
+    fun chooseSongFirst(
+        report: GrandConcertLessonReport,
+        songsLearnedThisCycle: Int?,
+        cycleTarget: Int = GREAT_SUCCESS_SONG_FLOOR.value,
+        totalBalance: Int? = null,
+    ): LessonOfferLine? {
+        if (songsLearnedThisCycle == null) return null
+        val song = report.ranked.firstOrNull { it.kind == LessonCardKind.SONG && it.affordable == true && !it.scheduled } ?: return null
+        if (songsLearnedThisCycle < GREAT_SUCCESS_SONG_FLOOR.value) return song
+        if (songsLearnedThisCycle >= cycleTarget) return null
+        if (totalBalance == null || song.rawCostTotal == null) return null
+        return if (totalBalance - song.rawCostTotal >= TECH_RESERVE_TOTAL) song else null
     }
 
     /** A gate-advance purchase may cost at most this much weighted-cost: cheap tier-I techniques
@@ -686,6 +712,9 @@ object GrandConcertPolicy {
 data class LessonScoreContext(
     val songsLearnedTotal: Int? = null,
     val songsLearnedThisCycle: Int? = null,
+    /** The cycle's purchased-song target from [GrandConcertPolicy.songTargetForCycle] (3-4-4-3-3
+     * cadence), or null when the turn context is unknown. */
+    val cycleSongTarget: Int? = null,
     val turnsUntilConcert: Int? = null,
     val turnsAfterNextConcert: Int? = null,
     val segment: ConcertSegment = ConcertSegment.UNKNOWN,

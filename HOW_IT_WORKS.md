@@ -1274,7 +1274,14 @@ approaches. Two concert-protection rules run ahead of the plain greedy pick, bot
 2026-07-26 songs-per-cycle measurement showed roughly two of five concerts missing the three-song
 Great Success condition (one career entered its Grand finale with zero new songs).
 `chooseSongFirst` buys any affordable, unscheduled song while the cycle is under the three-song
-floor, score notwithstanding: under the floor, count beats quality. And `chooseSpend`'s technique
+floor, score notwithstanding: under the floor, count beats quality. Above the floor it chases the
+cycle's milestone target (`songTargetForCycle`, the 3-4-4-3-3 cadence toward 17 purchased songs
+and the 16/18-song milestones), but the extra song is conditional: it must provably leave
+`TECH_RESERVE_TOTAL` in the pool, so the songbook chase can never starve the next cycle's floor.
+`spendVisit` also holds all purchases on the final turn before a concert once the floor is met:
+a revealed song left unbought survives the concert and counts as the new cycle's first lesson
+credit (song-saving), while any purchase would refresh the trio away, and un-revealed technique
+progress resets at the concert regardless. And `chooseSpend`'s technique
 reserve refuses a technique that would drop the total point balance below `TECH_RESERVE_TOTAL`
 (70, sized from master.mdb's own song-cost table: square_type 4 songs run 42-68 total, median 44)
 while any future concert remains, because the measured failure was techniques draining the pool a

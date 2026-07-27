@@ -450,6 +450,32 @@ class GrandConcertPolicyTest {
         }
 
         @Test
+        fun `the milestone extra above the floor is conditional on the technique reserve`() {
+            // The 3-4-4-3-3 cadence: cycles 2 and 3 target a fourth song, but only when the
+            // purchase provably leaves the reserve intact, so the 17-song chase can never starve
+            // the next cycle's three-song floor.
+            val song = LessonOfferLine(0, "extra song", LessonCardKind.SONG, true, false, 40, 35.0, rawCostTotal = 44)
+            val r = GrandConcertLessonReport(listOf(song), emptyList(), emptyList())
+            assertEquals(0, GrandConcertPolicy.chooseSongFirst(r, 3, cycleTarget = 4, totalBalance = 130)?.slot, "130 - 44 = 86 keeps the reserve")
+            assertNull(GrandConcertPolicy.chooseSongFirst(r, 3, cycleTarget = 4, totalBalance = 100), "100 - 44 = 56 breaks the reserve")
+            assertNull(GrandConcertPolicy.chooseSongFirst(r, 4, cycleTarget = 4, totalBalance = 300), "at the target the normal ranking takes over")
+            assertNull(GrandConcertPolicy.chooseSongFirst(r, 3, cycleTarget = 4, totalBalance = null), "an unknown balance never funds the extra")
+            assertNull(
+                GrandConcertPolicy.chooseSongFirst(r.copy(ranked = listOf(song.copy(rawCostTotal = null))), 3, cycleTarget = 4, totalBalance = 300),
+                "an unreadable cost never funds the extra",
+            )
+            // The unconditional floor path ignores the balance entirely: under 3 songs, count
+            // beats everything, exactly as before.
+            assertEquals(0, GrandConcertPolicy.chooseSongFirst(r, 2, cycleTarget = 4, totalBalance = 45)?.slot, "the floor path stays unconditional")
+        }
+
+        @Test
+        fun `the cycle targets follow the milestone cadence and fall back to the floor`() {
+            assertEquals(listOf(3, 4, 4, 3, 3), (0..4).map { GrandConcertPolicy.songTargetForCycle(it) })
+            assertEquals(GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value, GrandConcertPolicy.songTargetForCycle(5), "after the Grand the floor is the fallback")
+        }
+
+        @Test
         fun `the technique reserve blocks a technique that would drain the pool below the floor`() {
             // Tonight's starvation shape: the 48-61 cycle bought techniques after its own songs
             // and the Grand finale's cycle started broke. Balance 80, technique costing 20 would
