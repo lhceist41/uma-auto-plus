@@ -3677,7 +3677,17 @@ class CareerLaunchNavigator(private val context: Context) {
      * we only need the word "Trainee" to discriminate it from every other launch screen.
      */
     private fun isTraineeSelectScreen(bitmap: Bitmap): Boolean {
-        if (!readTraineeHeaderText(bitmap).uppercase().contains("TRAINEE")) return false
+        val header = readTraineeHeaderText(bitmap).uppercase()
+        if (!header.contains("TRAINEE")) return false
+        // The in-career trainee EVENT banner ("Trainee Event / <event name>") sits in the same
+        // header band and also reads "Trainee". A queue launch that starts while the game is
+        // parked on an event dialog (an interrupted launch resumed onto one, 2026-07-27) then
+        // ran a roster scan against the event screen, tapping grid cells into the event choices
+        // until the launch failed. The roster header is "Trainee Select" and never "Event".
+        if (header.contains("EVENT")) {
+            MessageLog.i(TAG, "[NAV] Rejected Trainee Select detection: the header reads a trainee EVENT banner (\"${header.take(40)}\").")
+            return false
+        }
         // Primary, OCR-free discriminator: any open game dialog (incl. the "Umamusume Details" card)
         // renders the title-gradient banner that DialogUtils template-matches; the full-screen Trainee
         // Select roster never does. This rejects the dialog before the brittle title/Close OCR below

@@ -120,5 +120,17 @@ class TraineeGridScrollTest {
             )
             assertTrue(nav.contains("TraineePositionStore.putAll(context, discoveredCells)"), "the roster-wide position save left the scan")
         }
+
+        /** The trainee EVENT banner ("Trainee Event / ...") reads "Trainee" in the same header
+         * band as the roster title; without the reject, a launch starting on an event dialog runs
+         * a roster scan against it and taps grid cells into the event choices (live 2026-07-27). */
+        @Test
+        fun `the roster detector rejects the trainee event banner`() {
+            val nav = navigatorSource()
+            assertTrue(
+                nav.contains("header.contains(\"EVENT\")"),
+                "the trainee-event header reject left isTraineeSelectScreen",
+            )
+        }
     }
 }
