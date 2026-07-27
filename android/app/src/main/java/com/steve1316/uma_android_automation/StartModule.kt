@@ -64,6 +64,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         @Volatile
         var queueStopRequested: Boolean = false
 
+        /** Single-flight latch for the bot session. The overlay play button can multi-fire
+         * StartEvents (five sessions in 100 ms observed live 2026-07-27, each dying on the same
+         * error and spraying log files); only the first entry may run, the rest are ignored
+         * until the session's finally releases the latch. */
+        private val sessionActive = java.util.concurrent.atomic.AtomicBoolean(false)
+
         /**
          * Human-readable reason for an internal/deliberate queue stop (e.g. the trainee-mismatch guard),
          * or null when the stop is a genuine user Stop. Lets the result and queue logs say WHY the queue
@@ -369,6 +375,23 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          *
          * GLOB (not LIKE) is used so `_` stays literal: `rot1_*` must not also match `rot10_*`.
          */
+        /** True when at least one snapshot row exists for rotation [index]. Read-only existence
+         * probe for the non-UI start preflight; never applies anything. Fails toward "missing",
+         * which only ever produces the actionable start-from-the-app error. */
+        fun rotationSnapshotExists(context: Context, index: Int): Boolean =
+            try {
+                val dbFile = File(context.filesDir, "SQLite/settings.db")
+                if (!dbFile.exists()) {
+                    false
+                } else {
+                    SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+                        db.rawQuery("SELECT 1 FROM settings WHERE category GLOB ? LIMIT 1", arrayOf("rot${index}_*")).use { it.moveToFirst() }
+                    }
+                }
+            } catch (_: Exception) {
+                false
+            }
+
         fun applyRotationSnapshot(context: Context, index: Int): Boolean {
             return try {
                 val dbFile = File(context.filesDir, "SQLite/settings.db")
@@ -1356,6 +1379,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     @Subscribe
     fun onStartEvent(event: StartEvent) {
         if (event.message == "Entry Point ON") {
+            if (!sessionActive.compareAndSet(false, true)) {
+                MessageLog.w(TAG, "[START] A bot session is already active; ignoring the duplicate start event.")
+                return
+            }
             // Acquire a PARTIAL_WAKE_LOCK for the entire bot session so Android's OomAdjuster
             // doesn't mark the process as 'empty' and SIGKILL it under memory pressure (TRIM_EMPTY).
             // Released in the finally below regardless of how the session ends.
@@ -1396,6 +1423,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // and abort the session on a mismatch: a write landed in the window between
                 // React's verification and this load, so this configuration was never verified.
                 // Sessions started without an identity (non-UI entries) warn and proceed.
+                var nonUiEntry = false
                 val expectedIdentity = com.steve1316.uma_android_automation.bot.LaunchIdentityGate.current
                 val loadedRevision = SettingsHelper.getIntSetting("general", "settingsRevision", 0)
                 when (com.steve1316.uma_android_automation.bot.LaunchIdentityGate.verdict(loadedRevision)) {
@@ -1413,6 +1441,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     }
                     com.steve1316.uma_android_automation.bot.LaunchIdentityGate.Verdict.NOT_SET -> {
                         MessageLog.w(TAG, "[START] session started without a verified launch identity (non-UI entry); revision on disk: $loadedRevision.")
+                        nonUiEntry = true
                     }
                 }
 
@@ -1444,6 +1473,20 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 val rotation = loadRotationConfig()
                 if (enableRunQueue && rotation.enabled) {
                     MessageLog.i(TAG, "[ROTATION] Enabled: ${rotation.count} trainees, switching every ${rotation.switchEvery} run(s).")
+                    // A rotation queue depends on the per-trainee snapshots the app's Start flow
+                    // precomputes. A non-UI start (the floating overlay's play button) skips that
+                    // flow entirely, so if the snapshots are absent the queue can only die at run
+                    // 1 with a cryptic error (lived 2026-07-27, twice). Fail here with the actual
+                    // remedy instead.
+                    if (nonUiEntry && !rotationSnapshotExists(context, 0)) {
+                        MessageLog.e(
+                            TAG,
+                            "[ROTATION] The rotation's per-trainee snapshots are missing, and this session was started " +
+                                "outside the app (the floating overlay skips the preparation step). Press Start on the " +
+                                "app's Home page instead: it builds the snapshots before launching.",
+                        )
+                        return
+                    }
                 }
 
                 if (enableRunQueue) {
@@ -1792,8 +1835,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     MessageLog.i(TAG, "[QUEUE] ========================================\n")
                 }
             } finally {
-                // Always release the wake lock, even on exception or break paths.
+                // Always release the wake lock and the session latch, even on exception or break paths.
                 Game.releaseWakeLock()
+                sessionActive.set(false)
             }
         }
     }
