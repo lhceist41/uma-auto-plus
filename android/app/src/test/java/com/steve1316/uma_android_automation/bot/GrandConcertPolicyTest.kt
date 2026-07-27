@@ -534,6 +534,47 @@ class GrandConcertPolicyTest {
         }
 
         @Test
+        fun `a reserve-blocked technique cannot deadlock the gate advance`() {
+            // The live 2026-07-27 cycle-2 deadlock: "Composure Training Basics" affordable at
+            // s=36, blocked by the type-aware reserve (its cost eats a type the remembered song
+            // needs), and the old gate-advance guard counted that same line as "still clears the
+            // bar" and deferred. Nothing was bought for an entire cycle: zero songs. The guard
+            // must judge lines the way chooseSpend does; the pick itself stays reserve-exempt.
+            val songCost = PerformancePointVector.of(0, 0, 0, 0, 21)
+            val balances = PerformancePointVector.of(20, 22, 37, 11, 30)
+            val coTech =
+                LessonOfferLine(
+                    0, "Composure Training Basics", LessonCardKind.TECHNIQUE, true, false, 36, 10.0,
+                    rawCostTotal = 10, rawCost = PerformancePointVector.of(0, 0, 0, 0, 10),
+                )
+            val r = GrandConcertLessonReport(listOf(coTech), emptyList(), emptyList())
+            assertNull(
+                GrandConcertPolicy.chooseSpend(r, totalBalance = 120, reserveActive = true, songTargetCost = songCost, balances = balances),
+                "30 Co minus 10 leaves 20, under the 21 the song needs: the reserve blocks the buy",
+            )
+            assertEquals(
+                0,
+                GrandConcertPolicy.chooseGateAdvance(
+                    r, totalBalance = 120, reserveActive = true, songTargetCost = songCost, balances = balances,
+                )?.slot,
+                "the gate advance must fire on the blocked-but-affordable technique instead of deadlocking",
+            )
+            // With a genuinely buyable high-scorer present, the gate advance still defers.
+            val freeTech =
+                LessonOfferLine(
+                    1, "eats nothing needed", LessonCardKind.TECHNIQUE, true, false, 40, 9.0,
+                    rawCostTotal = 12, rawCost = PerformancePointVector.of(12, 0, 0, 0, 0),
+                )
+            assertNull(
+                GrandConcertPolicy.chooseGateAdvance(
+                    GrandConcertLessonReport(listOf(coTech, freeTech), emptyList(), emptyList()),
+                    totalBalance = 120, reserveActive = true, songTargetCost = songCost, balances = balances,
+                ),
+                "an unblocked line above the bar belongs to chooseSpend, not the gate advance",
+            )
+        }
+
+        @Test
         fun `the technique reserve never blocks a song`() {
             val song = LessonOfferLine(0, "song", LessonCardKind.SONG, true, false, 90, 45.0, rawCostTotal = 63)
             val r = GrandConcertLessonReport(listOf(song), emptyList(), emptyList())

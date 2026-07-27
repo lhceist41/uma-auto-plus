@@ -469,16 +469,37 @@ object GrandConcertPolicy {
     const val GATE_ADVANCE_MAX_WEIGHTED_COST_URGENT = 40.0
 
     /**
-     * The technique-gate fallback: when the trio offers NO song and nothing clears [minScore],
-     * buying the cheapest sane technique still beats stalling, because the deterministic
-     * technique-then-song gate cannot advance without purchases and a stalled gate means no songs
-     * before the concert (the first live run proved this failure mode). Bounded hard: techniques
-     * only, provably affordable, positive score, weighted cost at most the cap for the current
-     * urgency, and only when the normal pick declined.
+     * The technique-gate fallback: when the trio offers NO song and nothing buyable clears
+     * [minScore], buying the cheapest sane technique still beats stalling, because the
+     * deterministic technique-then-song gate cannot advance without purchases and a stalled gate
+     * means no songs before the concert (the first live run proved this failure mode). Bounded
+     * hard: techniques only, provably affordable, positive score, weighted cost at most the cap
+     * for the current urgency, and only when the normal pick declined.
+     *
+     * The defer guard must judge lines the way [chooseSpend] does: a line the type-aware reserve
+     * blocks was NOT going to be bought, so it cannot count as "something still clears the bar".
+     * Without that, the reserve and this guard deadlock each other - the reserve refuses the
+     * technique, this guard defers to it, nothing is ever bought, and the cycle ends songless
+     * (live 2026-07-27: a whole cycle of "s=36 a=true" stop rules and zero purchases). The pick
+     * itself stays reserve-EXEMPT by design: minimum-cost gate movement is what un-stalls the
+     * pattern the reserve is protecting songs for.
      */
-    fun chooseGateAdvance(report: GrandConcertLessonReport, minScore: Int = SPEND_MIN_SCORE, urgent: Boolean = false): LessonOfferLine? {
+    fun chooseGateAdvance(
+        report: GrandConcertLessonReport,
+        minScore: Int = SPEND_MIN_SCORE,
+        urgent: Boolean = false,
+        totalBalance: Int? = null,
+        reserveActive: Boolean = false,
+        songTargetCost: PerformancePointVector? = null,
+        balances: PerformancePointVector? = null,
+    ): LessonOfferLine? {
         if (report.ranked.any { it.kind == LessonCardKind.SONG }) return null
-        if (report.ranked.any { it.affordable == true && !it.scheduled && it.score >= minScore }) return null
+        val clearsUnblocked =
+            report.ranked.any { line ->
+                line.affordable == true && !line.scheduled && line.score >= minScore &&
+                    !(reserveActive && line.kind == LessonCardKind.TECHNIQUE && reserveBlocksTechnique(line, totalBalance, songTargetCost, balances))
+            }
+        if (clearsUnblocked) return null
         val cap = if (urgent) GATE_ADVANCE_MAX_WEIGHTED_COST_URGENT else GATE_ADVANCE_MAX_WEIGHTED_COST
         return report.ranked
             .filter {

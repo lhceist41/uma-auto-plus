@@ -689,7 +689,16 @@ class GrandConcert(game: Game) : Campaign(game) {
                     )
             }
             if (pick == null) {
-                pick = GrandConcertPolicy.chooseGateAdvance(report, minScore, urgent)
+                pick =
+                    GrandConcertPolicy.chooseGateAdvance(
+                        report,
+                        minScore,
+                        urgent,
+                        totalBalance = list.balances.total(),
+                        reserveActive = reserveActive,
+                        songTargetCost = lastSongTargetCost,
+                        balances = list.balances,
+                    )
                 gateAdvance = pick != null
             }
             if (pick == null) {
