@@ -3306,6 +3306,22 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.i(TAG, "[NAV] [HOME] Detector 3 did not match.")
         }
 
+        // Detector 3b: the same in-progress wordmark on the anniversary event-skinned lobby,
+        // whose hanging-star backdrop dropped detector 3 to 0.52-0.56 against its 0.6 bar (the
+        // 2026-07-27 17:00 reset bounce failed the whole chain on that frame).
+        MessageLog.i(TAG, "[NAV] [HOME] Trying detector 3b: ButtonCareerHomeTextEvent (event-skin wordmark, confidence 0.6)...")
+        if (ButtonCareerHomeTextEvent.check(iu, sourceBitmap = bitmap)) {
+            MessageLog.i(TAG, "[NAV] [HOME] Detector 3b matched. Clicking...")
+            if (ButtonCareerHomeTextEvent.click(iu, sourceBitmap = bitmap)) {
+                MessageLog.i(TAG, "[NAV] [HOME] Detector 3b click succeeded.")
+                waitSafe(3.0)
+                return TransitionResult.Continue
+            }
+            MessageLog.w(TAG, "[NAV] [HOME] Detector 3b matched but click failed.")
+        } else {
+            MessageLog.i(TAG, "[NAV] [HOME] Detector 3b did not match.")
+        }
+
         // Detector 4: OCR scan for the CAREER/Event label at the button's known position
         // (region bounds and word rules documented on ocrCareerLabelAtHomePosition, which the
         // deep home probe in detectScreenState shares).

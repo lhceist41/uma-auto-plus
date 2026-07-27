@@ -146,6 +146,14 @@ object ButtonCareerHomeTextActive : ButtonInterface {
     override val template = Template("components/button/career_home_text_active", region = Region.bottomHalf, confidence = 0.6)
 }
 
+/** The same in-progress CAREER wordmark on the anniversary event-skinned lobby, whose busy
+ * backdrop (hanging stars behind the wordmark edges) dropped [ButtonCareerHomeTextActive] to
+ * 0.52-0.56 against its 0.6 bar; the 2026-07-27 17:00 reset bounce failed all four detectors on
+ * exactly that frame, which is what this template was cut from (self-match 1.000). */
+object ButtonCareerHomeTextEvent : ButtonInterface {
+    override val template = Template("components/button/career_home_text_event", region = Region.bottomHalf, confidence = 0.6)
+}
+
 object ButtonHomeSpecialMissions : ButtonInterface {
     override val template = Template("components/button/home_special_missions")
 }
