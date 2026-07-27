@@ -105,6 +105,13 @@ export const validatedPresets: ReadonlySet<string> = new Set([
     // by config fingerprint.
     "Daiwa Scarlet|Unity Cup",
     "Daiwa Scarlet|Trackblazer",
+    // The 2026-07-27 four-trainee rotation queue: every career completed its full 75-turn arc at
+    // A+ with the whole pipeline unattended (Bakushin's run additionally proved the mid-career
+    // resume path: interrupted at turn 59, resumed, completed at est. 14,212, the scenario's
+    // best score on record).
+    "Sakura Bakushin O|Grand Concert",
+    "Super Creek|Grand Concert",
+    "Agnes Tachyon|Grand Concert",
 ])
 
 /**
