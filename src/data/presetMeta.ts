@@ -112,6 +112,15 @@ export const validatedPresets: ReadonlySet<string> = new Set([
     "Sakura Bakushin O|Grand Concert",
     "Super Creek|Grand Concert",
     "Agnes Tachyon|Grand Concert",
+    // The 2026-07-27 evening endurance queue, four first-ever completions in one unattended
+    // sitting (A+ 12,532 / A 11,950 / A+ 13,480 / A 11,687). Biwa's run also survived a 17:00
+    // daily-reset lobby bounce mid-launch and a bot restart; Doto's race-dense build proved the
+    // song-carryover path (an unaffordable all-song trio banked across a concert and bought the
+    // next cycle).
+    "Biwa Hayahide|Grand Concert",
+    "Meisho Doto|Grand Concert",
+    "Nice Nature|Grand Concert",
+    "Tosen Jordan|Grand Concert",
 ])
 
 /**
