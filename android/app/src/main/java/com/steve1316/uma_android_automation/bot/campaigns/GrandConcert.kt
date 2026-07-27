@@ -9,6 +9,7 @@ import com.steve1316.uma_android_automation.bot.LessonCardKind
 import com.steve1316.uma_android_automation.bot.GrandConcertHandoff
 import com.steve1316.uma_android_automation.bot.GrandConcertHandoffReason
 import com.steve1316.uma_android_automation.bot.GrandConcertLessonReader
+import com.steve1316.uma_android_automation.bot.GrandConcertPointContext
 import com.steve1316.uma_android_automation.bot.GrandConcertPolicy
 import com.steve1316.uma_android_automation.bot.GrandConcertScenario
 import com.steve1316.uma_android_automation.bot.HypeTier
@@ -17,6 +18,7 @@ import com.steve1316.uma_android_automation.bot.LessonList
 import com.steve1316.uma_android_automation.bot.LessonListCard
 import com.steve1316.uma_android_automation.bot.LessonScoreContext
 import com.steve1316.uma_android_automation.bot.PerformancePointType
+import com.steve1316.uma_android_automation.bot.PerformancePointVector
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonClose
@@ -105,6 +107,13 @@ class GrandConcert(game: Game) : Campaign(game) {
 
     /** Set after a failed concert escort so the retry is a handoff, never a loop. */
     private var concertEscortFailed = false
+
+    /** The cheapest unscheduled song the shop last offered with a fully readable cost, remembered
+     * across turns so the training scorer can steer point income toward its per-type deficit.
+     * Refreshed on every settled list read; a trio with no readable song keeps the previous
+     * target (the offer does not expire, so the remembered cost stays actionable). */
+    private var lastSongTargetCost: PerformancePointVector? = null
+    private var lastSongTargetTitle: String? = null
 
     /** Set once the end-of-career Lessons drain has run, so skill-screen entry retries never
      * repeat it. */
@@ -378,7 +387,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             if (list != null && (best == null || list.cards.count { it.readable } > best!!.cards.count { it.readable })) {
                 best = list
             }
-            if (best?.complete == true) return best
+            if (best?.complete == true) break
             if (attempt < LESSON_LIST_READ_ATTEMPTS) {
                 MessageLog.i(
                     TAG,
@@ -388,7 +397,25 @@ class GrandConcert(game: Game) : Campaign(game) {
                 game.wait(1.0)
             }
         }
+        best?.let { rememberSongTarget(it) }
         return best
+    }
+
+    /** Remembers the cheapest readable, unscheduled song on [list] as the training scorer's
+     * point-steering target. Song absent or cost unreadable keeps the previous target. */
+    private fun rememberSongTarget(list: LessonList) {
+        val song =
+            list.cards
+                .filter { it.kind == LessonCardKind.SONG && it.scheduled != true && it.cost.fullyKnown }
+                .minByOrNull { it.cost.total() ?: Int.MAX_VALUE }
+                ?: return
+        lastSongTargetCost = song.cost
+        lastSongTargetTitle = song.title
+        MessageLog.i(
+            TAG,
+            "[GRAND_CONCERT] [LESSON_READ] Point-steering target: \"${song.title}\" " +
+                "cost=${PerformancePointType.entries.joinToString("/") { "${it.displayName.take(2)}${song.cost[it]}" }}",
+        )
     }
 
     /**
@@ -530,6 +557,41 @@ class GrandConcert(game: Game) : Campaign(game) {
             turnsAfterNextConcert = nextConcert?.let { (CAREER_END_TURN - it).coerceAtLeast(0) },
             segment = segment,
             energyPercent = trainee.energy,
+        )
+    }
+
+    /**
+     * The training scorer's point-economy context: cycle state from [buildLessonContext] (which
+     * also rolls the per-cycle song counter, so a context requested before the cycle's first shop
+     * visit still sees a fresh count), caps computed from the concerts already performed (200
+     * base, +50 each, research-confirmed on any success tier; never OCR'd), and the per-type
+     * deficit toward the remembered cheapest song. A type whose balance or cost is unreadable is
+     * omitted from the deficit so the scorer never biases on a guess.
+     */
+    override fun grandConcertPointContext(balances: Map<PerformancePointType, Int?>?): GrandConcertPointContext? {
+        val lessonContext = buildLessonContext()
+        val day = date.day
+        if (day <= 1) return null
+        val concertsPassed = CONCERT_TURNS.count { it <= day }
+        val caps = PerformancePointType.entries.associateWith { 200 + 50 * concertsPassed }
+        val balancesMap = balances ?: emptyMap()
+        val deficit = LinkedHashMap<PerformancePointType, Int>()
+        val cost = lastSongTargetCost
+        if (cost != null) {
+            for (type in PerformancePointType.entries) {
+                val c = cost[type] ?: continue
+                val b = balancesMap[type] ?: continue
+                deficit[type] = (c - b).coerceAtLeast(0)
+            }
+        }
+        return GrandConcertPointContext(
+            balances = balancesMap,
+            caps = caps,
+            deficit = deficit,
+            songsBoughtThisCycle = songsBoughtThisCycle,
+            purchasedFloor = GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value,
+            turnsUntilConcert = lessonContext.turnsUntilConcert,
+            songTargetTitle = lastSongTargetTitle,
         )
     }
 

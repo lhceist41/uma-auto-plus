@@ -188,6 +188,16 @@ class Training(private val game: Game, private val campaign: Campaign) {
      * @property latch The [CountDownLatch] used for thread synchronization.
      * @property startTime The system time when the analysis started.
      */
+    /** Grand Concert only: reads the Performance Points panel off each facility's analysis frame.
+     * Lazy so every other scenario never constructs it. */
+    private val gcTrainingReader by lazy { GrandConcertTrainingReader(game) }
+
+    /** Grand Concert only: the panel balances read during this turn's analysis (first facility
+     * frame that yielded them). Survives the per-turn analysis cache the same way the results do:
+     * a cache replay is same-turn by definition, so the balances written by the original run are
+     * still current. */
+    private var gcTurnBalances: Map<PerformancePointType, Int?>? = null
+
     data class TrainingAnalysisResult(val name: StatName, val latch: CountDownLatch, val startTime: Long) {
         /** Map of stat names to their detected gain values. */
         var statGains: Map<StatName, Int> = mapOf()
@@ -218,6 +228,10 @@ class Training(private val game: Game, private val campaign: Campaign) {
 
         /** The OCR-detected training level (1-5) for this stat, or null if the feature is disabled or OCR failed. */
         var trainingLevel: Int? = null
+
+        /** Grand Concert only: the performance-point type(s) this facility grants this turn, read
+         * off its own analysis frame's panel annotation. Null amount = glyph seen, number unread. */
+        var performanceGains: Map<PerformancePointType, Int?> = emptyMap()
     }
 
     /**
@@ -246,6 +260,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         val numSkillHints: Int = 0,
         val trainingLevel: Int? = null,
         val skipReason: String? = null,
+        val performanceGains: Map<PerformancePointType, Int?> = emptyMap(),
     ) {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
@@ -264,6 +279,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             if (numSkillHints != other.numSkillHints) return false
             if (trainingLevel != other.trainingLevel) return false
             if (skipReason != other.skipReason) return false
+            if (performanceGains != other.performanceGains) return false
 
             return true
         }
@@ -280,6 +296,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             result = 31 * result + numSkillHints
             result = 31 * result + (trainingLevel ?: 0)
             result = 31 * result + (skipReason?.hashCode() ?: 0)
+            result = 31 * result + performanceGains.entries.hashCode()
             return result
         }
     }
@@ -319,6 +336,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         val enableTrainingLevelWeighting: Boolean = false,
         val enablePrioritizeNearMaxFriendship: Boolean = true,
         val statsTrainedOverBuffer: Set<StatName> = emptySet(),
+        val grandConcertPoints: GrandConcertPointContext? = null,
     ) {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
@@ -341,6 +359,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             if (enableTrainingLevelWeighting != other.enableTrainingLevelWeighting) return false
             if (enablePrioritizeNearMaxFriendship != other.enablePrioritizeNearMaxFriendship) return false
             if (statsTrainedOverBuffer != other.statsTrainedOverBuffer) return false
+            if (grandConcertPoints != other.grandConcertPoints) return false
 
             return true
         }
@@ -361,6 +380,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             result = 31 * result + enableTrainingLevelWeighting.hashCode()
             result = 31 * result + enablePrioritizeNearMaxFriendship.hashCode()
             result = 31 * result + statsTrainedOverBuffer.hashCode()
+            result = 31 * result + (grandConcertPoints?.hashCode() ?: 0)
             return result
         }
     }
@@ -569,6 +589,20 @@ class Training(private val game: Game, private val campaign: Campaign) {
          * scenario cap.
          */
         const val SPARK_CAP_HEADROOM = 96
+
+        /** Grand Concert point bias: score multiplier added per effective point a facility's
+         * previewed gain contributes toward the target song's deficit. 0.04 x a typical 15-point
+         * contribution = +60% at the [GC_POINT_BOOST_MAX] ceiling, deliberately at the same
+         * ceiling as the anticipatory-rainbow multiplier and strictly below a real rainbow's
+         * 2.0x, so point steering re-ranks near-peers without overruling the big signals. */
+        const val GC_POINT_BOOST_PER_POINT = 0.04
+
+        /** Ceiling for the Grand Concert point-bias multiplier's boost portion. */
+        const val GC_POINT_BOOST_MAX = 0.6
+
+        /** Contribution assumed for a gain whose glyph was detected but whose "+N" number failed
+         * OCR. Mid-band of the observed per-training gains (roughly 8 to 25). */
+        const val GC_ASSUMED_GAIN_WHEN_UNREAD = 12
 
         /** Race calculations value stat points past 1200 at half weight (July 2026 rebalance). */
         private const val SOFT_CAP_STAT_VALUE = 1200
@@ -1204,7 +1238,42 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 }
             }
 
+            // 6. Grand Concert point-income multiplier: when the cycle is still short of its song
+            // floor, a facility whose per-turn performance type feeds the target song's deficit is
+            // worth extra. Applied as a bounded multiplier so it re-ranks comparable options
+            // without resurrecting a zero-score facility or outranking a real rainbow on its own.
+            totalScore *= calculateGrandConcertPointMultiplier(config, training)
+
             return totalScore.coerceAtLeast(0.0)
+        }
+
+        /**
+         * The Grand Concert point-income multiplier for [training], 1.0 outside the scenario or
+         * whenever the bias is disarmed.
+         *
+         * Armed only while the cycle is behind its purchased-song floor with a concert remaining
+         * (context.behindPace). Each point the facility's previewed gain contributes toward the
+         * target song's per-type deficit adds [GC_POINT_BOOST_PER_POINT], capped at
+         * [GC_POINT_BOOST_MAX] total. The contribution is clamped to both the remaining deficit
+         * and the cap headroom, because overflow above a type's cap is lost (research-confirmed),
+         * so a +20 preview into a nearly-capped type is genuinely worth only the headroom. A gain
+         * whose glyph was detected but whose amount resisted OCR contributes a conservative
+         * [GC_ASSUMED_GAIN_WHEN_UNREAD]: the TYPE is the dominant signal and is pixel-read, while
+         * the number is the fragile OCR half.
+         */
+        fun calculateGrandConcertPointMultiplier(config: TrainingConfig, training: TrainingOption): Double {
+            val ctx = config.grandConcertPoints ?: return 1.0
+            if (!ctx.behindPace || training.performanceGains.isEmpty()) return 1.0
+            var effectivePoints = 0
+            for ((type, amount) in training.performanceGains) {
+                val need = ctx.deficit[type] ?: continue
+                if (need <= 0) continue
+                var contribution = amount ?: GC_ASSUMED_GAIN_WHEN_UNREAD
+                ctx.headroom(type)?.let { contribution = minOf(contribution, it) }
+                effectivePoints += minOf(contribution, need)
+            }
+            if (effectivePoints <= 0) return 1.0
+            return 1.0 + minOf(GC_POINT_BOOST_MAX, GC_POINT_BOOST_PER_POINT * effectivePoints)
         }
     }
 
@@ -1322,6 +1391,12 @@ class Training(private val game: Game, private val campaign: Campaign) {
             )
         } else {
             MessageLog.v(TAG, "\n[TRAINING] Now starting process to analyze all 5 Trainings.")
+        }
+
+        // A fresh full analysis starts a new turn's panel read; a singleTraining re-analysis is
+        // same-turn by definition and must keep the balances the full pass already read.
+        if (!singleTraining) {
+            gcTurnBalances = null
         }
 
         val trainingButtons: Map<StatName, ComponentInterface> = trainingButtonsForScenario()
@@ -1642,6 +1717,20 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         startTime = startTime,
                     )
 
+                if (GrandConcertScenario.matches(game.scenario)) {
+                    // Read this facility's performance-point preview off the frame already in hand.
+                    // The selected facility's "+N" annotation is on screen right now, so each
+                    // facility's visit contributes its own (type, amount) and the loop as a whole
+                    // assembles the turn's full income matrix without extra navigation.
+                    val panel = gcTrainingReader.readFacilityPanel(sourceBitmap)
+                    if (panel != null) {
+                        result.performanceGains = panel.gains
+                        if (gcTurnBalances == null && panel.balances.values.any { it != null }) {
+                            gcTurnBalances = panel.balances
+                        }
+                    }
+                }
+
                 // For Unity Cup in parallel mode, run Spirit Explosion Gauge analysis synchronously before moving to next training.
                 // This ensures if retry is needed, it can take a new screenshot while still on the correct training.
                 // For singleTraining mode, handle it in a thread like the other analyses.
@@ -1866,6 +1955,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                             numSpiritGaugesReadyToBurst = result.numSpiritGaugesReadyToBurst,
                             numSkillHints = result.numSkillHints,
                             trainingLevel = result.trainingLevel,
+                            performanceGains = result.performanceGains,
                         )
                     trainingMap[result.name] = newTraining
                     break
@@ -2087,6 +2177,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     numSpiritGaugesReadyToBurst = result.numSpiritGaugesReadyToBurst,
                     numSkillHints = result.numSkillHints,
                     trainingLevel = result.trainingLevel,
+                    performanceGains = result.performanceGains,
                 )
             trainingMap[result.name] = newTraining
         }
@@ -2347,6 +2438,34 @@ class Training(private val game: Game, private val campaign: Campaign) {
         // Build skillHintsPerLocation from the training map.
         val skillHintsPerLocation: Map<StatName, Int> = StatName.entries.associateWith { trainingMap[it]?.numSkillHints ?: 0 }
 
+        // Grand Concert: assemble the point context (balances read this turn + the campaign's
+        // cycle state and song target) and log the turn's income matrix so the bias is auditable.
+        val grandConcertPoints = campaign.grandConcertPointContext(gcTurnBalances)
+        if (grandConcertPoints != null) {
+            val gainsLine =
+                StatName.entries.joinToString(" ") { stat ->
+                    val gains = trainingMap[stat]?.performanceGains
+                    val text =
+                        if (gains.isNullOrEmpty()) {
+                            "-"
+                        } else {
+                            gains.entries.joinToString(",") { "${it.key.displayName.take(2)}+${it.value ?: "?"}" }
+                        }
+                    "$stat=$text"
+                }
+            val balancesLine =
+                PerformancePointType.entries.joinToString(" ") {
+                    "${it.displayName.take(2)}=${grandConcertPoints.balances[it] ?: "?"}/${grandConcertPoints.caps[it]}"
+                }
+            MessageLog.i(
+                TAG,
+                "[TRAINING] [GC_POINTS] $balancesLine | $gainsLine | songs=${grandConcertPoints.songsBoughtThisCycle}/" +
+                    "${grandConcertPoints.purchasedFloor} concertIn=${grandConcertPoints.turnsUntilConcert} " +
+                    "deficit=${grandConcertPoints.deficit.entries.joinToString(",") { "${it.key.displayName.take(2)}:${it.value}" }.ifEmpty { "none" }} " +
+                    "biasArmed=${grandConcertPoints.behindPace}",
+            )
+        }
+
         // Build a TrainingConfig using the current game state for use with companion object scoring functions.
         val trainingConfig =
             TrainingConfig(
@@ -2365,6 +2484,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 enableTrainingLevelWeighting = enableTrainingLevelWeighting,
                 enablePrioritizeNearMaxFriendship = enablePrioritizeNearMaxFriendship,
                 statsTrainedOverBuffer = statsTrainedOverBuffer,
+                grandConcertPoints = grandConcertPoints,
             )
 
         // Compute scores and determine the best training option.

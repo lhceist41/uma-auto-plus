@@ -1290,6 +1290,26 @@ losing the points. Every concert entry logs the cycle's new-song count against t
 Its refusals are still the point: an unreadable card is never recommended, affordability is never
 claimed against an unknown cost or an unknown balance, and a scoring tie yields no recommendation.
 
+**Point-aware training.** The other half of the song economy is earned on the training screen, not
+spent in the shop, and the 2026-07-26/27 telemetry showed the binding constraint was income: cycles
+missed the floor because no affordable song was on offer, not because the chooser picked wrong. So
+the training loop now reads the Performance Points panel off each facility's own analysis frame
+(`GrandConcertTrainingReader`): the five balances once per turn, and per facility the "+N" gain
+annotation, whose row position IS the granted type because the per-turn type assignment is random
+(the facility badges rotate every turn; the probe layer detects the annotated rows by warm-gradient
+fill plus the glyph's white outline, two-factor because warm background art alone has fooled a
+single-hue test). The campaign contributes `GrandConcertPointContext`: the cheapest readable song
+the shop last offered (remembered across turns; offers do not expire), the per-type deficit against
+the balances, computed caps (200 base, +50 per concert on any success tier, never OCR'd), and the
+cycle's song count. While the cycle is under its floor, `calculateGrandConcertPointMultiplier`
+boosts a facility by 4% per effective point its gain feeds into the deficit, capped at +60%, the
+same ceiling as the anticipatory-rainbow multiplier and strictly below a real rainbow's 2.0x, so
+point steering re-ranks near-peers without overruling the big signals. Effective means clamped to
+both the remaining deficit and the cap headroom, because income above a type's cap is lost. A gain
+whose number resists OCR still contributes its pixel-read type at a conservative assumed amount.
+Every recommendation turn logs a `[GC_POINTS]` line: balances against caps, each facility's
+observed types and amounts, the deficit, and whether the bias armed.
+
 **The spend loop.** `spendVisit` is greedy with a stop rule, and every purchase is transactional.
 `attemptLearn` taps the card, reads the confirmation dialog, and commits **only** on
 `EXACT_MATCH` against the card it intended; a Schedule dialog (the card was not actually

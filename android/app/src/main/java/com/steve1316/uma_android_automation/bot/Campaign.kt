@@ -1976,6 +1976,15 @@ abstract class Campaign(game: Game) : Task(game) {
     }
 
     /**
+     * Grand Concert only: the point-economy context the training scorer uses to steer performance
+     * income toward the next song (see [Training.Companion.calculateGrandConcertPointMultiplier]).
+     * [balances] is what the training screen's panel showed this turn, read by Training; the
+     * campaign contributes the cycle state and the song target. Every other campaign returns
+     * null, which disarms the bias entirely.
+     */
+    open fun grandConcertPointContext(balances: Map<PerformancePointType, Int?>?): GrandConcertPointContext? = null
+
+    /**
      * Public accessor for the grade of the most recent race processed in this career.
      *
      * Exposes the protected [racing.lastRaceGrade] field so that base classes like [DialogHandler]

@@ -42,6 +42,7 @@ class GrandConcertProbeFixtureTest {
             "concert_confirm", "concert_playback", "concert_success_banner", "concert_overview",
             "bonuses_updated", "concert_on_stage", "active_bonuses_panel",
             "grand_confirm_unchecked", "grand_confirm_checked",
+            "training_panel_vi_gain", "training_panel_rainbow", "training_panel_hidden",
         )
 
     @Test
@@ -270,9 +271,54 @@ class GrandConcertProbeFixtureTest {
         fun `the selected training's performance type is read from the annotated row, not the facility`() {
             // Guts is selected, but the gold "+13" gain annotation sits on the Dance row. This is
             // the pixel proof of the per-turn override: nothing about the facility is consulted.
+            // The trainee's red jacket floods the Vi row's box with warm pixels (warm 164) on this
+            // very capture; the white-outline floor is what keeps the row list at exactly [Da].
             val rows = selectedTrainingPerformanceRows(sampler("training_guts_before"))
             assertEquals(listOf(0), rows, "only the Da row should carry the gold gain annotation")
             assertEquals(listOf(PerformancePointType.DANCE), selectedTrainingPerformanceTypes(sampler("training_guts_before")))
+        }
+
+        @Test
+        fun `a red-tier gain glyph on a bright background is still detected (telemetry frame, Vi row)`() {
+            // 2026-07-27 telemetry frame: "+23" beside the Vi row, its fill sampled on the RED half
+            // of the glyph's gold-to-red gradient over a bright beach backdrop. The launch-night
+            // single-hue calibration missed exactly this frame; the box scan must not.
+            assertEquals(listOf(3), selectedTrainingPerformanceRows(sampler("training_panel_vi_gain")))
+            assertEquals(listOf(PerformancePointType.VISUAL), selectedTrainingPerformanceTypes(sampler("training_panel_vi_gain")))
+        }
+
+        @Test
+        fun `a friendship training's split gain reads as two annotated rows`() {
+            // 2026-07-27 telemetry frame: Guts friendship training granting Dance AND Visual at
+            // once. Two rows, declaration order.
+            assertEquals(listOf(0, 3), selectedTrainingPerformanceRows(sampler("training_panel_rainbow")))
+            assertEquals(
+                listOf(PerformancePointType.DANCE, PerformancePointType.VISUAL),
+                selectedTrainingPerformanceTypes(sampler("training_panel_rainbow")),
+            )
+        }
+
+        @Test
+        fun `the performance panel presence gate accepts every panel capture and refuses everything else`() {
+            // The panel is a career-screen element as much as a training-screen one: both
+            // post-debut career captures show it at identical coordinates (career_main_turn1
+            // predates the mechanic's activation and must refuse). The runtime reader is
+            // additionally scoped to training analysis frames by its call site; this gate's job
+            // is only to guarantee the panel pixels are really there before any row or balance
+            // read is trusted.
+            val panelFixtures =
+                setOf(
+                    "training_guts_before", "training_panel_vi_gain", "training_panel_rainbow",
+                    "career_after_training", "career_scheduled",
+                )
+            for (name in panelFixtures) {
+                assertTrue(grandConcertPerformancePanelPresent(sampler(name)), "$name should show the panel")
+            }
+            // training_panel_hidden is a mid-loop capture with an overlay hiding the panel: the
+            // exact frame class the gate exists for, because its gain boxes read pure noise.
+            for (name in allFixtures.filterNot { it in panelFixtures }) {
+                assertFalse(grandConcertPerformancePanelPresent(sampler(name)), "$name should NOT read as the panel")
+            }
         }
 
         @Test
@@ -310,7 +356,14 @@ class GrandConcertProbeFixtureTest {
                     GrandConcertTrainingGeometry.FAILURE_OCR_REGION,
                     GrandConcertTrainingGeometry.SELECTED_FACILITY_BANNER_OCR_REGION,
                     GrandConcertHypeGauge.TITLE_OCR_REGION,
-                ) + (0..4).flatMap { listOf(GrandConcertTrainingGeometry.perfBalanceOcrRegion(it), GrandConcertTrainingGeometry.perfMorePillOcrRegion(it)) }
+                ) +
+                    (0..4).flatMap {
+                        listOf(
+                            GrandConcertTrainingGeometry.perfBalanceOcrRegion(it),
+                            GrandConcertTrainingGeometry.perfMorePillOcrRegion(it),
+                            GrandConcertTrainingGeometry.perfGainAmountOcrRegion(it),
+                        )
+                    }
             for (r in regions) {
                 assertTrue(r[0] >= 0 && r[1] >= 0, r.joinToString())
                 assertTrue(r[0] + r[2] <= 1080, "width overflow: ${r.joinToString()}")

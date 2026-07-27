@@ -273,6 +273,39 @@ class GrandConcertScenarioTest {
         }
 
         /**
+         * The point-income training bias only works if all three wiring points survive: the
+         * per-facility panel read inside the analysis loop, the context handoff from the campaign
+         * into the scoring config, and the multiplier inside the raw-score pipeline. Each is a
+         * single line a refactor could drop without any compile error changing behavior for the
+         * other scenarios, so they are pinned here.
+         */
+        @Test
+        fun `the training loop reads the point panel and the scorer consumes the campaign context`() {
+            val training = source("bot/Training.kt")
+            assertTrue(
+                training.contains("gcTrainingReader.readFacilityPanel(sourceBitmap)"),
+                "the per-facility panel read left the analysis loop",
+            )
+            assertTrue(
+                training.contains("campaign.grandConcertPointContext(gcTurnBalances)"),
+                "recommendTraining no longer asks the campaign for the point context",
+            )
+            assertTrue(
+                training.contains("totalScore *= calculateGrandConcertPointMultiplier(config, training)"),
+                "the point multiplier left the raw-score pipeline",
+            )
+            val campaign = source("bot/campaigns/GrandConcert.kt")
+            assertTrue(
+                campaign.contains("override fun grandConcertPointContext"),
+                "GrandConcert no longer overrides the point-context hook",
+            )
+            assertTrue(
+                campaign.contains("rememberSongTarget(it)"),
+                "the settled list read no longer refreshes the point-steering song target",
+            )
+        }
+
+        /**
          * The queue and rotation gates were removed once the scenario stopped needing a supervisor:
          * careers play the Lesson shop, all five concerts, the career-end sequence and the spark
          * selection unattended, and the navigator pages the carousel to Grand Concert like any other

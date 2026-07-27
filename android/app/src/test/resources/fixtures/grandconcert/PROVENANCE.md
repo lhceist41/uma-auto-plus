@@ -161,6 +161,25 @@ header alone, and two career-end drains aborted with "the list did not open" whi
 performance points expired. It pins the dim-tier card-kind thresholds and the any-card presence
 rule, and proves dim = unaffordable / bright = Learnable stays readable on this layout.
 
+## Eighth capture set: training-screen Performance panel (2026-07-27, telemetry corpus)
+
+Cut from the `gc_train_*` frames the dev-only `GrandConcertTelemetry.captureTrainingFacility`
+instrumentation saved during the 2026-07-27 rotation careers (Sakura Bakushin O endgame and the
+Super Creek run), pulled off-device and channel-swapped into the fixture orientation like every
+other bot-saved frame. These calibrate the training-screen point reader that feeds the
+point-income training bias.
+
+| Fixture | Original file | Screen |
+|---|---|---|
+| training_panel_vi_gain.png | on-device `files/temp/gc_train_0199_GUTS.png` (R/B-swapped) | Guts training selected on a bright beach backdrop, "+23" beside the Vi row, balances Da 13 / Pa 66 / Vo 14 / Vi 7 / Co 36 with /300 caps (two concerts passed). The "+N" fill here samples on the RED half of the glyph's gold-to-red gradient: the launch-night single-hue detector missed exactly this frame class. |
+| training_panel_rainbow.png | on-device `files/temp/gc_train_0004_GUTS.png` (R/B-swapped) | Guts friendship training granting two types at once: gain glyphs beside BOTH the Da and Vi rows. Pins the two-row split-gain case. |
+| training_panel_hidden.png | on-device `files/temp/gc_train_0050_WIT.png` (R/B-swapped) | A mid-loop capture with an overlay hiding the panel entirely. Pins that the panel presence gate refuses the frame, because its gain boxes read pure noise. |
+
+Together with training_guts_before.png (whose trainee's red jacket floods the Vi row's gain box
+with warm pixels), these four pin the gain-row detector's two-factor rule: warm gradient fill
+AND the glyph's thick white outline, at most two rows. Measured separation: art tops out at 37
+white samples, the faintest real glyph reads 115+.
+
 ## Screens still needed before further automation
 
 1. The lesson list immediately after a successful LEARN (the refresh; we have only after-schedule)

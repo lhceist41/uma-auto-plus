@@ -1624,4 +1624,80 @@ class TrainingScoringTest {
             assertEquals(1200, getScenarioStatCap("Unknown", stat), "Fallback cap for $stat")
         }
     }
+
+    // ---- Grand Concert point-income multiplier ----
+
+    private fun gcContext(
+        balances: Map<PerformancePointType, Int?> = PerformancePointType.entries.associateWith { 40 },
+        caps: Map<PerformancePointType, Int> = PerformancePointType.entries.associateWith { 300 },
+        deficit: Map<PerformancePointType, Int> = mapOf(PerformancePointType.VOCAL to 30),
+        songsBoughtThisCycle: Int = 1,
+        purchasedFloor: Int = 3,
+        turnsUntilConcert: Int? = 7,
+    ) = GrandConcertPointContext(balances, caps, deficit, songsBoughtThisCycle, purchasedFloor, turnsUntilConcert)
+
+    private fun gcTraining(gains: Map<PerformancePointType, Int?>) = createDefaultTrainingOption().copy(performanceGains = gains)
+
+    @Test
+    @DisplayName("GC point multiplier is 1.0 without a context, at the song floor, and for a no-gain option")
+    fun testGrandConcertPointMultiplierDisarmed() {
+        val training = gcTraining(mapOf(PerformancePointType.VOCAL to 20))
+        // No context at all (every non-GC scenario).
+        assertEquals(1.0, Training.calculateGrandConcertPointMultiplier(createDefaultConfig(), training))
+        // Cycle already at its floor: nothing to chase.
+        val atFloor = createDefaultConfig().copy(grandConcertPoints = gcContext(songsBoughtThisCycle = 3))
+        assertEquals(1.0, Training.calculateGrandConcertPointMultiplier(atFloor, training))
+        // No concert left (career tail): the deficit is moot.
+        val noConcert = createDefaultConfig().copy(grandConcertPoints = gcContext(turnsUntilConcert = null))
+        assertEquals(1.0, Training.calculateGrandConcertPointMultiplier(noConcert, training))
+        // Armed context but a facility with no read gains.
+        val armed = createDefaultConfig().copy(grandConcertPoints = gcContext())
+        assertEquals(1.0, Training.calculateGrandConcertPointMultiplier(armed, gcTraining(emptyMap())))
+    }
+
+    @Test
+    @DisplayName("GC point multiplier scales with the effective points fed into the deficit")
+    fun testGrandConcertPointMultiplierScaling() {
+        val config = createDefaultConfig().copy(grandConcertPoints = gcContext())
+        // 10 points into a 30-point Vocal deficit: 1.0 + 0.04 x 10 = 1.4.
+        assertEquals(1.4, Training.calculateGrandConcertPointMultiplier(config, gcTraining(mapOf(PerformancePointType.VOCAL to 10))), 1e-9)
+        // A type the deficit does not mention contributes nothing (unknown need never biases).
+        assertEquals(1.0, Training.calculateGrandConcertPointMultiplier(config, gcTraining(mapOf(PerformancePointType.DANCE to 25))))
+        // An unreadable amount falls back to the conservative assumed gain (12): 1.0 + 0.48.
+        assertEquals(1.48, Training.calculateGrandConcertPointMultiplier(config, gcTraining(mapOf(PerformancePointType.VOCAL to null))), 1e-9)
+    }
+
+    @Test
+    @DisplayName("GC point multiplier clamps to the deficit, the cap headroom, and the global ceiling")
+    fun testGrandConcertPointMultiplierClamps() {
+        // Deficit clamp: 20 previewed but only 5 still needed -> 1.2.
+        val smallNeed = createDefaultConfig().copy(grandConcertPoints = gcContext(deficit = mapOf(PerformancePointType.VOCAL to 5)))
+        assertEquals(1.2, Training.calculateGrandConcertPointMultiplier(smallNeed, gcTraining(mapOf(PerformancePointType.VOCAL to 20))), 1e-9)
+        // Headroom clamp: balance 295 of cap 300 means a +20 preview is worth 5 (overflow is lost).
+        val nearCap =
+            createDefaultConfig().copy(
+                grandConcertPoints =
+                    gcContext(
+                        balances = PerformancePointType.entries.associateWith { if (it == PerformancePointType.VOCAL) 295 else 40 },
+                    ),
+            )
+        assertEquals(1.2, Training.calculateGrandConcertPointMultiplier(nearCap, gcTraining(mapOf(PerformancePointType.VOCAL to 20))), 1e-9)
+        // Ceiling: a rainbow feeding two large deficits caps at 1.0 + 0.6.
+        val twoDeficits =
+            createDefaultConfig().copy(
+                grandConcertPoints = gcContext(deficit = mapOf(PerformancePointType.VOCAL to 40, PerformancePointType.DANCE to 40)),
+            )
+        val rainbowGains = gcTraining(mapOf(PerformancePointType.VOCAL to 20, PerformancePointType.DANCE to 20))
+        assertEquals(1.6, Training.calculateGrandConcertPointMultiplier(twoDeficits, rainbowGains), 1e-9)
+    }
+
+    @Test
+    @DisplayName("GC point multiplier composes into the raw training score")
+    fun testGrandConcertPointMultiplierComposes() {
+        val training = gcTraining(mapOf(PerformancePointType.VOCAL to 10))
+        val without = calculateRawTrainingScore(createDefaultConfig(), training)
+        val with = calculateRawTrainingScore(createDefaultConfig().copy(grandConcertPoints = gcContext()), training)
+        assertTrue(without > 0.0)
+        assertEquals(without * 1.4, with, 1e-6)
+    }
 }

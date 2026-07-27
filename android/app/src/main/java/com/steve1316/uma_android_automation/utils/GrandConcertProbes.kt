@@ -468,10 +468,35 @@ object GrandConcertTrainingGeometry {
      * row order against the tab colour). */
     const val PERF_TAB_X = 48
 
-    /** The column just right of the balance number where a selected training's "+N" gain is
-     * drawn in gold. Sampled across this x-band at each row's y. */
-    const val PERF_GAIN_X_START = 205
-    const val PERF_GAIN_X_END = 285
+    /** The full box a "+N" gain glyph occupies relative to its row's y. The glyph is a warm
+     * gradient (gold at the top fading to red-orange at the bottom) and its baseline floats up
+     * to ~45 px above the row line (measured across the 2026-07-27 telemetry corpus: 0008_POWER
+     * put the whole glyph at rowY-41..rowY+13), so a single-line scan at the row y grazes the
+     * faded edge and misses. The box is scanned per-pixel instead. */
+    const val PERF_GAIN_BOX_X_START = 195
+    const val PERF_GAIN_BOX_X_END = 335
+    const val PERF_GAIN_BOX_Y_ABOVE = 45
+    const val PERF_GAIN_BOX_Y_BELOW = 25
+
+    /** Minimum warm-pixel samples (stride 2) for a row box to count as carrying a gain glyph.
+     * Corpus calibration over 1150 row boxes: the smallest real one-digit glyph measures 81+,
+     * so 90 keeps every observed glyph. Warm alone is NOT sufficient - see the white floor. */
+    const val PERF_GAIN_MIN_WARM_SAMPLES = 90
+
+    /** Minimum white-outline samples that must accompany the warm fill. Warm background art can
+     * flood a row box (the launch fixture's trainee wears a red jacket right of the panel: warm
+     * 164 on a row with no gain; Bakushin's stage art reads warm 315), but art has no thick
+     * white outline: measured art tops out at 37 white samples while the faintest real glyph
+     * reads 115+, so 100 sits in a 3x gap. */
+    const val PERF_GAIN_MIN_WHITE_SAMPLES = 100
+
+    /** Pink "Performance Points" header band centre, flat (183, 155, 249) on every capture. */
+    const val PANEL_HEADER_X = 105
+    const val PANEL_HEADER_Y = 492
+
+    /** The coloured type chips on the panel's left edge, top to bottom Da/Pa/Vo/Vi/Co. Measured
+     * pixel-identical across launch-night and 2026-07-27 telemetry frames. */
+    val PANEL_CHIP_YS = listOf(580, 676, 772, 868, 964)
 
     /** The five facility buttons' per-turn type-icon centres (the small coloured hex badge on the
      * upper-left of each button). The SELECTED facility hides its badge behind the training's
@@ -498,6 +523,10 @@ object GrandConcertTrainingGeometry {
     fun perfBalanceOcrRegion(rowIndex: Int): IntArray = intArrayOf(80, PERF_ROW_YS[rowIndex] - 34, 120, 62)
 
     fun perfMorePillOcrRegion(rowIndex: Int): IntArray = intArrayOf(70, PERF_ROW_YS[rowIndex] - 72, 130, 40)
+
+    /** OCR band for the floating "+N" gain amount beside row [rowIndex], sized to the measured
+     * glyph box (see [PERF_GAIN_BOX_Y_ABOVE]). */
+    fun perfGainAmountOcrRegion(rowIndex: Int): IntArray = intArrayOf(185, PERF_ROW_YS[rowIndex] - 48, 165, 78)
 }
 
 /** A facility slot, kept probe-local so the Android-free probe layer does not depend on the
@@ -514,30 +543,82 @@ fun grandConcertTrainingFailurePillPresent(sampler: SparkPixelSampler): Boolean 
     return isFailurePillBlue(r, g, b)
 }
 
-/** Gold "+N" gain-annotation text, measured (254, 198, 114) / (237, 171, 40): red high, green
- * mid-high, blue low. */
-private fun isGainGold(r: Int, g: Int, b: Int): Boolean = r >= 230 && g in 150..225 && b <= 170 && r - b >= 70
+/** A "+N" gain-glyph fill pixel. The glyph is a warm vertical gradient, gold (253, 198, 117) at
+ * the top fading to red-orange (240, 113, 80) at the bottom, so the test spans the whole warm
+ * family; the white outline (g > 235) and the blue-leaning art behind the panel both fail it.
+ * The original launch-night calibration only saw the gold mid-band and silently missed glyphs
+ * sampled on their red half - measured 2026-07-27 when the telemetry corpus read zero gains on
+ * frames whose "+N" was plainly visible. */
+private fun isGainWarm(r: Int, g: Int, b: Int): Boolean = r >= 225 && b <= 175 && r - b >= 60 && g <= 235
 
 /**
- * The Performance Points rows that carry a gold "+N" gain annotation, i.e. the type(s) the
- * currently selected training grants this turn. Normally one row (single type); two when
- * friendship training splits the gain. Read from the screen precisely because the mapping is not
- * fixed to the facility.
+ * The Performance Points rows that carry a "+N" gain annotation, i.e. the type(s) the currently
+ * selected training grants this turn. Normally one row (single type); two when friendship
+ * training splits the gain. Read from the screen precisely because the mapping is not fixed to
+ * the facility.
+ *
+ * Detection is a per-pixel count over each row's measured glyph box (the glyph floats above the
+ * row line and grades gold to red, so a single-line single-hue scan misses; see
+ * [GrandConcertTrainingGeometry.PERF_GAIN_BOX_Y_ABOVE]) and a row must show BOTH the warm fill
+ * and the glyph's thick white outline - warm background art (a red jacket, stage lighting) has
+ * no outline and is rejected by the white floor. At most two rows are returned, best counts
+ * first, because a training never grants more than two types; any third candidate is art noise
+ * by construction.
  */
 fun selectedTrainingPerformanceRows(sampler: SparkPixelSampler): List<Int> {
-    val rows = mutableListOf<Int>()
+    val counted = mutableListOf<Pair<Int, Int>>()
     for (i in GrandConcertTrainingGeometry.PERF_ROW_YS.indices) {
         val y = GrandConcertTrainingGeometry.PERF_ROW_YS[i]
-        var hits = 0
-        var x = GrandConcertTrainingGeometry.PERF_GAIN_X_START
-        while (x <= GrandConcertTrainingGeometry.PERF_GAIN_X_END) {
-            val (r, g, b) = mean(sampler, x, y)
-            if (isGainGold(r, g, b)) hits++
-            x += 4
+        var warm = 0
+        var white = 0
+        var oy = y - GrandConcertTrainingGeometry.PERF_GAIN_BOX_Y_ABOVE
+        while (oy <= y + GrandConcertTrainingGeometry.PERF_GAIN_BOX_Y_BELOW) {
+            var ox = GrandConcertTrainingGeometry.PERF_GAIN_BOX_X_START
+            while (ox <= GrandConcertTrainingGeometry.PERF_GAIN_BOX_X_END) {
+                val p = sampler.argb(ox, oy)
+                val r = (p shr 16) and 0xFF
+                val g = (p shr 8) and 0xFF
+                val b = p and 0xFF
+                if (isGainWarm(r, g, b)) {
+                    warm++
+                } else if (r >= 236 && g >= 236 && b >= 231) {
+                    white++
+                }
+                ox += 2
+            }
+            oy += 2
         }
-        if (hits >= 2) rows.add(i)
+        if (warm >= GrandConcertTrainingGeometry.PERF_GAIN_MIN_WARM_SAMPLES &&
+            white >= GrandConcertTrainingGeometry.PERF_GAIN_MIN_WHITE_SAMPLES
+        ) {
+            counted.add(i to warm)
+        }
     }
-    return rows
+    return counted.sortedByDescending { it.second }.take(2).map { it.first }.sorted()
+}
+
+/** True when the training screen's Performance Points panel is on screen: the pink header band
+ * plus at least four of the five coloured type chips on the panel's left edge (one chip may be
+ * grazed by a floating overlay without invalidating the panel). This is the structural gate for
+ * every panel read; the Failure-pill probe is NOT suitable because the pill follows the selected
+ * facility across the screen. */
+fun grandConcertPerformancePanelPresent(sampler: SparkPixelSampler): Boolean {
+    val (hr, hg, hb) = mean(sampler, GrandConcertTrainingGeometry.PANEL_HEADER_X, GrandConcertTrainingGeometry.PANEL_HEADER_Y)
+    if (!(hr in 160..210 && hg in 130..180 && hb >= 225)) return false
+    val checks =
+        listOf<(Int, Int, Int) -> Boolean>(
+            { r, g, b -> b >= 210 && g in 150..210 && r <= 110 },
+            { r, g, b -> r >= 225 && g <= 120 && b in 80..140 },
+            { r, g, b -> r >= 225 && g in 105..165 && b in 160..220 },
+            { r, g, b -> r >= 220 && g in 160..215 && b in 90..150 },
+            { r, g, b -> r in 135..195 && g <= 150 && b >= 220 },
+        )
+    var ok = 0
+    for (i in 0..4) {
+        val (r, g, b) = mean(sampler, GrandConcertTrainingGeometry.PERF_TAB_X - 2, GrandConcertTrainingGeometry.PANEL_CHIP_YS[i])
+        if (checks[i](r, g, b)) ok++
+    }
+    return ok >= 4
 }
 
 /** The performance type(s) the selected training grants this turn, mapped from the annotated

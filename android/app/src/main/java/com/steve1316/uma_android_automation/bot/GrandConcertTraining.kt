@@ -100,6 +100,37 @@ data class GrandConcertScenarioState(
     fun stat(stat: StatName): Int? = stats[stat]
 }
 
+/**
+ * Everything the training scorer needs to steer point income toward the next song, assembled by
+ * the campaign at recommendation time (see Campaign.grandConcertPointContext). [deficit] is the
+ * per-type shortfall between the cheapest unscheduled song the shop last offered and the balances
+ * read off the training screen this turn; a type absent from the map has no known need (unread
+ * cost or no song target yet), which the scorer treats as "no bias" rather than guessing. [caps]
+ * is computed (200 base, +50 per completed concert, research-confirmed on any success tier),
+ * never OCR'd. The bias is armed only while [behindPace]: point income above a cap is lost, so
+ * the effective value of a gain is clamped to both the deficit and the cap headroom.
+ */
+data class GrandConcertPointContext(
+    val balances: Map<PerformancePointType, Int?>,
+    val caps: Map<PerformancePointType, Int>,
+    val deficit: Map<PerformancePointType, Int>,
+    val songsBoughtThisCycle: Int,
+    val purchasedFloor: Int,
+    val turnsUntilConcert: Int?,
+    val songTargetTitle: String? = null,
+) {
+    /** True while this cycle still owes songs to the Great Success floor and a concert remains. */
+    val behindPace: Boolean get() = turnsUntilConcert != null && songsBoughtThisCycle < purchasedFloor
+
+    /** Room left under [type]'s cap, or null when the balance was unreadable (never guess
+     * headroom against an unread balance). */
+    fun headroom(type: PerformancePointType): Int? {
+        val balance = balances[type] ?: return null
+        val cap = caps[type] ?: return null
+        return (cap - balance).coerceAtLeast(0)
+    }
+}
+
 /** One stat's post-turn behavior relative to what the preview promised. */
 data class StatDelta(
     val stat: StatName,
