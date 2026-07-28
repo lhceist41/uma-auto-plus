@@ -109,8 +109,17 @@ class GrandConcert(game: Game) : Campaign(game) {
     /** The concert boundary [songsBoughtThisCycle] was last reset at, from [CONCERT_TURNS]. */
     private var lastConcertBoundary = 0
 
-    /** Set after a failed concert escort so the retry is a handoff, never a loop. */
-    private var concertEscortFailed = false
+    /**
+     * Escort attempts spent on the concert currently pending, reset once one succeeds.
+     *
+     * This used to be a one-shot boolean, so a single unrecognised frame ended the run AND the
+     * whole queue: the game has one career slot, so a preserved career blocks every later run
+     * (2026-07-26 23:45, 6h21m dead with 2 runs unplayed). A give-up here is a recognition miss,
+     * not a timeout - successful concerts finish in 28-37s against a budget of about 100s - so the
+     * screen is usually driveable a moment later. Re-entering costs a few minutes and cannot
+     * corrupt anything: the escort only ever taps screens it has positively identified.
+     */
+    private var concertEscortAttempts = 0
 
     /** The cheapest unscheduled song the shop last offered with a fully readable cost, remembered
      * across turns so the training scorer can steer point income toward its per-type deficit.
@@ -191,19 +200,40 @@ class GrandConcert(game: Game) : Campaign(game) {
         // gated on a probe for the exact screen it belongs to, and any unrecognized state ends in
         // the same career-preserving handoff that used to fire immediately.
         if (grandConcertConcertPendingScreenPresent(sampler)) {
-            if (concertEscortFailed) {
-                val handoff = handOffToPlayer(GrandConcertHandoffReason.CONCERT_NOT_AUTOMATED, "the concert escort already failed once this run; finish it manually")
-                throw CampaignBreakpointException(handoff.playerMessage())
+            concertEscortAttempts++
+            MessageLog.i(
+                TAG,
+                "[GRAND_CONCERT] [CONCERT] Concert-pending screen detected; running the concert escort " +
+                    "(attempt $concertEscortAttempts of $MAX_CONCERT_ESCORT_ATTEMPTS).",
+            )
+            if (runConcertEscort()) {
+                concertEscortAttempts = 0
+                return true
             }
-            MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Concert-pending screen detected; running the concert escort.")
-            if (!runConcertEscort()) {
-                concertEscortFailed = true
-                val handoff = handOffToPlayer(GrandConcertHandoffReason.CONCERT_NOT_AUTOMATED, "the concert flow reached a screen the escort does not know; finish it manually")
-                throw CampaignBreakpointException(handoff.playerMessage())
+            if (concertEscortAttempts < MAX_CONCERT_ESCORT_ATTEMPTS) {
+                // Returning true hands the turn back to the main loop, which re-detects the pending
+                // screen and calls the escort again with a fresh capture. Nothing is tapped on the
+                // way out, so the career is exactly where it was.
+                MessageLog.w(
+                    TAG,
+                    "[GRAND_CONCERT] [CONCERT] Escort attempt $concertEscortAttempts did not finish the concert. " +
+                        "Settling ${CONCERT_ESCORT_RETRY_WAIT}s and re-entering; the career is untouched.",
+                )
+                game.wait(CONCERT_ESCORT_RETRY_WAIT)
+                return true
             }
-            return true
+            val handoff =
+                handOffToPlayer(
+                    GrandConcertHandoffReason.CONCERT_NOT_AUTOMATED,
+                    "the concert flow reached a screen the escort does not know after $concertEscortAttempts attempts; finish it manually",
+                )
+            throw CampaignBreakpointException(handoff.playerMessage())
         }
 
+        // No concert pending: whatever the escort was struggling with is off screen (the main loop
+        // or its unknown-screen ladder owns it now), so the next concert starts with a full budget
+        // rather than inheriting a spent attempt from this one.
+        concertEscortAttempts = 0
         return false
     }
 
@@ -897,6 +927,16 @@ class GrandConcert(game: Game) : Campaign(game) {
 
         /** Escort loop budget: playback plus a handful of result screens fits well inside this. */
         private const val MAX_ESCORT_TICKS = 40
+
+        /**
+         * Escort re-entries allowed for one pending concert before handing the career to the player.
+         * Three attempts cost a few minutes at worst; the alternative measured in production was a
+         * queue dead for hours, because a preserved career blocks the game's single career slot.
+         */
+        private const val MAX_CONCERT_ESCORT_ATTEMPTS = 3
+
+        /** Settle time between escort attempts, so a mid-animation frame is not re-read instantly. */
+        private const val CONCERT_ESCORT_RETRY_WAIT = 3.0
 
         /** Convenience for callers that only have the raw settings string. */
         fun isGrandConcert(scenario: String?): Boolean = GrandConcertScenario.matches(scenario)

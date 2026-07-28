@@ -23,6 +23,7 @@ import com.steve1316.automation_library.events.JSEvent
 import com.steve1316.automation_library.events.StartEvent
 import com.steve1316.automation_library.utils.BatteryOptimizationUtils
 import com.steve1316.automation_library.utils.BotService
+import com.steve1316.automation_library.utils.DiscordUtils
 import com.steve1316.automation_library.utils.MediaProjectionService
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
@@ -1142,6 +1143,29 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     }
 
     /**
+     * Pushes an out-of-band alert when the queue halts with runs still owed.
+     *
+     * An unattended queue that stops is only expensive because nobody finds out: the 2026-07-26
+     * halt cost 6h21m and two careers, and every minute of that was waiting for a human. Discord is
+     * the one channel this app can reach on its own (the foreground notification belongs to the
+     * foundation library), and the other breakpoints already use it, so a halt should too. It is
+     * opt-in and best-effort: a failure here must never mask the halt itself, which is already on
+     * the log above this call.
+     */
+    private fun notifyQueueHalted(completedRuns: Int, totalRuns: Int, unrun: Int, reason: String) {
+        if (!DiscordUtils.enableDiscordNotifications) return
+        try {
+            DiscordUtils.queue.add(
+                "```diff\n- ${MessageLog.getSystemTimeString()} QUEUE HALTED after $completedRuns of $totalRuns runs " +
+                    "($unrun not started).\n- Reason: $reason\n- The career slot is occupied; no further run can start until " +
+                    "this is handled in-game.\n```",
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "[ERROR] notifyQueueHalted:: Could not queue the Discord alert: ${e.message}")
+        }
+    }
+
+    /**
      * Runs a single Game instance on a background thread and returns its TaskResult.
      *
      * @return The TaskResult from Game.start(), or an Error result if an exception occurred.
@@ -1595,6 +1619,14 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     }
                 }
 
+                // Non-null once the queue exits for a reason the user did not ask for. The post-loop
+                // block used to log "Queue finished" and emit queueComplete no matter how the loop
+                // ended, so a queue abandoned mid-way reported success: the 2026-07-26 breakpoint
+                // logged "Queue finished. Completed 2 of 4 runs" at 23:45 and nothing said otherwise
+                // for the next 6h21m. The navigation-failure paths were equally misreported - they
+                // emit queueFailed and then the post-loop queueComplete immediately overwrote it.
+                var queueHaltReason: String? = null
+
                 for (i in startFromRun..totalRuns) {
                     // Check stop flag before starting each run.
                     if (queueStopRequested || !BotService.isRunning) {
@@ -1701,10 +1733,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         }
                         TaskResultCode.TASK_RESULT_BREAKPOINT_REACHED -> {
                             completedRuns++
-                            // Breakpoints stop the queue. The user set them for a reason.
+                            // Breakpoints stop the queue, and that part is not negotiable: the game
+                            // has a single career slot, so the preserved career blocks every later
+                            // run whether the breakpoint was user-set (skill-point threshold, a
+                            // mandatory race) or a screen the bot could not drive. What this must
+                            // NOT do is stop quietly - see queueHaltReason.
                             if (enableRunQueue) {
-                                MessageLog.i(TAG, "[QUEUE] Run $i hit a breakpoint. Stopping queue.")
+                                MessageLog.e(TAG, "[QUEUE] Run $i hit a breakpoint. Stopping queue: ${effectiveResult.message}")
                             }
+                            queueHaltReason = "run $i hit a breakpoint: ${effectiveResult.message}"
                             break
                         }
                         else -> {
@@ -1716,10 +1753,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 // foreign screen, which can only fail - so pause regardless of stopOnError
                                 // and leave the game where it is for the user to look at.
                                 MessageLog.e(TAG, "[QUEUE] Run $i stopped because the game could not be recovered. Pausing the queue instead of starting the next run on a dead or foreign screen.")
+                                queueHaltReason = "run $i stopped because the game could not be recovered"
                                 break
                             }
                             if (stopOnError) {
                                 MessageLog.e(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Stopping queue (stopOnError=true).")
+                                queueHaltReason = "run $i ended with ${effectiveResult.code} and stopOnError is on"
                                 break
                             } else {
                                 MessageLog.w(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Continuing queue (stopOnError=false).")
@@ -1776,6 +1815,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         val nextReuse = applyRotationForRun(rotation, i + 1, reuseLastLaunchSetup)
                         if (nextReuse == null) {
                             sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, "Missing rotation snapshot for the next trainee.")
+                            queueHaltReason = "missing rotation snapshot for the trainee after run $i"
                             break
                         }
 
@@ -1810,6 +1850,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 // reports the ending.
                                 if (navResult.lastDetectedState != "STOPPED") {
                                     sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, navResult.failureReason)
+                                    // Includes the finalize gate refusing to press Finish on unspent
+                                    // skill points, which is the protection working: halt, never
+                                    // auto-continue, and now say so instead of reporting completion.
+                                    queueHaltReason = "between-run navigation failed after run $i: ${navResult.failureReason}"
                                 }
                                 break
                             }
@@ -1827,12 +1871,32 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 }
 
                 if (enableRunQueue) {
-                    // Clear persisted queue state since queue finished normally.
-                    clearQueueState(context)
-                    sendQueueProgressEvent(totalRuns, totalRuns, "queueComplete", message = "Completed $completedRuns of $totalRuns runs.")
-                    MessageLog.i(TAG, "\n[QUEUE] ========================================")
-                    MessageLog.i(TAG, "[QUEUE] Queue finished. Completed $completedRuns of $totalRuns runs.")
-                    MessageLog.i(TAG, "[QUEUE] ========================================\n")
+                    val halt = queueHaltReason
+                    if (halt != null) {
+                        // Do NOT clear the persisted queue state: the queue did not finish, and the
+                        // remaining runs are still owed. The career occupying the game's one slot has
+                        // to be dealt with by hand before any of them can start.
+                        val unrun = totalRuns - completedRuns
+                        sendQueueProgressEvent(
+                            completedRuns,
+                            totalRuns,
+                            "queueFailed",
+                            message = "Halted after $completedRuns of $totalRuns runs: $halt",
+                        )
+                        MessageLog.e(TAG, "\n[QUEUE] ========================================")
+                        MessageLog.e(TAG, "[QUEUE] Queue HALTED after $completedRuns of $totalRuns runs ($unrun not started).")
+                        MessageLog.e(TAG, "[QUEUE] Reason: $halt")
+                        MessageLog.e(TAG, "[QUEUE] The career slot is occupied until this is handled in-game; no further run can start.")
+                        MessageLog.e(TAG, "[QUEUE] ========================================\n")
+                        notifyQueueHalted(completedRuns, totalRuns, unrun, halt)
+                    } else {
+                        // Clear persisted queue state since queue finished normally.
+                        clearQueueState(context)
+                        sendQueueProgressEvent(totalRuns, totalRuns, "queueComplete", message = "Completed $completedRuns of $totalRuns runs.")
+                        MessageLog.i(TAG, "\n[QUEUE] ========================================")
+                        MessageLog.i(TAG, "[QUEUE] Queue finished. Completed $completedRuns of $totalRuns runs.")
+                        MessageLog.i(TAG, "[QUEUE] ========================================\n")
+                    }
                 }
             } finally {
                 // Always release the wake lock and the session latch, even on exception or break paths.
