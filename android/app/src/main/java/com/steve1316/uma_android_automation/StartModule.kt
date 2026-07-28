@@ -1626,6 +1626,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // for the next 6h21m. The navigation-failure paths were equally misreported - they
                 // emit queueFailed and then the post-loop queueComplete immediately overwrote it.
                 var queueHaltReason: String? = null
+                // The run index the queue was on when it halted. completedRuns counts only THIS
+                // session, so after a resume it undercounts: the 2026-07-28 halt printed "after 1 of
+                // 4 runs (3 not started)" when runs 1 and 2 were both done and only 2 were owed.
+                var queueHaltRun = 0
+                // True when the halt leaves a career still occupying the game's single slot. A
+                // breakpoint does; a between-run navigation failure after a COMPLETED career does
+                // not, and telling the operator to go clear a slot that is already empty sends them
+                // looking for the wrong thing.
+                var queueHaltCareerInFlight = false
 
                 for (i in startFromRun..totalRuns) {
                     // Check stop flag before starting each run.
@@ -1742,6 +1751,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 MessageLog.e(TAG, "[QUEUE] Run $i hit a breakpoint. Stopping queue: ${effectiveResult.message}")
                             }
                             queueHaltReason = "run $i hit a breakpoint: ${effectiveResult.message}"
+                            queueHaltRun = i
+                            queueHaltCareerInFlight = true
                             break
                         }
                         else -> {
@@ -1754,11 +1765,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 // and leave the game where it is for the user to look at.
                                 MessageLog.e(TAG, "[QUEUE] Run $i stopped because the game could not be recovered. Pausing the queue instead of starting the next run on a dead or foreign screen.")
                                 queueHaltReason = "run $i stopped because the game could not be recovered"
+                                queueHaltRun = i
+                                queueHaltCareerInFlight = true
                                 break
                             }
                             if (stopOnError) {
                                 MessageLog.e(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Stopping queue (stopOnError=true).")
                                 queueHaltReason = "run $i ended with ${effectiveResult.code} and stopOnError is on"
+                                queueHaltRun = i
+                                queueHaltCareerInFlight = true
                                 break
                             } else {
                                 MessageLog.w(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Continuing queue (stopOnError=false).")
@@ -1816,6 +1831,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         if (nextReuse == null) {
                             sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, "Missing rotation snapshot for the next trainee.")
                             queueHaltReason = "missing rotation snapshot for the trainee after run $i"
+                            queueHaltRun = i
                             break
                         }
 
@@ -1854,6 +1870,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                     // skill points, which is the protection working: halt, never
                                     // auto-continue, and now say so instead of reporting completion.
                                     queueHaltReason = "between-run navigation failed after run $i: ${navResult.failureReason}"
+                                    queueHaltRun = i
                                 }
                                 break
                             }
@@ -1876,19 +1893,26 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         // Do NOT clear the persisted queue state: the queue did not finish, and the
                         // remaining runs are still owed. The career occupying the game's one slot has
                         // to be dealt with by hand before any of them can start.
-                        val unrun = totalRuns - completedRuns
+                        // Count from the halted run index, not this session's completions: runs
+                        // before startFromRun finished in an earlier session and are still done.
+                        val doneRuns = if (queueHaltRun > 0) queueHaltRun else completedRuns
+                        val unrun = (totalRuns - doneRuns).coerceAtLeast(0)
                         sendQueueProgressEvent(
-                            completedRuns,
+                            doneRuns,
                             totalRuns,
                             "queueFailed",
-                            message = "Halted after $completedRuns of $totalRuns runs: $halt",
+                            message = "Halted after $doneRuns of $totalRuns runs: $halt",
                         )
                         MessageLog.e(TAG, "\n[QUEUE] ========================================")
-                        MessageLog.e(TAG, "[QUEUE] Queue HALTED after $completedRuns of $totalRuns runs ($unrun not started).")
+                        MessageLog.e(TAG, "[QUEUE] Queue HALTED after $doneRuns of $totalRuns runs ($unrun not started).")
                         MessageLog.e(TAG, "[QUEUE] Reason: $halt")
-                        MessageLog.e(TAG, "[QUEUE] The career slot is occupied until this is handled in-game; no further run can start.")
+                        if (queueHaltCareerInFlight) {
+                            MessageLog.e(TAG, "[QUEUE] A career is still occupying the game's single slot; no further run can start until it is finished or abandoned in-game.")
+                        } else {
+                            MessageLog.e(TAG, "[QUEUE] The career itself completed; the game is parked on whatever screen navigation stopped at. Clear that screen, then restart to resume.")
+                        }
                         MessageLog.e(TAG, "[QUEUE] ========================================\n")
-                        notifyQueueHalted(completedRuns, totalRuns, unrun, halt)
+                        notifyQueueHalted(doneRuns, totalRuns, unrun, halt)
                     } else {
                         // Clear persisted queue state since queue finished normally.
                         clearQueueState(context)
