@@ -311,6 +311,78 @@ internal fun parseRemainingSkillPoints(text: String): Int? {
     return value.takeIf { it in 0..FINALIZE_SP_OCR_PLAUSIBLE_MAX }
 }
 
+/** Performance-point type codes on the Grand Concert Complete Career dialog, in screen order. */
+internal val GRAND_CONCERT_POINT_CODES: List<String> = listOf("da", "pa", "vo", "vi", "co")
+
+/** Plausibility ceiling for one performance-point balance. Same role as
+ * [FINALIZE_SP_OCR_PLAUSIBLE_MAX]: a digit-concatenation check, never an acceptance rule. */
+internal const val FINALIZE_PP_OCR_PLAUSIBLE_MAX = 9_999
+
+/** How many of the five type codes must be readable before the region counts as the performance
+ * table on structure alone. Three is far past anything a Skill Points dialog could produce by
+ * accident, and tolerates the label plus two codes being garbled. */
+internal const val FINALIZE_PP_MIN_TYPES = 3
+
+/**
+ * What the Complete Career dialog's balance region is actually showing.
+ *
+ * The region is scenario-dependent. Outside Grand Concert it carries a single
+ * "Remaining Skill Points: NNN pts" value. Inside Grand Concert the same band carries
+ * "Remaining Performance Points" with the five Da/Pa/Vo/Vi/Co balances and NO skill-point value
+ * at all, so there is nothing there to cross-check a skill-point balance against.
+ */
+internal sealed interface CompleteCareerBalances {
+    /** The non-scenario dialog: one skill-point balance, usable for corroboration. */
+    data class SkillPoints(val value: Int) : CompleteCareerBalances
+
+    /** The Grand Concert dialog: performance-point balances by type code. These are NEVER skill
+     * points and must never be substituted for one. */
+    data class PerformancePoints(val byType: Map<String, Int>) : CompleteCareerBalances
+
+    /** Neither shape could be read out of the region. */
+    data object Unreadable : CompleteCareerBalances
+}
+
+/** Shared normalization for the dialog's OCR text: casing, line breaks, and the l-for-i glyph
+ * confusion. The DIGIT 1 is deliberately left alone so numbers survive intact. */
+private fun normalizeFinalizeDialogText(text: String): String = text.lowercase().replace('\n', ' ').replace('l', 'i')
+
+/**
+ * Parse the Grand Concert "Remaining Performance Points" table into its per-type balances, or
+ * null when the region is not that table.
+ *
+ * Accepts the region on either the label or the structure, because either alone is already
+ * conclusive proof it is not a Skill Points dialog: the label phrase, or at least
+ * [FINALIZE_PP_MIN_TYPES] of the five type codes each followed by a number.
+ */
+internal fun parseRemainingPerformancePoints(text: String): Map<String, Int>? {
+    val norm = normalizeFinalizeDialogText(text)
+    val labelled = Regex("rema[i1]n[i1]ng\\s*performance\\s*po[i1]nts?").containsMatchIn(norm)
+    val found = LinkedHashMap<String, Int>()
+    for (code in GRAND_CONCERT_POINT_CODES) {
+        val match = Regex("\\b$code\\b\\s*([0-9]{1,5})").find(norm) ?: continue
+        val value = match.groupValues[1].toIntOrNull() ?: continue
+        if (value in 0..FINALIZE_PP_OCR_PLAUSIBLE_MAX) found[code] = value
+    }
+    if (!labelled && found.size < FINALIZE_PP_MIN_TYPES) return null
+    return found.takeIf { it.isNotEmpty() }
+}
+
+/**
+ * Classify what the Complete Career dialog's balance region is showing.
+ *
+ * Performance points are tested FIRST and deliberately so: the Grand Concert dialog's own
+ * warning line reads "You will lose any unused skill and performance points", so the word
+ * "skill" is present on a screen that carries no skill-point balance. Testing skill points
+ * first would let a future loosening of that pattern latch onto the wrong dialog and hand the
+ * caller a performance-point number dressed as a skill-point balance.
+ */
+internal fun classifyCompleteCareerBalances(text: String): CompleteCareerBalances {
+    parseRemainingPerformancePoints(text)?.let { return CompleteCareerBalances.PerformancePoints(it) }
+    parseRemainingSkillPoints(text)?.let { return CompleteCareerBalances.SkillPoints(it) }
+    return CompleteCareerBalances.Unreadable
+}
+
 /**
  * Whether the popup consistency check must block Finish: only when TWO readable popup values
  * both contradict the career-side verified balance (the same two-read rule the skill-point

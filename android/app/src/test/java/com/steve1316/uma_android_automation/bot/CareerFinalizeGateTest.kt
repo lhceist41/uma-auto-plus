@@ -326,6 +326,84 @@ class CareerFinalizeGateTest {
     }
 
     @Nested
+    @DisplayName("Complete Career balance region classification")
+    inner class BalanceRegionClassification {
+        /**
+         * The region exactly as it rendered on the Grand Concert Complete Career dialog of the
+         * 2026-07-28 Copano Rickey control career, transcribed from that career's own captured
+         * OCR crop (`debug_nav_complete_career_remaining_sp_cropped.png`). Note the third line:
+         * the screen says "skill" while carrying no skill-point balance whatsoever, which is the
+         * exact trap this classification exists to avoid.
+         */
+        private val grandConcertDialog =
+            "Remaining Performance Points\n" +
+                "Da 58 Pa 21 Vo 10 Vi 109 Co 22\n" +
+                "You will lose any unused skill and performance points."
+
+        @Test
+        fun `the real Grand Concert dialog is classified as performance points, never skill points`() {
+            val classified = classifyCompleteCareerBalances(grandConcertDialog)
+            assertTrue(classified is CompleteCareerBalances.PerformancePoints, "got $classified")
+            assertFalse(classified is CompleteCareerBalances.SkillPoints)
+        }
+
+        @Test
+        fun `every performance balance from the control career parses`() {
+            val parsed = parseRemainingPerformancePoints(grandConcertDialog)
+            assertEquals(mapOf("da" to 58, "pa" to 21, "vo" to 10, "vi" to 109, "co" to 22), parsed)
+        }
+
+        @Test
+        fun `the word skill in the loss warning cannot produce a skill point value`() {
+            // The failure this guards: any balance below being handed back as "remaining skill
+            // points" would be a category error, and 109 (Vi) is a plausible-looking balance.
+            assertNull(parseRemainingSkillPoints(grandConcertDialog), "the performance dialog carries no skill-point balance")
+        }
+
+        @Test
+        fun `structure alone classifies the table when the label is garbled`() {
+            // Label misread but the five type rows intact: still conclusively not a skill dialog.
+            val garbledLabel = "Remalnlng Performarce Polnts\nDa 58 Pa 21 Vo 10 Vi 109 Co 22"
+            val classified = classifyCompleteCareerBalances(garbledLabel)
+            assertTrue(classified is CompleteCareerBalances.PerformancePoints, "got $classified")
+        }
+
+        @Test
+        fun `the non-scenario skill point dialog is unchanged`() {
+            assertEquals(CompleteCareerBalances.SkillPoints(716), classifyCompleteCareerBalances("Remaining Skill Points: 716 pts"))
+            assertEquals(CompleteCareerBalances.SkillPoints(4), classifyCompleteCareerBalances("Complete the career?\nRemaining Skill Points: 4 pts\nCancel Finish"))
+            assertEquals(CompleteCareerBalances.SkillPoints(716), classifyCompleteCareerBalances("Remaining Skil1 Polnts: 716 pts"))
+        }
+
+        @Test
+        fun `a skill point dialog is never mistaken for the performance table`() {
+            assertNull(parseRemainingPerformancePoints("Remaining Skill Points: 716 pts"))
+            assertNull(parseRemainingPerformancePoints("Complete the career?\nRemaining Skill Points: 55 pts\nCancel Finish"))
+        }
+
+        @Test
+        fun `an unusable region reports Unreadable rather than inventing a balance`() {
+            assertEquals(CompleteCareerBalances.Unreadable, classifyCompleteCareerBalances(""))
+            assertEquals(CompleteCareerBalances.Unreadable, classifyCompleteCareerBalances("Complete the career?"))
+            assertEquals(CompleteCareerBalances.Unreadable, classifyCompleteCareerBalances("Fans: 280150\nCancel Finish"))
+        }
+
+        @Test
+        fun `one or two stray type codes are not enough to claim the performance table`() {
+            // Below FINALIZE_PP_MIN_TYPES with no label: refuse rather than half-read the region.
+            assertNull(parseRemainingPerformancePoints("Da 58"))
+            assertNull(parseRemainingPerformancePoints("Da 58 Pa 21"))
+        }
+
+        @Test
+        fun `an implausible performance balance is dropped rather than trusted`() {
+            // Digit concatenation, the same corruption FINALIZE_SP_OCR_PLAUSIBLE_MAX exists for.
+            val parsed = parseRemainingPerformancePoints("Remaining Performance Points\nDa 581234 Pa 21 Vo 10 Vi 109 Co 22")
+            assertEquals(mapOf("pa" to 21, "vo" to 10, "vi" to 109, "co" to 22), parsed, "the corrupt Da value is dropped, the rest still read")
+        }
+    }
+
+    @Nested
     @DisplayName("verdict scoping and lifecycle")
     inner class VerdictScoping {
         private fun verdict(token: String, armedAt: Long, approved: Boolean = true) =

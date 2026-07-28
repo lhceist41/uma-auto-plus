@@ -34,7 +34,8 @@ import com.steve1316.uma_android_automation.bot.SparkTxState
 import com.steve1316.uma_android_automation.bot.SparkWhiteClass
 import com.steve1316.uma_android_automation.bot.finalizeVerdictUsable
 import com.steve1316.uma_android_automation.bot.keepDialogVerdict
-import com.steve1316.uma_android_automation.bot.parseRemainingSkillPoints
+import com.steve1316.uma_android_automation.bot.CompleteCareerBalances
+import com.steve1316.uma_android_automation.bot.classifyCompleteCareerBalances
 import com.steve1316.uma_android_automation.bot.popupContradictsVerifiedBalance
 import com.steve1316.uma_android_automation.bot.SparkPagerAction
 import com.steve1316.uma_android_automation.bot.SparkPagerNav
@@ -1578,16 +1579,41 @@ class CareerLaunchNavigator(private val context: Context) {
         // ghosts). An unreadable line proceeds - the approved verdict already proves the
         // career-side evidence was complete, and this OCR region has not been through a live
         // career yet, so it corroborates but never overrules silently.
+        //
+        // The region is scenario-dependent. On Grand Concert it carries "Remaining Performance
+        // Points" with the Da/Pa/Vo/Vi/Co balances and no skill-point value at all, so there is
+        // nothing to cross-check against and the honest move is to say so and proceed on the
+        // verified balance. This read had failed on every recorded finalize dialog; the captured
+        // crop from the 2026-07-28 control career showed why, and it was never an OCR fault.
         usableFinalizeVerdict()?.let { verdict ->
-            val firstRead = readCompleteCareerRemainingSp()
-            if (firstRead == null) {
+            val balances = readCompleteCareerBalances()
+            val firstRead =
+                when (balances) {
+                    is CompleteCareerBalances.PerformancePoints -> {
+                        val shown = balances.byType.entries.joinToString(" ") { "${it.key.uppercase()}=${it.value}" }
+                        MessageLog.i(
+                            TAG,
+                            "[NAV] [FINALIZE] The Complete Career dialog shows Remaining Performance Points ($shown), not Skill Points, " +
+                                "so it carries no skill-point balance to cross-check. Skipping the popup consistency check and proceeding on " +
+                                "the verified balance of ${verdict.verifiedRemainingSp}.",
+                        )
+                        null
+                    }
+                    is CompleteCareerBalances.SkillPoints -> balances.value
+                    CompleteCareerBalances.Unreadable -> null
+                }
+            if (balances is CompleteCareerBalances.Unreadable) {
                 MessageLog.w(
                     TAG,
                     "[NAV] [FINALIZE] Could not read the Remaining Skill Points line on the Complete Career dialog. Proceeding on the verified balance of ${verdict.verifiedRemainingSp}.",
                 )
-            } else if (firstRead != verdict.verifiedRemainingSp) {
+            } else if (firstRead != null && firstRead != verdict.verifiedRemainingSp) {
                 MessageLog.w(TAG, "[NAV] [FINALIZE] Dialog reports $firstRead remaining skill points but the verification says ${verdict.verifiedRemainingSp}. Re-reading once...")
-                val secondRead = readCompleteCareerRemainingSp()
+                // Only a second SKILL-POINT read can corroborate a skill-point contradiction. A
+                // re-read that lands on the performance table (or fails) stays null, which
+                // popupContradictsVerifiedBalance treats as inconclusive, so Finish proceeds on
+                // the verified balance rather than blocking on a category error.
+                val secondRead = (readCompleteCareerBalances() as? CompleteCareerBalances.SkillPoints)?.value
                 if (popupContradictsVerifiedBalance(verdict.verifiedRemainingSp, firstRead, secondRead)) {
                     val reason =
                         "UNSPENT_SKILL_POINTS: the Complete Career dialog reports $firstRead/$secondRead remaining skill points " +
@@ -1620,14 +1646,15 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
-     * OCR the "Remaining Skill Points: NNN pts" line off the Complete Career confirmation
-     * dialog, or null when the line cannot be located or parsed. The band is anchored to the
-     * matched Finish button: the game renders the dialog at fixed size on the 1080-wide game
-     * surface, with the skill-point line in the text block directly above the button row.
+     * OCR the balance region off the Complete Career confirmation dialog and classify what it
+     * actually contains: a skill-point balance, the Grand Concert performance-point table, or
+     * nothing readable. The band is anchored to the matched Finish button: the game renders the
+     * dialog at fixed size on the 1080-wide game surface, with the balance block directly above
+     * the button row.
      */
-    private fun readCompleteCareerRemainingSp(): Int? {
+    private fun readCompleteCareerBalances(): CompleteCareerBalances {
         val (finishLocation, _) = ButtonFinish.find(iu)
-        if (finishLocation == null) return null
+        if (finishLocation == null) return CompleteCareerBalances.Unreadable
         val bitmap = iu.getSourceBitmap()
         val text =
             try {
@@ -1645,28 +1672,13 @@ class CareerLaunchNavigator(private val context: Context) {
             } catch (e: InterruptedException) {
                 throw e
             } catch (_: Exception) {
-                return null
+                return CompleteCareerBalances.Unreadable
             }
-        val parsed = parseRemainingSkillPoints(text)
-        if (parsed == null) {
-            // This read has failed 11 times out of 11 across every recorded finalize dialog, and
-            // there is still no image of what it is failing on, so the region has never been
-            // checkable. Capture it (debug builds only, same as every other saveFixture call) with
-            // the OCR text alongside, so the next failure arrives with its own evidence.
-            iu.saveFixture(
-                trigger = "nav_complete_career_remaining_sp_unreadable",
-                bitmap = bitmap,
-                sidecar =
-                    mapOf(
-                        "ocrText" to text,
-                        "regionX" to (bitmap.width * 0.08).toInt(),
-                        "regionY" to (finishLocation.y.toInt() - 330).coerceAtLeast(0),
-                        "regionW" to (bitmap.width * 0.84).toInt(),
-                        "regionH" to 260,
-                    ),
-            )
-        }
-        return parsed
+        // The unreadable-case saveFixture that used to sit here existed only to find out what
+        // this region was showing. The 2026-07-28 control career's own debug crop answered that
+        // (a Grand Concert performance-point table), so the capture is redundant; the
+        // performOCROnRegion debugName crop above still records the region every time.
+        return classifyCompleteCareerBalances(text)
     }
 
     /**
