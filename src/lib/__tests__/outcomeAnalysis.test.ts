@@ -7,6 +7,7 @@ import {
     dedupe,
     harvestLogText,
     isBotFault,
+    isFinalizeOnly,
     joinSparks,
     parseCorpus,
     parseJsonl,
@@ -32,6 +33,17 @@ const LEGACY_LINE = "05:08:39.225 [INFO] [CAREER_END] result=COMPLETE trainee=Go
 
 const STOPPED_LINE =
     '00:01:00.000 [INFO] [CAREER_END] result=MANUALLY_STOPPED outcome=INCOMPLETE trainee=Daiwa_Scarlet scenario=URA_Finale turn=1 fans=1 spd=1 sta=153 pwr=84 grt=175 wit=131 skillPts=120 stopReason="Stopped on trainee mismatch - restart from the home screen."'
+
+// Verbatim rows pulled from the on-device corpus (files/outcomes/careers.jsonl, indices 205-207).
+// One physical Copano Rickey career: the run that played it stopped at turn 75 with 997 skill
+// points unspent, then two later runs each started onto its leftover Complete Career screen and
+// finalized it again. The last two share fans=181609 spd=1248 pwr=1036 wit=663 and differ only by
+// OCR jitter and the points spent in between, which is why an exact-match dedup never caught them.
+const RESUMED_FINALIZE_CORPUS = [
+    '{"ts":1785077503058,"app":"1.3.8","fp":"6b3f5d6055","result":"BREAKPOINT_REACHED","outcome":"INCOMPLETE","trainee":"Copano_Rickey","scenario":"Grand_Concert","turn":75,"fans":94741,"spd":1239,"sta":372,"pwr":1020,"grt":436,"wit":621,"skillPts":997,"finaleRaces":0,"finaleWins":0,"quality":"INCOMPLETE","estRank":"A","estScore":11160,"cfg":{"statPrioritization":"Speed,Power,Stamina,Wit,Guts","preferredDistanceOverride":"Mile","maximumFailureChance":"15","focusOnSparkStatTarget":"Speed,Power","enableRainbowTrainingBonus":"false","enablePrioritizeNearMaxFriendship":"true","enableRiskyTraining":"false","moodFloor":"Good","enableFarmingFans":"false","daysToRunExtraRaces":"5","minFansThreshold":"0","enableRacingPlan":"false","enableMandatoryRacingPlan":"false","disableRaceRetries":"false","skillPointCheck":"1000","racingPlanDigest":"none"}}',
+    '{"ts":1785078984701,"app":"1.3.8","fp":"6b3f5d6055","result":"COMPLETE","outcome":"COMPLETED","trainee":"Copano_Rickey","scenario":"Grand_Concert","turn":1,"fans":181609,"spd":1248,"sta":388,"pwr":1036,"grt":452,"wit":663,"skillPts":98,"finaleRaces":0,"finaleWins":0,"quality":"COMPLETED","estRank":"A+","estScore":13352,"cfg":{"statPrioritization":"Speed,Power,Stamina,Wit,Guts","preferredDistanceOverride":"Mile","maximumFailureChance":"15","focusOnSparkStatTarget":"Speed,Power","enableRainbowTrainingBonus":"false","enablePrioritizeNearMaxFriendship":"true","enableRiskyTraining":"false","moodFloor":"Good","enableFarmingFans":"false","daysToRunExtraRaces":"5","minFansThreshold":"0","enableRacingPlan":"false","enableMandatoryRacingPlan":"false","disableRaceRetries":"false","skillPointCheck":"1000","racingPlanDigest":"none"}}',
+    '{"ts":1785084841558,"app":"1.3.8","fp":"6b3f5d6055","result":"COMPLETE","outcome":"COMPLETED","trainee":"Copano_Rickey","scenario":"Grand_Concert","turn":1,"fans":181609,"spd":1248,"sta":394,"pwr":1036,"grt":458,"wit":663,"skillPts":0,"finaleRaces":0,"finaleWins":0,"quality":"COMPLETED","estRank":"A+","estScore":13384,"cfg":{"statPrioritization":"Speed,Power,Stamina,Wit,Guts","preferredDistanceOverride":"Mile","maximumFailureChance":"15","focusOnSparkStatTarget":"Speed,Power","enableRainbowTrainingBonus":"false","enablePrioritizeNearMaxFriendship":"true","enableRiskyTraining":"false","moodFloor":"Good","enableFarmingFans":"false","daysToRunExtraRaces":"5","minFansThreshold":"0","enableRacingPlan":"false","enableMandatoryRacingPlan":"false","disableRaceRetries":"false","skillPointCheck":"1000","racingPlanDigest":"none"}}',
+].join("\n")
 
 function record(overrides: Partial<OutcomeRecord>): OutcomeRecord {
     return {
@@ -231,6 +243,44 @@ describe("dedupe", () => {
         expect(unique).toHaveLength(2)
         expect(unique).toContain(jsonl)
         expect(unique).toContain(olderLogRun)
+    })
+})
+
+describe("resumed-career finalize (real corpus rows)", () => {
+    it("resolves the three Copano Rickey rows to the one career that was actually played", () => {
+        const parsed = parseCorpus(RESUMED_FINALIZE_CORPUS, "careers.jsonl").outcomes
+        expect(parsed).toHaveLength(3)
+
+        // The two resumed finalizes are recognized; the played career is not.
+        expect(parsed.map(isFinalizeOnly)).toEqual([false, true, true])
+
+        const summaries = aggregate(dedupe(parsed))
+        expect(summaries).toHaveLength(1)
+        const arm = summaries[0]
+        expect(arm.trainee).toBe("Copano Rickey")
+        expect(arm.scenario).toBe("Grand Concert")
+        // One career counted, and it is the turn-75 run that stopped with 997 points unspent -
+        // NOT either of the A+ rows, which would otherwise have shown this arm completing two
+        // careers it never played.
+        expect(arm.n).toBe(1)
+        expect(arm.buckets).toEqual({ full: 0, late: 0, mid: 0, early: 0, incomplete: 1 })
+        expect(arm.fullRate).toBe(0)
+    })
+
+    it("keeps a genuinely early manual stop, which is INCOMPLETE rather than COMPLETED", () => {
+        const stopped = parseLedgerLine(STOPPED_LINE)
+        expect(stopped!.turn).toBe(1)
+        expect(isFinalizeOnly(stopped!)).toBe(false)
+    })
+
+    it("reads an unobserved turn as null on both the ledger and the corpus path", () => {
+        const ledger = parseLedgerLine(MODERN_LINE.replace("turn=75", "turn=unknown"))
+        expect(ledger!.turn).toBeNull()
+        expect(isFinalizeOnly(ledger!)).toBe(true)
+
+        const corpus = parseJsonl('{"result":"COMPLETE","outcome":"COMPLETED","trainee":"Test_Uma","scenario":"Grand_Concert","turn":null,"fans":1,"spd":1,"sta":1,"pwr":1,"grt":1,"wit":1,"skillPts":0}')
+        expect(corpus[0].turn).toBeNull()
+        expect(isFinalizeOnly(corpus[0])).toBe(true)
     })
 })
 

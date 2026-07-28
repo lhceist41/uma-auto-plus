@@ -3599,7 +3599,13 @@ abstract class Campaign(game: Game) : Task(game) {
                 forceEndReason?.let { put("forceEndReason", it) }
                 put("trainee", resolvedName)
                 put("scenario", scenarioToken)
-                put("turn", date.day)
+                // Only record a turn the bot actually read. A career resumed at its Complete Career
+                // screen finalizes without ever reading a date, and GameDate.day still holds its
+                // initial 1: writing that produced COMPLETED rows at turn 1 for full arcs, which
+                // both misread as crashes and double-counted careers an earlier run had already
+                // recorded (2026-07-26: one Copano Rickey career, three rows). The analyzer treats a
+                // null turn as "no observed arc" and keeps it out of the arm summaries.
+                put("turn", if (date.dayObserved) date.day else JSONObject.NULL)
                 put("fans", trainee.fans)
                 put("spd", st.speed)
                 put("sta", st.stamina)
@@ -3627,7 +3633,7 @@ abstract class Campaign(game: Game) : Task(game) {
             forceEndReason?.let { append(" forceEndReason=\"").append(it).append('"') }
             append(" trainee=").append(resolvedName)
             append(" scenario=").append(scenarioToken)
-            append(" turn=").append(date.day)
+            append(" turn=").append(if (date.dayObserved) date.day.toString() else "unknown")
             append(" fans=").append(trainee.fans)
             append(" spd=").append(st.speed)
             append(" sta=").append(st.stamina)

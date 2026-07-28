@@ -17,7 +17,7 @@
 
 import { readFileSync, readdirSync, statSync } from "node:fs"
 import { basename, extname, join } from "node:path"
-import { aggregate, analyzeSkillSpend, analyzeSparkFarm, dedupe, harvestLogText, isBotFault, parseCorpus, renderMarkdown, renderSkillSpendMarkdown, renderSparkFarmMarkdown } from "../src/lib/outcomeAnalysis.ts"
+import { aggregate, analyzeSkillSpend, analyzeSparkFarm, dedupe, harvestLogText, isBotFault, isFinalizeOnly, parseCorpus, renderMarkdown, renderSkillSpendMarkdown, renderSparkFarmMarkdown } from "../src/lib/outcomeAnalysis.ts"
 
 function collectFiles(path, depth = 0) {
     const stat = statSync(path)
@@ -71,15 +71,19 @@ function main(args) {
     const unique = dedupe(records)
     const dropped = records.length - unique.length
     // Bot faults (UNHANDLED_EXCEPTION crash-stops) are not career outcomes; aggregate() drops them.
-    // Surface the count instead of letting them vanish silently.
+    // Surface the count instead of letting them vanish silently. Finalize-only records (a career
+    // resumed at its Complete Career screen and finished without ever being played) are dropped for
+    // the same reason: the run that played that career already recorded it.
     const botFaults = unique.filter(isBotFault).length
-    const outcomeCount = unique.length - botFaults
+    const finalizeOnly = unique.filter((r) => !isBotFault(r) && isFinalizeOnly(r)).length
+    const outcomeCount = unique.length - botFaults - finalizeOnly
     const sparkReport = analyzeSparkFarm(unique, sparks)
 
     console.log(
         `${outcomeCount} career outcome(s), ${sparks.length} spark record(s), ${skillSpends.length} skill-spend record(s) from ${filesRead} file(s)` +
             `${dropped > 0 ? ` (${dropped} log duplicate(s) of corpus records dropped)` : ""}` +
             `${botFaults > 0 ? `; ${botFaults} bot-fault record(s) (UNHANDLED_EXCEPTION) excluded from outcomes` : ""}` +
+            `${finalizeOnly > 0 ? `; ${finalizeOnly} finalize-only record(s) (career finished but never played) excluded from outcomes` : ""}` +
             `${sparkReport.coverage.unjoined > 0 ? `; ${sparkReport.coverage.unjoined} unjoined spark record(s)` : ""}\n`,
     )
 

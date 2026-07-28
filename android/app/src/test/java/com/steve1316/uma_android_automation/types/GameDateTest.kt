@@ -509,5 +509,28 @@ class GameDateTest {
             assertEquals(5, date.day)
             assertTrue(date.bIsPreDebut)
         }
+
+        @Test
+        fun `a constructed date is not observed until updateDay runs`() {
+            // Campaign holds GameDate(day = 1). A career resumed at its Complete Career screen ends
+            // without ever reaching update(), so day is still that 1 and must not be recorded as a
+            // real turn 1: that made a full arc look like a turn-1 crash and double-counted the
+            // career in the outcome corpus.
+            val fresh = GameDate(day = 1)
+            assertEquals(1, fresh.day)
+            assertFalse(fresh.dayObserved)
+
+            fresh.updateDay(37)
+            assertEquals(37, fresh.day)
+            assertTrue(fresh.dayObserved)
+        }
+
+        @Test
+        fun `an observed turn 1 is distinguishable from the unread default`() {
+            val read = GameDate(day = 1)
+            read.updateDay(1)
+            assertEquals(1, read.day)
+            assertTrue(read.dayObserved)
+        }
     }
 }

@@ -31,6 +31,14 @@ class GameDate {
     /** The current turn number (1 to 72, with 73-75 for the Finale). */
     var day: Int = 1
 
+    /**
+     * Whether [day] came from an on-screen read rather than the value this object was built with.
+     * A career resumed at its Complete Career screen finalizes without ever reaching [update], so
+     * [day] still holds its initial 1. Recording that as a real turn 1 made a full arc look like a
+     * turn-1 crash and let one physical career land in the outcome corpus twice.
+     */
+    var dayObserved: Boolean = false
+
     /** Whether the game is in the Pre-Debut phase (Turns 1-11). */
     var bIsPreDebut: Boolean = false
 
@@ -460,6 +468,9 @@ class GameDate {
         this.month = tmpDate.month
         this.phase = tmpDate.phase
         this.day = day
+        // Every real date advance funnels through here (both branches of update()), so this is the
+        // one place that can distinguish a read turn from the constructed default.
+        this.dayObserved = true
 
         // Recalculate season flags.
         bIsPreDebut = this.day < 12

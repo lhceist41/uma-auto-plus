@@ -26,7 +26,8 @@ export interface OutcomeRecord {
     stopReason?: string
     trainee: string
     scenario: string
-    turn: number
+    /** End turn, or null when the bot never read an in-career date (see `isFinalizeOnly`). */
+    turn: number | null
     fans: number
     spd: number
     sta: number
@@ -92,6 +93,16 @@ function toInt(value: string | undefined): number {
 }
 
 /**
+ * Parses the turn field, which is deliberately absent-able. `unknown` (ledger line) and null/missing
+ * (JSONL) both mean the bot never read an in-career date, which is NOT the same as turn 0.
+ */
+function toTurn(value: string | number | null | undefined): number | null {
+    if (value === null || value === undefined || value === "unknown") return null
+    const n = typeof value === "number" ? value : parseInt(String(value), 10)
+    return Number.isFinite(n) ? n : null
+}
+
+/**
  * Ledger names come from raw OCR: underscores stand in for spaces, and a capital "El" scans
  * as "EI" often enough that the corpus already contains both spellings of El Condor Pasa.
  * Without the fixup the same trainee splits into two arms.
@@ -129,7 +140,7 @@ export function parseLedgerLine(line: string, file?: string): OutcomeRecord | nu
         stopReason: fields.stopReason,
         trainee: normalizeName(fields.trainee),
         scenario: (fields.scenario ?? "unknown").replace(/_/g, " "),
-        turn: toInt(fields.turn),
+        turn: toTurn(fields.turn),
         fans: toInt(fields.fans),
         spd: toInt(fields.spd),
         sta: toInt(fields.sta),
@@ -368,7 +379,7 @@ export function parseCorpus(text: string, file?: string): ParsedCorpus {
             stopReason: obj.stopReason,
             trainee: normalizeName(String(obj.trainee)),
             scenario: String(obj.scenario ?? "unknown").replace(/_/g, " "),
-            turn: Number(obj.turn) || 0,
+            turn: toTurn(obj.turn),
             fans: Number(obj.fans) || 0,
             spd: Number(obj.spd) || 0,
             sta: Number(obj.sta) || 0,
@@ -397,6 +408,9 @@ export function parseJsonl(text: string, file?: string): OutcomeRecord[] {
 
 /** Buckets a record by outcome label, the finale win/lose signal, and end turn. */
 export function classifyBucket(record: OutcomeRecord): OutcomeBucket {
+    // No observed turn means no observed arc, so none of the turn bands describe this record.
+    // aggregate() drops these before bucketing; this only keeps the function total.
+    if (record.turn === null) return "incomplete"
     if (record.outcome === "INCOMPLETE") return "incomplete"
     // A source-confirmed force-end is a loss even when it happens inside the finale block
     // (a lost mandatory finals race ends at turn 73-75): never count it as a full arc.
@@ -425,6 +439,28 @@ export function classifyBucket(record: OutcomeRecord): OutcomeBucket {
  */
 export function isBotFault(record: OutcomeRecord): boolean {
     return record.result === "UNHANDLED_EXCEPTION"
+}
+
+/**
+ * A record for a career the bot finalized but never played. Starting onto an already-finished
+ * career's Complete Career screen walks the career-end flow (Finish, sparks, keep) without ever
+ * reading an in-career date, so the run reports the previous career's final stats under its own
+ * config arm. The run that actually played that career already wrote its own record, so counting
+ * this one too double-counts one physical career: on 2026-07-26 a single Copano Rickey career
+ * produced a BREAKPOINT_REACHED turn=75 row plus two COMPLETED rows sharing fans=181609 and
+ * spd=1248, and Taiki Shuttle shows the same pattern.
+ *
+ * Two shapes qualify. New records carry a null turn outright. Records written before the turn fix
+ * carry GameDate's unread default of 1 - and a career cannot be COMPLETED on turn 1, so that pair
+ * is proof the date was never read rather than a real early end. INCOMPLETE records at turn <= 1
+ * are deliberately left alone: a run stopped seconds after launch is a real stop, and an INCOMPLETE
+ * row never inflates a completion rate.
+ *
+ * aggregate() drops them from arm summaries; the CLI tallies them separately.
+ */
+export function isFinalizeOnly(record: OutcomeRecord): boolean {
+    if (record.turn === null) return true
+    return record.turn <= 1 && record.outcome === "COMPLETED"
 }
 
 /** Nearest-rank percentile of an unsorted number list; 0 for an empty list. */
@@ -464,8 +500,10 @@ interface Group {
 export function aggregate(records: OutcomeRecord[]): ArmSummary[] {
     // Bot faults (UNHANDLED_EXCEPTION crash-stops) are not career outcomes - the career usually
     // resumes afterward via the between-run navigator or the in-place Home-lobby re-entry - so they
-    // must not land in any arm's buckets or record count. The CLI tallies them separately.
-    const outcomeRecords = records.filter((r) => !isBotFault(r))
+    // must not land in any arm's buckets or record count. Finalize-only records are not career
+    // outcomes either: they re-report a career an earlier run already recorded, under the wrong arm.
+    // The CLI tallies both separately.
+    const outcomeRecords = records.filter((r) => !isBotFault(r) && !isFinalizeOnly(r))
     // Group identity is held on the group object, never re-split from the key: an OCR'd pipe
     // in a trainee name must not shift fields.
     const groups = new Map<string, Group>()
@@ -511,6 +549,7 @@ export function aggregate(records: OutcomeRecord[]): ArmSummary[] {
             forceEndTurns: finished
                 .filter((r) => classifyBucket(r) !== "full")
                 .map((r) => r.turn)
+                .filter((t): t is number => t !== null)
                 .sort((a, b) => a - b),
             lowN: list.length < LOW_N_THRESHOLD,
         })
