@@ -50,6 +50,7 @@ import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.QuickModeGeometry
 import com.steve1316.uma_android_automation.utils.QuickModeOption
+import com.steve1316.uma_android_automation.utils.RosterScanPolicy
 import com.steve1316.uma_android_automation.utils.grandConcertCareerCompleteScreenPresent
 import com.steve1316.uma_android_automation.utils.grandConcertConcertPendingScreenPresent
 import com.steve1316.uma_android_automation.utils.quickModeDialogPresent
@@ -1157,6 +1158,13 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.POST_RUN_RESULTS
         }
 
+        // The "Rewards Collected" dialog matches none of those templates, so without this it reads
+        // UNKNOWN and the unknown-screen counter runs out (2026-07-28: five straight UNKNOWNs from
+        // POST_RUN_RESULTS, queue halted). Its handler owns the geometric close.
+        if (isRewardsCollectedDialog(bitmap)) {
+            return LaunchScreenState.POST_RUN_RESULTS
+        }
+
         // "Restore TP?" confirmation - the account lacks Training Points for another career
         // playthrough (back-to-back completed runs can drain TP). The dialog offers No / Restore
         // and matches none of the generic advance buttons. ButtonNo alone is ambiguous across
@@ -1639,7 +1647,26 @@ class CareerLaunchNavigator(private val context: Context) {
             } catch (_: Exception) {
                 return null
             }
-        return parseRemainingSkillPoints(text)
+        val parsed = parseRemainingSkillPoints(text)
+        if (parsed == null) {
+            // This read has failed 11 times out of 11 across every recorded finalize dialog, and
+            // there is still no image of what it is failing on, so the region has never been
+            // checkable. Capture it (debug builds only, same as every other saveFixture call) with
+            // the OCR text alongside, so the next failure arrives with its own evidence.
+            iu.saveFixture(
+                trigger = "nav_complete_career_remaining_sp_unreadable",
+                bitmap = bitmap,
+                sidecar =
+                    mapOf(
+                        "ocrText" to text,
+                        "regionX" to (bitmap.width * 0.08).toInt(),
+                        "regionY" to (finishLocation.y.toInt() - 330).coerceAtLeast(0),
+                        "regionW" to (bitmap.width * 0.84).toInt(),
+                        "regionH" to 260,
+                    ),
+            )
+        }
+        return parsed
     }
 
     /**
@@ -3082,8 +3109,53 @@ class CareerLaunchNavigator(private val context: Context) {
         return title.uppercase().contains("DETAIL")
     }
 
+    /**
+     * True when the post-career "Rewards Collected" dialog is up.
+     *
+     * Title OCR rather than a template, for the same reason [isUmamusumeDetailsScreen] uses it: the
+     * dialog's own Close button is what the standard templates cannot match, so the button is no
+     * use as the identifying feature.
+     */
+    private fun isRewardsCollectedDialog(bitmap: Bitmap): Boolean {
+        val title =
+            try {
+                iu.performOCROnRegion(
+                    bitmap,
+                    (bitmap.width * rewardsTitleRegion[0]).toInt(),
+                    (bitmap.height * rewardsTitleRegion[1]).toInt(),
+                    (bitmap.width * rewardsTitleRegion[2]).toInt(),
+                    (bitmap.height * rewardsTitleRegion[3]).toInt(),
+                    useThreshold = false,
+                    useGrayscale = true,
+                    scale = 2.0,
+                    debugName = "nav_rewards_collected_title",
+                )
+            } catch (e: InterruptedException) {
+                throw e
+            } catch (_: Exception) {
+                ""
+            }
+        val upper = title.uppercase()
+        return upper.contains("REWARD") && upper.contains("COLLECT")
+    }
+
     private fun handlePostRunResults(): TransitionResult {
         val bitmap = iu.getSourceBitmap()
+
+        // "Rewards Collected": tap its Close by geometry, because the template cascade below
+        // provably cannot see it. Gated on a positive title read so a blind tap can never land on
+        // some other screen, and the tap is a dismissal only - it collects nothing and spends
+        // nothing, the rewards are already granted by the time this dialog appears.
+        if (isRewardsCollectedDialog(bitmap)) {
+            MessageLog.i(TAG, "[NAV] Rewards Collected dialog detected; closing it by geometry (its Close does not template-match).")
+            gestureUtils.tap(
+                (bitmap.width * rewardsCloseFraction[0]).toDouble(),
+                (bitmap.height * rewardsCloseFraction[1]).toDouble(),
+                "nav_rewards_collected_close",
+            )
+            waitSafe(1.5)
+            return TransitionResult.Continue
+        }
 
         // Defense: if the post-career SkillList screen lingered (e.g. SkillPlan failed to detect
         // the screen and bailed without exiting), the navigator would loop forever clicking the
@@ -3651,6 +3723,16 @@ class CareerLaunchNavigator(private val context: Context) {
     // reliably: the real roster header never carries "Details", so this rejects only the dialog. x,y,w,h.
     private val detailsTitleRegion = floatArrayOf(0.18f, 0.02f, 0.64f, 0.07f)
 
+    // Green header band of the post-career "Rewards Collected" dialog. This is one of the
+    // full-height list dialogs whose wide bottom-centre Close scores ~0.36 against the standard
+    // close templates, so none of Next/OK/Confirm/Close/CloseDialog match it and the screen reads
+    // UNKNOWN. On 2026-07-28 it stopped the between-run navigation dead and cost 6h21m of queue
+    // time. Detected by its title the same way the Umamusume Details dialog is. x,y,w,h.
+    private val rewardsTitleRegion = floatArrayOf(0.15f, 0.02f, 0.70f, 0.06f)
+
+    /** Centre of that dialog's wide Close button, as a fraction of the frame. */
+    private val rewardsCloseFraction = floatArrayOf(0.50f, 0.923f)
+
     // ---- Support-deck composition (the [DECK] concentration advisory) ----
     // The deck-selection screen (PRE_RUN_CONFIRMATION) shows a row of support-type icons
     // (Speed, Stamina, Power, Guts, Wit, Friend, Group) each with an "xN" count badge; an absent
@@ -4048,99 +4130,123 @@ class CareerLaunchNavigator(private val context: Context) {
         // queue's different target jumps straight to its cell instead of scanning.
         val discoveredCells = HashMap<String, String>()
         var scanBitmap = iu.getSourceBitmap()
-        var startRow = 0
-        for (page in 0..traineeMaxSwipes) {
-            val bitmap = scanBitmap
-            var newThisPage = 0
-            for (row in startRow until traineeGridRows) {
-                for (col in traineeColFractions.indices) {
-                    if (!BotService.isRunning || StartModule.queueStopRequested) {
-                        return TransitionResult.Failed(
-                            reason = "Queue stopped during trainee selection.",
-                            transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
-                            isRecoverable = false,
-                        )
-                    }
-                    val tapX = bitmap.width * traineeColFractions[col]
-                    val tapY = bitmap.height * (traineeRow0Fraction + row * traineeRowStepFraction)
-                    gestureUtils.tap(tapX.toDouble(), tapY.toDouble(), "trainee_grid_c${col}_r$row")
-                    waitSafe(1.0)
-                    val preview = readTraineePreviewName()
-                    if (preview.isBlank()) continue
-                    val norm = preview.lowercase().replace(Regex("[^a-z0-9]"), "")
-                    if (norm.isEmpty()) continue
-                    if (!seen.add(norm)) continue // already scored on an earlier (overlapping) page.
+        // Cells that would not read at all. Non-zero means the census is incomplete, which both
+        // earns a second pass and has to reach the failure message: "not owned" and "could not be
+        // read" are different answers and the operator cannot act on the wrong one.
+        var failedReads = 0
+        for (pass in 0..1) {
+            if (pass == 1) {
+                if (!RosterScanPolicy.needsSecondPass(failedReads, passIndex = 0)) break
+                MessageLog.w(
+                    TAG,
+                    "[ROTATION] $failedReads cell read(s) failed on the first pass; re-anchoring and re-scanning once " +
+                        "before declaring '$target' absent from the roster.",
+                )
+                // Re-anchor rather than trusting wherever the first pass left the list: a scan that
+                // ended on an unmeasurable swipe does not know its own scroll position.
+                anchorTraineeGridTop()?.let { return it }
+                scanBitmap = iu.getSourceBitmap()
+                failedReads = 0
+            }
+            var startRow = 0
+            for (page in 0..traineeMaxSwipes) {
+                val bitmap = scanBitmap
+                var newThisPage = 0
+                var pageFullyRead = true
+                for (row in startRow until traineeGridRows) {
+                    for (col in traineeColFractions.indices) {
+                        if (!BotService.isRunning || StartModule.queueStopRequested) {
+                            return TransitionResult.Failed(
+                                reason = "Queue stopped during trainee selection.",
+                                transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
+                                isRecoverable = false,
+                            )
+                        }
+                        val preview = readRosterCell(bitmap, page, col, row)
+                        val norm = preview.lowercase().replace(Regex("[^a-z0-9]"), "")
+                        if (norm.isEmpty()) {
+                            // Already logged by readRosterCell. Record it so the page cannot be
+                            // treated as covered and the swipe skip cannot be earned.
+                            failedReads++
+                            pageFullyRead = false
+                            continue
+                        }
+                        if (!seen.add(norm)) continue // already scored on an earlier (overlapping) page.
                     // Remember every trainee read on the way, not just the target: the next
                     // queue's different target then jumps directly instead of scanning.
                     discoveredCells[norm] = "$page,$col,$row"
                     // Skip a sibling-outfit banner: a bare base-name target is outfit-insensitive and
                     // would otherwise match an owned outfit ("[Kukulkan Warrior] El Condor Pasa").
-                    if (excludeOutfits.any { TraineeNameMatcher.hasOutfit(preview, it) }) {
-                        MessageLog.i(TAG, "[ROTATION] Cell ($col,$row): '$preview' is an excluded sibling outfit; skipping.")
-                        continue
-                    }
-                    newThisPage++
-                    val score = TraineeNameMatcher.score(target, preview)
-                    MessageLog.i(TAG, "[ROTATION] Cell ($col,$row): '$preview' score=${"%.3f".format(score)}")
-                    if (score > bestScore) {
-                        bestScore = score
-                        bestLabel = preview
-                    }
-                    if (score >= traineeMatchThreshold) {
-                        MessageLog.i(TAG, "[ROTATION] Match: '$preview' (${"%.3f".format(score)}). Selecting and advancing.")
-                        // Remember where she was found (plus everyone read on the way) so the
-                        // next switch jumps directly instead of re-scanning cell by cell.
-                        discoveredCells[posKey] = "$page,$col,$row"
-                        if (TraineePositionStore.putAll(context, discoveredCells)) {
-                            MessageLog.i(
-                                TAG,
-                                "[ROTATION] Saved position page=$page cell=($col,$row) for '$target' " +
-                                    "(plus ${discoveredCells.size - 1} other trainee position(s) from the scan).",
+                        if (excludeOutfits.any { TraineeNameMatcher.hasOutfit(preview, it) }) {
+                            MessageLog.i(TAG, "[ROTATION] Cell ($col,$row): '$preview' is an excluded sibling outfit; skipping.")
+                            continue
+                        }
+                        newThisPage++
+                        val score = TraineeNameMatcher.score(target, preview)
+                        MessageLog.i(TAG, "[ROTATION] Cell ($col,$row): '$preview' score=${"%.3f".format(score)}")
+                        if (score > bestScore) {
+                            bestScore = score
+                            bestLabel = preview
+                        }
+                        if (score >= traineeMatchThreshold) {
+                            MessageLog.i(TAG, "[ROTATION] Match: '$preview' (${"%.3f".format(score)}). Selecting and advancing.")
+                            // Remember where she was found (plus everyone read on the way) so the
+                            // next switch jumps directly instead of re-scanning cell by cell.
+                            discoveredCells[posKey] = "$page,$col,$row"
+                            if (TraineePositionStore.putAll(context, discoveredCells)) {
+                                MessageLog.i(
+                                    TAG,
+                                    "[ROTATION] Saved position page=$page cell=($col,$row) for '$target' " +
+                                        "(plus ${discoveredCells.size - 1} other trainee position(s) from the scan).",
+                                )
+                            } else {
+                                MessageLog.w(TAG, "[ROTATION] Could not save the grid position for '$target' (file write failed).")
+                            }
+                            waitSafe(0.5)
+                            if (ButtonNext.click(iu)) {
+                                waitSafe(2.0)
+                                return TransitionResult.Continue
+                            }
+                            return TransitionResult.Failed(
+                                reason = "Matched trainee '$preview' but the Next click failed.",
+                                transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
+                                recommendedAction = "Manually press Next and restart the queue.",
                             )
-                        } else {
-                            MessageLog.w(TAG, "[ROTATION] Could not save the grid position for '$target' (file write failed).")
                         }
-                        waitSafe(0.5)
-                        if (ButtonNext.click(iu)) {
-                            waitSafe(2.0)
-                            return TransitionResult.Continue
-                        }
-                        return TransitionResult.Failed(
-                            reason = "Matched trainee '$preview' but the Next click failed.",
-                            transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
-                            recommendedAction = "Manually press Next and restart the queue.",
-                        )
                     }
                 }
-            }
-            // No new trainees on this page = bottom reached (or the list won't scroll). Stop paging.
-            if (page > 0 && newThisPage == 0 && startRow < traineeGridRows) break
-            if (page < traineeMaxSwipes) {
-                val swipe = swipeTraineeGridMeasured(pageDown = true)
-                scanBitmap = swipe.after
-                val rowPx = scanBitmap.height * traineeRowStepFraction
-                val delta = swipe.deltaPx
-                if (delta == null) {
-                    // Unmeasurable movement: the old conservative behavior. Scan every row and
-                    // let the name dedup absorb any overlap.
-                    startRow = 0
-                } else if (Math.abs(delta) < rowPx * 0.4f) {
-                    // Still parked after the retries: the roster bottom. Stop without paying a
-                    // page of taps to discover it.
-                    MessageLog.i(TAG, "[ROTATION] Roster stopped moving (bottom reached after ${seen.size} unique trainee(s)).")
-                    break
-                } else {
-                    val advancedRows = Math.round(delta / rowPx)
-                    if (advancedRows > traineeGridRows) {
+                // No new trainees on this page = bottom reached (or the list won't scroll). Stop paging.
+                if (page > 0 && newThisPage == 0 && startRow < traineeGridRows) break
+                if (page < traineeMaxSwipes) {
+                    val swipe = swipeTraineeGridMeasured(pageDown = true)
+                    scanBitmap = swipe.after
+                    val rowPx = scanBitmap.height * traineeRowStepFraction
+                    val delta = swipe.deltaPx
+                    if (delta != null && Math.abs(delta) < rowPx * 0.4f) {
+                        // Still parked after the retries: the roster bottom. Stop without paying a
+                        // page of taps to discover it.
+                        MessageLog.i(TAG, "[ROTATION] Roster stopped moving (bottom reached after ${seen.size} unique trainee(s)).")
+                        break
+                    }
+                    val advancedRows = if (delta == null) null else Math.round(delta / rowPx)
+                    if (advancedRows != null && advancedRows > traineeGridRows) {
                         MessageLog.w(
                             TAG,
                             "[ROTATION] Roster advanced $advancedRows rows in one swipe (more than the $traineeGridRows-row scan " +
                                 "band); some rows were skipped and the scan may need a second pass to find the target.",
                         )
                     }
-                    // Rows still on screen from the previous page start the next pass lower: an
-                    // advance of 1 row with a 2-row band means row 0 was already read.
-                    startRow = (traineeGridRows - advancedRows).coerceIn(0, traineeGridRows)
+                    // The skip has to be EARNED: only a measured advance over a page that read
+                    // completely may start the next pass below row 0. An unmeasurable swipe or a
+                    // blank cell drops back to 0 and lets the dedup absorb the re-reads.
+                    startRow = RosterScanPolicy.nextStartRow(traineeGridRows, advancedRows, pageFullyRead)
+                    if (startRow == 0 && advancedRows != null && !pageFullyRead) {
+                        MessageLog.i(
+                            TAG,
+                            "[ROTATION] Page $page had an unreadable cell, so its coverage is unproven; " +
+                                "re-scanning the next page from row 0 instead of skipping $advancedRows row(s).",
+                        )
+                    }
                 }
             }
         }
@@ -4149,14 +4255,64 @@ class CareerLaunchNavigator(private val context: Context) {
         // trainee the scan saw so the next launch starts from jumps, not scans.
         TraineePositionStore.putAll(context, discoveredCells)
 
+        // Say which answer this is. A clean scan that missed the target means she is not on the
+        // roster; a scan with failed reads means the census is incomplete and "not owned" would be
+        // an unsupported claim. The 2026-07-28 halt asserted the former while the latter was true.
+        val readQuality =
+            if (failedReads > 0) {
+                " WARNING: $failedReads cell(s) never read even after a re-anchored second pass, so this roster read is INCOMPLETE " +
+                    "and does not prove the trainee is unowned."
+            } else {
+                " Every cell read successfully, so the roster genuinely does not contain her."
+            }
         return TransitionResult.Failed(
             reason = "Trainee '$target' not found after scanning ${seen.size} unique roster trainee(s); best was '$bestLabel' @ ${"%.3f".format(
                 bestScore,
-            )}. Stopping to avoid running the wrong trainee.",
+            )}.$readQuality Stopping to avoid running the wrong trainee.",
             transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
             isRecoverable = true,
-            recommendedAction = "Check that the rotation trainee is one you own and that its inGameName matches the in-game name, or select the trainee manually and restart.",
+            recommendedAction =
+                if (failedReads > 0) {
+                    "The roster scan could not read every cell, so this is not proof she is unowned. Retry the queue; if it repeats, select the trainee manually and restart."
+                } else {
+                    "Check that the rotation trainee is one you own and that its inGameName matches the in-game name, or select the trainee manually and restart."
+                },
         )
+    }
+
+    /**
+     * Taps one roster cell and reads its preview name, retrying a blank read.
+     *
+     * A blank read is a FAILED read, never proof the cell is empty. It used to `continue` silently:
+     * five consecutive cells read blank on 2026-07-28, produced no log line at all, and the only
+     * way to find them afterwards was a 12-second gap between timestamps. Every failure is logged
+     * with its cell coordinate now, because that is not a diagnostic path anyone should need twice.
+     *
+     * @return the preview name, or "" when it still would not read.
+     */
+    private fun readRosterCell(bitmap: Bitmap, page: Int, col: Int, row: Int): String {
+        var attempt = 0
+        while (true) {
+            gestureUtils.tap(
+                (bitmap.width * traineeColFractions[col]).toDouble(),
+                (bitmap.height * (traineeRow0Fraction + row * traineeRowStepFraction)).toDouble(),
+                "trainee_grid_c${col}_r$row",
+            )
+            waitSafe(1.0)
+            val preview = readTraineePreviewName()
+            if (preview.isNotBlank()) return preview
+            if (!RosterScanPolicy.shouldRetryBlank(attempt)) {
+                MessageLog.w(
+                    TAG,
+                    "[ROTATION] Cell ($col,$row) on page $page read blank after ${RosterScanPolicy.MAX_BLANK_RETRIES} retry/retries; " +
+                        "this page's coverage is unproven.",
+                )
+                return ""
+            }
+            attempt++
+            MessageLog.w(TAG, "[ROTATION] Cell ($col,$row) on page $page read blank; retry $attempt of ${RosterScanPolicy.MAX_BLANK_RETRIES}.")
+            waitSafe(0.5)
+        }
     }
 
     /**
