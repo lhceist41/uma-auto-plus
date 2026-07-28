@@ -32,6 +32,18 @@ object StatMismatchPolicy {
     const val STRIKES_TO_PROMOTE: Int = 2
 
     sealed class Decision {
+        /**
+         * The reading is not a stat value at all: the readers return -1 for "no usable reading",
+         * including the plausibility floor's rejection. Keep whatever is held and change nothing.
+         *
+         * This has to be decided before the accept window, not inside it. abs(-1 - old) is under
+         * [ACCEPT_WINDOW] for any held value below 149, so a sentinel used to be taken at face
+         * value and written as the stat: live on 2026-07-28 the floor rejected a WIT read of 1
+         * against a verified 126, logged "Keeping 126", and the tracker then accepted the -1, so
+         * that turn scored with a WIT of -1 and a completion of -0.25%.
+         */
+        object Discard : Decision()
+
         /** Take the new value; it is close enough to the old one, or there was no old one. */
         object Accept : Decision()
 
@@ -53,13 +65,14 @@ object StatMismatchPolicy {
      * @param strikes corroborations the baseline has already collected.
      */
     fun decide(oldValue: Int, newValue: Int, recordedMismatch: Int?, strikes: Int): Decision {
+        // Real stats are always >= 1, so anything below that is a sentinel, never a reading.
+        if (newValue < 1) return Decision.Discard
         if (oldValue <= 0 || abs(newValue - oldValue) < ACCEPT_WINDOW) return Decision.Accept
         if (recordedMismatch == null || abs(newValue - recordedMismatch) >= CONSISTENT_WINDOW) {
             return Decision.Baseline(newValue)
         }
         val next = strikes + 1
-        // Never trust a non-positive value: a -1 OCR-rejection sentinel read repeatedly would
-        // otherwise lock a negative stat in (real stats are always >= 1).
-        return if (next >= STRIKES_TO_PROMOTE && newValue >= 1) Decision.Promote(next) else Decision.Hold(next)
+        // Sentinels never reach here; Discard above owns them.
+        return if (next >= STRIKES_TO_PROMOTE) Decision.Promote(next) else Decision.Hold(next)
     }
 }

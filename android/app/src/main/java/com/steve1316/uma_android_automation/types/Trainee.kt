@@ -779,6 +779,8 @@ class Trainee {
             for ((statName, newValue) in statMapping) {
                 val oldValue = getStat(statName)
                 when (val decision = decideStatUpdate(statName, oldValue, newValue)) {
+                    is StatMismatchPolicy.Decision.Discard ->
+                        Log.d(TAG, "[DEBUG] updateStats:: Unusable $statName reading ($newValue); keeping $oldValue.")
                     is StatMismatchPolicy.Decision.Accept -> acceptStat(statName, newValue)
                     is StatMismatchPolicy.Decision.Promote -> {
                         MessageLog.d(TAG, "[DEBUG] updateStats:: New $statName stat value has been consistent for ${decision.strikes} updates. Trusting the new value: $newValue (was $oldValue)")
@@ -812,6 +814,8 @@ class Trainee {
                 for ((statName, newValue) in statMapping) {
                     val oldValue = getStat(statName)
                     when (val decision = decideStatUpdate(statName, oldValue, newValue)) {
+                        is StatMismatchPolicy.Decision.Discard ->
+                            Log.d(TAG, "[DEBUG] updateStats:: Unusable $statName reading ($newValue) via sequential processing; keeping $oldValue.")
                         is StatMismatchPolicy.Decision.Accept -> acceptStat(statName, newValue)
                         is StatMismatchPolicy.Decision.Promote -> {
                             MessageLog.d(

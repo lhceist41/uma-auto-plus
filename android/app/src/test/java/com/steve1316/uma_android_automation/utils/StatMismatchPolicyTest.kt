@@ -39,8 +39,48 @@ class StatMismatchPolicyTest {
                     strikes = 0
                 }
                 is StatMismatchPolicy.Decision.Hold -> strikes = decision.strikes
+                is StatMismatchPolicy.Decision.Discard -> Unit
             }
             return decision
+        }
+    }
+
+    @Nested
+    @DisplayName("unusable readings")
+    inner class DiscardTests {
+        @Test
+        fun `the -1 sentinel is never written as a stat, at any held value`() {
+            // Live 2026-07-28: the floor rejected a WIT read of 1 against a verified 126 and
+            // returned -1. abs(-1 - 126) is 127, inside the 150 accept window, so the sentinel was
+            // taken at face value and that turn scored with WIT = -1 and completion -0.25%.
+            for (held in listOf(1, 50, 126, 148, 149, 231, 684, 1200)) {
+                val d = StatMismatchPolicy.decide(oldValue = held, newValue = -1, recordedMismatch = null, strikes = 0)
+                assertTrue(d is StatMismatchPolicy.Decision.Discard, "held=$held must discard the sentinel, not accept it")
+            }
+        }
+
+        @Test
+        fun `a discarded reading leaves the held value and the tracker untouched`() {
+            val wit = Tracker(held = 126)
+            assertTrue(wit.read(-1) is StatMismatchPolicy.Decision.Discard)
+            assertEquals(126, wit.held, "the floor's log promises the old value is kept")
+
+            // A later genuine reading still lands normally.
+            assertTrue(wit.read(131) is StatMismatchPolicy.Decision.Accept)
+            assertEquals(131, wit.held)
+        }
+
+        @Test
+        fun `repeated sentinels never accumulate strikes toward a promotion`() {
+            val wit = Tracker(held = 126)
+            repeat(6) { assertTrue(wit.read(-1) is StatMismatchPolicy.Decision.Discard) }
+            assertEquals(126, wit.held)
+        }
+
+        @Test
+        fun `zero is a sentinel too, not a real stat`() {
+            val d = StatMismatchPolicy.decide(oldValue = 126, newValue = 0, recordedMismatch = null, strikes = 0)
+            assertTrue(d is StatMismatchPolicy.Decision.Discard)
         }
     }
 
