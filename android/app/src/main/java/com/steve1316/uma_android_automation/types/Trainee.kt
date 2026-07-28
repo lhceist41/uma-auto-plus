@@ -34,6 +34,7 @@ import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.types.TrackDistance
 import com.steve1316.uma_android_automation.types.TrackSurface
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
+import com.steve1316.uma_android_automation.utils.StatMismatchPolicy
 import com.steve1316.uma_scoring.RankResult
 import net.ricecode.similarity.JaroWinklerStrategy
 import net.ricecode.similarity.StringSimilarityServiceImpl
@@ -42,7 +43,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.enums.enumEntries
-import kotlin.math.abs
 
 /**
  * Central data structure for a trainee (Uma Musume): tracks stats, aptitudes, fan count, mood, and
@@ -699,6 +699,34 @@ class Trainee {
     }
 
     /**
+     * Runs one reading through [StatMismatchPolicy] and applies whatever tracker state the verdict
+     * implies, so the threaded and sequential branches cannot drift apart. -1 in
+     * [lastMismatchedValues] means "no baseline observed": the policy must see null, not a number
+     * every low misread looks consistent with.
+     */
+    private fun decideStatUpdate(statName: StatName, oldValue: Int, newValue: Int): StatMismatchPolicy.Decision {
+        val recorded = lastMismatchedValues[statName]?.takeIf { it >= 0 }
+        val decision = StatMismatchPolicy.decide(oldValue, newValue, recorded, mismatchCounts[statName] ?: 0)
+        when (decision) {
+            is StatMismatchPolicy.Decision.Baseline -> {
+                mismatchCounts[statName] = 0
+                lastMismatchedValues[statName] = decision.value
+            }
+            is StatMismatchPolicy.Decision.Hold -> mismatchCounts[statName] = decision.strikes
+            else -> Unit // Accept and Promote both clear the tracker in acceptStat.
+        }
+        return decision
+    }
+
+    /** Takes [newValue] and clears this stat's mismatch tracking. */
+    private fun acceptStat(statName: StatName, newValue: Int) {
+        stats.setStat(statName, newValue)
+        bHasUpdatedStats = true
+        mismatchCounts[statName] = 0
+        lastMismatchedValues[statName] = -1
+    }
+
+    /**
      * Updates the trainee's stats via OCR, with a guard against misreads: a new value differing
      * from the old by >150 is rejected at first, but if the same out-of-range value reads
      * consistently across updates it's trusted (the old value was the actual misread).
@@ -750,46 +778,19 @@ class Trainee {
             val statMapping = threadSafeResults.toMap()
             for ((statName, newValue) in statMapping) {
                 val oldValue = getStat(statName)
-                val diff = abs(newValue - oldValue)
-
-                // Reject updates that vary too wildly unless the previous value was unset (<= 0).
-                if (oldValue <= 0 || diff < 150) {
-                    stats.setStat(statName, newValue)
-                    bHasUpdatedStats = true
-
-                    // Reset mismatch tracking for this stat.
-                    mismatchCounts[statName] = 0
-                    lastMismatchedValues[statName] = -1
-                } else {
-                    // Start or continue a verification count if the OCR result is consistent but different.
-                    val lastMismatchedValue = lastMismatchedValues[statName] ?: -1
-                    val mismatchDiff = abs(newValue - lastMismatchedValue)
-                    val currentCount = mismatchCounts[statName] ?: 0
-
-                    if (mismatchDiff < 50) {
-                        val newCount = currentCount + 1
-                        mismatchCounts[statName] = newCount
-
-                        // If the "incorrect" value is detected multiple times, assume the previous
-                        // recorded value was the actual misread and update to the new one. Never trust a
-                        // non-positive value: a -1 OCR-rejection sentinel read twice would otherwise lock
-                        // a negative stat in (real stats are always >= 1).
-                        if (newCount >= 2 && newValue >= 1) {
-                            MessageLog.d(TAG, "[DEBUG] updateStats:: New $statName stat value has been consistent for $newCount updates. Trusting the new value: $newValue (was $oldValue)")
-                            stats.setStat(statName, newValue)
-                            bHasUpdatedStats = true
-                            mismatchCounts[statName] = 0
-                            lastMismatchedValues[statName] = -1
-                        } else {
-                            MessageLog.w(
-                                TAG,
-                                "[WARN] updateStats:: New $statName stat value has changed too much since last update (old=$oldValue, new=$newValue). Consecutive mismatch count: $newCount",
-                            )
-                        }
-                    } else {
-                        // The mismatch itself is inconsistent, so reset the counter.
-                        mismatchCounts[statName] = 1
-                        lastMismatchedValues[statName] = newValue
+                when (val decision = decideStatUpdate(statName, oldValue, newValue)) {
+                    is StatMismatchPolicy.Decision.Accept -> acceptStat(statName, newValue)
+                    is StatMismatchPolicy.Decision.Promote -> {
+                        MessageLog.d(TAG, "[DEBUG] updateStats:: New $statName stat value has been consistent for ${decision.strikes} updates. Trusting the new value: $newValue (was $oldValue)")
+                        acceptStat(statName, newValue)
+                    }
+                    is StatMismatchPolicy.Decision.Hold -> {
+                        MessageLog.w(
+                            TAG,
+                            "[WARN] updateStats:: New $statName stat value has changed too much since last update (old=$oldValue, new=$newValue). Consecutive mismatch count: ${decision.strikes}",
+                        )
+                    }
+                    is StatMismatchPolicy.Decision.Baseline -> {
                         MessageLog.w(TAG, "[WARN] updateStats:: New $statName stat value has changed too much since last update (old=$oldValue, new=$newValue). Resetting mismatch count.")
                     }
                 }
@@ -810,42 +811,22 @@ class Trainee {
 
                 for ((statName, newValue) in statMapping) {
                     val oldValue = getStat(statName)
-                    val diff = abs(newValue - oldValue)
-
-                    if (oldValue <= 0 || diff < 150) {
-                        stats.setStat(statName, newValue)
-                        bHasUpdatedStats = true
-
-                        mismatchCounts[statName] = 0
-                        lastMismatchedValues[statName] = -1
-                    } else {
-                        val lastMismatchedValue = lastMismatchedValues[statName] ?: -1
-                        val mismatchDiff = abs(newValue - lastMismatchedValue)
-                        val currentCount = mismatchCounts[statName] ?: 0
-
-                        if (mismatchDiff < 50) {
-                            val newCount = currentCount + 1
-                            mismatchCounts[statName] = newCount
-
-                            // Never trust a non-positive value (a -1 OCR-rejection sentinel read twice).
-                            if (newCount >= 2 && newValue >= 1) {
-                                MessageLog.d(
-                                    TAG,
-                                    "[DEBUG] updateStats:: New $statName stat value has been consistent for $newCount updates via sequential processing. Trusting the new value: $newValue (was $oldValue)",
-                                )
-                                stats.setStat(statName, newValue)
-                                bHasUpdatedStats = true
-                                mismatchCounts[statName] = 0
-                                lastMismatchedValues[statName] = -1
-                            } else {
-                                MessageLog.w(
-                                    TAG,
-                                    "[WARN] updateStats:: New $statName stat value has changed too much since last update (old=$oldValue, new=$newValue) via sequential processing. Consecutive mismatch count: $newCount",
-                                )
-                            }
-                        } else {
-                            mismatchCounts[statName] = 1
-                            lastMismatchedValues[statName] = newValue
+                    when (val decision = decideStatUpdate(statName, oldValue, newValue)) {
+                        is StatMismatchPolicy.Decision.Accept -> acceptStat(statName, newValue)
+                        is StatMismatchPolicy.Decision.Promote -> {
+                            MessageLog.d(
+                                TAG,
+                                "[DEBUG] updateStats:: New $statName stat value has been consistent for ${decision.strikes} updates via sequential processing. Trusting the new value: $newValue (was $oldValue)",
+                            )
+                            acceptStat(statName, newValue)
+                        }
+                        is StatMismatchPolicy.Decision.Hold -> {
+                            MessageLog.w(
+                                TAG,
+                                "[WARN] updateStats:: New $statName stat value has changed too much since last update (old=$oldValue, new=$newValue) via sequential processing. Consecutive mismatch count: ${decision.strikes}",
+                            )
+                        }
+                        is StatMismatchPolicy.Decision.Baseline -> {
                             MessageLog.w(
                                 TAG,
                                 "[WARN] updateStats:: New $statName stat value has changed too much since last update (old=$oldValue, new=$newValue) via sequential processing. Resetting mismatch count.",
