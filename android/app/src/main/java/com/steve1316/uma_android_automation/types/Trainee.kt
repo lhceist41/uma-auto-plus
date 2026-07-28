@@ -723,7 +723,11 @@ class Trainee {
                         if (!BotService.isRunning) {
                             return@Thread
                         }
-                        val statValue = imageUtils.determineSingleStatValue(statName, sourceBitmap, skillPointsLocation, isAptitudeDialog)
+                        // getStat is this career's last VERIFIED value (only accepted reads reach
+                        // stats.setStat), and it resets to -1 with this Trainee, which Campaign
+                        // rebuilds per career. Read here rather than captured outside the loop
+                        // because nothing mutates it until every thread has finished below.
+                        val statValue = imageUtils.determineSingleStatValue(statName, sourceBitmap, skillPointsLocation, isAptitudeDialog, getStat(statName))
                         threadSafeResults[statName] = statValue
                     } catch (e: Exception) {
                         Log.e(TAG, "[ERROR] updateStats:: Error processing stat $statName: ${e.stackTraceToString()}")
@@ -801,6 +805,7 @@ class Trainee {
                         sourceBitmap = null,
                         skillPointsLocation = skillPointsLocation,
                         isAptitudeDialog = isAptitudeDialog,
+                        lastVerified = StatName.entries.associateWith { getStat(it) },
                     )
 
                 for ((statName, newValue) in statMapping) {

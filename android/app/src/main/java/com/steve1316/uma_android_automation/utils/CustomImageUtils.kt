@@ -1202,9 +1202,18 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @param sourceBitmap Optional source bitmap to use. Defaults to null.
      * @param skillPointsLocation Optional point location of the skill points icon. Defaults to null.
      * @param isAptitudeDialog Whether reading from the Aptitude dialog instead of the Main screen.
+     * @param lastVerified The last verified value of this stat in THIS career, or <= 0 when none
+     *   exists yet. Used only to reject implausible drops (see [StatReadPlausibility]); the caller
+     *   owns the value, so it resets with the career's [Trainee].
      * @return The integer value of the stat, or -1 if detection fails.
      */
-    fun determineSingleStatValue(statName: StatName, sourceBitmap: Bitmap? = null, skillPointsLocation: Point? = null, isAptitudeDialog: Boolean = false): Int {
+    fun determineSingleStatValue(
+        statName: StatName,
+        sourceBitmap: Bitmap? = null,
+        skillPointsLocation: Point? = null,
+        isAptitudeDialog: Boolean = false,
+        lastVerified: Int = -1,
+    ): Int {
         val (finalLocation, finalSourceBitmap) =
             if (sourceBitmap == null && skillPointsLocation == null) {
                 if (isAptitudeDialog) {
@@ -1283,22 +1292,29 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                 maxedCap
             }
         } else {
-            try {
-                Log.d(TAG, "[DEBUG] determineSingleStatValue:: Converting $text to integer for $statName stat value")
-                val cleanedText = text.replace(Regex("[^0-9]"), "")
-                val parsed = cleanedText.toInt()
-                // Reject implausible reads so the threaded path cannot leak an over-cap misread into
-                // the stat mismatch-recovery logic. Scenario-aware: rejecting at a flat 1200 would
-                // freeze every legitimate reading past 1200 under the raised caps.
-                val effectiveCap = statReadCeiling(statName)
-                if (parsed > effectiveCap) {
-                    Log.d(TAG, "[DEBUG] determineSingleStatValue:: Parsed value $parsed for $statName exceeds stat cap $effectiveCap, likely an OCR misread. Rejecting.")
-                    return -1
-                }
-                return parsed.coerceAtLeast(0)
-            } catch (_: NumberFormatException) {
+            Log.d(TAG, "[DEBUG] determineSingleStatValue:: Converting $text to integer for $statName stat value")
+            val parsed = StatReadPlausibility.parseStatDigits(text) ?: return -1
+            // Reject implausible reads so the threaded path cannot leak an over-cap misread into
+            // the stat mismatch-recovery logic. Scenario-aware: rejecting at a flat 1200 would
+            // freeze every legitimate reading past 1200 under the raised caps.
+            val effectiveCap = statReadCeiling(statName)
+            if (parsed > effectiveCap) {
+                Log.d(TAG, "[DEBUG] determineSingleStatValue:: Parsed value $parsed for $statName exceeds stat cap $effectiveCap, likely an OCR misread. Rejecting.")
                 return -1
             }
+            // The same rejection in the other direction: a dropped leading digit reads far BELOW the
+            // last verified value, and the caller's consistency rule would promote it to trusted on
+            // the second identical read. Returning the -1 sentinel keeps the last verified value,
+            // because updateStats never trusts a value below 1.
+            if (StatReadPlausibility.isImplausibleDrop(parsed, lastVerified)) {
+                MessageLog.w(
+                    TAG,
+                    "[WARN] determineSingleStatValue:: [STAT_FLOOR] Rejected $statName read of $parsed: more than " +
+                        "${StatReadPlausibility.MAX_SINGLE_EVENT_DROP} below the last verified $lastVerified. Keeping $lastVerified.",
+                )
+                return -1
+            }
+            return parsed.coerceAtLeast(0)
         }
     }
 
@@ -1308,9 +1324,17 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @param sourceBitmap Optional source bitmap to use. Defaults to null.
      * @param skillPointsLocation Optional point location of the skill points icon. Defaults to null.
      * @param isAptitudeDialog Whether reading from the Aptitude dialog instead of the Main screen.
+     * @param lastVerified Last verified value per stat in THIS career; a stat missing from the map
+     *   (or <= 0) has no baseline yet. Used only to reject implausible drops, exactly as in
+     *   [determineSingleStatValue] - this is the sequential fallback for the same read.
      * @return A map of stat names to their detected integer values.
      */
-    fun determineStatValues(sourceBitmap: Bitmap? = null, skillPointsLocation: Point? = null, isAptitudeDialog: Boolean = false): Map<StatName, Int> {
+    fun determineStatValues(
+        sourceBitmap: Bitmap? = null,
+        skillPointsLocation: Point? = null,
+        isAptitudeDialog: Boolean = false,
+        lastVerified: Map<StatName, Int> = emptyMap(),
+    ): Map<StatName, Int> {
         val (finalLocation, finalSourceBitmap) =
             if (sourceBitmap == null && skillPointsLocation == null) {
                 if (isAptitudeDialog) {
@@ -1393,7 +1417,19 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                             // Filter to values within the valid stat range. Values exceeding the cap are OCR misreads.
                             val validNumbers = numbers.filter { it in 0..cap }
                             if (validNumbers.isNotEmpty()) {
-                                result[statName] = validNumbers.max()
+                                val best = validNumbers.max()
+                                val baseline = lastVerified[statName] ?: -1
+                                if (StatReadPlausibility.isImplausibleDrop(best, baseline)) {
+                                    // Same floor as determineSingleStatValue; see StatReadPlausibility.
+                                    MessageLog.w(
+                                        TAG,
+                                        "[WARN] determineStatValues:: [STAT_FLOOR] Rejected $statName read of $best: more than " +
+                                            "${StatReadPlausibility.MAX_SINGLE_EVENT_DROP} below the last verified $baseline. Keeping $baseline.",
+                                    )
+                                    result[statName] = -1
+                                } else {
+                                    result[statName] = best
+                                }
                             } else {
                                 Log.d(TAG, "[DEBUG] determineStatValues:: All parsed numbers $numbers for $statName exceed stat cap $cap, likely an OCR misread. Rejecting.")
                                 result[statName] = -1
