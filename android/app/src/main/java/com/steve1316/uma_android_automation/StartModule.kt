@@ -1916,7 +1916,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     } else {
                         // Clear persisted queue state since queue finished normally.
                         clearQueueState(context)
-                        sendQueueProgressEvent(totalRuns, totalRuns, "queueComplete", message = "Completed $completedRuns of $totalRuns runs.")
+                        // currentRun was hard-coded to totalRuns, and the banner renders
+                        // "Queue complete: {currentRun}/{totalRuns} runs" from these fields rather
+                        // than from the message. A queue stopped before its first run therefore
+                        // showed "Queue complete: 4/4 runs" over a log reading "Completed 0 of 4"
+                        // (2026-07-28 12:39). Report what actually completed.
+                        sendQueueProgressEvent(completedRuns, totalRuns, "queueComplete", message = "Completed $completedRuns of $totalRuns runs.")
                         MessageLog.i(TAG, "\n[QUEUE] ========================================")
                         MessageLog.i(TAG, "[QUEUE] Queue finished. Completed $completedRuns of $totalRuns runs.")
                         MessageLog.i(TAG, "[QUEUE] ========================================\n")

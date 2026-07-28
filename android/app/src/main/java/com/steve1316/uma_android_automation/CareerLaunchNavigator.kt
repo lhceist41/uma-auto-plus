@@ -3712,6 +3712,13 @@ class CareerLaunchNavigator(private val context: Context) {
     private val traineeMaxSwipes = 8
     private val traineeMatchThreshold = 0.86
 
+    /**
+     * Similarity above which a non-matching cell is close enough to be worth naming in a failure.
+     * Sits below [traineeMatchThreshold] by design: the whole point is to surface the band where a
+     * name is recognisably hers but did not match.
+     */
+    private val NEAR_NAME_SIMILARITY = 0.70
+
     // Preview name banner: white "[Outfit] Name" text on a saturated character-colored pill. x,y,w,h.
     private val traineePreviewRegion = floatArrayOf(0.02f, 0.295f, 0.74f, 0.05f)
 
@@ -4060,6 +4067,9 @@ class CareerLaunchNavigator(private val context: Context) {
 
         var bestScore = 0.0
         var bestLabel = ""
+        var nearestSim = 0.0
+        var nearestLabel = ""
+        var nearestCell = ""
         val seen = HashSet<String>()
 
         anchorTraineeGridTop()?.let { return it }
@@ -4188,6 +4198,14 @@ class CareerLaunchNavigator(private val context: Context) {
                             bestScore = score
                             bestLabel = preview
                         }
+                        // Nearest cell by plain similarity, tracked separately: score() answers "is
+                        // this her" and answers 0.0 when it is not, so it cannot name a near miss.
+                        val sim = TraineeNameMatcher.similarity(target, preview)
+                        if (sim > nearestSim) {
+                            nearestSim = sim
+                            nearestLabel = preview
+                            nearestCell = "page $page cell ($col,$row)"
+                        }
                         if (score >= traineeMatchThreshold) {
                             MessageLog.i(TAG, "[ROTATION] Match: '$preview' (${"%.3f".format(score)}). Selecting and advancing.")
                             // Remember where she was found (plus everyone read on the way) so the
@@ -4258,12 +4276,21 @@ class CareerLaunchNavigator(private val context: Context) {
         // Say which answer this is. A clean scan that missed the target means she is not on the
         // roster; a scan with failed reads means the census is incomplete and "not owned" would be
         // an unsupported claim. The 2026-07-28 halt asserted the former while the latter was true.
+        // Three distinguishable answers, because they call for three different actions. The
+        // 2026-07-28 12:39 halt printed the "genuinely does not contain her" line while her own
+        // cell was on screen and correctly read, and sent the operator off to check ownership.
         val readQuality =
-            if (failedReads > 0) {
-                " WARNING: $failedReads cell(s) never read even after a re-anchored second pass, so this roster read is INCOMPLETE " +
-                    "and does not prove the trainee is unowned."
-            } else {
-                " Every cell read successfully, so the roster genuinely does not contain her."
+            when {
+                failedReads > 0 ->
+                    " WARNING: $failedReads cell(s) never read even after a re-anchored second pass, so this roster read is " +
+                        "INCOMPLETE and does not prove the trainee is unowned."
+                nearestSim >= NEAR_NAME_SIMILARITY ->
+                    " Every cell read, and the closest was $nearestCell '$nearestLabel' at ${"%.3f".format(nearestSim)} similarity, " +
+                        "below the $traineeMatchThreshold match threshold. That is a NAME-MATCHING miss, not proof she is unowned: " +
+                        "check that cell's text against the rotation's inGameName before changing the roster."
+                else ->
+                    " Every cell read and nothing on the roster resembles her (closest was '$nearestLabel' at " +
+                        "${"%.3f".format(nearestSim)}), so she is genuinely not in the roster."
             }
         return TransitionResult.Failed(
             reason = "Trainee '$target' not found after scanning ${seen.size} unique roster trainee(s); best was '$bestLabel' @ ${"%.3f".format(
@@ -4272,10 +4299,13 @@ class CareerLaunchNavigator(private val context: Context) {
             transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
             isRecoverable = true,
             recommendedAction =
-                if (failedReads > 0) {
-                    "The roster scan could not read every cell, so this is not proof she is unowned. Retry the queue; if it repeats, select the trainee manually and restart."
-                } else {
-                    "Check that the rotation trainee is one you own and that its inGameName matches the in-game name, or select the trainee manually and restart."
+                when {
+                    failedReads > 0 ->
+                        "The roster scan could not read every cell, so this is not proof she is unowned. Retry the queue; if it repeats, select the trainee manually and restart."
+                    nearestSim >= NEAR_NAME_SIMILARITY ->
+                        "A near-identical name was read at $nearestCell. Compare it with the rotation's inGameName; select the trainee manually and restart to continue meanwhile."
+                    else ->
+                        "Check that the rotation trainee is one you own and that its inGameName matches the in-game name, or select the trainee manually and restart."
                 },
         )
     }

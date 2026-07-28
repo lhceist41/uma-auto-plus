@@ -57,14 +57,51 @@ object TraineeNameMatcher {
         // The banner can't be the target if it has fewer words than the target name itself.
         if (readTokens.size < targetTokens.size) return 0.0
 
-        val window = readTokens.takeLast(targetTokens.size)
-        val perToken = targetTokens.indices.map { service.score(targetTokens[it], window[it]) }
-        // A clearly-different aligned word means a different trainee — fail hard so a shared prefix word
-        // can't carry the match (Gold Ship vs Gold City). Returning the min keeps bestMatch ranking sane.
-        if (perToken.any { it < TOKEN_FLOOR }) return perToken.minOrNull() ?: 0.0
-        // Every word is at least OCR-plausible; score the joined name region whole-string.
-        return service.score(targetTokens.joinToString(" "), window.joinToString(" "))
+        // Best ELIGIBLE window, or 0.0. A window is eligible only when every aligned word clears
+        // TOKEN_FLOOR, which is what keeps "Gold Ship" from riding its shared first word into
+        // "Gold City". Nothing about that gate changes here; what changes is which windows it sees.
+        var best = 0.0
+        for (window in windows(readTokens, targetTokens.size)) {
+            if (targetTokens.indices.any { service.score(targetTokens[it], window[it]) < TOKEN_FLOOR }) continue
+            val whole = service.score(targetTokens.joinToString(" "), window.joinToString(" "))
+            if (whole > best) best = whole
+        }
+        return best
     }
+
+    /**
+     * How close [read] comes to [target] regardless of whether it matches: the best whole-string
+     * Jaro-Winkler over the same windows, with no per-word gate.
+     *
+     * Purely diagnostic. [score] answers "is this her", and answers 0.0 when it is not; this answers
+     * "what was the nearest thing on screen", so a failure can name the closest cell instead of
+     * telling the operator to go check ownership while the trainee is visible.
+     */
+    fun similarity(target: String, read: String): Double {
+        val targetTokens = normalize(target).split(" ").filter { it.isNotEmpty() }
+        val readTokens = normalize(read).split(" ").filter { it.isNotEmpty() }
+        if (targetTokens.isEmpty() || readTokens.isEmpty()) return service.score(normalize(target), normalize(read))
+        if (readTokens.size < targetTokens.size) return service.score(normalize(target), normalize(read))
+        var best = 0.0
+        for (window in windows(readTokens, targetTokens.size)) {
+            val whole = service.score(targetTokens.joinToString(" "), window.joinToString(" "))
+            if (whole > best) best = whole
+        }
+        return best
+    }
+
+    /**
+     * Every contiguous [size]-token window of [tokens].
+     *
+     * The old code took only the LAST window, on the assumption that the character name ends the
+     * banner. OCR breaks that assumption routinely: a trailing badge digit on "[Azure Amazon] Hishi
+     * Amazon 1" pushed the real name out of the window, aligned "amazon" against "1", and scored the
+     * correct trainee 0.000 while an unrelated 18-character name scored 0.546 on coincidental letter
+     * overlap (live 2026-07-28, halted the queue). Sliding the window removes the positional
+     * assumption without touching the per-word gate.
+     */
+    private fun windows(tokens: List<String>, size: Int): List<List<String>> =
+        if (size > tokens.size) emptyList() else (0..tokens.size - size).map { tokens.subList(it, it + size) }
 
     /**
      * Per-word floor below which an aligned word is treated as a DIFFERENT word rather than OCR noise.
