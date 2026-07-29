@@ -174,6 +174,27 @@ new version's jar hash to that script in the same change, so the wrapper and the
 drift apart. The build workflows run the same script, so CI bootstraps exactly the way a fresh
 clone does.
 
+**Icon fonts.** The vector-icon TTFs ship from `node_modules`, not from the repository, and a
+release APK built without them renders icons as boxes. The release workflow copies them in its own
+step; for a local build run the same copy once after installing dependencies:
+
+```
+mkdir -p android/app/src/main/assets/fonts
+cp node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/*.ttf android/app/src/main/assets/fonts/
+```
+
+**Debug signing.** `android/app/debug.keystore` is not tracked. Release builds and unit tests do
+not use it, but `assembleDebug` needs it. Generate a standard debug keystore once:
+
+```
+keytool -genkeypair -keystore android/app/debug.keystore -alias androiddebugkey -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" -keyalg RSA -keysize 2048 -validity 10000
+```
+
+**Windows path length.** Clone into a short path such as `C:\dev\uma-auto-plus`. The NDK stage
+nests intermediate directories deeply, and a clone in a long directory fails with misleading CMake
+and ninja errors ("unknown target CPU", "manifest 'build.ninja' still dirty") that look nothing
+like the real problem.
+
 ## Versioning
 
 The Android build metadata is the single authority for the application version:
