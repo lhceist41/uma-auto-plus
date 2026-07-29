@@ -58,6 +58,32 @@ class CareerOutcomeTest {
     }
 
     @Test
+    @DisplayName("Fingerprint separates config arms when only moodFloor differs")
+    fun `fingerprint is sensitive to moodFloor`() {
+        // moodFloor is one of the enumerated tunables in Campaign.buildOutcomeConfigSnapshot, so a
+        // silent carry-over of a strict floor splits the corpus into arms that look comparable but
+        // are not. Pin that the field genuinely moves the fingerprint.
+        val cfg = { floor: String -> mapOf("statPrioritization" to "Speed,Power", "moodFloor" to floor) }
+        val good = outcomeConfigFingerprint("1.3.8", cfg("Good"))
+        val great = outcomeConfigFingerprint("1.3.8", cfg("Great"))
+        val normal = outcomeConfigFingerprint("1.3.8", cfg("Normal"))
+        assertEquals(false, good == great)
+        assertEquals(false, good == normal)
+        assertEquals(false, great == normal)
+        // Same floor, same arm: the field is the only thing that moved.
+        assertEquals(good, outcomeConfigFingerprint("1.3.8", cfg("Good")))
+    }
+
+    @Test
+    @DisplayName("Fingerprint ignores support-deck state entirely")
+    fun `fingerprint is deck agnostic`() {
+        // The snapshot enumerates tunables only; deck composition is deliberately not part of a
+        // config arm. Two runs differing solely in their deck must land in the same arm.
+        val arm = mapOf("moodFloor" to "Good", "statPrioritization" to "Speed,Power")
+        assertEquals(outcomeConfigFingerprint("1.3.8", arm), outcomeConfigFingerprint("1.3.8", arm.toMap()))
+    }
+
+    @Test
     @DisplayName("COMPLETED with a swept finale (wins == races > 0) is WIN")
     fun `completed with swept finale is win`() {
         assertEquals("WIN", classifyCareerQuality("COMPLETED", finaleRaces = 3, finaleWins = 3))

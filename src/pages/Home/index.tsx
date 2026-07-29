@@ -22,6 +22,7 @@ import { bumpSettingsRevision, createSingleFlight } from "../../lib/launchConfig
 import { presetCharacter, presetOutfit } from "../../data/presetMeta"
 import { deriveInGameName, deriveExcludeOutfits } from "../../lib/rotationSnapshots"
 import { presetObjectiveOf } from "../../lib/adaptiveSkillPolicy"
+import { presetMoodFloorOf } from "../../lib/moodFloorPolicy"
 import { GRAND_CONCERT_KEY, GRAND_CONCERT_WARNING, isGrandConcert, scenarioCapabilities } from "../../lib/scenarioKey"
 import { useNavigation } from "@react-navigation/native"
 
@@ -347,6 +348,14 @@ const Home = () => {
             // silently inherit the previous preset's objective. Mode/tier stay user-global and
             // are never stamped - presets must not set them.
             merged.skills.skillSpendObjective = presetObjectiveOf(preset.settings)
+        }
+
+        // Stamp the preset's mood floor on EVERY apply (absent -> "Good"), for the same reason as
+        // the objective above. Only trainees with a mood-gated trap event declare a strict floor;
+        // without the stamp that floor stayed applied to every later trainee, with no control to
+        // see or clear it, and it silently split the outcome-corpus config arm.
+        if (merged.training) {
+            merged.training.moodFloor = presetMoodFloorOf(preset.settings)
         }
 
         // A trainee-first pick from the picker carries its scenario; land it in the same apply so

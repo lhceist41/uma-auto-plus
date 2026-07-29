@@ -1,6 +1,7 @@
 import { Settings } from "../context/BotStateContext"
 import { characterPresets } from "../data/characterPresets"
 import { presetObjectiveOf } from "./adaptiveSkillPolicy"
+import { presetMoodFloorOf } from "./moodFloorPolicy"
 import { convertSettingsToBatch } from "./settingsUtils"
 
 /**
@@ -184,6 +185,13 @@ export function buildRotationSnapshotRows(base: Settings, rotation: RotationEntr
             // Home apply: the spread merges over the base settings, so an objective-less preset
             // would otherwise inherit whatever objective the base happened to carry.
             merged.skills.skillSpendObjective = presetObjectiveOf(preset.settings)
+        }
+
+        // Same stamp for the mood floor (absent -> "Good"). A rotation is exactly where the silent
+        // carry-over bit: a strict-floor trainee earlier in the cycle left her floor on every entry
+        // built after her, so the snapshots disagreed with the presets they were built from.
+        if (merged.training) {
+            merged.training.moodFloor = presetMoodFloorOf(preset.settings)
         }
 
         // The rotation entry's scenario is authoritative for which Campaign subclass runs.

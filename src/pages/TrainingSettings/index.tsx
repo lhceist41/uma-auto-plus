@@ -20,6 +20,7 @@ import { SearchPageProvider } from "../../context/SearchPageContext"
 import SearchableItem from "../../components/SearchableItem"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 import WarningContainer from "../../components/WarningContainer"
+import { MOOD_FLOORS, moodFloorLabel } from "../../lib/moodFloorPolicy"
 
 /**
  * Training Settings page: stat prioritization, blacklists, failure-chance thresholds, spark targets,
@@ -80,6 +81,7 @@ const TrainingSettings = () => {
         enableRainbowTrainingBonus,
         enablePrioritizeNearMaxFriendship,
         preferredDistanceOverride,
+        moodFloor,
         mustRestBeforeSummer,
         enableRiskyTraining,
         riskyTrainingMinStatGain,
@@ -720,6 +722,29 @@ const TrainingSettings = () => {
                                 {"\n\n"}
                                 For example, if Gold Ship has an aptitude of A for both Medium and Long, Auto will use Medium as the preferred distance. Whereas if Medium is A and Long is S, then Auto
                                 will instead use Long as the preferred distance.
+                            </Text>
+                        </View>
+
+                        <View style={styles.section}>
+                            <View style={styles.row}>
+                                <Text style={styles.label}>Mood Floor</Text>
+                                <CustomSelect
+                                    value={moodFloor}
+                                    onValueChange={(value) => updateTrainingSetting("moodFloor", value)}
+                                    options={MOOD_FLOORS.map((floor) => ({ label: moodFloorLabel(floor), value: floor }))}
+                                    placeholder="Select mood floor"
+                                    width={200}
+                                    searchId="mood-floor"
+                                    searchTitle="Mood Floor"
+                                    searchDescription="The mood the bot keeps the trainee at or above, spending a turn on recreation when she drops below it."
+                                />
+                            </View>
+                            <Text style={[styles.label, { fontSize: 14, color: colors.foreground, opacity: 0.7, marginTop: 4 }]}>
+                                The mood the bot keeps the trainee at or above. Whenever her mood falls below this level, the bot spends a turn on recreation instead of training. Default is
+                                &quot;Good&quot;.
+                                {"\n\n"}
+                                A higher floor trades training turns for a mood buffer, which is worth it only for trainees whose events can be redirected by low mood. Selecting a trainee preset sets
+                                this to whatever that trainee&apos;s build calls for, so change it after picking a preset if you want something different.
                             </Text>
                         </View>
 

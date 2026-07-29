@@ -3,6 +3,7 @@ import { startTiming } from "../lib/performanceLogger"
 import racesData from "../data/races.json"
 import { skillPlanSettingsPages } from "../pages/SkillPlanSettings/config"
 import { DEFAULT_ACCOUNT_TIER, DEFAULT_SKILL_SPEND_MODE, DEFAULT_SKILL_SPEND_OBJECTIVE } from "../lib/adaptiveSkillPolicy"
+import { DEFAULT_MOOD_FLOOR } from "../lib/moodFloorPolicy"
 
 /**
  * Configuration for an individual skill plan (e.g. preFinals, careerComplete).
@@ -672,9 +673,10 @@ export const defaultSettings: Settings = {
         enableTrainingLevelWeighting: true,
         enableTrainingAnalysisValidation: false,
         enableYoloStatDetection: false,
-        // Default Good matches base Campaign.shouldRecoverMood (`mood < Mood.GOOD`).
-        // Override to "Great" only for trainees with single-option mood-trap events.
-        moodFloor: "Good",
+        // Default Good matches base Campaign.shouldRecoverMood (`mood < Mood.GOOD`). The constant
+        // lives in lib/moodFloorPolicy so the Jest suite pins the actual default, and so the
+        // settings control and the preset stamp share one table.
+        moodFloor: DEFAULT_MOOD_FLOOR,
         // Pre-career deck validation is on by default — purely informational, no
         // behavior change beyond a one-time log line per career.
         enableDeckValidation: true,

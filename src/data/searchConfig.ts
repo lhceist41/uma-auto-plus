@@ -212,6 +212,13 @@ const searchConfig: SearchOption[] = [
         page: "TrainingSettings",
     },
     {
+        id: "mood-floor",
+        title: "Mood Floor",
+        description:
+            "The mood condition the bot keeps the trainee at or above: Normal, Good, or Great. When her mood drops below the floor, the bot spends a turn on recreation instead of training. Default is Good.",
+        page: "TrainingSettings",
+    },
+    {
         id: "stat-targets-by-distance",
         title: "Stat Targets by Distance",
         description:
