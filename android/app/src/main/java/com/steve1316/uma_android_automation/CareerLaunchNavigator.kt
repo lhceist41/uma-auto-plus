@@ -37,6 +37,7 @@ import com.steve1316.uma_android_automation.bot.keepDialogVerdict
 import com.steve1316.uma_android_automation.bot.CompleteCareerBalances
 import com.steve1316.uma_android_automation.bot.classifyCompleteCareerBalances
 import com.steve1316.uma_android_automation.bot.popupContradictsVerifiedBalance
+import com.steve1316.uma_android_automation.bot.sanitizeOcrExcerpt
 import com.steve1316.uma_android_automation.bot.SparkPagerAction
 import com.steve1316.uma_android_automation.bot.SparkPagerNav
 import com.steve1316.uma_android_automation.bot.SparkPagerRepaint
@@ -1583,14 +1584,21 @@ class CareerLaunchNavigator(private val context: Context) {
         // The region is scenario-dependent. On Grand Concert it carries "Remaining Performance
         // Points" with the Da/Pa/Vo/Vi/Co balances and no skill-point value at all, so there is
         // nothing to cross-check against and the honest move is to say so and proceed on the
-        // verified balance. This read had failed on every recorded finalize dialog; the captured
-        // crop from the 2026-07-28 control career showed why, and it was never an OCR fault.
+        // verified balance. Recognition keys on the "performance points" phrase, which the dialog
+        // prints in both its banner and its loss warning, so a dialog whose banner OCRs badly is
+        // still identified. Every branch here proceeds on the verified balance; none of them can
+        // block Finish on a dialog that carries no skill-point value in the first place.
         usableFinalizeVerdict()?.let { verdict ->
             val balances = readCompleteCareerBalances()
             val firstRead =
                 when (balances) {
                     is CompleteCareerBalances.PerformancePoints -> {
-                        val shown = balances.byType.entries.joinToString(" ") { "${it.key.uppercase()}=${it.value}" }
+                        val shown =
+                            if (balances.byType.isEmpty()) {
+                                "individual balances unreadable"
+                            } else {
+                                balances.byType.entries.joinToString(" ") { "${it.key.uppercase()}=${it.value}" }
+                            }
                         MessageLog.i(
                             TAG,
                             "[NAV] [FINALIZE] The Complete Career dialog shows Remaining Performance Points ($shown), not Skill Points, " +
@@ -1603,9 +1611,15 @@ class CareerLaunchNavigator(private val context: Context) {
                     CompleteCareerBalances.Unreadable -> null
                 }
             if (balances is CompleteCareerBalances.Unreadable) {
+                // Carry the text that failed. The 2026-07-29 live miss could not be diagnosed
+                // afterwards because the OCR output was never recorded anywhere, so the next
+                // occurrence has to arrive with its own evidence. Bounded and flattened to one
+                // line; emitted only here, so a classified dialog logs nothing extra.
                 MessageLog.w(
                     TAG,
-                    "[NAV] [FINALIZE] Could not read the Remaining Skill Points line on the Complete Career dialog. Proceeding on the verified balance of ${verdict.verifiedRemainingSp}.",
+                    "[NAV] [FINALIZE] Could not classify the Complete Career balance region (neither a Skill Points line nor a " +
+                        "Performance Points dialog). Proceeding on the verified balance of ${verdict.verifiedRemainingSp}. " +
+                        "OCR read: \"${sanitizeOcrExcerpt(lastCompleteCareerOcrText)}\"",
                 )
             } else if (firstRead != null && firstRead != verdict.verifiedRemainingSp) {
                 MessageLog.w(TAG, "[NAV] [FINALIZE] Dialog reports $firstRead remaining skill points but the verification says ${verdict.verifiedRemainingSp}. Re-reading once...")
@@ -1653,6 +1667,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * the button row.
      */
     private fun readCompleteCareerBalances(): CompleteCareerBalances {
+        lastCompleteCareerOcrText = ""
         val (finishLocation, _) = ButtonFinish.find(iu)
         if (finishLocation == null) return CompleteCareerBalances.Unreadable
         val bitmap = iu.getSourceBitmap()
@@ -1678,8 +1693,17 @@ class CareerLaunchNavigator(private val context: Context) {
         // this region was showing. The 2026-07-28 control career's own debug crop answered that
         // (a Grand Concert performance-point table), so the capture is redundant; the
         // performOCROnRegion debugName crop above still records the region every time.
+        //
+        // Held for the caller's unreadable-branch diagnostic only. Kept out of the return type so
+        // the classification stays a pure function of its text.
+        lastCompleteCareerOcrText = text
         return classifyCompleteCareerBalances(text)
     }
+
+    /** Raw OCR text of the most recent Complete Career balance read, for the unreadable-branch
+     * log line. Reset at the start of every read so a stale excerpt can never be reported against
+     * a later dialog. */
+    private var lastCompleteCareerOcrText: String = ""
 
     /**
      * POST_RUN_RESULTS: Clicks the first matching advancement button.

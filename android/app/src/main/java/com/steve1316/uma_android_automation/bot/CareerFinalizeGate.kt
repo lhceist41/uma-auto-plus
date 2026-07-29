@@ -348,24 +348,64 @@ internal sealed interface CompleteCareerBalances {
 private fun normalizeFinalizeDialogText(text: String): String = text.lowercase().replace('\n', ' ').replace('l', 'i')
 
 /**
+ * Whether [norm] (already normalized) carries the "performance points" phrase anywhere.
+ *
+ * The Grand Concert dialog prints that phrase twice: in the "Remaining Performance Points" banner
+ * and again in the "You will lose any unused skill and performance points." warning. Matching the
+ * bare phrase rather than the full banner wording accepts either one, which matters because the two
+ * are not equally readable. Measured on the captured 2026-07-29 crop, the banner is white text on
+ * pink with only ~60 grey levels of separation once the OCR call converts to grayscale, while the
+ * warning is blue on white at ~145 levels. Keying recognition solely to the banner meant depending
+ * on the weakest text in the region and ignoring the strongest.
+ *
+ * Safe against the non-scenario dialog, which reads "Remaining Skill Points: NNN pts" and contains
+ * no form of the word "performance".
+ */
+private fun carriesPerformancePointsPhrase(norm: String): Boolean = Regex("performance\\s*po[i1]nts?").containsMatchIn(norm)
+
+/**
  * Parse the Grand Concert "Remaining Performance Points" table into its per-type balances, or
  * null when the region is not that table.
  *
- * Accepts the region on either the label or the structure, because either alone is already
- * conclusive proof it is not a Skill Points dialog: the label phrase, or at least
- * [FINALIZE_PP_MIN_TYPES] of the five type codes each followed by a number.
+ * Accepts the region on either the phrase or the structure, because either alone is already
+ * conclusive proof it is not a Skill Points dialog: the "performance points" phrase anywhere in the
+ * text, or at least [FINALIZE_PP_MIN_TYPES] of the five type codes each followed by a number.
+ *
+ * A matched phrase returns even with NO readable balances, i.e. an empty map. The balances are
+ * corroborating structure, not a precondition: knowing the dialog is a performance-point dialog is
+ * the load-bearing fact, because it is what stops a skill-point balance being read off a screen
+ * that has none. An earlier revision documented exactly this rule but still required at least one
+ * readable code, so a phrase-only read fell through to Unreadable; that is the defect this fixes.
  */
 internal fun parseRemainingPerformancePoints(text: String): Map<String, Int>? {
     val norm = normalizeFinalizeDialogText(text)
-    val labelled = Regex("rema[i1]n[i1]ng\\s*performance\\s*po[i1]nts?").containsMatchIn(norm)
+    val phrasePresent = carriesPerformancePointsPhrase(norm)
     val found = LinkedHashMap<String, Int>()
     for (code in GRAND_CONCERT_POINT_CODES) {
         val match = Regex("\\b$code\\b\\s*([0-9]{1,5})").find(norm) ?: continue
         val value = match.groupValues[1].toIntOrNull() ?: continue
         if (value in 0..FINALIZE_PP_OCR_PLAUSIBLE_MAX) found[code] = value
     }
-    if (!labelled && found.size < FINALIZE_PP_MIN_TYPES) return null
-    return found.takeIf { it.isNotEmpty() }
+    if (!phrasePresent && found.size < FINALIZE_PP_MIN_TYPES) return null
+    return found
+}
+
+/** Cap on the OCR excerpt logged when the balance region cannot be classified. Long enough to show
+ * the whole dialog band, short enough that a repeated failure cannot flood the log. */
+internal const val FINALIZE_OCR_EXCERPT_MAX = 240
+
+/**
+ * One-line, length-bounded, printable rendering of OCR text for the unreadable-branch diagnostic.
+ *
+ * The live 2026-07-29 failure could not be diagnosed because the text that failed to classify was
+ * never recorded anywhere, on release or debug. This makes the next occurrence self-describing
+ * without a fixture dump: control characters and line breaks collapse to spaces so the excerpt
+ * cannot break log parsing, and the result is truncated to [FINALIZE_OCR_EXCERPT_MAX].
+ */
+internal fun sanitizeOcrExcerpt(text: String): String {
+    val flattened = text.map { if (it.isISOControl() || it.isWhitespace()) ' ' else it }.joinToString("").replace(Regex(" +"), " ").trim()
+    if (flattened.isEmpty()) return "(empty)"
+    return if (flattened.length <= FINALIZE_OCR_EXCERPT_MAX) flattened else flattened.take(FINALIZE_OCR_EXCERPT_MAX) + "..."
 }
 
 /**
@@ -376,6 +416,9 @@ internal fun parseRemainingPerformancePoints(text: String): Map<String, Int>? {
  * "skill" is present on a screen that carries no skill-point balance. Testing skill points
  * first would let a future loosening of that pattern latch onto the wrong dialog and hand the
  * caller a performance-point number dressed as a skill-point balance.
+ *
+ * A performance-point result may carry an empty map: that means "this is a Grand Concert dialog,
+ * balances unreadable", which is still a complete answer to the only question the caller asks.
  */
 internal fun classifyCompleteCareerBalances(text: String): CompleteCareerBalances {
     parseRemainingPerformancePoints(text)?.let { return CompleteCareerBalances.PerformancePoints(it) }

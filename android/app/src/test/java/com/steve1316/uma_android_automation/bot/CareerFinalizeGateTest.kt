@@ -390,9 +390,82 @@ class CareerFinalizeGateTest {
 
         @Test
         fun `one or two stray type codes are not enough to claim the performance table`() {
-            // Below FINALIZE_PP_MIN_TYPES with no label: refuse rather than half-read the region.
+            // Below FINALIZE_PP_MIN_TYPES with no phrase: refuse rather than half-read the region.
             assertNull(parseRemainingPerformancePoints("Da 58"))
             assertNull(parseRemainingPerformancePoints("Da 58 Pa 21"))
+            assertEquals(CompleteCareerBalances.Unreadable, classifyCompleteCareerBalances("Da 58 Pa 21"))
+        }
+
+        @Test
+        fun `a skill point dialog never trips the phrase rule`() {
+            // The phrase match is deliberately loose; it must still be impossible for the
+            // non-scenario dialog to satisfy it, since that dialog never says "performance".
+            for (skillText in listOf(
+                "Remaining Skill Points: 716 pts",
+                "Complete the career?\nRemaining Skill Points: 35 pts\nCancel Finish",
+                "Remaining Skil1 Polnts: 4 pts",
+            )) {
+                assertNull(parseRemainingPerformancePoints(skillText), "input: $skillText")
+                assertTrue(classifyCompleteCareerBalances(skillText) is CompleteCareerBalances.SkillPoints)
+            }
+        }
+
+        /**
+         * The King Halo Grand Concert completion dialog of 2026-07-29, transcribed from its own
+         * captured crop (`debug_nav_complete_career_remaining_sp_cropped.png`, sha256
+         * bec9c67c42fa9cdd713129ae28f72a0c79c39fa40b411ee26820e9346e32652f). That career is the one
+         * where the classifier returned Unreadable in production and the finalize log fell back to
+         * the skill-point wording, so every case below is anchored to it.
+         */
+        private val kingHaloDialog =
+            "Remaining Performance Points\n" +
+                "Da 2 Pa 16 Vo 0 Vi 17 Co 22\n" +
+                "You will lose any unused skill and performance points."
+
+        @Test
+        fun `the King Halo dialog classifies as performance points`() {
+            val classified = classifyCompleteCareerBalances(kingHaloDialog)
+            assertTrue(classified is CompleteCareerBalances.PerformancePoints, "got $classified")
+            assertEquals(mapOf("da" to 2, "pa" to 16, "vo" to 0, "vi" to 17, "co" to 22), parseRemainingPerformancePoints(kingHaloDialog))
+        }
+
+        @Test
+        fun `the label alone classifies with an empty map - the live regression`() {
+            // This is the case that failed in production: banner readable, balances not. It must
+            // answer "performance dialog, balances unknown", never "unreadable".
+            for (labelOnly in listOf("Remaining Performance Points", "Remaining Performance Points\n[] [] [] [] []")) {
+                val classified = classifyCompleteCareerBalances(labelOnly)
+                assertEquals(CompleteCareerBalances.PerformancePoints(emptyMap()), classified, "input: $labelOnly")
+            }
+        }
+
+        @Test
+        fun `the warning line alone is sufficient - it is the highest-contrast text in the region`() {
+            // Measured on the captured crop the banner separates by ~60 grey levels after the OCR
+            // call's grayscale conversion, the warning by ~145. The weaker signal must not be the
+            // only one recognition depends on.
+            val classified = classifyCompleteCareerBalances("You will lose any unused skill and performance points.")
+            assertEquals(CompleteCareerBalances.PerformancePoints(emptyMap()), classified)
+        }
+
+        @Test
+        fun `line breaks, spacing and punctuation do not break phrase recognition`() {
+            for (variant in listOf(
+                "Remaining Performance\nPoints",
+                "Remaining  Performance  Points",
+                "remaining performance points:",
+                "REMAINING PERFORMANCE POINT",
+                "Remaining Performance Polnts",
+            )) {
+                val classified = classifyCompleteCareerBalances(variant)
+                assertTrue(classified is CompleteCareerBalances.PerformancePoints, "variant '$variant' gave $classified")
+            }
+        }
+
+        @Test
+        fun `partial balances still classify, keeping whatever was readable`() {
+            val parsed = parseRemainingPerformancePoints("Remaining Performance Points\nDa 2 Vi 17")
+            assertEquals(mapOf("da" to 2, "vi" to 17), parsed)
         }
 
         @Test
@@ -401,6 +474,70 @@ class CareerFinalizeGateTest {
             val parsed = parseRemainingPerformancePoints("Remaining Performance Points\nDa 581234 Pa 21 Vo 10 Vi 109 Co 22")
             assertEquals(mapOf("pa" to 21, "vo" to 10, "vi" to 109, "co" to 22), parsed, "the corrupt Da value is dropped, the rest still read")
         }
+    }
+
+    @Nested
+    @DisplayName("unreadable-branch OCR diagnostic")
+    inner class OcrExcerptDiagnostic {
+        @Test
+        fun `flattens line breaks and control characters to one line`() {
+            assertEquals("a b c", sanitizeOcrExcerpt("a\nb\tc"))
+            assertEquals("a b", sanitizeOcrExcerpt("a b"))
+            assertEquals("Remaining Performance Points Da 2", sanitizeOcrExcerpt("Remaining Performance Points\n  Da 2  "))
+        }
+
+        @Test
+        fun `bounds the length so a repeated failure cannot flood the log`() {
+            val excerpt = sanitizeOcrExcerpt("x".repeat(5_000))
+            assertEquals(FINALIZE_OCR_EXCERPT_MAX + 3, excerpt.length, "truncated to the cap plus an ellipsis")
+            assertTrue(excerpt.endsWith("..."))
+        }
+
+        @Test
+        fun `empty or whitespace-only text says so rather than logging nothing`() {
+            assertEquals("(empty)", sanitizeOcrExcerpt(""))
+            assertEquals("(empty)", sanitizeOcrExcerpt("   \n\t  "))
+        }
+    }
+
+    @Nested
+    @DisplayName("live finalization paths stay unchanged")
+    inner class LiveFinalizationRegression {
+        @Test
+        fun `the King Halo 35-SP path still approves on candidate exhaustion`() {
+            // Live 2026-07-29: 35 SP, 7 eligible, none affordable, cheapest eligible 96.
+            val ev = evidence(35, eligible = 7, affordable = 0, cheapestEligible = 96, excluded = mapOf("negative" to 1, "wrong_axes" to 24))
+            val result = eval(35, ev, retryUsed = false)
+            assertEquals(FinalizeDecision.FINISH, result.decision, result.reason)
+            assertTrue("96" in result.reason, "the reason must still name the cheapest eligible price")
+        }
+
+        @Test
+        fun `the 92-SP path from the validation career still approves on exhaustion`() {
+            // Live 2026-07-29 (King Halo validation career): 92 SP, 4 eligible, none affordable,
+            // cheapest eligible 110, exclusions recorded as unbuyable_dead_tap=3 wrong_axes=20.
+            val ev = evidence(92, eligible = 4, affordable = 0, cheapestEligible = 110, excluded = mapOf("unbuyable_dead_tap" to 3, "wrong_axes" to 20))
+            val result = eval(92, ev, retryUsed = false)
+            assertEquals(FinalizeDecision.FINISH, result.decision, result.reason)
+            assertTrue("110" in result.reason, "the reason must name the cheapest eligible price")
+        }
+
+        @Test
+        fun `the Copano 4-SP path still scans and approves rather than shortcutting`() {
+            // Live 2026-07-28: 4 SP with no eligible candidate remaining after a complete scan.
+            val ev = evidence(4, eligible = 0, affordable = 0)
+            assertEquals(FinalizeDecision.FINISH, eval(4, ev, retryUsed = false).decision)
+        }
+
+        @Test
+        fun `neither balance is finishable without complete evidence`() {
+            // The classifier change must not have loosened the completeness requirement.
+            for (sp in listOf(4, 35)) {
+                assertEquals(FinalizeDecision.RETRY_SPEND, eval(sp, evidence(sp, scan = false), retryUsed = false).decision)
+                assertEquals(FinalizeDecision.BLOCK, eval(sp, evidence(sp, scan = false), retryUsed = true).decision)
+            }
+        }
+
     }
 
     @Nested
