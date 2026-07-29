@@ -154,17 +154,18 @@ sdk.dir=/path/to/your/Android/Sdk
 
 **`android/gradle/wrapper/gradle-wrapper.jar`** is not tracked. Gradle refuses to start without it
 with a bare `Unable to access jarfile` message, which is not obviously a bootstrap problem. Fetch
-the jar for the pinned Gradle version, which must match `distributionUrl` in
-`android/gradle/wrapper/gradle-wrapper.properties`:
+and verify it with:
 
 ```
-curl -sL "https://raw.githubusercontent.com/gradle/gradle/v8.14.3/gradle/wrapper/gradle-wrapper.jar" \
-  -o android/gradle/wrapper/gradle-wrapper.jar
+yarn bootstrap:android
 ```
 
-Keep the tag in that URL (`v8.14.3`) in step with the `distributionUrl` version whenever Gradle is
-upgraded, so the wrapper and the distribution never drift apart. The release workflow performs the
-same pinned download when the jar is absent.
+The script reads the pinned Gradle version from `gradle-wrapper.properties`, downloads the matching
+wrapper jar, and refuses to install it unless its SHA-256 matches the hash pinned in
+`scripts/bootstrap-gradle-wrapper.mjs`. When Gradle is upgraded, bump `distributionUrl` and add the
+new version's jar hash to that script in the same change, so the wrapper and the distribution never
+drift apart. The build workflows run the same script, so CI bootstraps exactly the way a fresh
+clone does.
 
 ## Versioning
 

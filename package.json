@@ -6,6 +6,7 @@
         "start": "expo start",
         "android": "expo run:android",
         "android:bundle": "node android/generate-bundle.js",
+        "bootstrap:android": "node scripts/bootstrap-gradle-wrapper.mjs",
         "build": "cd android && ./gradlew --stop && ./gradlew assembleRelease",
         "build:bundle": "node android/generate-bundle.js && cd android && ./gradlew --stop && ./gradlew assembleRelease",
         "build:clean": "cd android && ./gradlew --stop && ./gradlew clean && ./gradlew assembleRelease",

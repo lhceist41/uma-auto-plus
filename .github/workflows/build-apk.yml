@@ -70,12 +70,11 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      - name: Download Gradle wrapper
-        run: |
-          cd android
-          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            curl -sL "https://raw.githubusercontent.com/gradle/gradle/v8.14.3/gradle/wrapper/gradle-wrapper.jar" -o gradle/wrapper/gradle-wrapper.jar
-          fi
+      # Downloads the wrapper jar for the Gradle version pinned in gradle-wrapper.properties and
+      # verifies its SHA-256 against the pin in the script; a hash mismatch fails the build
+      # instead of running an unverified jar.
+      - name: Fetch and verify Gradle wrapper
+        run: node scripts/bootstrap-gradle-wrapper.mjs
 
       - name: Decode release keystore
         if: env.UMA_RELEASE_STORE_BASE64 != ''
