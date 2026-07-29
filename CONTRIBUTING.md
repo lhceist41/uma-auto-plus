@@ -96,6 +96,13 @@ Publish a note only when it is durable, generic, accurate, and useful to a futur
 - Do not untrack existing generated output until a fresh clone proves the build regenerates it.
 - Every generated file that stays tracked must have its reason written down, and an allowlist entry
   in the hygiene check.
+- The one standing tracked exception: the React Native asset drawables under
+  `android/app/src/main/res/drawable-*` (bundler output with `node_modules_*` and `src_*` names).
+  Release builds regenerate their own copies during the build, but debug APKs are built without
+  that bundling step and take these from the tree, and regenerating the set has been verified
+  byte-identical against the tracked copies. Never edit them by hand: they change only when
+  `src/assets`, a page's icons, or a dependency's shipped assets change, and the regenerated
+  files ride in the same change that caused them.
 
 ### Public documentation
 
