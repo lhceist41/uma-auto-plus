@@ -1,0 +1,28 @@
+name: Repository hygiene
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    name: Check tracked paths
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # The check reads `git ls-files` only. It needs no dependencies, no Android
+      # SDK, and no build, so it stays fast and cannot be broken by an unrelated
+      # toolchain failure.
+      - name: Check repository hygiene
+        run: yarn test:hygiene

@@ -111,3 +111,56 @@ android/gradle/wrapper/gradle-wrapper.jar
 /tmp_*
 __pycache__/
 *.pyc
+
+# --------------------------------------------------------------------------
+# Private working material. See CONTRIBUTING.md for what may be published.
+#
+# These rules deliberately ignore whole DIRECTORIES rather than guessing at
+# filenames: anything that lands in one of them is local by construction, and
+# a new kind of private file does not need a new rule.
+# --------------------------------------------------------------------------
+/scratchpad/
+/private/
+/validation/
+/captures/
+/gc-validation/
+/gc-watch-out/
+/docs-local/
+/tools/
+
+# One-off local notes at the repository root. Public documentation lives at the
+# root under its own known names (README, CHANGELOG, CONTRIBUTING, HOW_IT_WORKS,
+# PRESETS_GUIDE, TROUBLESHOOTING); everything else here is working material.
+# The hygiene check enforces the same allowlist, so a stray root document fails
+# CI even if it slips past these patterns.
+/PLAN_*.md
+/AUDIT_*.md
+/RESEARCH_*.md
+/UPSTREAM_TRIAGE_*.md
+
+# Diagnostics and captured state. Every one of these carries account data.
+*.log
+*.jsonl
+*.hprof
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Environment and credentials. .env.example is the one shareable template.
+.env
+.env.*
+!.env.example
+*.jks
+*.p12
+*.pem
+*.key
+
+# Installable and intermediate build output. Releases are published as release
+# assets, never committed.
+*.apk
+*.aab
+*.apks
+*.idsig
+*.dm

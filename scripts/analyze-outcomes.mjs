@@ -8,8 +8,8 @@
 // BOTH sources (every career since the corpus writer shipped also logs a ledger line) are
 // deduplicated, keeping the fingerprinted JSONL copy. Typical pull:
 //
-//   adb -s emulator-5554 pull "/storage/emulated/0/Android/data/com.lhceist41.uma_auto_plus/files/outcomes" .\pulled
-//   adb -s emulator-5554 pull "/storage/emulated/0/Android/data/com.lhceist41.uma_auto_plus/files/logs" .\pulled
+//   adb -s <device> pull "/storage/emulated/0/Android/data/com.lhceist41.uma_auto_plus/files/outcomes" .\pulled
+//   adb -s <device> pull "/storage/emulated/0/Android/data/com.lhceist41.uma_auto_plus/files/logs" .\pulled
 //   node scripts/analyze-outcomes.mjs .\pulled
 //
 // Requires node >= 23.6 (native TypeScript type stripping is default-on there; on 22.6-23.5

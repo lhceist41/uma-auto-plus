@@ -21,7 +21,8 @@
         "test": "jest",
         "test:watch": "jest --watch",
         "test:coverage": "jest --coverage",
-        "test:kt": "cd android && ./gradlew test"
+        "test:kt": "cd android && ./gradlew test",
+        "test:hygiene": "node scripts/check-repo-hygiene.mjs"
     },
     "dependencies": {
         "@expo/vector-icons": "^15.0.3",
