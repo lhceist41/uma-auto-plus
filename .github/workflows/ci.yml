@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  typescript:
+    name: TypeScript and Jest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Typecheck
+        run: node_modules/.bin/tsc --noEmit
+
+      - name: Jest
+        run: yarn jest --ci
+
+  android:
+    name: Kotlin unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'corretto'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      # The Gradle settings script resolves the React Native and Expo plugins through node, so
+      # the JS dependencies must be installed even though no bundle is built in this job.
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Fetch and verify Gradle wrapper
+        run: node scripts/bootstrap-gradle-wrapper.mjs
+
+      # testDebugUnitTest runs every JVM unit test once and compiles the debug Kotlin on the way.
+      # Debug variants skip JS bundling, so no bundle step is needed here; the release build path
+      # is exercised by the tag-triggered Build APK workflow.
+      - name: Kotlin unit tests
+        run: |
+          cd android
+          ./gradlew testDebugUnitTest --console=plain
