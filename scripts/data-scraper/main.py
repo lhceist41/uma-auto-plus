@@ -27,6 +27,12 @@ GAMETORA_MANIFEST_DATA_BASE_URL = f"{GAMETORA_DATA_URL}/umamusume"
 # Browser-like User-Agent for the plain-HTTP scrapes (some sites reject the default requests UA).
 HTTP_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"}
 
+# Stand-in price for the skills GameTora ships with no cost at all. Those are granted by a scenario or an event and are never
+# offered in the skill shop, so this value is database metadata rather than a price the bot ever pays: it exists so the entry
+# can be stored and recognized. The bot cannot mistake it for a real offer, because SkillList marks every database skill
+# "virtual" until it is actually seen on the skill list screen, and only non-virtual entries become purchase candidates.
+DEFAULT_SKILL_COST = 200
+
 # Module-level run state: the GameTora manifest index and per-dataset manifest data, each fetched once per run and reused across scrapers.
 _manifest_index_cache = None
 _manifest_data_cache = {}
@@ -148,6 +154,26 @@ def write_skill_icon_index(icons_dir):
     lines += ["}", "", "export default icons"]
     # Force LF; the checked-in index.ts is LF and this file has no .gitattributes to normalize it.
     (icons_dir / "index.ts").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+
+def exists_on_global(entry: Dict[str, Any]) -> bool:
+    """Reports whether a GameTora entry has been released on the Global server.
+
+    GameTora names the servers that do not have an entry yet in a per-entry list, spelled `unreleased` in the skill dataset and
+    `unreleased_servers` elsewhere, so both spellings are accepted here.
+
+    Scope: this is only consulted for skills that carry no shop price. GameTora's flag lags reality often enough that gating
+    priced skills on it would drop live ones, so priced skills are kept regardless of what it says. The race scraper does its
+    own gating through ERAS_NOT_ON_EN, because `did_not_exist` is a JP-history marker rather than an EN-availability flag and
+    the skill dataset does not carry that field at all.
+
+    Args:
+        entry (Dict[str, Any]): A GameTora entry, e.g. a skill.
+
+    Returns:
+        True when Global already has the entry.
+    """
+    return "en" not in (entry.get("unreleased_servers") or entry.get("unreleased") or [])
 
 
 def fetch_gametora_manifest_data(manifest_name: str) -> dict:
@@ -398,7 +424,8 @@ class SkillScraper(BaseScraper):
             versions_by_name = {}
             for skill in skill_data:
                 try:
-                    # No name_en means the skill isn't on Global yet.
+                    # Every record below is keyed and read by its English name, so there is nothing to build without one.
+                    # The release check itself is exists_on_global().
                     if "name_en" not in skill:
                         continue
 
@@ -417,9 +444,17 @@ class SkillScraper(BaseScraper):
                         skill_inherited = skill["gene_version"].get("inherited", False)
                         skill_cost = skill["gene_version"].get("cost", None)
 
-                    if skill_cost is None:
-                        logging.warning(f"Dropping skill with invalid COST: {skill_name_en}")
-                        continue
+                    # No cost means the skill is never sold in the shop: a scenario or an event grants it. Keep the ones Global
+                    # already has, so the bot can still recognize them when it reads the trainee's owned-skill list (the
+                    # estimated-rank calculation scores that list and used to silently drop every one of them), and skip the
+                    # rest as before. See DEFAULT_SKILL_COST for why a metadata price cannot turn one into a purchase.
+                    bHasShopCost = skill_cost is not None
+                    bIsOnGlobal = exists_on_global(skill)
+                    if not bHasShopCost:
+                        if not bIsOnGlobal:
+                            logging.debug(f"Skipping skill with no COST that Global does not have yet: {skill_name_en}")
+                            continue
+                        skill_cost = DEFAULT_SKILL_COST
 
                     # Get the skill activation conditions.
                     skill_condition = self.get_skill_activation_conditions(skill)
@@ -427,11 +462,13 @@ class SkillScraper(BaseScraper):
 
                     extra_data = skill_evaluation_points.get(skill_gene_id, {"evaluation_points": 0})
 
-                    # JP-only skills aren't on the tier list, so a miss isn't an error (review for misspellings). Negative skills never appear there.
+                    # The tier list only ranks purchasable skills that Global has, so a miss is only worth a warning for those
+                    # (review those for misspellings). JP-only and shop-less skills are expected to be absent, and negative
+                    # skills never appear there either.
                     tmp_skill_name = skill_to_tier_map_lowercase.get(skill_name_en.lower(), None)
                     bIsNegative = skill_iconid % 10 == 4
                     if tmp_skill_name is None and not bIsNegative:
-                        logging.warning(f"Skill Tier Unknown: {skill_name_en}")
+                        logging.log(logging.WARNING if bIsOnGlobal and bHasShopCost else logging.DEBUG, f"Skill Tier Unknown: {skill_name_en}")
 
                     community_tier = skill_to_tier_map.get(tmp_skill_name, None)
 
