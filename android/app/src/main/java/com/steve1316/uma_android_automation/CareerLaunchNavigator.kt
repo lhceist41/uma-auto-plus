@@ -227,6 +227,12 @@ class CareerLaunchNavigator(private val context: Context) {
          * new, so short lists pay no extra time. */
         private const val MAX_BORROW_SCAN_PAGES = 8
 
+        /** Repeats of a page-advance drag the picker swallowed (the screen came back identical).
+         * Two is enough to absorb a dropped gesture; past that an unchanged screen means the list
+         * has genuinely reached its end. Each retry spends page budget, so this cannot extend a
+         * scan indefinitely. */
+        private const val MAX_BORROW_SWALLOWED_SWIPE_RETRIES = 2
+
         /** The "! Duplicate Support" pill straddles a borrow row's top edge; its center sits
          * ~113 px above the row center on the measured captures. A pill inside this offset band
          * marks the row's character as already present in the deck. */
@@ -462,6 +468,11 @@ class CareerLaunchNavigator(private val context: Context) {
     private var borrowDuplicateReplacements: Int = 0
     private val borrowExcludedCharacters = mutableSetOf<String>()
     private var lastBorrowPickEntry: String? = null
+
+    // The capture the borrow list walker read its current screen from. The page-advance swipe
+    // needs the capture's dimensions for its coordinates, and reusing the screen's own capture
+    // keeps a walk at exactly one capture per page.
+    private var lastBorrowListBitmap: Bitmap? = null
 
     // The launch's active trainee identity (bare name or "[Outfit] Name"), used to reject borrow
     // candidates of the trainee's own character - the game refuses such a deck with a red
@@ -3538,8 +3549,8 @@ class CareerLaunchNavigator(private val context: Context) {
                 // wherever it sits. The scan is bounded, so a card sitting past the last scanned
                 // page is not seen - it takes the best card it reaches. First attempt only - if
                 // the tap does not commit, the bounded retry must fall back to the default
-                // template/top-row pick instead of repeating the same one. (A pick whose character
-                // is already in the deck DOES commit - the duplicate check below handles that.)
+                // pick instead of repeating the same one. (A pick whose character is already in
+                // the deck DOES commit - the duplicate check below handles that.)
                 if (SettingsHelper.getBooleanSetting("runQueue", "enableSmartBorrow", true) && friendSlotFillAttempts == 1) {
                     if (trySmartBorrowPick()) {
                         waitSafe(2.0)
@@ -3560,29 +3571,35 @@ class CareerLaunchNavigator(private val context: Context) {
                     MessageLog.i(TAG, "[NAV] Borrow Card list open. Preferred card found - selecting its row at (540, ${preferredLocation.y.toInt()})...")
                     gestureUtils.tap(540.0, preferredLocation.y, "borrow_preferred_row")
                 } else {
-                    // Validated default pick: read the visible rows and take the first one that is
-                    // neither pill-tagged nor an excluded character (the active trainee included).
-                    // The old blind first-row tap once borrowed the trainee's own card here - the
-                    // game then disables Start Career and the launch is unrecoverable by clicking.
-                    val scan = borrowRowsOnScreen(iu.getSourceBitmap())
-                    val pick =
-                        scan.rows.firstOrNull { (_, text) ->
-                            borrowExcludedCharacters.none { borrowRowMatchesPreference(text, it) }
+                    // Validated default pick: take the first row that is neither pill-tagged nor an
+                    // excluded character (the active trainee included). The old blind first-row tap
+                    // once borrowed the trainee's own card here - the game then disables Start
+                    // Career and the launch is unrecoverable by clicking.
+                    //
+                    // The search walks the bounded list instead of the one visible screen. When the
+                    // top of the pool is all "! Duplicate Support" rows nothing valid is in view,
+                    // and stopping there reported "no valid support available" with the rest of the
+                    // list never read.
+                    val selection =
+                        selectFromBorrowList(borrowWalker()) { text ->
+                            borrowTapApproved(text, null, borrowExcludedCharacters, borrowLaunchTraineeTarget)
                         }
+                    MessageLog.i(
+                        TAG,
+                        "[NAV] [BORROW] Default pick scan read ${selection.walk.screensInspected} screen(s) over ${selection.walk.pageGestures} page gesture(s); ended ${selection.walk.end}.",
+                    )
+                    val pick = selection.row
                     if (pick == null) {
                         ButtonClose.click(iu)
                         return TransitionResult.Failed(
-                            reason = "No valid borrowed support available: every visible Borrow Card row is the active trainee's own character, already refused this launch, or blocked by the game.",
+                            reason = "No valid borrowed support available: every Borrow Card row in the scanned list is the active trainee's own character, already refused this launch, or blocked by the game.",
                             transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
                             recommendedAction = "Follow more trainers or borrow a card of a different character manually, then restart the queue.",
                         )
                     }
                     MessageLog.i(
                         TAG,
-                        "[NAV] Borrow Card list open. Preferred card not visible - selecting the first valid card \"${pick.second.replace(
-                            "\n",
-                            " ",
-                        ).trim().take(60)}\" at (540, ${pick.first.toInt()})...",
+                        "[NAV] Borrow Card list open. Preferred card not visible - selecting the first valid card \"${borrowLogText(pick.second)}\" at (540, ${pick.first.toInt()})...",
                     )
                     lastBorrowPickEntry = pick.second
                     gestureUtils.tap(540.0, pick.first, "borrow_card_first_valid_row")
@@ -4574,59 +4591,57 @@ class CareerLaunchNavigator(private val context: Context) {
         // be borrowed this launch. Treating them as unreachable lets the early tap settle for
         // the best card that is actually legal instead of scanning on for a blocked one.
         val unreachable = mutableSetOf<Int>()
-        var page = 0
-        while (page <= MAX_BORROW_SCAN_PAGES) {
-            if (!BotService.isRunning || StartModule.queueStopRequested) break
-            val bitmap = iu.getSourceBitmap()
-            val scan = borrowRowsOnScreen(bitmap)
-            val rows = scan.rows
-            if (page == 0 && rows.isEmpty() && scan.duplicateTexts.isEmpty()) {
-                MessageLog.w(TAG, "[NAV] [BORROW] No borrow rows detected on the opened picker.")
-                break
-            }
-            for (dupText in scan.duplicateTexts + scan.traineeConflictTexts) {
-                priorities.forEachIndexed { idx, entry ->
-                    if (borrowRowMatchesPreference(dupText, entry) && unreachable.add(idx)) {
-                        MessageLog.i(TAG, "[NAV] [BORROW] \"$entry\" is offered but blocked for this launch (duplicate or active-trainee conflict) - not a candidate.")
+        var tapped = false
+        val discovery =
+            borrowWalker().walk { screen, page ->
+                val rows = screen.rows
+                for (dupText in screen.duplicateTexts + screen.traineeConflictTexts) {
+                    priorities.forEachIndexed { idx, entry ->
+                        if (borrowRowMatchesPreference(dupText, entry) && unreachable.add(idx)) {
+                            MessageLog.i(TAG, "[NAV] [BORROW] \"$entry\" is offered but blocked for this launch (duplicate or active-trainee conflict) - not a candidate.")
+                        }
                     }
                 }
+                for (text in rows.map { it.second } + screen.duplicateTexts) {
+                    val norm = borrowRowKey(text)
+                    if (norm.isEmpty() || !seen.add(norm)) continue
+                    MessageLog.i(TAG, "[NAV] [BORROW] Page $page: \"${borrowLogText(text)}\"")
+                }
+                val pageBest = smartBorrowBestMatch(rows.map { it.second }, priorities)
+                if (pageBest != null && pageBest.first < bestEntry) {
+                    bestEntry = pageBest.first
+                    bestPage = page
+                }
+                val firstReachable = priorities.indices.firstOrNull { it !in unreachable }
+                if (pageBest != null && firstReachable != null && pageBest.first == firstReachable) {
+                    // The best card that can still legally be borrowed is on screen - take it now.
+                    val (centerY, text) = rows[pageBest.second]
+                    if (borrowTapApproved(text, priorities[pageBest.first], borrowExcludedCharacters, borrowLaunchTraineeTarget)) {
+                        MessageLog.i(TAG, "[NAV] [BORROW] \"${priorities[pageBest.first]}\" found. Selecting it at (540, ${centerY.toInt()}).")
+                        lastBorrowPickEntry = priorities[pageBest.first]
+                        gestureUtils.tap(540.0, centerY, "borrow_smart_row")
+                        tapped = true
+                        return@walk true
+                    }
+                    MessageLog.w(TAG, "[NAV] [BORROW] The row offered as \"${priorities[pageBest.first]}\" failed the pre-tap identity check - leaving it and scanning on.")
+                }
+                false
             }
-            var newRows = 0
-            for (text in rows.map { it.second } + scan.duplicateTexts) {
-                val norm = text.lowercase().filter { it.isLetterOrDigit() }
-                if (norm.isEmpty() || !seen.add(norm)) continue
-                newRows++
-                MessageLog.i(TAG, "[NAV] [BORROW] Page $page: \"${text.replace("\n", " ").trim().take(60)}\"")
-            }
-            val pageBest = smartBorrowBestMatch(rows.map { it.second }, priorities)
-            if (pageBest != null && pageBest.first < bestEntry) {
-                bestEntry = pageBest.first
-                bestPage = page
-            }
-            val firstReachable = priorities.indices.firstOrNull { it !in unreachable }
-            if (pageBest != null && firstReachable != null && pageBest.first == firstReachable) {
-                // The best card that can still legally be borrowed is on screen - take it now.
-                val centerY = rows[pageBest.second].first
-                MessageLog.i(TAG, "[NAV] [BORROW] \"${priorities[pageBest.first]}\" found. Selecting it at (540, ${centerY.toInt()}).")
-                lastBorrowPickEntry = priorities[pageBest.first]
-                gestureUtils.tap(540.0, centerY, "borrow_smart_row")
-                return true
-            }
-            if (newRows == 0) break // a page of only already-seen rows = the end of the list
-            if (page == MAX_BORROW_SCAN_PAGES) break
-            swipeBorrowList(bitmap)
-            page++
+        if (tapped) return true
+        if (discovery.end == BorrowWalkEnd.EMPTY_PICKER) {
+            MessageLog.w(TAG, "[NAV] [BORROW] No borrow rows detected on the opened picker.")
         }
+        MessageLog.i(TAG, "[NAV] [BORROW] Discovery scan read ${discovery.screensInspected} screen(s) over ${discovery.pageGestures} page gesture(s); ended ${discovery.end}.")
 
         if (bestPage < 0) {
+            // No curated card anywhere in the bounded space. In replace mode any row the game did
+            // not tag and the deck has not already refused still beats the committed clash, so
+            // search the whole list for one instead of settling for whatever the last screen shows.
             if (replaceMode) {
-                // No curated card left to try: any row not tagged Duplicate Support (those never
-                // reach this list) and not already refused still beats the committed clash.
-                for ((centerY, text) in borrowRowsOnScreen(iu.getSourceBitmap()).rows) {
-                    if (borrowExcludedCharacters.any { borrowRowMatchesPreference(text, it) }) continue
-                    MessageLog.i(TAG, "[NAV] [BORROW] No curated card available - replacing with \"${text.replace("\n", " ").trim().take(60)}\" at (540, ${centerY.toInt()}).")
-                    lastBorrowPickEntry = text
-                    gestureUtils.tap(540.0, centerY, "borrow_any_row")
+                val anyValid = reopenAndSelect(replaceMode, "any borrowable card", "no curated card is on offer")
+                if (!anyValid.reopened) return false
+                anyValid.row?.let {
+                    lastBorrowPickEntry = it.second
                     return true
                 }
             }
@@ -4637,9 +4652,9 @@ class CareerLaunchNavigator(private val context: Context) {
         // Reopen to reset the list to the top deterministically, then SEARCH for the card again
         // rather than trusting the page number it was seen on.
         //
-        // Trusting the number lost a correctly chosen priority-1 Kitasan Black on 2026-07-26 and
-        // dropped the queue onto "first valid card", which took a Group card. Two independent
-        // reasons a remembered page can be wrong, both present in that run's log:
+        // Trusting the number lost a correctly chosen priority-1 card on 2026-07-26 and dropped
+        // the queue onto "first valid card", which took a Group card. Two independent reasons a
+        // remembered page can be wrong, both present in that run's log:
         //   - the picker is ordered by the friends' last login, so it genuinely reorders between
         //     the scan and the reopen;
         //   - the row text is OCR, and the bracket glyphs are unstable. The same card read as
@@ -4648,34 +4663,123 @@ class CareerLaunchNavigator(private val context: Context) {
         //     the same page can therefore miss a card that is sitting right there.
         // Re-scanning from the top costs one extra pass and survives both.
         MessageLog.i(TAG, "[NAV] [BORROW] Best available card is \"${priorities[bestEntry]}\" (first seen on page $bestPage). Reopening the picker to select it...")
-        ButtonClose.click(iu)
-        waitSafe(1.5)
-        if (!reopenBorrowPicker(replaceMode)) return false
-        waitSafe(2.0)
-        var searchPage = 0
-        val searchSeen = HashSet<String>()
-        while (searchPage <= MAX_BORROW_SCAN_PAGES) {
-            if (!BotService.isRunning || StartModule.queueStopRequested) break
-            val searchBitmap = iu.getSourceBitmap()
-            val searchRows = borrowRowsOnScreen(searchBitmap).rows
-            for ((centerY, text) in searchRows) {
-                if (borrowRowMatchesPreference(text, priorities[bestEntry])) {
-                    MessageLog.i(TAG, "[NAV] [BORROW] Selecting \"${priorities[bestEntry]}\" on page $searchPage at (540, ${centerY.toInt()}).")
-                    lastBorrowPickEntry = priorities[bestEntry]
-                    gestureUtils.tap(540.0, centerY, "borrow_smart_row")
-                    return true
-                }
-            }
-            // Stop at the end of the list: a page whose rows were all seen already is the tail.
-            val fresh = searchRows.count { searchSeen.add(it.second.lowercase().filter { c -> c.isLetterOrDigit() }) }
-            if (fresh == 0 || searchPage == MAX_BORROW_SCAN_PAGES) break
-            swipeBorrowList(searchBitmap)
-            searchPage++
+        val target = priorities[bestEntry]
+        // The re-scan also records what else the list is offering. If the chosen card has gone,
+        // that record is what makes a sane second choice possible without another full pass.
+        var bestSeenRank = Int.MAX_VALUE
+        val targeted =
+            reopenAndSelect(
+                replaceMode,
+                "\"$target\"",
+                "the chosen card",
+                observe = { text ->
+                    val rank = smartBorrowBestMatch(listOf(text), priorities)?.first
+                    if (rank != null && rank < bestSeenRank) bestSeenRank = rank
+                },
+                accept = { text -> borrowTapApproved(text, target, borrowExcludedCharacters, borrowLaunchTraineeTarget) },
+            )
+        if (!targeted.reopened) return false
+        if (targeted.row != null) {
+            lastBorrowPickEntry = target
+            return true
         }
-        MessageLog.w(TAG, "[NAV] [BORROW] Could not find \"${priorities[bestEntry]}\" again after reopening and re-scanning the list. Falling back.")
+
+        // The chosen card is not reachable any more: the pool reorders between two opens seconds
+        // apart, and a card that was on offer during discovery can be gone by the reopen. Do NOT
+        // settle for whatever happens to be visible - the pass above just walked the same bounded
+        // space and knows what else is there, so go and take the best of it under the same policy.
+        if (bestSeenRank != Int.MAX_VALUE) {
+            val alternative = priorities[bestSeenRank]
+            MessageLog.w(
+                TAG,
+                "[NAV] [BORROW] \"$target\" was not found in the re-scan (the list reordered). The best card still on offer is \"$alternative\" - selecting that instead.",
+            )
+            val retargeted =
+                reopenAndSelect(replaceMode, "\"$alternative\"", "the chosen card disappeared after a reorder") { text ->
+                    val rank = smartBorrowBestMatch(listOf(text), priorities)?.first
+                    rank != null && rank <= bestSeenRank && borrowTapApproved(text, null, borrowExcludedCharacters, borrowLaunchTraineeTarget)
+                }
+            if (!retargeted.reopened) return false
+            retargeted.row?.let {
+                lastBorrowPickEntry = it.second
+                return true
+            }
+            MessageLog.w(TAG, "[NAV] [BORROW] \"$alternative\" was gone from the list as well.")
+        }
+
+        if (replaceMode) {
+            val anyValid = reopenAndSelect(replaceMode, "any borrowable card", "no curated card survived the reorder")
+            if (!anyValid.reopened) return false
+            anyValid.row?.let {
+                lastBorrowPickEntry = it.second
+                return true
+            }
+        }
+        MessageLog.w(TAG, "[NAV] [BORROW] No curated card could be selected after re-scanning the whole list. Falling back to the default pick.")
         ButtonClose.click(iu)
         return false
     }
+
+    /** Outcome of one reopen-and-select pass: [row] is the row that was tapped, and [reopened] is
+     * false when the picker could not be reopened at all (nothing was scanned or tapped). */
+    private data class BorrowReselect(val row: Pair<Double, String>?, val reopened: Boolean)
+
+    /**
+     * Closes the picker, reopens it (which resets the list to the top), then walks the WHOLE
+     * bounded list for the first row [accept] approves and taps it. [observe] sees every
+     * borrowable row on the way, so a caller hunting one specific card still learns what else the
+     * list holds.
+     *
+     * Every selection that has to survive a reorder goes through here, which is what keeps the
+     * re-selection search covering the same space as discovery: both drive [borrowWalker].
+     *
+     * @param intent what is being looked for, for the log.
+     * @param because why this pass is running, for the log.
+     */
+    private fun reopenAndSelect(
+        replaceMode: Boolean,
+        intent: String,
+        because: String,
+        observe: (String) -> Unit = {},
+        accept: (String) -> Boolean = { text -> borrowTapApproved(text, null, borrowExcludedCharacters, borrowLaunchTraineeTarget) },
+    ): BorrowReselect {
+        ButtonClose.click(iu)
+        waitSafe(1.5)
+        if (!reopenBorrowPicker(replaceMode)) {
+            MessageLog.w(TAG, "[NAV] [BORROW] Could not reopen the Borrow Card picker to select $intent.")
+            return BorrowReselect(null, reopened = false)
+        }
+        waitSafe(2.0)
+        val selection = selectFromBorrowList(borrowWalker(), observe, accept)
+        val walk = selection.walk
+        MessageLog.i(
+            TAG,
+            "[NAV] [BORROW] Re-selection scan for $intent ($because) read ${walk.screensInspected} screen(s) over ${walk.pageGestures} page gesture(s); ended ${walk.end}.",
+        )
+        val row = selection.row ?: return BorrowReselect(null, reopened = true)
+        MessageLog.i(TAG, "[NAV] [BORROW] Selecting \"${borrowLogText(row.second)}\" at (540, ${row.first.toInt()}).")
+        gestureUtils.tap(540.0, row.first, "borrow_smart_row")
+        return BorrowReselect(row, reopened = true)
+    }
+
+    /** The bounded list walker wired to this navigator's capture, swipe, and stop checks. One
+     * factory so discovery and every re-selection pass cannot drift apart on their limits. */
+    private fun borrowWalker(): BorrowListWalker =
+        BorrowListWalker(
+            maxPageGestures = MAX_BORROW_SCAN_PAGES,
+            maxSwallowedRetries = MAX_BORROW_SWALLOWED_SWIPE_RETRIES,
+            readScreen = {
+                val bitmap = iu.getSourceBitmap()
+                lastBorrowListBitmap = bitmap
+                borrowRowsOnScreen(bitmap)
+            },
+            advancePage = { lastBorrowListBitmap?.let { swipeBorrowList(it) } },
+            abort = { !BotService.isRunning || StartModule.queueStopRequested },
+            log = { MessageLog.i(TAG, "[NAV] [BORROW] $it") },
+        )
+
+    /** Sanitized row text for the log: one line, bounded length. */
+    private fun borrowLogText(text: String): String = text.replace("\n", " ").trim().take(60)
 
     /** Opens the Borrow Card picker from the deck screen: via the empty-slot icon normally, or
      * via the filled slot's Friends banner when replacing a committed borrow. */
@@ -4686,11 +4790,6 @@ class CareerLaunchNavigator(private val context: Context) {
         gestureUtils.tap(bannerLocation.x, bannerLocation.y - 180, "borrow_slot_reopen")
         return true
     }
-
-    /** Visible picker rows split into borrowable [rows] and the texts of rows the game tagged
-     * "! Duplicate Support" or "! Trainee" - those cannot be borrowed this launch but still
-     * identify which priority entries are blocked. */
-    private data class BorrowScan(val rows: List<Pair<Double, String>>, val duplicateTexts: List<String>, val traineeConflictTexts: List<String> = emptyList())
 
     /**
      * Reads the visible Borrow Card rows: each row is located by its Last Login pill and its

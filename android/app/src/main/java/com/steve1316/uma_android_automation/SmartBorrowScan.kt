@@ -1,0 +1,204 @@
+package com.steve1316.uma_android_automation
+
+/**
+ * One visible screen of the Borrow Card picker: the rows that can be borrowed, plus the texts of
+ * the rows the game itself tagged "! Duplicate Support" or "! Trainee".
+ *
+ * The tagged rows are kept even though they can never be picked. They are the only evidence that
+ * a screen full of blocked cards is a real screen rather than the end of the list, and losing that
+ * evidence is what stopped a re-selection scan one screen in.
+ */
+internal data class BorrowScan(
+    val rows: List<Pair<Double, String>>,
+    val duplicateTexts: List<String> = emptyList(),
+    val traineeConflictTexts: List<String> = emptyList(),
+)
+
+/**
+ * Normalized identity of a row's OCR text: lowercase alphanumerics only, so bracket glyphs, line
+ * breaks, and spacing noise cannot make one row read as two different ones. Empty when the row
+ * carried nothing readable.
+ */
+internal fun borrowRowKey(text: String): String = text.lowercase().filter { it.isLetterOrDigit() }
+
+/**
+ * Every readable row identity on a screen, borrowable and blocked alike.
+ *
+ * Counting the blocked rows is what makes paging honest. A screen showing nothing but
+ * "! Duplicate Support" rows contributes no borrowable row at all, so a freshness rule that
+ * looked only at borrowable rows read such a screen as the tail of the list and stopped there,
+ * even with the whole list still below it.
+ */
+internal fun borrowScreenKeys(screen: BorrowScan): List<String> =
+    (screen.rows.map { it.second } + screen.duplicateTexts + screen.traineeConflictTexts)
+        .map(::borrowRowKey)
+        .filter { it.isNotEmpty() }
+
+/**
+ * Ordered fingerprint of a screen, used to tell a page that advanced from one that did not.
+ * Identity only: row positions shift by a few pixels between captures, so coordinates would
+ * report movement that did not happen.
+ */
+internal fun borrowScreenSignature(screen: BorrowScan): String = borrowScreenKeys(screen).joinToString("|")
+
+/** Alphanumerics a row must carry before it may be tapped without a name to match against. */
+private const val BORROW_MIN_READABLE_CHARS = 3
+
+/**
+ * Whether a row read well enough to act on. A row whose OCR failed comes back blank or as a
+ * fragment; tapping one commits an unknown card, which is worse than skipping it.
+ */
+internal fun borrowRowIsReadable(text: String): Boolean = borrowRowKey(text).length >= BORROW_MIN_READABLE_CHARS
+
+/**
+ * Final gate immediately before a tap: the row must be readable, must not be a character the deck
+ * already refused this launch, must not be the active trainee's own character, and when the tap is
+ * aimed at a specific card ([intendedEntry]) the row on screen must still be that card.
+ *
+ * The pill-based filtering in the screen reader already removes tagged rows. This is the identity
+ * re-check on top of it, so a reorder between reading a screen and acting on it cannot commit a
+ * card nobody chose.
+ */
+internal fun borrowTapApproved(
+    rowText: String,
+    intendedEntry: String?,
+    excludedCharacters: Collection<String>,
+    traineeTarget: String,
+): Boolean {
+    if (!borrowRowIsReadable(rowText)) return false
+    if (excludedCharacters.any { borrowRowMatchesPreference(rowText, it) }) return false
+    if (traineeTarget.isNotBlank() && borrowCandidateConflictsWithTrainee(rowText, traineeTarget)) return false
+    return intendedEntry == null || borrowRowMatchesPreference(rowText, intendedEntry)
+}
+
+/** Why a list walk ended. */
+internal enum class BorrowWalkEnd {
+    /** The visitor took its action and stopped the walk. */
+    PICKED,
+
+    /** The list stopped producing new rows, or stopped moving under the page gesture. */
+    END_OF_LIST,
+
+    /** The page-gesture budget ran out with the list still moving. */
+    MAX_PAGES,
+
+    /** The bot was stopped mid-walk. */
+    ABORTED,
+
+    /** The first screen carried no readable row at all: the picker is not open. */
+    EMPTY_PICKER,
+}
+
+/** What a walk did, for the log and for the caller's fallback decision. */
+internal data class BorrowWalkResult(
+    val end: BorrowWalkEnd,
+    val screensInspected: Int,
+    val pageGestures: Int,
+    val swallowedRetries: Int,
+) {
+    val picked: Boolean get() = end == BorrowWalkEnd.PICKED
+}
+
+/**
+ * The one bounded traversal of the Borrow Card list, shared by discovery and by every
+ * re-selection pass so their paging limits and end-of-list rules cannot drift apart.
+ *
+ * Reading a screen and advancing a page are injected, which keeps the traversal itself free of
+ * OpenCV, OCR, and gestures, and therefore unit-testable.
+ *
+ * Bounds, all hard:
+ *  - at most [maxPageGestures] gestures, so at most that many advances plus the first screen;
+ *  - a gesture that does not change the screen is retried at most [maxSwallowedRetries] times
+ *    before the list is declared finished, and each retry spends gesture budget;
+ *  - a screen whose rows were all seen before ends the walk.
+ * There is no path that repeats without consuming budget.
+ */
+internal class BorrowListWalker(
+    private val maxPageGestures: Int,
+    private val maxSwallowedRetries: Int,
+    private val readScreen: () -> BorrowScan,
+    private val advancePage: () -> Unit,
+    private val abort: () -> Boolean = { false },
+    private val log: (String) -> Unit = {},
+) {
+    /**
+     * Walks the list, calling [visit] once per unique screen with the screen and its zero-based
+     * index. [visit] returns true when it has acted and the walk should stop.
+     */
+    fun walk(visit: (screen: BorrowScan, pageIndex: Int) -> Boolean): BorrowWalkResult {
+        val seen = HashSet<String>()
+        var lastSignature: String? = null
+        var screens = 0
+        var gestures = 0
+        var retriesThisGap = 0
+        var retriesTotal = 0
+
+        while (true) {
+            if (abort()) return BorrowWalkResult(BorrowWalkEnd.ABORTED, screens, gestures, retriesTotal)
+
+            val screen = readScreen()
+            val keys = borrowScreenKeys(screen)
+            val signature = keys.joinToString("|")
+
+            if (lastSignature != null && signature == lastSignature) {
+                // The list did not move. Either the drag was swallowed (the picker eats short
+                // drags the same way the trainee roster does) or this is the bottom.
+                if (retriesThisGap < maxSwallowedRetries && gestures < maxPageGestures) {
+                    retriesThisGap++
+                    retriesTotal++
+                    log("page gesture did not move the list; retrying it ($retriesThisGap/$maxSwallowedRetries).")
+                    advancePage()
+                    gestures++
+                    continue
+                }
+                return BorrowWalkResult(BorrowWalkEnd.END_OF_LIST, screens, gestures, retriesTotal)
+            }
+            retriesThisGap = 0
+            lastSignature = signature
+
+            if (screens == 0 && keys.isEmpty()) {
+                return BorrowWalkResult(BorrowWalkEnd.EMPTY_PICKER, screens, gestures, retriesTotal)
+            }
+
+            screens++
+            if (visit(screen, screens - 1)) {
+                return BorrowWalkResult(BorrowWalkEnd.PICKED, screens, gestures, retriesTotal)
+            }
+
+            // Every row on this screen was already read on an earlier one: nothing further to find.
+            if (keys.none { seen.add(it) }) {
+                return BorrowWalkResult(BorrowWalkEnd.END_OF_LIST, screens, gestures, retriesTotal)
+            }
+            if (gestures >= maxPageGestures) {
+                return BorrowWalkResult(BorrowWalkEnd.MAX_PAGES, screens, gestures, retriesTotal)
+            }
+            advancePage()
+            gestures++
+        }
+    }
+}
+
+/** The row a selection walk settled on, with the walk's own statistics. */
+internal data class BorrowSelection(val row: Pair<Double, String>?, val walk: BorrowWalkResult)
+
+/**
+ * Walks the whole bounded list looking for a row [accept] approves, and reports the first one.
+ * [observe] sees every borrowable row on the way, which is how a caller can learn what the list
+ * actually holds while it hunts for one specific card.
+ */
+internal fun selectFromBorrowList(
+    walker: BorrowListWalker,
+    observe: (String) -> Unit = {},
+    accept: (String) -> Boolean,
+): BorrowSelection {
+    var found: Pair<Double, String>? = null
+    val walk =
+        walker.walk { screen, _ ->
+            for (row in screen.rows) {
+                observe(row.second)
+                if (found == null && accept(row.second)) found = row
+            }
+            found != null
+        }
+    return BorrowSelection(found, walk)
+}
