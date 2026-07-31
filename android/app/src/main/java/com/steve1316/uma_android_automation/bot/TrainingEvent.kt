@@ -677,7 +677,15 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         } else if (specialEventResult != null) {
             val (selectedOptionIndex, _) = specialEventResult
 
-            val decision = decideSpecialEventOption(selectedOptionIndex, characterOverrideIndex = null, eventOptionCount = eventRewards.size)
+            // A per-trainee override is more specific than the generic special event pick, so it
+            // wins when both target this event: several presets deliberately diverge from their own
+            // shared special defaults (e.g. Maruzensky's Acupuncture pick). The special flow is
+            // kept for the confidence bypass and the confirmation tap; only the index source changes.
+            val characterOverride = checkCharacterEventOverride(characterOrSupportName, eventTitle)
+            val decision = decideSpecialEventOption(selectedOptionIndex, characterOverride, eventRewards.size)
+            if (decision.usedCharacterOverride) {
+                MessageLog.v(TAG, "[TRAINING_EVENT] Character event override outranks the special event override for \"${eventTitle.replace("\n", " ")}\".")
+            }
             if (decision.clamped) {
                 // Either the setting names an option this event genuinely does not have, or the
                 // matched copy is the wrong shape because the screen was not read confidently. Both
@@ -685,7 +693,7 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                 // recognition defect for an entire release.
                 MessageLog.w(
                     TAG,
-                    "[WARN] handleTrainingEvent:: Special event option ${selectedOptionIndex + 1} does not exist on the matched " +
+                    "[WARN] handleTrainingEvent:: Special event option ${(characterOverride ?: selectedOptionIndex) + 1} does not exist on the matched " +
                         "\"${eventTitle.replace("\n", " ")}\" (${eventRewards.size} option(s)). Using option ${decision.optionIndex + 1}. " +
                         "Check the setting, and the option-row count logged above if the event really has more options.",
                 )
