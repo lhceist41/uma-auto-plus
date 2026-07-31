@@ -130,8 +130,115 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
      */
     data class EventOverride(val selectedOption: String, val requiresConfirmation: Boolean)
 
+    /**
+     * A trusted option-row count and the capture that produced it.
+     *
+     * @property count The number of option rows, observed twice in a row.
+     * @property acceptedAtIndex Index into the observation sequence of the confirming capture, so
+     *   the caller can reuse that capture's coordinates rather than an earlier partial one.
+     */
+    data class StableOptionCount(val count: Int, val acceptedAtIndex: Int)
+
+    /** What to do with the option rows currently in hand when it is time to tap. */
+    enum class OptionTapAction {
+        /** The selected option exists in the current list; tap that row. */
+        USE_ROW,
+
+        /** The list cannot serve the selected option; refresh it and re-plan. */
+        RESCAN,
+
+        /** Still short after a refresh: tap the last row that exists and report the shortfall. */
+        CLAMP_TO_LAST_ROW,
+
+        /** No rows at all after a refresh; the caller falls back to a single retrying search. */
+        NO_ROWS_AVAILABLE,
+    }
+
+    /** [OptionTapAction] plus the row index it applies to (-1 when there is no row to use). */
+    data class OptionTapPlan(val action: OptionTapAction, val rowIndex: Int)
+
+    /**
+     * Which option a special event ends up selecting.
+     *
+     * @property optionIndex The 0-based index to act on.
+     * @property usedCharacterOverride Whether a per-trainee override supplied the index.
+     * @property clamped Whether the requested index did not exist on the matched event's data.
+     */
+    data class SpecialOptionDecision(val optionIndex: Int, val usedCharacterOverride: Boolean, val clamped: Boolean)
+
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]TrainingEvent"
+
+        /** How many captures the option-row read may take before giving up on a stable answer. */
+        const val OPTION_ROW_MAX_CAPTURES = 4
+
+        /** Seconds between option-row captures. Four captures therefore add at most ~0.6s of waiting. */
+        const val OPTION_ROW_CAPTURE_INTERVAL = 0.2
+
+        /**
+         * Decides when a sequence of option-row observations may be trusted.
+         *
+         * Horseshoe matching runs on a single capture with no retries, and a partially rendered event
+         * screen genuinely reports fewer rows than it ends up having (the Unity Cup tutorial crashed
+         * on exactly that). The two directions of that error are not symmetric, so the rules are not
+         * either:
+         *
+         * - **Two or more rows** may be accepted as soon as two consecutive captures agree on the
+         *   count, provided no earlier capture saw MORE. Rows appear as a screen draws, they do not
+         *   vanish, so the largest count seen so far is a lower bound on the event's real shape and a
+         *   later smaller count is a dropped read rather than a new truth.
+         * - **One row** is only ever accepted when the whole capture budget has been spent and every
+         *   capture in it saw exactly one row. "One" is the reading a half-drawn two-option screen
+         *   produces, and it is also the reading that hands a normal race result to a one-option
+         *   card-specific event, so it demands the strongest evidence available: a count that never
+         *   moved across the entire observation window. Two early ones prove nothing, which is why
+         *   `[1,1,2,2]` settles on 2 and `[1,1,1,2]` settles on nothing at all.
+         *
+         * Zero never qualifies under either rule: an empty read is a failed capture, not a shape, so
+         * a window that starts with one cannot certify a one-option event.
+         *
+         * @param observations Row counts in capture order.
+         * @param requiredObservationCount How many captures the caller's budget allows; a count of one
+         *   is accepted only on a full window of that size.
+         * @return the accepted count with the index of the capture that confirmed it, or null when the
+         *   sequence proves nothing.
+         */
+        fun acceptStableOptionCount(observations: List<Int>, requiredObservationCount: Int = OPTION_ROW_MAX_CAPTURES): StableOptionCount? {
+            // Counts of two or more: two consecutive agreeing captures, never below an earlier peak.
+            var highestSeen = 0
+            for (index in observations.indices) {
+                val current = observations[index]
+                if (index > 0 && current >= 2 && current == observations[index - 1] && current >= highestSeen) {
+                    return StableOptionCount(current, index)
+                }
+                if (current > highestSeen) highestSeen = current
+            }
+
+            // A single row: only on a complete window that never showed anything else.
+            if (observations.size >= requiredObservationCount && observations.all { it == 1 }) {
+                return StableOptionCount(1, observations.size - 1)
+            }
+
+            return null
+        }
+
+        /**
+         * Plans which on-screen row to tap for [selectedIndex] given [availableRows] currently known.
+         *
+         * The row list is read before OCR, so by tap time it can be short: rows that were still
+         * rendering then may have appeared since. Silently tapping row 0 in that case throws away
+         * the option the settings asked for and looks identical to success in the log, so a short
+         * list asks for one refresh first, and a still-short list is reported rather than hidden.
+         *
+         * @param rescanned Whether the list has already been refreshed once for this event.
+         */
+        fun planOptionTap(selectedIndex: Int, availableRows: Int, rescanned: Boolean): OptionTapPlan =
+            when {
+                selectedIndex in 0 until availableRows -> OptionTapPlan(OptionTapAction.USE_ROW, selectedIndex)
+                !rescanned -> OptionTapPlan(OptionTapAction.RESCAN, selectedIndex)
+                availableRows > 0 -> OptionTapPlan(OptionTapAction.CLAMP_TO_LAST_ROW, availableRows - 1)
+                else -> OptionTapPlan(OptionTapAction.NO_ROWS_AVAILABLE, -1)
+            }
 
         /**
          * Whether a recognized event match is trustworthy enough to act on its option rewards.
@@ -147,6 +254,43 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         ): Boolean {
             if (eventRewards.isEmpty() || eventRewards[0] == "") return false
             return specialEventHandled || confidence >= minimumConfidence
+        }
+
+        /**
+         * Parses the 0-based option index out of a special override's selected option string
+         * ("Option 5: Energy +10" -> 4). "Default" is the first option. Returns null when the
+         * string carries no option number.
+         */
+        fun parseSpecialOverrideOptionIndex(selectedOption: String): Int? {
+            if (selectedOption == "Default") return 0
+            val optionMatch = Regex("Option (\\d+)").find(selectedOption) ?: return null
+            return optionMatch.groupValues[1].toInt() - 1
+        }
+
+        /**
+         * Resolves the option index for a special event from the two override sources and the matched
+         * event's own option count.
+         *
+         * Pure so the index path can be tested directly: a passing selection test proves the right
+         * data was chosen, but only this proves the configured option survives to the tap. Clamping
+         * here is a last-resort repair for data that disagrees with the settings, NOT the mechanism
+         * that picks between a one-option and a two-option copy of an event; that decision belongs to
+         * [TrainingEventRecognizer.selectSpecialEvent] and is made from the on-screen option count
+         * before this runs.
+         *
+         * @param eventOptionCount How many options the matched event data carries; 0 when unknown,
+         *   in which case the requested index passes through untouched.
+         */
+        fun decideSpecialEventOption(specialOverrideIndex: Int, characterOverrideIndex: Int?, eventOptionCount: Int): SpecialOptionDecision {
+            val requested = characterOverrideIndex ?: specialOverrideIndex
+            val usedCharacterOverride = characterOverrideIndex != null
+            val resolved =
+                when {
+                    requested < 0 -> 0
+                    eventOptionCount > 0 && requested >= eventOptionCount -> eventOptionCount - 1
+                    else -> requested
+                }
+            return SpecialOptionDecision(resolved, usedCharacterOverride, clamped = resolved != requested)
         }
     }
 
@@ -169,21 +313,16 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                     MessageLog.v(TAG, "[TRAINING_EVENT] Detected special event: $eventName")
 
                     // Parse the option number from the setting (e.g., "Option 5: Energy +10" -> 5).
-                    val optionIndex =
-                        if (override.selectedOption == "Default") {
-                            MessageLog.v(TAG, "[TRAINING_EVENT] Selecting Option 1 according to special event override.")
-                            0
-                        } else {
-                            val optionMatch = Regex("Option (\\d+)").find(override.selectedOption)
-                            if (optionMatch != null) {
-                                val optionNumber = optionMatch.groupValues[1].toInt()
-                                MessageLog.v(TAG, "[TRAINING_EVENT] Using setting: ${override.selectedOption} (Option $optionNumber)")
-                                optionNumber - 1
-                            } else {
-                                MessageLog.w(TAG, "[WARN] checkSpecialEventOverride:: Could not parse option number from setting: ${override.selectedOption}. Using option 1 by default.")
-                                0
-                            }
-                        }
+                    val optionIndex = parseSpecialOverrideOptionIndex(override.selectedOption)
+                    if (optionIndex == null) {
+                        MessageLog.w(TAG, "[WARN] checkSpecialEventOverride:: Could not parse option number from setting: ${override.selectedOption}. Using option 1 by default.")
+                        return Pair(0, override.requiresConfirmation)
+                    }
+                    if (override.selectedOption == "Default") {
+                        MessageLog.v(TAG, "[TRAINING_EVENT] Selecting Option 1 according to special event override.")
+                    } else {
+                        MessageLog.v(TAG, "[TRAINING_EVENT] Using setting: ${override.selectedOption} (Option ${optionIndex + 1})")
+                    }
 
                     return Pair(optionIndex, override.requiresConfirmation)
                 }
@@ -413,6 +552,52 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
     /**
+     * The result of reading the event's option rows.
+     *
+     * @property trustedCount The row count confirmed by two consecutive captures, or null when the
+     *   reads never agreed. Null means "unknown", never "no options".
+     * @property locations Coordinates from the confirming capture, or from the last capture taken
+     *   when nothing was confirmed.
+     * @property observations Every row count seen, for diagnostics.
+     */
+    private data class OptionRowScan(val trustedCount: Int?, val locations: ArrayList<Point>, val observations: List<Int>)
+
+    /**
+     * Reads the event's option rows until two consecutive captures agree, up to
+     * [OPTION_ROW_MAX_CAPTURES]. Gathers frames only; the acceptance rule itself lives in the pure
+     * [acceptStableOptionCount] so it can be tested against exact capture sequences.
+     */
+    private fun acquireStableOptionRows(): OptionRowScan {
+        val observations = mutableListOf<Int>()
+        val frames = mutableListOf<ArrayList<Point>>()
+        var accepted: StableOptionCount? = null
+
+        for (attempt in 0 until OPTION_ROW_MAX_CAPTURES) {
+            if (attempt > 0) game.wait(OPTION_ROW_CAPTURE_INTERVAL)
+            val locations: ArrayList<Point> = IconTrainingEventHorseshoe.findAll(game.imageUtils)
+            observations.add(locations.size)
+            frames.add(locations)
+            accepted = acceptStableOptionCount(observations, requiredObservationCount = OPTION_ROW_MAX_CAPTURES)
+            if (accepted != null) break
+        }
+
+        val trace = observations.joinToString(",")
+        return if (accepted != null) {
+            MessageLog.v(TAG, "[TRAINING_EVENT] Option rows settled at ${accepted.count} after ${observations.size} capture(s) [$trace].")
+            OptionRowScan(accepted.count, frames[accepted.acceptedAtIndex], observations)
+        } else {
+            // Two or more rows settle as soon as two captures agree, so reaching here means either the
+            // reads disagreed or a one-row reading did not hold for the whole window.
+            MessageLog.w(
+                TAG,
+                "[WARN] handleTrainingEvent:: Option row count never settled across ${observations.size} capture(s) [$trace]. " +
+                    "Treating it as unknown; card-specific one-option events will not be selected on this event.",
+            )
+            OptionRowScan(null, frames.lastOrNull() ?: arrayListOf(), observations)
+        }
+    }
+
+    /**
      * Handle the active Training Event. By default, it will select the first option.
      *
      * This method performs OCR to identify the event and its associated rewards. It then evaluates the options based on user preferences and character specific overrides to select the best possible
@@ -429,7 +614,17 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
             return
         }
 
-        val (eventRewards, confidence, eventTitle, characterOrSupportName) = trainingEventRecognizer.start()
+        // Read the option rows before recognition: the count is recognition input, not just tap
+        // geometry, because a one-option card-specific event (Gold City's race results) and the
+        // two-option graded common event share an on-screen title and only the number of rows says
+        // which one the game is showing. The read is repeated until two captures agree, since one
+        // capture of a still-rendering screen can report fewer rows than the screen ends up having.
+        // The 0.1s settle wait keeps its original purpose ahead of the first capture.
+        game.wait(0.1)
+        val optionRowScan = acquireStableOptionRows()
+        val trainingOptionLocations: ArrayList<Point> = optionRowScan.locations
+
+        val (eventRewards, confidence, eventTitle, characterOrSupportName) = trainingEventRecognizer.start(optionRowScan.trustedCount)
 
         val regex = Regex("[a-zA-Z]+")
         var optionSelected = 0
@@ -443,9 +638,11 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         // Handle Tutorial events by detecting the number of options on screen.
         if (eventTitle == "Tutorial") {
             isTutorialEvent = true
-            // Detect the number of event options on the screen.
-            val trainingOptionLocations: ArrayList<Point> = IconTrainingEventHorseshoe.findAll(game.imageUtils)
-            tutorialOptionCount = trainingOptionLocations.size
+            // Detect the number of event options on the screen. Deliberately its own scan: the
+            // Tutorial's 2-vs-5 branch turns on an exact count, and this one is taken after the OCR
+            // pass above, giving a freshly opened tutorial panel more time to finish rendering.
+            val tutorialOptionLocations: ArrayList<Point> = IconTrainingEventHorseshoe.findAll(game.imageUtils)
+            tutorialOptionCount = tutorialOptionLocations.size
 
             MessageLog.v(TAG, "[TRAINING_EVENT] Tutorial event detected for Unity Cup. Found $tutorialOptionCount option(s) on screen.")
 
@@ -472,18 +669,28 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         } else if (eventTitle == "A Team at Last") {
             // Handle "A Team at Last" Unity Cup event specially.
             MessageLog.i(TAG, "[TRAINING_EVENT] \"A Team at Last\" event detected for Unity Cup.")
-            val trainingOptionLocations: ArrayList<Point> = IconTrainingEventHorseshoe.findAll(game.imageUtils)
-            optionSelected = selectUnityCupTeamNameEvent(trainingOptionLocations)
+            // Its own scan for the same reason as the Tutorial branch: this event's option count
+            // varies from zero to five and the OCR pass above gives the panel time to settle.
+            val teamNameOptionLocations: ArrayList<Point> = IconTrainingEventHorseshoe.findAll(game.imageUtils)
+            optionSelected = selectUnityCupTeamNameEvent(teamNameOptionLocations)
             specialEventHandled = true
         } else if (specialEventResult != null) {
             val (selectedOptionIndex, _) = specialEventResult
-            optionSelected = selectedOptionIndex
 
-            // Ensure the selected option is within bounds.
-            if (eventRewards.isNotEmpty() && optionSelected >= eventRewards.size) {
-                MessageLog.w(TAG, "[WARN] handleTrainingEvent:: Selected special event option $optionSelected is out of bounds. Using last option.")
-                optionSelected = eventRewards.size - 1
+            val decision = decideSpecialEventOption(selectedOptionIndex, characterOverrideIndex = null, eventOptionCount = eventRewards.size)
+            if (decision.clamped) {
+                // Either the setting names an option this event genuinely does not have, or the
+                // matched copy is the wrong shape because the screen was not read confidently. Both
+                // are possible, so name both: attributing this to the setting alone once hid a
+                // recognition defect for an entire release.
+                MessageLog.w(
+                    TAG,
+                    "[WARN] handleTrainingEvent:: Special event option ${selectedOptionIndex + 1} does not exist on the matched " +
+                        "\"${eventTitle.replace("\n", " ")}\" (${eventRewards.size} option(s)). Using option ${decision.optionIndex + 1}. " +
+                        "Check the setting, and the option-row count logged above if the event really has more options.",
+                )
             }
+            optionSelected = decision.optionIndex
 
             if (eventRewards.isNotEmpty()) {
                 MessageLog.v(TAG, "[TRAINING_EVENT] Special event override applied: option ${optionSelected + 1}: \"${eventRewards[optionSelected]}\"")
@@ -757,20 +964,32 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
             }
         }
 
-        // Wait briefly for the UI to fully render all option buttons.
-        game.wait(0.1)
-
-        val trainingOptionLocations: ArrayList<Point> = IconTrainingEventHorseshoe.findAll(game.imageUtils)
+        // Validate the row list against the option that was actually chosen. The rows were read
+        // before OCR, so a row that was still rendering then may exist now; refreshing once is the
+        // difference between honoring the configured option and quietly tapping whatever row
+        // happened to be captured first.
+        var optionRows: ArrayList<Point> = trainingOptionLocations
+        var tapPlan = planOptionTap(optionSelected, optionRows.size, rescanned = false)
+        if (tapPlan.action == OptionTapAction.RESCAN) {
+            val refreshed: ArrayList<Point> = IconTrainingEventHorseshoe.findAll(game.imageUtils)
+            MessageLog.w(
+                TAG,
+                "[WARN] handleTrainingEvent:: Option ${optionSelected + 1} is outside the ${optionRows.size} row(s) read before recognition " +
+                    "for \"${eventTitle.replace("\n", " ")}\" (trainee ${campaign.trainee.name.ifEmpty { "?" }}); rescanned and found ${refreshed.size} row(s).",
+            )
+            optionRows = refreshed
+            tapPlan = planOptionTap(optionSelected, optionRows.size, rescanned = true)
+        }
 
         // Handle Tutorial events specially.
-        if (isTutorialEvent && trainingOptionLocations.isNotEmpty()) {
+        if (isTutorialEvent && optionRows.isNotEmpty()) {
             if (tutorialOptionCount == 5) {
                 // Determine the last option location for a 5-option Tutorial.
                 val lastOptionLocation =
                     try {
-                        trainingOptionLocations[4]
+                        optionRows[4]
                     } catch (_: IndexOutOfBoundsException) {
-                        trainingOptionLocations[trainingOptionLocations.size - 1]
+                        optionRows[optionRows.size - 1]
                     }
 
                 game.tap(lastOptionLocation.x + game.imageUtils.relWidth(100), lastOptionLocation.y, IconTrainingEventHorseshoe.template.path)
@@ -792,9 +1011,9 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                 // Select the determined option for standard Tutorial cases.
                 val selectedLocation =
                     try {
-                        trainingOptionLocations[optionSelected]
+                        optionRows[optionSelected]
                     } catch (_: IndexOutOfBoundsException) {
-                        trainingOptionLocations[trainingOptionLocations.size - 1]
+                        optionRows[optionRows.size - 1]
                     }
 
                 game.tap(selectedLocation.x + game.imageUtils.relWidth(100), selectedLocation.y, IconTrainingEventHorseshoe.template.path)
@@ -838,18 +1057,30 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                 }
             }
         } else {
-            // Proceed with normal event handling.
+            // Proceed with normal event handling. The plan already accounts for a refreshed row
+            // list; a shortfall that survived the refresh is reported rather than absorbed, because
+            // tapping a row the selection did not ask for is the failure this whole path exists to
+            // prevent and it is otherwise indistinguishable from success in the log.
             val selectedLocation: Point? =
-                if (trainingOptionLocations.isNotEmpty()) {
-                    // Handle cases where detected options might lead to an index out of bounds.
-                    try {
-                        trainingOptionLocations[optionSelected]
-                    } catch (_: IndexOutOfBoundsException) {
-                        // Default to selecting the first option.
-                        trainingOptionLocations[0]
+                when (tapPlan.action) {
+                    OptionTapAction.USE_ROW -> optionRows[tapPlan.rowIndex]
+
+                    OptionTapAction.CLAMP_TO_LAST_ROW -> {
+                        MessageLog.w(
+                            TAG,
+                            "[WARN] handleTrainingEvent:: Option ${optionSelected + 1} was selected for \"${eventTitle.replace("\n", " ")}\" but only " +
+                                "${optionRows.size} row(s) are on screen after a rescan. Tapping row ${tapPlan.rowIndex + 1}; the configured option was not applied.",
+                        )
+                        optionRows[tapPlan.rowIndex]
                     }
-                } else {
-                    IconTrainingEventHorseshoe.find(game.imageUtils, tries = 5).first
+
+                    OptionTapAction.NO_ROWS_AVAILABLE -> {
+                        MessageLog.w(TAG, "[WARN] handleTrainingEvent:: No option rows detected after a rescan. Falling back to a single retrying search for one row.")
+                        IconTrainingEventHorseshoe.find(game.imageUtils, tries = 5).first
+                    }
+
+                    // Re-planned above, so the list has already been refreshed by this point.
+                    OptionTapAction.RESCAN -> null
                 }
 
             if (selectedLocation != null) {
