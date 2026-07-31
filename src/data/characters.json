@@ -1336,7 +1336,7 @@
             "Mood +2\nAll stats +8\nSkill points +65\nHeal Ominous Portent\nYayoi Akikawa bond +4"
         ],
         "After the February S.: Win or Lose, Take to the Sky": [
-            "pl None\nMood +2\nAll stats +7\nSkill points +65\nHeal Ominous Portent\nYayoi Akikawa bond +4\n\npl None\nMood +2\nAll stats +6\nSkill points +65\nHeal Ominous Portent\nYayoi Akikawa bond +4"
+            "※ 2nd\nMood +2\nAll stats +7\nSkill points +65\nHeal Ominous Portent\nYayoi Akikawa bond +4\n\n※ 3rd or worse\nMood +2\nAll stats +6\nSkill points +65\nHeal Ominous Portent\nYayoi Akikawa bond +4"
         ],
         "After the Kashiwa Kinen: But I Won't Sing": [
             "All stats +3\nSkill points +45\nSunny Sign hint +1\nYayoi Akikawa bond +4"
@@ -2557,13 +2557,13 @@
             "Power +20\n(random) Get Charming ○ status"
         ],
         "Victory!": [
-            "pl None\nAll stats +10  /  +8  /  +5\nSkill points +45  /  +35  /  +30"
+            "※ 1st\nAll stats +10  /  +8  /  +5\nSkill points +45  /  +35  /  +30"
         ],
         "Solid Showing": [
-            "pl None\n2 random stats +8  /  +5  /  +3\nSkill points +45  /  +35  /  +30"
+            "※ 2nd–5th\n2 random stats +8  /  +5  /  +3\nSkill points +45  /  +35  /  +30"
         ],
         "Defeat": [
-            "pl None\n2 random stats +4  /  +3  /  +0\nSkill points +25  /  +20  /  +10"
+            "※ 6th or worse\n2 random stats +4  /  +3  /  +0\nSkill points +25  /  +20  /  +10"
         ]
     },
     "Gold Ship": {

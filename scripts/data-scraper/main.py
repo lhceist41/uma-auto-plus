@@ -84,6 +84,8 @@ EVENT_CONDITION_REWARDS = {
 EVENT_ENERGY_CODES = {"en"}  # Scaled by Event Recovery.
 EVENT_STAT_CODES = {"sp", "st", "po", "gu", "in", "pt", "5s", "rs", "unspecified_stats"}  # Scaled by Event Effectiveness.
 EVENT_DIVIDER_CODES = {"di", "di_s"}  # Split a choice into "Randomly either" outcome groups.
+# Marks a reward the game rolls for. Shared by the renderer and the stale-render detector so the two cannot drift apart.
+EVENT_RANDOM_PREFIX = "(random) "
 # Hiragana, Katakana, and CJK ideographs - any of these in an event marks it as still untranslated (JP-only, not on Global).
 EVENT_CJK_PATTERN = re.compile("[\u3040-\u30ff\u4e00-\u9fff]")
 EVENT_ACADEMY_CHAR = 9002  # Yayoi Akikawa, the bond target for the `bo_ch` reward.
@@ -676,7 +678,7 @@ class TrainingEventScraper(BaseScraper):
             The rendered reward line.
         """
         code, value, target = reward.get("t"), reward.get("v"), reward.get("d")
-        prefix = "(random) " if reward.get("r") else ""
+        prefix = EVENT_RANDOM_PREFIX if reward.get("r") else ""
         if isinstance(value, int):
             value = f"{value:+d}"  # Some values arrive as bare integers (e.g. 65); display them signed like the string ones.
         if code in EVENT_ENERGY_CODES:
@@ -768,6 +770,8 @@ class TrainingEventScraper(BaseScraper):
             return f"{prefix}{target}"
         if code == "sc":
             return f"{prefix}{self._render_condition(target)}"
+        if code == "pl":
+            return f"{prefix}{self._render_placement(target)}"
         if code == "mt":
             return f"{prefix}Performance token you have the least of {value}"
         if code == "yhs_tix":
@@ -797,6 +801,62 @@ class TrainingEventScraper(BaseScraper):
         if kind == "class" and len(detail) >= 2:
             return f"※ {EVENT_CLASS_NAMES.get(detail[1], detail[1])}"
         return f"※ {kind}"
+
+    @staticmethod
+    def _is_placement_range(detail: Any) -> bool:
+        """Whether a `pl` payload is a placement range this renderer understands.
+
+        The supported shapes are `[n]`, `[n, n]`, `[n, None]`, and `[a, b]` with `a <= b`, where each place is a
+        positive whole number. Everything else (a reversed range, a non-numeric or zero place, a longer list, a
+        non-list) is treated as unsupported rather than guessed at, so a shape GameTora has not shown us yet
+        cannot silently become a plausible-looking condition line.
+
+        Args:
+            detail (Any): The placement payload, taken from the reward's `d` field.
+
+        Returns:
+            True when the payload is one of the supported shapes.
+        """
+        def is_place(value: Any) -> bool:
+            return isinstance(value, int) and not isinstance(value, bool) and value >= 1
+
+        if not isinstance(detail, list) or not 1 <= len(detail) <= 2:
+            return False
+        if not is_place(detail[0]):
+            return False
+        if len(detail) == 1:
+            return True
+        return detail[1] is None or (is_place(detail[1]) and detail[0] <= detail[1])
+
+    @classmethod
+    def _render_placement(cls, detail: Any) -> str:
+        """Renders a `pl` reward: the race placement the rest of its outcome group is conditional on.
+
+        GameTora carries the placement in `d` and always leaves `v` null, so the text comes from `d` alone:
+        `[n]` (or `[n, n]`) is an exact place, `[n, None]` is that place or worse, and `[a, b]` is an
+        inclusive range. Like the other `※` lines this states a condition rather than something the trainee
+        receives, which is why it heads its group instead of being scaled like a reward. The range separator
+        below is deliberately an en dash (U+2013), matching what the site itself emits; it is not the em dash
+        this repository forbids.
+
+        An unsupported payload falls back to the generic raw-code form (`pl <payload>`) rather than a `※` line.
+        That keeps the output visible and deterministic, and it keeps it inside the stale-render detector's net,
+        so a later renderer that learns the new shape can still repair the text this run wrote.
+
+        Args:
+            detail (Any): The placement payload, taken from the reward's `d` field.
+
+        Returns:
+            The rendered placement line.
+        """
+        if not cls._is_placement_range(detail):
+            return f"pl {detail}"
+        first = cls._ordinal(detail[0])
+        if len(detail) == 1 or detail[0] == detail[1]:
+            return f"※ {first}"
+        if detail[1] is None:
+            return f"※ {first} or worse"
+        return f"※ {first}–{cls._ordinal(detail[1])}"
 
     def _render_choice(self, rewards: List[Dict[str, Any]], card_char: str, energy_mult: float, stat_mult: float) -> str:
         """Renders one choice's reward list, splitting "di" markers into "Randomly either" outcome groups.
@@ -851,11 +911,66 @@ class TrainingEventScraper(BaseScraper):
             name = name + "\n" + EVENT_TYPE_LABELS[event["type"]]
         return name
 
+    @staticmethod
+    def _has_raw_code_line(option: str, code: str) -> bool:
+        """Whether one rendered option contains the renderer's raw-code fallback line for `code`.
+
+        The fallback prints the reward code followed by its raw value ("pl None"), which no real reward label can
+        look like: rendered lines start with a capitalized word or the condition marker. Matching is per line and
+        anchored at the line start, so a code appearing inside a sentence never counts. A single leading random
+        marker is stripped first, since the renderer prefixes it to the fallback like any other line.
+
+        Args:
+            option (str): One option's rendered text.
+            code (str): The reward code to look for.
+
+        Returns:
+            True when some line of the option is that code's bare fallback.
+        """
+        marker = f"{code} "
+        for line in option.split("\n"):
+            if line.startswith(EVENT_RANDOM_PREFIX):
+                line = line[len(EVENT_RANDOM_PREFIX):]
+            if line == code or line.startswith(marker):
+                return True
+        return False
+
+    @classmethod
+    def _supersedes_stale_option(cls, stored: str, option: str, rewards: List[Dict[str, Any]]) -> bool:
+        """Whether one freshly rendered option should replace the stored text at that same index.
+
+        Stored text is normally kept untouched so curated Global values survive a refresh. The one exception is
+        text this scraper itself produced from a reward code it did not understand at the time: that is an
+        artifact, never a curation. It is recognized generically, with no code list to maintain, by looking for a
+        raw-code line that the fresh rendering of the same option no longer emits. Ordinary value drift between
+        curated Global text and GameTora's JP-current data carries no such line and is therefore preserved.
+
+        The decision is deliberately scoped to a single option and to that option's own rewards, so a stale
+        option can never authorize rewriting a sibling that was fine.
+
+        Args:
+            stored (str): The option text already in the output file.
+            option (str): The option text just rendered for the same index.
+            rewards (List[Dict[str, Any]]): The raw rewards of that same option.
+
+        Returns:
+            True when the stored text is a stale unknown-code rendering of this option.
+        """
+        codes = {reward.get("t") for reward in rewards if isinstance(reward.get("t"), str)}
+        return any(cls._has_raw_code_line(stored, code) and not cls._has_raw_code_line(option, code) for code in codes)
+
     def _ingest_events(self, card_events: Dict[str, List[str]], categories, char_name: str, energy_mult: float, stat_mult: float):
         """Renders a card's events and adds the localized, not-yet-present ones to the character's event dict.
 
-        Existing events are kept (setdefault), so curated values are never overwritten, and events still carrying
-        untranslated Japanese text are skipped as not yet on the Global server.
+        Existing events are kept, so curated values are never overwritten, and events still carrying untranslated
+        Japanese text are skipped as not yet on the Global server. The sole exception is an option whose stored text
+        is this scraper's own raw-code fallback for a reward it can now render (see [_supersedes_stale_option]);
+        without it a renderer fix could never reach an event that had already been written once.
+
+        That repair is applied per option, not per event: only the option that actually carries a stale line is
+        rewritten, and each surviving sibling is carried over by reference, so a stale option cannot drag a curated
+        one to GameTora's current values. An option list whose length no longer matches what is stored is left
+        entirely alone, because the indexes can no longer be paired up and text must never move between them.
 
         Args:
             card_events (Dict[str, List[str]]): The character's accumulated events, mutated in place.
@@ -868,8 +983,16 @@ class TrainingEventScraper(BaseScraper):
             for entry_index, event in enumerate(entries):
                 name = self._event_display_name(category, entry_index, event)
                 options = [self._render_choice(c["r"], char_name, energy_mult, stat_mult) for c in event["c"]]
-                if not self._is_unlocalized(name, options):
-                    card_events.setdefault(name, options)
+                if self._is_unlocalized(name, options):
+                    continue
+                stored = card_events.get(name)
+                if stored is None:
+                    card_events[name] = options
+                elif len(stored) == len(options):
+                    card_events[name] = [
+                        option if self._supersedes_stale_option(old, option, event["c"][index]["r"]) else old
+                        for index, (old, option) in enumerate(zip(stored, options))
+                    ]
 
 
 class CharacterScraper(TrainingEventScraper):
