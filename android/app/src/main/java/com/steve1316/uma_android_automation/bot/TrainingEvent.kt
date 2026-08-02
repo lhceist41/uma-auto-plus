@@ -25,6 +25,19 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
     /** Recognizer used to perform OCR and string matching for Training Events. */
     private val trainingEventRecognizer: TrainingEventRecognizer = TrainingEventRecognizer(game, game.imageUtils)
 
+    /**
+     * The five-row Acupuncture choice this class last tapped, kept only until the screen it opens
+     * has been identified. Null whenever no such tap is outstanding, which is the normal state.
+     *
+     * No single mechanism is relied on to clear it. It is dropped by the bounded
+     * [ACUPUNCTURE_GATE_WINDOW_MILLIS] window, by the Main Screen early return in
+     * [handleTrainingEvent], and by the exact event-title and trainee-name identity checks in
+     * [decideAcupunctureGateAction], which discard it as soon as the screen contradicts the tap it
+     * was built from. A career resync happens to reconstruct this object as well (see
+     * [Campaign.reloadTraineeConfig]), but that is one more path, not the guarantee.
+     */
+    private var pendingAcupunctureTreatment: AcupuncturePendingTreatment? = null
+
     /** Whether to prioritize options that provide energy gains. */
     private val enablePrioritizeEnergyOptions: Boolean = SettingsHelper.getBooleanSetting("trainingEvent", "enablePrioritizeEnergyOptions")
 
@@ -166,6 +179,47 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
      */
     data class SpecialOptionDecision(val optionIndex: Int, val usedCharacterOverride: Boolean, val clamped: Boolean)
 
+    /**
+     * A five-row Acupuncture treatment choice this class has just tapped, held only long enough to
+     * recognize the second screen the game answers it with.
+     *
+     * @property eventKey The matched event's data key, as the identity the next screen must repeat.
+     * @property traineeName The trainee the career was playing when the option was tapped.
+     * @property optionIndex The 0-based option that was asked for, so the log can name what was lost.
+     * @property expectedOptionCount How many options the five-row screen actually offered.
+     * @property tappedAtMillis When the option was tapped, bounding how long this may stay relevant.
+     * @property initialOptionTapped Whether the option tap was really issued; only ever true, and
+     *   checked anyway so a state that somehow says otherwise is discarded rather than acted on.
+     */
+    data class AcupuncturePendingTreatment(
+        val eventKey: String,
+        val traineeName: String,
+        val optionIndex: Int,
+        val expectedOptionCount: Int,
+        val tappedAtMillis: Long,
+        val initialOptionTapped: Boolean = true,
+    )
+
+    /** What the screen in front of the bot looks like when a pending treatment tap is consulted. */
+    data class AcupunctureGateInput(
+        val eventKey: String,
+        val traineeName: String,
+        val visibleOptionCount: Int?,
+        val nowMillis: Long,
+    )
+
+    /** What a pending Acupuncture treatment tap says to do about the current screen. */
+    enum class AcupunctureGateAction {
+        /** Nothing to decide here; ordinary handling continues and the pending state is untouched. */
+        NONE,
+
+        /** The known gate is on screen: tap its decline row once, and drop the pending state. */
+        DECLINE_AND_CLEAR,
+
+        /** The pending state cannot refer to this screen; drop it without acting on it. */
+        CLEAR_STALE,
+    }
+
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]TrainingEvent"
 
@@ -291,6 +345,81 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                     else -> requested
                 }
             return SpecialOptionDecision(resolved, usedCharacterOverride, clamped = resolved != requested)
+        }
+
+        /**
+         * The one shared training event known to answer an option tap with a second, differently
+         * shaped screen that repeats its own title: five treatment choices, then a two-row
+         * "Decline." / "Reconsider." gate.
+         *
+         * Matched by exact identity, never by the "Acupuncture" word the special-event pattern table
+         * searches for, because Sasami Anshinzawa's support events ("The Applications of
+         * Acupuncture", "An Accurate Acupuncturist ☆") carry that word too and are ordinary
+         * single-stage events that must keep their existing handling.
+         */
+        const val ACUPUNCTURE_TREATMENT_EVENT_KEY = "Acupuncture (Just an Acupuncturist, No Worries! ☆)"
+
+        /** Option rows the Acupuncture choice screen shows before any gate appears. */
+        const val ACUPUNCTURE_TREATMENT_OPTION_COUNT = 5
+
+        /** Option rows its Decline/Reconsider gate shows. */
+        const val ACUPUNCTURE_GATE_OPTION_COUNT = 2
+
+        /**
+         * The gate row to tap. Row 0 is the row that ends the event: two careers on the previous
+         * build tapped it and the game committed immediately, for the event's documented decline
+         * payout. Row 1 is the one that returns to the five choices, which is exactly what the
+         * generic last-row repair was tapping.
+         */
+        const val ACUPUNCTURE_GATE_DECLINE_ROW = 0
+
+        /**
+         * How long a tapped Acupuncture option may wait for its gate. Recorded cycles took about
+         * five and a half seconds from the option tap to the gate being recognized; a screen
+         * arriving much later belongs to something else and must not inherit this state.
+         */
+        const val ACUPUNCTURE_GATE_WINDOW_MILLIS = 15_000L
+
+        /** Whether a matched event key is exactly the shared multi-stage Acupuncture event. */
+        fun isAcupunctureTreatmentEvent(eventTitle: String): Boolean =
+            TrainingEventRecognizer.cleanTitle(eventTitle) == TrainingEventRecognizer.cleanTitle(ACUPUNCTURE_TREATMENT_EVENT_KEY)
+
+        /**
+         * Decides what a pending Acupuncture treatment tap means for the screen now on display.
+         *
+         * The five-choice Acupuncture screen answers an option tap with a two-row
+         * "Decline." / "Reconsider." gate carrying the same title. Reconsider returns to the five
+         * choices, so the generic short-list repair (rescan, then clamp onto the last row) taps
+         * Reconsider and walks straight back into the choice it just made; three such cycles were
+         * recorded live before the event happened to resolve. A two-row screen proves nothing on its
+         * own, so the gate is only ever recognized against a tap this class itself made.
+         *
+         * Deliberately strict, and asymmetric about what it does with the state: anything that
+         * CONTRADICTS the pending tap (a different event, a different trainee, a shape that is
+         * neither the gate nor the choice list, an elapsed window) discards it, so it can never fire
+         * on a later event; anything merely UNPROVEN (an unreadable count) leaves it alone to be
+         * judged on the next look or to expire on its own.
+         *
+         * @param pending The outstanding treatment tap, or null when there is none.
+         * @param input What is on screen now.
+         */
+        fun decideAcupunctureGateAction(pending: AcupuncturePendingTreatment?, input: AcupunctureGateInput): AcupunctureGateAction {
+            if (pending == null) return AcupunctureGateAction.NONE
+            if (input.nowMillis - pending.tappedAtMillis > ACUPUNCTURE_GATE_WINDOW_MILLIS) return AcupunctureGateAction.CLEAR_STALE
+            // State is only ever built around an issued tap, so one that says otherwise is corrupt.
+            if (!pending.initialOptionTapped) return AcupunctureGateAction.CLEAR_STALE
+            if (TrainingEventRecognizer.cleanTitle(input.eventKey) != TrainingEventRecognizer.cleanTitle(pending.eventKey)) {
+                return AcupunctureGateAction.CLEAR_STALE
+            }
+            if (input.traineeName != pending.traineeName) return AcupunctureGateAction.CLEAR_STALE
+            // An unreadable count is not evidence about the shape of the screen, so it decides nothing.
+            if (!TrainingEventRecognizer.isAuthoritativeOptionCount(input.visibleOptionCount)) return AcupunctureGateAction.NONE
+            return when (input.visibleOptionCount) {
+                ACUPUNCTURE_GATE_OPTION_COUNT -> AcupunctureGateAction.DECLINE_AND_CLEAR
+                // The choice list is on screen again; ordinary handling picks from it as usual.
+                pending.expectedOptionCount -> AcupunctureGateAction.NONE
+                else -> AcupunctureGateAction.CLEAR_STALE
+            }
         }
     }
 
@@ -609,6 +738,9 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
 
         // Check if the bot is currently at the Main Screen.
         if (campaign.checkMainScreen()) {
+            // The event flow is over, so a treatment tap waiting for its gate can no longer be
+            // answered by anything and must not outlive this screen.
+            pendingAcupunctureTreatment = null
             MessageLog.v(TAG, "[TRAINING_EVENT] Bot is at the Main Screen. Ending the Training Event process.")
             MessageLog.v(TAG, "********************")
             return
@@ -625,6 +757,58 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
         val trainingOptionLocations: ArrayList<Point> = optionRowScan.locations
 
         val (eventRewards, confidence, eventTitle, characterOrSupportName) = trainingEventRecognizer.start(optionRowScan.trustedCount)
+
+        // The Acupuncture gate is answered before any option is chosen. Its two rows repeat the
+        // five-choice event's own title, so ordinary handling would ask for the configured option
+        // again and the short-list repair would clamp onto the last row, which is the row that
+        // returns to the five choices. Only a tap this class itself made can put the bot here, and
+        // that is what the pending state records; nothing else can enter this branch.
+        when (
+            decideAcupunctureGateAction(
+                pendingAcupunctureTreatment,
+                AcupunctureGateInput(
+                    eventKey = eventTitle,
+                    traineeName = trainingEventRecognizer.resolveActiveTraineeName(),
+                    visibleOptionCount = optionRowScan.trustedCount,
+                    nowMillis = System.currentTimeMillis(),
+                ),
+            )
+        ) {
+            AcupunctureGateAction.DECLINE_AND_CLEAR -> {
+                val declined = pendingAcupunctureTreatment
+                // Cleared before the tap so no later pass can act on it a second time.
+                pendingAcupunctureTreatment = null
+                val declineRow = trainingOptionLocations.getOrNull(ACUPUNCTURE_GATE_DECLINE_ROW)
+                if (declineRow != null) {
+                    val configuredOption = (declined?.optionIndex ?: 0) + 1
+                    // The last of the five rows is "Energy +10", the same no-treatment result the
+                    // decline row gives, so reporting it as "not applied" there would be false.
+                    val configuredNote =
+                        if (declined?.optionIndex == ACUPUNCTURE_TREATMENT_OPTION_COUNT - 1) {
+                            "configured Option $configuredOption is the no-treatment choice this row already gives"
+                        } else {
+                            "configured treatment Option $configuredOption was not safely applied"
+                        }
+                    MessageLog.w(
+                        TAG,
+                        "[WARN] handleTrainingEvent:: Acupuncture treatment choice opened the Decline/Reconsider gate. " +
+                            "Taking the decline row once to prevent a repeat loop; $configuredNote.",
+                    )
+                    game.tap(declineRow.x + game.imageUtils.relWidth(100), declineRow.y, IconTrainingEventHorseshoe.template.path)
+                    MessageLog.v(TAG, "[TRAINING_EVENT] Process to handle detected Training Event completed.")
+                    MessageLog.v(TAG, "********************")
+                    return
+                }
+                MessageLog.w(TAG, "[WARN] handleTrainingEvent:: Recognized the Acupuncture decline gate but held no option row to tap. Falling through to ordinary handling.")
+            }
+
+            AcupunctureGateAction.CLEAR_STALE -> {
+                pendingAcupunctureTreatment = null
+                MessageLog.v(TAG, "[TRAINING_EVENT] Dropped the pending Acupuncture treatment state; this screen is not its gate.")
+            }
+
+            AcupunctureGateAction.NONE -> Unit
+        }
 
         val regex = Regex("[a-zA-Z]+")
         var optionSelected = 0
@@ -1093,6 +1277,32 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
 
             if (selectedLocation != null) {
                 game.tap(selectedLocation.x + game.imageUtils.relWidth(100), selectedLocation.y, IconTrainingEventHorseshoe.template.path)
+
+                // Remember a five-row Acupuncture choice so the two-row gate it opens is recognized
+                // on the next pass instead of being mistaken for a shorter copy of the same event.
+                // Only the full choice screen qualifies: the gate itself, a screen whose row count
+                // was never trusted, and a tap that had to be clamped all fail to establish that a
+                // treatment was actually chosen, and a state built on any of them could only mislead.
+                if (tapPlan.action == OptionTapAction.USE_ROW &&
+                    isAcupunctureTreatmentEvent(eventTitle) &&
+                    optionRowScan.trustedCount == ACUPUNCTURE_TREATMENT_OPTION_COUNT &&
+                    eventRewards.size == ACUPUNCTURE_TREATMENT_OPTION_COUNT &&
+                    optionSelected in 0 until ACUPUNCTURE_TREATMENT_OPTION_COUNT
+                ) {
+                    pendingAcupunctureTreatment =
+                        AcupuncturePendingTreatment(
+                            eventKey = eventTitle,
+                            traineeName = trainingEventRecognizer.resolveActiveTraineeName(),
+                            optionIndex = optionSelected,
+                            expectedOptionCount = eventRewards.size,
+                            tappedAtMillis = System.currentTimeMillis(),
+                        )
+                    MessageLog.v(
+                        TAG,
+                        "[TRAINING_EVENT] Tapped Acupuncture option ${optionSelected + 1} of $ACUPUNCTURE_TREATMENT_OPTION_COUNT; " +
+                            "watching for the Decline/Reconsider gate it may open.",
+                    )
+                }
 
                 // Verify if a confirmation dialog is required for this special event.
                 if (specialEventResult != null) {

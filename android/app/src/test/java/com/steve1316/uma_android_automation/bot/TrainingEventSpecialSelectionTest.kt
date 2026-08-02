@@ -830,6 +830,204 @@ class TrainingEventSpecialSelectionTest {
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
     @Nested
+    @DisplayName("Acupuncture multi-stage gate")
+    inner class AcupunctureGate {
+        private val eventKey = TrainingEvent.ACUPUNCTURE_TREATMENT_EVENT_KEY
+        private val trainee = "Gold City"
+        private val tappedAt = 1_000L
+
+        private fun pending(
+            key: String = eventKey,
+            who: String = trainee,
+            index: Int = 2,
+            expected: Int = 5,
+            at: Long = tappedAt,
+            tapped: Boolean = true,
+        ) = TrainingEvent.AcupuncturePendingTreatment(key, who, index, expected, at, tapped)
+
+        private fun act(
+            state: TrainingEvent.AcupuncturePendingTreatment?,
+            key: String = eventKey,
+            who: String = trainee,
+            count: Int? = 2,
+            now: Long = tappedAt + 5_400L,
+        ) = TrainingEvent.decideAcupunctureGateAction(state, TrainingEvent.AcupunctureGateInput(key, who, count, now))
+
+        @Test
+        fun `the recorded live sequence declines once and never reaches the clamp`() {
+            // Steps 1 and 2: the five-row choice screen, and the per-trainee pick the presets ship.
+            val decision = TrainingEvent.decideSpecialEventOption(specialOverrideIndex = 2, characterOverrideIndex = 2, eventOptionCount = 5)
+            assertEquals(2, decision.optionIndex, "the configured Option 3 is index 2")
+            assertTrue(decision.usedCharacterOverride)
+            assertFalse(decision.clamped)
+
+            // Step 3: the initial tap takes row 2 of five, needing no repair.
+            val initialPlan = TrainingEvent.planOptionTap(decision.optionIndex, availableRows = 5, rescanned = false)
+            assertEquals(TrainingEvent.OptionTapAction.USE_ROW, initialPlan.action)
+            assertEquals(2, initialPlan.rowIndex)
+
+            // Steps 4 and 5: that tap is remembered, and the same-title two-row gate follows it.
+            val action = act(pending(), count = 2, now = tappedAt + 4_400L)
+
+            // Steps 6 and 7: the gate is recognized, and answered on row 0.
+            assertEquals(TrainingEvent.AcupunctureGateAction.DECLINE_AND_CLEAR, action)
+            assertEquals(0, TrainingEvent.ACUPUNCTURE_GATE_DECLINE_ROW)
+
+            // Step 8: nothing survives the action, so the following pass has no state to act on.
+            assertEquals(TrainingEvent.AcupunctureGateAction.NONE, act(null, count = 2))
+
+            // Steps 9 to 11: what the generic repair would otherwise do here. It asks for a rescan,
+            // then clamps onto row 1, which is the Reconsider row that put the five choices back on
+            // screen and began the next cycle. The gate action runs first, so neither happens and
+            // the configured option is never tapped a second time.
+            assertEquals(TrainingEvent.OptionTapAction.RESCAN, TrainingEvent.planOptionTap(decision.optionIndex, availableRows = 2, rescanned = false).action)
+            val clamped = TrainingEvent.planOptionTap(decision.optionIndex, availableRows = 2, rescanned = true)
+            assertEquals(TrainingEvent.OptionTapAction.CLAMP_TO_LAST_ROW, clamped.action)
+            assertEquals(1, clamped.rowIndex, "the clamp tapped Reconsider, which is the loop")
+            assertNotEquals(TrainingEvent.ACUPUNCTURE_GATE_DECLINE_ROW, clamped.rowIndex)
+        }
+
+        @Test
+        fun `the gate cannot be handled twice and a cleared state cannot be reused`() {
+            assertEquals(TrainingEvent.AcupunctureGateAction.DECLINE_AND_CLEAR, act(pending(), count = 2))
+            // The runtime clears before tapping, so every later look starts from no state at all.
+            assertEquals(TrainingEvent.AcupunctureGateAction.NONE, act(null, count = 2, now = tappedAt + 6_000L))
+            assertEquals(TrainingEvent.AcupunctureGateAction.NONE, act(null, count = 5, now = tappedAt + 7_000L))
+        }
+
+        @Test
+        fun `a pending tap expires after its bounded window`() {
+            assertEquals(
+                TrainingEvent.AcupunctureGateAction.DECLINE_AND_CLEAR,
+                act(pending(), count = 2, now = tappedAt + TrainingEvent.ACUPUNCTURE_GATE_WINDOW_MILLIS),
+            )
+            assertEquals(
+                TrainingEvent.AcupunctureGateAction.CLEAR_STALE,
+                act(pending(), count = 2, now = tappedAt + TrainingEvent.ACUPUNCTURE_GATE_WINDOW_MILLIS + 1),
+                "an expired tap must be dropped, never declined",
+            )
+        }
+
+        @Test
+        fun `a different trainee on the same screen never declines`() {
+            assertEquals(TrainingEvent.AcupunctureGateAction.CLEAR_STALE, act(pending(), who = "Daiwa Scarlet", count = 2))
+        }
+
+        @Test
+        fun `an unreadable trainee name on both passes still answers its own gate`() {
+            // resolveActiveTraineeName yields "" when neither the applied preset row nor the career
+            // header can be read. Blank on the arming pass AND on the gate pass is the same unknown
+            // career seen twice, so the name neither proves nor contradicts identity and the other
+            // checks (exact event title, bounded window, option count) decide. Pinning that: the
+            // gate is still answered, rather than dropping the tap into the clamp-to-Reconsider loop.
+            assertEquals(
+                TrainingEvent.AcupunctureGateAction.DECLINE_AND_CLEAR,
+                act(pending(who = ""), who = "", count = 2),
+                "blank on both sides is not a contradiction",
+            )
+            // A blank on one side only IS a contradiction and still discards the tap.
+            assertEquals(
+                TrainingEvent.AcupunctureGateAction.CLEAR_STALE,
+                act(pending(who = ""), who = trainee, count = 2),
+                "the name became readable, so this is a different screen",
+            )
+            assertEquals(
+                TrainingEvent.AcupunctureGateAction.CLEAR_STALE,
+                act(pending(), who = "", count = 2),
+                "the name stopped being readable, so identity is no longer proven",
+            )
+        }
+
+        @Test
+        fun `a different event title never declines`() {
+            assertEquals(TrainingEvent.AcupunctureGateAction.CLEAR_STALE, act(pending(), key = "Victory! (G1)\n1st", count = 2))
+        }
+
+        @Test
+        fun `the acupuncture support events never reach this state machine`() {
+            // The special-event pattern table matches the bare word "Acupuncture", so identity here
+            // is exact instead of pattern-based; these are ordinary single-stage support events.
+            for (other in listOf(
+                "The Applications of Acupuncture",
+                "An Accurate Acupuncturist ☆\nRandomly after training (repeatable)",
+                "An Assuring Acupuncturist Appears! ☆",
+            )) {
+                assertFalse(TrainingEvent.isAcupunctureTreatmentEvent(other), "$other must not count as the multi-stage event")
+                assertEquals(TrainingEvent.AcupunctureGateAction.CLEAR_STALE, act(pending(), key = other, count = 2), other)
+            }
+            assertTrue(TrainingEvent.isAcupunctureTreatmentEvent(TrainingEvent.ACUPUNCTURE_TREATMENT_EVENT_KEY))
+        }
+
+        @Test
+        fun `with no pending tap an ordinary two-row mismatch keeps the existing planner behavior`() {
+            assertEquals(TrainingEvent.AcupunctureGateAction.NONE, act(null, count = 2))
+            assertEquals(TrainingEvent.OptionTapAction.RESCAN, TrainingEvent.planOptionTap(2, availableRows = 2, rescanned = false).action)
+            assertEquals(TrainingEvent.OptionTapAction.CLAMP_TO_LAST_ROW, TrainingEvent.planOptionTap(2, availableRows = 2, rescanned = true).action)
+        }
+
+        @Test
+        fun `the choice screen itself is never mistaken for the gate`() {
+            assertEquals(TrainingEvent.AcupunctureGateAction.NONE, act(pending(), count = 5))
+        }
+
+        @Test
+        fun `an unreadable count neither infers the gate nor discards the state`() {
+            for (count in listOf(null, 0)) {
+                assertEquals(TrainingEvent.AcupunctureGateAction.NONE, act(pending(), count = count), "count=$count must decide nothing")
+            }
+        }
+
+        @Test
+        fun `a shape that is neither the gate nor the choice list drops the state`() {
+            for (count in listOf(1, 3, 4, 6)) {
+                assertEquals(TrainingEvent.AcupunctureGateAction.CLEAR_STALE, act(pending(), count = count), "count=$count")
+            }
+        }
+
+        @Test
+        fun `a state that does not record an issued tap is discarded rather than acted on`() {
+            assertEquals(TrainingEvent.AcupunctureGateAction.CLEAR_STALE, act(pending(tapped = false), count = 2))
+        }
+
+        @Test
+        fun `the per-trainee override still supplies the index on the five-row screen`() {
+            // Against the shipped generic default of Option 5, exactly as the presets configure it.
+            val decision = TrainingEvent.decideSpecialEventOption(specialOverrideIndex = 4, characterOverrideIndex = 2, eventOptionCount = 5)
+            assertEquals(2, decision.optionIndex)
+            assertTrue(decision.usedCharacterOverride)
+            assertFalse(decision.clamped, "Option 3 is in bounds on the five-option data")
+        }
+
+        @Test
+        fun `the decline row is not the configured option, so the fallback cannot read as success`() {
+            val state = pending(index = 2)
+            assertEquals(TrainingEvent.AcupunctureGateAction.DECLINE_AND_CLEAR, act(state, count = 2))
+            assertNotEquals(
+                state.optionIndex,
+                TrainingEvent.ACUPUNCTURE_GATE_DECLINE_ROW,
+                "row 0 is the decline; the configured option is a different row and was not applied",
+            )
+        }
+
+        @Test
+        fun `the shipped Acupuncture data still carries five options for every character`() {
+            // The state only ever arms on a five-row screen, so a data refresh that moved this count
+            // would silently disarm the whole path.
+            for (owner in shippedCharacters.keys().asSequence().toList()) {
+                val events = shippedCharacters.getJSONObject(owner)
+                assertTrue(events.has(TrainingEvent.ACUPUNCTURE_TREATMENT_EVENT_KEY), "$owner is missing the Acupuncture event")
+                assertEquals(
+                    TrainingEvent.ACUPUNCTURE_TREATMENT_OPTION_COUNT,
+                    events.getJSONArray(TrainingEvent.ACUPUNCTURE_TREATMENT_EVENT_KEY).length(),
+                    "$owner's Acupuncture option count moved; the arming condition assumes five",
+                )
+            }
+        }
+    }
+
+    // //////////////////////////////////////////////////////////////////////////////////////////////////
+
+    @Nested
     @DisplayName("Determinism")
     inner class Determinism {
         private fun fixture(owners: List<String>): JSONObject {

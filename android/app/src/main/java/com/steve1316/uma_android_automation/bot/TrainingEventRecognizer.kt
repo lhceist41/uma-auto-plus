@@ -820,8 +820,12 @@ class TrainingEventRecognizer(private val game: Game, private val imageUtils: Cu
      * (general.appliedPresetTrainee, kept in sync for rotation careers too, possibly outfit-bearing);
      * the in-career header read is the fallback for careers started without one. Empty when neither
      * is available, in which case card-specific event variants simply never match.
+     *
+     * Shared with [TrainingEvent] rather than duplicated there: its Acupuncture gate state compares
+     * the trainee across two screens, and a second copy of this resolution order could drift out of
+     * step with the one owner gating already uses.
      */
-    private fun resolveActiveTraineeName(): String {
+    internal fun resolveActiveTraineeName(): String {
         val applied = SettingsHelper.getStringSetting("general", "appliedPresetTrainee").trim()
         if (applied.isNotEmpty()) return applied
         val inCareer = (game.task as? Campaign)?.trainee?.name?.trim() ?: ""
