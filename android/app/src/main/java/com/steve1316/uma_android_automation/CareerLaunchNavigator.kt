@@ -25,6 +25,9 @@ import com.steve1316.uma_android_automation.bot.SparkRowFact
 import com.steve1316.uma_android_automation.bot.SparkRowKind
 import com.steve1316.uma_android_automation.bot.SparkScanTermination
 import com.steve1316.uma_android_automation.bot.SparkScrollMerge
+import com.steve1316.uma_android_automation.bot.SparkSelectionAction
+import com.steve1316.uma_android_automation.bot.SparkSelectionInputs
+import com.steve1316.uma_android_automation.bot.SparkSelectionPolicy
 import com.steve1316.uma_android_automation.bot.SparkSetReading
 import com.steve1316.uma_android_automation.bot.SparkSetSide
 import com.steve1316.uma_android_automation.bot.SparkSideBreakdown
@@ -170,6 +173,14 @@ class CareerLaunchNavigator(private val context: Context) {
          * typed TIMED_OUT_PARTIAL that never authorizes a spend or a choice. */
         private const val SPARK_SCAN_MAX_SCROLLS = 6
         private const val SPARK_SCAN_BUDGET_MS = 45_000L
+
+        /** Settle beat before the one same-position re-read of a frame whose stitch was refused.
+         * Long enough for the bottom-bumper rubber-band to finish; the failing capture sits
+         * 1.0s after a 900ms swipe, so the list is still moving when it is taken. */
+        private const val SPARK_MERGE_RETRY_SETTLE_SECONDS = 1.2
+
+        /** Settle beat before a page's single full rescan. */
+        private const val SPARK_PAGE_RESCAN_SETTLE_SECONDS = 1.5
 
         /** Horizontal center of the spark lists, the swipe axis for the complete read. */
         private const val SPARK_LIST_SCROLL_X = 540f
@@ -2137,9 +2148,26 @@ class CareerLaunchNavigator(private val context: Context) {
             resolveCurrentPagerSide()
                 ?: return sparkSelectionBlocked(transition, transaction, "the pager page cannot be resolved (heading and page dot unreadable or contradictory)")
 
-        // Read the page on screen once, in full.
+        // Read the page on screen once, in full. A short read gets exactly one full re-read
+        // from the top for this page (the scan restores the list top itself), which is the
+        // cheapest way to convert a transient frame flake into a real comparison.
         if (transaction.pagerRead(side) == null) {
-            val reading = readCompleteSparkSet(SPARK_PAGER_GEOMETRY, "pager ${side.wire}")
+            var reading = readCompleteSparkSet(SPARK_PAGER_GEOMETRY, "pager ${side.wire}")
+            if (!reading.complete && transaction.usePagerRescan(side)) {
+                MessageLog.w(
+                    TAG,
+                    "[SPARKS] The ${side.wire} page read short (${reading.termination.name}, ${reading.rows.size} rows); re-reading it once.",
+                )
+                waitSafe(SPARK_PAGE_RESCAN_SETTLE_SECONDS)
+                val rescan = readCompleteSparkSet(SPARK_PAGER_GEOMETRY, "pager ${side.wire} rescan")
+                // Keep the better read: a complete one always wins, otherwise the longer one.
+                if (rescan.complete || rescan.rows.size > reading.rows.size) reading = rescan
+                MessageLog.i(
+                    TAG,
+                    "[SPARKS] The ${side.wire} rescan ended ${rescan.termination.name} with ${rescan.rows.size} rows; " +
+                        "keeping the ${reading.termination.name} read.",
+                )
+            }
             transaction.recordPagerRead(side, reading)
             crossCheckPagerRead(side, reading, transaction)
         }
@@ -2175,42 +2203,84 @@ class CareerLaunchNavigator(private val context: Context) {
             transaction.setsVerified()
             val original = transaction.pagerRead(SparkSetSide.ORIGINAL)!!
             val rerolled = transaction.pagerRead(SparkSetSide.REROLLED)!!
-            val choice = SparkKeepPolicy.choose(original, rerolled, buildSparkChooserProfile())
-            if (!choice.certain && !original.complete) {
-                // The pager read of the Original page came up short. That used to end the queue,
-                // which is a harsh outcome for a choice that always has a safe answer: keeping the
-                // original is never a loss, because it is the set the career already earned.
-                //
-                // Confirm it anyway when three independent things line up. The pre-pager scan of the
-                // Original set was COMPLETE (it has to be, or the 30 TP would never have been spent),
-                // so the set's content is already known. The pager's own heading and dots confirmed
-                // which page is on screen, independently of any row read. And every row the short
-                // pager read did capture agrees with the leading rows of that known set, so nothing
-                // observed contradicts it. Known content, confirmed page, no contradiction.
-                //
-                // Anything less still blocks: an unverified page, a contradicted row, or no complete
-                // pre-pager read. The comparison itself never runs on partial data and the rerolled
-                // set is never confirmed this way, so this can only ever keep the original.
-                val known = transaction.originalRead
-                val corroborated =
-                    known != null &&
-                        known.complete &&
-                        transaction.pagerPageVerified(SparkSetSide.ORIGINAL) &&
-                        SparkScrollMerge.rowsAreConsistentPrefix(known.rows, original.rows)
-                if (!corroborated) {
-                    return sparkSelectionBlocked(
-                        transition,
-                        transaction,
-                        "neither set could be read completely (original ${original.termination.name}, rerolled ${rerolled.termination.name}); no choice is safe",
-                    )
+            var choice = SparkKeepPolicy.choose(original, rerolled, buildSparkChooserProfile())
+
+            // What the bot could not read is not a reason to stop. Keeping the Original set is
+            // safe whatever the rows say: it is the set the career already earned and the 30 TP
+            // is spent either way. What would be unsafe is committing a page whose IDENTITY is
+            // unproven, so identity (and the Confirm control) is what gates this, not content.
+            // The old gate demanded a content prefix match through the same exact-match predicate
+            // that produced the short read, so a single transient misread ended the queue twice
+            // (2026-07-22, 2026-08-04). That comparison is now evidence in the log only.
+            val known = transaction.originalRead
+            val prefix =
+                if (!choice.certain && known != null && known.complete && original.rows.isNotEmpty()) {
+                    SparkScrollMerge.describePrefix(known.rows, original.rows)
+                } else {
+                    null
                 }
+            // Only probed when it is about to matter: a degraded commit must never fall back to
+            // the fixed Confirm coordinate, so the control has to be genuinely locatable.
+            val controlAvailable =
+                if (!choice.certain && side == SparkSetSide.ORIGINAL) {
+                    ButtonConfirm.find(iu, tries = 1).first != null
+                } else {
+                    true
+                }
+            val decision =
+                SparkSelectionPolicy.decide(
+                    choice,
+                    SparkSelectionInputs(
+                        originalTermination = original.termination,
+                        rerolledTermination = rerolled.termination,
+                        currentPageSide = side,
+                        originalPageVerifiedByNavigation = transaction.pagerPageVerified(SparkSetSide.ORIGINAL),
+                        originalControlAvailable = controlAvailable,
+                        currentPageRescanAvailable = !transaction.pagerRescanUsed(side),
+                        prefix = prefix,
+                    ),
+                )
+
+            when (decision.action) {
+                SparkSelectionAction.HALT -> return sparkSelectionBlocked(transition, transaction, decision.reason)
+
+                SparkSelectionAction.RESCAN_CURRENT_PAGE -> {
+                    // Reachable only when this page was recorded without spending its rescan
+                    // (an FSM re-entry). One more full read of the page already on screen; no
+                    // navigation, so no identity risk.
+                    if (transaction.usePagerRescan(side)) {
+                        MessageLog.w(TAG, "[SPARKS] [CHOOSER] ${decision.reason}")
+                        waitSafe(SPARK_PAGE_RESCAN_SETTLE_SECONDS)
+                        val rescan = readCompleteSparkSet(SPARK_PAGER_GEOMETRY, "pager ${side.wire} rescan")
+                        val existing = transaction.pagerRead(side)
+                        if (rescan.complete || rescan.rows.size > (existing?.rows?.size ?: 0)) {
+                            transaction.replacePagerRead(side, rescan)
+                        }
+                    }
+                    return TransitionResult.Continue
+                }
+
+                SparkSelectionAction.CHOOSE_ORIGINAL, SparkSelectionAction.CHOOSE_REROLLED -> Unit
+            }
+
+            if (!decision.certain) {
+                // One greppable line carrying everything needed to reconstruct the decision.
                 MessageLog.w(
                     TAG,
-                    "[SPARKS] [CHOOSER] The original pager page read short (${original.termination.name}, " +
-                        "${original.rows.size} of ${known!!.rows.size} rows), but it agrees with the complete " +
-                        "pre-pager capture on a verified ORIGINAL page. Keeping the original.",
+                    "[SPARKS] [CHOOSER] Original chosen without reroll comparison. " +
+                        "original=${original.termination.name} rerolled=${rerolled.termination.name} " +
+                        "originalRetries=${original.sameFrameRetries}/${original.sameFrameRecoveries} " +
+                        "rerolledRetries=${rerolled.sameFrameRetries}/${rerolled.sameFrameRecoveries} " +
+                        "rescans=[original=${transaction.pagerRescanUsed(SparkSetSide.ORIGINAL)} " +
+                        "rerolled=${transaction.pagerRescanUsed(SparkSetSide.REROLLED)}] " +
+                        "identity=[currentPage=${side.wire} navVerified=${transaction.pagerPageVerified(SparkSetSide.ORIGINAL)}] " +
+                        "${prefix?.summarize() ?: "prefixAgreed=unavailable"} " +
+                        "decidedBy=${decision.decidedBy} certain=false",
                 )
+                // Carry the fallback's own reason into the recorded choice so the corpus keeps it.
+                choice = choice.copy(reason = decision.reason)
             }
+
             val selected = transaction.selectWinner(choice)
             if (!selected.ok) {
                 return sparkSelectionBlocked(transition, transaction, selected.reason)
@@ -2247,6 +2317,17 @@ class CareerLaunchNavigator(private val context: Context) {
         MessageLog.i(TAG, "[SPARKS] [CHOOSER] Confirming the ${winner.wire} page.")
         val bitmap = iu.getSourceBitmap()
         if (!ButtonConfirm.click(iu, sourceBitmap = bitmap)) {
+            // A degraded decision never commits on the fixed coordinate: the bot could not read
+            // this page, so the one thing it must not also guess is where to press. A certain
+            // comparison keeps the long-standing anchor fallback unchanged.
+            if (transaction.choice?.certain == false) {
+                return sparkSelectionBlocked(
+                    transition,
+                    transaction,
+                    "the Confirm control could not be located on the verified ${winner.wire} page and the evaluation was degraded; " +
+                        "never committing a set the bot could not read on a guessed coordinate",
+                )
+            }
             gestureUtils.tap(SPARK_PAGER_CONFIRM_X.toDouble(), SPARK_PAGER_CONFIRM_Y.toDouble(), "spark_pager_confirm")
         }
         waitSafe(2.0)
@@ -2781,13 +2862,15 @@ class CareerLaunchNavigator(private val context: Context) {
         var merged = listOf<SparkRowFact>()
         var previousRows: List<SparkRowFact>? = null
         var scrolls = 0
+        var sameFrameRetries = 0
+        var sameFrameRecoveries = 0
         var result: SparkSetReading? = null
         while (result == null) {
             // A user Stop or queue-stop mid-scan: bail as a partial read (never complete) so the
             // caller keeps the original set. A hard interrupt throws out of waitSafe below and is
             // handled by the FSM; this covers the soft-stop flags waitSafe only returns on.
             if (!BotService.isRunning || StartModule.queueStopRequested) {
-                result = SparkSetReading(merged, if (merged.isEmpty()) SparkScanTermination.FAILED else SparkScanTermination.TIMED_OUT_PARTIAL, scrolls)
+                result = SparkSetReading(merged, if (merged.isEmpty()) SparkScanTermination.FAILED else SparkScanTermination.TIMED_OUT_PARTIAL, scrolls, sameFrameRetries, sameFrameRecoveries)
                 break
             }
             var frame = readSparkFrame(iu.getSourceBitmap(), geometry)
@@ -2800,9 +2883,9 @@ class CareerLaunchNavigator(private val context: Context) {
             if (frame == null || frame.rows.isEmpty()) {
                 result =
                     if (merged.isEmpty()) {
-                        SparkSetReading(emptyList(), SparkScanTermination.FAILED, scrolls)
+                        SparkSetReading(emptyList(), SparkScanTermination.FAILED, scrolls, sameFrameRetries, sameFrameRecoveries)
                     } else {
-                        SparkSetReading(merged, SparkScanTermination.TIMED_OUT_PARTIAL, scrolls)
+                        SparkSetReading(merged, SparkScanTermination.TIMED_OUT_PARTIAL, scrolls, sameFrameRetries, sameFrameRecoveries)
                     }
                 break
             }
@@ -2812,21 +2895,53 @@ class CareerLaunchNavigator(private val context: Context) {
             // Checking it here keeps a bottom-of-list of look-alike whites a COMPLETE read rather
             // than letting the hardened (ambiguity-refusing) merge downgrade it to ALIGNMENT_FAILED.
             if (previousRows != null && previousRows.size == frame.rows.size && SparkScrollMerge.rowsAlign(previousRows, frame.rows)) {
-                result = SparkSetReading(merged, SparkScanTermination.COMPLETE_NO_PROGRESS, scrolls)
+                result = SparkSetReading(merged, SparkScanTermination.COMPLETE_NO_PROGRESS, scrolls, sameFrameRetries, sameFrameRecoveries)
                 break
             }
-            val mergedNext = SparkScrollMerge.merge(merged, frame.rows)
+            var mergedNext = SparkScrollMerge.merge(merged, frame.rows)
             if (mergedNext == null) {
-                result = SparkSetReading(merged, SparkScanTermination.ALIGNMENT_FAILED, scrolls)
-                break
+                // The post-swipe capture lands ~1s after a 900ms swipe that clamps against the
+                // bottom bumper, so it can be taken mid-rubber-band-bounce: rows straddle the
+                // crop grid and read as damaged-but-readable ("rs Climax Scenario", or one crop
+                // spanning two text lines), which the exact-match stitch reports as no overlap.
+                // Every known cause is a single-frame transient, so the frame gets ONE fresh
+                // capture at this same scroll position before the scan is written off. The merge
+                // rules themselves are untouched: only the evidence gets a second chance.
+                sameFrameRetries++
+                waitSafe(SPARK_MERGE_RETRY_SETTLE_SECONDS)
+                if (!BotService.isRunning || StartModule.queueStopRequested) {
+                    result = SparkSetReading(merged, SparkScanTermination.TIMED_OUT_PARTIAL, scrolls, sameFrameRetries, sameFrameRecoveries)
+                    break
+                }
+                val retryFrame = readSparkFrame(iu.getSourceBitmap(), geometry)
+                if (retryFrame != null && retryFrame.rows.isNotEmpty()) {
+                    if (previousRows != null && previousRows.size == retryFrame.rows.size && SparkScrollMerge.rowsAlign(previousRows, retryFrame.rows)) {
+                        // The settled frame proves the list never moved: this is a normal
+                        // bottom-of-list completion, not a failed stitch.
+                        result = SparkSetReading(merged, SparkScanTermination.COMPLETE_NO_PROGRESS, scrolls, sameFrameRetries, sameFrameRecoveries)
+                        break
+                    }
+                    val retryMerge = SparkScrollMerge.merge(merged, retryFrame.rows)
+                    if (retryMerge != null) {
+                        sameFrameRecoveries++
+                        MessageLog.i(TAG, "[SPARKS] Same-position re-read recovered the stitch at scroll $scrolls ($label).")
+                        mergedNext = retryMerge
+                        frame = retryFrame
+                    }
+                }
+                if (mergedNext == null) {
+                    logSparkMergeRefusal(label, scrolls, merged, frame.rows)
+                    result = SparkSetReading(merged, SparkScanTermination.ALIGNMENT_FAILED, scrolls, sameFrameRetries, sameFrameRecoveries)
+                    break
+                }
             }
             merged = mergedNext
             if (frame.endMarkerSeen) {
-                result = SparkSetReading(merged, SparkScanTermination.COMPLETE_END_MARKER, scrolls)
+                result = SparkSetReading(merged, SparkScanTermination.COMPLETE_END_MARKER, scrolls, sameFrameRetries, sameFrameRecoveries)
                 break
             }
             if (scrolls >= maxScrolls || System.currentTimeMillis() - startMs > budgetMs) {
-                result = SparkSetReading(merged, SparkScanTermination.TIMED_OUT_PARTIAL, scrolls)
+                result = SparkSetReading(merged, SparkScanTermination.TIMED_OUT_PARTIAL, scrolls, sameFrameRetries, sameFrameRecoveries)
                 break
             }
             previousRows = frame.rows
@@ -2839,9 +2954,28 @@ class CareerLaunchNavigator(private val context: Context) {
         }
         MessageLog.i(
             TAG,
-            "[SPARKS] Scan ($label): ${result!!.rows.size} rows, ${result.termination.name}, $scrolls scroll(s), ${result.unreadableRowCount} unreadable name(s).",
+            "[SPARKS] Scan ($label): ${result!!.rows.size} rows, ${result.termination.name}, $scrolls scroll(s), " +
+                "${result.unreadableRowCount} unreadable name(s), $sameFrameRetries same-position retry(ies), $sameFrameRecoveries recovered.",
         )
         return result
+    }
+
+    /** Dumps the two row lists a refused stitch could not reconcile. Without this the failure
+     * left nothing behind, so which field disagreed was unrecoverable after the fact (the
+     * 2026-08-04 halt). Log-only. */
+    private fun logSparkMergeRefusal(
+        label: String,
+        scrolls: Int,
+        merged: List<SparkRowFact>,
+        frameRows: List<SparkRowFact>,
+    ) {
+        fun render(rows: List<SparkRowFact>) = rows.joinToString(" | ") { "\"${it.name}\" ${it.stars}* ${it.kind}" }
+        MessageLog.w(
+            TAG,
+            "[SPARKS] Stitch refused after the same-position re-read ($label, scroll $scrolls). " +
+                "Merged so far (${merged.size}): ${render(merged)}",
+        )
+        MessageLog.w(TAG, "[SPARKS] Stitch refused: incoming frame (${frameRows.size}): ${render(frameRows)}")
     }
 
     /** Scrolls a spark list back to its top and verifies the first merged row is visible again.

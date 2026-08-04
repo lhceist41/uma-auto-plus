@@ -1622,14 +1622,45 @@ or one of the partial terminations. Only a complete read may authorize the spend
 choice; the old fixed six-row window (which truncated a live ten-row set and under-counted
 the 3-star whites the pricing protects) is gone.
 
+Two bounded retries protect that scan, because its failures were all single-frame transients.
+A post-swipe frame is captured while the list is still rubber-banding off its bottom bumper,
+so one row can straddle the crop grid and read as damaged-but-readable (a dropped leading
+glyph, or one crop spanning two text lines); the exact-match stitch then finds no overlap at
+all and the read comes back `ALIGNMENT_FAILED`. So a refused stitch now takes one fresh
+capture at the same scroll position and retries the merge once (the merge rules themselves are
+untouched: only the evidence gets a second chance), and a pager page whose first full read
+came up short gets exactly one full re-read from the top. Both are hard-bounded at one, the
+per-page budget lives on the reroll transaction so FSM re-entry cannot multiply it, and a
+stitch that is still refused afterwards dumps both row lists so the disagreeing field is
+recoverable.
+
 The choice itself is `SparkKeepPolicy` (`bot/SparkChooser.kt`): a conservative lexicographic
 comparison with no numeric weights. First a 3-star protection vector per side ([target blue,
 desired pink, relevant white], where race sparks always count as relevant, skill whites only
 when planned, and an unreadable 3-star white protects the ORIGINAL side only), then plain
 integer tiers: target-blue stars (with target order breaking ties), matched pinks, uniques,
 relevant whites, total stars. A tie keeps the original; an incomplete read on either side
-forces keep-original, which is only acted on when the Original page and the confirmation
-header verify -- otherwise the flow blocks. The pager page is never assumed: heading OCR and
+forces keep-original.
+
+What that keep-original then requires is the part two overnight queues got wrong. It used to
+demand that the short pager read still match the known set row for row, through the same
+exact-match predicate that had just failed to stitch the read, so one transient misread ended
+the queue (2026-07-22 at 4 of 8, 2026-08-04 at 3 of 11 with the pager standing on a verified
+Original page showing exactly the right set). The rule now separates the two kinds of doubt.
+Keeping the Original set is safe no matter how little was read, because it is the set the
+career already earned and the 30 TP is spent either way; what would be unsafe is committing a
+page whose IDENTITY is unproven, because that commits the rerolled set irreversibly. So an
+incomplete evaluation degrades to keeping the Original once the page is identity-verified
+(heading and dots on this pass, or a verified pager repaint) and the Confirm control is
+actually locatable, and it is recorded as `decidedBy=incomplete_read, certain=false` with both
+scan terminations, the retry and rescan counts, the identity evidence, and the row-level
+comparison against the known set. That comparison is diagnostics only: `prefixAgreed=false`
+is logged, never obeyed. A degraded commit also never falls back to the fixed Confirm
+coordinate, since a page the bot could not read is the last place to guess where to press.
+Identity failures stay fatal exactly as before. The decision itself is a pure seam
+(`SparkSelectionPolicy`) that touches no bitmap and dispatches no gesture.
+
+The pager page is never assumed: heading OCR and
 the lit page dot must agree before anything acts on it. Page changes are dispatched as a
 horizontal swipe across the pager's central content (`SparkPagerNav`), never as a tap on the
 edge chevrons: the 2026-07-20 supervised run aimed two taps at the right chevron's own

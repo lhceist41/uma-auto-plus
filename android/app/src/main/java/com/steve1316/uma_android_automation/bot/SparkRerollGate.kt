@@ -163,6 +163,10 @@ internal class SparkRerollTransaction internal constructor(
     var pagerNavRetryUsed: Boolean = false
         private set
 
+    /** Pages whose one full re-read has been spent. A page that reads short gets exactly one
+     * rescan from the top; after that the decision proceeds on what the bot has. */
+    private val pagerRescansUsed = mutableSetOf<SparkSetSide>()
+
     val postSpend: Boolean
         get() =
             state in
@@ -315,6 +319,24 @@ internal class SparkRerollTransaction internal constructor(
         if (pagerNavRetryUsed) return false
         pagerNavRetryUsed = true
         return true
+    }
+
+    fun pagerRescanUsed(side: SparkSetSide): Boolean = side in pagerRescansUsed
+
+    /** Claims [side]'s single full rescan. False once it has already been spent, which is what
+     * keeps the re-read bounded at one per page however often the FSM re-enters the pager. */
+    fun usePagerRescan(side: SparkSetSide): Boolean {
+        if (side in pagerRescansUsed) return false
+        pagerRescansUsed.add(side)
+        return true
+    }
+
+    /** Replaces a page read with a better one from that page's rescan. Bounded by
+     * [usePagerRescan]; the recorded read is what the decision then sees. */
+    fun replacePagerRead(side: SparkSetSide, read: SparkSetReading): SparkTxResult {
+        if (!postSpend) return refused("replacePagerRead", "state is $state")
+        pagerReads[side] = read
+        return SparkTxResult(true)
     }
 
     /** A spend career may only complete with its kept-set and choice records written. */

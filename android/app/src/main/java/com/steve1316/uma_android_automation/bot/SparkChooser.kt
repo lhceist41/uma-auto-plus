@@ -75,11 +75,16 @@ enum class SparkScanTermination {
     val complete: Boolean get() = this == COMPLETE_END_MARKER || this == COMPLETE_NO_PROGRESS
 }
 
-/** A full set read: ordered rows, how the scan terminated, and how many scrolls it took. */
+/** A full set read: ordered rows, how the scan terminated, and how many scrolls it took.
+ * [sameFrameRetries] counts merge failures that were given one fresh capture at the same scroll
+ * position; [sameFrameRecoveries] counts how many of those the fresh capture rescued. Both ride
+ * into the decision log so a degraded outcome can be told apart from a lucky one. */
 data class SparkSetReading(
     val rows: List<SparkRowFact>,
     val termination: SparkScanTermination,
     val scrollsUsed: Int = 0,
+    val sameFrameRetries: Int = 0,
+    val sameFrameRecoveries: Int = 0,
 ) {
     val complete: Boolean get() = termination.complete && rows.isNotEmpty()
     val unreadableRowCount: Int get() = rows.count { it.unreadable }
@@ -150,6 +155,12 @@ object SparkScrollMerge {
      * the exact question worth asking: it can only ever confirm, never extend, so a partial read can
      * corroborate a known set without ever being trusted to define one. An empty [partial] proves
      * nothing and is rejected.
+     *
+     * NO LONGER AN AUTHORIZATION GATE. It used to decide whether the keep-original fallback was
+     * allowed, and because it compares through the exact-match [rowsAlign] it refused for the very
+     * same transient misread that made the read partial, ending the queue (2026-08-04). It now
+     * feeds [SparkPrefixEvidence.prefixAgreed] as diagnostics, which is useful precisely because it
+     * is the old rule: the log states whether that rule would have blocked.
      */
     fun rowsAreConsistentPrefix(known: List<SparkRowFact>, partial: List<SparkRowFact>): Boolean {
         if (partial.isEmpty() || partial.size > known.size) return false
@@ -172,6 +183,204 @@ object SparkScrollMerge {
         }
         if (chosenOverlap == -1) return null
         return merged + next.subList(chosenOverlap, next.size)
+    }
+
+    /** Folds the OCR damage that is irrelevant to identifying a row, for the DIAGNOSTIC prefix
+     * comparison only. Deliberately separate from [rowsAlign]: this never decides an outcome,
+     * so loosening it cannot loosen any safety rule. */
+    private fun foldName(name: String): String =
+        name.lowercase().replace('0', 'o').replace('1', 'i').replace('l', 'i').filter { it.isLetterOrDigit() }
+
+    /**
+     * Describes how a partial read of a page compares with the set already known to be on it.
+     *
+     * This is OBSERVABILITY, not authorization. The 2026-08-04 halt happened because the
+     * keep-original fallback gated on [rowsAreConsistentPrefix], which reuses the exact-match
+     * [rowsAlign] and therefore fails for exactly the same transient reason that produced the
+     * partial read in the first place; the refusal path then logged no row detail, so which
+     * field disagreed was not even recoverable afterwards. The evidence is now computed and
+     * logged, and the decision no longer depends on it.
+     */
+    fun describePrefix(known: List<SparkRowFact>, partial: List<SparkRowFact>): SparkPrefixEvidence {
+        val compared = minOf(known.size, partial.size)
+        var firstDiffering: Int? = null
+        var detail: String? = null
+        for (i in 0 until compared) {
+            val k = known[i]
+            val p = partial[i]
+            val nameAgrees = k.unreadable || p.unreadable || foldName(k.name) == foldName(p.name)
+            if (k.kind == p.kind && k.stars == p.stars && nameAgrees) continue
+            firstDiffering = i
+            detail =
+                "row ${i + 1}: known \"${k.name}\" ${k.stars}* ${k.kind} vs read \"${p.name}\" ${p.stars}* ${p.kind}"
+            break
+        }
+        return SparkPrefixEvidence(
+            knownRowCount = known.size,
+            partialRowCount = partial.size,
+            comparedRowCount = compared,
+            missingRowCount = maxOf(0, known.size - partial.size),
+            extraRowCount = maxOf(0, partial.size - known.size),
+            // Tolerant: names are folded, so this names a row that GENUINELY disagrees rather
+            // than one that merely lost a glyph.
+            firstDifferingRow = firstDiffering,
+            firstDifference = detail,
+            // Strict, and deliberately the very predicate the old gate used: logging it says
+            // outright whether that gate would have blocked here. It decides nothing now.
+            prefixAgreed = rowsAreConsistentPrefix(known, partial),
+        )
+    }
+}
+
+/**
+ * Diagnostic comparison of a partial page read against the set already known to be on that page.
+ * Logged with the fallback decision; never an input to whether the fallback is allowed.
+ */
+data class SparkPrefixEvidence(
+    val knownRowCount: Int,
+    val partialRowCount: Int,
+    val comparedRowCount: Int,
+    val missingRowCount: Int,
+    val extraRowCount: Int,
+    /** 0-based index of the first row that disagreed, or null when none did. */
+    val firstDifferingRow: Int?,
+    val firstDifference: String?,
+    val prefixAgreed: Boolean,
+) {
+    fun summarize(): String =
+        "prefixAgreed=$prefixAgreed known=$knownRowCount read=$partialRowCount compared=$comparedRowCount " +
+            "missing=$missingRowCount extra=$extraRowCount" +
+            (firstDifference?.let { " firstDiff=[$it]" } ?: "")
+}
+
+/** What the pager should do about the two page reads it holds. */
+enum class SparkSelectionAction {
+    /** Commit the Original page (the set the career already earned). */
+    CHOOSE_ORIGINAL,
+
+    /** Commit the Rerolled page. Only ever reachable from a certain comparison. */
+    CHOOSE_REROLLED,
+
+    /** Re-read the page currently on screen once more before deciding. */
+    RESCAN_CURRENT_PAGE,
+
+    /** Stop and leave the selection to the operator. */
+    HALT,
+}
+
+/** Everything the pager decision depends on. Pure data: no bitmaps, no gestures, no clock. */
+data class SparkSelectionInputs(
+    val originalTermination: SparkScanTermination,
+    val rerolledTermination: SparkScanTermination,
+    /** The page resolved from BOTH heading and dots, or null when unreadable or contradictory. */
+    val currentPageSide: SparkSetSide?,
+    /** The Original page was independently proven on screen by a verified pager repaint. */
+    val originalPageVerifiedByNavigation: Boolean,
+    /** False only once the bot has actually looked for the Confirm control and not found it. */
+    val originalControlAvailable: Boolean,
+    /** This page still has its one full rescan available. */
+    val currentPageRescanAvailable: Boolean,
+    val prefix: SparkPrefixEvidence? = null,
+) {
+    /**
+     * Whether the bot knows it is looking at the Original page. Two independent routes, both
+     * two-signal: the page resolved as ORIGINAL from heading AND dots on this very pass, or a
+     * pager swipe to ORIGINAL repainted and was verified the same way.
+     */
+    val originalIdentityTrusted: Boolean
+        get() = currentPageSide == SparkSetSide.ORIGINAL || originalPageVerifiedByNavigation
+
+    val currentPageIncomplete: Boolean
+        get() =
+            when (currentPageSide) {
+                SparkSetSide.ORIGINAL -> !originalTermination.complete
+                SparkSetSide.REROLLED -> !rerolledTermination.complete
+                null -> false
+            }
+}
+
+/** The decided action, with everything needed to explain it in one log line. */
+data class SparkSelectionDecision(
+    val action: SparkSelectionAction,
+    val side: SparkSetSide?,
+    val reason: String,
+    val certain: Boolean,
+    val decidedBy: String,
+)
+
+/**
+ * Decides what the Spark Selection pager does once it holds a read of both pages.
+ *
+ * The safety invariant this encodes, proven by two live queue halts (2026-07-22 and
+ * 2026-08-04): an incomplete EVALUATION is not a reason to stop. Keeping the Original set is
+ * safe no matter how little the bot managed to read, because it is the set the career already
+ * earned and the 30 TP is spent either way. What is genuinely unsafe is committing a page whose
+ * IDENTITY is not proven, because that commits the rerolled set irreversibly. So content
+ * uncertainty degrades the choice, and only identity or control uncertainty halts.
+ *
+ * Pure: it inspects nothing and touches nothing. The caller performs the action.
+ */
+object SparkSelectionPolicy {
+    fun decide(choice: SparkChoice, inputs: SparkSelectionInputs): SparkSelectionDecision {
+        if (choice.certain) {
+            // Both pages read completely: the comparison stands exactly as before.
+            return SparkSelectionDecision(
+                action = if (choice.side == SparkSetSide.ORIGINAL) SparkSelectionAction.CHOOSE_ORIGINAL else SparkSelectionAction.CHOOSE_REROLLED,
+                side = choice.side,
+                reason = choice.reason,
+                certain = true,
+                decidedBy = choice.decidedBy,
+            )
+        }
+
+        val terminations = "original ${inputs.originalTermination.name}, rerolled ${inputs.rerolledTermination.name}"
+
+        // One more look at the page in front of us before giving up on comparing.
+        if (inputs.currentPageIncomplete && inputs.currentPageRescanAvailable) {
+            return SparkSelectionDecision(
+                action = SparkSelectionAction.RESCAN_CURRENT_PAGE,
+                side = inputs.currentPageSide,
+                reason = "the ${inputs.currentPageSide?.wire} page read short ($terminations); re-reading it once before deciding",
+                certain = false,
+                decidedBy = "rescan",
+            )
+        }
+
+        if (!inputs.originalIdentityTrusted) {
+            return SparkSelectionDecision(
+                action = SparkSelectionAction.HALT,
+                side = null,
+                reason =
+                    "the evaluation is incomplete ($terminations) and the Original page identity is not established " +
+                        "(current page ${inputs.currentPageSide?.wire ?: "unresolved"}, navigation-verified=${inputs.originalPageVerifiedByNavigation}); " +
+                        "never committing a page the bot cannot name",
+                certain = false,
+                decidedBy = "identity_unverified",
+            )
+        }
+
+        if (!inputs.originalControlAvailable) {
+            return SparkSelectionDecision(
+                action = SparkSelectionAction.HALT,
+                side = null,
+                reason =
+                    "the evaluation is incomplete ($terminations) and the Confirm control could not be located on the " +
+                        "verified Original page; never committing on a guessed coordinate",
+                certain = false,
+                decidedBy = "control_unavailable",
+            )
+        }
+
+        return SparkSelectionDecision(
+            action = SparkSelectionAction.CHOOSE_ORIGINAL,
+            side = SparkSetSide.ORIGINAL,
+            reason =
+                "Original chosen without reroll comparison: the evaluation is degraded ($terminations) but the Original " +
+                    "page is identity-verified, so the set the career earned is kept" +
+                    (inputs.prefix?.let { " [${it.summarize()}]" } ?: ""),
+            certain = false,
+            decidedBy = "incomplete_read",
+        )
     }
 }
 

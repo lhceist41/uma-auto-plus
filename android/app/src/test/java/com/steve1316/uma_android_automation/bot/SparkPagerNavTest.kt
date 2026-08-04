@@ -288,6 +288,31 @@ class SparkPagerNavTest {
                 "an unprovable page must block without another gesture at both call sites",
             )
         }
+
+        @Test
+        fun `a degraded decision refuses the fixed Confirm coordinate, and the policy seam sits between the comparison and the winner`() {
+            // Both properties are wiring, not policy: the pure decision tests would still pass if
+            // the navigator called the seam in the wrong place or let a degraded commit fall
+            // through to the anchor tap, so they are pinned here against the source.
+            val body = pagerHandlerBody()
+
+            // 1. A degraded evaluation must never commit on the fixed coordinate. The refusal has
+            // to be reached BEFORE the anchor tap, which stays available to a certain comparison.
+            val degradedRefusal = body.indexOf("transaction.choice?.certain == false")
+            val anchorTap = body.indexOf("gestureUtils.tap(SPARK_PAGER_CONFIRM_X")
+            assertTrue(degradedRefusal >= 0, "the degraded-commit refusal must exist in the pager handler")
+            assertTrue(anchorTap >= 0, "the certain path keeps its fixed Confirm anchor")
+            assertTrue(degradedRefusal < anchorTap, "an uncertain evaluation must be refused before the anchor tap is reachable")
+
+            // 2. The seam decides after the comparison and before anything is committed, so no
+            // path can select a winner without passing through it.
+            val compareAt = body.indexOf("SparkKeepPolicy.choose(")
+            val decideAt = body.indexOf("SparkSelectionPolicy.decide(")
+            val selectAt = body.indexOf("selectWinner(")
+            assertTrue(compareAt >= 0, "the comparison must still run")
+            assertTrue(decideAt > compareAt, "the decision seam must consume the comparison, not replace it")
+            assertTrue(selectAt > decideAt, "no winner may be selected before the seam has decided")
+        }
     }
 
     // Source-tree access, same walk as the other lifecycle guards.
