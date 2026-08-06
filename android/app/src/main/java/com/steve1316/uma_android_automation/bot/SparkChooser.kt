@@ -253,6 +253,227 @@ data class SparkPrefixEvidence(
             (firstDifference?.let { " firstDiff=[$it]" } ?: "")
 }
 
+/**
+ * The closed vocabularies a structural name repair may draw from.
+ *
+ * Blue (stat) and pink (aptitude) rows are the only kinds whose entire name space is known up
+ * front, and that is exactly what makes a repair provable instead of a guess: a name either
+ * resolves to one of these or it does not. White rows carry open-vocabulary race names and the
+ * skill catalog, and unique rows are per-character, so neither is ever repaired.
+ */
+val SPARK_STAT_NAMES: List<String> = listOf("Speed", "Stamina", "Power", "Guts", "Wit")
+
+val SPARK_APTITUDE_NAMES: List<String> =
+    listOf("Sprint", "Mile", "Medium", "Long", "Turf", "Dirt", "Front Runner", "Pace Chaser", "Late Surger", "End Closer")
+
+/** Which read supplied the content the chooser scored for one side. */
+enum class SparkReadAuthority {
+    /** The two reads corroborated structurally and every comparable name already agreed. */
+    PAGER_UNCHANGED,
+
+    /** The two reads corroborated structurally and at least one stat/aptitude name was repaired. */
+    PAGER_WITH_STRUCTURAL_NAME_REPAIR,
+
+    /** No corroboration was available, or it was refused; the pager read stands alone. */
+    PAGER_ONLY,
+}
+
+/** Why a structural corroboration was unavailable or refused. [wire] is the telemetry string. */
+enum class SparkReconcileRefusal(val wire: String) {
+    NONE("none"),
+    NO_EARLIER_CAPTURE("no_earlier_capture"),
+    EARLIER_INCOMPLETE("earlier_incomplete"),
+    PAGER_INCOMPLETE("pager_incomplete"),
+    DIFFERENT_TRANSACTION("different_transaction"),
+    DIFFERENT_SIDE("different_side"),
+    ROW_COUNT_MISMATCH("row_count_mismatch"),
+    KIND_MISMATCH("kind_mismatch"),
+    STAR_MISMATCH("star_mismatch"),
+    VALID_NAME_CONTRADICTION("valid_name_contradiction"),
+}
+
+/** One repaired row: the pager's damaged name replaced, for scoring only, by the earlier
+ * capture's exact closed-vocabulary name. Both spellings are kept so the corpus never loses
+ * what the pager actually read. */
+data class SparkNameRepair(
+    val rowIndex: Int,
+    val kind: SparkRowKind,
+    val pagerName: String,
+    val repairedName: String,
+)
+
+/**
+ * An earlier capture of one side, tagged with the transaction and side it provably belongs to.
+ *
+ * The tags are what make "same set, same side" a checked precondition rather than an assumption.
+ * In production they are structurally guaranteed (the transaction state machine admits
+ * `captureOriginal` only from IDLE on the SPARKS screen and `captureRerolled` only from
+ * SPEND_CONFIRMED on the result screen, and a new career replaces the whole transaction), so the
+ * two mismatch refusals below are defense in depth against a future caller, not live conditions.
+ */
+data class SparkSideCapture(
+    val reading: SparkSetReading,
+    val side: SparkSetSide,
+    val transactionId: String,
+)
+
+/** The read-authority outcome for one side: both raw reads, the read actually scored, and why. */
+data class SparkReadAuthorityResult(
+    val side: SparkSetSide,
+    /** The earlier result-screen capture, when one existed at all (raw, never mutated). */
+    val earlier: SparkSetReading?,
+    /** The pager read exactly as the pager produced it (raw, never mutated). */
+    val pager: SparkSetReading,
+    /** What the chooser scores: the pager read, with at most the listed names replaced. */
+    val effective: SparkSetReading,
+    val authority: SparkReadAuthority,
+    val repairs: List<SparkNameRepair>,
+    /** Row count, order, kinds and stars all matched between the two reads. */
+    val structurallyAgreed: Boolean,
+    val refusal: SparkReconcileRefusal,
+) {
+    val repairedRowIndexes: List<Int> get() = repairs.map { it.rowIndex }
+
+    fun summarize(): String =
+        when (authority) {
+            SparkReadAuthority.PAGER_WITH_STRUCTURAL_NAME_REPAIR ->
+                "structural name repair on the ${side.wire} page: ${pager.rows.size} rows, identical kinds and stars; " +
+                    repairs.joinToString("; ") { "row ${it.rowIndex + 1} \"${it.pagerName}\" -> \"${it.repairedName}\"" } +
+                    "; authority=${authority.name}"
+            SparkReadAuthority.PAGER_ONLY ->
+                "the ${side.wire} page was scored from the pager alone (${refusal.wire}); authority=${authority.name}"
+            SparkReadAuthority.PAGER_UNCHANGED ->
+                "the ${side.wire} page reads corroborate and needed no repair; authority=${authority.name}"
+        }
+}
+
+/**
+ * Reconciles the pager read of one side against the earlier capture of that same side.
+ *
+ * Why this exists (2026-08-06 live defect). The pager reads the same immutable set the result
+ * screen already showed, but its name OCR is systematically worse: across the 15-career batch of
+ * 2026-08-05/06, all ten pager-side reads of the five reroll careers disagreed with their earlier
+ * captures while all twenty earlier reads were clean, and the damage was always a lost or
+ * corrupted LEADING glyph (`Speed` -> `peed`, `Sprint` -> `print`, `Late Surger` -> `ate Surger`).
+ * Stars, kinds, row counts and row order agreed every time. Because [SparkKeepPolicy] resolves
+ * the blue target by exact name, one lost glyph demoted a configured target to rank -1 and the
+ * chooser discarded a 17-star rerolled set holding Speed 2* and Sprint 2* for a 9-star original.
+ *
+ * THE AUTHORITY SPLIT IS LOAD-BEARING. The pager remains the sole authority for side identity,
+ * page navigation and which side is confirmed - it is the surface the Confirm tap lands on. The
+ * earlier capture may repair CONTENT NAMES ONLY, and only where the two reads corroborate each
+ * other structurally: same transaction, same side, both complete, equal row count and order, and
+ * identical kind and stars at every index. Under those conditions the two reads describe the same
+ * list row for row, so a name difference is by construction a misread on one side.
+ *
+ * The repair is further confined to stat and aptitude rows, whose vocabularies are closed
+ * ([SPARK_STAT_NAMES], [SPARK_APTITUDE_NAMES]), and only in the one direction that adds
+ * information: the earlier name resolves exactly, the pager name does not. Two names that both
+ * resolve to DIFFERENT valid entries are a contradiction, not a repair - it breaks the same-set
+ * premise, so the whole side falls back to the pager read.
+ *
+ * Pure and total: no bitmaps, no gestures, no clock, no I/O, single pass, no retries.
+ */
+object SparkReadReconcile {
+    /** The canonical spelling for [name] within [kind]'s closed vocabulary, or null when the
+     * kind has no closed vocabulary or the name does not resolve. */
+    fun canonicalNameFor(kind: SparkRowKind, name: String): String? =
+        when (kind) {
+            SparkRowKind.STAT -> SPARK_STAT_NAMES.firstOrNull { SparkTextNorm.namesEqual(it, name) }
+            SparkRowKind.APTITUDE -> SPARK_APTITUDE_NAMES.firstOrNull { SparkTextNorm.namesEqual(it, name) }
+            else -> null
+        }
+
+    fun reconcile(
+        side: SparkSetSide,
+        transactionId: String,
+        earlier: SparkSideCapture?,
+        pager: SparkSetReading,
+    ): SparkReadAuthorityResult {
+        fun pagerOnly(refusal: SparkReconcileRefusal, structurallyAgreed: Boolean = false) =
+            SparkReadAuthorityResult(
+                side = side,
+                earlier = earlier?.reading,
+                pager = pager,
+                effective = pager,
+                authority = SparkReadAuthority.PAGER_ONLY,
+                repairs = emptyList(),
+                structurallyAgreed = structurallyAgreed,
+                refusal = refusal,
+            )
+
+        if (earlier == null) return pagerOnly(SparkReconcileRefusal.NO_EARLIER_CAPTURE)
+        if (earlier.transactionId != transactionId) return pagerOnly(SparkReconcileRefusal.DIFFERENT_TRANSACTION)
+        if (earlier.side != side) return pagerOnly(SparkReconcileRefusal.DIFFERENT_SIDE)
+        if (!earlier.reading.complete) return pagerOnly(SparkReconcileRefusal.EARLIER_INCOMPLETE)
+        if (!pager.complete) return pagerOnly(SparkReconcileRefusal.PAGER_INCOMPLETE)
+
+        val earlierRows = earlier.reading.rows
+        val pagerRows = pager.rows
+        if (earlierRows.size != pagerRows.size) return pagerOnly(SparkReconcileRefusal.ROW_COUNT_MISMATCH)
+        // Rows are compared strictly by index. That does NOT by itself prove the two reads are in
+        // the same order: swapping two rows that share a kind and a star count would pass this
+        // check. It is safe anyway, for reasons that hold outside this loop. A generated set
+        // carries exactly one stat row and one aptitude row, so no repairable row can be swapped
+        // with another repairable row of its own kind; the list reader works top-down and the
+        // scroll merge only ever appends, so it cannot invert order; white rows, the only kind
+        // that repeats, are never repaired; and the scoring below sums and counts same-kind rows,
+        // so it is permutation-invariant over them.
+        for (i in pagerRows.indices) {
+            if (earlierRows[i].kind != pagerRows[i].kind) return pagerOnly(SparkReconcileRefusal.KIND_MISMATCH)
+            if (earlierRows[i].stars != pagerRows[i].stars) return pagerOnly(SparkReconcileRefusal.STAR_MISMATCH)
+        }
+
+        // Structurally corroborated from here: same length, same kind and stars at every index.
+        val repairs = mutableListOf<SparkNameRepair>()
+        for (i in pagerRows.indices) {
+            val kind = pagerRows[i].kind
+            if (kind != SparkRowKind.STAT && kind != SparkRowKind.APTITUDE) continue
+            if (SparkTextNorm.namesEqual(earlierRows[i].name, pagerRows[i].name)) continue
+            val earlierCanonical = canonicalNameFor(kind, earlierRows[i].name)
+            val pagerCanonical = canonicalNameFor(kind, pagerRows[i].name)
+            if (earlierCanonical != null && pagerCanonical != null && earlierCanonical != pagerCanonical) {
+                // Both reads name a DIFFERENT valid spark. They cannot be the same row of the same
+                // set, so nothing here is repairable and no partial repair may leak out.
+                return pagerOnly(SparkReconcileRefusal.VALID_NAME_CONTRADICTION, structurallyAgreed = true)
+            }
+            if (earlierCanonical != null && pagerCanonical == null) {
+                repairs.add(SparkNameRepair(i, kind, pagerRows[i].name, earlierCanonical))
+            }
+        }
+
+        if (repairs.isEmpty()) {
+            return SparkReadAuthorityResult(
+                side = side,
+                earlier = earlier.reading,
+                pager = pager,
+                effective = pager,
+                authority = SparkReadAuthority.PAGER_UNCHANGED,
+                repairs = emptyList(),
+                structurallyAgreed = true,
+                refusal = SparkReconcileRefusal.NONE,
+            )
+        }
+
+        // The effective read is the PAGER read with names substituted in place: row count, order,
+        // kind, stars, white class, scan termination and the scan counters all stay the pager's.
+        val repairedRows = pagerRows.toMutableList()
+        for (repair in repairs) {
+            repairedRows[repair.rowIndex] = repairedRows[repair.rowIndex].copy(name = repair.repairedName)
+        }
+        return SparkReadAuthorityResult(
+            side = side,
+            earlier = earlier.reading,
+            pager = pager,
+            effective = pager.copy(rows = repairedRows),
+            authority = SparkReadAuthority.PAGER_WITH_STRUCTURAL_NAME_REPAIR,
+            repairs = repairs,
+            structurallyAgreed = true,
+            refusal = SparkReconcileRefusal.NONE,
+        )
+    }
+}
+
 /** What the pager should do about the two page reads it holds. */
 enum class SparkSelectionAction {
     /** Commit the Original page (the set the career already earned). */

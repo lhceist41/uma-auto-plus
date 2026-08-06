@@ -131,6 +131,11 @@ internal class SparkRerollTransaction internal constructor(
     private val pagerReads = mutableMapOf<SparkSetSide, SparkSetReading>()
     private val pagerPagesVerified = mutableSetOf<SparkSetSide>()
 
+    /** Per-side read-authority outcomes, recorded at the moment the chooser scored them, so the
+     * choice record persists the reads the decision actually consumed rather than a later
+     * recomputation. */
+    private val readAuthorities = mutableMapOf<SparkSetSide, SparkReadAuthorityResult>()
+
     var choice: SparkChoice? = null
         private set
     var winner: SparkSetSide? = null
@@ -189,6 +194,26 @@ internal class SparkRerollTransaction internal constructor(
         get() = !spendEverConfirmed && !terminal
 
     fun pagerRead(side: SparkSetSide): SparkSetReading? = pagerReads[side]
+
+    /**
+     * The earlier capture of [side] tagged with this transaction's identity, or null when that
+     * side was never captured before the pager (a fast transition can skip the result screen).
+     * Tagging here is what lets the reconciliation check "same transaction, same side" instead of
+     * assuming it.
+     */
+    fun earlierCapture(side: SparkSetSide): SparkSideCapture? {
+        val reading = if (side == SparkSetSide.ORIGINAL) originalRead else rerolledRead
+        return reading?.let { SparkSideCapture(it, side, careerNonce) }
+    }
+
+    val recordedReadAuthorities: Map<SparkSetSide, SparkReadAuthorityResult>
+        get() = readAuthorities.toMap()
+
+    /** Records which read the chooser scored for one side. Content-only bookkeeping: it never
+     * affects side identity, navigation, or which page is confirmed. */
+    fun recordReadAuthority(result: SparkReadAuthorityResult) {
+        readAuthorities[result.side] = result
+    }
 
     /**
      * Records that the pager was independently confirmed to be showing [side], by both the heading

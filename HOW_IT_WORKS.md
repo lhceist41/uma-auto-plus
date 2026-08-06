@@ -1634,6 +1634,32 @@ per-page budget lives on the reroll transaction so FSM re-entry cannot multiply 
 stitch that is still refused afterwards dumps both row lists so the disagreeing field is
 recoverable.
 
+Before either page is scored, each side is reconciled against its own earlier capture
+(`SparkReadReconcile`). The pager's name OCR is measurably worse than the screens that precede
+it: across the 15-career batch of 2026-08-05/06 all ten pager-side reads of the five reroll
+careers disagreed with their earlier captures while all twenty earlier reads were clean, and the
+damage was always a lost or corrupted LEADING glyph (`Speed` read as `peed`, `Sprint` as
+`print`, `Late Surger` as `ate Surger`). Stars, kinds, row counts and row order agreed every
+time. Because the comparison below resolves the blue target by exact name, one lost glyph
+demoted a configured target to rank -1 and a career discarded a 17-star rerolled set holding
+Speed 2-star and Sprint 2-star for a 9-star original.
+
+The authority split is the safety property. The pager stays the sole authority for side
+identity, page navigation and which page is confirmed -- it is the surface the Confirm tap lands
+on. The earlier capture may repair CONTENT NAMES ONLY, and only where the two reads corroborate
+each other structurally: same transaction, same side, both complete, equal row count and order,
+and identical kind and stars at every index. Under those conditions the two reads describe the
+same list row for row, so a name difference is by construction a misread on one side. The repair
+is confined further to stat and aptitude rows, whose vocabularies are closed, and runs only in
+the direction that adds information: the earlier name resolves exactly, the pager name does not.
+Names that both resolve to DIFFERENT valid entries are a contradiction rather than a repair --
+that breaks the same-set premise, so the whole side falls back to the pager read. White rows
+(race and skill names) and unique rows are open-vocabulary and are never repaired. Each side
+records which read it was scored from (`PAGER_UNCHANGED`, `PAGER_WITH_STRUCTURAL_NAME_REPAIR`,
+or `PAGER_ONLY` with the refusal reason), and every pager page is persisted raw as its own
+`pager_original` / `pager_rerolled` corpus record before any repair exists, so a repair can
+never hide what the pager actually saw.
+
 The choice itself is `SparkKeepPolicy` (`bot/SparkChooser.kt`): a conservative lexicographic
 comparison with no numeric weights. First a 3-star protection vector per side ([target blue,
 desired pink, relevant white], where race sparks always count as relevant, skill whites only

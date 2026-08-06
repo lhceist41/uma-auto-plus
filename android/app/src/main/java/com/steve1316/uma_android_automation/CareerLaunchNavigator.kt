@@ -18,6 +18,10 @@ import com.steve1316.uma_android_automation.bot.SparkSpendDiagnostics
 import com.steve1316.uma_android_automation.bot.SparkKeepPolicy
 import com.steve1316.uma_android_automation.bot.SparkKeepVerdict
 import com.steve1316.uma_android_automation.bot.SparkPagerResolution
+import com.steve1316.uma_android_automation.bot.SparkReadAuthority
+import com.steve1316.uma_android_automation.bot.SparkReadAuthorityResult
+import com.steve1316.uma_android_automation.bot.SparkReadReconcile
+import com.steve1316.uma_android_automation.bot.SparkReconcileRefusal
 import com.steve1316.uma_android_automation.bot.SparkRerollGate
 import com.steve1316.uma_android_automation.bot.SparkRerollPolicy
 import com.steve1316.uma_android_automation.bot.SparkRerollTransaction
@@ -1786,11 +1790,15 @@ class CareerLaunchNavigator(private val context: Context) {
             sparksSetRecorded = true
             if (transaction != null) {
                 originalReading = readCompleteSparkSet(SPARKS_SCREEN_GEOMETRY, "original")
-                recordSparkRows(originalReading.rows, "original", originalReading)
+                // Capture BEFORE recording: captureOriginal is what binds the career token, and
+                // recordSparkRows stamps whatever token exists when it runs. Recording first left
+                // every original-phase record tokenless (all 15 of the 2026-08-05/06 batch), so the
+                // one read the reconciliation depends on could only be joined by trainee and time.
                 val captured = transaction.captureOriginal(originalReading, StartModule.lastCareerEndTrainee, StartModule.lastCareerEndScenario)
                 if (!captured.ok) {
                     MessageLog.w(TAG, "[SPARKS] ${captured.reason}")
                 }
+                recordSparkRows(originalReading.rows, "original", originalReading)
             } else {
                 recordSparkSet(bitmap, "original")
             }
@@ -2169,7 +2177,11 @@ class CareerLaunchNavigator(private val context: Context) {
                 )
             }
             transaction.recordPagerRead(side, reading)
-            crossCheckPagerRead(side, reading, transaction)
+            // Persist the pager read RAW, here rather than at decision time: a page that never
+            // reaches a decision (a block, a stale transaction) is exactly the case whose pixels
+            // are unrecoverable afterwards, and reconstructing the 2026-08-06 defect needed this
+            // read and did not have it.
+            recordSparkRows(reading.rows, "pager_${side.wire}", reading)
         }
 
         // Both pages must be read before any decision.
@@ -2203,7 +2215,25 @@ class CareerLaunchNavigator(private val context: Context) {
             transaction.setsVerified()
             val original = transaction.pagerRead(SparkSetSide.ORIGINAL)!!
             val rerolled = transaction.pagerRead(SparkSetSide.REROLLED)!!
-            var choice = SparkKeepPolicy.choose(original, rerolled, buildSparkChooserProfile())
+
+            // CONTENT reconciliation, and content only. The pager's name OCR loses leading glyphs
+            // (all ten pager reads of the 2026-08-05/06 batch disagreed with their clean earlier
+            // captures), and one lost glyph is enough to demote a configured blue target to rank
+            // -1 and discard the better set. Where the earlier capture of the SAME side in the
+            // SAME transaction corroborates this read row for row - equal count and order,
+            // identical kinds and stars - a damaged stat/aptitude name may take the earlier
+            // capture's exact spelling. Side identity, navigation and the Confirm target below
+            // are untouched by this and stay the pager's alone.
+            val originalAuthority =
+                SparkReadReconcile.reconcile(SparkSetSide.ORIGINAL, transaction.careerNonce, transaction.earlierCapture(SparkSetSide.ORIGINAL), original)
+            val rerolledAuthority =
+                SparkReadReconcile.reconcile(SparkSetSide.REROLLED, transaction.careerNonce, transaction.earlierCapture(SparkSetSide.REROLLED), rerolled)
+            transaction.recordReadAuthority(originalAuthority)
+            transaction.recordReadAuthority(rerolledAuthority)
+            reportReadAuthority(originalAuthority)
+            reportReadAuthority(rerolledAuthority)
+
+            var choice = SparkKeepPolicy.choose(originalAuthority.effective, rerolledAuthority.effective, buildSparkChooserProfile())
 
             // What the bot could not read is not a reason to stop. Keeping the Original set is
             // safe whatever the rows say: it is the set the career already earned and the 30 TP
@@ -2334,17 +2364,23 @@ class CareerLaunchNavigator(private val context: Context) {
         return TransitionResult.Continue
     }
 
-    /** Log-only comparison of a pager page read against the earlier capture of the same set
-     * (SPARKS screen for the original, the result screen for the rerolled). The pager is
-     * authoritative for the choice; a disagreement is surfaced for the log, not acted on. */
-    private fun crossCheckPagerRead(side: SparkSetSide, pagerReading: SparkSetReading, transaction: SparkRerollTransaction) {
-        val earlier = if (side == SparkSetSide.ORIGINAL) transaction.originalRead else transaction.rerolledRead
-        if (earlier == null || !earlier.complete || !pagerReading.complete) return
-        if (!SparkScrollMerge.rowsAlign(earlier.rows, pagerReading.rows)) {
-            MessageLog.w(
-                TAG,
-                "[SPARKS] [CHOOSER] The ${side.wire} pager page (${pagerReading.rows.size} rows) disagrees with its earlier capture (${earlier.rows.size} rows); trusting the pager.",
-            )
+    /**
+     * Reports which read the chooser scored for one side. Replaces the old log-only cross-check,
+     * which observed the same disagreement and then discarded the observation ("trusting the
+     * pager"); the outcome is now decided by [SparkReadReconcile] and this line states it.
+     *
+     * Deliberately quiet in the two ordinary cases: fully agreeing reads say nothing, and a side
+     * with no earlier capture at all (a fast transition past the result screen) is normal. Both
+     * are still persisted in the choice record.
+     */
+    private fun reportReadAuthority(result: SparkReadAuthorityResult) {
+        when (result.authority) {
+            SparkReadAuthority.PAGER_WITH_STRUCTURAL_NAME_REPAIR -> MessageLog.i(TAG, "[SPARKS] [CHOOSER] ${result.summarize()}")
+            SparkReadAuthority.PAGER_ONLY ->
+                if (result.refusal != SparkReconcileRefusal.NO_EARLIER_CAPTURE) {
+                    MessageLog.w(TAG, "[SPARKS] [CHOOSER] ${result.summarize()}")
+                }
+            SparkReadAuthority.PAGER_UNCHANGED -> Unit
         }
     }
 
@@ -2670,6 +2706,16 @@ class CareerLaunchNavigator(private val context: Context) {
             record.put("confirmed_header", verifiedHeader.wire)
             record.put("original", JSONObject(choice.original.toRecordMap()))
             record.put("rerolled", JSONObject(choice.rerolled.toRecordMap()))
+            // Additive: which read each side was scored from, both raw reads, and any repairs.
+            // Older readers ignore the key; newer ones can reconstruct the decision exactly.
+            transaction.recordedReadAuthorities.takeIf { it.isNotEmpty() }?.let { authorities ->
+                record.put(
+                    "read_authority",
+                    JSONObject().apply {
+                        authorities.forEach { (side, result) -> put(side.wire, sparkReadAuthorityJson(result)) }
+                    },
+                )
+            }
             record.put("tp_spent", 30)
             transaction.tpRestoreSource?.let { record.put("tp_restore_source", it) }
             transaction.spendConfirmedAtMs?.let { record.put("spend_ts", it) }
@@ -2678,6 +2724,57 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.w(TAG, "[SPARKS] Failed to append the spark_choice record: $it")
         }
     }
+
+    /** Rows in the corpus's row shape. Shared so a raw read and a repaired read can never drift
+     * into different serializations. */
+    private fun sparkRowsJson(rows: List<SparkRowFact>): JSONArray =
+        JSONArray().apply {
+            rows.forEach { row ->
+                put(
+                    JSONObject().apply {
+                        put("name", row.name)
+                        put("stars", row.stars)
+                        put("kind", row.kind.wire)
+                    },
+                )
+            }
+        }
+
+    /**
+     * One side's read-authority audit trail. The pager read is always persisted verbatim, so a
+     * repair can never silently replace what the pager actually saw; the effective read is
+     * written only when it differs.
+     */
+    private fun sparkReadAuthorityJson(result: SparkReadAuthorityResult): JSONObject =
+        JSONObject().apply {
+            put("authority", result.authority.name)
+            put("structurally_agreed", result.structurallyAgreed)
+            put("refusal", result.refusal.wire)
+            put("pager_rows", sparkRowsJson(result.pager.rows))
+            put("pager_scan", result.pager.termination.name)
+            result.earlier?.let {
+                put("earlier_rows", sparkRowsJson(it.rows))
+                put("earlier_scan", it.termination.name)
+            }
+            if (result.repairs.isNotEmpty()) {
+                put(
+                    "repairs",
+                    JSONArray().apply {
+                        result.repairs.forEach { repair ->
+                            put(
+                                JSONObject().apply {
+                                    put("row", repair.rowIndex)
+                                    put("kind", repair.kind.wire)
+                                    put("pager_name", repair.pagerName)
+                                    put("repaired_name", repair.repairedName)
+                                },
+                            )
+                        }
+                    },
+                )
+                put("effective_rows", sparkRowsJson(result.effective.rows))
+            }
+        }
 
     /**
      * Handles the reroll's TP-short dialog by restoring TP with items. Runs only when the dialog
@@ -3018,20 +3115,7 @@ class CareerLaunchNavigator(private val context: Context) {
             StartModule.lastCareerEndScenario?.let { record.put("scenario", it) }
             StartModule.lastCareerEndFp?.let { record.put("fp", it) }
             record.put("phase", phase)
-            record.put(
-                "rows",
-                JSONArray().apply {
-                    rows.forEach { row ->
-                        put(
-                            JSONObject().apply {
-                                put("name", row.name)
-                                put("stars", row.stars)
-                                put("kind", row.kind.wire)
-                            },
-                        )
-                    }
-                },
-            )
+            record.put("rows", sparkRowsJson(rows))
             reading?.let {
                 record.put("scan", it.termination.name)
                 record.put("scan_complete", it.complete)
