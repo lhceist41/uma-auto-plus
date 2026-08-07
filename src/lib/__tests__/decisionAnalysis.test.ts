@@ -330,3 +330,221 @@ describe("read-only guarantees", () => {
         expect(renderReport(analyze(lines))).toBe(renderReport(analyze(lines)))
     })
 })
+
+describe("cross-career aggregate", () => {
+    const tokenA = "Taiki Shuttle|Unity Cup|run0|aaaa"
+    const tokenB = "Biwa Hayahide|Trackblazer|run0|bbbb"
+
+    // A record committing to a training (TRAIN action + the given training, both represented in candidates).
+    function trainLine(training: string, overrides: Record<string, unknown> = {}): string {
+        return traceLine({
+            candidates: [
+                { type: "action", id: "TRAIN", selected: true, reason: "default" },
+                { type: "training", id: training, selected: true, reason: "won", failChance: 5, gains: { spd: 10 } },
+                { type: "training", id: "WIT", selected: false, rejected: true, reason: "excluded" },
+            ],
+            selected: { action: "TRAIN", source: "action_choice", training, trainingSource: "ANALYSIS", trainingReason: "won" },
+            ...overrides,
+        })
+    }
+    // A record committing to RACE (an action with no selected training), represented in its candidates.
+    function raceLine(overrides: Record<string, unknown> = {}): string {
+        return traceLine({
+            candidates: [{ type: "action", id: "RACE", selected: true, reason: "race required" }],
+            selected: { action: "RACE", source: "action_choice", reason: "race required" },
+            ...overrides,
+        })
+    }
+    const careerA = tokenA
+    const careerB = tokenB
+    // Career-A defaults: Unity Cup / Taiki Shuttle; Career-B: Trackblazer / Biwa Hayahide.
+    function aLine(overrides: Record<string, unknown> = {}): string {
+        return trainLine("SPEED", { careerToken: careerA, scenario: "Unity Cup", trainee: "Taiki Shuttle", preset: "Taiki Shuttle", ...overrides })
+    }
+    function bLine(overrides: Record<string, unknown> = {}): string {
+        return trainLine("SPEED", { careerToken: careerB, scenario: "Trackblazer", trainee: "Biwa Hayahide", preset: "Biwa Hayahide", ...overrides })
+    }
+    // A committed-training record on career A, with an explicit training stat.
+    function aTrain(training: string, turn: number): string {
+        return trainLine(training, { careerToken: careerA, scenario: "Unity Cup", trainee: "Taiki Shuttle", preset: "Taiki Shuttle", turn })
+    }
+    // A RACE record on career A (no committed training).
+    function aRace(turn: number): string {
+        return raceLine({ careerToken: careerA, scenario: "Unity Cup", trainee: "Taiki Shuttle", preset: "Taiki Shuttle", turn })
+    }
+    function finalize(token: string, extra: Record<string, unknown> = {}): string {
+        return JSON.stringify({ type: "career_finalize", ts: 1784213999999, careerToken: token, finalizationDecision: "FINISH", sessionOutcome: "committed", verifiedRemainingSp: 10, objective: "rank", ...extra })
+    }
+
+    function agg(decisionLines: string[], careerLines: string[] = [], options = {}) {
+        const result = analyze(decisionLines, careerLines, { aggregate: true, ...options })
+        expect(result.aggregate).toBeDefined()
+        return result.aggregate!
+    }
+
+    test("1. two valid careers aggregate into one corpus summary", () => {
+        const a = agg([aLine({ turn: 1 }), aLine({ turn: 2 }), bLine({ turn: 1 })])
+        expect(a.mode).toBe("aggregate")
+        expect(a.corpus.distinctKeyedCareers).toBe(2)
+        expect(a.corpus.totalValidRecords).toBe(3)
+        expect(a.careers).toHaveLength(2)
+    })
+
+    test("2. careers from two scenarios produce separate, deterministically ordered scenario summaries", () => {
+        const a = agg([aLine({ turn: 1 }), bLine({ turn: 1 })])
+        expect(a.scenarios.map((s) => s.scenario)).toEqual(["Trackblazer", "Unity Cup"])
+        expect(a.scenarios.every((s) => s.careerCount === 1)).toBe(true)
+    })
+
+    test("3. action counts and percentages are correct", () => {
+        // One career: 3 TRAIN + 1 RACE.
+        const a = agg([aTrain("SPEED", 1), aTrain("SPEED", 2), aTrain("SPEED", 3), aRace(4)])
+        const train = a.actions.find((x) => x.id === "TRAIN")!
+        const race = a.actions.find((x) => x.id === "RACE")!
+        expect(train.count).toBe(3)
+        expect(train.pct).toBe(75)
+        expect(race.count).toBe(1)
+        expect(race.pct).toBe(25)
+    })
+
+    test("4. training counts and percentages are correct", () => {
+        // 3 SPEED + 1 POWER committed trainings.
+        const a = agg([aTrain("SPEED", 1), aTrain("SPEED", 2), aTrain("SPEED", 3), aTrain("POWER", 4)])
+        const speed = a.trainings.find((x) => x.id === "SPEED")!
+        const power = a.trainings.find((x) => x.id === "POWER")!
+        expect(speed.count).toBe(3)
+        expect(speed.pct).toBe(75)
+        expect(power.count).toBe(1)
+        expect(power.pct).toBe(25)
+    })
+
+    test("5. a trace with no selected training is handled (not counted, not malformed)", () => {
+        const a = agg([aTrain("SPEED", 1), aRace(2)])
+        // Only the one TRAIN/SPEED record contributes to the training denominator.
+        const speed = a.trainings.find((x) => x.id === "SPEED")!
+        expect(speed.count).toBe(1)
+        expect(speed.pct).toBe(100)
+        expect(a.corpus.consistencyFailures).toBe(0)
+    })
+
+    test("6. observation-read coverage is correct", () => {
+        const a = agg([
+            aLine({ turn: 1, observation: { turnObserved: true, statsObserved: true, skillPointsObserved: true, aptitudesObserved: false } }),
+            aLine({ turn: 2, observation: { turnObserved: true, statsObserved: true, skillPointsObserved: true, aptitudesObserved: true } }),
+        ])
+        const apt = a.observations.flags.find((f) => f.flag === "aptitudes")!
+        expect(a.observations.totalRecords).toBe(2)
+        expect(apt.observed).toBe(1)
+        expect(apt.missing).toBe(1)
+        expect(apt.pctObserved).toBe(50)
+        expect(apt.careersWithUnobserved).toBe(1)
+    })
+
+    test("7. median records-per-career is correct for odd and even career counts", () => {
+        // Odd: 3 careers with 1, 2, 3 records -> median 2.
+        const odd = agg([
+            aLine({ careerToken: "A|Unity Cup|run0|1", turn: 1 }),
+            aLine({ careerToken: "B|Unity Cup|run0|2", turn: 1 }),
+            aLine({ careerToken: "B|Unity Cup|run0|2", turn: 2 }),
+            aLine({ careerToken: "C|Unity Cup|run0|3", turn: 1 }),
+            aLine({ careerToken: "C|Unity Cup|run0|3", turn: 2 }),
+            aLine({ careerToken: "C|Unity Cup|run0|3", turn: 3 }),
+        ])
+        expect(odd.corpus.recordsPerCareer.median).toBe(2)
+        // Even: 2 careers with 1 and 3 records -> median 2.
+        const even = agg([
+            aLine({ careerToken: "A|Unity Cup|run0|1", turn: 1 }),
+            aLine({ careerToken: "B|Unity Cup|run0|2", turn: 1 }),
+            aLine({ careerToken: "B|Unity Cup|run0|2", turn: 2 }),
+            aLine({ careerToken: "B|Unity Cup|run0|2", turn: 3 }),
+        ])
+        expect(even.corpus.recordsPerCareer.median).toBe(2)
+    })
+
+    test("8. a missing career_finalize join is surfaced", () => {
+        const a = agg([aLine({ turn: 1 })], [finalize("some-other-token")])
+        expect(a.corpus.careersWithNoFinalize).toBe(1)
+        expect(a.corpus.careersWithExactlyOneFinalize).toBe(0)
+        expect(a.outcomes.joinedCareerCount).toBe(0)
+    })
+
+    test("9. a duplicate career_finalize join is surfaced", () => {
+        const a = agg([aLine({ turn: 1 })], [finalize(careerA), finalize(careerA, { retryUsed: true })])
+        expect(a.corpus.careersWithDuplicateFinalize).toBe(1)
+        expect(a.outcomes.joinedCareerCount).toBe(0) // duplicates are not aggregated
+        expect(a.outcomes.careersWithDuplicateFinalize).toBe(1)
+    })
+
+    test("10. joined finalize fields aggregate only across 1:1-joined careers", () => {
+        // Career A joins; career B has no finalize row.
+        const a = agg([aLine({ turn: 1 }), bLine({ turn: 1 })], [finalize(careerA, { verifiedRemainingSp: 42 })])
+        expect(a.outcomes.joinedCareerCount).toBe(1)
+        expect(a.outcomes.remainingSp.count).toBe(1)
+        expect(a.outcomes.remainingSp.mean).toBe(42)
+        expect(a.outcomes.finalizationDecisionCounts).toEqual([{ value: "FINISH", count: 1 }])
+    })
+
+    test("11. unkeyed records are counted, never fabricated into a keyed career", () => {
+        const a = agg([aLine({ turn: 1 }), traceLine({ careerToken: undefined, turn: 1 })])
+        expect(a.corpus.unkeyedRecordCount).toBe(1)
+        expect(a.corpus.distinctKeyedCareers).toBe(1)
+        expect(a.careers).toHaveLength(1)
+        expect(a.careers.every((c) => c.careerToken !== "(unkeyed)")).toBe(true)
+        // Unkeyed records still count toward whole-file quality totals.
+        expect(a.candidates.totalRecords).toBe(2)
+    })
+
+    test("12. parse/schema/consistency failures retain exit-code precedence in aggregate mode", () => {
+        const parse = analyze([aLine({ turn: 1 }), "{broken"], [], { aggregate: true })
+        expect(parse.exitCode).toBe(EXIT_PARSE_OR_SCHEMA)
+        expect(parse.aggregate).toBeDefined()
+        const bad = aLine({ turn: 2, selected: { action: "REST", source: "action_choice" } }) // REST not in candidates
+        const consistency = analyze([bad], [], { aggregate: true })
+        expect(consistency.exitCode).toBe(EXIT_CONSISTENCY)
+        expect(consistency.aggregate!.candidates.recordsSelectedActionNotRepresented).toBe(1)
+    })
+
+    test("13. existing filters are applied before aggregate calculation", () => {
+        const a = agg([aLine({ turn: 1 }), bLine({ turn: 1 })], [], { careerToken: careerA })
+        expect(a.corpus.distinctKeyedCareers).toBe(1)
+        expect(a.corpus.totalValidRecords).toBe(1)
+        expect(a.careers[0].careerToken).toBe(careerA)
+    })
+
+    test("14. aggregate JSON output is deterministic", () => {
+        const lines = [aLine({ turn: 1 }), aLine({ turn: 2 }), bLine({ turn: 1 }), raceLine({ careerToken: careerB, scenario: "Trackblazer", trainee: "Biwa Hayahide", turn: 2 })]
+        const careers = [finalize(careerA), finalize(careerB, { verifiedRemainingSp: 5 })]
+        const first = JSON.stringify(agg(lines, careers))
+        const second = JSON.stringify(agg(lines, careers))
+        expect(first).toBe(second)
+    })
+
+    test("15. non-aggregate mode does not attach an aggregate object", () => {
+        const plain = analyze([aLine({ turn: 1 })])
+        expect(plain.aggregate).toBeUndefined()
+    })
+
+    test("16. aggregate mode is read-only (input strings survive analysis unchanged)", () => {
+        const raw = aLine({ turn: 1 })
+        const before = raw
+        analyze([raw], [finalize(careerA)], { aggregate: true })
+        expect(raw).toBe(before)
+    })
+
+    test("candidate diagnostics: zero-candidate, hard-excluded and median are computed", () => {
+        const a = agg([
+            aLine({ turn: 1 }), // 3 candidates incl. a hard-excluded WIT
+            traceLine({ careerToken: careerA, scenario: "Unity Cup", trainee: "Taiki Shuttle", turn: 2, candidates: [], selected: {} }), // zero candidates
+        ])
+        expect(a.candidates.recordsWithZeroCandidates).toBe(1)
+        expect(a.candidates.recordsWithHardExcluded).toBe(1)
+        expect(a.candidates.partialActionCandidateCoverage).toBeNull()
+    })
+
+    test("outcome scenario/trainee come from the finalize row verbatim (may differ from the decision side)", () => {
+        // Decision side spells with spaces; finalize row uses underscores. Both are reported honestly.
+        const a = agg([aLine({ turn: 1 })], [finalize(careerA, { scenario: "Unity_Cup", trainee: "Taiki_Shuttle" })])
+        expect(a.outcomes.scenarioCounts).toEqual([{ value: "Unity_Cup", count: 1 }])
+        expect(a.careers[0].scenario).toBe("Unity Cup") // decision-side, unchanged
+    })
+})

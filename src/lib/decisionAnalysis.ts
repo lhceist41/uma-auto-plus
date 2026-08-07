@@ -211,6 +211,8 @@ export interface AnalysisResult {
     /** True when strict mode aborted analysis at the first parse/schema failure. */
     abortedByStrict: boolean
     exitCode: number
+    /** The cross-career aggregate, present only when the analyzer ran in aggregate mode. Additive: absent in the default single-career result. */
+    aggregate?: AggregateResult
 }
 
 /** Options controlling which records are analyzed and how failures are treated. */
@@ -223,6 +225,8 @@ export interface AnalyzerOptions {
     fromLine?: number
     /** Abort at the first parse/schema failure instead of continuing past it. */
     strict?: boolean
+    /** Compute the corpus-level cross-career aggregate (attached to `AnalysisResult.aggregate`). Off by default; the single-career report is unchanged either way. */
+    aggregate?: boolean
 }
 
 interface CareerAccumulator {
@@ -257,6 +261,32 @@ interface CareerAccumulator {
     selectedTrainingNotInCandidates: number[]
     multipleSelectedActionCandidates: number[]
     multipleSelectedTrainingCandidates: number[]
+    // Aggregate-only candidate diagnostics. Populated only when the analyzer runs in aggregate mode;
+    // otherwise they stay at these zero/empty values and are never read (the single-career path is unchanged).
+    zeroCandidateRecords: number
+    recordsWithGains: number
+    recordsWithFailChance: number
+    recordsWithTrainingScore: number
+    recordsWithHardExcluded: number
+    /** candidate-count -> how many records had that many candidates (bounded: counts are small integers), for an exact corpus median. */
+    candHistogram: Map<number, number>
+}
+
+/** The `career_finalize` fields aggregated by the outcome section. Compact (one per careerToken), so no raw trace is retained. */
+interface FinalizeSummary {
+    finalizationDecision: string | null
+    sessionOutcome: string | null
+    verifiedRemainingSp: number | null
+    scenario: string | null
+    trainee: string | null
+    objective: string | null
+    retryUsed: boolean | null
+}
+
+/** A representative turn reference where an observation flag was not a confirmed read. Bounded per flag. */
+export interface UnobservedRef {
+    careerToken: string | null
+    turn: number | null
 }
 
 const UNKEYED = "__unkeyed__" // internal bucket key for records with no careerToken; a real token always contains "|", so this never collides
@@ -283,6 +313,16 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
     const careerTokenIndex = new Map<string, string[]>()
     // Weak index: trainee|scenario|runN (token minus nonce) -> tokens, for a diagnostic-only fallback.
     const weakCareerIndex = new Map<string, Set<string>>()
+    // Aggregate-only: careerToken -> compact career_finalize field values, for the outcome section. Populated only in aggregate mode.
+    const finalizeByToken = new Map<string, FinalizeSummary[]>()
+    const collectAggregate = options.aggregate === true
+    // Aggregate-only: a few representative turn references per observation flag that was not a confirmed read, bounded so the analyzer stays streaming.
+    const UNOBSERVED_EXAMPLE_CAP = 8
+    const unobservedExamples: Record<"turn" | "stats" | "skillPoints" | "aptitudes", UnobservedRef[]> = { turn: [], stats: [], skillPoints: [], aptitudes: [] }
+    function pushUnobserved(flag: "turn" | "stats" | "skillPoints" | "aptitudes", token: string | null, turn: number | null): void {
+        const list = unobservedExamples[flag]
+        if (list.length < UNOBSERVED_EXAMPLE_CAP) list.push({ careerToken: token, turn })
+    }
     let totalLines = 0
     let blankLines = 0
     let decisionRecordCount = 0
@@ -327,6 +367,12 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
                 selectedTrainingNotInCandidates: [],
                 multipleSelectedActionCandidates: [],
                 multipleSelectedTrainingCandidates: [],
+                zeroCandidateRecords: 0,
+                recordsWithGains: 0,
+                recordsWithFailChance: 0,
+                recordsWithTrainingScore: 0,
+                recordsWithHardExcluded: 0,
+                candHistogram: new Map(),
             }
             careers.set(key, acc)
         }
@@ -406,6 +452,23 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
             const represented = candidates.some((c) => isObject(c) && c.type === "training" && c.id === training && c.selected === true)
             if (!represented) acc.selectedTrainingNotInCandidates.push(lineNumber)
         }
+
+        // Aggregate-only collection. Gated so the single-career path allocates and computes nothing extra.
+        if (collectAggregate) {
+            const n = candidates.length
+            acc.candHistogram.set(n, (acc.candHistogram.get(n) ?? 0) + 1)
+            if (n === 0) acc.zeroCandidateRecords++
+            if (candidates.some((c) => isObject(c) && has(c, "gains"))) acc.recordsWithGains++
+            if (candidates.some((c) => isObject(c) && has(c, "failChance"))) acc.recordsWithFailChance++
+            if (candidates.some((c) => isObject(c) && has(c, "score"))) acc.recordsWithTrainingScore++
+            if (candidates.some((c) => isObject(c) && c.rejected === true)) acc.recordsWithHardExcluded++
+            // A flag that is not exactly `true` is not a confirmed read; record a bounded example turn ref.
+            const turnRef = typeof record.turn === "number" ? record.turn : null
+            if (obs.turnObserved !== true) pushUnobserved("turn", token, turnRef)
+            if (obs.statsObserved !== true) pushUnobserved("stats", token, turnRef)
+            if (obs.skillPointsObserved !== true) pushUnobserved("skillPoints", token, turnRef)
+            if (obs.aptitudesObserved !== true) pushUnobserved("aptitudes", token, turnRef)
+        }
     }
 
     function ingestDecisionLine(rawLine: string, lineNumber: number): boolean {
@@ -464,6 +527,20 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
                 set.add(token)
                 weakCareerIndex.set(weakKey, set)
             }
+            // Aggregate-only: retain the finalize field values (never the whole row) for the outcome section.
+            if (collectAggregate && parsed.type === "career_finalize") {
+                const summaries = finalizeByToken.get(token) ?? []
+                summaries.push({
+                    finalizationDecision: typeof parsed.finalizationDecision === "string" ? parsed.finalizationDecision : null,
+                    sessionOutcome: typeof parsed.sessionOutcome === "string" ? parsed.sessionOutcome : null,
+                    verifiedRemainingSp: typeof parsed.verifiedRemainingSp === "number" ? parsed.verifiedRemainingSp : null,
+                    scenario: typeof parsed.scenario === "string" ? parsed.scenario : null,
+                    trainee: typeof parsed.trainee === "string" ? parsed.trainee : null,
+                    objective: typeof parsed.objective === "string" ? parsed.objective : null,
+                    retryUsed: typeof parsed.retryUsed === "boolean" ? parsed.retryUsed : null,
+                })
+                finalizeByToken.set(token, summaries)
+            }
         }
     }
 
@@ -472,6 +549,10 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
         let unkeyed: CareerReport | null = null
         let consistencyFailureCount = 0
         let warningCount = 0
+        // Keep each keyed career's accumulator beside its report (aggregate mode reads the accumulator's
+        // gated counters/histogram); the unkeyed bucket is tracked separately.
+        const keyedPairs: { acc: CareerAccumulator; report: CareerReport }[] = []
+        let unkeyedPair: { acc: CareerAccumulator; report: CareerReport } | null = null
 
         for (const acc of careers.values()) {
             const report = buildReport(acc, joinAttempted, careerTokenIndex, weakCareerIndex)
@@ -488,19 +569,22 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
             if (joinAttempted && report.careerToken !== null && report.join !== "one") warningCount++
             if (acc.careerToken === null) {
                 unkeyed = report
+                unkeyedPair = { acc, report }
                 warningCount++ // a real career always carries a token; unkeyed records are themselves an anomaly
             } else {
                 reports.push(report)
+                keyedPairs.push({ acc, report })
             }
         }
         reports.sort((a, b) => (a.firstTs ?? 0) - (b.firstTs ?? 0))
+        keyedPairs.sort((a, b) => (a.report.firstTs ?? 0) - (b.report.firstTs ?? 0))
 
         let exitCode = EXIT_CLEAN
         if (warningCount > 0) exitCode = worstExit(exitCode, EXIT_WARNINGS)
         if (parseErrors.length > 0 || schemaFailures.length > 0) exitCode = worstExit(exitCode, EXIT_PARSE_OR_SCHEMA)
         if (consistencyFailureCount > 0) exitCode = worstExit(exitCode, EXIT_CONSISTENCY)
 
-        return {
+        const result: AnalysisResult = {
             decisionFilesRead,
             careerFilesRead,
             totalLines,
@@ -517,6 +601,21 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
             abortedByStrict: aborted,
             exitCode,
         }
+        if (collectAggregate) {
+            result.aggregate = buildAggregate({
+                keyedPairs,
+                unkeyedPair,
+                decisionRecordCount,
+                parseErrorCount: parseErrors.length,
+                schemaFailureCount: schemaFailures.length,
+                consistencyFailureCount,
+                warningCount,
+                joinAttempted,
+                finalizeByToken,
+                unobservedExamples,
+            })
+        }
+        return result
     }
 
     return {
@@ -786,4 +885,696 @@ function summarizeInts(nums: number[]): string {
     }
     parts.push(start === prev ? `${start}` : `${start}-${prev}`)
     return parts.join(", ")
+}
+
+// ---------------------------------------------------------------------------
+// Cross-career aggregate (opt-in, read-only).
+//
+// The aggregate is descriptive only: it counts what the bot chose across careers, groups it by
+// scenario, and summarizes trace coverage and the joined career_finalize outcomes. It never scores a
+// decision, never claims causality, and never invents a field the corpus does not carry. Behavioral
+// sections (scenarios, actions, trainings, per-career rows, outcomes) cover keyed careers; quality
+// sections (observations, candidates) and the corpus summary cover the whole analyzed file; outcomes
+// aggregate strictly over careers that join exactly one career_finalize, with the denominator reported.
+// ---------------------------------------------------------------------------
+
+/** A `{value, count}` row used across the aggregate; always sorted count-desc then value-asc for determinism. */
+export interface CountRow {
+    value: string
+    count: number
+}
+
+/** A distribution row grouped by career vs record for the corpus scenario/trainee/preset breakdowns. */
+export interface CorpusGroupRow {
+    value: string
+    careers: number
+    records: number
+}
+
+export interface AggregateCorpus {
+    totalValidRecords: number
+    distinctKeyedCareers: number
+    unkeyedRecordCount: number
+    careersWithExactlyOneFinalize: number
+    careersWithNoFinalize: number
+    careersWithDuplicateFinalize: number
+    scenarioDistribution: CorpusGroupRow[]
+    traineeDistribution: CorpusGroupRow[]
+    presetDistribution: CorpusGroupRow[]
+    parseSchemaFailures: number
+    consistencyFailures: number
+    warnings: number
+    earliestTs: number | null
+    latestTs: number | null
+    totalBytes: number
+    meanBytesPerRecord: number
+    recordsPerCareer: { mean: number; median: number; min: number; max: number }
+}
+
+export interface AggregatePctRow {
+    id: string
+    count: number
+    pct: number
+}
+
+export interface AggregateScenario {
+    scenario: string
+    careerCount: number
+    traceRecordCount: number
+    meanRecordsPerCareer: number
+    observedTurnRecords: number
+    observedTurnPct: number
+    /** Sum of per-career turn-gap counts (races/summer legitimately skip a main-screen decision). Diagnostic, not a failure. */
+    gapCount: number
+    selectedActions: AggregatePctRow[]
+    selectedTrainings: AggregatePctRow[]
+    observationCoverage: { flag: string; observed: number; pct: number }[]
+    emptySelectionCount: number
+    candidateConsistencyFailureCount: number
+    meanCandidateCount: number
+    meanRecordBytes: number
+}
+
+export interface AggregateDistributionRow {
+    id: string
+    count: number
+    /** Percentage of all traces that carried a committed value of this kind (keyed careers). */
+    pct: number
+    /** Number of keyed careers in which this value appeared. */
+    careerCount: number
+    scenarioBreakdown: CountRow[]
+}
+
+export interface AggregateObservationFlag {
+    flag: string
+    observed: number
+    missing: number
+    pctObserved: number
+    /** Keyed careers with at least one record where this flag was not a confirmed read. */
+    careersWithUnobserved: number
+    /** A few representative turn references where this flag was unobserved (bounded). */
+    examples: UnobservedRef[]
+}
+
+export interface AggregateObservations {
+    totalRecords: number
+    flags: AggregateObservationFlag[]
+}
+
+export interface AggregateCandidates {
+    totalRecords: number
+    meanCandidateCount: number
+    medianCandidateCount: number
+    recordsWithZeroCandidates: number
+    recordsSelectedActionNotRepresented: number
+    recordsWithMultipleSelectedAction: number
+    recordsWithMultipleSelectedTraining: number
+    recordsWithTrainingScores: number
+    recordsWithGains: number
+    recordsWithFailChance: number
+    recordsWithHardExcluded: number
+    /** Not derivable from v1: the candidate list is the actions the cascade named, not the full action space. Always null. */
+    partialActionCandidateCoverage: null
+    note: string
+}
+
+export interface AggregateOutcomes {
+    /** Denominator for every value tally below: careers that joined exactly one career_finalize row. */
+    joinedCareerCount: number
+    careersWithNoFinalize: number
+    careersWithDuplicateFinalize: number
+    finalizationDecisionCounts: CountRow[]
+    sessionOutcomeCounts: CountRow[]
+    /** From the career_finalize rows themselves, whose scenario/trainee spelling can differ from the decision side. */
+    scenarioCounts: CountRow[]
+    traineeCounts: CountRow[]
+    objectiveCounts: CountRow[]
+    retryUsedCount: number
+    remainingSp: { count: number; mean: number | null; median: number | null; min: number | null; max: number | null }
+    note: string
+}
+
+export interface AggregateCareerRow {
+    careerToken: string
+    scenario: string
+    trainee: string
+    preset: string
+    traceCount: number
+    turnRange: [number, number] | null
+    gapCount: number
+    actions: Record<string, number>
+    trainings: Record<string, number>
+    join: JoinStatus
+    finalizationDecision: string | null
+    sessionOutcome: string | null
+    remainingSp: number | null
+    warningFailureCount: number
+}
+
+export interface AggregateResult {
+    mode: "aggregate"
+    corpus: AggregateCorpus
+    scenarios: AggregateScenario[]
+    actions: AggregateDistributionRow[]
+    trainings: AggregateDistributionRow[]
+    observations: AggregateObservations
+    candidates: AggregateCandidates
+    outcomes: AggregateOutcomes
+    careers: AggregateCareerRow[]
+}
+
+interface AggregateInputs {
+    keyedPairs: { acc: CareerAccumulator; report: CareerReport }[]
+    unkeyedPair: { acc: CareerAccumulator; report: CareerReport } | null
+    decisionRecordCount: number
+    parseErrorCount: number
+    schemaFailureCount: number
+    consistencyFailureCount: number
+    warningCount: number
+    joinAttempted: boolean
+    finalizeByToken: Map<string, FinalizeSummary[]>
+    unobservedExamples: Record<"turn" | "stats" | "skillPoints" | "aptitudes", UnobservedRef[]>
+}
+
+const OBS_FLAGS = ["turn", "stats", "skillPoints", "aptitudes"] as const
+
+/** Builds the cross-career aggregate from the finished per-career accumulators/reports. Pure and deterministic. */
+function buildAggregate(input: AggregateInputs): AggregateResult {
+    const keyed = [...input.keyedPairs].sort((a, b) => {
+        const t = (a.report.firstTs ?? 0) - (b.report.firstTs ?? 0)
+        return t !== 0 ? t : cmpStr(a.report.careerToken ?? "", b.report.careerToken ?? "")
+    })
+    // All buckets (keyed + unkeyed) for whole-file quality sections.
+    const all = input.unkeyedPair ? [...keyed, input.unkeyedPair] : keyed
+
+    // Finalize join classification (careerToken -> how many career_finalize rows). The outcome denominator.
+    let oneFinalize = 0
+    let noFinalize = 0
+    let dupFinalize = 0
+    const finalizeOne: FinalizeSummary[] = []
+    for (const { report } of keyed) {
+        const summaries = report.careerToken !== null ? (input.finalizeByToken.get(report.careerToken) ?? []) : []
+        if (summaries.length === 1) {
+            oneFinalize++
+            finalizeOne.push(summaries[0])
+        } else if (summaries.length === 0) {
+            noFinalize++
+        } else {
+            dupFinalize++
+        }
+    }
+
+    // ---- corpus ----
+    const scenarioGroup = new Map<string, { careers: number; records: number }>()
+    const traineeGroup = new Map<string, { careers: number; records: number }>()
+    const presetGroup = new Map<string, { careers: number; records: number }>()
+    const perCareerRecordCounts: number[] = []
+    let earliestTs: number | null = null
+    let latestTs: number | null = null
+    for (const { report } of keyed) {
+        perCareerRecordCounts.push(report.recordCount)
+        addGroup(scenarioGroup, singleOr(report.scenarios), report.recordCount)
+        addGroup(traineeGroup, singleOr(report.trainees), report.recordCount)
+        addGroup(presetGroup, singleOr(report.presets), report.recordCount)
+        if (report.firstTs !== null) earliestTs = earliestTs === null ? report.firstTs : Math.min(earliestTs, report.firstTs)
+        if (report.lastTs !== null) latestTs = latestTs === null ? report.lastTs : Math.max(latestTs, report.lastTs)
+    }
+    if (input.unkeyedPair) {
+        const r = input.unkeyedPair.report
+        if (r.firstTs !== null) earliestTs = earliestTs === null ? r.firstTs : Math.min(earliestTs, r.firstTs)
+        if (r.lastTs !== null) latestTs = latestTs === null ? r.lastTs : Math.max(latestTs, r.lastTs)
+    }
+    let totalBytesAll = 0
+    for (const { acc } of all) totalBytesAll += acc.totalBytes
+
+    const corpus: AggregateCorpus = {
+        totalValidRecords: input.decisionRecordCount,
+        distinctKeyedCareers: keyed.length,
+        unkeyedRecordCount: input.unkeyedPair ? input.unkeyedPair.report.recordCount : 0,
+        careersWithExactlyOneFinalize: oneFinalize,
+        careersWithNoFinalize: noFinalize,
+        careersWithDuplicateFinalize: dupFinalize,
+        scenarioDistribution: groupRows(scenarioGroup),
+        traineeDistribution: groupRows(traineeGroup),
+        presetDistribution: groupRows(presetGroup),
+        parseSchemaFailures: input.parseErrorCount + input.schemaFailureCount,
+        consistencyFailures: input.consistencyFailureCount,
+        warnings: input.warningCount,
+        earliestTs,
+        latestTs,
+        totalBytes: totalBytesAll,
+        meanBytesPerRecord: safeMean(totalBytesAll, input.decisionRecordCount),
+        recordsPerCareer: {
+            mean: safeMean(sum(perCareerRecordCounts), perCareerRecordCounts.length),
+            median: median(perCareerRecordCounts),
+            min: perCareerRecordCounts.length > 0 ? Math.min(...perCareerRecordCounts) : 0,
+            max: perCareerRecordCounts.length > 0 ? Math.max(...perCareerRecordCounts) : 0,
+        },
+    }
+
+    // ---- per-scenario (keyed careers grouped by their single scenario) ----
+    const byScenario = new Map<string, { acc: CareerAccumulator; report: CareerReport }[]>()
+    for (const pair of keyed) {
+        const key = singleOr(pair.report.scenarios)
+        const list = byScenario.get(key) ?? []
+        list.push(pair)
+        byScenario.set(key, list)
+    }
+    const scenarios: AggregateScenario[] = [...byScenario.entries()]
+        .sort((a, b) => cmpStr(a[0], b[0]))
+        .map(([scenario, pairs]) => {
+            const traceRecordCount = sum(pairs.map((p) => p.report.recordCount))
+            const actionMap = new Map<string, number>()
+            const trainingMap = new Map<string, number>()
+            let obsTurn = 0
+            let obsStats = 0
+            let obsSkill = 0
+            let obsApt = 0
+            let candSum = 0
+            let candRecords = 0
+            let totalBytes = 0
+            let empty = 0
+            let gap = 0
+            let consistency = 0
+            for (const { acc, report } of pairs) {
+                mergeInto(actionMap, report.selectedActionCounts)
+                mergeInto(trainingMap, report.trainingSelectionCounts)
+                obsTurn += acc.obsTurn
+                obsStats += acc.obsStats
+                obsSkill += acc.obsSkillPoints
+                obsApt += acc.obsAptitudes
+                candSum += acc.candSum
+                candRecords += acc.candRecords
+                totalBytes += acc.totalBytes
+                empty += acc.emptySelectionCount
+                gap += report.turnGaps.length
+                consistency +=
+                    report.selectedActionNotInCandidates.length +
+                    report.selectedTrainingNotInCandidates.length +
+                    report.multipleSelectedActionCandidates.length +
+                    report.multipleSelectedTrainingCandidates.length
+            }
+            const totalAction = mapTotal(actionMap)
+            const totalTraining = mapTotal(trainingMap)
+            return {
+                scenario,
+                careerCount: pairs.length,
+                traceRecordCount,
+                meanRecordsPerCareer: safeMean(traceRecordCount, pairs.length),
+                observedTurnRecords: obsTurn,
+                observedTurnPct: pct(obsTurn, traceRecordCount),
+                gapCount: gap,
+                selectedActions: pctRows(actionMap, totalAction),
+                selectedTrainings: pctRows(trainingMap, totalTraining),
+                observationCoverage: [
+                    { flag: "turn", observed: obsTurn, pct: pct(obsTurn, traceRecordCount) },
+                    { flag: "stats", observed: obsStats, pct: pct(obsStats, traceRecordCount) },
+                    { flag: "skillPoints", observed: obsSkill, pct: pct(obsSkill, traceRecordCount) },
+                    { flag: "aptitudes", observed: obsApt, pct: pct(obsApt, traceRecordCount) },
+                ],
+                emptySelectionCount: empty,
+                candidateConsistencyFailureCount: consistency,
+                meanCandidateCount: safeMean(candSum, candRecords),
+                meanRecordBytes: safeMean(totalBytes, traceRecordCount),
+            }
+        })
+
+    // ---- action / training distributions (keyed) ----
+    const actions = distribution(keyed, (r) => r.selectedActionCounts)
+    const trainings = distribution(keyed, (r) => r.trainingSelectionCounts)
+
+    // ---- observations (whole file) ----
+    const obsSums: Record<string, number> = { turn: 0, stats: 0, skillPoints: 0, aptitudes: 0 }
+    let obsTotalRecords = 0
+    for (const { acc } of all) {
+        obsSums.turn += acc.obsTurn
+        obsSums.stats += acc.obsStats
+        obsSums.skillPoints += acc.obsSkillPoints
+        obsSums.aptitudes += acc.obsAptitudes
+        obsTotalRecords += acc.recordCount
+    }
+    const observations: AggregateObservations = {
+        totalRecords: obsTotalRecords,
+        flags: OBS_FLAGS.map((flag) => {
+            const observed = obsSums[flag]
+            const accField = flag === "turn" ? "obsTurn" : flag === "stats" ? "obsStats" : flag === "skillPoints" ? "obsSkillPoints" : "obsAptitudes"
+            const careersWithUnobserved = keyed.filter(({ acc }) => (acc[accField as keyof CareerAccumulator] as number) < acc.recordCount).length
+            return {
+                flag,
+                observed,
+                missing: obsTotalRecords - observed,
+                pctObserved: pct(observed, obsTotalRecords),
+                careersWithUnobserved,
+                examples: input.unobservedExamples[flag],
+            }
+        }),
+    }
+
+    // ---- candidate diagnostics (whole file) ----
+    const histAll = new Map<number, number>()
+    let candSumAll = 0
+    let candRecordsAll = 0
+    let zeroCand = 0
+    let selActionNotRep = 0
+    let multiAction = 0
+    let multiTraining = 0
+    let withScore = 0
+    let withGains = 0
+    let withFail = 0
+    let withHardExcl = 0
+    for (const { acc } of all) {
+        for (const [n, f] of acc.candHistogram) histAll.set(n, (histAll.get(n) ?? 0) + f)
+        candSumAll += acc.candSum
+        candRecordsAll += acc.candRecords
+        zeroCand += acc.zeroCandidateRecords
+        selActionNotRep += acc.selectedActionNotInCandidates.length
+        multiAction += acc.multipleSelectedActionCandidates.length
+        multiTraining += acc.multipleSelectedTrainingCandidates.length
+        withScore += acc.recordsWithTrainingScore
+        withGains += acc.recordsWithGains
+        withFail += acc.recordsWithFailChance
+        withHardExcl += acc.recordsWithHardExcluded
+    }
+    const candidates: AggregateCandidates = {
+        totalRecords: candRecordsAll,
+        meanCandidateCount: safeMean(candSumAll, candRecordsAll),
+        medianCandidateCount: medianFromHistogram(histAll),
+        recordsWithZeroCandidates: zeroCand,
+        recordsSelectedActionNotRepresented: selActionNotRep,
+        recordsWithMultipleSelectedAction: multiAction,
+        recordsWithMultipleSelectedTraining: multiTraining,
+        recordsWithTrainingScores: withScore,
+        recordsWithGains: withGains,
+        recordsWithFailChance: withFail,
+        recordsWithHardExcluded: withHardExcl,
+        partialActionCandidateCoverage: null,
+        note: "partial action-candidate coverage is not derivable from v1: the candidate list is the actions the cascade named, not the full theoretical action space.",
+    }
+
+    // ---- outcomes (careers with exactly one career_finalize) ----
+    const decisionCounts = new Map<string, number>()
+    const sessionCounts = new Map<string, number>()
+    const outScenario = new Map<string, number>()
+    const outTrainee = new Map<string, number>()
+    const outObjective = new Map<string, number>()
+    let retryUsed = 0
+    const remainingSpVals: number[] = []
+    for (const f of finalizeOne) {
+        bump(decisionCounts, f.finalizationDecision ?? "(missing)")
+        bump(sessionCounts, f.sessionOutcome ?? "(missing)")
+        bump(outScenario, f.scenario ?? "(missing)")
+        bump(outTrainee, f.trainee ?? "(missing)")
+        bump(outObjective, f.objective ?? "(missing)")
+        if (f.retryUsed === true) retryUsed++
+        if (typeof f.verifiedRemainingSp === "number") remainingSpVals.push(f.verifiedRemainingSp)
+    }
+    const outcomes: AggregateOutcomes = {
+        joinedCareerCount: oneFinalize,
+        careersWithNoFinalize: noFinalize,
+        careersWithDuplicateFinalize: dupFinalize,
+        finalizationDecisionCounts: countRows(decisionCounts),
+        sessionOutcomeCounts: countRows(sessionCounts),
+        scenarioCounts: countRows(outScenario),
+        traineeCounts: countRows(outTrainee),
+        objectiveCounts: countRows(outObjective),
+        retryUsedCount: retryUsed,
+        remainingSp: {
+            count: remainingSpVals.length,
+            mean: remainingSpVals.length > 0 ? safeMean(sum(remainingSpVals), remainingSpVals.length) : null,
+            median: remainingSpVals.length > 0 ? median(remainingSpVals) : null,
+            min: remainingSpVals.length > 0 ? Math.min(...remainingSpVals) : null,
+            max: remainingSpVals.length > 0 ? Math.max(...remainingSpVals) : null,
+        },
+        note: "aggregated only over careers with exactly one career_finalize join; scenario/trainee are the finalize row's own values.",
+    }
+
+    // ---- per-career table ----
+    const careers: AggregateCareerRow[] = keyed.map(({ report }) => {
+        const summaries = report.careerToken !== null ? (input.finalizeByToken.get(report.careerToken) ?? []) : []
+        const one = summaries.length === 1 ? summaries[0] : null
+        const cf =
+            report.selectedActionNotInCandidates.length +
+            report.selectedTrainingNotInCandidates.length +
+            report.multipleSelectedActionCandidates.length +
+            report.multipleSelectedTrainingCandidates.length
+        let warn = 0
+        if (report.duplicateTurns.length > 0) warn++
+        if (report.nonMonotonicCount > 0) warn++
+        if (report.emptySelectionCount > 0) warn++
+        if (report.recordsLackingIdentity > 0) warn++
+        if (input.joinAttempted && report.join !== "one") warn++
+        return {
+            careerToken: report.careerToken ?? "(unkeyed)",
+            scenario: singleOr(report.scenarios),
+            trainee: singleOr(report.trainees),
+            preset: singleOr(report.presets),
+            traceCount: report.recordCount,
+            turnRange: report.turnRange,
+            gapCount: report.turnGaps.length,
+            actions: report.selectedActionCounts,
+            trainings: report.trainingSelectionCounts,
+            join: report.join,
+            finalizationDecision: one ? one.finalizationDecision : null,
+            sessionOutcome: one ? one.sessionOutcome : null,
+            remainingSp: one ? one.verifiedRemainingSp : null,
+            warningFailureCount: cf + warn,
+        }
+    })
+
+    return { mode: "aggregate", corpus, scenarios, actions, trainings, observations, candidates, outcomes, careers }
+}
+
+/** Builds a corpus-wide distribution (keyed careers) for a chosen per-career count map (selectedAction or training). */
+function distribution(
+    keyed: { acc: CareerAccumulator; report: CareerReport }[],
+    pick: (r: CareerReport) => Record<string, number>,
+): AggregateDistributionRow[] {
+    const total = new Map<string, number>()
+    const careersWith = new Map<string, Set<string>>()
+    const byScenario = new Map<string, Map<string, number>>()
+    let grandTotal = 0
+    for (const { report } of keyed) {
+        const scenario = singleOr(report.scenarios)
+        const token = report.careerToken ?? "(unkeyed)"
+        for (const [id, count] of Object.entries(pick(report))) {
+            total.set(id, (total.get(id) ?? 0) + count)
+            grandTotal += count
+            const set = careersWith.get(id) ?? new Set<string>()
+            set.add(token)
+            careersWith.set(id, set)
+            const sb = byScenario.get(id) ?? new Map<string, number>()
+            sb.set(scenario, (sb.get(scenario) ?? 0) + count)
+            byScenario.set(id, sb)
+        }
+    }
+    return [...total.entries()]
+        .sort((a, b) => b[1] - a[1] || cmpStr(a[0], b[0]))
+        .map(([id, count]) => ({
+            id,
+            count,
+            pct: pct(count, grandTotal),
+            careerCount: careersWith.get(id)?.size ?? 0,
+            scenarioBreakdown: countRows(byScenario.get(id) ?? new Map()),
+        }))
+}
+
+// --- small deterministic helpers used only by the aggregate ---
+
+function cmpStr(a: string, b: string): number {
+    return a < b ? -1 : a > b ? 1 : 0
+}
+
+function sum(nums: number[]): number {
+    let s = 0
+    for (const n of nums) s += n
+    return s
+}
+
+function safeMean(total: number, count: number): number {
+    return count > 0 ? round2(total / count) : 0
+}
+
+function round2(x: number): number {
+    return Math.round(x * 100) / 100
+}
+
+/** Percentage to one decimal place; 0 when the denominator is 0. */
+function pct(part: number, whole: number): number {
+    return whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0
+}
+
+function median(nums: number[]): number {
+    if (nums.length === 0) return 0
+    const s = [...nums].sort((a, b) => a - b)
+    const mid = Math.floor(s.length / 2)
+    return s.length % 2 === 1 ? s[mid] : round2((s[mid - 1] + s[mid]) / 2)
+}
+
+/** Exact median of the values summarized by a count histogram, without retaining every value. */
+function medianFromHistogram(hist: Map<number, number>): number {
+    const entries = [...hist.entries()].sort((a, b) => a[0] - b[0])
+    const total = sum(entries.map((e) => e[1]))
+    if (total === 0) return 0
+    const lowerIdx = Math.floor((total - 1) / 2)
+    const upperIdx = Math.ceil((total - 1) / 2)
+    let seen = 0
+    let lo: number | null = null
+    let hi: number | null = null
+    for (const [val, freq] of entries) {
+        const start = seen
+        const end = seen + freq - 1
+        if (lo === null && lowerIdx >= start && lowerIdx <= end) lo = val
+        if (hi === null && upperIdx >= start && upperIdx <= end) hi = val
+        seen += freq
+        if (lo !== null && hi !== null) break
+    }
+    return round2(((lo ?? 0) + (hi ?? 0)) / 2)
+}
+
+function mergeInto(target: Map<string, number>, source: Record<string, number>): void {
+    for (const [k, v] of Object.entries(source)) target.set(k, (target.get(k) ?? 0) + v)
+}
+
+function mapTotal(m: Map<string, number>): number {
+    let t = 0
+    for (const v of m.values()) t += v
+    return t
+}
+
+function bump(m: Map<string, number>, key: string): void {
+    m.set(key, (m.get(key) ?? 0) + 1)
+}
+
+function countRows(m: Map<string, number>): CountRow[] {
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || cmpStr(a[0], b[0])).map(([value, count]) => ({ value, count }))
+}
+
+function pctRows(m: Map<string, number>, total: number): AggregatePctRow[] {
+    return [...m.entries()].sort((a, b) => b[1] - a[1] || cmpStr(a[0], b[0])).map(([id, count]) => ({ id, count, pct: pct(count, total) }))
+}
+
+function addGroup(m: Map<string, { careers: number; records: number }>, key: string, records: number): void {
+    const g = m.get(key) ?? { careers: 0, records: 0 }
+    g.careers++
+    g.records += records
+    m.set(key, g)
+}
+
+function groupRows(m: Map<string, { careers: number; records: number }>): CorpusGroupRow[] {
+    return [...m.entries()]
+        .sort((a, b) => b[1].records - a[1].records || cmpStr(a[0], b[0]))
+        .map(([value, g]) => ({ value, careers: g.careers, records: g.records }))
+}
+
+/** The single value of a per-career set, or a labeled sentinel when a career shows zero or many (an anomaly). */
+function singleOr(values: string[]): string {
+    if (values.length === 0) return "(none)"
+    if (values.length === 1) return values[0]
+    return `(mixed: ${values.join("/")})`
+}
+
+/**
+ * Renders the aggregate as a deterministic human-readable report. Percentages are shown to one decimal
+ * place. Descriptive only; nothing here judges a decision or claims causality.
+ */
+export function renderAggregateReport(agg: AggregateResult): string {
+    const lines: string[] = []
+    const push = (s = "") => lines.push(s)
+    const c = agg.corpus
+
+    push(`# DecisionTrace corpus aggregate (descriptive only; no decision is scored, no causality claimed)`)
+    push()
+    push(`## Corpus`)
+    push(`- valid decision records: ${c.totalValidRecords} across ${c.distinctKeyedCareers} keyed career(s), ${c.unkeyedRecordCount} unkeyed record(s)`)
+    push(`- records/career: mean ${c.recordsPerCareer.mean}, median ${c.recordsPerCareer.median}, min ${c.recordsPerCareer.min}, max ${c.recordsPerCareer.max}`)
+    push(`- finalize joins: ${c.careersWithExactlyOneFinalize} exactly-one, ${c.careersWithNoFinalize} none, ${c.careersWithDuplicateFinalize} duplicate`)
+    push(`- scenarios: ${groupLine(c.scenarioDistribution)}`)
+    push(`- trainees: ${groupLine(c.traineeDistribution)}`)
+    push(`- presets: ${groupLine(c.presetDistribution)}`)
+    push(`- failures: ${c.parseSchemaFailures} parse/schema, ${c.consistencyFailures} consistency, ${c.warnings} warning(s)`)
+    push(`- time: ${fmtTs(c.earliestTs)} .. ${fmtTs(c.latestTs)}`)
+    push(`- bytes: total ${c.totalBytes}, mean/record ${c.meanBytesPerRecord}`)
+
+    push()
+    push(`## Per scenario`)
+    for (const s of agg.scenarios) {
+        push(`### ${s.scenario}`)
+        push(`- careers: ${s.careerCount}, trace records: ${s.traceRecordCount} (mean ${s.meanRecordsPerCareer}/career)`)
+        push(`- observed-turn coverage: ${s.observedTurnRecords}/${s.traceRecordCount} (${s.observedTurnPct}%), turn gaps: ${s.gapCount}`)
+        push(`- actions: ${pctRowLine(s.selectedActions)}`)
+        push(`- trainings: ${pctRowLine(s.selectedTrainings)}`)
+        push(`- observation reads: ${s.observationCoverage.map((o) => `${o.flag} ${o.observed} (${o.pct}%)`).join(", ")}`)
+        push(`- empty selections: ${s.emptySelectionCount}, candidate consistency failures: ${s.candidateConsistencyFailureCount}`)
+        push(`- candidates/trace: mean ${s.meanCandidateCount}, bytes/record: mean ${s.meanRecordBytes}`)
+    }
+
+    push()
+    push(`## Action distribution (of ${sumRows(agg.actions)} traces with a committed action)`)
+    for (const a of agg.actions) push(`- ${a.id}: ${a.count} (${a.pct}%) in ${a.careerCount} career(s) [${countLine(a.scenarioBreakdown)}]`)
+
+    push()
+    push(`## Training distribution (of ${sumRows(agg.trainings)} traces with a committed training)`)
+    for (const t of agg.trainings) push(`- ${t.id}: ${t.count} (${t.pct}%) in ${t.careerCount} career(s) [${countLine(t.scenarioBreakdown)}]`)
+
+    push()
+    push(`## Observation quality (whole file, ${agg.observations.totalRecords} record(s))`)
+    for (const f of agg.observations.flags) {
+        push(`- ${f.flag}: ${f.observed} observed (${f.pctObserved}%), ${f.missing} unobserved, in ${f.careersWithUnobserved} career(s)`)
+        if (f.examples.length > 0) push(`  - e.g. ${f.examples.map((e) => `${e.careerToken ?? "(unkeyed)"}@turn ${e.turn ?? "?"}`).join("; ")}`)
+    }
+
+    push()
+    push(`## Candidate diagnostics (whole file, ${agg.candidates.totalRecords} record(s))`)
+    const cd = agg.candidates
+    push(`- candidates/record: mean ${cd.meanCandidateCount}, median ${cd.medianCandidateCount}`)
+    push(`- zero-candidate records: ${cd.recordsWithZeroCandidates}`)
+    push(`- selected action not represented: ${cd.recordsSelectedActionNotRepresented}, >1 selected action: ${cd.recordsWithMultipleSelectedAction}, >1 selected training: ${cd.recordsWithMultipleSelectedTraining}`)
+    push(`- records carrying training scores: ${cd.recordsWithTrainingScores}, gains: ${cd.recordsWithGains}, failChance: ${cd.recordsWithFailChance}, hard-excluded candidate(s): ${cd.recordsWithHardExcluded}`)
+    push(`- partial action-candidate coverage: not derivable from v1 (${cd.note})`)
+
+    push()
+    push(`## Career-finalize outcomes (denominator: ${agg.outcomes.joinedCareerCount} 1:1-joined career(s))`)
+    const o = agg.outcomes
+    push(`- unjoined: ${o.careersWithNoFinalize} no finalize, ${o.careersWithDuplicateFinalize} duplicate`)
+    push(`- finalization decision: ${countLine(o.finalizationDecisionCounts)}`)
+    push(`- session outcome: ${countLine(o.sessionOutcomeCounts)}`)
+    push(`- scenario (finalize field): ${countLine(o.scenarioCounts)}`)
+    push(`- trainee (finalize field): ${countLine(o.traineeCounts)}`)
+    push(`- objective: ${countLine(o.objectiveCounts)}`)
+    push(`- retry used: ${o.retryUsedCount}`)
+    push(
+        `- remaining SP (n=${o.remainingSp.count}): ${o.remainingSp.count > 0 ? `mean ${o.remainingSp.mean}, median ${o.remainingSp.median}, min ${o.remainingSp.min}, max ${o.remainingSp.max}` : "-"}`,
+    )
+
+    push()
+    push(`## Careers`)
+    for (const cr of agg.careers) {
+        push(`### ${cr.careerToken}`)
+        push(`- scenario: ${cr.scenario}, trainee: ${cr.trainee}, preset: ${cr.preset}`)
+        push(`- traces: ${cr.traceCount}, turns: ${cr.turnRange ? `${cr.turnRange[0]}..${cr.turnRange[1]}` : "none observed"}, gaps: ${cr.gapCount}`)
+        push(`- actions: ${fmtCounts(cr.actions)}`)
+        push(`- trainings: ${fmtCounts(cr.trainings)}`)
+        push(
+            `- finalize: join ${cr.join}${cr.finalizationDecision ? `, decision ${cr.finalizationDecision}` : ""}${cr.sessionOutcome ? `, outcome ${cr.sessionOutcome}` : ""}${cr.remainingSp !== null ? `, remaining SP ${cr.remainingSp}` : ""}`,
+        )
+        push(`- warnings/failures: ${cr.warningFailureCount}`)
+    }
+
+    return lines.join("\n")
+}
+
+function groupLine(rows: CorpusGroupRow[]): string {
+    return rows.length === 0 ? "-" : rows.map((r) => `${r.value} (${r.careers}c/${r.records}r)`).join(", ")
+}
+
+function countLine(rows: CountRow[]): string {
+    return rows.length === 0 ? "-" : rows.map((r) => `${r.value}:${r.count}`).join(", ")
+}
+
+function pctRowLine(rows: AggregatePctRow[]): string {
+    return rows.length === 0 ? "-" : rows.map((r) => `${r.id}:${r.count} (${r.pct}%)`).join(", ")
+}
+
+function sumRows(rows: { count: number }[]): number {
+    return sum(rows.map((r) => r.count))
 }
