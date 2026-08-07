@@ -3621,11 +3621,18 @@ abstract class Campaign(game: Game) : Task(game) {
         when (action) {
             MainScreenAction.RACE -> {
                 MessageLog.i(TAG, "[INFO] All checks are cleared for racing.")
-                if (!handleRaceEvents(bIsScheduledRaceDay) && handleRaceEventFallback()) {
+                // bDidRace is the authoritative advance signal: true only when a race actually ran.
+                // An aborted race (consecutive-race warning, no suitable race, failed nav) returns false
+                // and leaves the bot on the same logical turn.
+                val bDidRace = handleRaceEvents(bIsScheduledRaceDay)
+                if (!bDidRace && handleRaceEventFallback()) {
                     throw CampaignBreakpointException("Mandatory race detected. Stopping bot...")
                 }
+                // Always re-evaluate the same turn (a failed race must pick another action), but shadow-only:
+                // rearm CareerState only when the race advanced the turn. Arming on an aborted race let the
+                // next same-turn pass build a duplicate snapshot.
                 bHasCheckedDateThisTurn = false
-                careerStateLatch.armForNewTurn() // shadow-only: a race advances the turn
+                careerStateLatch.armForNewTurnIf(bDidRace)
             }
 
             MainScreenAction.TRAIN -> {

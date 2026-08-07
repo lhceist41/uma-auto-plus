@@ -332,6 +332,40 @@ class CareerStateTest {
         assertTrue(latch.shouldBuild())
     }
 
+    @Test
+    @DisplayName("A non-advancing RACE (aborted by the consecutive-race warning) does not rearm, so the next same-turn pass builds no duplicate")
+    fun nonAdvancingRaceDoesNotRebuildSameTurn() {
+        val latch = CareerStateTurnLatch()
+        // The prior turn's advancing action armed the latch; this turn builds its one pre-decision snapshot.
+        latch.armForNewTurn()
+        assertTrue(latch.shouldBuild())
+
+        // executeAction(RACE): handleRaceEvents returned false (consecutive-race warning aborted the race).
+        // The RACE branch resets bHasCheckedDateThisTurn but arms CareerState only on the real advance signal.
+        latch.armForNewTurnIf(false)
+
+        // The next main-screen pass is still the same logical turn (the bot re-evaluates and picks another
+        // action). No second snapshot may be built - this is the turn-25 live duplicate, now prevented.
+        assertFalse(latch.shouldBuild())
+        // Freshness is untouched by the no-op arm, so a stale tracer window cannot masquerade as fresh.
+        assertFalse(latch.tracerWindowFresh())
+    }
+
+    @Test
+    @DisplayName("An advancing RACE (a race actually ran) rearms, so the next logical turn builds exactly one snapshot")
+    fun advancingRaceRearmsForNextTurn() {
+        val latch = CareerStateTurnLatch()
+        latch.armForNewTurn()
+        assertTrue(latch.shouldBuild()) // this turn's snapshot
+
+        // executeAction(RACE): handleRaceEvents returned true (a race ran and advanced the game turn).
+        latch.armForNewTurnIf(true)
+
+        // The following logical turn builds once, and a same-turn re-tick still does not rebuild.
+        assertTrue(latch.shouldBuild())
+        assertFalse(latch.shouldBuild())
+    }
+
     // ---- Pure construction ----
 
     @Test

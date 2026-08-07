@@ -251,6 +251,16 @@ class CareerStateTurnLatch {
         tracerFresh = false
     }
 
+    /**
+     * Arm only when [advanced] is true. For action outcomes that advance the turn on some paths but
+     * not others - a RACE that runs vs. one aborted by the consecutive-race warning - pass the real
+     * runtime outcome so a non-advancing outcome leaves the latch consumed and cannot produce a
+     * duplicate same-turn snapshot on the next pass. A no-op when [advanced] is false.
+     */
+    fun armForNewTurnIf(advanced: Boolean) {
+        if (advanced) armForNewTurn()
+    }
+
     /** Record that the DecisionTracer opened its window this turn (its `startTurn` ran), so the shadow comparison has fresh turn-open evidence. */
     fun markTracerWindowOpened() {
         tracerFresh = true
