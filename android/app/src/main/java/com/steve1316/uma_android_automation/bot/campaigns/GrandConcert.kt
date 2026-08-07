@@ -12,6 +12,7 @@ import com.steve1316.uma_android_automation.bot.GrandConcertLessonReader
 import com.steve1316.uma_android_automation.bot.GrandConcertPointContext
 import com.steve1316.uma_android_automation.bot.GrandConcertPolicy
 import com.steve1316.uma_android_automation.bot.GrandConcertScenario
+import com.steve1316.uma_android_automation.bot.GrandConcertState
 import com.steve1316.uma_android_automation.bot.HypeTier
 import com.steve1316.uma_android_automation.bot.LearnVerdict
 import com.steve1316.uma_android_automation.bot.LessonList
@@ -19,6 +20,7 @@ import com.steve1316.uma_android_automation.bot.LessonListCard
 import com.steve1316.uma_android_automation.bot.LessonScoreContext
 import com.steve1316.uma_android_automation.bot.PerformancePointType
 import com.steve1316.uma_android_automation.bot.PerformancePointVector
+import com.steve1316.uma_android_automation.bot.ScenarioState
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonClose
@@ -503,6 +505,19 @@ class GrandConcert(game: Game) : Campaign(game) {
             ).purchases
         exitLessonShop()
         return spent
+    }
+
+    /**
+     * Shadow CareerState scenario payload (Phase A). Performance-point balances are intentionally
+     * omitted: they are unknown at the main-screen boundary (read only during training-screen
+     * analysis), so surfacing them here would fabricate state.
+     */
+    override fun scenarioStateSnapshot(): ScenarioState {
+        return GrandConcertState(
+            songsBoughtThisCycle = songsBoughtThisCycle,
+            songsBoughtThisCareer = songsBoughtThisCareer,
+            lastConcertBoundary = lastConcertBoundary,
+        )
     }
 
     /**

@@ -352,6 +352,69 @@ abstract class Campaign(game: Game) : Task(game) {
         OutcomeCorpus.append(game.myContext, record, OutcomeCorpus.DECISIONS_PATH, DecisionTrace.MAX_FILE_BYTES)
     }
 
+    /**
+     * Build the shadow [CareerState] for this turn (Phase A). Pure over live in-memory state: reuses
+     * the same identity derivation as [appendDecisionTrace] and copies date/trainee/race values via
+     * [CareerStateBuilder]. Triggers no OCR, screenshot, navigation, scoring, or tap. Shadow-only -
+     * the returned object is not consulted by any decision path.
+     */
+    protected fun buildCareerState(): CareerState {
+        val presetRaw: String = SettingsHelper.getStringSetting("general", "appliedPresetTrainee").trim()
+        val queueRunRaw: Int = CareerFinalizeGate.context?.queueRun ?: SettingsHelper.getIntSetting("queueState", "currentRun", 0)
+        val identity =
+            CareerStateBuilder.buildIdentity(
+                scenario = game.scenario,
+                traineeName = trainee.name,
+                presetRaw = presetRaw,
+                queueRunRaw = queueRunRaw,
+                careerNonce = careerFinalizeNonce,
+                configFingerprint = currentConfigFingerprint(),
+            )
+        return CareerStateBuilder.build(
+            identity = identity,
+            date = date,
+            trainee = trainee,
+            mandatoryRaceDay = cachedMandatoryRaceDay,
+            scheduledRaceDay = cachedScheduledRaceDay,
+            goalRibbonDay = cachedGoalRibbonDay,
+            scenario = scenarioStateSnapshot(),
+        )
+    }
+
+    /**
+     * Debug-only, non-fatal shadow comparison of [careerState] against the DecisionTracer turn-open
+     * snapshot, delegating the field-by-field logic to the pure [CareerStateShadow.compare]. Emits one
+     * compact `[CAREER_STATE]` line; no object dumps, and nothing here can alter gameplay.
+     */
+    private fun compareCareerStateToTracer(careerState: CareerState) {
+        val turnLabel: String = careerState.date.observedTurn?.toString() ?: "?"
+        val scenarioName = careerState.scenario?.let { it::class.simpleName } ?: "none"
+        // Only compare when the DecisionTracer opened a window THIS turn. Its startTurn is gated on a
+        // date change / unread stats, which does not fire when date OCR failed - and this shadow now
+        // builds on those turns too. Comparing against the tracer's earlier-turn snapshot would
+        // manufacture a mismatch, so report the build with the comparison unavailable instead.
+        val open = if (careerStateLatch.tracerWindowFresh()) decisionTracer?.turnEvidence()?.state else null
+        if (open == null) {
+            MessageLog.i(TAG, "[CAREER_STATE] turn=$turnLabel built compare=unavailable scenario=$scenarioName")
+            return
+        }
+        val openTurn = decisionTracer?.currentTurnDate()?.let { if (it.dayObserved) it.day else null }
+        val result = CareerStateShadow.compare(careerState, open, openTurn)
+        if (result.strictMismatches.isNotEmpty()) {
+            MessageLog.w(
+                TAG,
+                "[CAREER_STATE] turn=$turnLabel STRICT-MISMATCH ${result.strictMismatches.joinToString("; ")}" +
+                    if (result.expectedDrift.isNotEmpty()) " | drift ${result.expectedDrift.joinToString(", ")}" else "",
+            )
+        } else {
+            MessageLog.i(
+                TAG,
+                "[CAREER_STATE] turn=$turnLabel built strict=ok scenario=$scenarioName" +
+                    if (result.expectedDrift.isNotEmpty()) " drift=[${result.expectedDrift.joinToString(", ")}]" else "",
+            )
+        }
+    }
+
     /** Flag to track whether the bot should force Wit training during the pre-summer turn. */
     var bForcedWitTraining: Boolean = false
 
@@ -788,6 +851,28 @@ abstract class Campaign(game: Game) : Task(game) {
      * Lifetime: same as [cachedMandatoryRaceDay].
      */
     protected var cachedGoalRibbonDay: Boolean = false
+
+    /**
+     * Canonical CareerState v1 (Phase A) - shadow-only. The most recent pre-decision main-screen
+     * snapshot, replaced once per turn. Read by NO gameplay path: only the debug shadow comparison
+     * and the unit tests observe it. See [buildCareerState] and [CareerState].
+     */
+    var shadowCareerState: CareerState? = null
+        private set
+
+    /** Once-per-turn guard so the multi-tick [handleMainScreen] loop builds exactly one [shadowCareerState] per turn. */
+    private val careerStateLatch = CareerStateTurnLatch()
+
+    /**
+     * Rearm the CareerState build latch for a new main-screen decision turn. Invariant: every
+     * turn-advancing path that resets [bHasCheckedDateThisTurn] must also rearm CareerState here, or
+     * that turn produces no shadow snapshot. [executeAction]'s own advancing branches do this inline;
+     * a scenario override that bypasses [executeAction] (e.g. Trackblazer's TRAIN fast path) calls
+     * this directly. Shadow-only: it touches nothing but the latch and never affects gameplay.
+     */
+    protected fun armCareerStateForNewTurn() {
+        careerStateLatch.armForNewTurn()
+    }
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1438,6 +1523,16 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     open fun onMainScreenEntry() {
         return
+    }
+
+    /**
+     * Scenario-specific decision state for the shadow [CareerState] snapshot, or null when the
+     * scenario carries no persistent decision-relevant state at the main-screen boundary. Subclasses
+     * override this to build their payload from their own fields, so no private scenario field is
+     * widened. Called by [buildCareerState] only; reads fields, never touches the screen.
+     */
+    open fun scenarioStateSnapshot(): ScenarioState? {
+        return null
     }
 
     /**
@@ -2893,6 +2988,12 @@ abstract class Campaign(game: Game) : Task(game) {
                     settings = DecisionTracer.SettingsSnapshot().add("Mood Floor", moodFloor),
                 )
 
+                // The DecisionTracer just opened its turn window; mark it so the debug shadow comparison
+                // knows it has fresh turn-open evidence for this turn. The CareerState build latch is NOT
+                // armed here: it is rearmed from the action-completion lifecycle (see executeAction), so a
+                // new turn still snapshots when date OCR failed and the tracer opened no window.
+                careerStateLatch.markTracerWindowOpened()
+
                 // Debug build or Debug Mode: one labeled positive fixture per new turn for the offline replay corpus.
                 if ((com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode) && dateChanged) {
                     game.imageUtils.saveFixture(
@@ -2962,6 +3063,23 @@ abstract class Campaign(game: Game) : Task(game) {
 
         // Scenario-specific main screen entry hook (e.g. for item usage).
         onMainScreenEntry()
+
+        // Canonical CareerState v1 (Phase A, shadow-only): snapshot the coherent pre-decision state
+        // exactly once per turn, now that all state-changing turn prep (race caches, global checks,
+        // scenario item use) has run. Phase A has no production consumer, so the automatic construction
+        // runs only under a debug build or Debug Mode; the builder/model stay available internally for
+        // tests and a future Phase B consumer, so a release build does no per-turn shadow work. Nothing
+        // below reads it; a failure here must never change the decision, so the block is non-fatal.
+        if ((com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode) && careerStateLatch.shouldBuild()) {
+            try {
+                val careerState = buildCareerState()
+                shadowCareerState = careerState
+                compareCareerStateToTracer(careerState)
+            } catch (e: Exception) {
+                // Shadow-only observability: swallow so a snapshot/compare fault cannot stop or alter the turn.
+                Log.e(TAG, "[CAREER_STATE] shadow snapshot failed (ignored): ${e.message}")
+            }
+        }
 
         // Decision-making process.
         val action = decideNextAction()
@@ -3494,6 +3612,9 @@ abstract class Campaign(game: Game) : Task(game) {
             training.handleTraining(StatName.WIT)
             bForcedWitTraining = false
             bHasCheckedDateThisTurn = false
+            // Shadow-only: forced-Wit training advances to a new main-screen decision turn; rearm the
+            // CareerState build latch so the next turn snapshots even when date OCR fails.
+            careerStateLatch.armForNewTurn()
             return true
         }
 
@@ -3504,12 +3625,14 @@ abstract class Campaign(game: Game) : Task(game) {
                     throw CampaignBreakpointException("Mandatory race detected. Stopping bot...")
                 }
                 bHasCheckedDateThisTurn = false
+                careerStateLatch.armForNewTurn() // shadow-only: a race advances the turn
             }
 
             MainScreenAction.TRAIN -> {
                 MessageLog.i(TAG, "[INFO] Decision made to train.")
                 training.handleTraining()
                 bHasCheckedDateThisTurn = false
+                careerStateLatch.armForNewTurn() // shadow-only: training advances the turn
             }
 
             MainScreenAction.REST -> {
@@ -3517,6 +3640,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 // (the vast majority of turns) do not need a fresh screenshot here.
                 recoverEnergy(game.imageUtils.getSourceBitmap())
                 bHasCheckedDateThisTurn = false
+                careerStateLatch.armForNewTurn() // shadow-only: resting advances the turn
             }
 
             MainScreenAction.RECOVER_MOOD -> {
@@ -3535,6 +3659,9 @@ abstract class Campaign(game: Game) : Task(game) {
                 bHasCheckedDateThisTurn = false
                 if (recovered) {
                     forcedTargetMood = null
+                    // Shadow-only: a successful recovery advances the turn; a failed one (the spin below)
+                    // does not, and the re-dispatch to TRAIN rearms via the TRAIN branch.
+                    careerStateLatch.armForNewTurn()
                 } else if (trainee.mood >= Mood.GOOD) {
                     // Recovery made no progress while only a high floor (GREAT) is unmet. The floor
                     // is a preference; training is progress. Train this turn rather than letting any
@@ -3555,6 +3682,8 @@ abstract class Campaign(game: Game) : Task(game) {
                     MessageLog.i(TAG, "[RECREATION_DATE] Scheduled outing did not start. Deferring to the normal action flow for the rest of this turn.")
                 }
                 bHasCheckedDateThisTurn = false
+                // Shadow-only: a started outing advances the turn; a failed one (no selectable rows) does not.
+                if (started) careerStateLatch.armForNewTurn()
             }
 
             MainScreenAction.NONE -> {

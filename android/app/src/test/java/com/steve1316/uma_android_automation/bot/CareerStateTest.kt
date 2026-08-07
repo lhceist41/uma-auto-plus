@@ -1,0 +1,378 @@
+package com.steve1316.uma_android_automation.bot
+
+import com.steve1316.uma_android_automation.types.Aptitude
+import com.steve1316.uma_android_automation.types.DateMonth
+import com.steve1316.uma_android_automation.types.DatePhase
+import com.steve1316.uma_android_automation.types.DateYear
+import com.steve1316.uma_android_automation.types.GameDate
+import com.steve1316.uma_android_automation.types.Mood
+import com.steve1316.uma_android_automation.types.StatName
+import com.steve1316.uma_android_automation.types.TrackDistance
+import com.steve1316.uma_android_automation.types.Trainee
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.DisplayName
+import org.junit.jupiter.api.Test
+
+/**
+ * Deterministic contract tests for Canonical CareerState v1 (Phase A).
+ *
+ * The invariants pinned here are the ones a Phase-B consumer would silently misread if they broke:
+ * the snapshot is an immutable value copy (a later mutation of the live objects cannot reach it); a
+ * group that was never read is unavailable rather than carrying its constructor default; identity
+ * reuses the authoritative finalize-token machinery rather than an approximate duplicate; scenario
+ * state stays out of the stable core; and the debug shadow comparison only holds the fields that are
+ * semantically equal at both boundaries strict, classifying the rest as expected drift.
+ *
+ * The pure builder/comparator take no `Context`/`ImageUtils`, so these run headless over synthetic
+ * `Trainee`/`GameDate` instances - which is itself the structural proof that construction triggers no
+ * screen read.
+ */
+@DisplayName("CareerState Phase A Tests")
+class CareerStateTest {
+    private fun identity(): CareerIdentity =
+        CareerStateBuilder.buildIdentity(
+            scenario = "Trackblazer",
+            traineeName = "Biwa Hayahide",
+            presetRaw = "Biwa Hayahide",
+            queueRunRaw = 0,
+            careerNonce = "abc123",
+            configFingerprint = "fp1",
+        )
+
+    /** A date whose day was read from the screen (dayObserved = true). */
+    private fun observedDate(day: Int = 5): GameDate = GameDate(day).apply { updateDay(day) }
+
+    /** A fully-read trainee: stats/skill points/aptitudes flagged observed. */
+    private fun observedTrainee(): Trainee =
+        Trainee().apply {
+            name = "Biwa Hayahide"
+            energy = 62
+            mood = Mood.GOOD
+            skillPoints = 340
+            fans = 12000
+            setTraineeStats(speed = 412, stamina = 300, power = 288, guts = 190, wit = 260)
+            bHasUpdatedStats = true
+            bHasUpdatedSkillPoints = true
+            bHasUpdatedAptitudes = true
+        }
+
+    private fun build(
+        date: GameDate = observedDate(),
+        trainee: Trainee = observedTrainee(),
+        scenario: ScenarioState? = null,
+        mandatoryRaceDay: Boolean = false,
+        scheduledRaceDay: Boolean = false,
+        goalRibbonDay: Boolean = false,
+    ): CareerState =
+        CareerStateBuilder.build(identity(), date, trainee, mandatoryRaceDay, scheduledRaceDay, goalRibbonDay, scenario)
+
+    /** A DecisionTracer turn-open snapshot matching [observedTrainee] / [observedDate]. */
+    private fun openSnapshot(
+        energy: Int = 62,
+        mood: Mood = Mood.GOOD,
+        skillPoints: Int = 340,
+        speed: Int = 412,
+    ): DecisionTracer.StateSnapshot =
+        DecisionTracer.StateSnapshot(
+            energy = energy,
+            mood = mood,
+            negativeStatuses = emptyList(),
+            inventory = emptyMap(),
+            extra = emptyMap(),
+            stats = mapOf(StatName.SPEED to speed, StatName.STAMINA to 300, StatName.POWER to 288, StatName.GUTS to 190, StatName.WIT to 260),
+            skillPoints = skillPoints,
+            fans = 12000,
+            statsObserved = true,
+            skillPointsObserved = true,
+            aptitudesObserved = true,
+        )
+
+    // ---- Immutability ----
+
+    @Test
+    @DisplayName("A snapshot is unaffected by later mutation of the live sources it was built from")
+    fun snapshotIsImmutable() {
+        val date = observedDate(5)
+        val trainee = observedTrainee()
+        trainee.trackDistanceAptitudes[TrackDistance.MILE] = Aptitude.A
+        trainee.currentNegativeStatuses.add("Headache")
+        val inventory = mutableMapOf("Empowering Megaphone" to 2)
+        val tb = TrackblazerState.snapshot(10, inventory, 1, true, false, false, false, 0, 0)
+
+        val snapshot = build(date, trainee, tb)
+
+        // Mutate every live source AFTER the snapshot was taken.
+        date.updateDay(40)
+        trainee.setTraineeStats(speed = 999, stamina = 999, power = 999, guts = 999, wit = 999)
+        trainee.trackDistanceAptitudes[TrackDistance.MILE] = Aptitude.S
+        trainee.currentNegativeStatuses.add("Injury")
+        trainee.energy = 5
+        inventory["Empowering Megaphone"] = 99
+
+        assertEquals(5, snapshot.date.observedTurn)
+        assertEquals(412, snapshot.stats!!.stats[StatName.SPEED])
+        assertEquals(Aptitude.A, snapshot.aptitudes!!.distance[TrackDistance.MILE])
+        assertEquals(listOf("Headache"), snapshot.condition.negativeStatuses)
+        assertEquals(62, snapshot.condition.energy)
+        assertEquals(mapOf("Empowering Megaphone" to 2), (snapshot.scenario as TrackblazerState).inventory)
+    }
+
+    // ---- Default / unread protection ----
+
+    @Test
+    @DisplayName("Unread stats and skill points are unavailable, never the -1 / 120 constructor defaults")
+    fun unreadStatsAreUnavailable() {
+        val fresh = Trainee() // bHasUpdatedStats = false, stats default -1, skillPoints default 120
+        val snapshot = build(trainee = fresh)
+        assertNull(snapshot.stats)
+        assertNull(snapshot.skillPoints)
+        assertEquals(StateProvenance.UNREAD, snapshot.provenance.stats)
+    }
+
+    @Test
+    @DisplayName("Unread aptitudes are unavailable, never the all-G defaults")
+    fun unreadAptitudesAreUnavailable() {
+        val trainee = observedTrainee().apply { bHasUpdatedAptitudes = false }
+        val snapshot = build(trainee = trainee)
+        assertNull(snapshot.aptitudes)
+        assertEquals(StateProvenance.UNREAD, snapshot.provenance.aptitudes)
+    }
+
+    @Test
+    @DisplayName("An unobserved date exposes no turn (guards the phantom turn-1 bug)")
+    fun unobservedDateExposesNoTurn() {
+        val date = GameDate(year = DateYear.JUNIOR, month = DateMonth.JANUARY, phase = DatePhase.EARLY)
+        assertFalse(date.dayObserved)
+        val snapshot = build(date = date)
+        assertNull(snapshot.date.observedTurn)
+        assertNull(snapshot.date.year)
+        assertFalse(snapshot.date.dayObserved)
+        assertEquals(StateProvenance.UNREAD, snapshot.provenance.date)
+    }
+
+    // ---- Provenance ----
+
+    @Test
+    @DisplayName("Group provenance classifies configured / derived / observed / unread correctly")
+    fun provenanceClassifiesGroups() {
+        val snapshot = build(scenario = null)
+        assertEquals(StateProvenance.CONFIGURED, snapshot.provenance.identityInputs)
+        assertEquals(StateProvenance.DERIVED, snapshot.provenance.derivedIdentity)
+        assertEquals(StateProvenance.OBSERVED, snapshot.provenance.date)
+        assertEquals(StateProvenance.OBSERVED, snapshot.provenance.condition)
+        assertEquals(StateProvenance.OBSERVED, snapshot.provenance.stats)
+        assertEquals(StateProvenance.OBSERVED, snapshot.provenance.aptitudes)
+        assertEquals(StateProvenance.OBSERVED, snapshot.provenance.race)
+        assertEquals(StateProvenance.UNREAD, snapshot.provenance.scenario)
+    }
+
+    // ---- Identity ----
+
+    @Test
+    @DisplayName("Identity token is the exact output of the authoritative finalize-token machinery")
+    fun identityReusesFinalizeToken() {
+        val id =
+            CareerStateBuilder.buildIdentity(
+                scenario = "Unity Cup",
+                traineeName = "Taiki Shuttle",
+                presetRaw = "Taiki Shuttle",
+                queueRunRaw = 2,
+                careerNonce = "deadbeef",
+                configFingerprint = "fpX",
+            )
+        assertEquals(buildCareerFinalizeToken("Taiki Shuttle", "Unity Cup", 2, "deadbeef"), id.careerToken)
+        assertEquals(2, id.queueRun)
+        assertEquals("Taiki Shuttle", id.preset)
+    }
+
+    @Test
+    @DisplayName("Empty preset falls back to the trainee name and queueRun 0 becomes null, matching finalize semantics")
+    fun identityPresetAndQueueFallback() {
+        val id =
+            CareerStateBuilder.buildIdentity(
+                scenario = "Trackblazer",
+                traineeName = "Biwa Hayahide",
+                presetRaw = "",
+                queueRunRaw = 0,
+                careerNonce = "nonce",
+                configFingerprint = "f",
+            )
+        assertEquals(buildCareerFinalizeToken("Biwa Hayahide", "Trackblazer", null, "nonce"), id.careerToken)
+        assertNull(id.preset)
+        assertNull(id.queueRun)
+    }
+
+    // ---- Scenario extensions ----
+
+    @Test
+    @DisplayName("A scenario with no boundary state yields a null extension (base / URA / Unity Cup)")
+    fun noScenarioExtension() {
+        val snapshot = build(scenario = null)
+        assertNull(snapshot.scenario)
+        assertEquals(StateProvenance.UNREAD, snapshot.provenance.scenario)
+    }
+
+    @Test
+    @DisplayName("The Trackblazer extension is a defensive copy, and passes through the snapshot")
+    fun trackblazerExtensionCopiedAndCarried() {
+        val inventory = mutableMapOf("Empowering Megaphone" to 1)
+        val tb = TrackblazerState.snapshot(5, inventory, 3, true, true, false, false, 2, 4)
+        inventory["Empowering Megaphone"] = 99
+        inventory["New Item"] = 1
+        assertEquals(mapOf("Empowering Megaphone" to 1), tb.inventory)
+
+        val snapshot = build(scenario = tb)
+        assertSame(tb, snapshot.scenario)
+        assertEquals(StateProvenance.OBSERVED, snapshot.provenance.scenario)
+    }
+
+    @Test
+    @DisplayName("The Grand Concert extension carries its known counters and structurally omits PP balances")
+    fun grandConcertExtensionKnownState() {
+        val gc = GrandConcertState(songsBoughtThisCycle = 2, songsBoughtThisCareer = 9, lastConcertBoundary = 24)
+        val snapshot = build(scenario = gc)
+        assertSame(gc, snapshot.scenario)
+        assertEquals(2, (snapshot.scenario as GrandConcertState).songsBoughtThisCycle)
+    }
+
+    // ---- Race context ----
+
+    @Test
+    @DisplayName("Race context copies the current turn's race-day flags")
+    fun raceContextCopiesFlags() {
+        val snapshot = build(mandatoryRaceDay = true, scheduledRaceDay = false, goalRibbonDay = true)
+        assertNotNull(snapshot.race)
+        assertTrue(snapshot.race!!.mandatoryRaceDay)
+        assertFalse(snapshot.race.scheduledRaceDay)
+        assertTrue(snapshot.race.goalRibbonDay)
+    }
+
+    @Test
+    @DisplayName("Two snapshots do not share race state, so a stale prior-turn context cannot leak in")
+    fun raceContextIsPerSnapshot() {
+        val date = observedDate()
+        val trainee = observedTrainee()
+        val racy = CareerStateBuilder.build(identity(), date, trainee, true, true, true, null)
+        val calm = CareerStateBuilder.build(identity(), date, trainee, false, false, false, null)
+        assertTrue(racy.race!!.mandatoryRaceDay)
+        assertFalse(calm.race!!.mandatoryRaceDay)
+    }
+
+    // ---- One-per-turn latch ----
+
+    @Test
+    @DisplayName("The latch builds exactly once per armed turn and re-arms for the next turn")
+    fun latchBuildsOncePerTurn() {
+        val latch = CareerStateTurnLatch()
+        latch.armForNewTurn()
+        assertTrue(latch.shouldBuild()) // first decision tick of the turn
+        assertFalse(latch.shouldBuild()) // a RECOVER_MOOD re-tick on the same date must not rebuild
+        assertFalse(latch.shouldBuild())
+        latch.armForNewTurn() // next turn opens
+        assertTrue(latch.shouldBuild())
+    }
+
+    @Test
+    @DisplayName("Cadence follows action-completion turns, not date OCR: two unknown-date turns each build once, both with turn=null")
+    fun latchRebuildsAcrossUnknownDateTurns() {
+        val latch = CareerStateTurnLatch()
+        val unread = GameDate(year = DateYear.JUNIOR, month = DateMonth.JANUARY, phase = DatePhase.EARLY) // dayObserved = false
+        assertFalse(unread.dayObserved)
+
+        // Turn A: the first pre-decision pass builds even though the tracer never opened a window and the
+        // date was never read. A same-turn re-tick must not rebuild.
+        assertTrue(latch.shouldBuild())
+        assertFalse(latch.shouldBuild())
+        val a = CareerStateBuilder.build(identity(), unread, observedTrainee(), false, false, false, null)
+        assertNull(a.date.observedTurn)
+
+        // The action advanced the game to a new turn while date OCR is still failing. The latch takes no
+        // date input, so it rearms regardless of dayObserved. Turn B builds exactly once and honestly
+        // keeps turn = null. This is the exact class of failure the first live run exposed.
+        latch.armForNewTurn()
+        assertTrue(latch.shouldBuild())
+        assertFalse(latch.shouldBuild())
+        val b = CareerStateBuilder.build(identity(), unread, observedTrainee(), false, false, false, null)
+        assertNull(b.date.observedTurn)
+    }
+
+    @Test
+    @DisplayName("Cadence does not require a DecisionTracer window (markTracerWindowOpened is never called)")
+    fun latchCadenceIsIndependentOfTracerWindow() {
+        val latch = CareerStateTurnLatch()
+        // No tracer window is ever opened; the build cadence is unaffected.
+        assertTrue(latch.shouldBuild())
+        latch.armForNewTurn()
+        assertTrue(latch.shouldBuild())
+        // ...and the comparison is honestly reported as having no fresh evidence rather than comparing.
+        assertFalse(latch.tracerWindowFresh())
+    }
+
+    @Test
+    @DisplayName("Tracer-window freshness tracks the tracer window, so a snapshot is never compared against a prior turn's evidence")
+    fun tracerWindowFreshnessTracksTheWindow() {
+        val latch = CareerStateTurnLatch()
+        assertFalse(latch.tracerWindowFresh()) // no window opened yet
+
+        // Turn A: the tracer opened its window this turn, so the shadow comparison is meaningful.
+        latch.markTracerWindowOpened()
+        assertTrue(latch.tracerWindowFresh())
+        assertTrue(latch.shouldBuild())
+
+        // An action advances to turn B; the tracer has NOT reopened (its startTurn gate did not fire, e.g.
+        // date OCR failed). The snapshot still builds, but the tracer window is now stale, so freshness is
+        // false and the comparison must be treated as unavailable rather than compared against turn A.
+        latch.armForNewTurn()
+        assertFalse(latch.tracerWindowFresh())
+        assertTrue(latch.shouldBuild())
+    }
+
+    // ---- Pure construction ----
+
+    @Test
+    @DisplayName("Construction runs headless with no Context / ImageUtils / OCR dependency")
+    fun builderIsPure() {
+        // If build() required a Context/ImageUtils/screenshot handle this test could not run headless.
+        assertNotNull(build())
+    }
+
+    // ---- Shadow comparison semantics ----
+
+    @Test
+    @DisplayName("Comparison reports no strict mismatch and no drift when both boundaries agree")
+    fun shadowComparisonAgrees() {
+        val result = CareerStateShadow.compare(build(), openSnapshot(), openObservedTurn = 5)
+        assertTrue(result.strictMismatches.isEmpty())
+        assertTrue(result.expectedDrift.isEmpty())
+    }
+
+    @Test
+    @DisplayName("Expected pre-decision drift (skill buys, item use) is classified as drift, not a mismatch")
+    fun shadowComparisonClassifiesDrift() {
+        // Pre-decision trainee: skill points dropped by a purchase, energy raised by an item.
+        val postPrep =
+            observedTrainee().apply {
+                skillPoints = 315
+                energy = 80
+            }
+        val snapshot = build(trainee = postPrep)
+        val result = CareerStateShadow.compare(snapshot, openSnapshot(energy = 62, skillPoints = 340), openObservedTurn = 5)
+        assertTrue(result.strictMismatches.isEmpty())
+        assertTrue(result.expectedDrift.any { it.contains("skillPts 340->315") })
+        assertTrue(result.expectedDrift.any { it.contains("energy 62->80") })
+    }
+
+    @Test
+    @DisplayName("A changed strict field (a core stat) is reported as a real mismatch")
+    fun shadowComparisonCatchesStrictMismatch() {
+        val mutated = observedTrainee().apply { setTraineeStats(speed = 999) }
+        val snapshot = build(trainee = mutated)
+        val result = CareerStateShadow.compare(snapshot, openSnapshot(speed = 412), openObservedTurn = 5)
+        assertTrue(result.strictMismatches.any { it.contains("stat.SPEED 412->999") })
+    }
+}

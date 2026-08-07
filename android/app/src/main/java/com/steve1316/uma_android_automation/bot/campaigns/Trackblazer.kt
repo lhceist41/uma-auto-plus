@@ -8,7 +8,9 @@ import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.bot.DialogHandlerResult
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.MainScreenAction
+import com.steve1316.uma_android_automation.bot.ScenarioState
 import com.steve1316.uma_android_automation.bot.SelectionSource
+import com.steve1316.uma_android_automation.bot.TrackblazerState
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonClose
@@ -766,6 +768,26 @@ class Trackblazer(game: Game) : Campaign(game) {
         training.clearAnalysisCache()
     }
 
+    /**
+     * Shadow CareerState scenario payload (Phase A). Reads Trackblazer's own fields by value and
+     * copies the inventory map; [TrackblazerState.consecutiveRaceCountObserved] carries the
+     * [counterUpdatedByOCR] flag so a carried count is never mistaken for an observed one. Megaphone
+     * turns live on the trainee, not on this scenario.
+     */
+    override fun scenarioStateSnapshot(): ScenarioState {
+        return TrackblazerState.snapshot(
+            shopCoins = shopCoins,
+            inventory = currentInventory,
+            consecutiveRaceCount = consecutiveRaceCount,
+            consecutiveRaceCountObserved = counterUpdatedByOCR,
+            usedWhistleToday = bUsedWhistleToday,
+            usedCharmToday = bUsedCharmToday,
+            usedHammerToday = bUsedHammerToday,
+            recreationUsedCount = recreationUsedCount,
+            megaphoneTurnCounter = trainee.megaphoneTurnCounter,
+        )
+    }
+
     override fun onBeforeMainScreenUpdate() {
         // Buy items if a shop check is pending after a race.
         if (bShouldCheckShop) {
@@ -1004,6 +1026,10 @@ class Trackblazer(game: Game) : Campaign(game) {
                         MessageLog.i(TAG, "[TRACKBLAZER] Decision made to train.")
                         handleTrackblazerTraining()
                         bHasCheckedDateThisTurn = false
+                        // Shadow-only: this fast path advances the turn without super.executeAction, so the
+                        // base CareerState rearm is bypassed - rearm here beside the reset. This also covers
+                        // the virtual RECOVER_MOOD -> TRAIN redispatch, which re-enters this same branch.
+                        armCareerStateForNewTurn()
                         true
                     }
                 }
