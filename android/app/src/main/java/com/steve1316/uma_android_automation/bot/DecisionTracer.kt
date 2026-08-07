@@ -35,6 +35,17 @@ class DecisionTracer {
     /** True once `emit()` has flushed this turn's block, so subsequent calls become no-ops. */
     private var hasEmitted: Boolean = false
 
+    /**
+     * Optional observability sink invoked once per turn by `emit()`, after the block is logged and
+     * after the turn's action has already executed. Set by [Campaign] to append the machine-readable
+     * `decision_trace` record. Never consulted by any decision path: a sink that is absent, slow or
+     * throwing changes nothing about what the bot chose.
+     */
+    var traceSink: ((TurnEvidence) -> Unit)? = null
+
+    /** True once a sink failure has been reported, so a persistent disk fault warns once per career instead of every turn. */
+    private var hasWarnedOnSinkFailure: Boolean = false
+
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // Data types
@@ -51,6 +62,18 @@ class DecisionTracer {
         val inventory: Map<String, Map<String, Int>>,
         /** Campaign-specific extra state (e.g. `consecutiveRaceCount` for Trackblazer) as displayable key/value pairs. */
         val extra: Map<String, String>,
+        /** The five trainee stats as read at turn start. Captured here rather than at emit time because the turn's action has already run by then. */
+        val stats: Map<StatName, Int> = emptyMap(),
+        /** Skill points at turn start, before any in-turn skill purchase. */
+        val skillPoints: Int = 0,
+        /** Fan count at turn start. */
+        val fans: Int = 0,
+        /** Whether the stat values came from an actual read this career rather than the trainee's initial defaults. */
+        val statsObserved: Boolean = false,
+        /** Whether [skillPoints] came from an actual read. */
+        val skillPointsObserved: Boolean = false,
+        /** Whether the trainee's aptitudes had been read by this turn. */
+        val aptitudesObserved: Boolean = false,
     )
 
     /** Settings that influence this turn's decision tree. Subclasses populate via the builder. */
@@ -214,6 +237,12 @@ class DecisionTracer {
                 negativeStatuses = trainee.currentNegativeStatuses.toList(),
                 inventory = inventorySnapshot.mapValuesTo(LinkedHashMap()) { (_, items) -> LinkedHashMap(items) },
                 extra = extraState.toMap(),
+                stats = StatName.entries.associateWith { trainee.getStat(it) },
+                skillPoints = trainee.skillPoints,
+                fans = trainee.fans,
+                statsObserved = trainee.bHasUpdatedStats,
+                skillPointsObserved = trainee.bHasUpdatedSkillPoints,
+                aptitudesObserved = trainee.bHasUpdatedAptitudes,
             )
         settingsSnapshot = settings
         events.clear()
@@ -227,8 +256,41 @@ class DecisionTracer {
     fun emit() {
         if (hasEmitted || stateSnapshot == null) return
         MessageLog.i(TAG, formatReport())
+        // Set BEFORE the sink runs so a sink that throws cannot leave the turn re-emittable and
+        // duplicate the block on the next tick.
         hasEmitted = true
+        val sink = traceSink ?: return
+        try {
+            sink(turnEvidence())
+        } catch (e: Exception) {
+            // Observability must never surface as a run failure. Warn once per tracer so a
+            // persistent fault leaves one diagnosable line instead of one per turn, and keep the
+            // sink attached so a transient failure does not silently drop the rest of the career.
+            if (!hasWarnedOnSinkFailure) {
+                hasWarnedOnSinkFailure = true
+                MessageLog.w(TAG, "Failed to record the decision trace for this turn (further failures are not repeated): $e")
+            }
+        }
     }
+
+    /**
+     * Immutable copy of this turn's captured evidence, for the trace sink.
+     *
+     * Copies the event list and settings map so a consumer holds a stable view even though the
+     * tracer reuses its buffers on the next `startTurn`. The state snapshot is already replaced
+     * wholesale each turn rather than mutated, so it is safe to hold. The date is NOT: it is the
+     * campaign's live [GameDate], which the next turn advances in place. A consumer must read what
+     * it needs during the call rather than retaining the evidence across turns.
+     *
+     * @return The turn's evidence. Date and state are null before the first turn opens.
+     */
+    fun turnEvidence(): TurnEvidence =
+        TurnEvidence(
+            date = turnDate,
+            state = stateSnapshot,
+            settings = LinkedHashMap(settingsSnapshot?.entries ?: LinkedHashMap()),
+            events = events.toList(),
+        )
 
     /**
      * The game date captured for the current turn by `startTurn`, or null before the first turn opens.

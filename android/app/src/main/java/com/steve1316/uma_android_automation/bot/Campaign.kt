@@ -314,6 +314,44 @@ abstract class Campaign(game: Game) : Task(game) {
     val decisionTracer: DecisionTracer? =
         if (com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode) DecisionTracer() else null
 
+    init {
+        // Machine-readable companion to the Decision Report block: the same evidence, appended as
+        // one JSON line per turn. Attaching the sink is the only side effect - the lambda body runs
+        // inside emit(), which fires AFTER the turn's action has already executed, so no failure in
+        // it can reach the decision path. Shares the tracer's gate, so release builds without Debug
+        // Mode never allocate or write anything.
+        decisionTracer?.traceSink = { evidence -> appendDecisionTrace(evidence) }
+    }
+
+    /**
+     * Appends one turn's [DecisionTrace] record to the on-device corpus.
+     *
+     * Identity is read at emit time from the sources the other corpus records already use, so a
+     * decision trace joins the career_finalize and career-outcome rows on `careerToken` and `fp`
+     * rather than needing an identifier of its own. Nothing here reads the screen.
+     *
+     * Failures propagate to [DecisionTracer.emit], which swallows them behind a single bounded
+     * warning; [OutcomeCorpus.append] already absorbs its own I/O errors.
+     */
+    private fun appendDecisionTrace(evidence: TurnEvidence) {
+        val preset: String = SettingsHelper.getStringSetting("general", "appliedPresetTrainee").trim()
+        val traineeIdentity: String = preset.ifEmpty { trainee.name }
+        val queueRun: Int = CareerFinalizeGate.context?.queueRun ?: SettingsHelper.getIntSetting("queueState", "currentRun", 0)
+        val record =
+            DecisionTrace.buildRecord(
+                timestamp = System.currentTimeMillis(),
+                evidence = evidence,
+                app = BuildConfig.VERSION_NAME,
+                fp = currentConfigFingerprint(),
+                scenario = game.scenario,
+                trainee = trainee.name,
+                preset = preset,
+                careerToken = buildCareerFinalizeToken(traineeIdentity, game.scenario, queueRun.takeIf { it > 0 }, careerFinalizeNonce),
+                queueRun = queueRun.takeIf { it > 0 },
+            )
+        OutcomeCorpus.append(game.myContext, record, OutcomeCorpus.DECISIONS_PATH, DecisionTrace.MAX_FILE_BYTES)
+    }
+
     /** Flag to track whether the bot should force Wit training during the pre-summer turn. */
     var bForcedWitTraining: Boolean = false
 

@@ -1,6 +1,6 @@
 # How It Works
 
-*Last updated: 2026-07-25*
+*Last updated: 2026-08-06*
 
 A comprehensive guide to the inner workings of the app. This document explains what the bot does at each step of a campaign, how it makes decisions, and how each scenario differs.
 
@@ -333,6 +333,60 @@ flowchart TD
 Every career ends with a structured `[CAREER_END]` log line carrying an `outcome=` label — `COMPLETED` (reached the career-end screen with no confirmed force-end), `FORCE_END` (a lost mandatory race the bot could not retry past), or `INCOMPLETE` (a non-completion result: user stop, watchdog timeout, or unhandled exception). The game shows the same end screen for a win and an early force-end, so within `COMPLETED` the end turn is the tell: a full arc ends near the scenario's last turn, a force-end ends early.
 
 Alongside the log line, each career appends one JSON record to an on-device corpus (`files/outcomes/careers.jsonl`) carrying those fields plus the app version and a **config fingerprint** — a stable hash of the tunables that shape play (stat priorities and targets, racing flags, the racing-plan content, skill threshold, mood floor, and the Trackblazer overrides), snapshotted when the campaign is constructed so a rotation switch between runs cannot mislabel the record. A dev-side tool (`scripts/analyze-outcomes.mjs`, backed by `src/lib/outcomeAnalysis.ts`) reads the corpus — and harvests the older ledger lines out of pulled message logs — and reports per-trainee outcome distributions per config arm: how many full arcs versus early exits, fan and stat percentiles, and the turns each arm tends to die at. This is what lets a tuning change be measured across many runs instead of judged one at a time.
+
+### 5.2 Decision Trace Records
+
+The `[DECISION]` Decision Report block above is written for a human reading one run's log. `DecisionTrace` (`bot/DecisionTrace.kt`) writes the same turn's evidence a second time as a machine-readable JSON line, so a turn can be examined across many careers without parsing log prose.
+
+**What it records.** One record per main-screen turn: the identity of the career, the game date, the state the decision engine saw when the turn opened, the candidates it named, and the action it committed to.
+
+- Identity: record `type` and version, wall-clock `ts`, app version, config fingerprint (`fp`), scenario, trainee, applied preset, `careerToken` (the same career identity the finalization records use, so traces join to them directly), and `queueRun`.
+- Date: `turn` plus `year` / `month` / `phase`.
+- State: energy, mood, the five stats, skill points, fans, negative statuses, and any scenario inventory or extra state the campaign passes to the tracer. This is the snapshot taken when the turn opened, not live state at write time, because the turn's action has already run by then.
+- `observation`: whether the turn number, stats, skill points and aptitudes came from an actual read this career rather than a carried-over or default value. These are the read flags the existing readers already maintain. They are not confidence scores, because those readers do not expose one, and none is invented.
+- `candidates`: a flat list of what was considered. Main-screen actions carry the chosen one plus each alternative the priority cascade explicitly ruled out. Trainings carry the analyzer's pick plus its runner-ups with their scores, failure chances and stat gains.
+- `selected`: the committed action and its reason, the training pick and which branch of `recommendTraining` produced it, and a `recovery` block when the turn abandoned its pick and executed a recovery instead.
+- `raceEligibility`, `items` and `notes` when the turn recorded them.
+
+**Where.** `files/outcomes/decisions.jsonl` under the app's external files dir, appended one record per line through the same `OutcomeCorpus` writer the career corpus uses. It is a separate file on purpose: a career writes one outcome record but roughly 75 traces, so interleaving them would bury the rows the outcome analyzer reads. The file has a byte cap (`DecisionTrace.MAX_FILE_BYTES`); past it records are dropped with one warning rather than filling the device. Nothing is rotated or deleted.
+
+**When.** Tracing rides the existing Decision Report gate: debug builds, or Debug Mode enabled in settings. There is no separate toggle. Release builds without Debug Mode allocate nothing and write nothing.
+
+**Versioning.** `type` is `decision_trace` and `v` is the schema version. Purely additive fields keep the current version, so a reader must ignore fields it does not know. Renaming or removing a field, or changing the meaning or units of one, bumps `v`.
+
+**Best-effort and non-authoritative.** The record is written inside `DecisionTracer.emit()`, which runs *after* the turn's action has executed. It observes the decision; it never participates in it. A serializer exception is caught there and warned once per career; a disk-append failure is caught one layer down in `OutcomeCorpus` and warned per failed append; either way the record is dropped and the turn continues -- it is not retried, no tap repeats, and the run goes on. The same observed state produces the same action whether tracing is on, off, or broken. The corpus is therefore evidence about a run, never a source of truth about one, and it is not one-row-per-turn: a turn that ends in a dialog before the action tick never opens a trace window.
+
+**Optional fields.** Everything except `type`, `v`, `ts`, `observation` and `selected` is conditional, and an unavailable value is omitted rather than filled in. In particular `turn` is absent when the date was never read (the constructed default is turn 1, and writing that as real already produced phantom rows in the career corpus); a candidate `score` is absent for a hard-excluded training because no real ranking existed for it; `gains` carries only the stats the caller supplied; and `selected` is empty when the turn committed to nothing. `careerToken` falls back to a per-campaign nonce when no career task installed an identity.
+
+**Example** (redacted; key order is not stable, since the writer uses a hash map, and is shown here grouped for readability):
+
+```json
+{
+  "type": "decision_trace", "v": 1, "ts": 1785312000000, "app": "1.4.0",
+  "fp": "1e681a57e1", "scenario": "Trackblazer", "trainee": "Biwa Hayahide",
+  "preset": "Biwa Hayahide", "careerToken": "Biwa Hayahide|Trackblazer|run2|3f9a1c22",
+  "queueRun": 2, "turn": 25, "year": "CLASSIC", "month": "JANUARY", "phase": "EARLY",
+  "state": {"energy": 62, "mood": "GOOD", "skillPts": 340, "fans": 12000,
+            "spd": 412, "sta": 300, "pwr": 288, "grt": 190, "wit": 260},
+  "observation": {"turnObserved": true, "statsObserved": true,
+                  "skillPointsObserved": true, "aptitudesObserved": true},
+  "settings": {"Mood Floor": "GOOD"},
+  "candidates": [
+    {"type": "action", "id": "TRAIN", "selected": true, "reason": "default action: no race required, no recovery needed, no extra race eligible"},
+    {"type": "action", "id": "RECOVER_MOOD", "selected": false, "rejected": true, "reason": "mood GOOD at/above floor GOOD"},
+    {"type": "training", "id": "SPEED", "selected": true, "failChance": 8, "gains": {"spd": 11, "pwr": 2}, "reason": "won analysis (Year 2+) with score 41.50"},
+    {"type": "training", "id": "WIT", "selected": false, "rejected": false, "score": 12.25, "failChance": 3, "reason": "outscored"},
+    {"type": "training", "id": "GUTS", "selected": false, "rejected": true, "reason": "excluded (hard penalty)"}
+  ],
+  "raceEligibility": {"eligible": false, "reason": "not eligible for an extra race this turn"},
+  "selected": {"action": "TRAIN", "source": "action_choice", "reason": "default action: no race required, no recovery needed, no extra race eligible",
+               "training": "SPEED", "trainingSource": "ANALYSIS", "trainingReason": "won analysis (Year 2+) with score 41.50"}
+}
+```
+
+**Coverage.** Only the main-screen turn boundary emits traces today, which covers the action choice, the training contest and extra-race eligibility for every scenario, including Trackblazer's own action hijacks (they record through the same tracer). Decisions resolved outside that window are not covered and stay in their existing chronological log tags: race selection and running-style resolution (`[RACE]` and `[DIALOG]`, since the strategy is resolved in the race-prep dialog handler rather than in an open turn), skill purchasing (`[SKILLS]` / `[KNAPSACK]`, whose career-end knapsack runs after the last turn), training-event choices (`[TRAINING_EVENT]`), and spark reroll (`[SPARKS]`).
+
+**Intended consumers.** The corpus exists so that later analysis work has something to read: comparing what the bot chose against what it should have chosen, studying which observations preceded bad turns, or checking a scoring change turn by turn instead of by career outcome. None of those tools exist yet, and nothing in the app reads the file.
 
 ---
 
