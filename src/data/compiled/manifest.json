@@ -1,0 +1,120 @@
+{
+  "manifestSchemaVersion": 1,
+  "compiler": {
+    "version": "1.0.0",
+    "normalizationVersion": 1,
+    "skillsSchemaVersion": 1,
+    "racesSchemaVersion": 1
+  },
+  "fingerprint": "2df1ccd4847e4d3b6b2ae5aa9f3672148550fe7b87dea6436812e39f634c9b12",
+  "knownProvenance": {
+    "generator": "scripts/data-scraper",
+    "recordedSourceVersion": null,
+    "recordedGamePatch": null,
+    "recordedScrapeTime": null
+  },
+  "source": [
+    {
+      "family": "objectives",
+      "path": "src/data/character_objectives.json",
+      "sha256": "ad1e1916f244d8385f1311ea6b50410fc0966e95370ef7bd8daf5a64549969be",
+      "recordCount": 62,
+      "provenance": {
+        "origin": "data-scraper",
+        "sourceVersion": null
+      }
+    },
+    {
+      "family": "characters",
+      "path": "src/data/characters.json",
+      "sha256": "5c8b1975f30ea2d2a7cb56ebb20e934b79b2cc07e54bba35783cf3bdadd17aa4",
+      "recordCount": 62,
+      "provenance": {
+        "origin": "data-scraper",
+        "sourceVersion": null
+      }
+    },
+    {
+      "family": "races",
+      "path": "src/data/races.json",
+      "sha256": "5d3c70282b960b49c75c85ba85dd25d0c0e5afbfa1b0cff6a802a26a1f00f13c",
+      "recordCount": 402,
+      "provenance": {
+        "origin": "data-scraper",
+        "sourceVersion": null
+      }
+    },
+    {
+      "family": "scenarios",
+      "path": "src/data/scenarios.json",
+      "sha256": "a5aeaebbf37cee0f234deeb0ddb39524def7b519ed47bc22ef97a776fe1b58ad",
+      "recordCount": 4,
+      "provenance": {
+        "origin": "data-scraper",
+        "sourceVersion": null
+      }
+    },
+    {
+      "family": "skills",
+      "path": "src/data/skills.json",
+      "sha256": "716094e63c3f775aca94dea08126a63ce6ac19df489762ec0796d4529302c7f9",
+      "recordCount": 694,
+      "provenance": {
+        "origin": "data-scraper",
+        "sourceVersion": null
+      }
+    },
+    {
+      "family": "supports",
+      "path": "src/data/supports.json",
+      "sha256": "24e000f0cd5cf81db3f9bccef2c79f350f3c2c081c3602aa0a808eddd5a5a68c",
+      "recordCount": 82,
+      "provenance": {
+        "origin": "data-scraper",
+        "sourceVersion": null
+      }
+    }
+  ],
+  "compiled": [
+    {
+      "path": "src/data/compiled/races.json",
+      "sha256": "c617cbd7938c76657c3c3b9d94cc30f52de7df00d40c532a91b40124093079f7",
+      "recordCount": 402
+    },
+    {
+      "path": "src/data/compiled/skills.json",
+      "sha256": "b18c470d721eca7a99b1e8f0dac04a1c05e00c6feaa204ccf0e9341a2a64ad02",
+      "recordCount": 694
+    }
+  ],
+  "validation": {
+    "warnings": [
+      {
+        "code": "chainReferenceUnresolved",
+        "detail": "skill 201102 downgrade -> 201103 references a skill absent from this dataset"
+      },
+      {
+        "code": "chainReferenceUnresolved",
+        "detail": "skill 201211 downgrade -> 201212 references a skill absent from this dataset"
+      }
+    ],
+    "info": [
+      {
+        "code": "bareRaceNameCollision",
+        "detail": "106 race records share a bare name with another record (296 distinct names across 402 races)"
+      },
+      {
+        "code": "nullFieldPrevalence",
+        "detail": "races: course is null on 246/402 records"
+      },
+      {
+        "code": "nullFieldPrevalence",
+        "detail": "skills: tier is null on 694/694 records"
+      },
+      {
+        "code": "provenanceUnavailable",
+        "detail": "raw source files record no upstream version/patch/scrape-time; manifest provenance fields are explicit null"
+      }
+    ]
+  }
+}
