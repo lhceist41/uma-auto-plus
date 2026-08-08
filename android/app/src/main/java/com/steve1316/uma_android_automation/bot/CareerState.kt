@@ -278,6 +278,41 @@ class CareerStateTurnLatch {
 }
 
 /**
+ * Per-career monotonic decision-sequence holder: the join authority between the `career_state` and
+ * `decision_trace` streams. Owned by a single Campaign (one career), so a fresh career/resume starts a
+ * new instance at seq 1 under a new career token, keeping `careerToken + seq` unique.
+ *
+ * Lifecycle, mirroring the build/emit ordering in `Campaign.handleMainScreen`:
+ * - [allocate] once per consumed CareerState build opportunity: advances the counter, returns the new
+ *   seq, and clears [current] (so an unbuilt/failed turn carries no seq).
+ * - [retain] only when the build succeeded: pins [current] to that seq.
+ * - [current] read at trace-emit time. Emit runs AFTER the action re-armed the turn latch for the next
+ *   turn, but the latch is a separate object; nothing between [retain] and emit touches [current], so
+ *   the trace stamps the current turn's seq, never the next turn's or a stale one.
+ *
+ * The counter advances on every [allocate] even when the build later fails, so seq N is never reused for
+ * a later turn - a gap after a swallowed build is honest and keeps joins unambiguous. Pure and testable.
+ */
+class CareerStateDecisionSequence {
+    private var counter: Int = 0
+    private var current: Int? = null
+
+    /** Consume a build opportunity: advance the counter, clear [current], and return the new seq. */
+    fun allocate(): Int {
+        current = null
+        return ++counter
+    }
+
+    /** Pin [current] to [seq] after a successful build, so emit stamps this turn's seq. */
+    fun retain(seq: Int) {
+        current = seq
+    }
+
+    /** The seq retained for the current turn, or null when no CareerState was built/retained this turn. */
+    fun current(): Int? = current
+}
+
+/**
  * Pure builder for [CareerState]. Reads the given live objects' fields and returns an immutable
  * snapshot with defensive copies. It takes no `Context`, `ImageUtils`, or any OCR/screenshot handle,
  * so by construction it cannot read the screen or influence gameplay; it is exercised directly by the

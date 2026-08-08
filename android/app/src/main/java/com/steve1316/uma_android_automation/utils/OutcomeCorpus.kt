@@ -30,6 +30,13 @@ object OutcomeCorpus {
     const val DECISIONS_PATH = "outcomes/decisions.jsonl"
 
     /**
+     * Relative path of the per-turn `career_state` file. A separate durable record type from
+     * [DECISIONS_PATH] on purpose: `decision_trace` and `career_state` are joined offline by
+     * `careerToken + seq`, and each parser rejects the other's records, so they must not interleave.
+     */
+    const val CAREER_STATE_PATH = "outcomes/career_state.jsonl"
+
+    /**
      * Appends one [record] as a JSON line to [path]. Writing must never disturb the calling
      * path: any failure is swallowed after a MessageLog warning. MessageLog is safe here -
      * the career path that logs the ledger line via MessageLog immediately after, and the

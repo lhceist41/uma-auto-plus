@@ -467,6 +467,108 @@ class CareerStateTest {
         assertFalse(latch.tracerWindowFresh())
     }
 
+    // ---- Decision sequence (career_state <-> decision_trace join key) ----
+
+    @Test
+    @DisplayName("Decision seq is monotonic per career and emit stamps the current turn's seq even after the action re-armed the latch for the next turn")
+    fun decisionSeqIsMonotonicAndEmitStampsTheCurrentTurn() {
+        val latch = CareerStateTurnLatch()
+        val seq = CareerStateDecisionSequence()
+        latch.armForNewTurn()
+
+        // Turn 1 build boundary: consume the build opportunity, allocate seq 1, build succeeds -> retain.
+        assertTrue(latch.shouldBuild())
+        val s1 = seq.allocate()
+        assertEquals(1, s1)
+        seq.retain(s1)
+        assertEquals(1, seq.current())
+
+        // executeAction advances and RE-ARMS the latch for turn 2 - and this happens BEFORE turn 1's
+        // trace emits. The emit-ordering trap: the trace must still stamp turn 1's seq, not turn 2's.
+        latch.armForNewTurn()
+        assertEquals(1, seq.current()) // emit reads the retained current-turn seq, unaffected by the re-arm
+
+        // Turn 2 build boundary: allocate clears current until the new build retains it.
+        assertTrue(latch.shouldBuild())
+        val s2 = seq.allocate()
+        assertEquals(2, s2)
+        assertNull(seq.current())
+        seq.retain(s2)
+        assertEquals(2, seq.current())
+    }
+
+    @Test
+    @DisplayName("A same-turn re-tick does not reach the build boundary again, so it allocates no new seq")
+    fun sameTurnRetickDoesNotAllocateNewSeq() {
+        val latch = CareerStateTurnLatch()
+        val seq = CareerStateDecisionSequence()
+        latch.armForNewTurn()
+
+        assertTrue(latch.shouldBuild())
+        seq.retain(seq.allocate())
+        assertEquals(1, seq.current())
+
+        // A same-turn re-tick: shouldBuild is false, so the build block (and allocate) never runs.
+        assertFalse(latch.shouldBuild())
+        assertEquals(1, seq.current())
+    }
+
+    @Test
+    @DisplayName("A swallowed CareerState build consumes its seq position, stamps no seq on the trace, and never reuses that position")
+    fun buildFailureStampsNoSeqAndNeverReusesThePosition() {
+        val latch = CareerStateTurnLatch()
+        val seq = CareerStateDecisionSequence()
+        latch.armForNewTurn()
+
+        // Turn 1: build opportunity consumed (seq 1 allocated) but buildCareerState throws -> no retain.
+        assertTrue(latch.shouldBuild())
+        assertEquals(1, seq.allocate())
+        assertNull(seq.current()) // the trace for this turn carries no seq
+        latch.armForNewTurn()
+
+        // Turn 2 succeeds: allocates seq 2, NOT reusing the failed position 1.
+        assertTrue(latch.shouldBuild())
+        val s2 = seq.allocate()
+        assertEquals(2, s2)
+        seq.retain(s2)
+        assertEquals(2, seq.current())
+    }
+
+    @Test
+    @DisplayName("A non-advancing action (aborted RACE) does not re-arm, so the next seq is not allocated until a real next decision turn")
+    fun nonAdvancingActionDoesNotAllocateTheNextSeq() {
+        val latch = CareerStateTurnLatch()
+        val seq = CareerStateDecisionSequence()
+        latch.armForNewTurn()
+
+        assertTrue(latch.shouldBuild())
+        seq.retain(seq.allocate())
+        assertEquals(1, seq.current())
+
+        // Aborted RACE: non-advancing, so the latch is not re-armed. The same-turn re-evaluation reaches
+        // the build boundary again but shouldBuild is false, so no seq is allocated.
+        latch.armForNewTurnIf(false)
+        assertFalse(latch.shouldBuild())
+        assertEquals(1, seq.current())
+
+        // A later advancing action (fallback training, a real next turn) re-arms -> seq 2 is allocated.
+        latch.armForNewTurn()
+        assertTrue(latch.shouldBuild())
+        assertEquals(2, seq.allocate())
+    }
+
+    @Test
+    @DisplayName("Decision seq takes no date input, so two unknown-date turns still allocate 1 then 2 independent of any turn number")
+    fun decisionSeqIsIndependentOfObservedTurnNumber() {
+        val seq = CareerStateDecisionSequence()
+        assertEquals(1, seq.allocate())
+        seq.retain(1)
+        assertEquals(1, seq.current())
+        assertEquals(2, seq.allocate())
+        seq.retain(2)
+        assertEquals(2, seq.current())
+    }
+
     // ---- Pure construction ----
 
     @Test

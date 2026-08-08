@@ -362,8 +362,22 @@ abstract class Campaign(game: Game) : Task(game) {
                 preset = preset,
                 careerToken = buildCareerFinalizeToken(traineeIdentity, game.scenario, queueRun.takeIf { it > 0 }, careerFinalizeNonce),
                 queueRun = queueRun.takeIf { it > 0 },
+                // The retained current-turn seq, joining this trace to its career_state record. Omitted
+                // (null) when no CareerState was built this turn. Not read from post-action latch state.
+                seq = careerStateSeq.current(),
             )
         OutcomeCorpus.append(game.myContext, record, OutcomeCorpus.DECISIONS_PATH, DecisionTrace.MAX_FILE_BYTES)
+    }
+
+    /**
+     * Appends one turn's `career_state` record to the separate on-device corpus, at the pre-decision
+     * boundary. Pure serialization ([CareerStateSerializer]) plus the shared [OutcomeCorpus.append],
+     * which swallows its own I/O errors; the enclosing build block swallows a serialization fault. So a
+     * telemetry failure here can never change a turn, matching the Phase A shadow policy.
+     */
+    private fun appendCareerState(careerState: CareerState, seq: Int) {
+        val record = CareerStateSerializer.buildRecord(careerState, seq, System.currentTimeMillis())
+        OutcomeCorpus.append(game.myContext, record, OutcomeCorpus.CAREER_STATE_PATH, CareerStateSerializer.MAX_FILE_BYTES)
     }
 
     /**
@@ -876,6 +890,13 @@ abstract class Campaign(game: Game) : Task(game) {
 
     /** Once-per-turn guard so the multi-tick [handleMainScreen] loop builds exactly one [shadowCareerState] per turn. */
     private val careerStateLatch = CareerStateTurnLatch()
+
+    /**
+     * Per-career CareerState decision-sequence holder: the `careerToken + seq` join authority between
+     * the separate `career_state` and `decision_trace` streams (never the observed turn number). Scoped
+     * to this Campaign instance, so a fresh career/resume restarts at seq 1 under a new career token.
+     */
+    private val careerStateSeq = CareerStateDecisionSequence()
 
     /**
      * Rearm the CareerState build latch for a new main-screen decision turn. Invariant: every
@@ -3090,9 +3111,19 @@ abstract class Campaign(game: Game) : Task(game) {
         // tests and a future Phase B consumer, so a release build does no per-turn shadow work. Nothing
         // below reads it; a failure here must never change the decision, so the block is non-fatal.
         if ((com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode) && careerStateLatch.shouldBuild()) {
+            // Allocate this logical decision turn's sequence exactly when the build opportunity is
+            // consumed. currentTurnSeq stays null until the build succeeds, so a swallowed build leaves
+            // the emitted trace without a seq rather than inheriting the previous turn's; the counter
+            // still advances, so seq N is never reused for a later turn (a gap is honest).
+            val seq = careerStateSeq.allocate()
             try {
                 val careerState = buildCareerState()
                 shadowCareerState = careerState
+                // Build succeeded: retain the seq for this turn's trace BEFORE the append, so even a
+                // later serialize/append failure leaves the trace correctly stamped (a traceWithoutState
+                // join, not a stale seq). Serialization is pure and the append swallows its own I/O.
+                careerStateSeq.retain(seq)
+                appendCareerState(careerState, seq)
                 compareCareerStateToTracer(careerState)
             } catch (e: Exception) {
                 // Shadow-only observability: swallow so a snapshot/compare fault cannot stop or alter the turn.

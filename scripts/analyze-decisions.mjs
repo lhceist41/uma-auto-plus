@@ -7,8 +7,9 @@
 //
 // Usage:
 //   node scripts/analyze-decisions.mjs --decisions <decisions.jsonl> [--careers <careers.jsonl>]
-//                                      [--career-token <token>] [--since <epochMs>]
-//                                      [--from-line <N>] [--aggregate] [--strict] [--json] [--help]
+//                                      [--career-state <career_state.jsonl>] [--career-token <token>]
+//                                      [--since <epochMs>] [--from-line <N>] [--aggregate] [--strict]
+//                                      [--json] [--help]
 //
 // With --aggregate the reader emits one corpus-level cross-career summary instead of the per-career
 // report: what actions and trainings the bot chose across careers, broken down by scenario, plus trace
@@ -41,13 +42,16 @@
 
 import { createReadStream, existsSync, statSync } from "node:fs"
 import { createInterface } from "node:readline"
-import { createDecisionAnalyzer, renderReport, renderAggregateReport } from "../src/lib/decisionAnalysis.ts"
+import { createDecisionAnalyzer, renderReport, renderAggregateReport, renderCareerStateJoin } from "../src/lib/decisionAnalysis.ts"
 
 const HELP = `analyze-decisions - DecisionTrace v1 corpus reader (read-only)
 
 Options:
   --decisions <path>      Path to decisions.jsonl (required).
   --careers <path>        Path to careers.jsonl, to join each career to its career_finalize row.
+  --career-state <path>   Path to career_state.jsonl, to join each trace to its CareerState snapshot on
+                          careerToken+seq. Adds a coverage report; missing joins are benign, only duplicate
+                          composite keys and malformed state records fail.
   --career-token <token>  Analyze only records whose careerToken equals this value.
   --since <epochMs>       Analyze only records with ts >= this epoch-millis boundary.
   --from-line <N>         Analyze only decisions lines with 1-based number >= N (isolate a new run).
@@ -62,7 +66,7 @@ Options:
 Exit: 0 clean | 1 warnings | 2 parse/schema failure | 3 consistency failure (worst wins).`
 
 function parseArgs(argv) {
-    const opts = { decisions: null, careers: null, careerToken: undefined, since: undefined, fromLine: undefined, aggregate: false, strict: false, json: false, help: false }
+    const opts = { decisions: null, careers: null, careerState: null, careerToken: undefined, since: undefined, fromLine: undefined, aggregate: false, strict: false, json: false, help: false }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
         const next = () => {
@@ -76,6 +80,9 @@ function parseArgs(argv) {
                 break
             case "--careers":
                 opts.careers = next()
+                break
+            case "--career-state":
+                opts.careerState = next()
                 break
             case "--career-token":
                 opts.careerToken = next()
@@ -141,7 +148,7 @@ async function main(argv) {
         console.error(HELP)
         return 2
     }
-    for (const [label, path] of [["--decisions", opts.decisions], ["--careers", opts.careers]]) {
+    for (const [label, path] of [["--decisions", opts.decisions], ["--careers", opts.careers], ["--career-state", opts.careerState]]) {
         if (path && (!existsSync(path) || !statSync(path).isFile())) {
             console.error(`${label} path is not a readable file: ${path}`)
             return 2
@@ -154,12 +161,18 @@ async function main(argv) {
         fromLine: opts.fromLine,
         strict: opts.strict,
         aggregate: opts.aggregate,
+        careerState: opts.careerState != null,
     })
 
     // Join index first, so every decision record can be joined as it streams in.
     if (opts.careers) {
         await feedFile(opts.careers, (line, n) => analyzer.ingestCareerLine(line, n))
         analyzer.noteCareerFile()
+    }
+    // Career_state index (token+seq); order relative to decisions does not matter for a keyed index.
+    if (opts.careerState) {
+        await feedFile(opts.careerState, (line, n) => analyzer.ingestCareerStateLine(line, n))
+        analyzer.noteCareerStateFile()
     }
 
     let stopped = false
@@ -176,6 +189,8 @@ async function main(argv) {
             console.log(JSON.stringify(result.aggregate, null, 2))
         } else {
             console.log(renderAggregateReport(result.aggregate))
+            // renderAggregateReport does not carry the join; append it so aggregate + --career-state still shows coverage.
+            if (result.join) console.log("\n" + renderCareerStateJoin(result.join))
         }
     } else if (opts.json) {
         console.log(JSON.stringify(result, null, 2))

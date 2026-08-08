@@ -1,4 +1,6 @@
 import {
+    CAREER_STATE_SCHEMA,
+    CAREER_STATE_SCHEMA_VERSION,
     createDecisionAnalyzer,
     DECISION_SCHEMA,
     DECISION_SCHEMA_VERSION,
@@ -6,6 +8,7 @@ import {
     EXIT_CONSISTENCY,
     EXIT_PARSE_OR_SCHEMA,
     EXIT_WARNINGS,
+    parseCareerStateLine,
     parseDecisionLine,
     renderReport,
 } from "../decisionAnalysis"
@@ -548,3 +551,188 @@ describe("cross-career aggregate", () => {
         expect(a.careers[0].scenario).toBe("Unity Cup") // decision-side, unchanged
     })
 })
+
+describe("career_state join", () => {
+    const token = "Biwa Hayahide|Trackblazer|run0|3f9a1c22"
+
+    // A career_state v1 record shaped exactly as CareerStateSerializer.buildRecord emits it (join key = identity.careerToken + top-level seq).
+    function careerStateLine(overrides: Record<string, unknown> = {}): string {
+        const base: Record<string, unknown> = {
+            type: CAREER_STATE_SCHEMA,
+            v: CAREER_STATE_SCHEMA_VERSION,
+            ts: 1784213172197,
+            seq: 5,
+            identity: { careerToken: token, scenario: "Trackblazer", trainee: "Biwa Hayahide", preset: "Biwa Hayahide", queueRun: 0, fp: "1e681a57e1" },
+            turn: 9,
+            year: "CLASSIC",
+            month: "JANUARY",
+            phase: "EARLY",
+            observation: { turnObserved: true },
+            condition: { energy: 62, mood: "GOOD", negativeStatuses: ["Headache"] },
+            stats: { spd: 412, sta: 300, pwr: 288, grt: 190, wit: 260 },
+            skillPts: 340,
+            race: { mandatory: false, scheduled: false, goalRibbon: false },
+            provenance: { identityInputs: "configured", date: "observed" },
+        }
+        return JSON.stringify({ ...base, ...overrides })
+    }
+
+    /** Feed decision lines, career_state lines, and optional careers lines through a career-state-enabled analyzer. */
+    function joinAnalyze(decisionLines: string[], stateLines: string[], careerLines: string[] = [], options = {}): AnalysisResult {
+        const analyzer = createDecisionAnalyzer({ careerState: true, ...options })
+        careerLines.forEach((line, i) => analyzer.ingestCareerLine(line, i + 1))
+        if (careerLines.length > 0) analyzer.noteCareerFile()
+        stateLines.forEach((line, i) => analyzer.ingestCareerStateLine(line, i + 1))
+        analyzer.noteCareerStateFile()
+        decisionLines.forEach((line, i) => analyzer.ingestDecisionLine(line, i + 1))
+        analyzer.noteDecisionFile()
+        return analyzer.finish()
+    }
+
+    describe("parseCareerStateLine", () => {
+        test("a valid record parses and exposes only the join key + turnObserved", () => {
+            const parsed = parseCareerStateLine(careerStateLine(), 1)
+            expect(parsed.kind).toBe("record")
+            if (parsed.kind === "record") {
+                expect(parsed.careerToken).toBe(token)
+                expect(parsed.seq).toBe(5)
+                expect(parsed.turnObserved).toBe(true)
+            }
+        })
+
+        test("blank lines are ignored, not failed", () => {
+            expect(parseCareerStateLine("", 1).kind).toBe("blank")
+            expect(parseCareerStateLine("  \t ", 2).kind).toBe("blank")
+        })
+
+        test("the wrong record type is reported, not reinterpreted", () => {
+            expect(parseCareerStateLine(careerStateLine({ type: "decision_trace" }), 1).kind).toBe("wrongType")
+        })
+
+        test("an unsupported version is reported", () => {
+            const parsed = parseCareerStateLine(careerStateLine({ v: 2 }), 1)
+            expect(parsed.kind).toBe("unsupportedVersion")
+            if (parsed.kind === "unsupportedVersion") expect(parsed.version).toBe(2)
+        })
+
+        test("a bad ts is a malformed envelope", () => {
+            const parsed = parseCareerStateLine(careerStateLine({ ts: "nope" }), 1)
+            expect(parsed.kind).toBe("malformedEnvelope")
+            if (parsed.kind === "malformedEnvelope") expect(parsed.missing).toContain("ts")
+        })
+
+        test("a missing identity.careerToken is a malformed envelope", () => {
+            const parsed = parseCareerStateLine(careerStateLine({ identity: { scenario: "Trackblazer" } }), 1)
+            expect(parsed.kind).toBe("malformedEnvelope")
+            if (parsed.kind === "malformedEnvelope") expect(parsed.missing).toContain("identity.careerToken")
+        })
+
+        test("a non-positive or non-integer seq is a malformed envelope", () => {
+            for (const bad of [0, -3, 2.5, "5", null]) {
+                const parsed = parseCareerStateLine(careerStateLine({ seq: bad }), 1)
+                expect(parsed.kind).toBe("malformedEnvelope")
+                if (parsed.kind === "malformedEnvelope") expect(parsed.missing).toContain("seq")
+            }
+        })
+
+        test("malformed JSON is a parse error", () => {
+            expect(parseCareerStateLine("{not json", 1).kind).toBe("parseError")
+            expect(parseCareerStateLine("[1,2]", 1).kind).toBe("parseError")
+        })
+    })
+
+    test("2. a trace with seq joins its matching career_state on (careerToken, seq)", () => {
+        const result = joinAnalyze([traceLine({ turn: 9, seq: 5 })], [careerStateLine({ seq: 5 })])
+        expect(result.join).toBeDefined()
+        const j = result.join!
+        expect(j.joinedPairCount).toBe(1)
+        expect(j.stateWithoutTrace).toBe(0)
+        expect(j.traceWithoutState).toBe(0)
+        expect(j.sequencedTraceCount).toBe(1)
+        expect(j.stateRecordCount).toBe(1)
+        expect(result.exitCode).toBe(EXIT_CLEAN)
+    })
+
+    test("3. a career_state with no matching trace is a benign coverage gap, not an error", () => {
+        const result = joinAnalyze([traceLine({ turn: 9, seq: 5 })], [careerStateLine({ seq: 5 }), careerStateLine({ seq: 6 })])
+        const j = result.join!
+        expect(j.stateWithoutTrace).toBe(1) // seq 6 has no trace
+        expect(j.joinedPairCount).toBe(1)
+        expect(result.exitCode).not.toBe(EXIT_PARSE_OR_SCHEMA)
+        expect(result.exitCode).not.toBe(EXIT_CONSISTENCY)
+    })
+
+    test("4. a trace with a seq but no matching state is a benign coverage gap", () => {
+        const result = joinAnalyze([traceLine({ turn: 9, seq: 5 }), traceLine({ turn: 10, seq: 6 })], [careerStateLine({ seq: 5 })])
+        const j = result.join!
+        expect(j.traceWithoutState).toBe(1) // trace seq 6 has no state
+        expect(j.joinedPairCount).toBe(1)
+        expect(result.exitCode).not.toBe(EXIT_PARSE_OR_SCHEMA)
+        expect(result.exitCode).not.toBe(EXIT_CONSISTENCY)
+    })
+
+    test("5. a duplicate (careerToken, seq) among career_state records is a consistency failure (exit 3)", () => {
+        const result = joinAnalyze([traceLine({ turn: 9, seq: 5 })], [careerStateLine({ seq: 5 }), careerStateLine({ seq: 5 })])
+        expect(result.join!.stateDuplicateKeys).toEqual([{ careerToken: token, seq: 5 }])
+        expect(result.exitCode).toBe(EXIT_CONSISTENCY)
+    })
+
+    test("5b. a duplicate (careerToken, seq) among sequenced traces is a consistency failure (exit 3)", () => {
+        const result = joinAnalyze([traceLine({ turn: 9, seq: 5 }), traceLine({ turn: 9, seq: 5 })], [careerStateLine({ seq: 5 })])
+        expect(result.join!.traceDuplicateKeys).toEqual([{ careerToken: token, seq: 5 }])
+        expect(result.exitCode).toBe(EXIT_CONSISTENCY)
+    })
+
+    test("6. an old trace without seq is counted unsequenced and stays valid", () => {
+        const result = joinAnalyze([traceLine({ turn: 9, seq: undefined }), traceLine({ turn: 10, seq: 6 })], [careerStateLine({ seq: 6 })])
+        const j = result.join!
+        expect(j.unsequencedTraceCount).toBe(1)
+        expect(j.sequencedTraceCount).toBe(1)
+        expect(j.joinedPairCount).toBe(1)
+        expect(result.parseErrors).toHaveLength(0)
+        expect(result.schemaFailures).toHaveLength(0)
+    })
+
+    test("6b. a malformed career_state record surfaces as a parse/schema failure (exit 2), not a join gap", () => {
+        const result = joinAnalyze([traceLine({ turn: 9, seq: 5 })], [careerStateLine({ seq: 5 }), careerStateLine({ seq: -1 })])
+        expect(result.join!.stateParseSchemaFailures).toHaveLength(1)
+        expect(result.exitCode).toBe(EXIT_PARSE_OR_SCHEMA)
+    })
+
+    test("7. without the career-state option, output and exit code are unchanged and no join section appears", () => {
+        const lines = [traceLine({ turn: 1, seq: 1 }), traceLine({ turn: 2 }), traceLine({ turn: 3, seq: 3 })]
+        const withoutState = analyze(lines)
+        expect(withoutState.join).toBeUndefined()
+        expect(renderReport(withoutState)).not.toContain("Career-state join")
+
+        // A career-state-enabled run over the SAME decisions but with an empty state file must not change
+        // the exit code, the rendered decision sections, or add a join section to the plain analysis.
+        const plain = analyze(lines)
+        const enabled = joinAnalyze(lines, [])
+        expect(enabled.exitCode).toBe(plain.exitCode)
+        expect(renderReport(plain)).toBe(stripJoinSection(renderReport(enabled)))
+    })
+
+    test("8. two runs with career-state input produce identical join JSON", () => {
+        const decisions = [traceLine({ turn: 9, seq: 5 }), traceLine({ turn: 10, seq: 6 }), traceLine({ turn: 11, seq: 7 })]
+        const states = [careerStateLine({ seq: 5 }), careerStateLine({ seq: 6 }), careerStateLine({ seq: 8 })]
+        const first = JSON.stringify(joinAnalyze(decisions, states).join)
+        const second = JSON.stringify(joinAnalyze(decisions, states).join)
+        expect(first).toBe(second)
+    })
+
+    test("the join section renders with the benign-gap wording when a career-state input is present", () => {
+        const result = joinAnalyze([traceLine({ turn: 9, seq: 5 })], [careerStateLine({ seq: 5 })])
+        const rendered = renderReport(result)
+        expect(rendered).toContain("Career-state join (token+seq)")
+        expect(rendered).toContain("benign, not failures")
+    })
+})
+
+// Removes the additive career-state join section (and the blank line preceding it) so a join-enabled
+// render can be compared against the plain render of the same decisions.
+function stripJoinSection(rendered: string): string {
+    const idx = rendered.indexOf("## Career-state join")
+    if (idx < 0) return rendered
+    return rendered.slice(0, idx).replace(/\n+$/, "")
+}

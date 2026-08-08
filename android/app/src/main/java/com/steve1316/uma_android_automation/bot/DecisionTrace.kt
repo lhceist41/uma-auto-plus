@@ -87,6 +87,9 @@ object DecisionTrace {
      * @param preset Applied preset identity, or null/blank when no preset was applied.
      * @param careerToken The career identity token shared with the finalize records, or null.
      * @param queueRun Run queue index when a queue is driving this career, or null.
+     * @param seq This turn's per-career CareerState decision sequence, or null when no CareerState was
+     * built for the turn (release/non-debug, or a swallowed build). Additive and version-neutral: it
+     * is the offline join key to the separate `career_state` records and replaces no existing field.
      * @return The record, ready to append as one JSONL line.
      */
     @Suppress("LongParameterList")
@@ -100,11 +103,14 @@ object DecisionTrace {
         preset: String? = null,
         careerToken: String? = null,
         queueRun: Int? = null,
+        seq: Int? = null,
     ): JSONObject {
         val record = JSONObject()
         record.put("type", SCHEMA)
         record.put("v", SCHEMA_VERSION)
         record.put("ts", timestamp)
+        // Additive join key to the separate career_state stream; omitted when no CareerState was built.
+        seq?.let { record.put("seq", it) }
         app?.takeIf { it.isNotBlank() }?.let { record.put("app", it) }
         fp?.takeIf { it.isNotBlank() }?.let { record.put("fp", it) }
         scenario?.takeIf { it.isNotBlank() }?.let { record.put("scenario", it) }

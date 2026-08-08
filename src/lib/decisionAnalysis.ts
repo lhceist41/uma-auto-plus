@@ -28,6 +28,12 @@ export const DECISION_SCHEMA = "decision_trace"
 /** The only schema version this reader understands, matching `DecisionTrace.SCHEMA_VERSION`. */
 export const DECISION_SCHEMA_VERSION = 1
 
+/** Record type discriminator for the optional companion corpus, matching `CareerStateSerializer.SCHEMA`. */
+export const CAREER_STATE_SCHEMA = "career_state"
+
+/** The only career_state schema version this reader understands, matching `CareerStateSerializer.SCHEMA_VERSION`. */
+export const CAREER_STATE_SCHEMA_VERSION = 1
+
 // Exit codes. Higher = more serious; the CLI reports the worst category found (see `worstExit`).
 /** No parse errors, no schema failures, no consistency failures, no warnings. */
 export const EXIT_CLEAN = 0
@@ -55,6 +61,8 @@ export interface DecisionRecord {
     preset?: unknown
     careerToken?: unknown
     queueRun?: unknown
+    /** Optional monotonic per-career sequence stamped by the CareerState writer. Absent on old records and when no CareerState was built. */
+    seq?: unknown
     turn?: unknown
     year?: unknown
     month?: unknown
@@ -128,6 +136,62 @@ function excerpt(line: string, max = 120): string {
     return oneLine.length <= max ? oneLine : oneLine.slice(0, max) + "..."
 }
 
+/** The outcome of parsing one raw career_state JSONL line. Only the join-key fields are retained; the full state blob is never kept. */
+export type CareerStateLineParse =
+    | { kind: "blank"; lineNumber: number }
+    | { kind: "parseError"; lineNumber: number; message: string; excerpt: string; bytes: number }
+    | { kind: "wrongType"; lineNumber: number; type: unknown; bytes: number }
+    | { kind: "unsupportedVersion"; lineNumber: number; version: unknown; bytes: number }
+    | { kind: "malformedEnvelope"; lineNumber: number; missing: string[]; bytes: number }
+    | { kind: "record"; lineNumber: number; careerToken: string; seq: number; turnObserved: boolean; bytes: number }
+
+/** A positive integer is the only valid `seq`; the writer stamps it from a per-career counter that starts at 1. */
+function isPositiveInt(value: unknown): value is number {
+    return typeof value === "number" && Number.isInteger(value) && value > 0
+}
+
+/**
+ * Parses one raw career_state JSONL line into a typed outcome, mirroring `parseDecisionLine`'s taxonomy.
+ *
+ * A career_state record is only useful if it carries a join key, so a missing/invalid `identity.careerToken`
+ * or a non-positive-integer `seq` is a malformed envelope (parse/schema class), not a poor-observation turn.
+ * Every other field is legitimately omissible (the writer omits date/stats/etc. when unobserved), so absence
+ * is tolerated, never inferred away. Only the join key and the `turnObserved` flag are read out.
+ */
+export function parseCareerStateLine(rawLine: string, lineNumber: number): CareerStateLineParse {
+    const bytes = lineBytes(rawLine)
+    const trimmed = rawLine.trim()
+    if (trimmed.length === 0) return { kind: "blank", lineNumber }
+
+    let parsed: unknown
+    try {
+        parsed = JSON.parse(trimmed)
+    } catch (e) {
+        return { kind: "parseError", lineNumber, message: e instanceof Error ? e.message : String(e), excerpt: excerpt(trimmed), bytes }
+    }
+    if (!isObject(parsed)) {
+        return { kind: "parseError", lineNumber, message: "line is not a JSON object", excerpt: excerpt(trimmed), bytes }
+    }
+
+    const record = parsed
+    if (record.type !== CAREER_STATE_SCHEMA) {
+        return { kind: "wrongType", lineNumber, type: record.type, bytes }
+    }
+    if (record.v !== CAREER_STATE_SCHEMA_VERSION) {
+        return { kind: "unsupportedVersion", lineNumber, version: record.v, bytes }
+    }
+    const missing: string[] = []
+    if (typeof record.ts !== "number") missing.push("ts")
+    const identity = isObject(record.identity) ? record.identity : {}
+    const token = identity.careerToken
+    if (typeof token !== "string" || token.length === 0) missing.push("identity.careerToken")
+    if (!isPositiveInt(record.seq)) missing.push("seq")
+    if (missing.length > 0) return { kind: "malformedEnvelope", lineNumber, missing, bytes }
+
+    const observation = isObject(record.observation) ? record.observation : {}
+    return { kind: "record", lineNumber, careerToken: token as string, seq: record.seq as number, turnObserved: observation.turnObserved === true, bytes }
+}
+
 /** How a decision career's `careerToken` joined against the supplied `careers.jsonl` index. */
 export type JoinStatus = "none" | "one" | "multiple" | "no-careers-file"
 
@@ -190,6 +254,58 @@ export interface CareerReport {
     weakJoinSuggestion: string | null
 }
 
+/** A composite `(careerToken, seq)` join key, reported for duplicate-key diagnostics. */
+export interface CareerStateKeyRef {
+    careerToken: string
+    seq: number
+}
+
+/** Per-career slice of the career_state join, sorted by careerToken for determinism. Bounded (counts only). */
+export interface CareerStateJoinCareer {
+    careerToken: string
+    stateRecords: number
+    sequencedTraces: number
+    joinedPairs: number
+    stateWithoutTrace: number
+    traceWithoutState: number
+}
+
+/**
+ * The token+seq join between the decision-trace corpus and the optional career_state corpus.
+ * Present on `AnalysisResult` only when a career_state input was supplied. Missing joins
+ * (`stateWithoutTrace` / `traceWithoutState`) are coverage diagnostics, not failures: a state can be
+ * built on an unknown-date turn where the tracer never opened a window, and a trace can outlive a
+ * swallowed CareerState build. Only duplicate composite keys (impossible for the writer to produce)
+ * and malformed state records are hard errors.
+ */
+export interface CareerStateJoin {
+    careerStateFilesRead: number
+    stateRecordCount: number
+    /** State records whose own `observation.turnObserved` was true. Informational. */
+    stateTurnObservedCount: number
+    /** Every analyzed decision record (== sequencedTraces + unsequencedTraces). */
+    traceRecordCount: number
+    /** Decision records carrying both a careerToken and a valid positive-int `seq` (join-eligible). */
+    sequencedTraceCount: number
+    /** Decision records with no usable join key (no `seq`, or seq present but no careerToken). Old records land here. */
+    unsequencedTraceCount: number
+    /** Distinct `(careerToken, seq)` pairs present in BOTH corpora. */
+    joinedPairCount: number
+    /** Distinct state pairs with no matching trace. Benign coverage gap, not a failure. */
+    stateWithoutTrace: number
+    /** Distinct sequenced-trace pairs with no matching state. Benign coverage gap, not a failure. */
+    traceWithoutState: number
+    /** Repeated `(careerToken, seq)` among state records. A hard consistency failure (exit 3). */
+    stateDuplicateKeys: CareerStateKeyRef[]
+    /** Repeated `(careerToken, seq)` among sequenced traces. A hard consistency failure (exit 3). */
+    traceDuplicateKeys: CareerStateKeyRef[]
+    /** Career_state lines that failed to parse or carried the wrong type/version/envelope (exit 2). */
+    stateParseSchemaFailures: LineFailure[]
+    /** Career_state blank lines (ignored, never failed). */
+    stateBlankLines: number
+    perCareer: CareerStateJoinCareer[]
+}
+
 /** The full analysis result. */
 export interface AnalysisResult {
     decisionFilesRead: number
@@ -213,6 +329,8 @@ export interface AnalysisResult {
     exitCode: number
     /** The cross-career aggregate, present only when the analyzer ran in aggregate mode. Additive: absent in the default single-career result. */
     aggregate?: AggregateResult
+    /** The token+seq career_state join, present only when a career_state input was supplied. Additive: absent otherwise, so default output is unchanged. */
+    join?: CareerStateJoin
 }
 
 /** Options controlling which records are analyzed and how failures are treated. */
@@ -227,6 +345,8 @@ export interface AnalyzerOptions {
     strict?: boolean
     /** Compute the corpus-level cross-career aggregate (attached to `AnalysisResult.aggregate`). Off by default; the single-career report is unchanged either way. */
     aggregate?: boolean
+    /** True when a career_state input is supplied; enables token+seq join tracking and the join report. Off by default; output is byte-identical when off. */
+    careerState?: boolean
 }
 
 interface CareerAccumulator {
@@ -297,10 +417,14 @@ export interface DecisionAnalyzer {
     ingestDecisionLine(rawLine: string, lineNumber: number): boolean
     /** Ingest one raw line from the careers corpus, to build the join index. */
     ingestCareerLine(rawLine: string, lineNumber: number): void
+    /** Ingest one raw line from the optional career_state corpus, to build the token+seq join index. */
+    ingestCareerStateLine(rawLine: string, lineNumber: number): void
     /** Mark that a decisions file was fully read (for the file count). */
     noteDecisionFile(): void
     /** Mark that a careers file was fully read. */
     noteCareerFile(): void
+    /** Mark that a career_state file was fully read. */
+    noteCareerStateFile(): void
     finish(): AnalysisResult
 }
 
@@ -316,6 +440,20 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
     // Aggregate-only: careerToken -> compact career_finalize field values, for the outcome section. Populated only in aggregate mode.
     const finalizeByToken = new Map<string, FinalizeSummary[]>()
     const collectAggregate = options.aggregate === true
+    // Career_state join (opt-in): only tracked/reported when a career_state input is supplied, so default output is byte-identical.
+    const collectJoin = options.careerState === true
+    // Bounded join index: careerToken -> (seq -> count). Stores only the join key + a count, never the state blob.
+    const stateByToken = new Map<string, Map<number, number>>()
+    const traceSeqByToken = new Map<string, Map<number, number>>()
+    const stateDuplicateKeys: CareerStateKeyRef[] = []
+    const traceDuplicateKeys: CareerStateKeyRef[] = []
+    const stateParseSchemaFailures: LineFailure[] = []
+    let stateRecordCount = 0
+    let stateTurnObservedCount = 0
+    let stateBlankLines = 0
+    let sequencedTraceCount = 0
+    let unsequencedTraceCount = 0
+    let careerStateFilesRead = 0
     // Aggregate-only: a few representative turn references per observation flag that was not a confirmed read, bounded so the analyzer stays streaming.
     const UNOBSERVED_EXAMPLE_CAP = 8
     const unobservedExamples: Record<"turn" | "stats" | "skillPoints" | "aptitudes", UnobservedRef[]> = { turn: [], stats: [], skillPoints: [], aptitudes: [] }
@@ -469,6 +607,26 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
             if (obs.skillPointsObserved !== true) pushUnobserved("skillPoints", token, turnRef)
             if (obs.aptitudesObserved !== true) pushUnobserved("aptitudes", token, turnRef)
         }
+
+        // Career_state join: index this trace by (careerToken, seq) when both are present. A record is
+        // join-eligible only with a token AND a valid positive-int seq; anything else is unsequenced
+        // (old records carry no seq, and a seq without a token cannot form a join key). Never infer seq from turn.
+        if (collectJoin) {
+            if (token !== null && isPositiveInt(record.seq)) {
+                const seq = record.seq
+                sequencedTraceCount++
+                let m = traceSeqByToken.get(token)
+                if (!m) {
+                    m = new Map()
+                    traceSeqByToken.set(token, m)
+                }
+                const prev = m.get(seq) ?? 0
+                m.set(seq, prev + 1)
+                if (prev >= 1) traceDuplicateKeys.push({ careerToken: token, seq })
+            } else {
+                unsequencedTraceCount++
+            }
+        }
     }
 
     function ingestDecisionLine(rawLine: string, lineNumber: number): boolean {
@@ -544,6 +702,95 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
         }
     }
 
+    function ingestCareerStateLine(rawLine: string, lineNumber: number): void {
+        const parsed = parseCareerStateLine(rawLine, lineNumber)
+        switch (parsed.kind) {
+            case "blank":
+                stateBlankLines++
+                return
+            case "parseError":
+                stateParseSchemaFailures.push({ lineNumber, detail: `${parsed.message} :: ${parsed.excerpt}` })
+                return
+            case "wrongType":
+                stateParseSchemaFailures.push({ lineNumber, detail: `unexpected type ${JSON.stringify(parsed.type)} (expected "${CAREER_STATE_SCHEMA}")` })
+                return
+            case "unsupportedVersion":
+                stateParseSchemaFailures.push({ lineNumber, detail: `unsupported schema version ${JSON.stringify(parsed.version)} (this reader understands v${CAREER_STATE_SCHEMA_VERSION})` })
+                return
+            case "malformedEnvelope":
+                stateParseSchemaFailures.push({ lineNumber, detail: `missing/invalid required field(s): ${parsed.missing.join(", ")}` })
+                return
+            case "record": {
+                stateRecordCount++
+                if (parsed.turnObserved) stateTurnObservedCount++
+                let m = stateByToken.get(parsed.careerToken)
+                if (!m) {
+                    m = new Map()
+                    stateByToken.set(parsed.careerToken, m)
+                }
+                const prev = m.get(parsed.seq) ?? 0
+                m.set(parsed.seq, prev + 1)
+                // A duplicate composite key is impossible for the writer to legitimately produce (seq is per-career monotonic).
+                if (prev >= 1) stateDuplicateKeys.push({ careerToken: parsed.careerToken, seq: parsed.seq })
+                return
+            }
+        }
+    }
+
+    /** Builds the token+seq join report from the two bounded indexes. Deterministic (keys sorted). Only called when collectJoin. */
+    function buildJoin(): CareerStateJoin {
+        let joinedPairCount = 0
+        let stateWithoutTrace = 0
+        let traceWithoutState = 0
+        const tokens = new Set<string>([...stateByToken.keys(), ...traceSeqByToken.keys()])
+        const perCareer: CareerStateJoinCareer[] = []
+        for (const token of [...tokens].sort(cmpStr)) {
+            const stateMap = stateByToken.get(token)
+            const traceMap = traceSeqByToken.get(token)
+            let joined = 0
+            let sWithout = 0
+            let tWithout = 0
+            if (stateMap) {
+                for (const seq of stateMap.keys()) {
+                    if (traceMap && traceMap.has(seq)) joined++
+                    else sWithout++
+                }
+            }
+            if (traceMap) {
+                for (const seq of traceMap.keys()) {
+                    if (!(stateMap && stateMap.has(seq))) tWithout++
+                }
+            }
+            joinedPairCount += joined
+            stateWithoutTrace += sWithout
+            traceWithoutState += tWithout
+            perCareer.push({
+                careerToken: token,
+                stateRecords: stateMap ? sumMapValues(stateMap) : 0,
+                sequencedTraces: traceMap ? sumMapValues(traceMap) : 0,
+                joinedPairs: joined,
+                stateWithoutTrace: sWithout,
+                traceWithoutState: tWithout,
+            })
+        }
+        return {
+            careerStateFilesRead,
+            stateRecordCount,
+            stateTurnObservedCount,
+            traceRecordCount: sequencedTraceCount + unsequencedTraceCount,
+            sequencedTraceCount,
+            unsequencedTraceCount,
+            joinedPairCount,
+            stateWithoutTrace,
+            traceWithoutState,
+            stateDuplicateKeys: [...stateDuplicateKeys].sort(cmpKeyRef),
+            traceDuplicateKeys: [...traceDuplicateKeys].sort(cmpKeyRef),
+            stateParseSchemaFailures,
+            stateBlankLines,
+            perCareer,
+        }
+    }
+
     function finish(): AnalysisResult {
         const reports: CareerReport[] = []
         let unkeyed: CareerReport | null = null
@@ -579,10 +826,18 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
         reports.sort((a, b) => (a.firstTs ?? 0) - (b.firstTs ?? 0))
         keyedPairs.sort((a, b) => (a.report.firstTs ?? 0) - (b.report.firstTs ?? 0))
 
+        // Career_state join: computed only when a career_state input was supplied. Missing joins are benign
+        // (no exit bump); duplicate composite keys are exit 3, malformed state records are exit 2.
+        const join = collectJoin ? buildJoin() : undefined
+
         let exitCode = EXIT_CLEAN
         if (warningCount > 0) exitCode = worstExit(exitCode, EXIT_WARNINGS)
         if (parseErrors.length > 0 || schemaFailures.length > 0) exitCode = worstExit(exitCode, EXIT_PARSE_OR_SCHEMA)
         if (consistencyFailureCount > 0) exitCode = worstExit(exitCode, EXIT_CONSISTENCY)
+        if (join) {
+            if (join.stateParseSchemaFailures.length > 0) exitCode = worstExit(exitCode, EXIT_PARSE_OR_SCHEMA)
+            if (join.stateDuplicateKeys.length > 0 || join.traceDuplicateKeys.length > 0) exitCode = worstExit(exitCode, EXIT_CONSISTENCY)
+        }
 
         const result: AnalysisResult = {
             decisionFilesRead,
@@ -615,17 +870,22 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
                 unobservedExamples,
             })
         }
+        if (join) result.join = join
         return result
     }
 
     return {
         ingestDecisionLine,
         ingestCareerLine,
+        ingestCareerStateLine,
         noteDecisionFile() {
             decisionFilesRead++
         },
         noteCareerFile() {
             careerFilesRead++
+        },
+        noteCareerStateFile() {
+            careerStateFilesRead++
         },
         finish,
     }
@@ -831,7 +1091,53 @@ export function renderReport(result: AnalysisResult): string {
             }
         }
     }
+
+    // Additive career_state join section, present only when a career_state input was supplied.
+    if (result.join) {
+        push()
+        push(renderCareerStateJoin(result.join))
+    }
     return lines.join("\n")
+}
+
+/**
+ * Renders the token+seq career_state join as a deterministic section. `stateWithoutTrace` /
+ * `traceWithoutState` are labeled as coverage diagnostics, not failures. Only duplicate composite
+ * keys and malformed state records are flagged as errors here.
+ */
+export function renderCareerStateJoin(join: CareerStateJoin): string {
+    const lines: string[] = []
+    const push = (s = "") => lines.push(s)
+    push(`## Career-state join (token+seq)`)
+    push(`- career_state records: ${join.stateRecordCount} (turnObserved: ${join.stateTurnObservedCount}) from ${join.careerStateFilesRead} file(s), ${join.stateBlankLines} blank`)
+    push(`- decision traces: ${join.traceRecordCount} (sequenced: ${join.sequencedTraceCount}, unsequenced: ${join.unsequencedTraceCount})`)
+    push(`- joined (token,seq) pairs: ${join.joinedPairCount}`)
+    push(`- coverage gaps (benign, not failures): state without trace ${join.stateWithoutTrace}, trace without state ${join.traceWithoutState}`)
+    if (join.stateParseSchemaFailures.length > 0) {
+        push(`- PARSE/SCHEMA FAILURE career_state line(s):`)
+        for (const f of join.stateParseSchemaFailures.slice(0, 20)) push(`  - line ${f.lineNumber}: ${f.detail}`)
+        if (join.stateParseSchemaFailures.length > 20) push(`  - ... and ${join.stateParseSchemaFailures.length - 20} more`)
+    }
+    if (join.stateDuplicateKeys.length > 0) {
+        push(`- CONSISTENCY FAILURE duplicate (careerToken, seq) among career_state records: ${fmtKeyRefs(join.stateDuplicateKeys)}`)
+    }
+    if (join.traceDuplicateKeys.length > 0) {
+        push(`- CONSISTENCY FAILURE duplicate (careerToken, seq) among sequenced traces: ${fmtKeyRefs(join.traceDuplicateKeys)}`)
+    }
+    if (join.stateParseSchemaFailures.length === 0 && join.stateDuplicateKeys.length === 0 && join.traceDuplicateKeys.length === 0) {
+        push(`- integrity: OK (no duplicate composite keys, no malformed career_state records)`)
+    }
+    for (const p of join.perCareer) {
+        push(`### ${p.careerToken}`)
+        push(`- state ${p.stateRecords}, sequenced traces ${p.sequencedTraces}, joined ${p.joinedPairs}, state-without-trace ${p.stateWithoutTrace}, trace-without-state ${p.traceWithoutState}`)
+    }
+    return lines.join("\n")
+}
+
+/** Compact display of composite keys for a diagnostic line, bounded so a large list never floods the report. */
+function fmtKeyRefs(refs: CareerStateKeyRef[]): string {
+    const shown = refs.slice(0, 12).map((r) => `${r.careerToken}#${r.seq}`)
+    return refs.length <= 12 ? shown.join(", ") : `${shown.join(", ")}, ... (+${refs.length - 12})`
 }
 
 function exitLabel(code: number): string {
@@ -1382,6 +1688,18 @@ function distribution(
 
 function cmpStr(a: string, b: string): number {
     return a < b ? -1 : a > b ? 1 : 0
+}
+
+/** Total of a `seq -> count` map's values, for the per-career state/trace record counts. */
+function sumMapValues(m: Map<number, number>): number {
+    let t = 0
+    for (const v of m.values()) t += v
+    return t
+}
+
+/** Deterministic order for composite-key diagnostics: careerToken, then seq. */
+function cmpKeyRef(a: CareerStateKeyRef, b: CareerStateKeyRef): number {
+    return cmpStr(a.careerToken, b.careerToken) || a.seq - b.seq
 }
 
 function sum(nums: number[]): number {
