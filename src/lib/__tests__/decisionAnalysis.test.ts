@@ -729,6 +729,54 @@ describe("career_state join", () => {
     })
 })
 
+describe("enteredRace additive-field compatibility", () => {
+    // A RACE trace whose committed action is present in its candidates, so it is consistent on its own.
+    const raceOverrides = {
+        candidates: [{ type: "action", id: "RACE", selected: true, reason: "mandatory race" }],
+        selected: { action: "RACE", reason: "mandatory race", source: "action_choice" },
+    }
+
+    test("a v1 record carrying enteredRace still parses as a record", () => {
+        const line = traceLine({
+            ...raceOverrides,
+            enteredRace: { turnNumber: 34, resolution: "exact", path: "mandatoryGoal", name: "Tokyo Yushun (Japanese Derby)" },
+        })
+        expect(parseDecisionLine(line, 1).kind).toBe("record")
+    })
+
+    test("a corpus mixing enteredRace, old, and seq-less records analyzes clean at v1", () => {
+        // A pre-enteredRace, pre-seq record: neither field present. Must remain valid (additive fields).
+        // Kept first so turns stay monotonic (an out-of-order turn is a benign warning unrelated to this field).
+        const legacy = traceLine({ turn: 1 })
+        const withEntered = traceLine({
+            turn: 34,
+            ...raceOverrides,
+            enteredRace: { turnNumber: 34, resolution: "ambiguousSet", path: "scheduled", matchCount: 2 },
+        })
+        const nonCatalog = traceLine({
+            turn: 60,
+            ...raceOverrides,
+            enteredRace: { turnNumber: 60, resolution: "nonCatalog", path: "unityCupShowdown" },
+        })
+        const result = analyze([legacy, withEntered, nonCatalog])
+        expect(result.decisionRecordCount).toBe(3)
+        expect(result.parseErrors).toHaveLength(0)
+        expect(result.schemaFailures).toHaveLength(0)
+        expect(result.consistencyFailureCount).toBe(0)
+        expect(result.exitCode).toBe(EXIT_CLEAN)
+    })
+
+    test("an unknown future enteredRace sub-field is tolerated, not rejected", () => {
+        // The reader ignores fields it does not know; a Phase-2 addition inside enteredRace must not
+        // retroactively fail Phase-1 corpora.
+        const line = traceLine({
+            ...raceOverrides,
+            enteredRace: { turnNumber: 5, resolution: "exact", path: "smart", name: "Osaka Hai", futureField: 7 },
+        })
+        expect(parseDecisionLine(line, 1).kind).toBe("record")
+    })
+})
+
 // Removes the additive career-state join section (and the blank line preceding it) so a join-enabled
 // render can be compared against the plain render of the same decisions.
 function stripJoinSection(rendered: string): string {

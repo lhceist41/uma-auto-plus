@@ -358,4 +358,83 @@ class DecisionTraceTest {
         assertEquals(1, secondTurn.size, secondTurn.toString())
         assertFalse(secondTurn.single().contains("Failed to record the decision trace"), secondTurn.toString())
     }
+
+    @Test
+    @DisplayName("an exact entered-race fact serializes with its name and no matchCount")
+    fun `entered race exact serializes`() {
+        val json =
+            DecisionTrace.buildRecord(
+                timestamp = 1L,
+                evidence = representativeTurn().turnEvidence(),
+                enteredRace = EnteredRace(34, EnteredRaceResolution.EXACT, EnteredRacePath.MANDATORY_GOAL, name = "Tokyo Yushun (Japanese Derby)"),
+            )
+        val entered = json.getJSONObject("enteredRace")
+        assertEquals(34, entered.getInt("turnNumber"))
+        assertEquals("exact", entered.getString("resolution"))
+        assertEquals("mandatoryGoal", entered.getString("path"))
+        assertEquals("Tokyo Yushun (Japanese Derby)", entered.getString("name"))
+        // matchCount is omitted for a single exact match, not written as null or 1.
+        assertFalse(entered.has("matchCount"))
+        // Round-trips byte-identically (insertion order stable).
+        assertEquals(json.toString(), JSONObject(json.toString()).toString())
+    }
+
+    @Test
+    @DisplayName("an ambiguous set carries matchCount and no name")
+    fun `entered race ambiguous omits name`() {
+        val json =
+            DecisionTrace.buildRecord(
+                timestamp = 1L,
+                evidence = representativeTurn().turnEvidence(),
+                enteredRace = EnteredRace(55, EnteredRaceResolution.AMBIGUOUS_SET, EnteredRacePath.SCHEDULED, matchCount = 2),
+            )
+        val entered = json.getJSONObject("enteredRace")
+        assertEquals("ambiguousSet", entered.getString("resolution"))
+        assertEquals(2, entered.getInt("matchCount"))
+        // No fabricated name for an unresolved-among-many set.
+        assertFalse(entered.has("name"))
+    }
+
+    @Test
+    @DisplayName("unresolved and non-catalog facts never carry a name")
+    fun `entered race nameless resolutions`() {
+        val standard =
+            DecisionTrace
+                .buildRecord(timestamp = 1L, evidence = representativeTurn().turnEvidence(), enteredRace = EnteredRace(40, EnteredRaceResolution.UNRESOLVED, EnteredRacePath.STANDARD))
+                .getJSONObject("enteredRace")
+        assertEquals("unresolved", standard.getString("resolution"))
+        assertEquals("standard", standard.getString("path"))
+        assertFalse(standard.has("name"))
+        assertFalse(standard.has("matchCount"))
+
+        val showdown =
+            DecisionTrace
+                .buildRecord(timestamp = 1L, evidence = representativeTurn().turnEvidence(), enteredRace = EnteredRace(60, EnteredRaceResolution.NON_CATALOG, EnteredRacePath.UNITY_CUP_SHOWDOWN))
+                .getJSONObject("enteredRace")
+        assertEquals("nonCatalog", showdown.getString("resolution"))
+        assertEquals("unityCupShowdown", showdown.getString("path"))
+        assertFalse(showdown.has("name"))
+    }
+
+    @Test
+    @DisplayName("a turn with no completed race omits enteredRace entirely")
+    fun `entered race omitted when absent`() {
+        // A representative (TRAIN) turn built without an enteredRace argument, and an empty turn.
+        assertFalse(record(representativeTurn()).has("enteredRace"))
+        assertFalse(DecisionTrace.buildRecord(timestamp = 1L, evidence = DecisionTracer().turnEvidence()).has("enteredRace"))
+    }
+
+    @Test
+    @DisplayName("the entered-race turn is exactly the one supplied, never a same-name race's other turn")
+    fun `entered race turn is collision-safe`() {
+        // Admire Vega's Arima Kinen recurs at turns 48 and 72 (same bare name, distinct turns). A fact
+        // recorded for the turn-48 entry must serialize 48 even though the name also exists at turn 72:
+        // the writer sources the turn from the current turn, never a bare-name-map RaceData.turnNumber.
+        val entered =
+            DecisionTrace
+                .buildRecord(timestamp = 1L, evidence = representativeTurn().turnEvidence(), enteredRace = EnteredRace(48, EnteredRaceResolution.EXACT, EnteredRacePath.SMART, name = "Arima Kinen"))
+                .getJSONObject("enteredRace")
+        assertEquals(48, entered.getInt("turnNumber"))
+        assertEquals("Arima Kinen", entered.getString("name"))
+    }
 }

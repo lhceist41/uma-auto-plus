@@ -5,6 +5,9 @@ import android.util.Log
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.bot.DialogHandlerResult
+import com.steve1316.uma_android_automation.bot.EnteredRace
+import com.steve1316.uma_android_automation.bot.EnteredRacePath
+import com.steve1316.uma_android_automation.bot.EnteredRaceResolution
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.components.ButtonNext
 import com.steve1316.uma_android_automation.components.ButtonNextRaceEnd
@@ -140,7 +143,12 @@ class UnityCup(game: Game) : Campaign(game) {
         if (ButtonUnityCupRace.check(game.imageUtils)) {
             // Handle the Unity Cup race.
             MessageLog.i(TAG, "[UNITY_CUP] Will start the process for Unity Cup race handling.")
-            handleRaceEventsUnityCup()
+            // A showdown is not an ordinary catalog race. Record a non-catalog entered-race fact only
+            // when the showdown actually completed (the inner function returns true only at its natural
+            // completion exit; an abort/timeout returns false). The unconditional true below is unchanged.
+            if (handleRaceEventsUnityCup()) {
+                recordEnteredRace(EnteredRace(date.day, EnteredRaceResolution.NON_CATALOG, EnteredRacePath.UNITY_CUP_SHOWDOWN))
+            }
             return true
         }
 

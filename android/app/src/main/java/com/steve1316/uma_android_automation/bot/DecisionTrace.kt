@@ -90,6 +90,10 @@ object DecisionTrace {
      * @param seq This turn's per-career CareerState decision sequence, or null when no CareerState was
      * built for the turn (release/non-debug, or a swallowed build). Additive and version-neutral: it
      * is the offline join key to the separate `career_state` records and replaces no existing field.
+     * @param enteredRace The identity of a race that actually COMPLETED this turn, or null when no race
+     * completed (including a RACE decision whose race aborted). Additive and version-neutral: omitted
+     * entirely when null, so historical records without it stay valid. Only a RACE turn can carry it,
+     * because it is written only from a proven race-completion tail.
      * @return The record, ready to append as one JSONL line.
      */
     @Suppress("LongParameterList")
@@ -104,6 +108,7 @@ object DecisionTrace {
         careerToken: String? = null,
         queueRun: Int? = null,
         seq: Int? = null,
+        enteredRace: EnteredRace? = null,
     ): JSONObject {
         val record = JSONObject()
         record.put("type", SCHEMA)
@@ -145,8 +150,28 @@ object DecisionTrace {
         val notes = evidence.events.filterIsInstance<DecisionTracer.DecisionEvent.Note>().map { it.message }
         if (notes.isNotEmpty()) record.put("notes", JSONArray().apply { notes.forEach { put(it) } })
 
+        // Post-decision execution evidence: the race that actually completed this turn. Omitted when
+        // none did, so only a RACE turn ever carries it and old records stay valid without it.
+        enteredRace?.let { record.put("enteredRace", buildEnteredRace(it)) }
+
         return record
     }
+
+    /**
+     * Renders the completed-race identity fact.
+     *
+     * Deterministic field order (turnNumber, resolution, path, then the optional name/matchCount).
+     * Optional identity is OMITTED, never null-filled: an absent `name` means the runtime did not
+     * resolve a catalog name it could stand behind, and a fabricated one would mis-attribute the entry.
+     */
+    private fun buildEnteredRace(entered: EnteredRace): JSONObject =
+        JSONObject().apply {
+            put("turnNumber", entered.turnNumber)
+            put("resolution", entered.resolution.wire)
+            put("path", entered.path.wire)
+            entered.name?.takeIf { it.isNotBlank() }?.let { put("name", it) }
+            entered.matchCount?.let { put("matchCount", it) }
+        }
 
     /**
      * Renders the state the decision engine saw when the turn opened.

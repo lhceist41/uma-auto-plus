@@ -365,6 +365,9 @@ abstract class Campaign(game: Game) : Task(game) {
                 // The retained current-turn seq, joining this trace to its career_state record. Omitted
                 // (null) when no CareerState was built this turn. Not read from post-action latch state.
                 seq = careerStateSeq.current(),
+                // The race that actually completed this turn, or null when none did. Cleared before the
+                // decision, written only by a proven completion tail, so only a RACE turn carries it.
+                enteredRace = pendingEnteredRace.current(),
             )
         OutcomeCorpus.append(game.myContext, record, OutcomeCorpus.DECISIONS_PATH, DecisionTrace.MAX_FILE_BYTES)
     }
@@ -897,6 +900,29 @@ abstract class Campaign(game: Game) : Task(game) {
      * to this Campaign instance, so a fresh career/resume restarts at seq 1 under a new career token.
      */
     private val careerStateSeq = CareerStateDecisionSequence()
+
+    /**
+     * Per-turn holder for the pending entered-race identity fact ([EnteredRace]). Cleared at the start
+     * of each decision turn (before [decideNextAction]) and written only from a proven race-completion
+     * tail, so a completed-race fact never leaks into a turn that completed no race. Read once at
+     * trace-emit time by [appendDecisionTrace]. Scoped to this Campaign (one career).
+     */
+    private val pendingEnteredRace = PendingEnteredRace()
+
+    /**
+     * Record the identity of a race that just COMPLETED this turn, for the decision trace. Called from
+     * the race-completion tails ([Racing] and scenario overrides) only after both the race run and the
+     * results finalization succeeded for the same entry; a considered/planned/aborted race records
+     * nothing. A later completion in the same turn overwrites an earlier one (last-write-wins), which a
+     * scenario override uses to replace the base path's weaker identity with its own stronger one.
+     *
+     * Observability only: it stores one nullable reference and is read solely at trace-emit time, so it
+     * cannot reach any decision path. Present regardless of build, but only the debug-gated trace sink
+     * ever reads it.
+     */
+    fun recordEnteredRace(entry: EnteredRace) {
+        pendingEnteredRace.record(entry)
+    }
 
     /**
      * Rearm the CareerState build latch for a new main-screen decision turn. Invariant: every
@@ -3130,6 +3156,11 @@ abstract class Campaign(game: Game) : Task(game) {
                 Log.e(TAG, "[CAREER_STATE] shadow snapshot failed (ignored): ${e.message}")
             }
         }
+
+        // Start this decision turn with no held entered-race fact. Only a race that completes inside
+        // executeAction below may write one, and the trace emit right after reads it; clearing here
+        // ensures a completed-race fact from a prior turn can never attach to this turn's trace.
+        pendingEnteredRace.clear()
 
         // Decision-making process.
         val action = decideNextAction()

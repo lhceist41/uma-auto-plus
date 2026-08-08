@@ -228,6 +228,40 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Retries used on the current race. Shared by the button-based and dialog-based retry paths so both honor the per-race limit. */
     var retriesThisRace: Int = 0
 
+    /** Which tier resolved the LAST [lookupRaceInDatabase] call, so a caller can label entered-race telemetry
+     * `exact` vs `fuzzy` truthfully. Reset to NONE at each lookup entry; only meaningful when read
+     * immediately after a single lookup, before any intervening lookup runs. */
+    private var lastLookupTier: LookupTier = LookupTier.NONE
+
+    /** Result tier of a [lookupRaceInDatabase] call, for entered-race telemetry resolution labeling. */
+    private enum class LookupTier { NONE, EXACT, FUZZY }
+
+    /** The identity of the optional race the extra-race selection committed to this attempt, staged by
+     * [processSmartRacing] (or a scenario) and read at the extra-race completion tail. Null means the
+     * selection did not resolve a name (e.g. positional standard racing), yielding an `unresolved` fact.
+     * Cleared at the top of [handleExtraRace] so a prior attempt's target never carries over. */
+    private var stagedExtraRaceEntry: EnteredRace? = null
+
+    /**
+     * Builds an [EnteredRace] fact from a single turn-scoped [lookupRaceInDatabase] result, preserving
+     * resolution truthfully: `unresolved` when nothing matched, `fuzzy` from the fuzzy tier (named only
+     * when the fuzzy match was unique), `exact` for a single exact match, and `ambiguousSet` (with
+     * [EnteredRace.matchCount], no name) when several turn-scoped candidates matched. Never flattens an
+     * ambiguous set to the first row. Must be called immediately after the lookup, before another runs.
+     */
+    private fun enteredRaceFromLookup(path: EnteredRacePath, turn: Int, matches: List<RaceData>): EnteredRace =
+        when {
+            matches.isEmpty() -> EnteredRace(turn, EnteredRaceResolution.UNRESOLVED, path)
+            lastLookupTier == LookupTier.FUZZY ->
+                if (matches.size == 1) {
+                    EnteredRace(turn, EnteredRaceResolution.FUZZY, path, name = matches[0].name)
+                } else {
+                    EnteredRace(turn, EnteredRaceResolution.FUZZY, path, matchCount = matches.size)
+                }
+            matches.size == 1 -> EnteredRace(turn, EnteredRaceResolution.EXACT, path, name = matches[0].name)
+            else -> EnteredRace(turn, EnteredRaceResolution.AMBIGUOUS_SET, path, matchCount = matches.size)
+        }
+
     /** Whether to stop the bot when a mandatory race is detected. */
     internal val enableStopOnMandatoryRace: Boolean = SettingsHelper.getBooleanSetting("racing", "enableStopOnMandatoryRaces")
 
@@ -1901,6 +1935,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      * @return A list of [RaceData] objects matching the criteria, or an empty list if no matches found.
      */
     private fun lookupRaceInDatabase(turnNumber: Int, detectedName: String): ArrayList<RaceData> {
+        // Default to NONE; only the two found-returns below promote it to EXACT/FUZZY for telemetry.
+        lastLookupTier = LookupTier.NONE
         val settingsManager = SQLiteSettingsManager(game.myContext)
         if (!settingsManager.isAvailable()) {
             MessageLog.e(TAG, "[ERROR] lookupRaceInDatabase:: Database not available for race lookup.")
@@ -1973,6 +2009,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         MessageLog.i(TAG, "[RACE]     - \"${race.name}\" (Fans: ${race.fans})")
                     }
                 }
+                lastLookupTier = LookupTier.EXACT
                 return matches
             }
             exactCursor.close()
@@ -2074,6 +2111,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         MessageLog.i(TAG, "[RACE]     - \"${race.name}\" (Fans: ${race.fans})")
                     }
                 }
+                lastLookupTier = LookupTier.FUZZY
                 return bestMatches
             }
 
@@ -2898,6 +2936,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return false
         }
 
+        // Completed via the standalone entry tail with no source-proven selected identity.
+        campaign.recordEnteredRace(EnteredRace(campaign.date.day, EnteredRaceResolution.UNRESOLVED, EnteredRacePath.STANDALONE))
         MessageLog.v(TAG, "[RACE] Racing process for Standalone Race is completed. Grade: ${lastRaceGrade ?: "Standalone"}")
         MessageLog.v(TAG, "********************")
         return true
@@ -2936,6 +2976,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Clear the next smart race day tracker since we just completed a race.
         nextSmartRaceDay = null
 
+        // Completed via the already-selected tail. A scenario that entered a known race through here
+        // (Trackblazer) overwrites this weaker identity after super returns; the base fact is unresolved.
+        campaign.recordEnteredRace(EnteredRace(campaign.date.day, EnteredRaceResolution.UNRESOLVED, EnteredRacePath.STANDALONE))
         MessageLog.v(TAG, "[RACE] Racing process for already selected race is completed. Grade: ${lastRaceGrade ?: "OP"}")
         MessageLog.v(TAG, "********************")
         return true
@@ -2948,6 +2991,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      */
     private fun handleMandatoryRace(): Boolean {
         MessageLog.v(TAG, "[RACE] Starting process for handling a mandatory race.")
+
+        // Strongest identity fact we resolve for this mandatory race (from the turn-scoped OCR+lookup
+        // below), read at the completion tail. Stays null until the lookup resolves something.
+        var enteredRaceFact: EnteredRace? = null
 
         if (enableStopOnMandatoryRace) {
             MessageLog.v(TAG, "********************")
@@ -2972,6 +3019,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             if (predictionAnchors.isNotEmpty()) {
                 val raceName = game.imageUtils.extractRaceName(predictionAnchors[0].location)
                 val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
+                // Capture identity from the same lookup (turn-scoped) without copying its [0] grade flatten.
+                enteredRaceFact = enteredRaceFromLookup(EnteredRacePath.MANDATORY_GOAL, campaign.date.day, raceDataList)
                 if (raceDataList.isNotEmpty()) {
                     val raceData = raceDataList[0]
                     lastRaceGrade = raceData.grade
@@ -3016,6 +3065,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return false
         }
 
+        // Record the completed mandatory race. Falls back to an unresolved fact when no anchor/lookup
+        // resolved a name (e.g. a finale race, whose grade was set directly without a catalog lookup).
+        campaign.recordEnteredRace(enteredRaceFact ?: EnteredRace(campaign.date.day, EnteredRaceResolution.UNRESOLVED, EnteredRacePath.MANDATORY_GOAL))
         MessageLog.v(TAG, "[RACE] Racing process for Mandatory Race is completed. Grade: ${lastRaceGrade ?: "Mandatory"}")
         MessageLog.v(TAG, "********************")
         return true
@@ -3295,6 +3347,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Clear the next smart race day tracker since we just completed a race.
         nextSmartRaceDay = null
 
+        // The maiden path knows only the current turn, not a catalog race name.
+        campaign.recordEnteredRace(EnteredRace(campaign.date.day, EnteredRaceResolution.UNRESOLVED, EnteredRacePath.MAIDEN))
         MessageLog.v(TAG, "[RACE] Racing process for Maiden Race is completed. Grade: ${lastRaceGrade ?: "Maiden"}")
         MessageLog.v(TAG, "********************")
         // Mark the daily maiden check as done now that the race actually ran.
@@ -3310,6 +3364,11 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      */
     private fun handleExtraRace(isScheduledRace: Boolean = false): Boolean {
         MessageLog.v(TAG, "[RACE] Starting process for handling a extra race${if (isScheduledRace) " (scheduled)" else ""}.")
+
+        // Drop any target the previous extra-race attempt staged; only this attempt's selection counts.
+        stagedExtraRaceEntry = null
+        // Identity fact for the scheduled sub-branch (resolved from its own turn-scoped lookup below).
+        var scheduledEntry: EnteredRace? = null
 
         // If there is a scheduled race pending, proceed to run it immediately.
         if (!isScheduledRace) {
@@ -3455,6 +3514,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 if (predictionAnchors.isNotEmpty()) {
                     val raceName = game.imageUtils.extractRaceName(predictionAnchors[0].location)
                     val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
+                    // Capture identity from the same turn-scoped lookup before reading [0] for grade.
+                    scheduledEntry = enteredRaceFromLookup(EnteredRacePath.SCHEDULED, campaign.date.day, raceDataList)
                     if (raceDataList.isNotEmpty()) {
                         lastRaceGrade = raceDataList[0].grade
                         lastRaceFans = raceDataList[0].fans
@@ -3494,6 +3555,16 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Clear the next smart race day tracker since we just completed a race.
         nextSmartRaceDay = null
 
+        // Record the completed extra race. Scheduled races carry their turn-scoped lookup identity;
+        // non-scheduled races carry whatever smart racing staged, else an unresolved standard-path fact
+        // (the positional standard picker does not resolve a name).
+        val extraFact =
+            if (isScheduledRace) {
+                scheduledEntry ?: EnteredRace(campaign.date.day, EnteredRaceResolution.UNRESOLVED, EnteredRacePath.SCHEDULED)
+            } else {
+                stagedExtraRaceEntry ?: EnteredRace(campaign.date.day, EnteredRaceResolution.UNRESOLVED, EnteredRacePath.STANDARD)
+            }
+        campaign.recordEnteredRace(extraFact)
         MessageLog.v(TAG, "[RACE] Racing process for Extra Race${if (isScheduledRace) " (scheduled) " else " "}is completed. Grade: ${lastRaceGrade ?: "OP"}")
         MessageLog.v(TAG, "********************")
         return true
@@ -3539,12 +3610,19 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Track the best prediction tier seen per race name so scoring can penalize single-star entries.
         MessageLog.i(TAG, "[RACE] Extracting race names and matching with database...")
         val tierByName = mutableMapOf<String, PredictionTier>()
+        // Per-name lookup resolution (exact vs fuzzy), so the selected target's entered-race fact stays
+        // truthful about how its name resolved. EXACT wins over FUZZY if a name resolved both ways.
+        val resolutionByName = mutableMapOf<String, EnteredRaceResolution>()
         val currentRaces =
             anchors.flatMap { anchor ->
                 val raceName = game.imageUtils.extractRaceName(anchor.location)
                 val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
+                val lookupResolution = if (lastLookupTier == LookupTier.EXACT) EnteredRaceResolution.EXACT else EnteredRaceResolution.FUZZY
                 if (raceDataList.isNotEmpty()) {
                     raceDataList.forEach { raceData ->
+                        if (resolutionByName[raceData.name] != EnteredRaceResolution.EXACT) {
+                            resolutionByName[raceData.name] = lookupResolution
+                        }
                         val previousTier = tierByName[raceData.name]
                         if (previousTier == null || anchor.tier > previousTier) {
                             tierByName[raceData.name] = anchor.tier
@@ -3564,6 +3642,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // If mandatory extra race data is provided, immediately find and select it on screen.
         if (mandatoryExtraRaceData != null) {
             MessageLog.v(TAG, "[RACE] Mandatory mode for extra races enabled. Looking for planned race \"${mandatoryExtraRaceData.name}\" on screen for turn ${campaign.date.day}.")
+
+            // Stage the planned race's identity by its explicit tuple: name from the plan, turn from the
+            // current turn (never the bare-name map's turnNumber). Only entries that actually complete
+            // reach the extra-race completion tail, so a not-found abort below never emits it.
+            stagedExtraRaceEntry =
+                EnteredRace(campaign.date.day, EnteredRaceResolution.EXACT, EnteredRacePath.PLANNED_MANDATORY, name = mandatoryExtraRaceData.name, matchCount = 1)
 
             // Check if there are multiple races with the same formatted name but different fan counts.
             val raceVariants = currentRaces.filter { it.nameFormatted == mandatoryExtraRaceData.nameFormatted }
@@ -3798,6 +3882,16 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Sort by score and find the best race.
         val sortedScoredRaces = scoredRaces.sortedByDescending { it.score }
         val bestRace = sortedScoredRaces.first()
+
+        // Stage the scored selection's identity for the completion tail: the turn-scoped name the bot
+        // chose and taps by name, with the resolution tier its own lookup produced (never overclaimed).
+        stagedExtraRaceEntry =
+            EnteredRace(
+                campaign.date.day,
+                resolutionByName[bestRace.raceData.name] ?: EnteredRaceResolution.FUZZY,
+                EnteredRacePath.SMART,
+                name = bestRace.raceData.name,
+            )
 
         MessageLog.v(TAG, "[RACE] Best race selected: ${bestRace.raceData.name} (score: ${game.decimalFormat.format(bestRace.score)}).")
         if (plannedRaces.contains(bestRace.raceData)) {
