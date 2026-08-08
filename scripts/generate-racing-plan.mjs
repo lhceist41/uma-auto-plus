@@ -17,10 +17,18 @@
 // mandatory races always outrank the plan at runtime, so goal turns are never planned over.
 // Reminder: mandatory-plan mode overrides the in-game consecutive-race warning entirely
 // (Racing.kt), so this script's spacing is the only guardrail the run gets.
+//
+// Requires node >= 23.6 (native TypeScript type stripping) for the RaceLab .ts imports below.
 
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+// Factual race/objective interpretation flows through the landed RaceLab layer (canonical (name,
+// turnNumber) identity, hash-verified compiled data, URA objective modeling) instead of re-reading the
+// raw JSON here. RaceLab is factual only; all selection/ordering/strategy below stays generator-local.
+import { loadRaceCatalog } from "../src/lib/raceLab/catalog.ts"
+import { buildObjectiveTimeline, loadRawObjectives } from "../src/lib/raceLab/objectives.ts"
+import { APTITUDE_ORDER } from "../src/lib/raceLab/types.ts"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
@@ -63,7 +71,7 @@ function fail(msg) {
     process.exit(1)
 }
 
-const APT_ORDER = ["G", "F", "E", "D", "C", "B", "A", "S"]
+const APT_ORDER = APTITUDE_ORDER
 const GRADE_RANK = { G1: 3, G2: 2, G3: 1 }
 
 const args = parseArgs(process.argv)
@@ -75,21 +83,27 @@ for (const k of ["turf", "dirt", "sprint", "mile", "medium", "long"]) {
 }
 if (!(args.minGrade in GRADE_RANK)) fail("--min-grade must be G1, G2, or G3")
 
-const races = Object.values(JSON.parse(fs.readFileSync(path.join(root, "src/data/races.json"), "utf8")))
+// Canonical race catalog (hash-verified compiled layer, (name, turnNumber) identity) instead of the raw
+// races.json. Same 402 races and the same per-race fields the generator reads (name/date/turnNumber/
+// grade/terrain/distanceType/fans); selection/ordering policy below is unchanged.
+const catalog = loadRaceCatalog(path.join(root, "src/data/compiled"))
+const races = catalog.allRaces()
 
-// Goal turns: objectives file first, --goals as override/fallback.
+// Goal turns: RaceLab's URA objective model first, --goals as override/fallback. RaceLab resolves every
+// objective option canonically by (raceName, turn) and preserves choice options; the generator keeps its
+// own display join and raw-grade G1 test so its summary text is unchanged.
 const objectivesPath = path.join(root, "src/data/character_objectives.json")
 let goalTurns = null
 let goalRaces = []
 if (fs.existsSync(objectivesPath)) {
-    const objectives = JSON.parse(fs.readFileSync(objectivesPath, "utf8"))
-    const entry = objectives[args.character]
-    if (entry) {
-        goalTurns = entry.mandatoryRaces.map((r) => r.turn)
-        goalRaces = entry.mandatoryRaces.map((r) => ({
+    const rawObjectives = loadRawObjectives(objectivesPath)
+    if (args.character in rawObjectives) {
+        const timeline = buildObjectiveTimeline(args.character, rawObjectives, catalog)
+        goalTurns = timeline.requirements.map((r) => r.turn)
+        goalRaces = timeline.requirements.map((r) => ({
             turn: r.turn,
             name: r.options.map((o) => o.raceName).join(" / "),
-            g1: r.options.some((o) => o.grade === "G1"),
+            g1: r.options.some((o) => o.rawMeta.grade === "G1"),
         }))
     }
 }
