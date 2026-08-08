@@ -64,6 +64,20 @@ enum class SelectionSource {
 }
 
 /**
+ * Result of [Training.handleTrainingWithOutcome]. [selectedTraining] is the executed facility (null when
+ * none executed, e.g. a recovery or backout); [turnAdvanced] is true whenever a turn-advancing action ran
+ * (facility training, forced Wit, or energy/mood recovery). The two are independent: a recovery advances
+ * the turn while leaving [selectedTraining] null.
+ *
+ * @property selectedTraining The facility that was trained, or null if none executed.
+ * @property turnAdvanced True when the turn advanced (training or recovery), false on a same-turn backout.
+ */
+data class TrainingActionOutcome(
+    val selectedTraining: StatName?,
+    val turnAdvanced: Boolean,
+)
+
+/**
  * Handle the training process, including analysis of options, scoring recommendations, and execution.
  *
  * @property game The [Game] instance for interacting with the game state.
@@ -2933,11 +2947,27 @@ class Training(private val game: Game, private val campaign: Campaign) {
      * @param forceStat Optional stat name to force the bot to perform regardless of analysis.
      * @return The name of the training that was executed, or null if none.
      */
-    fun handleTraining(forceStat: StatName? = null): StatName? {
+    fun handleTraining(forceStat: StatName? = null): StatName? = handleTrainingWithOutcome(forceStat).selectedTraining
+
+    /**
+     * Handle the training process and report whether the game turn advanced.
+     *
+     * [TrainingActionOutcome.turnAdvanced] is true when a facility training executed, forced Wit ran, or
+     * energy/mood recovery ran (all of which consume the turn), and false only on a non-advancing exit
+     * (could not open the Training screen, or could not return to the Main screen to recover). The RACE
+     * fallback needs this because [TrainingActionOutcome.selectedTraining] is null on recovery paths that
+     * still advance the turn.
+     *
+     * @param forceStat Optional stat name to force the bot to perform regardless of analysis.
+     * @return The selected training (null if none executed) and whether the turn advanced.
+     */
+    fun handleTrainingWithOutcome(forceStat: StatName? = null): TrainingActionOutcome {
         MessageLog.v(TAG, "\n********************")
         MessageLog.v(TAG, "[TRAINING] Starting Training process on ${campaign.date}.")
         val startTime = System.currentTimeMillis()
         var trainingSelected: StatName? = null
+        // Shadow-only: true once a turn-advancing action (facility training, forced Wit, or recovery) runs.
+        var advanced = false
 
         // Enter the Training screen.
         if (ButtonTraining.click(game.imageUtils)) {
@@ -2969,12 +2999,14 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         game.waitForLoading()
                         MessageLog.v(TAG, "[TRAINING] Successfully forced Wit training during the Finale instead of recovering energy.")
                         firstTrainingCheck = false
+                        advanced = true
                     } else {
                         MessageLog.w(TAG, "[WARN] handleTraining:: Could not find Wit training button. Falling back to recovering energy...")
                         ButtonBack.click(game.imageUtils)
                         game.wait(1.0)
                         if (campaign.checkMainScreen()) {
                             campaign.recoverEnergy()
+                            advanced = true
                         } else {
                             MessageLog.w(TAG, "[WARN] handleTraining:: Could not head back to the Main screen in order to recover energy.")
                         }
@@ -2991,6 +3023,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                             MessageLog.v(TAG, "[TRAINING] Will recover energy due to either failure chance was high enough to do so or no failure chances were detected via OCR.")
                         }
                         campaign.recoverEnergy()
+                        advanced = true
                     } else {
                         MessageLog.w(TAG, "[WARN] handleTraining:: Could not head back to the Main screen in order to recover energy.")
                     }
@@ -2999,6 +3032,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 // Now select the training option with the highest weight.
                 executeTraining(trainingSelected)
                 firstTrainingCheck = false
+                advanced = true
             }
 
             MessageLog.v(TAG, "[TRAINING] Training process completed. Total time: ${System.currentTimeMillis() - startTime}ms")
@@ -3006,7 +3040,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             MessageLog.e(TAG, "[ERROR] handleTraining:: Cannot start the Training process. Moving on...")
         }
         MessageLog.v(TAG, "********************")
-        return trainingSelected
+        return TrainingActionOutcome(selectedTraining = trainingSelected, turnAdvanced = advanced)
     }
 
     /**

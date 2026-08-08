@@ -366,6 +366,107 @@ class CareerStateTest {
         assertFalse(latch.shouldBuild())
     }
 
+    @Test
+    @DisplayName("An aborted RACE whose fallback backs out (no training or recovery) does not rearm, so no same-turn duplicate")
+    fun abortedRaceWithBackoutFallbackDoesNotRebuild() {
+        val latch = CareerStateTurnLatch()
+        latch.armForNewTurn()
+        assertTrue(latch.shouldBuild()) // this turn's snapshot
+
+        // executeAction(RACE): bDidRace=false, and the fallback merely backed out onto the same turn.
+        val bDidRace = false
+        val fallback = RaceFallbackOutcome(shouldStopForMandatoryRace = false, turnAdvanced = false)
+        val turnAdvanced = bDidRace || fallback.turnAdvanced
+        latch.armForNewTurnIf(turnAdvanced)
+
+        // Still the same logical turn (the bot re-evaluates and picks another action). No duplicate.
+        assertFalse(latch.shouldBuild())
+        assertFalse(latch.tracerWindowFresh())
+    }
+
+    @Test
+    @DisplayName("An aborted RACE whose fallback training advances the turn rearms once and invalidates freshness, so the next logical turn builds exactly one snapshot")
+    fun abortedRaceWithAdvancingFallbackRearms() {
+        val latch = CareerStateTurnLatch()
+        latch.armForNewTurn()
+        latch.markTracerWindowOpened() // this turn opened its DecisionTracer window
+        assertTrue(latch.shouldBuild()) // this turn's snapshot
+        assertTrue(latch.tracerWindowFresh())
+
+        // executeAction(RACE): bDidRace=false, but the fallback trained/recovered and advanced the turn.
+        val bDidRace = false
+        val fallback = RaceFallbackOutcome(shouldStopForMandatoryRace = false, turnAdvanced = true)
+        val turnAdvanced = bDidRace || fallback.turnAdvanced
+        latch.armForNewTurnIf(turnAdvanced)
+
+        // Freshness is invalidated by the rearm, so the next snapshot cannot compare against stale evidence.
+        assertFalse(latch.tracerWindowFresh())
+        // The next logical turn (previously missing, e.g. live turns 58/59) now builds exactly one snapshot.
+        assertTrue(latch.shouldBuild())
+        assertFalse(latch.shouldBuild())
+    }
+
+    /** Mirror of the base handleRaceEventFallback mapping: a training outcome becomes a fallback outcome. */
+    private fun baseFallbackOutcome(training: TrainingActionOutcome): RaceFallbackOutcome =
+        RaceFallbackOutcome(shouldStopForMandatoryRace = false, turnAdvanced = training.turnAdvanced)
+
+    @Test
+    @DisplayName("Base fallback: a normal facility training advances the turn, so CareerState rearms once")
+    fun baseFallbackNormalTrainingRearms() {
+        val latch = CareerStateTurnLatch()
+        latch.armForNewTurn()
+        assertTrue(latch.shouldBuild())
+
+        // handleTrainingWithOutcome ran a facility training: selectedTraining non-null, turnAdvanced true.
+        val bDidRace = false
+        val fallback = baseFallbackOutcome(TrainingActionOutcome(selectedTraining = StatName.SPEED, turnAdvanced = true))
+        latch.armForNewTurnIf(bDidRace || fallback.turnAdvanced)
+
+        assertTrue(latch.shouldBuild()) // next turn builds
+        assertFalse(latch.shouldBuild()) // only once
+    }
+
+    @Test
+    @DisplayName("Base fallback: a recovery-only training advances the turn even with a null selected stat, so CareerState still rearms (the residual gap, now closed)")
+    fun baseFallbackRecoveryAdvanceRearms() {
+        val latch = CareerStateTurnLatch()
+        latch.armForNewTurn()
+        latch.markTracerWindowOpened()
+        assertTrue(latch.shouldBuild())
+        assertTrue(latch.tracerWindowFresh())
+
+        // handleTrainingWithOutcome recovered energy/mood: NO facility executed (selectedTraining null) but
+        // the turn advanced. The old `selectedTraining != null` test would have read this as non-advancing.
+        val training = TrainingActionOutcome(selectedTraining = null, turnAdvanced = true)
+        assertNull(training.selectedTraining)
+        assertTrue(training.turnAdvanced)
+
+        val bDidRace = false
+        val fallback = baseFallbackOutcome(training)
+        assertTrue(fallback.turnAdvanced) // truthful advancement despite the null stat
+        latch.armForNewTurnIf(bDidRace || fallback.turnAdvanced)
+
+        assertFalse(latch.tracerWindowFresh()) // freshness invalidated through the normal rearm
+        assertTrue(latch.shouldBuild()) // the next logical turn builds exactly one snapshot
+        assertFalse(latch.shouldBuild())
+    }
+
+    @Test
+    @DisplayName("Base fallback: a non-advancing outcome (nav/backout) does not rearm, so no same-turn duplicate")
+    fun baseFallbackNonAdvanceDoesNotRebuild() {
+        val latch = CareerStateTurnLatch()
+        latch.armForNewTurn()
+        assertTrue(latch.shouldBuild())
+
+        // handleTrainingWithOutcome could not open the Training screen / return to Main: no advance.
+        val bDidRace = false
+        val fallback = baseFallbackOutcome(TrainingActionOutcome(selectedTraining = null, turnAdvanced = false))
+        latch.armForNewTurnIf(bDidRace || fallback.turnAdvanced)
+
+        assertFalse(latch.shouldBuild()) // same turn: no duplicate
+        assertFalse(latch.tracerWindowFresh())
+    }
+
     // ---- Pure construction ----
 
     @Test

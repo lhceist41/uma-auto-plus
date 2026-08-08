@@ -8,6 +8,7 @@ import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.bot.DialogHandlerResult
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.MainScreenAction
+import com.steve1316.uma_android_automation.bot.RaceFallbackOutcome
 import com.steve1316.uma_android_automation.bot.ScenarioState
 import com.steve1316.uma_android_automation.bot.SelectionSource
 import com.steve1316.uma_android_automation.bot.TrackblazerState
@@ -644,7 +645,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         return false
     }
 
-    override fun handleRaceEventFallback(): Boolean {
+    override fun handleRaceEventFallback(): RaceFallbackOutcome {
         if (racing.detectedMandatoryRaceCheck) {
             return super.handleRaceEventFallback()
         }
@@ -652,8 +653,10 @@ class Trackblazer(game: Game) : Campaign(game) {
         ButtonCancel.click(game.imageUtils)
         ButtonClose.click(game.imageUtils)
         game.wait(1.0)
-        handleTrackblazerTraining()
-        return false
+        // Shadow-only: report whether the specialized training actually advanced the turn (trained or
+        // recovered) so the RACE branch rearms CareerState. A pure backout leaves the same turn and must not.
+        val advanced = handleTrackblazerTraining()
+        return RaceFallbackOutcome(shouldStopForMandatoryRace = false, turnAdvanced = advanced)
     }
 
     override fun handleRaceEvents(isScheduledRace: Boolean): Boolean {
@@ -1498,8 +1501,12 @@ class Trackblazer(game: Game) : Campaign(game) {
     /**
      * Handles the specialized training process for Trackblazer, including item usage.
      */
-    private fun handleTrackblazerTraining() {
+    private fun handleTrackblazerTraining(): Boolean {
         MessageLog.i(TAG, "[TRACKBLAZER] Starting specialized Training process.")
+        // Shadow-only: true once a turn-advancing action (training execution or mood/energy recovery)
+        // actually runs. Stays false on a pure backout so the RACE fallback does not rearm on a
+        // non-advancing outcome.
+        var advanced = false
 
         // Fast path: Already on the training screen from irregular training evaluation.
         if (bIsIrregularTraining) {
@@ -1517,6 +1524,7 @@ class Trackblazer(game: Game) : Campaign(game) {
             if (trainingSelected != null) {
                 training.executeTraining(trainingSelected)
                 bCompletedTrainingThisTurn = true
+                advanced = true
             } else {
                 MessageLog.w(TAG, "[WARN] handleTrackblazerTraining:: Irregular training unexpectedly became null. Backing out.")
                 ButtonBack.click(game.imageUtils)
@@ -1524,13 +1532,13 @@ class Trackblazer(game: Game) : Campaign(game) {
             }
 
             bIsIrregularTraining = false
-            return
+            return advanced
         }
 
         // Enter the Training screen.
         if (!ButtonTraining.click(game.imageUtils)) {
             MessageLog.e(TAG, "[ERROR] handleTrackblazerTraining:: Failed to enter Training screen.")
-            return
+            return false
         }
         game.wait(0.5)
 
@@ -1648,6 +1656,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         if (trainingSelected != null) {
             training.executeTraining(trainingSelected)
             bCompletedTrainingThisTurn = true
+            advanced = true
         } else {
             // No suitable training, so take the best recovery action to avoid a wasted turn.
             // Resting is 62.5% chance of +50 energy; Shrine (clears status conditions) is 30% in recreation.
@@ -1666,6 +1675,8 @@ class Trackblazer(game: Game) : Campaign(game) {
                         MessageLog.i(TAG, "[TRACKBLAZER] Energy is ${trainee.energy}%. Attempting to recover energy.")
                         recoverEnergy()
                     }
+                    // Shadow-only: a recovery action advances the turn.
+                    advanced = true
                 }
             } else {
                 // Force a training (Wit when we'd risk stat reductions, else Speed). 80 Energy is
@@ -1700,6 +1711,8 @@ class Trackblazer(game: Game) : Campaign(game) {
                             MessageLog.i(TAG, "[TRACKBLAZER] Energy is ${trainee.energy}%. Attempting to recover energy.")
                             recoverEnergy()
                         }
+                        // Shadow-only: a recovery action advances the turn.
+                        advanced = true
                     }
                 } else {
                     MessageLog.i(
@@ -1709,11 +1722,13 @@ class Trackblazer(game: Game) : Campaign(game) {
                     training.executeTraining(forcedStat)
                     bCompletedTrainingThisTurn = true
                     training.firstTrainingCheck = false
+                    advanced = true
                 }
             }
         }
 
         bIsIrregularTraining = false
+        return advanced
     }
 
     /**

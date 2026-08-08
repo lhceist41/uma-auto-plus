@@ -121,6 +121,20 @@ enum class MainScreenAction {
     NONE,
 }
 
+/**
+ * Result of [Campaign.handleRaceEventFallback]. Carries the existing mandatory-race stop signal plus
+ * whether the fallback actually advanced to a new logical turn (it trained or recovered) as opposed to
+ * merely backing out onto the same turn. The RACE branch uses [turnAdvanced] to rearm the shadow
+ * CareerState latch when a fallback advances, so the next decision turn is not left without a snapshot.
+ *
+ * @property shouldStopForMandatoryRace True when a mandatory race was detected and the bot must stop.
+ * @property turnAdvanced True when the fallback performed a turn-advancing action (training or recovery).
+ */
+data class RaceFallbackOutcome(
+    val shouldStopForMandatoryRace: Boolean,
+    val turnAdvanced: Boolean,
+)
+
 // Position of the "Group Event Progress X/Y" text relative to the right edge of the matched "Group Event Progress" pill ([LabelEventProgress]), for OCR. Tune if the "GroupEventProgress" debug crop misses the digits.
 private const val GROUP_PROGRESS_GAP_X = 15
 private const val GROUP_PROGRESS_WIDTH = 120
@@ -2795,23 +2809,28 @@ abstract class Campaign(game: Game) : Task(game) {
      *
      * This includes checking for mandatory race detection and falling back to training.
      *
-     * @return True if the bot should break out of the main loop, false otherwise.
+     * @return A [RaceFallbackOutcome] whose [RaceFallbackOutcome.shouldStopForMandatoryRace] is true when
+     * a mandatory race forces the bot to stop, and whose [RaceFallbackOutcome.turnAdvanced] is true when
+     * the fallback trained or recovered (advancing the turn) rather than backing out onto the same turn.
      */
-    open fun handleRaceEventFallback(): Boolean {
+    open fun handleRaceEventFallback(): RaceFallbackOutcome {
         if (racing.detectedMandatoryRaceCheck) {
             MessageLog.v(TAG, "\n[END] Stopping bot due to detection of Mandatory Race.")
             game.notificationMessage = "Stopping bot due to detection of Mandatory Race."
             if (DiscordUtils.enableDiscordNotifications) {
                 DiscordUtils.queue.add("```diff\n- ${MessageLog.getSystemTimeString()} Stopping bot due to detection of Mandatory Race.\n```")
             }
-            return true
+            return RaceFallbackOutcome(shouldStopForMandatoryRace = true, turnAdvanced = false)
         }
         ButtonBack.click(game.imageUtils)
         ButtonCancel.click(game.imageUtils)
         ButtonClose.click(game.imageUtils)
         game.wait(1.0)
-        training.handleTraining()
-        return false
+        // Use the explicit training outcome: turnAdvanced is true for a facility training, forced Wit, OR
+        // energy/mood recovery - all of which advance the turn. The selected-stat return alone is null on
+        // recovery paths that still advance, so it cannot be used to detect advancement here.
+        val trainingOutcome = training.handleTrainingWithOutcome()
+        return RaceFallbackOutcome(shouldStopForMandatoryRace = false, turnAdvanced = trainingOutcome.turnAdvanced)
     }
 
     /**
@@ -3623,16 +3642,22 @@ abstract class Campaign(game: Game) : Task(game) {
                 MessageLog.i(TAG, "[INFO] All checks are cleared for racing.")
                 // bDidRace is the authoritative advance signal: true only when a race actually ran.
                 // An aborted race (consecutive-race warning, no suitable race, failed nav) returns false
-                // and leaves the bot on the same logical turn.
+                // and leaves the bot on the same logical turn - but its fallback may then train/recover
+                // and advance the turn itself, so track advancement from both sources.
                 val bDidRace = handleRaceEvents(bIsScheduledRaceDay)
-                if (!bDidRace && handleRaceEventFallback()) {
-                    throw CampaignBreakpointException("Mandatory race detected. Stopping bot...")
+                var turnAdvanced = bDidRace
+                if (!bDidRace) {
+                    val fallback = handleRaceEventFallback()
+                    if (fallback.shouldStopForMandatoryRace) {
+                        throw CampaignBreakpointException("Mandatory race detected. Stopping bot...")
+                    }
+                    turnAdvanced = fallback.turnAdvanced
                 }
                 // Always re-evaluate the same turn (a failed race must pick another action), but shadow-only:
-                // rearm CareerState only when the race advanced the turn. Arming on an aborted race let the
-                // next same-turn pass build a duplicate snapshot.
+                // rearm CareerState when the race OR its fallback training advanced the turn. A same-turn
+                // backout advances nothing and does not rearm, so no duplicate snapshot is built.
                 bHasCheckedDateThisTurn = false
-                careerStateLatch.armForNewTurnIf(bDidRace)
+                careerStateLatch.armForNewTurnIf(turnAdvanced)
             }
 
             MainScreenAction.TRAIN -> {
