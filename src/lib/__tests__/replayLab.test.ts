@@ -434,3 +434,253 @@ describe("determinism and output shape", () => {
         expect(text).not.toContain("reward")
     })
 })
+
+// ---- Phase 2A: entered-race consumer ----
+
+// A RACE decision line. `enteredRace` is attached only when provided (absent otherwise, matching the producer).
+function raceLine(over: Record<string, unknown> = {}, enteredRace?: unknown): string {
+    const base: Record<string, unknown> = {
+        selected: { action: "RACE", source: "action_choice", reason: "race day" },
+        candidates: [{ type: "action", id: "RACE", selected: true, reason: "race day" }],
+        ...over,
+    }
+    if (enteredRace !== undefined) base.enteredRace = enteredRace
+    return decisionLine(base)
+}
+
+const OTHER_TOKEN = "Special Week|URA|run0|zzz999"
+
+describe("entered-race consumer (Phase 2A)", () => {
+    it("1. exact smart completed race is preserved and TRACE_ONLY exposes the fact", () => {
+        const r = run([raceLine({ seq: undefined, turn: 16 }, { turnNumber: 16, resolution: "exact", path: "smart", name: "Niigata Junior Stakes", matchCount: 1 })])
+        const c = r.careers[0]
+        expect(c.capability).toBe("TRACE_ONLY")
+        const rx = c.decisions[0].raceExecution
+        expect(rx.status).toBe("completed")
+        if (rx.status !== "completed") throw new Error("expected completed")
+        expect(rx.fact).toMatchObject({ turnNumber: 16, resolution: "exact", path: "smart", name: "Niigata Junior Stakes", matchCount: 1, valid: true, knownResolution: true, knownPath: true })
+        expect(rx.fact.issues).toEqual([])
+    })
+
+    it("2. RACE without fact in a witnessed career is notConfirmedCompleted", () => {
+        const r = run([
+            raceLine({ seq: undefined, turn: 16 }, { turnNumber: 16, resolution: "exact", path: "smart", name: "Race A", matchCount: 1 }),
+            raceLine({ seq: undefined, turn: 20 }),
+        ])
+        const c = r.careers[0]
+        expect(c.enteredRaceCapabilityWitness).toBe(true)
+        expect(c.decisions[1].raceExecution.status).toBe("notConfirmedCompleted")
+    })
+
+    it("3. RACE without fact in an unwitnessed career is unknown", () => {
+        const r = run([raceLine({ seq: undefined, turn: 20 })])
+        const c = r.careers[0]
+        expect(c.enteredRaceCapabilityWitness).toBe(false)
+        expect(c.decisions[0].raceExecution.status).toBe("unknown")
+    })
+
+    it("4. a non-RACE decision after a completed race is notApplicable, no leakage", () => {
+        const r = run([
+            raceLine({ seq: undefined, turn: 16 }, { turnNumber: 16, resolution: "exact", path: "smart", name: "Race A", matchCount: 1 }),
+            decisionLine({ seq: undefined, turn: 17 }),
+        ])
+        expect(r.careers[0].decisions[1].raceExecution.status).toBe("notApplicable")
+    })
+
+    it("5. fuzzy unique completed race keeps the name and knownResolution", () => {
+        const r = run([raceLine({ seq: undefined, turn: 72 }, { turnNumber: 72, resolution: "fuzzy", path: "scheduled", name: "Hanshin Cup", matchCount: 1 })])
+        const rx = r.careers[0].decisions[0].raceExecution
+        if (rx.status !== "completed") throw new Error("expected completed")
+        expect(rx.fact.resolution).toBe("fuzzy")
+        expect(rx.fact.knownResolution).toBe(true)
+        expect(rx.fact.name).toBe("Hanshin Cup")
+        expect(rx.fact.valid).toBe(true)
+    })
+
+    it("6. ambiguousSet has no name, matchCount > 1, and is valid", () => {
+        const r = run([raceLine({ seq: undefined, turn: 40 }, { turnNumber: 40, resolution: "ambiguousSet", path: "scheduled", matchCount: 2 })])
+        const rx = r.careers[0].decisions[0].raceExecution
+        if (rx.status !== "completed") throw new Error("expected completed")
+        expect(rx.fact.name).toBeNull()
+        expect(rx.fact.matchCount).toBe(2)
+        expect(rx.fact.valid).toBe(true)
+    })
+
+    it("7. fuzzy multi has no name, matchCount > 1, and is valid", () => {
+        const r = run([raceLine({ seq: undefined, turn: 40 }, { turnNumber: 40, resolution: "fuzzy", path: "scheduled", matchCount: 3 })])
+        const rx = r.careers[0].decisions[0].raceExecution
+        if (rx.status !== "completed") throw new Error("expected completed")
+        expect(rx.fact.name).toBeNull()
+        expect(rx.fact.matchCount).toBe(3)
+        expect(rx.fact.valid).toBe(true)
+    })
+
+    it("8. unresolved has no name and is valid", () => {
+        const r = run([raceLine({ seq: undefined, turn: 22 }, { turnNumber: 22, resolution: "unresolved", path: "standard" })])
+        const rx = r.careers[0].decisions[0].raceExecution
+        if (rx.status !== "completed") throw new Error("expected completed")
+        expect(rx.fact.name).toBeNull()
+        expect(rx.fact.valid).toBe(true)
+    })
+
+    it("9. nonCatalog unityCupShowdown is completed, nameless, valid", () => {
+        const r = run([raceLine({ seq: undefined, turn: 40 }, { turnNumber: 40, resolution: "nonCatalog", path: "unityCupShowdown" })])
+        const rx = r.careers[0].decisions[0].raceExecution
+        if (rx.status !== "completed") throw new Error("expected completed")
+        expect(rx.fact.resolution).toBe("nonCatalog")
+        expect(rx.fact.path).toBe("unityCupShowdown")
+        expect(rx.fact.name).toBeNull()
+        expect(rx.fact.valid).toBe(true)
+    })
+
+    it("10. a historical RACE record without the field and no witness is unknown", () => {
+        const r = run([raceLine({ seq: undefined, turn: 20 })])
+        expect(r.careers[0].decisions[0].raceExecution.status).toBe("unknown")
+    })
+
+    it("11. a seq-less historical trace stays valid and invents no identity", () => {
+        const r = run([decisionLine({ seq: undefined, turn: 10 })])
+        const c = r.careers[0]
+        expect(c.capability).toBe("TRACE_ONLY")
+        expect(c.decisions[0].raceExecution.status).toBe("notApplicable")
+        expect(r.exitCode).toBeLessThanOrEqual(1)
+    })
+
+    it("12. enteredRace on TRAIN is a warning anomaly, notApplicable, not promoted to completed identity", () => {
+        const trainWithFact = decisionLine({ seq: undefined, turn: 10, enteredRace: { turnNumber: 10, resolution: "exact", path: "smart", name: "X", matchCount: 1 } })
+        const c = run([trainWithFact]).careers[0]
+        expect(c.decisions[0].raceExecution.status).toBe("notApplicable")
+        expect(c.anomalies.some((a) => a.type === "enteredRaceOnNonRaceDecision")).toBe(true)
+    })
+
+    it("13. a turn mismatch is a warning anomaly with an issue recorded", () => {
+        const r = run([raceLine({ seq: undefined, turn: 20 }, { turnNumber: 19, resolution: "exact", path: "smart", name: "Race A", matchCount: 1 })])
+        const c = r.careers[0]
+        expect(c.anomalies.some((a) => a.type === "enteredRaceTurnMismatch")).toBe(true)
+        const rx = c.decisions[0].raceExecution
+        if (rx.status !== "completed") throw new Error("expected completed")
+        expect(rx.fact.valid).toBe(false)
+        expect(rx.fact.issues.some((i) => i.includes("does not match trace turn"))).toBe(true)
+    })
+
+    it("14. exact with no name is invalid", () => {
+        const r = run([raceLine({ seq: undefined, turn: 16 }, { turnNumber: 16, resolution: "exact", path: "smart", matchCount: 1 })])
+        const rx = r.careers[0].decisions[0].raceExecution
+        if (rx.status !== "completed") throw new Error("expected completed")
+        expect(rx.fact.valid).toBe(false)
+        expect(r.careers[0].anomalies.some((a) => a.type === "invalidEnteredRaceFact")).toBe(true)
+    })
+
+    it("15. unresolved with a name is invalid", () => {
+        const r = run([raceLine({ seq: undefined, turn: 22 }, { turnNumber: 22, resolution: "unresolved", path: "standard", name: "Ghost" })])
+        const rx = r.careers[0].decisions[0].raceExecution
+        if (rx.status !== "completed") throw new Error("expected completed")
+        expect(rx.fact.valid).toBe(false)
+    })
+
+    it("16. ambiguousSet with a name is invalid", () => {
+        const r = run([raceLine({ seq: undefined, turn: 40 }, { turnNumber: 40, resolution: "ambiguousSet", path: "scheduled", name: "Named", matchCount: 2 })])
+        const rx = r.careers[0].decisions[0].raceExecution
+        if (rx.status !== "completed") throw new Error("expected completed")
+        expect(rx.fact.valid).toBe(false)
+    })
+
+    it("17. matchCount 0 is invalid", () => {
+        const r = run([raceLine({ seq: undefined, turn: 40 }, { turnNumber: 40, resolution: "ambiguousSet", path: "scheduled", matchCount: 0 })])
+        const rx = r.careers[0].decisions[0].raceExecution
+        if (rx.status !== "completed") throw new Error("expected completed")
+        expect(rx.fact.valid).toBe(false)
+    })
+
+    it("18. an unknown future resolution token is preserved raw, knownResolution false, no throw", () => {
+        const r = run([raceLine({ seq: undefined, turn: 16 }, { turnNumber: 16, resolution: "quantumMatch", path: "smart", name: "Race A" })])
+        const rx = r.careers[0].decisions[0].raceExecution
+        if (rx.status !== "completed") throw new Error("expected completed")
+        expect(rx.fact.resolution).toBe("quantumMatch")
+        expect(rx.fact.knownResolution).toBe(false)
+        expect(rx.fact.valid).toBe(true) // structurally coherent; an unknown token alone is not invalid
+    })
+
+    it("19. an unknown future path token is preserved raw, knownPath false, no throw", () => {
+        const r = run([raceLine({ seq: undefined, turn: 16 }, { turnNumber: 16, resolution: "exact", path: "teleport", name: "Race A", matchCount: 1 })])
+        const rx = r.careers[0].decisions[0].raceExecution
+        if (rx.status !== "completed") throw new Error("expected completed")
+        expect(rx.fact.path).toBe("teleport")
+        expect(rx.fact.knownPath).toBe(false)
+        expect(rx.fact.valid).toBe(true)
+    })
+
+    it("20. ReplayLab export is deterministic across repeated runs", () => {
+        const lines = [
+            raceLine({ seq: undefined, turn: 16 }, { turnNumber: 16, resolution: "exact", path: "smart", name: "Race A", matchCount: 1 }),
+            raceLine({ seq: undefined, turn: 20 }),
+            raceLine({ seq: undefined, turn: 40 }, { turnNumber: 40, resolution: "nonCatalog", path: "unityCupShowdown" }),
+        ]
+        const a = JSON.stringify(run(lines))
+        const b = JSON.stringify(run(lines))
+        expect(a).toBe(b)
+    })
+
+    it("21. TRACE_ONLY and JOINED expose the same raceExecution fact for the same decision", () => {
+        const fact = { turnNumber: 10, resolution: "exact", path: "smart", name: "Race A", matchCount: 1 }
+        const traceOnly = run([raceLine({ seq: undefined, turn: 10 }, fact)])
+        const joined = run([raceLine({ seq: 1, turn: 10 }, fact)], [stateLine({ seq: 1 })])
+        expect(joined.careers[0].capability).toBe("JOINED")
+        expect(traceOnly.careers[0].decisions[0].raceExecution).toEqual(joined.careers[0].decisions[0].raceExecution)
+    })
+
+    // ---- witness edge cases ----
+
+    it("a later fact retroactively reclassifies an earlier RACE-without-fact in the same career", () => {
+        const r = run([
+            raceLine({ seq: undefined, turn: 12 }),
+            raceLine({ seq: undefined, turn: 16 }, { turnNumber: 16, resolution: "exact", path: "smart", name: "Race A", matchCount: 1 }),
+        ])
+        expect(r.careers[0].decisions[0].raceExecution.status).toBe("notConfirmedCompleted")
+    })
+
+    it("the witness never leaks across careerTokens", () => {
+        const r = run([
+            raceLine({ careerToken: TOKEN, seq: undefined, turn: 16 }, { turnNumber: 16, resolution: "exact", path: "smart", name: "Race A", matchCount: 1 }),
+            raceLine({ careerToken: OTHER_TOKEN, seq: undefined, turn: 20 }),
+        ])
+        const witnessed = r.careers.find((c) => c.careerToken === TOKEN)
+        const other = r.careers.find((c) => c.careerToken === OTHER_TOKEN)
+        expect(witnessed?.enteredRaceCapabilityWitness).toBe(true)
+        expect(other?.enteredRaceCapabilityWitness).toBe(false)
+        expect(other?.decisions[0].raceExecution.status).toBe("unknown")
+    })
+
+    it("summary aggregates factual race-execution counts and a sorted path mix", () => {
+        const r = run([
+            raceLine({ seq: undefined, turn: 16 }, { turnNumber: 16, resolution: "exact", path: "smart", name: "Race A", matchCount: 1 }),
+            raceLine({ seq: undefined, turn: 20 }, { turnNumber: 20, resolution: "exact", path: "mandatoryGoal", name: "Race B" }),
+            raceLine({ seq: undefined, turn: 40 }, { turnNumber: 40, resolution: "nonCatalog", path: "unityCupShowdown" }),
+            raceLine({ seq: undefined, turn: 24 }),
+        ])
+        const sx = r.summary.raceExecution
+        expect(sx.completedRaceCount).toBe(3)
+        expect(sx.notConfirmedCompletedRaceCount).toBe(1) // witnessed career, one RACE-without-fact
+        expect(sx.unknownRaceCount).toBe(0)
+        expect(sx.nonCatalogCompletedCount).toBe(1)
+        expect(sx.careersWithEnteredRaceWitness).toBe(1)
+        expect(Object.keys(sx.pathMix)).toEqual(["mandatoryGoal", "smart", "unityCupShowdown"]) // sorted
+        expect(sx.pathMix).toEqual({ mandatoryGoal: 1, smart: 1, unityCupShowdown: 1 })
+    })
+
+    it("the text report reports completed race facts without causal or failure language", () => {
+        const text = renderReplayReport(
+            run([
+                raceLine({ seq: undefined, turn: 16 }, { turnNumber: 16, resolution: "exact", path: "smart", name: "Niigata Junior Stakes", matchCount: 1 }),
+                raceLine({ seq: undefined, turn: 22 }, { turnNumber: 22, resolution: "unresolved", path: "standard" }),
+                raceLine({ seq: undefined, turn: 40 }, { turnNumber: 40, resolution: "nonCatalog", path: "unityCupShowdown" }),
+            ]),
+        ).toLowerCase()
+        expect(text).toContain("race completed: niigata junior stakes (turn 16, exact, smart)")
+        expect(text).toContain("identity unresolved (turn 22, standard)")
+        expect(text).toContain("non-catalog race event completed (turn 40, unitycupshowdown)")
+        expect(text).not.toContain("aborted")
+        expect(text).not.toContain("race failed")
+        expect(text).not.toContain("optimal")
+    })
+})

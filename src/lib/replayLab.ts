@@ -126,6 +126,58 @@ export interface ReplayTraceState {
     stats: Record<string, number> | null
 }
 
+/** Producer resolution tokens ReplayLab recognizes. Unknown future tokens are preserved raw, never dropped. */
+const KNOWN_ENTERED_RACE_RESOLUTIONS: ReadonlySet<string> = new Set(["exact", "ambiguousSet", "fuzzy", "unresolved", "nonCatalog"])
+
+/** Producer path tokens ReplayLab recognizes. Unknown future tokens are preserved raw, never dropped. */
+const KNOWN_ENTERED_RACE_PATHS: ReadonlySet<string> = new Set([
+    "mandatoryGoal",
+    "scheduled",
+    "plannedMandatory",
+    "smart",
+    "standard",
+    "maiden",
+    "standalone",
+    "unityCupShowdown",
+])
+
+/** Internal marker embedded in a fact issue string so the assembler can classify a turn mismatch distinctly. */
+const TURN_MISMATCH_MARKER = "does not match trace turn"
+
+/**
+ * The projected DecisionTrace `enteredRace` fact for one decision. Raw producer tokens are preserved as
+ * strings (never normalized into a closed enum); [knownResolution]/[knownPath] flag whether the token is
+ * one this ReplayLab version recognizes. [valid] is false when a structural or producer-semantic
+ * inconsistency was found, with the reasons in [issues]; a false fact must never be treated as canonical
+ * race identity by a later consumer.
+ */
+export interface ReplayEnteredRaceFact {
+    turnNumber: number | null
+    resolution: string | null
+    knownResolution: boolean
+    path: string | null
+    knownPath: boolean
+    name: string | null
+    matchCount: number | null
+    valid: boolean
+    issues: string[]
+}
+
+/**
+ * The factual race-execution state of a replay decision, sourced from DecisionTrace alone (no CareerState
+ * required, no guessing).
+ * - `notApplicable`: the committed action was not RACE (a stray enteredRace here is surfaced as an anomaly).
+ * - `completed`: a RACE decision carried an enteredRace object; [fact] holds it (which may be `valid:false`).
+ * - `notConfirmedCompleted`: a RACE decision with no enteredRace, in a career whose producer capability is
+ *   witnessed (another record under the same careerToken carried an enteredRace field).
+ * - `unknown`: a RACE decision with no enteredRace and no capability witness (historical/seq-less/unwitnessed).
+ */
+export type ReplayRaceExecution =
+    | { status: "notApplicable" }
+    | { status: "completed"; fact: ReplayEnteredRaceFact }
+    | { status: "notConfirmedCompleted" }
+    | { status: "unknown" }
+
 /** One reconstructed decision. `seq` is null for TRACE_ONLY records; line order/ts are diagnostics only. */
 export interface ReplayDecision {
     lineNumber: number
@@ -140,6 +192,8 @@ export interface ReplayDecision {
     actionContest: ReplayActionContest | null
     trainingContest: ReplayTrainingContest
     traceState: ReplayTraceState | null
+    /** The DecisionTrace-sourced race-execution fact for this decision. Additive; never causal. */
+    raceExecution: ReplayRaceExecution
     /** True only for a JOINED career when a CareerState record joined this decision on (token, seq). */
     hasStateJoin: boolean
 }
@@ -225,6 +279,9 @@ export type ReplayAnomalyType =
     | "mixedCapabilityWithinCareer"
     | "identityInconsistency"
     | "scenarioExtensionInconsistency"
+    | "invalidEnteredRaceFact"
+    | "enteredRaceOnNonRaceDecision"
+    | "enteredRaceTurnMismatch"
 
 /** One reconstructed career, grouped by careerToken (a resumed segment with a new token is a separate career). */
 export interface ReplayCareer {
@@ -238,6 +295,13 @@ export interface ReplayCareer {
     stateWithoutTraceCount: number
     traceWithoutStateCount: number
     seqGapCount: number
+    /**
+     * True when at least one decision under this careerToken carried an `enteredRace` field, proving the
+     * telemetry producer was capable of recording completed-race facts for this (resume-local) career. It
+     * is the ONLY signal that turns a RACE-without-fact from `unknown` into `notConfirmedCompleted`; it is
+     * never inferred from version/timestamp/scenario. Always false for the unkeyed bucket (no careerToken).
+     */
+    enteredRaceCapabilityWitness: boolean
     decisions: ReplayDecision[]
     transitions: BetweenDecisionObservedTransition[]
     finalize: ReplayFinalize
@@ -257,6 +321,23 @@ export interface ReplaySummary {
     scoreGapEligibleCount: number
     scoreGapSuppressedCount: number
     seqGapCount: number
+    /** Factual entered-race consumer counts (Phase 2A). No optimality/performance is aggregated. */
+    raceExecution: {
+        /** RACE decisions carrying an enteredRace object (valid or not). */
+        completedRaceCount: number
+        /** RACE decisions with no fact, in a capability-witnessed career. */
+        notConfirmedCompletedRaceCount: number
+        /** RACE decisions with no fact and no capability witness (historical/unwitnessed). */
+        unknownRaceCount: number
+        /** Completed facts that failed structural/semantic validation. */
+        invalidEnteredRaceFactCount: number
+        /** Valid completed facts with resolution `nonCatalog` (e.g. Unity Cup showdowns). */
+        nonCatalogCompletedCount: number
+        /** Careers whose producer capability was witnessed. */
+        careersWithEnteredRaceWitness: number
+        /** Path token -> count over VALID completed facts. Keys sorted for deterministic JSON. */
+        pathMix: Record<string, number>
+    }
     anomalyCountsByType: Record<string, number>
 }
 
@@ -531,24 +612,93 @@ function projectTraceState(record: DecisionRecord): ReplayTraceState | null {
     return { energy: asFiniteNumber(state.energy), mood: asString(state.mood), skillPts: asFiniteNumber(state.skillPts), stats }
 }
 
+/**
+ * Validates a present `enteredRace` value against the producer contract. Never throws: an inconsistency
+ * marks the fact `valid:false` and records a reason in `issues`, preserving raw tokens. An unknown
+ * resolution/path token alone does NOT invalidate the fact (structure can still be coherent); it only
+ * clears the corresponding known-flag. Semantic checks fire only for recognized resolution tokens.
+ */
+function buildEnteredRaceFact(raw: unknown, traceTurn: number | null): ReplayEnteredRaceFact {
+    if (!isObject(raw)) {
+        return { turnNumber: null, resolution: null, knownResolution: false, path: null, knownPath: false, name: null, matchCount: null, valid: false, issues: ["enteredRace is not an object"] }
+    }
+    const issues: string[] = []
+
+    const turnNumber = typeof raw.turnNumber === "number" && Number.isFinite(raw.turnNumber) && Number.isInteger(raw.turnNumber) ? raw.turnNumber : null
+    if (turnNumber === null) issues.push("turnNumber missing or not a finite integer")
+
+    const resolution = typeof raw.resolution === "string" && raw.resolution.length > 0 ? raw.resolution : null
+    if (resolution === null) issues.push("resolution missing or not a string")
+    const knownResolution = resolution !== null && KNOWN_ENTERED_RACE_RESOLUTIONS.has(resolution)
+
+    const path = typeof raw.path === "string" && raw.path.length > 0 ? raw.path : null
+    if (path === null) issues.push("path missing or not a string")
+    const knownPath = path !== null && KNOWN_ENTERED_RACE_PATHS.has(path)
+
+    let name: string | null = null
+    if (raw.name !== undefined) {
+        if (typeof raw.name === "string" && raw.name.length > 0) name = raw.name
+        else issues.push("name present but not a non-empty string")
+    }
+
+    let matchCount: number | null = null
+    if (raw.matchCount !== undefined) {
+        if (typeof raw.matchCount === "number" && Number.isInteger(raw.matchCount) && raw.matchCount > 0) matchCount = raw.matchCount
+        else issues.push("matchCount present but not a positive integer")
+    }
+
+    // Turn coherence: the fact's turn must equal the trace's observed turn.
+    if (turnNumber !== null && traceTurn !== null && turnNumber !== traceTurn) {
+        issues.push(`turnNumber ${turnNumber} ${TURN_MISMATCH_MARKER} ${traceTurn}`)
+    }
+    // Producer-semantic name/count invariants, only for recognized resolution tokens.
+    if (resolution === "exact" && name === null) issues.push("exact resolution with no name")
+    if (resolution === "ambiguousSet" && name !== null) issues.push("ambiguousSet resolution carries a name")
+    if (resolution === "unresolved" && name !== null) issues.push("unresolved resolution carries a name")
+    if (resolution === "nonCatalog" && name !== null) issues.push("nonCatalog resolution carries a name")
+    if (resolution === "ambiguousSet" && matchCount !== null && matchCount < 2) issues.push("ambiguousSet resolution with matchCount < 2")
+    if (resolution === "fuzzy" && name !== null && matchCount !== null && matchCount > 1) issues.push("fuzzy multi-match carries a name")
+
+    return { turnNumber, resolution, knownResolution, path, knownPath, name, matchCount, valid: issues.length === 0, issues }
+}
+
+/**
+ * Projects the DecisionTrace-sourced race-execution state for one decision. Uses only the record itself,
+ * no CareerState. A RACE-without-fact is returned as `unknown` here and MAY be upgraded to
+ * `notConfirmedCompleted` by the career assembler once the per-career capability witness is known. A
+ * present enteredRace on a non-RACE decision is `notApplicable` (never reinterpreted as completed); the
+ * assembler surfaces it as an anomaly.
+ */
+function projectRaceExecution(record: DecisionRecord, committedAction: string | null, traceTurn: number | null): ReplayRaceExecution {
+    const raw = record.enteredRace
+    const present = raw !== undefined
+    const isRace = committedAction === "RACE"
+    if (!present) return isRace ? { status: "unknown" } : { status: "notApplicable" }
+    if (!isRace) return { status: "notApplicable" }
+    return { status: "completed", fact: buildEnteredRaceFact(raw, traceTurn) }
+}
+
 function toReplayDecision(record: DecisionRecord, lineNumber: number): ReplayDecision {
     const selected = isObject(record.selected) ? record.selected : {}
     const recoveryObj = isObject(selected.recovery) ? selected.recovery : null
     const raceElig = isObject(record.raceEligibility) ? record.raceEligibility : null
     const seq = typeof record.seq === "number" && Number.isInteger(record.seq) && record.seq > 0 ? record.seq : null
+    const committedAction = asString(selected.action)
+    const observedTurn = asFiniteNumber(record.turn)
     return {
         lineNumber,
         ts: asFiniteNumber(record.ts),
         seq,
-        observedTurn: asFiniteNumber(record.turn),
+        observedTurn,
         turnObserved: isObject(record.observation) ? record.observation.turnObserved === true : false,
-        committedAction: asString(selected.action),
+        committedAction,
         committedTraining: asString(selected.training),
         recovery: recoveryObj ? { action: asString(recoveryObj.action), reason: asString(recoveryObj.reason) } : null,
         raceEligibility: raceElig ? { eligible: raceElig.eligible === true, reason: asString(raceElig.reason) } : null,
         actionContest: classifyActionContest(record),
         trainingContest: classifyTrainingContest(record),
         traceState: projectTraceState(record),
+        raceExecution: projectRaceExecution(record, committedAction, observedTurn),
         hasStateJoin: false,
     }
 }
@@ -827,10 +977,55 @@ function describeParseFailure(parsed: { kind: string; [key: string]: unknown }):
 
 // ---- Career assembly ----
 
+/**
+ * Per-career entered-race capability witness: true when at least one decision under this careerToken
+ * carried an `enteredRace` field. This is the sole capability signal (never version/timestamp/scenario),
+ * and it is intentionally token-scoped so a resumed run (new careerToken) cannot witness for another - no
+ * cross-career leakage. Field presence (not fact validity) proves the producer emitted the field.
+ */
+function enteredRaceWitnessed(entries: DecisionEntry[]): boolean {
+    return entries.some((e) => e.record.enteredRace !== undefined)
+}
+
+/**
+ * Under a proven capability witness, a RACE decision with no fact means the producer did not confirm a
+ * completed race for it - `notConfirmedCompleted`, never "aborted". Only the provisional `unknown` set by
+ * [projectRaceExecution] for a RACE-without-fact is upgraded; every other status is left untouched.
+ */
+function upgradeUnconfirmedRaceExecutions(entries: DecisionEntry[]): void {
+    for (const e of entries) {
+        if (e.decision.raceExecution.status === "unknown") e.decision.raceExecution = { status: "notConfirmedCompleted" }
+    }
+}
+
+/** Emits warning-class entered-race anomalies. Never fatal: a well-formed v1 record stays parseable. */
+function enteredRaceAnomalies(token: string | null, entries: DecisionEntry[], out: ReplayAnomaly[]): void {
+    for (const e of entries) {
+        const present = e.record.enteredRace !== undefined
+        const isRace = e.decision.committedAction === "RACE"
+        if (present && !isRace) {
+            out.push({ type: "enteredRaceOnNonRaceDecision", careerToken: token, seq: e.decision.seq, detail: `enteredRace present on non-RACE decision (action ${e.decision.committedAction ?? "none"})` })
+            continue
+        }
+        const rx = e.decision.raceExecution
+        if (rx.status !== "completed" || rx.fact.valid) continue
+        const turnMismatch = rx.fact.issues.filter((i) => i.includes(TURN_MISMATCH_MARKER))
+        const otherIssues = rx.fact.issues.filter((i) => !i.includes(TURN_MISMATCH_MARKER))
+        if (turnMismatch.length > 0) out.push({ type: "enteredRaceTurnMismatch", careerToken: token, seq: e.decision.seq, detail: turnMismatch[0] })
+        if (otherIssues.length > 0) out.push({ type: "invalidEnteredRaceFact", careerToken: token, seq: e.decision.seq, detail: otherIssues.join("; ") })
+    }
+}
+
 function assembleCareer(token: string, entries: DecisionEntry[], seqMap: Map<number, ReplayState> | null, finalizeList: FinalizeRecord[] | null, careerStateSupplied: boolean): ReplayCareer {
     const anomalies: ReplayAnomaly[] = []
     const cohort = mergeCohort(entries.map((e) => cohortFromDecision(e.record)))
     identityAnomalies(token, entries, anomalies)
+
+    // Entered-race capability witness is token-scoped: compute over all of this token's decisions, then
+    // upgrade RACE-without-fact from `unknown` to `notConfirmedCompleted` only under the witness.
+    const enteredRaceCapabilityWitness = enteredRaceWitnessed(entries)
+    if (enteredRaceCapabilityWitness) upgradeUnconfirmedRaceExecutions(entries)
+    enteredRaceAnomalies(token, entries, anomalies)
 
     const sequenced = entries.filter((e) => e.decision.seq !== null)
     const unsequenced = entries.filter((e) => e.decision.seq === null)
@@ -930,6 +1125,7 @@ function assembleCareer(token: string, entries: DecisionEntry[], seqMap: Map<num
         stateWithoutTraceCount,
         traceWithoutStateCount: anomalies.filter((a) => a.type === "traceWithoutState").length,
         seqGapCount,
+        enteredRaceCapabilityWitness,
         decisions: ordered.map((e) => e.decision),
         transitions,
         finalize: assembleFinalize(finalizeList),
@@ -941,6 +1137,9 @@ function assembleUnkeyed(entries: DecisionEntry[]): ReplayCareer {
     const cohort = mergeCohort(entries.map((e) => cohortFromDecision(e.record)))
     const anomalies: ReplayAnomaly[] = []
     contestAnomalies(null, entries, anomalies)
+    // Unkeyed records have no careerToken, so capability can never be proven "for the same career": no
+    // witness, no upgrade. A RACE-without-fact stays `unknown`. Structural anomalies still surface.
+    enteredRaceAnomalies(null, entries, anomalies)
     return {
         careerToken: UNKEYED,
         capability: "TRACE_ONLY",
@@ -952,6 +1151,7 @@ function assembleUnkeyed(entries: DecisionEntry[]): ReplayCareer {
         stateWithoutTraceCount: 0,
         traceWithoutStateCount: 0,
         seqGapCount: 0,
+        enteredRaceCapabilityWitness: false,
         decisions: entries.map((e) => e.decision),
         transitions: [],
         finalize: assembleFinalize(null),
@@ -975,6 +1175,7 @@ function assembleStateOnly(token: string, seqMap: Map<number, ReplayState>): Rep
         stateWithoutTraceCount: seqMap.size,
         traceWithoutStateCount: 0,
         seqGapCount: 0,
+        enteredRaceCapabilityWitness: false,
         decisions: [],
         transitions: [],
         finalize: assembleFinalize(null),
@@ -1034,10 +1235,18 @@ function summarize(careers: ReplayCareer[]): ReplaySummary {
     const anomalyCountsByType: Record<string, number> = {}
     let traceOnly = 0
     let joined = 0
+    let completedRaceCount = 0
+    let notConfirmedCompletedRaceCount = 0
+    let unknownRaceCount = 0
+    let invalidEnteredRaceFactCount = 0
+    let nonCatalogCompletedCount = 0
+    let careersWithEnteredRaceWitness = 0
+    const pathMixCounts = new Map<string, number>()
 
     for (const c of careers) {
         if (c.capability === "JOINED") joined++
         else traceOnly++
+        if (c.enteredRaceCapabilityWitness) careersWithEnteredRaceWitness++
         decisionCount += c.decisionCount
         sequencedDecisionCount += c.sequencedDecisionCount
         joinedCount += c.joinedCount
@@ -1049,9 +1258,26 @@ function summarize(careers: ReplayCareer[]): ReplaySummary {
                 if (d.trainingContest.recordedScoreGap.eligible) scoreGapEligibleCount++
                 else if (d.trainingContest.selected) scoreGapSuppressedCount++
             }
+            const rx = d.raceExecution
+            if (rx.status === "completed") {
+                completedRaceCount++
+                if (!rx.fact.valid) invalidEnteredRaceFactCount++
+                else {
+                    if (rx.fact.resolution === "nonCatalog") nonCatalogCompletedCount++
+                    if (rx.fact.path !== null) pathMixCounts.set(rx.fact.path, (pathMixCounts.get(rx.fact.path) ?? 0) + 1)
+                }
+            } else if (rx.status === "notConfirmedCompleted") {
+                notConfirmedCompletedRaceCount++
+            } else if (rx.status === "unknown") {
+                unknownRaceCount++
+            }
         }
         for (const a of c.anomalies) anomalyCountsByType[a.type] = (anomalyCountsByType[a.type] ?? 0) + 1
     }
+
+    // Sort path keys for byte-stable JSON regardless of encounter order.
+    const pathMix: Record<string, number> = {}
+    for (const key of [...pathMixCounts.keys()].sort()) pathMix[key] = pathMixCounts.get(key) as number
 
     return {
         careerCount: careers.length,
@@ -1065,6 +1291,15 @@ function summarize(careers: ReplayCareer[]): ReplaySummary {
         scoreGapEligibleCount,
         scoreGapSuppressedCount,
         seqGapCount,
+        raceExecution: {
+            completedRaceCount,
+            notConfirmedCompletedRaceCount,
+            unknownRaceCount,
+            invalidEnteredRaceFactCount,
+            nonCatalogCompletedCount,
+            careersWithEnteredRaceWitness,
+            pathMix,
+        },
         anomalyCountsByType,
     }
 }
@@ -1083,6 +1318,33 @@ function computeExit(failures: ReplayResult["failures"], careers: ReplayCareer[]
 
 // ---- Text report (constrained terminology; no causal language, no "regret") ----
 
+/**
+ * One factual race-execution line for a decision, or null when not race-relevant. Uses only recorded
+ * facts and preserved uncertainty: no "failed"/"aborted"/"caused"/"optimal", no invented identity.
+ */
+function describeRaceExecution(d: ReplayDecision): string | null {
+    const rx = d.raceExecution
+    const turn = d.observedTurn ?? "?"
+    switch (rx.status) {
+        case "notApplicable":
+            return null
+        case "notConfirmedCompleted":
+            return `- seq ${d.seq ?? "-"}: RACE selected; completion not confirmed by entered-race telemetry (turn ${turn})`
+        case "unknown":
+            return `- seq ${d.seq ?? "-"}: RACE selected; completion identity unavailable from this corpus (turn ${turn})`
+        case "completed": {
+            const f = rx.fact
+            const ft = f.turnNumber ?? turn
+            if (!f.valid) return `- seq ${d.seq ?? "-"}: race completed; malformed entered-race telemetry (turn ${ft}, issues: ${f.issues.join("; ")})`
+            if (f.resolution === "nonCatalog") return `- seq ${d.seq ?? "-"}: non-catalog race event completed (turn ${ft}, ${f.path})`
+            if (f.name !== null) return `- seq ${d.seq ?? "-"}: race completed: ${f.name} (turn ${ft}, ${f.resolution}, ${f.path})`
+            if (f.resolution === "unresolved") return `- seq ${d.seq ?? "-"}: race completed: identity unresolved (turn ${ft}, ${f.path})`
+            // ambiguousSet / fuzzy-multi: preserve uncertainty, never invent a name.
+            return `- seq ${d.seq ?? "-"}: race completed: identity ambiguous (turn ${ft}, ${f.resolution}, ${f.path}${f.matchCount !== null ? `, matchCount ${f.matchCount}` : ""})`
+        }
+    }
+}
+
 /** Renders the deterministic human-readable report. Uses only observational/recorded terminology. */
 export function renderReplayReport(result: ReplayResult): string {
     const lines: string[] = []
@@ -1091,6 +1353,12 @@ export function renderReplayReport(result: ReplayResult): string {
     lines.push(`${s.careerCount} career(s): ${s.joinedCount} JOINED, ${s.traceOnlyCount} TRACE_ONLY. ${s.decisionCount} decision(s), ${s.sequencedDecisionCount} sequenced.`)
     lines.push(`state coverage: ${s.stateCoverage.joined}/${s.stateCoverage.sequencedDecisions} sequenced decisions joined a CareerState. finalize: ${s.finalizeCoverage.withFinalize}/${s.finalizeCoverage.careers} careers.`)
     lines.push(`training contests: ${s.trainingContestCount} (recordedScoreGap eligible ${s.scoreGapEligibleCount}, suppressed ${s.scoreGapSuppressedCount}). seq gaps: ${s.seqGapCount}.`)
+    const rx = s.raceExecution
+    const pathMixText = Object.keys(rx.pathMix).length > 0 ? ` paths: ${Object.entries(rx.pathMix).map(([p, n]) => `${p}=${n}`).join(", ")}.` : ""
+    lines.push(
+        `race execution: ${rx.completedRaceCount} completed (${rx.invalidEnteredRaceFactCount} malformed, ${rx.nonCatalogCompletedCount} non-catalog), ` +
+            `${rx.notConfirmedCompletedRaceCount} not-confirmed, ${rx.unknownRaceCount} unknown; ${rx.careersWithEnteredRaceWitness}/${s.careerCount} career(s) with capability witness.${pathMixText}`,
+    )
     if (result.failures.length > 0) lines.push(`parse/schema failures: ${result.failures.length} (see below).`)
     const anomalyTypes = Object.keys(s.anomalyCountsByType).sort()
     if (anomalyTypes.length > 0) lines.push(`anomalies: ${anomalyTypes.map((t) => `${t}=${s.anomalyCountsByType[t]}`).join(", ")}.`)
@@ -1117,6 +1385,11 @@ export function renderReplayReport(result: ReplayResult): string {
             lines.push(`- finalize: ${c.finalize.finalizationDecision ?? "?"} / ${c.finalize.sessionOutcome ?? "?"} / remaining SP ${c.finalize.verifiedRemainingSp ?? "?"}`)
         } else {
             lines.push(`- finalize: absent (valid; a pre-resume segment legitimately has none)`)
+        }
+        lines.push(`- entered-race capability witness: ${c.enteredRaceCapabilityWitness ? "yes" : "no"}`)
+        for (const d of c.decisions) {
+            const raceLine = describeRaceExecution(d)
+            if (raceLine !== null) lines.push(`  ${raceLine}`)
         }
         if (c.anomalies.length > 0) {
             const byType = new Map<string, number>()
