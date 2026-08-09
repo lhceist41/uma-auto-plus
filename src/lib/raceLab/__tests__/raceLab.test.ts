@@ -274,3 +274,254 @@ describe("synthetic same-name collision", () => {
         expect(r.issues.find((i) => i.code === "planTurnMismatch")?.detail).toContain("12, 30")
     })
 })
+
+// ---- Phase 2B: entered-race canonical enrichment ----
+
+describe("entered-race canonical enrichment (Phase 2B)", () => {
+    const uraTimeline = buildObjectiveTimeline("Copano Rickey", rawObjectives, catalog) // Fukuryu Stakes @ turn 31 (mandatory)
+    const mandatoryReq = uraTimeline.requirements.find((r) => !r.isChoice) as ObjectiveRequirement
+    const mandatoryRace = mandatoryReq.options[0].canonicalRace // real (name, turnNumber) that IS an objective
+    const daiwaTimeline = buildObjectiveTimeline("Daiwa Scarlet", rawObjectives, catalog) // choice @ turn 34
+    const choiceReq = daiwaTimeline.requirements.find((r) => r.isChoice) as ObjectiveRequirement
+    const choiceRace = choiceReq.options[0].canonicalRace
+    const marineTurns = catalog.racesByName("Marine Cup").map((r) => r.turnNumber) // [31, 55] real collision
+    // A real catalog race that is NOT any Copano Rickey objective (for the nonObjective relation).
+    const objKeys = new Set(uraTimeline.requirements.flatMap((r) => r.options.map((o) => `${o.canonicalRace.key.name}|${o.canonicalRace.key.turnNumber}`)))
+    const nonObjectiveRace = catalog.allRaces().find((r) => !objKeys.has(`${r.name}|${r.turnNumber}`)) as CompiledRace
+
+    function exactFact(name: string, turnNumber: number): { turnNumber: number; resolution: string; path: string; name: string; matchCount: number } {
+        return { turnNumber, resolution: "exact", path: "smart", name, matchCount: 1 }
+    }
+
+    it("1. old/no-fact input keeps enteredRaceIdentity unavailable and adds no nested enrichment", () => {
+        const a = annotateHistoricalTurn({ seq: 5, turn: 31, committedAction: "RACE" }, uraTimeline, undefined, catalog)
+        expect(a.enteredRaceIdentity).toBe("unavailable")
+        expect(a.enteredRace).toBeUndefined()
+    })
+
+    it("2. exact + name + matching key resolves canonical metadata and preserves resolution/path", () => {
+        const a = annotateHistoricalTurn(
+            { seq: 1, turn: mandatoryRace.turnNumber, committedAction: "RACE", enteredRace: exactFact(mandatoryRace.name, mandatoryRace.turnNumber) },
+            uraTimeline,
+            undefined,
+            catalog,
+        )
+        expect(a.enteredRaceIdentity).toBe(mandatoryRace.name)
+        expect(a.enteredRace?.catalog.status).toBe("resolved")
+        if (a.enteredRace?.catalog.status !== "resolved") throw new Error("expected resolved")
+        expect(a.enteredRace.catalog.race).toMatchObject({
+            name: mandatoryRace.name,
+            turnNumber: mandatoryRace.turnNumber,
+            grade: mandatoryRace.grade,
+            surface: mandatoryRace.terrain,
+            distanceType: mandatoryRace.distanceType,
+            distance: mandatoryRace.distanceMeters,
+        })
+        expect(a.enteredRace.fact.resolution).toBe("exact")
+        expect(a.enteredRace.fact.path).toBe("smart")
+    })
+
+    it("3. fuzzy unique + canonical name joins and stays fuzzy (never upgraded to exact)", () => {
+        const a = annotateHistoricalTurn(
+            { turn: mandatoryRace.turnNumber, committedAction: "RACE", enteredRace: { turnNumber: mandatoryRace.turnNumber, resolution: "fuzzy", path: "scheduled", name: mandatoryRace.name, matchCount: 1 } },
+            uraTimeline,
+            undefined,
+            catalog,
+        )
+        expect(a.enteredRaceIdentity).toBe(mandatoryRace.name)
+        expect(a.enteredRace?.catalog.status).toBe("resolved")
+        expect(a.enteredRace?.fact.resolution).toBe("fuzzy") // preserved, not exact
+    })
+
+    it("4. ambiguousSet does not join, identity unavailable, matchCount preserved, no possible-set", () => {
+        const a = annotateHistoricalTurn(
+            { turn: 31, committedAction: "RACE", enteredRace: { turnNumber: 31, resolution: "ambiguousSet", path: "scheduled", matchCount: 2 } },
+            uraTimeline,
+            undefined,
+            catalog,
+        )
+        expect(a.enteredRaceIdentity).toBe("unavailable")
+        expect(a.enteredRace?.catalog.status).toBe("notJoinable")
+        if (a.enteredRace?.catalog.status !== "notJoinable") throw new Error("expected notJoinable")
+        expect(a.enteredRace.catalog.reason).toBe("ambiguous")
+        expect(a.enteredRace.fact.matchCount).toBe(2)
+        // No possible-set is invented: the annotation exposes no candidate list.
+        expect(Object.keys(a.enteredRace)).toEqual(["fact", "catalog", "fit", "objectiveRelation"])
+    })
+
+    it("5. fuzzy multi does not join and preserves fuzzy ambiguity + matchCount", () => {
+        const a = annotateHistoricalTurn(
+            { turn: 31, committedAction: "RACE", enteredRace: { turnNumber: 31, resolution: "fuzzy", path: "scheduled", matchCount: 3 } },
+            uraTimeline,
+            undefined,
+            catalog,
+        )
+        expect(a.enteredRaceIdentity).toBe("unavailable")
+        expect(a.enteredRace?.catalog.status).toBe("notJoinable")
+        expect(a.enteredRace?.fact.resolution).toBe("fuzzy")
+        expect(a.enteredRace?.fact.matchCount).toBe(3)
+    })
+
+    it("6. unresolved does not join and identity stays unavailable", () => {
+        const a = annotateHistoricalTurn(
+            { turn: 22, committedAction: "RACE", enteredRace: { turnNumber: 22, resolution: "unresolved", path: "standard" } },
+            uraTimeline,
+            undefined,
+            catalog,
+        )
+        expect(a.enteredRaceIdentity).toBe("unavailable")
+        if (a.enteredRace?.catalog.status !== "notJoinable") throw new Error("expected notJoinable")
+        expect(a.enteredRace.catalog.reason).toBe("unresolved")
+    })
+
+    it("7. nonCatalog/unityCupShowdown is a factual event: no join, no fit, identity unavailable", () => {
+        const a = annotateHistoricalTurn(
+            { turn: 40, committedAction: "RACE", enteredRace: { turnNumber: 40, resolution: "nonCatalog", path: "unityCupShowdown" } },
+            uraTimeline,
+            { surface: { TURF: "A" }, distance: { MILE: "A" } },
+            catalog,
+        )
+        expect(a.enteredRaceIdentity).toBe("unavailable")
+        if (a.enteredRace?.catalog.status !== "notJoinable") throw new Error("expected notJoinable")
+        expect(a.enteredRace.catalog.reason).toBe("nonCatalog")
+        expect(a.enteredRace.fit).toBeNull()
+        expect(a.enteredRace.fact.path).toBe("unityCupShowdown")
+    })
+
+    it("8. catalogLookupFailed preserves the producer name and stamps the catalog fingerprint, no throw", () => {
+        const a = annotateHistoricalTurn(
+            { turn: 9999, committedAction: "RACE", enteredRace: exactFact(mandatoryRace.name, 9999) }, // real name, absent turn
+            uraTimeline,
+            undefined,
+            catalog,
+        )
+        expect(a.enteredRaceIdentity).toBe(mandatoryRace.name) // producer truth preserved despite drift
+        if (a.enteredRace?.catalog.status !== "catalogLookupFailed") throw new Error("expected catalogLookupFailed")
+        expect(a.enteredRace.catalog.name).toBe(mandatoryRace.name)
+        expect(a.enteredRace.catalog.turnNumber).toBe(9999)
+        expect(a.enteredRace.catalog.catalogFingerprint).toBe(catalog.fingerprint())
+    })
+
+    it("9. same-name collision joins only (name, fact.turnNumber); the wrong turn never substitutes", () => {
+        const [tA, tB] = marineTurns
+        const jA = annotateHistoricalTurn({ turn: tA, committedAction: "RACE", enteredRace: exactFact("Marine Cup", tA) }, undefined, undefined, catalog).enteredRace
+        const jB = annotateHistoricalTurn({ turn: tB, committedAction: "RACE", enteredRace: exactFact("Marine Cup", tB) }, undefined, undefined, catalog).enteredRace
+        if (jA?.catalog.status !== "resolved" || jB?.catalog.status !== "resolved") throw new Error("expected both resolved")
+        expect(jA.catalog.race.turnNumber).toBe(tA)
+        expect(jB.catalog.race.turnNumber).toBe(tB)
+        // A Marine Cup at a turn that has no Marine Cup fails the lookup rather than binding another occurrence.
+        const jGhost = annotateHistoricalTurn({ turn: 9999, committedAction: "RACE", enteredRace: exactFact("Marine Cup", 9999) }, undefined, undefined, catalog).enteredRace
+        expect(jGhost?.catalog.status).toBe("catalogLookupFailed")
+    })
+
+    it("10. an invalid fact refuses canonical enrichment and stays conservative, no throw", () => {
+        const a = annotateHistoricalTurn(
+            { turn: mandatoryRace.turnNumber, committedAction: "RACE", enteredRace: { ...exactFact(mandatoryRace.name, mandatoryRace.turnNumber), valid: false, issues: ["exact resolution with no name"] } },
+            uraTimeline,
+            undefined,
+            catalog,
+        )
+        expect(a.enteredRaceIdentity).toBe("unavailable")
+        if (a.enteredRace?.catalog.status !== "notJoinable") throw new Error("expected notJoinable")
+        expect(a.enteredRace.catalog.reason).toBe("invalid")
+    })
+
+    it("11. aptitude fit reuses classifyRaceFit for a joined race when aptitudes are supplied", () => {
+        const apt = { surface: { [mandatoryRace.terrain.toUpperCase()]: "A" }, distance: { [mandatoryRace.distanceType.toUpperCase()]: "A" } }
+        const a = annotateHistoricalTurn(
+            { turn: mandatoryRace.turnNumber, committedAction: "RACE", enteredRace: exactFact(mandatoryRace.name, mandatoryRace.turnNumber) },
+            uraTimeline,
+            apt,
+            catalog,
+        )
+        expect(a.enteredRace?.fit?.meetsCurrentRuntimeAptitudeGate).toBe(true)
+        expect(a.enteredRace?.fit).toEqual(classifyRaceFit(mandatoryRace, apt))
+    })
+
+    it("12. aptitude unavailable yields no invented fit (null)", () => {
+        const a = annotateHistoricalTurn(
+            { turn: mandatoryRace.turnNumber, committedAction: "RACE", enteredRace: exactFact(mandatoryRace.name, mandatoryRace.turnNumber) },
+            uraTimeline,
+            undefined,
+            catalog,
+        )
+        expect(a.enteredRace?.fit).toBeNull()
+    })
+
+    it("13. an exact (name, turn) match to a URA mandatory objective is matchesMandatoryObjective", () => {
+        const a = annotateHistoricalTurn(
+            { turn: mandatoryRace.turnNumber, committedAction: "RACE", enteredRace: exactFact(mandatoryRace.name, mandatoryRace.turnNumber) },
+            uraTimeline,
+            undefined,
+            catalog,
+        )
+        expect(a.enteredRace?.objectiveRelation).toBe("matchesMandatoryObjective")
+    })
+
+    it("14. an exact option-key match to a URA choice objective is matchesChoiceOption", () => {
+        const a = annotateHistoricalTurn(
+            { turn: choiceRace.turnNumber, committedAction: "RACE", enteredRace: exactFact(choiceRace.name, choiceRace.turnNumber) },
+            daiwaTimeline,
+            undefined,
+            catalog,
+        )
+        expect(a.enteredRace?.objectiveRelation).toBe("matchesChoiceOption")
+    })
+
+    it("15. a joined race not in the supplied URA objective set is nonObjective", () => {
+        const a = annotateHistoricalTurn(
+            { turn: nonObjectiveRace.turnNumber, committedAction: "RACE", enteredRace: exactFact(nonObjectiveRace.name, nonObjectiveRace.turnNumber) },
+            uraTimeline,
+            undefined,
+            catalog,
+        )
+        expect(a.enteredRace?.catalog.status).toBe("resolved")
+        expect(a.enteredRace?.objectiveRelation).toBe("nonObjective")
+    })
+
+    it("16. no objective timeline yields objectiveRelation unavailable", () => {
+        const a = annotateHistoricalTurn(
+            { turn: mandatoryRace.turnNumber, committedAction: "RACE", enteredRace: exactFact(mandatoryRace.name, mandatoryRace.turnNumber) },
+            undefined,
+            undefined,
+            catalog,
+        )
+        expect(a.enteredRace?.objectiveRelation).toBe("unavailable")
+    })
+
+    it("17. without a URA timeline (e.g. Trackblazer/Unity Cup callers), no URA relation is ever asserted", () => {
+        const a = annotateHistoricalTurn(
+            { turn: mandatoryRace.turnNumber, committedAction: "RACE", enteredRace: exactFact(mandatoryRace.name, mandatoryRace.turnNumber) },
+            undefined, // no timeline supplied
+            undefined,
+            catalog,
+        )
+        expect(a.enteredRace?.objectiveRelation).toBe("unavailable")
+    })
+
+    it("18. producer resolution and path are preserved verbatim through enrichment", () => {
+        const a = annotateHistoricalTurn(
+            { turn: mandatoryRace.turnNumber, committedAction: "RACE", enteredRace: { turnNumber: mandatoryRace.turnNumber, resolution: "exact", path: "mandatoryGoal", name: mandatoryRace.name, matchCount: 1 } },
+            uraTimeline,
+            undefined,
+            catalog,
+        )
+        expect(a.enteredRace?.fact.resolution).toBe("exact")
+        expect(a.enteredRace?.fact.path).toBe("mandatoryGoal")
+    })
+
+    it("19. the enrichment stamps the current catalog fingerprint on both resolved and failed joins", () => {
+        const resolved = annotateHistoricalTurn({ turn: mandatoryRace.turnNumber, committedAction: "RACE", enteredRace: exactFact(mandatoryRace.name, mandatoryRace.turnNumber) }, undefined, undefined, catalog).enteredRace
+        const failed = annotateHistoricalTurn({ turn: 9999, committedAction: "RACE", enteredRace: exactFact(mandatoryRace.name, 9999) }, undefined, undefined, catalog).enteredRace
+        if (resolved?.catalog.status !== "resolved" || failed?.catalog.status !== "catalogLookupFailed") throw new Error("unexpected statuses")
+        expect(resolved.catalog.catalogFingerprint).toBe(catalog.fingerprint())
+        expect(failed.catalog.catalogFingerprint).toBe(catalog.fingerprint())
+    })
+
+    it("20. repeated annotation output is byte-identical (deterministic)", () => {
+        const input = { turn: mandatoryRace.turnNumber, committedAction: "RACE" as const, enteredRace: exactFact(mandatoryRace.name, mandatoryRace.turnNumber) }
+        const a = JSON.stringify(annotateHistoricalTurn(input, uraTimeline, { surface: { TURF: "A" }, distance: { MILE: "A" } }, catalog))
+        const b = JSON.stringify(annotateHistoricalTurn(input, uraTimeline, { surface: { TURF: "A" }, distance: { MILE: "A" } }, catalog))
+        expect(a).toBe(b)
+    })
+})

@@ -10,4 +10,14 @@ export { classifyRaceFit, meetsCurrentRuntimeAptitudeGate } from "./fit.ts"
 export { buildSchedule, analyzePressure } from "./pressure.ts"
 export { parsePlan, validatePlan, loadPlan } from "./planValidator.ts"
 export { annotateHistoricalTurn, annotateHistory } from "./annotate.ts"
-export type { HistoricalTurnInput, TurnAnnotation, AnnotatedObjectiveOption } from "./annotate.ts"
+export type {
+    HistoricalTurnInput,
+    TurnAnnotation,
+    AnnotatedObjectiveOption,
+    HistoricalEnteredRaceFact,
+    EnteredRaceAnnotation,
+    EnteredRaceCatalogJoin,
+    EnteredRaceObjectiveRelation,
+    EnteredRaceNotJoinableReason,
+    CanonicalRaceMeta,
+} from "./annotate.ts"
