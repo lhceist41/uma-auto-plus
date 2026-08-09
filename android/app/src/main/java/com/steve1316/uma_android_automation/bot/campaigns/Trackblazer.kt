@@ -7,8 +7,6 @@ import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.bot.DialogHandlerResult
 import com.steve1316.uma_android_automation.bot.EnteredRace
-import com.steve1316.uma_android_automation.bot.EnteredRacePath
-import com.steve1316.uma_android_automation.bot.EnteredRaceResolution
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.MainScreenAction
 import com.steve1316.uma_android_automation.bot.RaceFallbackOutcome
@@ -665,10 +663,11 @@ class Trackblazer(game: Game) : Campaign(game) {
     override fun handleRaceEvents(isScheduledRace: Boolean): Boolean {
         counterUpdatedByOCR = false
 
-        // Name of the Trackblazer-selected extra race, captured before it is entered so the completed
-        // entry can be recorded with its real identity (the base already-selected tail only knows an
-        // unresolved fact). Stays null for scheduled and mandatory-ribbon races, which use base telemetry.
-        var tbSelectedRaceName: String? = null
+        // Entered-race fact for the Trackblazer-selected extra race, captured before it is entered so the
+        // completed entry can be recorded with its real identity AND its true lookup provenance (the base
+        // already-selected tail only knows an unresolved fact). Stays null for scheduled and
+        // mandatory-ribbon races, which use base telemetry.
+        var tbSelectedEnteredRace: EnteredRace? = null
 
         // If it's not a scheduled race, we need to apply Trackblazer-specific filtering.
         if (!isScheduledRace) {
@@ -717,8 +716,8 @@ class Trackblazer(game: Game) : Campaign(game) {
 
             val suitableRaceResult = racing.findSuitableTrackblazerRace(consecutiveRaceCount)
             if (suitableRaceResult != null) {
-                val suitableRaceLocation = suitableRaceResult.first
-                val raceData = suitableRaceResult.second
+                val suitableRaceLocation = suitableRaceResult.point
+                val raceData = suitableRaceResult.raceData
                 MessageLog.i(TAG, "[TRACKBLAZER] Found suitable race: ${raceData.name} (${raceData.grade}). Processing items.")
 
                 // Use race-related items (Hammers, Glow Sticks).
@@ -731,7 +730,9 @@ class Trackblazer(game: Game) : Campaign(game) {
 
                 racing.lastRaceGrade = raceData.grade
                 racing.lastRaceIsRival = raceData.isRival
-                tbSelectedRaceName = raceData.name
+                // Carry the selection's real resolution provenance (exact/fuzzy/ambiguousSet) instead of
+                // stamping exact/1 unconditionally.
+                tbSelectedEnteredRace = suitableRaceResult.enteredRace
                 game.tap(suitableRaceLocation.x, suitableRaceLocation.y, IconRaceListPredictionDoubleStar.template.path, ignoreWaiting = true)
                 game.wait(0.5)
             } else {
@@ -745,10 +746,9 @@ class Trackblazer(game: Game) : Campaign(game) {
         val result = super.handleRaceEvents(isScheduledRace)
         if (result) {
             // The base already-selected tail recorded an unresolved standalone fact; replace it with the
-            // race Trackblazer actually selected by name (turn from the current turn, not the map).
-            tbSelectedRaceName?.let {
-                recordEnteredRace(EnteredRace(date.day, EnteredRaceResolution.EXACT, EnteredRacePath.SMART, name = it, matchCount = 1))
-            }
+            // race Trackblazer actually selected, carrying its real lookup provenance (turn is already
+            // the current turn, never the bare-name map's).
+            tbSelectedEnteredRace?.let { recordEnteredRace(it) }
             if (!counterUpdatedByOCR) {
                 consecutiveRaceCount++
                 MessageLog.i(TAG, "[TRACKBLAZER] Incremented consecutive race count to $consecutiveRaceCount.")

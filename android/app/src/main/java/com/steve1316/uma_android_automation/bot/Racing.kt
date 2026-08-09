@@ -234,7 +234,28 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     private var lastLookupTier: LookupTier = LookupTier.NONE
 
     /** Result tier of a [lookupRaceInDatabase] call, for entered-race telemetry resolution labeling. */
-    private enum class LookupTier { NONE, EXACT, FUZZY }
+    internal enum class LookupTier { NONE, EXACT, FUZZY }
+
+    /**
+     * One suitable Trackblazer race row, carrying the star tier used for ranking AND the lookup
+     * provenance ([lookupTier] / [matchCount]) captured at THIS row's database lookup. Hoisted out of
+     * [findSuitableTrackblazerRace] so the pure winner-selection ([trackblazerWinner]) and its
+     * entered-race fact ([selectTrackblazerRaceFact]) can be unit-tested without a device, and so the
+     * selected row's own tier travels with it instead of being read from the mutable [lastLookupTier]
+     * after later rows overwrite it.
+     */
+    internal data class TrackblazerCandidate(
+        val point: Point,
+        val race: RaceData,
+        val detectedName: String,
+        val isRival: Boolean,
+        val starTier: PredictionTier,
+        val lookupTier: LookupTier,
+        val matchCount: Int,
+    )
+
+    /** Selection + point + entered-race provenance returned by [findSuitableTrackblazerRace]. */
+    data class TrackblazerRaceSelection(val point: Point, val raceData: RaceData, val enteredRace: EnteredRace)
 
     /** The identity of the optional race the extra-race selection committed to this attempt, staged by
      * [processSmartRacing] (or a scenario) and read at the extra-race completion tail. Null means the
@@ -250,17 +271,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      * ambiguous set to the first row. Must be called immediately after the lookup, before another runs.
      */
     private fun enteredRaceFromLookup(path: EnteredRacePath, turn: Int, matches: List<RaceData>): EnteredRace =
-        when {
-            matches.isEmpty() -> EnteredRace(turn, EnteredRaceResolution.UNRESOLVED, path)
-            lastLookupTier == LookupTier.FUZZY ->
-                if (matches.size == 1) {
-                    EnteredRace(turn, EnteredRaceResolution.FUZZY, path, name = matches[0].name)
-                } else {
-                    EnteredRace(turn, EnteredRaceResolution.FUZZY, path, matchCount = matches.size)
-                }
-            matches.size == 1 -> EnteredRace(turn, EnteredRaceResolution.EXACT, path, name = matches[0].name)
-            else -> EnteredRace(turn, EnteredRaceResolution.AMBIGUOUS_SET, path, matchCount = matches.size)
-        }
+        enteredRaceFromResolution(path, turn, lastLookupTier, matches.size, matches.singleOrNull()?.name)
 
     /** Whether to stop the bot when a mandatory race is detected. */
     internal val enableStopOnMandatoryRace: Boolean = SettingsHelper.getBooleanSetting("racing", "enableStopOnMandatoryRaces")
@@ -395,6 +406,64 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]Racing"
+
+        /** Grade ranking for Trackblazer candidate selection (lower = preferred). */
+        private val trackblazerGradePriority: Map<RaceGrade, Int> =
+            mapOf(RaceGrade.G1 to 1, RaceGrade.G2 to 2, RaceGrade.G3 to 3, RaceGrade.OP to 4, RaceGrade.PRE_OP to 5)
+
+        /**
+         * Pure resolution mapping shared by every lookup-derived entered-race fact, so the exact/
+         * ambiguousSet/fuzzy/unresolved taxonomy lives in one place. Callers that scan multiple rows
+         * (Trackblazer) must capture [tier] and [matchCount] per row AT its lookup and pass them here,
+         * never read the mutable `lastLookupTier` later - a subsequent lookup overwrites it. [uniqueName]
+         * is used only when [matchCount] is 1; an ambiguous set never serializes a name (no index-0
+         * flattening).
+         *
+         * [unitMatchCount] is the matchCount stamped on a UNIQUE (size-1) match: null (the default) omits
+         * it, matching the mandatory/scheduled base facts; the Trackblazer path passes 1 to keep its
+         * landed, live-validated `exact/1` shape. An ambiguous set always carries the real match count.
+         */
+        internal fun enteredRaceFromResolution(
+            path: EnteredRacePath,
+            turn: Int,
+            tier: LookupTier,
+            matchCount: Int,
+            uniqueName: String?,
+            unitMatchCount: Int? = null,
+        ): EnteredRace =
+            when {
+                matchCount == 0 -> EnteredRace(turn, EnteredRaceResolution.UNRESOLVED, path)
+                tier == LookupTier.FUZZY && matchCount == 1 -> EnteredRace(turn, EnteredRaceResolution.FUZZY, path, name = uniqueName, matchCount = unitMatchCount)
+                tier == LookupTier.FUZZY -> EnteredRace(turn, EnteredRaceResolution.FUZZY, path, matchCount = matchCount)
+                matchCount == 1 -> EnteredRace(turn, EnteredRaceResolution.EXACT, path, name = uniqueName, matchCount = unitMatchCount)
+                else -> EnteredRace(turn, EnteredRaceResolution.AMBIGUOUS_SET, path, matchCount = matchCount)
+            }
+
+        /**
+         * Pure Trackblazer winner selection: Rival first, then prediction tier, then grade, then fans.
+         * No device access, so it is unit-testable and its ordering is exactly the landed policy.
+         */
+        internal fun trackblazerWinner(candidates: List<TrackblazerCandidate>): TrackblazerCandidate? {
+            if (candidates.isEmpty()) return null
+            return candidates
+                .sortedWith(
+                    compareByDescending<TrackblazerCandidate> { it.isRival }
+                        .thenByDescending { it.starTier }
+                        .thenBy { trackblazerGradePriority[it.race.grade] ?: 99 }
+                        .thenByDescending { it.race.fans },
+                ).first()
+        }
+
+        /**
+         * Pure entered-race fact for the Trackblazer-selected optional race: the SELECTED winner's own
+         * lookup provenance, not a global tier. `path=smart` (the landed, live-proven Trackblazer path),
+         * turn is the caller's current turn, and `unitMatchCount=1` keeps the live-validated `exact/1`
+         * shape. Returns null when no candidate was suitable.
+         */
+        internal fun selectTrackblazerRaceFact(candidates: List<TrackblazerCandidate>, turn: Int): EnteredRace? {
+            val winner = trackblazerWinner(candidates) ?: return null
+            return enteredRaceFromResolution(EnteredRacePath.SMART, turn, winner.lookupTier, winner.matchCount, winner.race.name, unitMatchCount = 1)
+        }
 
         /** The name of the races table in the database. */
         private const val TABLE_RACES = "races"
@@ -2512,7 +2581,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      * @param consecutiveRaceCount Current number of consecutive races performed.
      * @return Pair of the best suitable race's location and [RaceData], or null if none found.
      */
-    fun findSuitableTrackblazerRace(consecutiveRaceCount: Int): Pair<Point, RaceData>? {
+    fun findSuitableTrackblazerRace(consecutiveRaceCount: Int): TrackblazerRaceSelection? {
         // Fan-emergency, force racing, OR a Trackblazer Grade-Point wall (the game's own
         // insufficient_goal_race_result_pts dialog forced this race) admit single-star prediction
         // races as last-resort candidates, always ranked below every double-star one. Without the
@@ -2571,14 +2640,12 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
         // ========================== END PRE-FLIGHT CHECK ==========================
 
-        data class Candidate(val point: Point, val race: RaceData, val detectedName: String, val isRival: Boolean, val tier: PredictionTier)
-
         // Cache: entry.index → list of (location-within-entry-bitmap, OCR'd race name, tier) triples.
         // Eliminates the redundant prediction findAll the original did inside onEntry on top of the
         // keyExtractor's findAll, halving the template-match work per scroll page.
         data class StarMatch(val location: Point, val name: String, val tier: PredictionTier)
 
-        val allSuitableRaces = mutableListOf<Candidate>()
+        val allSuitableRaces = mutableListOf<TrackblazerCandidate>()
 
         val scrollList = ScrollList.create(game)
         if (scrollList != null) {
@@ -2642,6 +2709,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     val screenPoint = Point(entry.bbox.x + predictionLocation.x, entry.bbox.y + predictionLocation.y)
                     val detectedName = sm.name
                     val matches = lookupRaceInDatabase(campaign.date.day, detectedName)
+                    // Capture THIS row's lookup provenance immediately, before any later row overwrites
+                    // the mutable lastLookupTier, so the selected candidate carries its own tier/count.
+                    val rowLookupTier = lastLookupTier
+                    val rowMatchCount = matches.size
 
                     for (race in matches) {
                         var isSuitable = false
@@ -2683,7 +2754,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         }
 
                         if (isSuitable) {
-                            allSuitableRaces.add(Candidate(screenPoint, race, detectedName, rivalFound, sm.tier))
+                            allSuitableRaces.add(TrackblazerCandidate(screenPoint, race, detectedName, rivalFound, sm.tier, rowLookupTier, rowMatchCount))
                             sb.appendLine("\n- Found Suitable Race: \"${race.name}\" (${race.grade}) Rival: $rivalFound Prediction: ${sm.tier}")
                         } else {
                             sb.appendLine("\n- Ignored Race: \"${race.name}\" (${race.grade}). Reason: ${reasons.joinToString(", ")}")
@@ -2722,6 +2793,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
                 val detectedName = game.imageUtils.extractRaceName(location)
                 val matches = lookupRaceInDatabase(campaign.date.day, detectedName)
+                // Capture this row's provenance before the next iteration's lookup overwrites it.
+                val rowLookupTier = lastLookupTier
+                val rowMatchCount = matches.size
 
                 for (race in matches) {
                     var isSuitable = false
@@ -2755,39 +2829,25 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     }
 
                     if (isSuitable) {
-                        allSuitableRaces.add(Candidate(location, race, detectedName, rivalFound, fallbackAnchor.tier))
+                        allSuitableRaces.add(TrackblazerCandidate(location, race, detectedName, rivalFound, fallbackAnchor.tier, rowLookupTier, rowMatchCount))
                     }
                 }
             }
         }
 
-        if (allSuitableRaces.isEmpty()) {
+        // Prioritize Rival Races, then prediction tier, then Grade, then fans (pure, unchanged policy).
+        val winner = trackblazerWinner(allSuitableRaces)
+        if (winner == null) {
             sb.appendLine("\nSummary: No suitable races found after analysis.")
             sb.appendLine("================================================")
             MessageLog.v(TAG, sb.toString())
             return null
         }
 
-        // Prioritize Rival Races, then prediction tier, then Grade, then fans.
-        val gradePriority =
-            mapOf(
-                RaceGrade.G1 to 1,
-                RaceGrade.G2 to 2,
-                RaceGrade.G3 to 3,
-                RaceGrade.OP to 4,
-                RaceGrade.PRE_OP to 5,
-            )
+        // Entered-race provenance for the SELECTED row, built from its own captured lookup tier/count.
+        val winnerEnteredRace = selectTrackblazerRaceFact(allSuitableRaces, campaign.date.day) ?: return null
 
-        val sortedRaces =
-            allSuitableRaces.sortedWith(
-                compareByDescending<Candidate> { it.isRival }
-                    .thenByDescending { it.tier }
-                    .thenBy { gradePriority[it.race.grade] ?: 99 }
-                    .thenByDescending { it.race.fans },
-            )
-        val winner = sortedRaces.first()
-
-        sb.appendLine("\nSelected Race: ${winner.race.name} (${winner.race.grade}) Rival: ${winner.isRival} Prediction: ${winner.tier}")
+        sb.appendLine("\nSelected Race: ${winner.race.name} (${winner.race.grade}) Rival: ${winner.isRival} Prediction: ${winner.starTier}")
         sb.appendLine("================================================")
         MessageLog.v(TAG, sb.toString())
 
@@ -2812,9 +2872,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 }
                 false
             }
-            if (finalWinnerPoint != null) finalWinnerPoint to winner.race else null
+            if (finalWinnerPoint != null) TrackblazerRaceSelection(finalWinnerPoint, winner.race, winnerEnteredRace) else null
         } else {
-            winner.point to winner.race
+            TrackblazerRaceSelection(winner.point, winner.race, winnerEnteredRace)
         }
     }
 
