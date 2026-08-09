@@ -39,8 +39,12 @@ export interface CanonicalRaceMeta {
     distance: number
 }
 
-/** Why an entered-race fact could not be canonically joined. */
-export type EnteredRaceNotJoinableReason = "ambiguous" | "unresolved" | "nonCatalog" | "invalid"
+/**
+ * Why an entered-race fact could not be canonically joined. `unknownResolution` is distinct from
+ * `unresolved`: the producer explicitly said `unresolved`, whereas `unknownResolution` means THIS RaceLab
+ * version does not recognize the (forward-compatible, preserved-raw) resolution token at all.
+ */
+export type EnteredRaceNotJoinableReason = "ambiguous" | "unresolved" | "nonCatalog" | "invalid" | "unknownResolution"
 
 /**
  * The result of joining an entered-race fact against RaceLab's CURRENT compiled catalog. Every branch stamps
@@ -111,7 +115,11 @@ export interface TurnAnnotation {
 function factHasCanonicalName(fact: HistoricalEnteredRaceFact): boolean {
     if (fact.valid === false) return false
     if (fact.resolution !== "exact" && fact.resolution !== "fuzzy") return false
-    return typeof fact.name === "string" && fact.name.length > 0
+    if (typeof fact.name !== "string" || fact.name.length === 0) return false
+    // A multi-match (matchCount > 1) cannot assert a unique canonical name, even if a name was carried:
+    // that shape is producer-impossible (exact multi becomes ambiguousSet; a named fuzzy is unit-count).
+    if (fact.matchCount !== undefined && fact.matchCount > 1) return false
+    return true
 }
 
 /** Derives the legacy `enteredRaceIdentity`: the producer name for a valid exact/fuzzy+name fact, else "unavailable". */
@@ -120,38 +128,60 @@ function deriveEnteredRaceIdentity(fact: HistoricalEnteredRaceFact | undefined):
     return factHasCanonicalName(fact) ? (fact.name as string) : "unavailable"
 }
 
-/** Joins a fact against the current catalog, refusing any join that would assert false canonical certainty. */
+/** Joins a NAMED exact/fuzzy fact by the canonical (name, turnNumber) key ONLY - never a bare name. */
+function joinByCanonicalKey(fact: HistoricalEnteredRaceFact, catalog: RaceCatalog, fingerprint: string): EnteredRaceCatalogJoin {
+    const name = fact.name as string
+    const race = catalog.raceByKey(name, fact.turnNumber)
+    if (race === undefined) {
+        return { status: "catalogLookupFailed", catalogFingerprint: fingerprint, name, turnNumber: fact.turnNumber }
+    }
+    return {
+        status: "resolved",
+        catalogFingerprint: fingerprint,
+        race: { name: race.name, turnNumber: race.turnNumber, grade: race.grade, surface: race.terrain, distanceType: race.distanceType, distance: race.distanceMeters },
+    }
+}
+
+/**
+ * Joins a fact against the current catalog, refusing any join that would assert false canonical certainty.
+ * RaceLab can be called directly (without ReplayLab's validation), so this re-checks the producer-impossible
+ * shapes locally - it must never grant canonical identity to a fact the native producer could not emit
+ * merely because `valid` was omitted. Rules mirror EnteredRace.kt / Racing.kt enteredRaceFromResolution.
+ */
 function joinEnteredRace(fact: HistoricalEnteredRaceFact, catalog: RaceCatalog): EnteredRaceCatalogJoin {
     const fingerprint = catalog.fingerprint()
-    // An invalid fact never yields a canonical join (a later consumer must not treat it as certain).
-    if (fact.valid === false) return { status: "notJoinable", catalogFingerprint: fingerprint, reason: "invalid" }
+    const notJoinable = (reason: EnteredRaceNotJoinableReason): EnteredRaceCatalogJoin => ({ status: "notJoinable", catalogFingerprint: fingerprint, reason })
+    // An explicit producer-side invalid verdict never yields a canonical join.
+    if (fact.valid === false) return notJoinable("invalid")
+    const matchCount = fact.matchCount ?? null
+    const named = typeof fact.name === "string" && fact.name.length > 0
     switch (fact.resolution) {
         case "nonCatalog":
-            return { status: "notJoinable", catalogFingerprint: fingerprint, reason: "nonCatalog" }
+            // nonCatalog is not an ordinary catalog match set; any multiplicity is producer-impossible.
+            return matchCount !== null ? notJoinable("invalid") : notJoinable("nonCatalog")
         case "unresolved":
-            return { status: "notJoinable", catalogFingerprint: fingerprint, reason: "unresolved" }
+            // The producer never attaches a catalog multiplicity to an unresolved identity.
+            return matchCount !== null ? notJoinable("invalid") : notJoinable("unresolved")
         case "ambiguousSet":
-            return { status: "notJoinable", catalogFingerprint: fingerprint, reason: "ambiguous" }
+            // ambiguousSet means >= 2 exact matches; a missing or < 2 count is producer-impossible.
+            return matchCount === null || matchCount < 2 ? notJoinable("invalid") : notJoinable("ambiguous")
         case "exact":
-        case "fuzzy": {
-            // A named exact/fuzzy fact joins by the canonical (name, turnNumber) key ONLY - never a bare name.
-            // A nameless fuzzy fact (fuzzy multi-match) stays ambiguous; the producer's OCR certainty is kept.
-            if (typeof fact.name !== "string" || fact.name.length === 0) {
-                return { status: "notJoinable", catalogFingerprint: fingerprint, reason: "ambiguous" }
-            }
-            const race = catalog.raceByKey(fact.name, fact.turnNumber)
-            if (race === undefined) {
-                return { status: "catalogLookupFailed", catalogFingerprint: fingerprint, name: fact.name, turnNumber: fact.turnNumber }
-            }
-            return {
-                status: "resolved",
-                catalogFingerprint: fingerprint,
-                race: { name: race.name, turnNumber: race.turnNumber, grade: race.grade, surface: race.terrain, distanceType: race.distanceType, distance: race.distanceMeters },
-            }
-        }
+            // exact resolves exactly one race: a multi count or a missing name is producer-impossible.
+            if (matchCount !== null && matchCount > 1) return notJoinable("invalid")
+            if (!named) return notJoinable("invalid")
+            return joinByCanonicalKey(fact, catalog, fingerprint)
+        case "fuzzy":
+            // A named fuzzy joins by the canonical key and STAYS fuzzy. A nameless fuzzy stays ambiguous -
+            // the producer's OCR did not settle on one identity, so no canonical certainty is granted. A
+            // NAMED fuzzy with matchCount > 1 is producer-impossible (a unique fuzzy carries no count or 1),
+            // so it is invalid rather than a canonical join, matching ReplayLab's verdict for that shape.
+            if (!named) return notJoinable("ambiguous")
+            if (matchCount !== null && matchCount > 1) return notJoinable("invalid")
+            return joinByCanonicalKey(fact, catalog, fingerprint)
         default:
-            // An unknown/future resolution token is preserved on the fact but is not a joinable canonical identity.
-            return { status: "notJoinable", catalogFingerprint: fingerprint, reason: "unresolved" }
+            // An unknown/future resolution token is preserved raw on the fact but is not a known semantic;
+            // it is distinct from a producer-explicit `unresolved`, so it gets its own reason.
+            return notJoinable("unknownResolution")
     }
 }
 

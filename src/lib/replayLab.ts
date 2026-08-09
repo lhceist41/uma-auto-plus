@@ -378,6 +378,13 @@ function isObject(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
+/** A human-readable JSON type label for a malformed value, so a tampered corpus is diagnosable. */
+function jsonTypeOf(value: unknown): string {
+    if (value === null) return "null"
+    if (Array.isArray(value)) return "array"
+    return typeof value
+}
+
 function asString(value: unknown): string | null {
     return typeof value === "string" && value.length > 0 ? value : null
 }
@@ -651,12 +658,21 @@ function buildEnteredRaceFact(raw: unknown, traceTurn: number | null): ReplayEnt
     if (turnNumber !== null && traceTurn !== null && turnNumber !== traceTurn) {
         issues.push(`turnNumber ${turnNumber} ${TURN_MISMATCH_MARKER} ${traceTurn}`)
     }
-    // Producer-semantic name/count invariants, only for recognized resolution tokens.
+    // Producer-semantic name/count invariants, only for recognized resolution tokens. These mirror the
+    // native producer (see EnteredRace.kt / Racing.kt enteredRaceFromResolution): the runtime cannot emit
+    // any combination rejected here, so an offending fact is tampered/foreign, not a real completion.
     if (resolution === "exact" && name === null) issues.push("exact resolution with no name")
     if (resolution === "ambiguousSet" && name !== null) issues.push("ambiguousSet resolution carries a name")
     if (resolution === "unresolved" && name !== null) issues.push("unresolved resolution carries a name")
     if (resolution === "nonCatalog" && name !== null) issues.push("nonCatalog resolution carries a name")
-    if (resolution === "ambiguousSet" && matchCount !== null && matchCount < 2) issues.push("ambiguousSet resolution with matchCount < 2")
+    // exact resolves exactly one turn-scoped race: it carries no matchCount, or a unit matchCount of 1
+    // (SMART/Trackblazer/planned). A count > 1 is producer-impossible (exact multi becomes ambiguousSet).
+    if (resolution === "exact" && matchCount !== null && matchCount > 1) issues.push("exact resolution with matchCount > 1")
+    // ambiguousSet represents >= 2 turn-scoped exact matches, so it always carries a matchCount >= 2.
+    if (resolution === "ambiguousSet" && (matchCount === null || matchCount < 2)) issues.push("ambiguousSet resolution requires matchCount >= 2")
+    // unresolved / nonCatalog are not ordinary catalog match sets, so the producer attaches no multiplicity.
+    if (resolution === "unresolved" && matchCount !== null) issues.push("unresolved resolution carries a matchCount")
+    if (resolution === "nonCatalog" && matchCount !== null) issues.push("nonCatalog resolution carries a matchCount")
     if (resolution === "fuzzy" && name !== null && matchCount !== null && matchCount > 1) issues.push("fuzzy multi-match carries a name")
 
     return { turnNumber, resolution, knownResolution, path, knownPath, name, matchCount, valid: issues.length === 0, issues }
@@ -668,13 +684,17 @@ function buildEnteredRaceFact(raw: unknown, traceTurn: number | null): ReplayEnt
  * `notConfirmedCompleted` by the career assembler once the per-career capability witness is known. A
  * present enteredRace on a non-RACE decision is `notApplicable` (never reinterpreted as completed); the
  * assembler surfaces it as an anomaly.
+ *
+ * A completion fact requires an OBJECT-shaped enteredRace envelope. A non-object value (null/string/
+ * number/array) can never be completion evidence and never witnesses producer capability - the native
+ * producer cannot emit it. On a RACE decision it is treated exactly like a missing fact (provisional
+ * `unknown`); the assembler surfaces the malformed field as a warning-class anomaly.
  */
 function projectRaceExecution(record: DecisionRecord, committedAction: string | null, traceTurn: number | null): ReplayRaceExecution {
     const raw = record.enteredRace
-    const present = raw !== undefined
     const isRace = committedAction === "RACE"
-    if (!present) return isRace ? { status: "unknown" } : { status: "notApplicable" }
     if (!isRace) return { status: "notApplicable" }
+    if (!isObject(raw)) return { status: "unknown" }
     return { status: "completed", fact: buildEnteredRaceFact(raw, traceTurn) }
 }
 
@@ -979,12 +999,14 @@ function describeParseFailure(parsed: { kind: string; [key: string]: unknown }):
 
 /**
  * Per-career entered-race capability witness: true when at least one decision under this careerToken
- * carried an `enteredRace` field. This is the sole capability signal (never version/timestamp/scenario),
- * and it is intentionally token-scoped so a resumed run (new careerToken) cannot witness for another - no
- * cross-career leakage. Field presence (not fact validity) proves the producer emitted the field.
+ * carried an OBJECT-shaped `enteredRace` envelope. This is the sole capability signal (never
+ * version/timestamp/scenario), and it is intentionally token-scoped so a resumed run (new careerToken)
+ * cannot witness for another - no cross-career leakage. An object envelope (not fact validity) proves the
+ * producer emitted the field; a non-object value (null/string/number/array) is tampered/foreign and must
+ * never witness capability, so it can never turn a sibling RACE-without-fact into notConfirmedCompleted.
  */
 function enteredRaceWitnessed(entries: DecisionEntry[]): boolean {
-    return entries.some((e) => e.record.enteredRace !== undefined)
+    return entries.some((e) => isObject(e.record.enteredRace))
 }
 
 /**
@@ -1001,10 +1023,17 @@ function upgradeUnconfirmedRaceExecutions(entries: DecisionEntry[]): void {
 /** Emits warning-class entered-race anomalies. Never fatal: a well-formed v1 record stays parseable. */
 function enteredRaceAnomalies(token: string | null, entries: DecisionEntry[], out: ReplayAnomaly[]): void {
     for (const e of entries) {
-        const present = e.record.enteredRace !== undefined
+        const raw = e.record.enteredRace
+        if (raw === undefined) continue
         const isRace = e.decision.committedAction === "RACE"
-        if (present && !isRace) {
+        if (!isRace) {
             out.push({ type: "enteredRaceOnNonRaceDecision", careerToken: token, seq: e.decision.seq, detail: `enteredRace present on non-RACE decision (action ${e.decision.committedAction ?? "none"})` })
+            continue
+        }
+        // A RACE decision with a non-object envelope is not a completion fact (projectRaceExecution kept it
+        // `unknown`), so the completed-fact issue path below never sees it; surface the malformed field here.
+        if (!isObject(raw)) {
+            out.push({ type: "invalidEnteredRaceFact", careerToken: token, seq: e.decision.seq, detail: `enteredRace is not an object (got ${jsonTypeOf(raw)})` })
             continue
         }
         const rx = e.decision.raceExecution
@@ -1337,6 +1366,9 @@ function describeRaceExecution(d: ReplayDecision): string | null {
             const ft = f.turnNumber ?? turn
             if (!f.valid) return `- seq ${d.seq ?? "-"}: race completed; malformed entered-race telemetry (turn ${ft}, issues: ${f.issues.join("; ")})`
             if (f.resolution === "nonCatalog") return `- seq ${d.seq ?? "-"}: non-catalog race event completed (turn ${ft}, ${f.path})`
+            // A future/unknown resolution token gets neutral wording: never labelled with a known semantic
+            // (exact/fuzzy/ambiguous/unresolved/nonCatalog); the raw token is shown verbatim.
+            if (!f.knownResolution) return `- seq ${d.seq ?? "-"}: race completed: identity unavailable under unknown resolution token ${f.resolution ?? "?"} (turn ${ft}, ${f.path})`
             if (f.name !== null) return `- seq ${d.seq ?? "-"}: race completed: ${f.name} (turn ${ft}, ${f.resolution}, ${f.path})`
             if (f.resolution === "unresolved") return `- seq ${d.seq ?? "-"}: race completed: identity unresolved (turn ${ft}, ${f.path})`
             // ambiguousSet / fuzzy-multi: preserve uncertainty, never invent a name.

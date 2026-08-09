@@ -525,3 +525,111 @@ describe("entered-race canonical enrichment (Phase 2B)", () => {
         expect(a).toBe(b)
     })
 })
+
+// ---- Direct-call semantic hardening (validation bundle) ----
+
+describe("entered-race join hardening (validation bundle)", () => {
+    const uraTimeline = buildObjectiveTimeline("Copano Rickey", rawObjectives, catalog)
+    const mandatoryReq = uraTimeline.requirements.find((r) => !r.isChoice) as ObjectiveRequirement
+    const mandatoryRace = mandatoryReq.options[0].canonicalRace
+
+    function joinOf(enteredRace: Record<string, unknown>) {
+        const a = annotateHistoricalTurn({ turn: (enteredRace.turnNumber as number) ?? 16, committedAction: "RACE", enteredRace: enteredRace as never }, uraTimeline, undefined, catalog)
+        return a.enteredRace
+    }
+    function reasonOf(enteredRace: Record<string, unknown>): string {
+        const j = joinOf(enteredRace)
+        if (j?.catalog.status !== "notJoinable") throw new Error(`expected notJoinable, got ${j?.catalog.status}`)
+        return j.catalog.reason
+    }
+
+    it("unknown future resolution refuses join with reason unknownResolution, raw token preserved, no throw", () => {
+        const j = joinOf({ turnNumber: 16, resolution: "quantumMatch", path: "smart", name: "Race A" })
+        expect(reasonOf({ turnNumber: 16, resolution: "quantumMatch", path: "smart", name: "Race A" })).toBe("unknownResolution")
+        expect(j?.fact.resolution).toBe("quantumMatch") // preserved raw
+        const a = annotateHistoricalTurn({ turn: 16, committedAction: "RACE", enteredRace: { turnNumber: 16, resolution: "quantumMatch", path: "smart", name: "Race A" } }, uraTimeline, undefined, catalog)
+        expect(a.enteredRaceIdentity).toBe("unavailable")
+    })
+
+    it("known producer unresolved keeps reason unresolved (not conflated with unknownResolution)", () => {
+        expect(reasonOf({ turnNumber: 22, resolution: "unresolved", path: "standard" })).toBe("unresolved")
+    })
+
+    it("exact + matchCount > 1 (valid omitted) refuses canonical join as invalid, identity unavailable", () => {
+        const bad = { turnNumber: mandatoryRace.turnNumber, resolution: "exact", path: "smart", name: mandatoryRace.name, matchCount: 2 }
+        expect(reasonOf(bad)).toBe("invalid")
+        const a = annotateHistoricalTurn({ turn: mandatoryRace.turnNumber, committedAction: "RACE", enteredRace: bad as never }, uraTimeline, undefined, catalog)
+        expect(a.enteredRaceIdentity).toBe("unavailable")
+    })
+
+    it("unresolved + matchCount is invalid", () => {
+        expect(reasonOf({ turnNumber: 22, resolution: "unresolved", path: "standard", matchCount: 2 })).toBe("invalid")
+    })
+
+    it("nonCatalog + matchCount is invalid", () => {
+        expect(reasonOf({ turnNumber: 40, resolution: "nonCatalog", path: "unityCupShowdown", matchCount: 2 })).toBe("invalid")
+    })
+
+    it("ambiguousSet without matchCount is invalid", () => {
+        expect(reasonOf({ turnNumber: 31, resolution: "ambiguousSet", path: "scheduled" })).toBe("invalid")
+    })
+
+    it("ambiguousSet with matchCount 1 is invalid", () => {
+        expect(reasonOf({ turnNumber: 31, resolution: "ambiguousSet", path: "scheduled", matchCount: 1 })).toBe("invalid")
+    })
+
+    it("ambiguousSet with matchCount 2 stays ambiguous (joins nothing)", () => {
+        expect(reasonOf({ turnNumber: 31, resolution: "ambiguousSet", path: "scheduled", matchCount: 2 })).toBe("ambiguous")
+    })
+
+    it("nameless exact is invalid, not merely ambiguous", () => {
+        expect(reasonOf({ turnNumber: 16, resolution: "exact", path: "smart", matchCount: 1 })).toBe("invalid")
+    })
+
+    it("nameless fuzzy multi (matchCount > 1) stays ambiguous, not invalid", () => {
+        expect(reasonOf({ turnNumber: 31, resolution: "fuzzy", path: "scheduled", matchCount: 3 })).toBe("ambiguous")
+    })
+
+    it("named fuzzy + matchCount > 1 (valid omitted) is invalid, never a canonical join", () => {
+        const bad = { turnNumber: mandatoryRace.turnNumber, resolution: "fuzzy", path: "scheduled", name: mandatoryRace.name, matchCount: 2 }
+        const a = annotateHistoricalTurn(
+            { turn: mandatoryRace.turnNumber, committedAction: "RACE", enteredRace: bad as never },
+            uraTimeline,
+            { surface: { [mandatoryRace.terrain.toUpperCase()]: "A" }, distance: { [mandatoryRace.distanceType.toUpperCase()]: "A" } },
+            catalog,
+        )
+        expect(a.enteredRaceIdentity).toBe("unavailable")
+        if (a.enteredRace?.catalog.status !== "notJoinable") throw new Error("expected notJoinable")
+        expect(a.enteredRace.catalog.reason).toBe("invalid")
+        expect(a.enteredRace.fit).toBeNull()
+        expect(a.enteredRace.objectiveRelation).toBe("unavailable")
+    })
+
+    it("a valid exact canonical tuple still resolves", () => {
+        const j = joinOf({ turnNumber: mandatoryRace.turnNumber, resolution: "exact", path: "smart", name: mandatoryRace.name, matchCount: 1 })
+        expect(j?.catalog.status).toBe("resolved")
+    })
+
+    it("a valid fuzzy unique tuple still resolves and stays fuzzy", () => {
+        const j = joinOf({ turnNumber: mandatoryRace.turnNumber, resolution: "fuzzy", path: "scheduled", name: mandatoryRace.name, matchCount: 1 })
+        expect(j?.catalog.status).toBe("resolved")
+        expect(j?.fact.resolution).toBe("fuzzy")
+    })
+
+    it("finding F: a fact supplied without a catalog keeps legacy identity and adds no nested enrichment", () => {
+        // No production caller invokes historical annotation without a catalog; this documents the
+        // intentionally-retained behavior (raw producer name still surfaces; no enrichment is faked).
+        const a = annotateHistoricalTurn(
+            { turn: mandatoryRace.turnNumber, committedAction: "RACE", enteredRace: exactFactLocal(mandatoryRace.name, mandatoryRace.turnNumber) },
+            uraTimeline,
+            undefined,
+            undefined,
+        )
+        expect(a.enteredRaceIdentity).toBe(mandatoryRace.name)
+        expect(a.enteredRace).toBeUndefined()
+    })
+
+    function exactFactLocal(name: string, turnNumber: number) {
+        return { turnNumber, resolution: "exact", path: "smart", name, matchCount: 1 }
+    }
+})
