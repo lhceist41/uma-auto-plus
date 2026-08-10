@@ -630,8 +630,30 @@ class CareerLaunchNavigator(private val context: Context) {
         finalizeGuardActive = SettingsHelper.getStringSetting("skills", "skillSpendMode").trim().lowercase() == "adaptive"
         finalizeToHomeMode = finalizeToHome
         previousCareerCompleteMode = previousCareerComplete
-        singleRunTraineeTarget = singleRunTrainee
-        singleRunTraineeTargetExcludes = singleRunTraineeExcludes
+        // Resolve the trainee THIS launch must roster-verify. The queue launch paths (StartModule's
+        // cold-start and between-run navigate() calls) pass a blank singleRunTrainee, so a queued
+        // rotation-off run would otherwise arm no target and tap through Trainee Select onto the
+        // game's sticky preselection - launched under the applied preset's token (the 2026-08-10
+        // Taiki-under-Symboli mislabel: token run1|... proves it was a queue launch). Derive the
+        // applied preset here so every launch entry point verifies identity through one choke point;
+        // rotation keeps ownership via queueState.currentTrainee, and a finalize-to-home pass starts
+        // no career. Pure branch logic lives in SingleRunTraineeGate for JUnit coverage.
+        val rotationEnabled = SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false)
+        singleRunTraineeTarget =
+            SingleRunTraineeGate.resolveTarget(
+                finalizeToHome,
+                singleRunTrainee,
+                rotationEnabled,
+                SettingsHelper.getStringSetting("general", "appliedPresetTrainee"),
+            )
+        singleRunTraineeTargetExcludes =
+            SingleRunTraineeGate.resolveExcludes(
+                finalizeToHome,
+                singleRunTrainee,
+                singleRunTraineeExcludes,
+                rotationEnabled,
+                SettingsHelper.getStringSetting("general", "appliedPresetTraineeExcludes"),
+            )
         singleRunTraineeSelectHandled = false
 
         // Smart Borrow must never pick a support of the ACTIVE TRAINEE's character: the game
@@ -3698,6 +3720,20 @@ class CareerLaunchNavigator(private val context: Context) {
     private fun handleSupportDeckScreen(reuseLastLaunchSetup: Boolean, autoFillSupports: Boolean = false): TransitionResult {
         MessageLog.i(TAG, "[NAV] On support deck screen. autoFillSupports=$autoFillSupports")
 
+        // Identity fail-closed: this screen carries the Start Career button, so a targeted single-run
+        // launch that reached here without roster-verifying the trainee (a missed Trainee Select
+        // detection tapped through onto the game's sticky preselection) must STOP before the deck is
+        // completed and the career starts. Legacy Select carries the same backstop; this covers the
+        // route where Legacy Select was also skipped or misread. reuse/deck behavior is unchanged for
+        // rotation launches and for single runs that DID verify.
+        if (SingleRunTraineeGate.mustFailClosed(singleRunTraineeTarget, singleRunTraineeSelectHandled)) {
+            return TransitionResult.Failed(
+                reason = "This launch expected trainee '$singleRunTraineeTarget' (applied preset) but Trainee Select was not verified before the Support Deck; the wrong trainee may be selected.",
+                transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                recommendedAction = "Select the trainee manually in-game and start from the deck screen, or re-apply the intended preset and start again.",
+            )
+        }
+
         if (!reuseLastLaunchSetup) {
             return TransitionResult.Failed(
                 reason = "SUPPORT_DECK_SCREEN reached but reuseLastLaunchSetup is disabled. Deck configuration requires manual input.",
@@ -4280,6 +4316,18 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
+     * Marks that THIS navigate attempt roster-verified the single-run target, so the Start-Career
+     * gates (Legacy Select, Support Deck, Pre-Run Confirmation) may advance. Called only from the
+     * three verified-advance points in [handleTraineeSelectScreen], each reached solely after a
+     * confident name match. A no-op for rotation launches (blank single-run target).
+     */
+    private fun markSingleRunTraineeVerified() {
+        if (singleRunTraineeTarget.isNotBlank()) {
+            singleRunTraineeSelectHandled = true
+        }
+    }
+
+    /**
      * TRAINEE_SELECT_SCREEN (rotation only): pick the rotation trainee in-game and verify her name
      * before advancing. Taps each roster thumbnail, reads the preview name banner, and Jaro-Winkler
      * matches it against the target the queue recorded (queueState.currentTrainee). On a confident
@@ -4308,13 +4356,14 @@ class CareerLaunchNavigator(private val context: Context) {
         }
         MessageLog.i(TAG, "[ROTATION] Trainee Select: target '$target'${if (singleRunMode) " (applied preset, single run)" else ""}.")
 
-        // We are handling the trainee switch now — disarm the missed-detection backstop. (A no-match
-        // STOP below never reaches Legacy Select, so the flag value is moot in that case.) Single
-        // runs are not queue-managed and must not touch the queue's backstop state; they disarm
-        // their own mirror backstop instead.
-        if (singleRunMode) {
-            singleRunTraineeSelectHandled = true
-        } else {
+        // Rotation disarms its queue-managed missed-detection backstop on handler entry (unchanged
+        // behavior). The single-run mirror is deliberately NOT disarmed here: for a targeted single
+        // run, singleRunTraineeSelectHandled must mean "the target was factually verified on this
+        // attempt", not merely "the handler ran". It is set only at the verified-advance points
+        // below, where a confirmed name match precedes the Next tap; a no-match returns Failed and
+        // never sets it, so the Legacy Select / Support Deck / Pre-Run Confirmation backstops stay
+        // armed even if this handler bailed mid-hunt.
+        if (!singleRunMode) {
             StartModule.setRotationSwitchPending(context, false)
         }
 
@@ -4326,6 +4375,7 @@ class CareerLaunchNavigator(private val context: Context) {
         if (!currentExcluded && current.isNotBlank() && TraineeNameMatcher.score(target, current) >= traineeMatchThreshold) {
             MessageLog.i(TAG, "[ROTATION] Target already selected ('$current'). Advancing.")
             if (ButtonNext.click(iu)) {
+                markSingleRunTraineeVerified()
                 waitSafe(2.0)
                 return TransitionResult.Continue
             }
@@ -4389,6 +4439,7 @@ class CareerLaunchNavigator(private val context: Context) {
             if (!previewExcluded && preview.isNotBlank() && TraineeNameMatcher.score(target, preview) >= traineeMatchThreshold) {
                 MessageLog.i(TAG, "[ROTATION] Remembered position hit: '$preview'. Selecting and advancing.")
                 if (ButtonNext.click(iu)) {
+                    markSingleRunTraineeVerified()
                     waitSafe(2.0)
                     return TransitionResult.Continue
                 }
@@ -4493,6 +4544,7 @@ class CareerLaunchNavigator(private val context: Context) {
                             }
                             waitSafe(0.5)
                             if (ButtonNext.click(iu)) {
+                                markSingleRunTraineeVerified()
                                 waitSafe(2.0)
                                 return TransitionResult.Continue
                             }
@@ -5101,7 +5153,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // Single-run mirror of the same backstop: an applied-preset expectation was armed but the
         // roster was never handled (a missed Trainee Select detection tapped through it), so the
         // game's sticky preselection may be the wrong trainee. Stop before the career starts.
-        if (singleRunTraineeTarget.isNotBlank() && !singleRunTraineeSelectHandled) {
+        if (SingleRunTraineeGate.mustFailClosed(singleRunTraineeTarget, singleRunTraineeSelectHandled)) {
             return TransitionResult.Failed(
                 reason = "This launch expected trainee '$singleRunTraineeTarget' (applied preset) but Trainee Select was not handled before Legacy Select — the wrong trainee may be selected.",
                 transition = "LEGACY_SELECT_SCREEN -> SUPPORT_DECK_SCREEN",
@@ -5163,6 +5215,19 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     private fun handlePreRunConfirmation(): TransitionResult {
+        // Identity fail-closed: this is the final Start Career gate. A targeted single-run launch
+        // that reached here without roster-verifying the trainee (both the roster screen and the
+        // Legacy Select / Support Deck backstops skipped or misread) must STOP rather than press
+        // Start Career on the game's sticky preselection. Verified single runs and rotation launches
+        // are unaffected.
+        if (SingleRunTraineeGate.mustFailClosed(singleRunTraineeTarget, singleRunTraineeSelectHandled)) {
+            return TransitionResult.Failed(
+                reason = "This launch expected trainee '$singleRunTraineeTarget' (applied preset) but Trainee Select was not verified before Start Career; the wrong trainee may be selected.",
+                transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
+                recommendedAction = "Select the trainee manually in-game and start from the deck screen, or re-apply the intended preset and start again.",
+            )
+        }
+
         // Opt-in: tick "Event Boost (TP Usage x2)" before starting so careers earn double event
         // rewards (worth it during the Trackblazer event; the TP cost doubles, which the Max TP
         // restore covers). Runs before the Start Career tap so the boost is committed with the run.

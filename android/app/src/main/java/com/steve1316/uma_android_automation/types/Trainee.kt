@@ -527,7 +527,11 @@ class Trainee {
         // Extract reference point coordinates from cached location or find it if not available.
         val refPoint = statTrackLocation ?: LabelStatTrackSurface.find(imageUtils = imageUtils).first
         if (refPoint == null) {
-            name = "null"
+            // Leave `name` untouched (empty, or a prior good read) rather than caching the string
+            // "null". A nonempty placeholder satisfies every isEmpty()-guarded retry and permanently
+            // pins a failed read; leaving it empty lets a later readName() retry the OCR. Ported from
+            // upstream 27e6e23 (retry the trainee name read instead of caching a null placeholder).
+            MessageLog.w(TAG, "[WARN] readName:: Track-surface anchor not found; leaving the name unread so a later read can retry.")
             return
         }
 
