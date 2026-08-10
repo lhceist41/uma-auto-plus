@@ -3515,6 +3515,8 @@ class CareerLaunchNavigator(private val context: Context) {
             return handleScenarioSelect()
         }
 
+        // Neither the roster nor Scenario Select is on the settled frame. This counts toward the
+        // bounded timeout so nothing (benign-popup churn included) can avoid fail-closed forever.
         rosterExpectationReprobes++
         val label = if (singleRunTraineeTarget.isNotBlank()) "'$singleRunTraineeTarget'" else "the rotation trainee"
         if (RosterLivenessPolicy.expectationTimedOut(rosterExpectationReprobes, MAX_ROSTER_EXPECTATION_REPROBES)) {
@@ -3523,6 +3525,32 @@ class CareerLaunchNavigator(private val context: Context) {
                 transition = "POST_RUN_RESULTS -> TRAINEE_SELECT_SCREEN",
                 recommendedAction = "Ensure the game opens Trainee Select for a new career (clear any blocking popup), or select the trainee manually and restart the queue.",
             )
+        }
+        // Source-proven benign-popup allowlist. A Home-level popup can appear after the first Home
+        // classification and obscure the roster / Career button; if it reads as POST_RUN_RESULTS the
+        // expectation would otherwise suppress ALL handling and fail closed. Close ONLY a popup with a
+        // positive, roster-disjoint signature via its dedicated control - NEVER the generic
+        // Next/OK/Confirm/Close cascade - so the next iteration re-probes the roster on a clean frame.
+        //
+        // Rewards Collected is the only source-proven case: its title OCR (REWARD + COLLECT, see
+        // isRewardsCollectedDialog) is a signature the Trainee Select ("Trainee Select") and Scenario
+        // Select headers never carry, and its geometry Close is a pure dismissal (the rewards are
+        // already granted; it selects nothing, spends nothing, and cannot start a career or advance a
+        // trainee/scenario). It runs on the FRESH settled frame captured above, is gated on that title
+        // so the tap can never fire on the roster, keeps rosterSelectionPending true, and marks no
+        // verification and no career-launched latch. It counts toward the timeout above, so a popup
+        // that never clears still fails closed. SkillList / Umamusume Details / Complete Career are
+        // career-end artifacts that precede Home and cannot occur in this window - they stay in the
+        // legacy handler below the hook.
+        if (isRewardsCollectedDialog(fresh)) {
+            MessageLog.i(TAG, "[NAV] [EXPECT_TRAINEE] Benign Rewards Collected popup in the roster window; closing by its dedicated geometry, roster obligation still pending (attempt $rosterExpectationReprobes/$MAX_ROSTER_EXPECTATION_REPROBES).")
+            gestureUtils.tap(
+                (fresh.width * rewardsCloseFraction[0]).toDouble(),
+                (fresh.height * rewardsCloseFraction[1]).toDouble(),
+                "expect_trainee_rewards_collected_close",
+            )
+            waitSafe(1.5)
+            return TransitionResult.Continue
         }
         MessageLog.i(TAG, "[NAV] [EXPECT_TRAINEE] POST_RUN_RESULTS during the trainee-selection window; suppressing the generic Next and re-probing the roster (attempt $rosterExpectationReprobes/$MAX_ROSTER_EXPECTATION_REPROBES).")
         return TransitionResult.Continue

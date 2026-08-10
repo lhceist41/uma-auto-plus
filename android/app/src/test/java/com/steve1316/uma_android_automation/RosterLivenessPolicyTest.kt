@@ -194,6 +194,84 @@ class RosterLivenessPolicyTest {
         }
     }
 
+    @Nested
+    @DisplayName("benign-popup handling in the protected window (source guard)")
+    inner class BenignPopupHandling {
+        private val nav by lazy { sourceFile("CareerLaunchNavigator.kt").readText().replace("\r\n", "\n") }
+        private val expectationBody by lazy {
+            val start = nav.indexOf("private fun rosterLivenessExpectation(")
+            require(start >= 0)
+            nav.substring(start, nav.indexOf("\n    }\n", start) + 1)
+        }
+
+        @Test
+        fun `Rewards Collected is admitted with its dedicated geometry close`() {
+            assertTrue(expectationBody.contains("isRewardsCollectedDialog(fresh)"), "the allowlist checks the Rewards Collected signature on the settled frame")
+            assertTrue(expectationBody.contains("expect_trainee_rewards_collected_close"), "it taps the dedicated Rewards Collected close geometry")
+            assertTrue(expectationBody.contains("rewardsCloseFraction"), "the tap uses the Rewards Collected close fraction, not an ad-hoc coordinate")
+        }
+
+        @Test
+        fun `no generic Next OK Confirm or Close is reachable inside the expectation`() {
+            for (generic in listOf("ButtonNext", "ButtonOk", "ButtonConfirm", "ButtonClose", "ButtonCloseDialog")) {
+                assertFalse(expectationBody.contains(generic), "$generic must never be clicked in the protected roster window")
+            }
+        }
+
+        @Test
+        fun `closing a benign popup does not verify, latch, or clear the roster obligation`() {
+            assertFalse(expectationBody.contains("markSingleRunTraineeVerified"), "popup handling is not trainee verification")
+            assertFalse(expectationBody.contains("singleRunTraineeSelectHandled = true"), "popup handling does not mark verification")
+            assertFalse(expectationBody.contains("careerLaunchInitiated = true"), "popup handling does not latch career launched")
+            assertFalse(expectationBody.contains("rosterSelectionPending = false"), "the roster obligation stays pending after a popup close")
+        }
+
+        @Test
+        fun `Trainee Select and Scenario Select keep priority over the popup allowlist`() {
+            val roster = expectationBody.indexOf("isTraineeSelectScreen(fresh)")
+            val scenario = expectationBody.indexOf("LabelScenarioSelectHeader.check(iu, sourceBitmap = fresh)")
+            val popup = expectationBody.indexOf("isRewardsCollectedDialog(fresh)")
+            assertTrue(roster in 0 until popup, "the roster check precedes the popup allowlist")
+            assertTrue(scenario in 0 until popup, "the scenario check precedes the popup allowlist")
+        }
+
+        @Test
+        fun `a benign popup counts toward the timeout and cannot bypass fail-closed`() {
+            val incr = expectationBody.indexOf("rosterExpectationReprobes++")
+            val timeout = expectationBody.indexOf("RosterLivenessPolicy.expectationTimedOut(")
+            val popup = expectationBody.indexOf("isRewardsCollectedDialog(fresh)")
+            assertTrue(incr in 0 until popup, "the re-probe counter increments before the popup branch")
+            assertTrue(timeout in 0 until popup, "the timeout check precedes the popup branch")
+            // The popup branch must not reset the counter (an endless popup chain still times out).
+            val popupBranch = expectationBody.substring(popup)
+            assertFalse(popupBranch.contains("rosterExpectationReprobes = 0"), "a popup close must not reset the timeout budget")
+        }
+
+        @Test
+        fun `the timeout still returns a structured failure`() {
+            val timeout = expectationBody.indexOf("RosterLivenessPolicy.expectationTimedOut(")
+            assertTrue(timeout >= 0)
+            assertTrue(expectationBody.indexOf("TransitionResult.Failed(", timeout) in (timeout + 1)..(timeout + 200), "timeout fails closed")
+        }
+
+        @Test
+        fun `the popup branch returns Continue so the next iteration re-probes a fresh frame`() {
+            val popup = expectationBody.indexOf("isRewardsCollectedDialog(fresh)")
+            val branch = expectationBody.substring(popup, expectationBody.indexOf("\n        }\n", popup) + 1)
+            assertTrue(branch.contains("waitSafe(1.5)") && branch.contains("return TransitionResult.Continue"), "the popup close settles then continues")
+        }
+
+        @Test
+        fun `SkillList, Umamusume Details, and the generic cascade stay in the legacy handler below the hook`() {
+            val handler = nav.indexOf("private fun handlePostRunResults(")
+            val hook = nav.indexOf("rosterLivenessExpectation()?.let { return it }", handler)
+            val legacy = nav.substring(hook)
+            assertTrue(legacy.contains("ButtonSkillListFullStats"), "SkillList back-out remains below the hook (career-end artifact, not reachable pre-roster)")
+            assertTrue(legacy.contains("isUmamusumeDetailsScreen"), "Umamusume Details close remains below the hook")
+            assertTrue(legacy.contains("ButtonNext.check(iu, sourceBitmap = bitmap)"), "the generic cascade remains below the hook, unchanged")
+        }
+    }
+
     private fun sourceFile(relative: String): File = File(kotlinRoot(), relative).also { require(it.isFile) { "missing ${it.path}" } }
 
     private fun kotlinRoot(): File {
