@@ -219,6 +219,17 @@ class CareerLaunchNavigator(private val context: Context) {
          * quantity popup wedged as POST_RUN_RESULTS for all 15 iterations and killed the queue). */
         private const val STUCK_STATE_REBIND_AT = 7
 
+        /** Cold-start Trainee Select liveness: while a launch still owes a roster verification and a
+         * POST_RUN_RESULTS is detected (the roster/scenario green Next misread as a generic dialog),
+         * the handler settles and re-probes the roster this many times before failing closed instead
+         * of tapping the sticky trainee through. Kept below MAX_STUCK_ITERATIONS so the roster-specific
+         * diagnostic fires before the generic stuck bail. */
+        private const val MAX_ROSTER_EXPECTATION_REPROBES = 10
+
+        /** Settle wait before each roster-liveness re-probe capture, so a mid-transition frame that
+         * fooled the OCR-based roster detector has time to render fully. */
+        private const val ROSTER_EXPECT_SETTLE_SECONDS = 1.0
+
         /** Borrow Card list row pitch on 1080-wide captures, measured across the 2026-07-13
          * picker screenshots (row centers 440/700/965/1225/1490 -> ~262 px). */
         private const val BORROW_ROW_PITCH_PX = 262
@@ -470,6 +481,24 @@ class CareerLaunchNavigator(private val context: Context) {
     // verifyRotationTrainee.
     private var careerLaunchInitiated: Boolean = false
 
+    // --- Cold-start Trainee Select liveness (2026-08-10) ---
+    // True while THIS launch still owes a roster verification: rotation is on, or a single-run target
+    // is armed, and a career is actually being launched (not a finalize-to-home pass). It gates the
+    // careerLaunchInitiated latch (a launch that still owes a Trainee Select cannot have passed Start
+    // Career - the landed Legacy/Deck/Pre-Run identity backstops make that impossible - so a
+    // CINEMATIC_INTRO / TAP_TO_CONTINUE seen while this is true is a pre-career scenario/event intro
+    // Skip button, a false positive that must not disable the roster detector) and it arms the
+    // roster-liveness expectation in handlePostRunResults. Cleared at the verified-advance points in
+    // handleTraineeSelectScreen; reset per navigate().
+    private var rosterSelectionPending: Boolean = false
+    // True once HOME_SCREEN has been seen this navigation - past any post-career-results screens and
+    // into the career-creation flow. Scopes the roster-liveness expectation so it never suppresses the
+    // legitimate between-run results Next that precedes Home.
+    private var launchFlowEntered: Boolean = false
+    // Bounded settle-and-reprobe counter for the roster-liveness expectation. Reset per navigate() and
+    // whenever a fresh probe re-recognizes the roster or scenario screen.
+    private var rosterExpectationReprobes: Int = 0
+
     // Session-scoped counters for the support deck screen. The borrowed friend card never
     // persists between careers, and the game silently ignores Start Career while that slot
     // is empty, so both paths need bounded retries instead of an open-ended click loop.
@@ -655,6 +684,14 @@ class CareerLaunchNavigator(private val context: Context) {
                 SettingsHelper.getStringSetting("general", "appliedPresetTraineeExcludes"),
             )
         singleRunTraineeSelectHandled = false
+        // Roster-liveness expectation state (cold-start Trainee Select hardening). The launch owes a
+        // Trainee Select when rotation is on OR a single-run target is armed, and it is launching a
+        // career (finalize-to-home selects no trainee). Reset per navigate() so the expectation never
+        // leaks across runs or navigator instances.
+        rosterSelectionPending =
+            RosterLivenessPolicy.rosterSelectionPending(finalizeToHome, rotationEnabled, singleRunTraineeTarget.isNotBlank())
+        launchFlowEntered = false
+        rosterExpectationReprobes = 0
 
         // Smart Borrow must never pick a support of the ACTIVE TRAINEE's character: the game
         // refuses such a deck (red "! Trainee" pill, Start Career disabled, "Includes a
@@ -855,13 +892,26 @@ class CareerLaunchNavigator(private val context: Context) {
                 }
                 currentState = detectedState
                 consecutiveUnknowns = 0
-                // Latch once the launch has provably passed Start Career. These three states only
-                // occur after the Start Career click succeeds, and the in-career "Umamusume Details"
-                // card the game shows right after them must NOT be tested for Trainee Select.
-                if (detectedState == LaunchScreenState.PRE_RUN_CONFIRMATION ||
-                    detectedState == LaunchScreenState.CINEMATIC_INTRO ||
-                    detectedState == LaunchScreenState.QUICK_MODE_PROMPT ||
-                    detectedState == LaunchScreenState.TAP_TO_CONTINUE
+                // Once Home is seen we are past any post-career-results screens and into the
+                // career-creation flow; this arms the roster-liveness expectation (handlePostRunResults)
+                // without ever suppressing the legitimate between-run results Next that precedes Home.
+                if (detectedState == LaunchScreenState.HOME_SCREEN) {
+                    launchFlowEntered = true
+                }
+                // Latch once the launch has provably passed Start Career: PRE_RUN_CONFIRMATION and the
+                // in-career states only occur after the Start Career click, and the "Umamusume Details"
+                // card shown right after them must NOT be tested for Trainee Select. BUT a launch that
+                // still owes a Trainee Select verification cannot have passed Start Career - the landed
+                // Legacy/Deck/Pre-Run identity backstops make that impossible - so a CINEMATIC_INTRO or
+                // TAP_TO_CONTINUE seen while rosterSelectionPending is a pre-career scenario/event intro
+                // Skip button (a false positive) that would otherwise disable the roster + scenario
+                // detectors for the rest of the launch (the 2026-08-10 cold-start liveness failure).
+                // Gate the latch on the roster obligation being settled.
+                if ((detectedState == LaunchScreenState.PRE_RUN_CONFIRMATION ||
+                        detectedState == LaunchScreenState.CINEMATIC_INTRO ||
+                        detectedState == LaunchScreenState.QUICK_MODE_PROMPT ||
+                        detectedState == LaunchScreenState.TAP_TO_CONTINUE) &&
+                    RosterLivenessPolicy.mayLatchCareerLaunch(rosterSelectionPending)
                 ) {
                     careerLaunchInitiated = true
                 }
@@ -3426,7 +3476,66 @@ class CareerLaunchNavigator(private val context: Context) {
         return upper.contains("REWARD") && upper.contains("COLLECT")
     }
 
+    /**
+     * Cold-start Trainee Select liveness expectation.
+     *
+     * The 2026-08-10 cold-start failure: from a popup-heavy Home a pre-career scenario/event intro
+     * Skip button was misread as CINEMATIC_INTRO and latched careerLaunchInitiated (now gated), which
+     * disabled the roster/scenario detectors; the real Scenario Select and Trainee Select frames then
+     * fell through to POST_RUN_RESULTS, whose ButtonNext tap advanced the game's sticky trainee. The
+     * landed identity backstops stopped the wrong launch at Legacy Select, but the launch failed
+     * rather than selecting the intended trainee.
+     *
+     * This is the liveness net. While the launch still owes a roster verification
+     * ([rosterSelectionPending]), has entered the career-creation flow ([launchFlowEntered], i.e. past
+     * Home so the between-run results Next is never suppressed), and has not started the career, a
+     * POST_RUN_RESULTS is treated as a churn-misread roster/scenario: settle, recapture a FRESH frame,
+     * and re-probe the existing roster/scenario detectors. If either is now recognized, run its handler
+     * directly on the settled frame (existing target verification still governs a Trainee Select). The
+     * generic Next is never tapped during this window; on repeated failure to recognize the roster it
+     * fails closed with a structured diagnostic rather than consume the selection boundary. The landed
+     * Legacy/Support-Deck/Pre-Run identity backstops remain the ultimate net.
+     *
+     * @return a [TransitionResult] to short-circuit handlePostRunResults, or null when the expectation
+     *   is not active (normal post-run handling proceeds unchanged).
+     */
+    private fun rosterLivenessExpectation(): TransitionResult? {
+        if (!RosterLivenessPolicy.expectationActive(launchFlowEntered, rosterSelectionPending, careerLaunchInitiated)) return null
+
+        waitSafe(ROSTER_EXPECT_SETTLE_SECONDS)
+        val fresh = iu.getSourceBitmap()
+        if (isTraineeSelectScreen(fresh)) {
+            MessageLog.i(TAG, "[NAV] [EXPECT_TRAINEE] Re-probe recognized Trainee Select on a settled frame; handling the roster instead of tapping the generic Next.")
+            rosterExpectationReprobes = 0
+            return handleTraineeSelectScreen()
+        }
+        if (LabelScenarioSelectHeader.check(iu, sourceBitmap = fresh)) {
+            MessageLog.i(TAG, "[NAV] [EXPECT_TRAINEE] Re-probe recognized Scenario Select on a settled frame; handling it instead of tapping the generic Next.")
+            rosterExpectationReprobes = 0
+            return handleScenarioSelect()
+        }
+
+        rosterExpectationReprobes++
+        val label = if (singleRunTraineeTarget.isNotBlank()) "'$singleRunTraineeTarget'" else "the rotation trainee"
+        if (RosterLivenessPolicy.expectationTimedOut(rosterExpectationReprobes, MAX_ROSTER_EXPECTATION_REPROBES)) {
+            return TransitionResult.Failed(
+                reason = "Expected Trainee Select after entering the launch flow (target $label) but the roster was not recognized within $MAX_ROSTER_EXPECTATION_REPROBES settled re-probes. Refusing to advance the game's sticky trainee via the generic Next.",
+                transition = "POST_RUN_RESULTS -> TRAINEE_SELECT_SCREEN",
+                recommendedAction = "Ensure the game opens Trainee Select for a new career (clear any blocking popup), or select the trainee manually and restart the queue.",
+            )
+        }
+        MessageLog.i(TAG, "[NAV] [EXPECT_TRAINEE] POST_RUN_RESULTS during the trainee-selection window; suppressing the generic Next and re-probing the roster (attempt $rosterExpectationReprobes/$MAX_ROSTER_EXPECTATION_REPROBES).")
+        return TransitionResult.Continue
+    }
+
     private fun handlePostRunResults(): TransitionResult {
+        // Cold-start Trainee Select liveness: during the trainee-selection window a POST_RUN_RESULTS
+        // is almost always a churn-misread Scenario/Trainee Select whose green Next this handler would
+        // tap - advancing the game's sticky trainee before it is verified. Re-probe the roster on a
+        // settled frame first (see rosterLivenessExpectation); a null result means the expectation is
+        // not active and normal post-run handling proceeds.
+        rosterLivenessExpectation()?.let { return it }
+
         val bitmap = iu.getSourceBitmap()
 
         // "Rewards Collected": tap its Close by geometry, because the template cascade below
@@ -4316,15 +4425,18 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
-     * Marks that THIS navigate attempt roster-verified the single-run target, so the Start-Career
-     * gates (Legacy Select, Support Deck, Pre-Run Confirmation) may advance. Called only from the
-     * three verified-advance points in [handleTraineeSelectScreen], each reached solely after a
-     * confident name match. A no-op for rotation launches (blank single-run target).
+     * Marks that THIS navigate attempt roster-verified the trainee at Trainee Select, so the
+     * Start-Career gates (Legacy Select, Support Deck, Pre-Run Confirmation) may advance. Called only
+     * from the three verified-advance points in [handleTraineeSelectScreen], each reached solely after
+     * a confident name match. The single-run identity latch is set for a targeted single run only; the
+     * roster-liveness expectation clears for BOTH single-run and rotation, since either way the launch
+     * no longer owes a Trainee Select once the roster is verified and advanced.
      */
     private fun markSingleRunTraineeVerified() {
         if (singleRunTraineeTarget.isNotBlank()) {
             singleRunTraineeSelectHandled = true
         }
+        rosterSelectionPending = false
     }
 
     /**
