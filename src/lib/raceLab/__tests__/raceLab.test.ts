@@ -61,12 +61,41 @@ describe("catalog", () => {
 // ---- Objectives (Part R) ----
 
 describe("objectives", () => {
-    it("resolves all 485 real options across 62 characters, 0 unresolved", () => {
+    it("resolves all 494 real options across 63 characters, 0 unresolved", () => {
         const { reconciliation } = buildAllObjectiveTimelines(rawObjectives, catalog)
-        expect(reconciliation.characterCount).toBe(62)
-        expect(reconciliation.optionCount).toBe(485)
+        expect(reconciliation.characterCount).toBe(63)
+        expect(reconciliation.optionCount).toBe(494)
         expect(reconciliation.unresolvedCount).toBe(0)
     })
+    it("Yukino Bijin (v5.8.6 data refresh) resolves all 9 mandatory objectives canonically, including the adjacent t69/t70 G1 pair", () => {
+        const rawCharacters = JSON.parse(readFileSync(join(REPO_ROOT, "src/data/characters.json"), "utf8")) as Record<string, unknown>
+        expect("Yukino Bijin" in rawCharacters).toBe(true)
+        expect("Yukino Bijin" in rawObjectives).toBe(true)
+
+        // buildObjectiveTimeline throws objectiveRaceUnresolved on any option that does not resolve by
+        // canonical (name, turnNumber), so a clean return with 9 single-option mandatory requirements is
+        // proof that all 9 resolved canonically - never by bare name, never ambiguous, never unresolved.
+        const t = buildObjectiveTimeline("Yukino Bijin", rawObjectives, catalog)
+        expect(t.scenario).toBe("URA")
+        expect(t.requirements).toHaveLength(9)
+        expect(t.requirements.every((r) => !r.isChoice && r.options.length === 1)).toBe(true)
+        expect(t.requirements.every((r) => r.options[0].canonicalRace.key.turnNumber === r.turn)).toBe(true)
+
+        // The three names that collide on bare name elsewhere in the catalog must still resolve by key.
+        const keyAt = (turn: number) => t.requirements.find((r) => r.turn === turn)!.options[0].canonicalRace.key
+        expect(keyAt(38)).toEqual({ name: "Queen Stakes", turnNumber: 38 })
+        expect(keyAt(69)).toEqual({ name: "Queen Elizabeth II Cup", turnNumber: 69 })
+        expect(keyAt(70)).toEqual({ name: "Japan Cup", turnNumber: 70 })
+
+        // Turns 69 and 70 are adjacent mandatory G1 targets (Queen Elizabeth II Cup, then Japan Cup).
+        const t69 = t.requirements.find((r) => r.turn === 69)!
+        const t70 = t.requirements.find((r) => r.turn === 70)!
+        expect(t.requirements.indexOf(t70) - t.requirements.indexOf(t69)).toBe(1)
+        expect(t70.turn - t69.turn).toBe(1)
+        expect(t69.options[0].canonicalRace.grade).toBe("G1")
+        expect(t70.options[0].canonicalRace.grade).toBe("G1")
+    })
+
     it("preserves every option of a genuine choice objective (Daiwa Scarlet turn 34)", () => {
         const t = buildObjectiveTimeline("Daiwa Scarlet", rawObjectives, catalog)
         const choice = t.requirements.find((r) => r.turn === 34)!

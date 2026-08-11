@@ -259,7 +259,7 @@ describe("real committed dataset", () => {
         expect(r.stats.uniqueRaceKeyCount).toBe(402)
         expect(r.stats.distinctBareRaceNameCount).toBe(296)
         expect(r.stats.bareNameCollisionCount).toBe(106)
-        expect(r.stats.objectiveReferencesChecked).toBe(485)
+        expect(r.stats.objectiveReferencesChecked).toBe(494)
     })
 
     // Part D: pin the exact unresolved-chain reference set so a third dangling ref cannot pass silently
