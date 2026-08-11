@@ -324,6 +324,14 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
     init {
         initTesseract("eng.traineddata")
         SharedData.templateSubfolderPathName = "images/"
+
+        // Library 2.5.7 moved matchFilePath to internal filesDir/temp. UMA Auto+ keeps this debug/fixture
+        // path on external app storage so /triage fixtures, stuck screenshots, and the Remote Log Viewer's
+        // debug images stay adb-pullable without root; this is the same directory LogStreamServer serves.
+        // Restore it here, after the superclass constructor has set the library default.
+        val externalTemp = File(context.getExternalFilesDir(null), "temp")
+        externalTemp.mkdirs()
+        matchFilePath = externalTemp.absolutePath
     }
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
