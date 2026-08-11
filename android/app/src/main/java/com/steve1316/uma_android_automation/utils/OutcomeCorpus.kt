@@ -19,22 +19,29 @@ import java.io.File
 object OutcomeCorpus {
     private const val TAG: String = "${SharedData.loggerTag}OutcomeCorpus"
 
+    /**
+     * Directory (under the external files dir) that holds every telemetry JSONL file. Owned here so
+     * the writer paths below and the startup self-heal share one definition of where the corpus
+     * lives instead of repeating the literal in more than one place.
+     */
+    const val OUTCOMES_DIR = "outcomes"
+
     /** Relative path of the corpus file under the external files dir. */
-    const val CORPUS_PATH = "outcomes/careers.jsonl"
+    const val CORPUS_PATH = "$OUTCOMES_DIR/careers.jsonl"
 
     /**
      * Relative path of the per-turn decision-trace file. Kept out of [CORPUS_PATH] deliberately:
      * a career writes one outcome record but ~75 decision traces, so interleaving them would bury
      * the outcome rows the analyzer and the manual greps read.
      */
-    const val DECISIONS_PATH = "outcomes/decisions.jsonl"
+    const val DECISIONS_PATH = "$OUTCOMES_DIR/decisions.jsonl"
 
     /**
      * Relative path of the per-turn `career_state` file. A separate durable record type from
      * [DECISIONS_PATH] on purpose: `decision_trace` and `career_state` are joined offline by
      * `careerToken + seq`, and each parser rejects the other's records, so they must not interleave.
      */
-    const val CAREER_STATE_PATH = "outcomes/career_state.jsonl"
+    const val CAREER_STATE_PATH = "$OUTCOMES_DIR/career_state.jsonl"
 
     /**
      * Appends one [record] as a JSON line to [path]. Writing must never disturb the calling
@@ -59,9 +66,61 @@ object OutcomeCorpus {
                 return
             }
             file.parentFile?.mkdirs()
-            file.appendText(record.toString() + "\n")
+            appendLineAndMakeReadable(file, record.toString() + "\n")
         } catch (e: Exception) {
             MessageLog.w(TAG, "[OUTCOME] Failed to append the outcome record: $e")
+        }
+    }
+
+    /**
+     * Appends [line] to [file] exactly as given, then best-effort marks the file world-readable.
+     *
+     * The readable-mode repair fixes a real device pathology: app-written files can materialize
+     * `0600 u0_aXX:u0_aXX` on this emulator image, which locks the non-root adb shell out of the
+     * telemetry pull (decisions.jsonl and career_state.jsonl were unpullable this way while
+     * careers.jsonl happened to ride an older readable inode). Marking every appended file readable
+     * mirrors the per-career log's existing `setReadable(true, false)` so the whole corpus stays
+     * adb-pullable. The repair runs after the append and in its own catch, so a permission failure
+     * can never discard the telemetry line that was already written. Split out so the byte-append
+     * plus readable-mode contract can be pinned by a real-filesystem test without an Android Context.
+     */
+    internal fun appendLineAndMakeReadable(file: File, line: String) {
+        file.appendText(line)
+        try {
+            file.setReadable(true, false)
+        } catch (_: Exception) {
+        }
+    }
+
+    /**
+     * Best-effort, mode-only startup self-heal: marks every existing `.jsonl` file under the
+     * `outcomes` dir world-readable so a non-root adb shell can pull a completed run's telemetry after simply
+     * opening the app - no bot run and no TP spend. It opens no file for reading, rewrites no bytes,
+     * and creates, renames, or deletes nothing, so already-written records stay byte-for-byte intact.
+     * Failures are swallowed (per file and around the directory scan) so app startup can never be
+     * aborted by it. Idempotent: re-running only re-applies the same mode.
+     */
+    fun ensureExistingFilesReadable(context: Context) {
+        ensureJsonlReadable(File(context.getExternalFilesDir(null), OUTCOMES_DIR))
+    }
+
+    /**
+     * Marks every regular `*.jsonl` file directly inside [outcomesDir] world-readable, best-effort.
+     * Non-`.jsonl` entries and subdirectories are left untouched; a missing or empty directory is a
+     * no-op. Split from [ensureExistingFilesReadable] so the file selection and mode-only behavior can
+     * be tested against a real temp directory without an Android Context.
+     */
+    internal fun ensureJsonlReadable(outcomesDir: File) {
+        try {
+            outcomesDir.listFiles()?.forEach { file ->
+                if (file.isFile && file.name.endsWith(".jsonl")) {
+                    try {
+                        file.setReadable(true, false)
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+        } catch (_: Exception) {
         }
     }
 

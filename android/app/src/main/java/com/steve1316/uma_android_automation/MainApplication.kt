@@ -13,6 +13,7 @@ import com.facebook.react.common.ReleaseLevel
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint
 import com.facebook.react.defaults.DefaultReactNativeHost
 import com.google.mlkit.common.MlKit
+import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 
@@ -40,6 +41,11 @@ class MainApplication : Application(), ReactApplication {
 
     override fun onCreate() {
         super.onCreate()
+
+        // Best-effort, mode-only self-heal of telemetry files a prior process may have written
+        // 0600, so simply opening the app makes decisions/career_state/careers.jsonl adb-pullable
+        // again - no bot run and no TP spend. Runs unconditionally at app start and never throws.
+        OutcomeCorpus.ensureExistingFilesReadable(this)
 
         // Initialize ML Kit explicitly. The auto-init ContentProvider is removed in
         // AndroidManifest.xml (tools:node="remove") because on quick process restarts the
