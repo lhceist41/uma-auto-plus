@@ -1132,6 +1132,37 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 }
 
         /**
+         * Same-turn decision-time evidence for a forced or fallback training pick: the picked facility's observed stat
+         * gains and its failure chance (null when OCR did not measure it, i.e. a negative raw value).
+         *
+         * @property pickedFailureChance The picked facility's OCR failure chance, or null when unmeasured.
+         * @property pickedStatGains The picked facility's observed stat gains, or null when no same-turn option exists.
+         */
+        internal data class SelectedTrainingEvidence(val pickedFailureChance: Int?, val pickedStatGains: Map<StatName, Int>?)
+
+        /**
+         * Resolves the decision-time evidence for a forced/fallback [stat] pick so its TrainingSelection can carry the
+         * same numbers the analyzer already measured. Prefers the picked facility's own [trainingMap] entry, then the
+         * failure-gated [skippedTrainingMap], then honest nulls when neither holds it. Pure over the two maps: no OCR,
+         * taps, waits, scoring, inference, or mutation. Callers pass this turn's maps (cleared at [executeTraining] end
+         * and rebuilt on the next turn's [analyzeTrainings]), so it never reads prior-turn state. A negative raw failure
+         * chance maps to null rather than a fabricated number.
+         *
+         * @param trainingMap The gate-passing trainings analyzed this turn.
+         * @param skippedTrainingMap The failure-gated trainings analyzed this turn.
+         * @param stat The forced/fallback facility, or null when none was picked.
+         * @return The picked facility's evidence, or null/null when absent.
+         */
+        internal fun selectedTrainingEvidence(
+            trainingMap: Map<StatName, TrainingOption>,
+            skippedTrainingMap: Map<StatName, TrainingOption>,
+            stat: StatName?,
+        ): SelectedTrainingEvidence {
+            val option = stat?.let { trainingMap[it] ?: skippedTrainingMap[it] } ?: return SelectedTrainingEvidence(null, null)
+            return SelectedTrainingEvidence(option.failureChance.takeIf { it >= 0 }, option.statGains)
+        }
+
+        /**
          * Calculate the raw training score without normalization.
          *
          * This method calculates raw high-level scores that will later be normalized based on the actual maximum score in the current training session.
@@ -2581,11 +2612,14 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 "[TRAINING] Analysis produced no scored entries. forceSelection=true → defaulting to first non-blacklisted training: ${defaulted ?: "none available"}.",
             )
             lastSelectionSource = SelectionSource.FORCED_DEFAULT
+            val defaultEvidence = selectedTrainingEvidence(trainingMap, skippedTrainingMap, defaulted)
             tracer?.recordTrainingSelection(
                 selected = defaulted,
                 source = SelectionSource.FORCED_DEFAULT,
                 reason = "analysis produced no scored entries; forced first non-blacklisted training",
                 runnerUps = buildTracerRunnerUps(trainingScores, skippedScores, picked = null),
+                pickedFailureChance = defaultEvidence.pickedFailureChance,
+                pickedStatGains = defaultEvidence.pickedStatGains,
             )
             return defaulted
         }
@@ -2596,11 +2630,14 @@ class Training(private val game: Game, private val campaign: Campaign) {
             "[TRAINING] Analysis returned no winning training. forceSelection=false → returning first non-blacklisted training: ${unforced ?: "none available"}. Caller decides whether to execute.",
         )
         lastSelectionSource = SelectionSource.UNFORCED_DEFAULT
+        val unforcedEvidence = selectedTrainingEvidence(trainingMap, skippedTrainingMap, unforced)
         tracer?.recordTrainingSelection(
             selected = unforced,
             source = SelectionSource.UNFORCED_DEFAULT,
             reason = "analysis returned no winner; returning first non-blacklisted training for caller to handle",
             runnerUps = buildTracerRunnerUps(trainingScores, skippedScores, picked = null),
+            pickedFailureChance = unforcedEvidence.pickedFailureChance,
+            pickedStatGains = unforcedEvidence.pickedStatGains,
         )
         return unforced
     }
@@ -3000,6 +3037,20 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         MessageLog.v(TAG, "[TRAINING] Successfully forced Wit training during the Finale instead of recovering energy.")
                         firstTrainingCheck = false
                         advanced = true
+                        campaign.decisionTracer?.let { tracer ->
+                            // recommendTraining() already recorded selected=null for this empty-map turn; now that the
+                            // forced Wit tap has succeeded, record the authoritative WIT selection so lastOrNull() makes
+                            // it the turn's pick. Evidence is same-turn pre-action analysis only. This never runs on the
+                            // failed-tap recovery branch below, so a rest is never mislabeled as a Wit training.
+                            val evidence = selectedTrainingEvidence(trainingMap, skippedTrainingMap, StatName.WIT)
+                            tracer.recordTrainingSelection(
+                                selected = StatName.WIT,
+                                source = SelectionSource.FORCED_DEFAULT,
+                                reason = "forced Wit training during Finale",
+                                pickedFailureChance = evidence.pickedFailureChance,
+                                pickedStatGains = evidence.pickedStatGains,
+                            )
+                        }
                     } else {
                         MessageLog.w(TAG, "[WARN] handleTraining:: Could not find Wit training button. Falling back to recovering energy...")
                         ButtonBack.click(game.imageUtils)
@@ -3030,6 +3081,22 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 }
             } else {
                 // Now select the training option with the highest weight.
+                campaign.decisionTracer?.let { tracer ->
+                    // P05: record a forced override only on this committed path. This is the else of the
+                    // trainingMap.isEmpty() check, so the map is non-empty and the turn will actually train;
+                    // a forced Wit that fell through to recoverEnergy() on the empty-map branch records nothing.
+                    // Evidence is same-turn pre-action analysis; lastOrNull() keeps this the turn's selection.
+                    if (forceStat != null) {
+                        val evidence = selectedTrainingEvidence(trainingMap, skippedTrainingMap, forceStat)
+                        tracer.recordTrainingSelection(
+                            selected = forceStat,
+                            source = SelectionSource.FORCED_DEFAULT,
+                            reason = "forced training override: $forceStat",
+                            pickedFailureChance = evidence.pickedFailureChance,
+                            pickedStatGains = evidence.pickedStatGains,
+                        )
+                    }
+                }
                 executeTraining(trainingSelected)
                 firstTrainingCheck = false
                 advanced = true
