@@ -22,7 +22,14 @@ package com.steve1316.uma_android_automation.bot
  * latch is process-local (never persisted), cleared only by a fresh UI-verified [setExpected]; a
  * process restart resets it, keeping legitimate fresh-process non-UI crash recovery working.
  *
- * Pure and JVM-testable: no Android types, no settings reads of its own.
+ * A one-shot [armForcedMismatchForTest] validation hook lets the default-off Remote Log Viewer
+ * command channel force the NEXT verdict to MISMATCH, so the live overlay can deterministically
+ * exercise the mismatch -> sticky-block path without a stale disk. It is fail-safe (can only turn a
+ * would-be PASS into an abort), process-local, never persisted, and self-clearing.
+ *
+ * Pure and JVM-testable: no settings reads and no SQLite or game dependency. The only Android touch
+ * is a best-effort android.util.Log marker on the validation-hook path, wrapped so it can never
+ * change the verdict and a no-op under the unit tests' returnDefaultValues.
  */
 object LaunchIdentityGate {
     /** The outcome of comparing the loaded revision against the React-verified one. */
@@ -42,6 +49,17 @@ object LaunchIdentityGate {
     @Volatile
     private var blockedAfterMismatch: Boolean = false
 
+    /**
+     * One-shot, process-local validation hook. When armed (only via [LogStreamServer]'s default-off
+     * CMD:ARM_LAUNCH_MISMATCH_TEST), the next verdict that has an expected identity is forced to
+     * [Verdict.MISMATCH] BEFORE the real revision comparison and latches [blockedAfterMismatch]
+     * exactly as a real mismatch would, so the live overlay can drive the sticky-guard path
+     * deterministically. Fail-safe: it can only make a would-be PASS abort, never the reverse.
+     * Consumed once, never persisted, and NOT re-armed by [setExpected].
+     */
+    @Volatile
+    private var forceMismatchOnceForTest: Boolean = false
+
     /** What React verified, for logging after a verdict. Null once consumed or never set. */
     val current: Expected?
         get() = expected
@@ -60,6 +78,7 @@ object LaunchIdentityGate {
     fun clear() {
         expected = null
         blockedAfterMismatch = false
+        forceMismatchOnceForTest = false
     }
 
     /**
@@ -71,6 +90,19 @@ object LaunchIdentityGate {
     fun verdict(loadedRevision: Int): Verdict {
         val e = expected ?: return Verdict.NOT_SET
         expected = null
+        if (forceMismatchOnceForTest) {
+            // Validation hook consumed: force a synthetic MISMATCH before the real comparison and latch
+            // the sticky block exactly as a real mismatch would. One-shot (self-clears). The real
+            // revision is deliberately NOT compared here, so the marker below -- not StartModule's
+            // revision-based mismatch log -- is the truthful record of why this launch aborted.
+            forceMismatchOnceForTest = false
+            blockedAfterMismatch = true
+            try {
+                android.util.Log.i("LaunchIdentityGate", "[VALIDATION] forced launch-identity MISMATCH consumed (synthetic; real revision not compared)")
+            } catch (_: Exception) {
+            }
+            return Verdict.MISMATCH
+        }
         if (e.revision == loadedRevision) return Verdict.PASS
         // A mismatch poisons the process: the expectation is now consumed, so the next verdict is
         // NOT_SET, and the caller must fail closed until a fresh UI setExpected re-arms the gate.
@@ -83,6 +115,15 @@ object LaunchIdentityGate {
      * caller uses this to fail a NOT_SET start closed after a mismatch instead of trusting disk.
      */
     fun isBlockedAfterMismatch(): Boolean = blockedAfterMismatch
+
+    /**
+     * Arm the one-shot forced-mismatch validation hook (see [forceMismatchOnceForTest]). Reached only
+     * through the default-off Remote Log Viewer command channel ([LogStreamServer]); there is no UI or
+     * settings path. Idempotent -- arming twice is the same as once. Fail-safe: can only force an abort.
+     */
+    fun armForcedMismatchForTest() {
+        forceMismatchOnceForTest = true
+    }
 
     /** A greppable description of the expectation for the session log. */
     fun describe(e: Expected): String = "revision=${e.revision} hash=${e.hash}"

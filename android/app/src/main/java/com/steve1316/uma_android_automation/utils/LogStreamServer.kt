@@ -10,6 +10,7 @@ import android.util.Log
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.events.JSEvent
 import com.steve1316.automation_library.utils.MessageLog
+import com.steve1316.uma_android_automation.bot.LaunchIdentityGate
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -338,6 +339,15 @@ object LogStreamServer {
                     val text = frame.readText()
                     if (text == "CMD:REFRESH_IMAGES") {
                         sendDebugImages(session)
+                    } else if (text == "CMD:ARM_LAUNCH_MISMATCH_TEST") {
+                        // Engineering validation only: arm the launch-identity gate's one-shot forced
+                        // mismatch so the next overlay PLAY aborts on a synthetic MISMATCH, exercising the
+                        // sticky-guard second-PLAY block deterministically. Reachable only over this
+                        // default-off Remote Log Viewer channel; it touches no settings, game, or service
+                        // and can only make one launch fail closed.
+                        LaunchIdentityGate.armForcedMismatchForTest()
+                        Log.i(TAG, "[TEST] Armed the next launch-identity verdict for a forced mismatch (validation hook).")
+                        session.send(Frame.Text("ACK:ARM_LAUNCH_MISMATCH_TEST"))
                     }
                 }
             }

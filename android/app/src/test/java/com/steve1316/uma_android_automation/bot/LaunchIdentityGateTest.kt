@@ -217,6 +217,116 @@ class LaunchIdentityGateTest {
         }
     }
 
+    @Nested
+    @DisplayName("forced-mismatch validation hook")
+    inner class ForcedMismatchValidationHook {
+        @Test
+        fun `the forced hook starts unarmed -- an ordinary verdict is unaffected`() {
+            LaunchIdentityGate.setExpected(7, "h")
+            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(7))
+        }
+
+        @Test
+        fun `armed then a matching revision is forced to MISMATCH (a would-be PASS aborts)`() {
+            LaunchIdentityGate.armForcedMismatchForTest()
+            LaunchIdentityGate.setExpected(7, "h")
+            // Revisions MATCH (7 == 7): without the hook this is a PASS; the hook forces MISMATCH.
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(7))
+        }
+
+        @Test
+        fun `a forced MISMATCH latches the sticky block exactly like a real one`() {
+            LaunchIdentityGate.armForcedMismatchForTest()
+            LaunchIdentityGate.setExpected(7, "h")
+            LaunchIdentityGate.verdict(7)
+            assertTrue(LaunchIdentityGate.isBlockedAfterMismatch())
+        }
+
+        @Test
+        fun `the hook self-clears after one use`() {
+            LaunchIdentityGate.armForcedMismatchForTest()
+            LaunchIdentityGate.setExpected(7, "h")
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(7))
+            // Re-arm the gate (clears the sticky block); a fresh matching launch now PASSes -- the forced
+            // flag did not survive its single use.
+            LaunchIdentityGate.setExpected(8, "h2")
+            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(8))
+        }
+
+        @Test
+        fun `after a forced mismatch the second unverified verdict is NOT_SET and still blocked`() {
+            LaunchIdentityGate.armForcedMismatchForTest()
+            LaunchIdentityGate.setExpected(7, "h")
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.NOT_SET, LaunchIdentityGate.verdict(7))
+            assertTrue(LaunchIdentityGate.isBlockedAfterMismatch())
+        }
+
+        @Test
+        fun `arming before any expected identity yields NOT_SET and keeps the hook armed`() {
+            LaunchIdentityGate.armForcedMismatchForTest()
+            // No setExpected yet: the verdict is NOT_SET and must NOT consume the hook.
+            assertEquals(LaunchIdentityGate.Verdict.NOT_SET, LaunchIdentityGate.verdict(7))
+            // The retained hook then forces exactly one MISMATCH once a real expected exists.
+            LaunchIdentityGate.setExpected(7, "h")
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(7))
+        }
+
+        @Test
+        fun `the retained hook forces exactly one MISMATCH -- a later launch is normal`() {
+            LaunchIdentityGate.armForcedMismatchForTest()
+            LaunchIdentityGate.verdict(9) // NOT_SET, hook retained
+            LaunchIdentityGate.setExpected(9, "h")
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(9))
+            LaunchIdentityGate.setExpected(10, "h2")
+            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(10))
+        }
+
+        @Test
+        fun `clear resets the forced hook`() {
+            LaunchIdentityGate.armForcedMismatchForTest()
+            LaunchIdentityGate.clear()
+            LaunchIdentityGate.setExpected(7, "h")
+            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(7))
+        }
+
+        @Test
+        fun `an ordinary unarmed PASS is unchanged`() {
+            LaunchIdentityGate.setExpected(5, "abc")
+            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(5))
+            assertFalse(LaunchIdentityGate.isBlockedAfterMismatch())
+        }
+
+        @Test
+        fun `an ordinary real-revision MISMATCH is unchanged`() {
+            LaunchIdentityGate.setExpected(5, "abc")
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(6))
+            assertTrue(LaunchIdentityGate.isBlockedAfterMismatch())
+        }
+
+        @Test
+        fun `setExpected after a forced mismatch clears the block but does not re-arm the hook`() {
+            LaunchIdentityGate.armForcedMismatchForTest()
+            LaunchIdentityGate.setExpected(7, "h")
+            LaunchIdentityGate.verdict(7) // forced MISMATCH -> blocked, hook consumed
+            LaunchIdentityGate.setExpected(7, "h") // clears the block; must NOT re-arm the hook
+            assertFalse(LaunchIdentityGate.isBlockedAfterMismatch())
+            // A matching revision now PASSes -- proof the hook was not silently re-armed.
+            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(7))
+        }
+
+        @Test
+        fun `repeated arm requests are idempotent -- still exactly one forced mismatch`() {
+            LaunchIdentityGate.armForcedMismatchForTest()
+            LaunchIdentityGate.armForcedMismatchForTest()
+            LaunchIdentityGate.armForcedMismatchForTest()
+            LaunchIdentityGate.setExpected(7, "h")
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(7))
+            LaunchIdentityGate.setExpected(8, "h2")
+            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(8))
+        }
+    }
+
     private fun sourceFile(relative: String): File = File(kotlinRoot(), relative).also { require(it.isFile) { "missing ${it.path}" } }
 
     private fun kotlinRoot(): File {
