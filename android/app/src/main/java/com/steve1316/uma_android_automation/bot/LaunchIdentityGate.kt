@@ -16,6 +16,12 @@ package com.steve1316.uma_android_automation.bot
  * identity (legacy or non-UI entry) is reported as [Verdict.NOT_SET]; the caller warns and
  * proceeds, preserving non-UI start paths.
  *
+ * Once a MISMATCH is seen in this process the gate latches [isBlockedAfterMismatch]: the mismatch
+ * consumes the expectation, so the very next verdict is [Verdict.NOT_SET] again -- and without the
+ * latch a second overlay start would trust the same stale config the mismatch just rejected. The
+ * latch is process-local (never persisted), cleared only by a fresh UI-verified [setExpected]; a
+ * process restart resets it, keeping legitimate fresh-process non-UI crash recovery working.
+ *
  * Pure and JVM-testable: no Android types, no settings reads of its own.
  */
 object LaunchIdentityGate {
@@ -27,30 +33,56 @@ object LaunchIdentityGate {
     @Volatile
     private var expected: Expected? = null
 
+    /**
+     * Process-local poison latch: set once a MISMATCH is seen, cleared only by a fresh UI-verified
+     * [setExpected] (or [clear]). While set, the caller must refuse an unverified NOT_SET start so
+     * the stale config the mismatch just rejected cannot slip in on a retry. Never persisted, so a
+     * process restart clears it and fresh-process non-UI crash recovery is unaffected.
+     */
+    @Volatile
+    private var blockedAfterMismatch: Boolean = false
+
     /** What React verified, for logging after a verdict. Null once consumed or never set. */
     val current: Expected?
         get() = expected
 
-    /** Store the identity the React barrier just verified. Called right before BotService starts. */
+    /**
+     * Store the identity the React barrier just verified. Called right before BotService starts.
+     * A fresh UI-verified identity also clears [blockedAfterMismatch]: this is the only in-process
+     * path that re-arms launch verification after a prior mismatch poisoned it.
+     */
     fun setExpected(revision: Int, hash: String) {
         expected = Expected(revision, hash)
+        blockedAfterMismatch = false
     }
 
-    /** Clear without a verdict (test isolation / an aborted launch attempt). */
+    /** Clear all in-process state without a verdict (test isolation / a full re-arm). */
     fun clear() {
         expected = null
+        blockedAfterMismatch = false
     }
 
     /**
      * Compare the freshly-loaded revision against the expected identity and CONSUME the
      * expectation (single-use). [Verdict.PASS] and [Verdict.MISMATCH] only occur when an
-     * expectation was set; [Verdict.NOT_SET] means this session was started without one.
+     * expectation was set; [Verdict.NOT_SET] means this session was started without one. A
+     * [Verdict.MISMATCH] also latches [blockedAfterMismatch] so the next unverified start fails closed.
      */
     fun verdict(loadedRevision: Int): Verdict {
         val e = expected ?: return Verdict.NOT_SET
         expected = null
-        return if (e.revision == loadedRevision) Verdict.PASS else Verdict.MISMATCH
+        if (e.revision == loadedRevision) return Verdict.PASS
+        // A mismatch poisons the process: the expectation is now consumed, so the next verdict is
+        // NOT_SET, and the caller must fail closed until a fresh UI setExpected re-arms the gate.
+        blockedAfterMismatch = true
+        return Verdict.MISMATCH
     }
+
+    /**
+     * Whether a MISMATCH has been seen in this process since the last [setExpected] or [clear]. The
+     * caller uses this to fail a NOT_SET start closed after a mismatch instead of trusting disk.
+     */
+    fun isBlockedAfterMismatch(): Boolean = blockedAfterMismatch
 
     /** A greppable description of the expectation for the session log. */
     fun describe(e: Expected): String = "revision=${e.revision} hash=${e.hash}"

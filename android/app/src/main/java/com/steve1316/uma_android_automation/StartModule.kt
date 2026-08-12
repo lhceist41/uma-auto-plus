@@ -1464,6 +1464,19 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         MessageLog.i(TAG, "[START] launch identity verified: revision=$loadedRevision hash=${expectedIdentity?.hash}")
                     }
                     com.steve1316.uma_android_automation.bot.LaunchIdentityGate.Verdict.NOT_SET -> {
+                        // A prior launch-identity MISMATCH poisons this process: the first PLAY aborted, but the
+                        // mismatch consumed the expectation, so a second PLAY reaches NOT_SET and would otherwise
+                        // trust the same stale config that just failed verification. Fail closed until a fresh
+                        // UI-verified Start Queue (setVerifiedLaunchIdentity -> setExpected) re-arms the gate. This
+                        // return runs before any run-settings read, queue advance, or game interaction.
+                        if (com.steve1316.uma_android_automation.bot.LaunchIdentityGate.isBlockedAfterMismatch()) {
+                            MessageLog.e(
+                                TAG,
+                                "[START] launch blocked after a prior launch-identity mismatch this session (revision on disk: " +
+                                    "$loadedRevision); return to UMA Auto+ and start again from the verified Start Queue.",
+                            )
+                            return
+                        }
                         MessageLog.w(TAG, "[START] session started without a verified launch identity (non-UI entry); revision on disk: $loadedRevision.")
                         nonUiEntry = true
                     }
