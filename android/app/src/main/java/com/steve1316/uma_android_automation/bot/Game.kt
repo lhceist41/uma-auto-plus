@@ -13,6 +13,7 @@ import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.CareerLaunchNavigator
+import com.steve1316.uma_android_automation.DebugTestGate
 import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.bot.Campaign
@@ -744,9 +745,36 @@ class Game(val myContext: Context) {
             )
         }
 
+        // Diagnostic arming observability + fail-closed gate (2026-08-13 deck-number incident). An
+        // intended read-only diagnostic did not arm at runtime (a debug-test toggle that did not
+        // survive an app restart), so startTests() ran nothing and the bot fell through into normal
+        // career navigation, which pressed Start Career and spent TP. Resolve the armed set ONCE,
+        // BEFORE navigation, so the operator can confirm on the Home screen whether a diagnostic is
+        // armed instead of discovering at Start Career that it was not.
+        val armedDebugTests = DebugTestGate.requested { key -> SettingsHelper.getBooleanSetting("debug", key) }
+        if (armedDebugTests.isEmpty()) {
+            MessageLog.i(TAG, "[DEBUG-TEST] No debug diagnostic armed; normal bot operation will proceed.")
+        } else {
+            MessageLog.i(TAG, "[DEBUG-TEST] Armed: ${armedDebugTests.joinToString(", ")}. Only the diagnostic will run; no career will start.")
+        }
+
         if (task.startTests()) {
             MessageLog.i(TAG, "[INFO] Debug test(s) complete. Stopping bot...")
             return TaskResult.Success(TaskResultCode.TASK_RESULT_COMPLETE, "Debug tests completed.")
+        }
+
+        // Fail closed: a diagnostic was armed but startTests() ran none for this campaign (a lost or
+        // reverted toggle, or a test this campaign does not provide). Refuse to fall through into
+        // normal career navigation -- the path that reached Start Career and spent TP -- and stop.
+        if (armedDebugTests.isNotEmpty()) {
+            val armedList = armedDebugTests.joinToString(", ")
+            MessageLog.e(
+                TAG,
+                "[DEBUG-TEST] A debug diagnostic is enabled in settings ($armedList) but did not run for this " +
+                    "campaign; stopping fail-closed instead of starting normal navigation. Re-check the Debug " +
+                    "Settings toggle and start again.",
+            )
+            return TaskResult.Success(TaskResultCode.TASK_RESULT_COMPLETE, "Debug diagnostic requested but not armed; stopped fail-closed.")
         }
 
         warnOnRacingConfigDrift()

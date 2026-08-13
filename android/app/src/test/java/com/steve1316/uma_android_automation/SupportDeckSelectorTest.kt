@@ -240,6 +240,42 @@ class SupportDeckSelectorTest {
         }
     }
 
+    @Nested
+    @DisplayName("deck-number OCR geometry (source guard)")
+    inner class DeckNumberGeometry {
+        private val nav by lazy { sourceFile("CareerLaunchNavigator.kt").readText().replace("\r\n", "\n") }
+
+        private fun fractionOf(name: String): Float =
+            Regex("private val $name = ([0-9.]+)f").find(nav)?.groupValues?.get(1)?.toFloat()
+                ?: error("missing constant $name")
+
+        @Test
+        fun `the corrected rowY fraction replaced the too-low 0_20 estimate`() {
+            // 0.20 put the box top at y=384, ~40px below the label; 0.177 lifts it to y~339 so the
+            // full "Deck N" text is captured (2026-08-13 real-screen calibration).
+            assertEquals(0.177f, fractionOf("deckNumberRowYFraction"), 0.0001f)
+        }
+
+        @Test
+        fun `the OCR box contains the measured Deck N label on a 1080x1920 capture`() {
+            // Measured on the real Support Formation screen: "Deck N" label at x[85..300], y[345..400].
+            val w = 1080
+            val h = 1920
+            val boxW = (w * fractionOf("deckNumberBoxW")).toInt()
+            val boxH = (h * fractionOf("deckNumberBoxH")).toInt()
+            val x0 = (w * fractionOf("deckNumberColFraction")).toInt() - boxW / 2
+            val x1 = x0 + boxW
+            val y0 = (h * fractionOf("deckNumberRowYFraction")).toInt()
+            val y1 = y0 + boxH
+            // The corrected box fully contains the label height (the fixed dimension) and its right
+            // edge, with its left edge at the measured (approximate) label left.
+            assertTrue(y0 <= 345, "box top $y0 must sit at or above the label top (345)")
+            assertTrue(y1 >= 400, "box bottom $y1 must sit at or below the label bottom (400)")
+            assertTrue(x1 >= 300, "box right $x1 must cover the label right (300)")
+            assertTrue(x0 <= 88, "box left $x0 must be at the label left (~85)")
+        }
+    }
+
     private fun sourceFile(relative: String): File = File(kotlinRoot(), relative).also { require(it.isFile) { "missing ${it.path}" } }
 
     private fun kotlinRoot(): File {

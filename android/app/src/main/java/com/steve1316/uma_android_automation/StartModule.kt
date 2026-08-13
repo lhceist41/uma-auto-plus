@@ -1503,6 +1503,40 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // totalRuns, and before the first navigator construction, which consumes it.
                 CareerLaunchNavigator.resetTpRestoresForSession(totalRuns)
 
+                // Debug diagnostics are an outer-orchestration mode. When any Debug Settings "Start ...
+                // Test" toggle is armed the session is a single read-only probe: it must run once inside
+                // Game.start() and NEVER trigger a career-launching navigation. StartModule presses Start
+                // Career in two places OUTSIDE Game.start() (the cold-start launch below and the
+                // between-run LAUNCH_NEXT), so the Game.kt fail-closed gate alone can be bypassed by the
+                // queue -- a real career (and its TP) launched before or between diagnostic reads
+                // (2026-08-13, deck-number diagnostic). Resolve intent ONCE, from the same DebugTestGate
+                // registry Game.kt and Campaign.startTests() read, with the same "debug" category -- no
+                // second key list.
+                val armedDebugTests = DebugTestGate.requested { key -> SettingsHelper.getBooleanSetting("debug", key) }
+                val debugDiagnosticArmed = armedDebugTests.isNotEmpty()
+                if (debugDiagnosticArmed) {
+                    // Diagnostic-only session: this is NOT a queue run. Execute exactly one read-only
+                    // diagnostic through the same runSingleGame() -> Game.start() -> startTests() path a
+                    // normal run uses, then end the session. Placed here DELIBERATELY -- after canonical
+                    // intent resolution but BEFORE any queue bookkeeping (the resume-state read and its
+                    // clearQueueState, saveQueueState(PHASE_CAREER), CareerFinalizeGate.beginCareer, the
+                    // rotation snapshot swap, completedRuns, decidePostCareerAction, and the post-loop
+                    // clearQueueState/queueComplete) -- so a pre-existing interrupted queue's resume state
+                    // is neither consumed nor cleared, and no fake PHASE_CAREER record is ever written (a
+                    // process kill mid-diagnostic cannot poison normal resume). The outer finally still
+                    // releases the wake lock and the session latch. The later career-launch gates
+                    // (cold-start suppression, single-shot break) are now unreachable but are kept as
+                    // defense-in-depth in case this branch is ever bypassed.
+                    MessageLog.i(
+                        TAG,
+                        "[DEBUG-TEST] Diagnostic-only session; armed: ${armedDebugTests.joinToString(", ")}. " +
+                            "Running exactly one read-only diagnostic; no career, and queue resume state is left untouched.",
+                    )
+                    val diagnosticResult = runSingleGame()
+                    MessageLog.i(TAG, "[DEBUG-TEST] Diagnostic session ended (${diagnosticResult.code.name}). No queue state was read, saved, or cleared.")
+                    return
+                }
+
                 // Trainee rotation: parse the cycle once, up here so the auto-resume decision below
                 // can distinguish a rotation queue (which must re-enter an interrupted career, never
                 // skip to the next trainee's snapshot) from a normal single-trainee queue. Also used
@@ -1609,7 +1643,16 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // screen detection inside the career loop. Detect that one unambiguous case
                 // and drive a career launch first. Probe failures fall through to the old
                 // behavior of starting the run directly.
-                if (enableRunQueue && startFromRun <= totalRuns && BotService.isRunning && !queueStopRequested) {
+                if (debugDiagnosticArmed) {
+                    // Phase 4: a diagnostic is armed, so no career-launching navigation may run here.
+                    // The diagnostic executes read-only inside Game.start() (runSingleGame) below; the
+                    // cold-start launch would press Start Career and spend TP. Skip it entirely.
+                    MessageLog.i(
+                        TAG,
+                        "[DEBUG-TEST] StartModule launch suppressed; diagnostic armed: ${armedDebugTests.joinToString(", ")}. " +
+                            "No cold-start career navigation; the diagnostic runs read-only inside the run.",
+                    )
+                } else if (enableRunQueue && startFromRun <= totalRuns && BotService.isRunning && !queueStopRequested) {
                     val scenarioSetting = SettingsHelper.getStringSetting("general", "scenario")
                     val isMiscMode = scenarioSetting == "Daily Races" || scenarioSetting == "Team Trials"
                     // Reuse the probe's navigator for the launch - its Game/CV initialisation is
@@ -1793,6 +1836,17 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 completedRuns++
                             }
                         }
+                    }
+
+                    // Debug diagnostics are single-shot: the one diagnostic execution has returned, so
+                    // end the session now. Breaking BEFORE decidePostCareerAction makes both the
+                    // FINALIZE_TO_HOME (career-end) and the LAUNCH_NEXT (next career) navigations below
+                    // unreachable, so no career-launching or career-end navigation runs regardless of
+                    // totalRuns, queue mode, reuse, scenario, or trainee. This is the outer-orchestration
+                    // counterpart to Game.kt's inner fail-closed gate; the stored totalRuns is untouched.
+                    if (debugDiagnosticArmed) {
+                        MessageLog.i(TAG, "[DEBUG-TEST] Diagnostic run complete; ending the session single-shot. No further runs, no career-launching or career-end navigation.")
+                        break
                     }
 
                     // Post-career routing. The career-end flow (Complete Career -> results -> sparks

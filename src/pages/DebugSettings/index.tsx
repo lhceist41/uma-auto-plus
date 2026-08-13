@@ -2,6 +2,7 @@ import { useMemo, useContext, useRef, useState, useEffect } from "react"
 import { View, Text, ScrollView, StyleSheet, NativeModules, Linking, AppState, AppStateStatus } from "react-native"
 import { useTheme } from "../../context/ThemeContext"
 import { BotStateContext } from "../../context/BotStateContext"
+import { useSettings } from "../../context/SettingsContext"
 import CustomSlider from "../../components/CustomSlider"
 import CustomCheckbox from "../../components/CustomCheckbox"
 import CustomTitle from "../../components/CustomTitle"
@@ -23,6 +24,7 @@ const DebugSettings = () => {
     usePerformanceLogging("DebugSettings")
     const { colors } = useTheme()
     const bsc = useContext(BotStateContext)
+    const { saveSettingsImmediate } = useSettings()
     const scrollViewRef = useRef<ScrollView>(null)
 
     /** List of all diagnostic debug test property names in bsc.settings.debug. */
@@ -51,27 +53,27 @@ const DebugSettings = () => {
      * @param checked The new checked state.
      */
     const handleDebugTestToggle = (key: (typeof debugTestKeys)[number], checked: boolean) => {
-        if (checked) {
-            // Create updates for all debug test keys, setting only the target one to true.
-            const updates = debugTestKeys.reduce((acc, currentKey) => {
-                acc[currentKey] = currentKey === key
-                return acc
-            }, {} as any)
+        // Mutual exclusivity: enabling one test sets only it true; disabling clears just that one.
+        const nextDebug = checked
+            ? {
+                  ...bsc.settings.debug,
+                  ...debugTestKeys.reduce((acc, currentKey) => {
+                      acc[currentKey] = currentKey === key
+                      return acc
+                  }, {} as any),
+              }
+            : { ...bsc.settings.debug, [key]: false }
+        const nextSettings = { ...bsc.settings, debug: nextDebug }
 
-            bsc.setSettings({
-                ...bsc.settings,
-                debug: {
-                    ...bsc.settings.debug,
-                    ...updates,
-                },
-            })
-        } else {
-            // Just disable the one test.
-            bsc.setSettings({
-                ...bsc.settings,
-                debug: { ...bsc.settings.debug, [key]: false },
-            })
-        }
+        bsc.setSettings(nextSettings)
+
+        // A debug diagnostic decides whether the bot runs a read-only test or normal career
+        // navigation, so its toggle MUST be durable the instant it is set. The 500ms debounced
+        // auto-save can be lost to an app restart between here and Start -- the 2026-08-13
+        // deck-number incident: the toggle reverted across a restart, so the bot ran normal
+        // navigation and pressed Start Career, spending TP. Persist it immediately (in addition to
+        // the debounce) so a restart before Start cannot silently disarm the requested diagnostic.
+        void saveSettingsImmediate(nextSettings)
     }
 
     const [deviceIp, setDeviceIp] = useState<string>("<phone-ip>")

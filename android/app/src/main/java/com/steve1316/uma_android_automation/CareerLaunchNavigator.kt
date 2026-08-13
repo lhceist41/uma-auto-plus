@@ -4304,14 +4304,15 @@ class CareerLaunchNavigator(private val context: Context) {
     private val deckCountBoxH = 0.02f
 
     // Geometry of the "Deck N" selector label + its left/right arrows on the career-start Support
-    // Formation screen (the explicit-deck gate reads/navigates these). ESTIMATES anchored to the
-    // shared deck-panel layout (deckCountRowYFraction above matches the editor's type-count row), to
-    // be tuned on-device with the read-only debugDeckNumberRead diagnostic
-    // (debugMode_startDeckNumberReadTest) during the zero-TP device proof -- exactly as the
-    // deckCount* fractions were tuned via debugDeckStatRead. Fractions of a 1080x1920 capture; the
-    // label box is centred on deckNumberColFraction.
+    // Formation screen (the explicit-deck gate reads/navigates these). Fractions of a 1080x1920
+    // capture; the label box is centred on deckNumberColFraction. deckNumberRowYFraction is the box
+    // TOP (the read crops downward by deckNumberBoxH). Calibrated 2026-08-13 against a real
+    // Support Formation screenshot: the "Deck N" label sits at y ~345..400 (centre ~370). The first
+    // estimate 0.20 (box top y=384) sat ~40px below the text and caught only its lower edge / the
+    // gap / the top of the first card; 0.177 (box top y~340, box y[340..407]) contains the full
+    // "Deck N" text. x/width/height were correct at first estimate and are unchanged.
     private val deckNumberColFraction = 0.18f
-    private val deckNumberRowYFraction = 0.20f
+    private val deckNumberRowYFraction = 0.177f
     private val deckNumberBoxW = 0.20f
     private val deckNumberBoxH = 0.035f
     private val deckArrowLeftXFraction = 0.05f
