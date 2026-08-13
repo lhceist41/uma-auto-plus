@@ -338,6 +338,28 @@ abstract class Campaign(game: Game) : Task(game) {
     }
 
     /**
+     * Live Shadow Advisor S3 sink: observational only. After each factual decision_trace append it evaluates the
+     * static S1 policy from the immutable serialized decision_trace plus the retained same-seq career_state, and
+     * appends a separate `shadow_advisor.jsonl` record. It shares the decision tracer's gate, never influences any
+     * decision/execution, and swallows all of its own failures, so it can never change a turn. Null (no-op) in
+     * release without Debug Mode.
+     */
+    val shadowAdvisorSink: com.steve1316.uma_android_automation.bot.shadowadvisor.ShadowAdvisorSink? =
+        if (com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode) {
+            com.steve1316.uma_android_automation.bot.shadowadvisor.ShadowAdvisorSink()
+        } else {
+            null
+        }
+
+    /**
+     * The exact serialized `career_state` JSON string and its seq, retained when the state is appended so the
+     * Shadow Advisor sink can pair the immutable pre-decision state to this turn's decision_trace by matching seq.
+     * Immutable strings only, never read by any gameplay path.
+     */
+    private var retainedShadowCareerStateJson: String? = null
+    private var retainedShadowCareerStateSeq: Int? = null
+
+    /**
      * Appends one turn's [DecisionTrace] record to the on-device corpus.
      *
      * Identity is read at emit time from the sources the other corpus records already use, so a
@@ -370,6 +392,18 @@ abstract class Campaign(game: Game) : Task(game) {
                 enteredRace = pendingEnteredRace.current(),
             )
         OutcomeCorpus.append(game.myContext, record, OutcomeCorpus.DECISIONS_PATH, DecisionTrace.MAX_FILE_BYTES)
+
+        // Shadow Advisor S3: the ONLY live invocation, strictly AFTER the factual decision_trace append. It reads the
+        // immutable serialized trace string plus the retained same-seq career_state string, evaluates the static S1
+        // policy, and appends its own observational record. It cannot influence this or any later turn; every failure
+        // mode is isolated inside the sink. Passing record.toString() hands over an immutable copy, never the JSONObject.
+        shadowAdvisorSink?.onDecisionTraceAppended(
+            context = game.myContext,
+            serializedTrace = record.toString(),
+            traceSeq = careerStateSeq.current(),
+            serializedState = retainedShadowCareerStateJson,
+            retainedStateSeq = retainedShadowCareerStateSeq,
+        )
     }
 
     /**
@@ -380,6 +414,10 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     private fun appendCareerState(careerState: CareerState, seq: Int) {
         val record = CareerStateSerializer.buildRecord(careerState, seq, System.currentTimeMillis())
+        // Retain the exact appended JSON string for the Shadow Advisor sink's same-seq pairing, before the append so
+        // it is captured regardless of the write result. Immutable string; nothing else reads it.
+        retainedShadowCareerStateJson = record.toString()
+        retainedShadowCareerStateSeq = seq
         OutcomeCorpus.append(game.myContext, record, OutcomeCorpus.CAREER_STATE_PATH, CareerStateSerializer.MAX_FILE_BYTES)
     }
 

@@ -164,9 +164,36 @@ describe("manifest", () => {
             totalByteSize: decBytes.length + stBytes.length,
         })
         expect(m.manifestVersion).toBe(MANIFEST_VERSION)
-        expect(m.filePresence).toEqual({ "decisions.jsonl": true, "career_state.jsonl": true, "careers.jsonl": false })
+        expect(m.filePresence).toEqual({ "decisions.jsonl": true, "career_state.jsonl": true, "careers.jsonl": false, "shadow_advisor.jsonl": false })
         expect(m.summary.totalByteSize).toBe(decBytes.length + stBytes.length)
         expect(m.collectionMode).toBe("fromDir")
+    })
+
+    it("2/19. an optional shadow_advisor.jsonl is hashed, counted, and marked present when supplied", () => {
+        const decBytes = Buffer.from(toJsonl([dec({ seq: 1 })]), "utf8")
+        const stBytes = Buffer.from(toJsonl([st({ seq: 1 })]), "utf8")
+        // One valid shadow row and one malformed line, to prove hashing + malformed counting cover the stream.
+        const shadowBytes = Buffer.from(`${JSON.stringify({ type: "shadow_advisor", v: 1, seq: 1, careerToken: "T", status: "notApplicable", reasons: [], limitations: [] })}\n{ not json\n`, "utf8")
+        const shadowMeta = fileMetadata("shadow_advisor.jsonl", shadowBytes, parseJsonl(shadowBytes))
+        expect(shadowMeta.recordCount).toBe(1)
+        expect(shadowMeta.malformedLineCount).toBe(1)
+        expect(shadowMeta.sha256).toMatch(/^[0-9a-f]{64}$/)
+
+        const files = [fileMetadata("decisions.jsonl", decBytes, parseJsonl(decBytes)), fileMetadata("career_state.jsonl", stBytes, parseJsonl(stBytes)), shadowMeta]
+        const m = buildManifest({
+            label: "run1",
+            sanitizedLabel: "run1",
+            bundleId: "2026-08-10-run1",
+            collectedAtUtc: "2026-08-10T00:00:00.000Z",
+            source: { mode: "fromDir", deviceSerial: null, deviceTelemetryPath: null, fromDir: "pulled" },
+            files,
+            analysis: analyzeCorpus([dec({ seq: 1 })], [st({ seq: 1 })], null),
+            totalByteSize: decBytes.length + stBytes.length + shadowBytes.length,
+        })
+        expect(m.filePresence).toEqual({ "decisions.jsonl": true, "career_state.jsonl": true, "careers.jsonl": false, "shadow_advisor.jsonl": true })
+        // The manifest carries the shadow file's hash + malformed count; the join analysis ignores it (it is not a
+        // decision/state/careers record), and an archive without it stays valid (the case above).
+        expect(m.files.find((f) => f.filename === "shadow_advisor.jsonl")).toEqual(shadowMeta)
     })
 })
 

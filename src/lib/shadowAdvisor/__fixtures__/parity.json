@@ -1,0 +1,3288 @@
+[
+  {
+    "name": "complete-train-positive-margin",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 20,
+            "pwr": 4
+          },
+          "failChance": 10
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 12,
+            "grt": 2
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 10
+          },
+          "failChance": 6
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 8
+          },
+          "failChance": 4
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 6,
+            "spd": 1
+          },
+          "failChance": 2
+        }
+      ],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 20,
+              "pwr": 4
+            },
+            "failChance": 10
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 12,
+              "grt": 2
+            },
+            "failChance": 8
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 10
+            },
+            "failChance": 6
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 8
+            },
+            "failChance": 4
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "spd": 1,
+              "wit": 6
+            },
+            "failChance": 2
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "recommendationAvailable",
+      "recommended": {
+        "action": "TRAIN",
+        "trainingType": "SPEED"
+      },
+      "scoreMargin": {
+        "value": 9,
+        "over": "STAMINA"
+      },
+      "reasons": [
+        {
+          "code": "trainingScoreHigher",
+          "detail": "SPEED advisor score 19 exceeded STAMINA 10 by 9"
+        }
+      ],
+      "limitations": [
+        "relationship, rainbow, and hint facts are unavailable offline",
+        "support-card presence and bonuses are unavailable offline",
+        "advisor scores raw stat gains only; the current-policy utility score is intentionally excluded"
+      ],
+      "scoreBreakdown": {
+        "weightedGain": 24,
+        "failurePenalty": 5,
+        "total": 19,
+        "perStat": {
+          "spd": 20,
+          "pwr": 4
+        }
+      }
+    }
+  },
+  {
+    "name": "complete-train-negative-margin",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 60
+          },
+          "failChance": 55
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 12
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 10
+          },
+          "failChance": 6
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 8
+          },
+          "failChance": 4
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 6
+          },
+          "failChance": 2
+        }
+      ],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 60
+            },
+            "failChance": 55
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 12
+            },
+            "failChance": 8
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 10
+            },
+            "failChance": 6
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 8
+            },
+            "failChance": 4
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "wit": 6
+            },
+            "failChance": 2
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "recommendationAvailable",
+      "recommended": {
+        "action": "TRAIN",
+        "trainingType": "STAMINA"
+      },
+      "scoreMargin": {
+        "value": -24.5,
+        "over": "SPEED"
+      },
+      "reasons": [
+        {
+          "code": "trainingAlternativeExcludedByFailureRisk",
+          "detail": "SPEED advisor score 32.5 exceeded STAMINA 8 but its failChance 55 exceeded advisor limit 40"
+        },
+        {
+          "code": "failureRiskLower",
+          "detail": "STAMINA failChance 8 below SPEED 55"
+        }
+      ],
+      "limitations": [
+        "relationship, rainbow, and hint facts are unavailable offline",
+        "support-card presence and bonuses are unavailable offline",
+        "advisor scores raw stat gains only; the current-policy utility score is intentionally excluded"
+      ],
+      "scoreBreakdown": {
+        "weightedGain": 12,
+        "failurePenalty": 4,
+        "total": 8,
+        "perStat": {
+          "sta": 12
+        }
+      }
+    }
+  },
+  {
+    "name": "train-tie-break-canonical",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 20
+          },
+          "failChance": 10
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 20
+          },
+          "failChance": 10
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 8
+          },
+          "failChance": 6
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 6
+          },
+          "failChance": 4
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 4
+          },
+          "failChance": 2
+        }
+      ],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 20
+            },
+            "failChance": 10
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 20
+            },
+            "failChance": 10
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 8
+            },
+            "failChance": 6
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 6
+            },
+            "failChance": 4
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "wit": 4
+            },
+            "failChance": 2
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "recommendationAvailable",
+      "recommended": {
+        "action": "TRAIN",
+        "trainingType": "SPEED"
+      },
+      "scoreMargin": {
+        "value": 0,
+        "over": "STAMINA"
+      },
+      "reasons": [
+        {
+          "code": "trainingScoreHigher",
+          "detail": "SPEED advisor score 15 exceeded STAMINA 15 by 0"
+        }
+      ],
+      "limitations": [
+        "relationship, rainbow, and hint facts are unavailable offline",
+        "support-card presence and bonuses are unavailable offline",
+        "advisor scores raw stat gains only; the current-policy utility score is intentionally excluded"
+      ],
+      "scoreBreakdown": {
+        "weightedGain": 20,
+        "failurePenalty": 5,
+        "total": 15,
+        "perStat": {
+          "spd": 20
+        }
+      }
+    }
+  },
+  {
+    "name": "train-tie-break-failchance",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 25
+          },
+          "failChance": 20
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 20
+          },
+          "failChance": 10
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 8
+          },
+          "failChance": 6
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 6
+          },
+          "failChance": 4
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 4
+          },
+          "failChance": 2
+        }
+      ],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 25
+            },
+            "failChance": 20
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 20
+            },
+            "failChance": 10
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 8
+            },
+            "failChance": 6
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 6
+            },
+            "failChance": 4
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "wit": 4
+            },
+            "failChance": 2
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "recommendationAvailable",
+      "recommended": {
+        "action": "TRAIN",
+        "trainingType": "STAMINA"
+      },
+      "scoreMargin": {
+        "value": 0,
+        "over": "SPEED"
+      },
+      "reasons": [
+        {
+          "code": "trainingScoreHigher",
+          "detail": "STAMINA advisor score 15 exceeded SPEED 15 by 0"
+        },
+        {
+          "code": "failureRiskLower",
+          "detail": "STAMINA failChance 10 below SPEED 20"
+        }
+      ],
+      "limitations": [
+        "relationship, rainbow, and hint facts are unavailable offline",
+        "support-card presence and bonuses are unavailable offline",
+        "advisor scores raw stat gains only; the current-policy utility score is intentionally excluded"
+      ],
+      "scoreBreakdown": {
+        "weightedGain": 20,
+        "failurePenalty": 5,
+        "total": 15,
+        "perStat": {
+          "sta": 20
+        }
+      }
+    }
+  },
+  {
+    "name": "train-all-over-limit-least-risk",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 30
+          },
+          "failChance": 60
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 28
+          },
+          "failChance": 45
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 26
+          },
+          "failChance": 50
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 24
+          },
+          "failChance": 55
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 22
+          },
+          "failChance": 52
+        }
+      ],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 30
+            },
+            "failChance": 60
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 28
+            },
+            "failChance": 45
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 26
+            },
+            "failChance": 50
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 24
+            },
+            "failChance": 55
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "wit": 22
+            },
+            "failChance": 52
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "recommendationAvailable",
+      "recommended": {
+        "action": "TRAIN",
+        "trainingType": "STAMINA"
+      },
+      "scoreMargin": {
+        "value": 4.5,
+        "over": "POWER"
+      },
+      "reasons": [
+        {
+          "code": "failureRiskAboveThreshold",
+          "detail": "all candidates exceed the failChance limit 40; selected least-risk STAMINA at failChance 45"
+        },
+        {
+          "code": "failureRiskLower",
+          "detail": "STAMINA failChance 45 below POWER 50"
+        }
+      ],
+      "limitations": [
+        "relationship, rainbow, and hint facts are unavailable offline",
+        "support-card presence and bonuses are unavailable offline",
+        "advisor scores raw stat gains only; the current-policy utility score is intentionally excluded"
+      ],
+      "scoreBreakdown": {
+        "weightedGain": 28,
+        "failurePenalty": 22.5,
+        "total": 5.5,
+        "perStat": {
+          "sta": 28
+        }
+      }
+    }
+  },
+  {
+    "name": "train-missing-gains",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "failChance": 10
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 12,
+            "grt": 2
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 10
+          },
+          "failChance": 6
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 8
+          },
+          "failChance": 4
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 6,
+            "spd": 1
+          },
+          "failChance": 2
+        }
+      ],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": null,
+            "failChance": 10
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 12,
+              "grt": 2
+            },
+            "failChance": 8
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 10
+            },
+            "failChance": 6
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 8
+            },
+            "failChance": 4
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "spd": 1,
+              "wit": 6
+            },
+            "failChance": 2
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "insufficientEvidence",
+      "reasons": [
+        {
+          "code": "incompleteTrainingContest",
+          "detail": "facility SPEED is missing gains"
+        }
+      ],
+      "limitations": []
+    }
+  },
+  {
+    "name": "train-missing-failchance",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 20
+          }
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 12,
+            "grt": 2
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 10
+          },
+          "failChance": 6
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 8
+          },
+          "failChance": 4
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 6,
+            "spd": 1
+          },
+          "failChance": 2
+        }
+      ],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 20
+            },
+            "failChance": null
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 12,
+              "grt": 2
+            },
+            "failChance": 8
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 10
+            },
+            "failChance": 6
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 8
+            },
+            "failChance": 4
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "spd": 1,
+              "wit": 6
+            },
+            "failChance": 2
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "insufficientEvidence",
+      "reasons": [
+        {
+          "code": "incompleteTrainingContest",
+          "detail": "facility SPEED is missing failChance"
+        }
+      ],
+      "limitations": []
+    }
+  },
+  {
+    "name": "train-incomplete-four-facilities",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 20,
+            "pwr": 4
+          },
+          "failChance": 10
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 12,
+            "grt": 2
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 10
+          },
+          "failChance": 6
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 8
+          },
+          "failChance": 4
+        }
+      ],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": false,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 20,
+              "pwr": 4
+            },
+            "failChance": 10
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 12,
+              "grt": 2
+            },
+            "failChance": 8
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 10
+            },
+            "failChance": 6
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 8
+            },
+            "failChance": 4
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "insufficientEvidence",
+      "reasons": [
+        {
+          "code": "incompleteTrainingContest",
+          "detail": "training contest incomplete (4 facility candidate(s), five required)"
+        }
+      ],
+      "limitations": []
+    }
+  },
+  {
+    "name": "rest-energy-below-threshold",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 20,
+            "pwr": 4
+          },
+          "failChance": 10
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 12,
+            "grt": 2
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 10
+          },
+          "failChance": 6
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 8
+          },
+          "failChance": 4
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 6,
+            "spd": 1
+          },
+          "failChance": 2
+        }
+      ],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 18,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 18,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 20,
+              "pwr": 4
+            },
+            "failChance": 10
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 12,
+              "grt": 2
+            },
+            "failChance": 8
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 10
+            },
+            "failChance": 6
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 8
+            },
+            "failChance": 4
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "spd": 1,
+              "wit": 6
+            },
+            "failChance": 2
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "recommendationAvailable",
+      "recommended": {
+        "action": "REST"
+      },
+      "reasons": [
+        {
+          "code": "energyBelowAdvisorThreshold",
+          "detail": "energy 18 below advisor REST threshold 30"
+        }
+      ],
+      "limitations": [
+        "relationship, rainbow, and hint facts are unavailable offline",
+        "support-card presence and bonuses are unavailable offline",
+        "advisor scores raw stat gains only; the current-policy utility score is intentionally excluded"
+      ]
+    }
+  },
+  {
+    "name": "recover-mood-below-floor",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 20,
+            "pwr": 4
+          },
+          "failChance": 10
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 12,
+            "grt": 2
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 10
+          },
+          "failChance": 6
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 8
+          },
+          "failChance": 4
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 6,
+            "spd": 1
+          },
+          "failChance": 2
+        }
+      ],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "BAD",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "BAD",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 20,
+              "pwr": 4
+            },
+            "failChance": 10
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 12,
+              "grt": 2
+            },
+            "failChance": 8
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 10
+            },
+            "failChance": 6
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 8
+            },
+            "failChance": 4
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "spd": 1,
+              "wit": 6
+            },
+            "failChance": 2
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "recommendationAvailable",
+      "recommended": {
+        "action": "RECOVER_MOOD"
+      },
+      "reasons": [
+        {
+          "code": "moodBelowAdvisorFloor",
+          "detail": "mood BAD below advisor floor NORMAL"
+        }
+      ],
+      "limitations": [
+        "relationship, rainbow, and hint facts are unavailable offline",
+        "support-card presence and bonuses are unavailable offline",
+        "advisor scores raw stat gains only; the current-policy utility score is intentionally excluded"
+      ]
+    }
+  },
+  {
+    "name": "race-day-mandatory-not-applicable",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 20,
+            "pwr": 4
+          },
+          "failChance": 10
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 12,
+            "grt": 2
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 10
+          },
+          "failChance": 6
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 8
+          },
+          "failChance": 4
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 6,
+            "spd": 1
+          },
+          "failChance": 2
+        }
+      ],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": true,
+        "scheduled": false,
+        "goalRibbon": true
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": true,
+          "scheduled": false,
+          "goalRibbon": true
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 20,
+              "pwr": 4
+            },
+            "failChance": 10
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 12,
+              "grt": 2
+            },
+            "failChance": 8
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 10
+            },
+            "failChance": 6
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 8
+            },
+            "failChance": 4
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "spd": 1,
+              "wit": 6
+            },
+            "failChance": 2
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "notApplicable",
+      "reasons": [
+        {
+          "code": "raceDayForced",
+          "detail": "mandatory race day; training/recovery comparison is not applicable"
+        }
+      ],
+      "limitations": []
+    }
+  },
+  {
+    "name": "state-unavailable-no-contest-no-state",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": null,
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": null,
+      "state": {
+        "energy": null,
+        "mood": null,
+        "negativeStatuses": null,
+        "stats": null,
+        "skillPts": null,
+        "raceFlags": null
+      },
+      "trainingContest": null
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "insufficientEvidence",
+      "reasons": [
+        {
+          "code": "stateUnavailable",
+          "detail": "no training contest and pre-decision state unavailable"
+        }
+      ],
+      "limitations": []
+    }
+  },
+  {
+    "name": "no-contest-not-applicable",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "action",
+          "id": "REST",
+          "selected": true
+        }
+      ],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 80,
+        "mood": "GOOD",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 80,
+        "mood": "GOOD",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": null
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "notApplicable",
+      "reasons": [],
+      "limitations": []
+    }
+  },
+  {
+    "name": "forced-default-selection-ignored",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 20,
+            "pwr": 4
+          },
+          "failChance": 10
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 12,
+            "grt": 2
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 10
+          },
+          "failChance": 6
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 8
+          },
+          "failChance": 4
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 6,
+            "spd": 1
+          },
+          "failChance": 2
+        }
+      ],
+      "selected": {
+        "action": "TRAIN",
+        "trainingType": "GUTS",
+        "trainingSource": "FORCED_DEFAULT",
+        "score": 999
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 20,
+              "pwr": 4
+            },
+            "failChance": 10
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 12,
+              "grt": 2
+            },
+            "failChance": 8
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 10
+            },
+            "failChance": 6
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 8
+            },
+            "failChance": 4
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "spd": 1,
+              "wit": 6
+            },
+            "failChance": 2
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "recommendationAvailable",
+      "recommended": {
+        "action": "TRAIN",
+        "trainingType": "SPEED"
+      },
+      "scoreMargin": {
+        "value": 9,
+        "over": "STAMINA"
+      },
+      "reasons": [
+        {
+          "code": "trainingScoreHigher",
+          "detail": "SPEED advisor score 19 exceeded STAMINA 10 by 9"
+        }
+      ],
+      "limitations": [
+        "relationship, rainbow, and hint facts are unavailable offline",
+        "support-card presence and bonuses are unavailable offline",
+        "advisor scores raw stat gains only; the current-policy utility score is intentionally excluded"
+      ],
+      "scoreBreakdown": {
+        "weightedGain": 24,
+        "failurePenalty": 5,
+        "total": 19,
+        "perStat": {
+          "spd": 20,
+          "pwr": 4
+        }
+      }
+    }
+  },
+  {
+    "name": "forced-from-skipped-selection-ignored",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 20,
+            "pwr": 4
+          },
+          "failChance": 10
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 12,
+            "grt": 2
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 10
+          },
+          "failChance": 6
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 8
+          },
+          "failChance": 4
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 6,
+            "spd": 1
+          },
+          "failChance": 2
+        }
+      ],
+      "selected": {
+        "action": "TRAIN",
+        "trainingType": "WIT",
+        "trainingSource": "FORCED_FROM_SKIPPED",
+        "score": 1
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 20,
+              "pwr": 4
+            },
+            "failChance": 10
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 12,
+              "grt": 2
+            },
+            "failChance": 8
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 10
+            },
+            "failChance": 6
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 8
+            },
+            "failChance": 4
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "spd": 1,
+              "wit": 6
+            },
+            "failChance": 2
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "recommendationAvailable",
+      "recommended": {
+        "action": "TRAIN",
+        "trainingType": "SPEED"
+      },
+      "scoreMargin": {
+        "value": 9,
+        "over": "STAMINA"
+      },
+      "reasons": [
+        {
+          "code": "trainingScoreHigher",
+          "detail": "SPEED advisor score 19 exceeded STAMINA 10 by 9"
+        }
+      ],
+      "limitations": [
+        "relationship, rainbow, and hint facts are unavailable offline",
+        "support-card presence and bonuses are unavailable offline",
+        "advisor scores raw stat gains only; the current-policy utility score is intentionally excluded"
+      ],
+      "scoreBreakdown": {
+        "weightedGain": 24,
+        "failurePenalty": 5,
+        "total": 19,
+        "perStat": {
+          "spd": 20,
+          "pwr": 4
+        }
+      }
+    }
+  },
+  {
+    "name": "numeric-integer-total",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 30
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 10
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 8
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 6
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 4
+          },
+          "failChance": 8
+        }
+      ],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 30
+            },
+            "failChance": 8
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 10
+            },
+            "failChance": 8
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 8
+            },
+            "failChance": 8
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 6
+            },
+            "failChance": 8
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "wit": 4
+            },
+            "failChance": 8
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "recommendationAvailable",
+      "recommended": {
+        "action": "TRAIN",
+        "trainingType": "SPEED"
+      },
+      "scoreMargin": {
+        "value": 20,
+        "over": "STAMINA"
+      },
+      "reasons": [
+        {
+          "code": "trainingScoreHigher",
+          "detail": "SPEED advisor score 26 exceeded STAMINA 6 by 20"
+        }
+      ],
+      "limitations": [
+        "relationship, rainbow, and hint facts are unavailable offline",
+        "support-card presence and bonuses are unavailable offline",
+        "advisor scores raw stat gains only; the current-policy utility score is intentionally excluded"
+      ],
+      "scoreBreakdown": {
+        "weightedGain": 30,
+        "failurePenalty": 4,
+        "total": 26,
+        "perStat": {
+          "spd": 30
+        }
+      }
+    }
+  },
+  {
+    "name": "numeric-half-step-total",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 30
+          },
+          "failChance": 9
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 10
+          },
+          "failChance": 9
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 8
+          },
+          "failChance": 9
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 6
+          },
+          "failChance": 9
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 4
+          },
+          "failChance": 9
+        }
+      ],
+      "selected": {
+        "action": "TRAIN"
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 30
+            },
+            "failChance": 9
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 10
+            },
+            "failChance": 9
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 8
+            },
+            "failChance": 9
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 6
+            },
+            "failChance": 9
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "wit": 4
+            },
+            "failChance": 9
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "recommendationAvailable",
+      "recommended": {
+        "action": "TRAIN",
+        "trainingType": "SPEED"
+      },
+      "scoreMargin": {
+        "value": 20,
+        "over": "STAMINA"
+      },
+      "reasons": [
+        {
+          "code": "trainingScoreHigher",
+          "detail": "SPEED advisor score 25.5 exceeded STAMINA 5.5 by 20"
+        }
+      ],
+      "limitations": [
+        "relationship, rainbow, and hint facts are unavailable offline",
+        "support-card presence and bonuses are unavailable offline",
+        "advisor scores raw stat gains only; the current-policy utility score is intentionally excluded"
+      ],
+      "scoreBreakdown": {
+        "weightedGain": 30,
+        "failurePenalty": 4.5,
+        "total": 25.5,
+        "perStat": {
+          "spd": 30
+        }
+      }
+    }
+  },
+  {
+    "name": "forbidden-post-execution-blocks-ignored",
+    "decisionTrace": {
+      "type": "decision_trace",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "turn": 20,
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "candidates": [
+        {
+          "type": "training",
+          "id": "SPEED",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "spd": 20,
+            "pwr": 4
+          },
+          "failChance": 10
+        },
+        {
+          "type": "training",
+          "id": "STAMINA",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "sta": 12,
+            "grt": 2
+          },
+          "failChance": 8
+        },
+        {
+          "type": "training",
+          "id": "POWER",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "pwr": 10
+          },
+          "failChance": 6
+        },
+        {
+          "type": "training",
+          "id": "GUTS",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "grt": 8
+          },
+          "failChance": 4
+        },
+        {
+          "type": "training",
+          "id": "WIT",
+          "selected": false,
+          "reason": "candidate",
+          "gains": {
+            "wit": 6,
+            "spd": 1
+          },
+          "failChance": 2
+        }
+      ],
+      "selected": {
+        "action": "TRAIN",
+        "trainingType": "GUTS",
+        "trainingSource": "ANALYSIS",
+        "score": 42
+      },
+      "enteredRace": {
+        "name": "Some Race",
+        "valid": true
+      },
+      "recovery": {
+        "kind": "rest"
+      },
+      "observedTransition": {
+        "spd": 5
+      }
+    },
+    "careerState": {
+      "type": "career_state",
+      "v": 1,
+      "ts": 1,
+      "seq": 1,
+      "identity": {
+        "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b"
+      },
+      "turn": 20,
+      "observation": {
+        "turnObserved": true
+      },
+      "condition": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": []
+      },
+      "stats": {
+        "spd": 300,
+        "sta": 200,
+        "pwr": 150,
+        "grt": 120,
+        "wit": 110
+      },
+      "skillPts": 120,
+      "race": {
+        "mandatory": false,
+        "scheduled": false,
+        "goalRibbon": false
+      },
+      "scenario": {
+        "type": "URA Finale"
+      },
+      "recovery": {
+        "kind": "rest"
+      },
+      "enteredRace": {
+        "valid": false
+      }
+    },
+    "expectedContext": {
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "scenarioType": "URA Finale",
+      "state": {
+        "energy": 70,
+        "mood": "GREAT",
+        "negativeStatuses": [],
+        "stats": {
+          "spd": 300,
+          "sta": 200,
+          "pwr": 150,
+          "grt": 120,
+          "wit": 110
+        },
+        "skillPts": 120,
+        "raceFlags": {
+          "mandatory": false,
+          "scheduled": false,
+          "goalRibbon": false
+        }
+      },
+      "trainingContest": {
+        "complete": true,
+        "facilities": [
+          {
+            "id": "SPEED",
+            "gains": {
+              "spd": 20,
+              "pwr": 4
+            },
+            "failChance": 10
+          },
+          {
+            "id": "STAMINA",
+            "gains": {
+              "sta": 12,
+              "grt": 2
+            },
+            "failChance": 8
+          },
+          {
+            "id": "POWER",
+            "gains": {
+              "pwr": 10
+            },
+            "failChance": 6
+          },
+          {
+            "id": "GUTS",
+            "gains": {
+              "grt": 8
+            },
+            "failChance": 4
+          },
+          {
+            "id": "WIT",
+            "gains": {
+              "spd": 1,
+              "wit": 6
+            },
+            "failChance": 2
+          }
+        ]
+      }
+    },
+    "expectedRecommendation": {
+      "advisorVersion": "1",
+      "policyId": "raw-gain-ranker-v1",
+      "careerToken": "Copano Rickey|Grand Concert|run1|f9b1bc4b",
+      "seq": 1,
+      "turn": 20,
+      "status": "recommendationAvailable",
+      "recommended": {
+        "action": "TRAIN",
+        "trainingType": "SPEED"
+      },
+      "scoreMargin": {
+        "value": 9,
+        "over": "STAMINA"
+      },
+      "reasons": [
+        {
+          "code": "trainingScoreHigher",
+          "detail": "SPEED advisor score 19 exceeded STAMINA 10 by 9"
+        }
+      ],
+      "limitations": [
+        "relationship, rainbow, and hint facts are unavailable offline",
+        "support-card presence and bonuses are unavailable offline",
+        "advisor scores raw stat gains only; the current-policy utility score is intentionally excluded"
+      ],
+      "scoreBreakdown": {
+        "weightedGain": 24,
+        "failurePenalty": 5,
+        "total": 19,
+        "perStat": {
+          "spd": 20,
+          "pwr": 4
+        }
+      }
+    }
+  }
+]

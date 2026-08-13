@@ -44,6 +44,15 @@ object OutcomeCorpus {
     const val CAREER_STATE_PATH = "$OUTCOMES_DIR/career_state.jsonl"
 
     /**
+     * Relative path of the per-turn Shadow Advisor S3 stream. A separate append-only record type joined offline to
+     * [DECISIONS_PATH] by `careerToken + seq`: it carries only what the observational S1 policy would have
+     * recommended from the same pre-decision facts, never the bot's committed action or outcome. Kept out of the
+     * decision/state files so their parsers never see a foreign record, and it inherits the shared append-only,
+     * public-readable, and startup-readability-sweep behavior of this object.
+     */
+    const val SHADOW_ADVISOR_PATH = "$OUTCOMES_DIR/shadow_advisor.jsonl"
+
+    /**
      * Appends one [record] as a JSON line to [path]. Writing must never disturb the calling
      * path: any failure is swallowed after a MessageLog warning. MessageLog is safe here -
      * the career path that logs the ledger line via MessageLog immediately after, and the

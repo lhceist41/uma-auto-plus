@@ -11,7 +11,7 @@
 
 import type { ReplayCareer } from "../replayLab.ts"
 import type { AdvisorDecisionContext, AdvisorFacilityFact } from "./types.ts"
-import { ADVISOR_GAIN_KEYS } from "./types.ts"
+import { ADVISOR_FACILITIES, ADVISOR_GAIN_KEYS } from "./types.ts"
 
 /**
  * The raw per-seq source rows the advisor context needs but ReplayLab's projected types omit. The caller
@@ -143,4 +143,55 @@ export function buildAdvisorContexts(career: ReplayCareer, rawBySeq: ReadonlyMap
         })
     }
     return out
+}
+
+/**
+ * Record-based twin of [buildAdvisorContexts]: builds ONE AdvisorDecisionContext from a single serialized
+ * decision_trace record object plus its matching-seq career_state record object (or null), without ReplayLab. This
+ * is the exact projection the live Kotlin S3 adapter mirrors and the golden fixtures pin, so the offline
+ * re-derivation of a live shadow record joins the same two records the runtime saw. Returns null when the trace
+ * carries no seq (the one shape S3 never records). Reads only pre-decision facts; never a candidate score, the
+ * committed action, enteredRace, a transition, finalize, or a later seq.
+ */
+export function buildContextFromRecords(traceRecord: unknown, stateRecord: unknown): AdvisorDecisionContext | null {
+    if (!isObject(traceRecord)) return null
+    const seq = asFiniteNumber(traceRecord.seq)
+    if (seq === null || !Number.isInteger(seq)) return null
+
+    const traceToken = asString(traceRecord.careerToken)
+    const rawState = isObject(stateRecord) ? stateRecord : null
+    const stateToken = rawState !== null ? careerStateToken(rawState) : null
+    const careerToken = traceToken ?? stateToken ?? ""
+    // Same career-token guard as buildAdvisorContexts: a state row whose identity token is present and mismatched
+    // is dropped (state unavailable), never trusted; an absent token is trusted per the same-career caller contract.
+    const careerState = rawState !== null && !(stateToken !== null && stateToken !== careerToken) ? rawState : null
+
+    const turnRaw = asFiniteNumber(traceRecord.turn)
+    return {
+        careerToken,
+        seq,
+        turn: turnRaw !== null && Number.isInteger(turnRaw) ? turnRaw : null,
+        scenarioType: projectScenarioType(careerState),
+        state: projectState(careerState),
+        trainingContest: projectTrainingContestFromCandidates(traceRecord.candidates),
+    }
+}
+
+/**
+ * Record-based training contest: completeness is the five-facility rule applied directly (ReplayLab's authority),
+ * with no bridge. Null when the record has no training candidates; the per-facility gains/failChance nullity is left
+ * to the policy, matching the offline path.
+ */
+function projectTrainingContestFromCandidates(candidatesRaw: unknown): AdvisorDecisionContext["trainingContest"] {
+    const candidates = Array.isArray(candidatesRaw) ? candidatesRaw : []
+    const training = candidates.filter((c): c is Record<string, unknown> => isObject(c) && c.type === "training")
+    if (training.length === 0) return null
+    const facilities: AdvisorFacilityFact[] = training.map((c) => ({
+        id: asString(c.id) ?? "",
+        gains: projectGains(c.gains),
+        failChance: asFiniteNumber(c.failChance),
+    }))
+    const distinct = new Set(facilities.map((f) => f.id).filter((id) => (ADVISOR_FACILITIES as readonly string[]).includes(id)))
+    const complete = (ADVISOR_FACILITIES as readonly string[]).every((f) => distinct.has(f)) && facilities.length >= 5
+    return { complete, facilities }
 }

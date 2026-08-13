@@ -33,15 +33,29 @@ class OutcomeCorpusReadabilityTest {
     // ---- Path constants: still resolve under external outcomes/, unchanged (behavior on the compiled values) ----
 
     @Test
-    fun `the three telemetry paths resolve under the single owned outcomes directory`() {
+    fun `the telemetry paths resolve under the single owned outcomes directory`() {
         assertEquals("outcomes", OutcomeCorpus.OUTCOMES_DIR)
         assertEquals("outcomes/careers.jsonl", OutcomeCorpus.CORPUS_PATH)
         assertEquals("outcomes/decisions.jsonl", OutcomeCorpus.DECISIONS_PATH)
         assertEquals("outcomes/career_state.jsonl", OutcomeCorpus.CAREER_STATE_PATH)
-        for (path in listOf(OutcomeCorpus.CORPUS_PATH, OutcomeCorpus.DECISIONS_PATH, OutcomeCorpus.CAREER_STATE_PATH)) {
+        // The Shadow Advisor S3 stream is a separate outcomes/*.jsonl file, so it inherits the append-only,
+        // public-readable append and the startup readability sweep with no permission special case.
+        assertEquals("outcomes/shadow_advisor.jsonl", OutcomeCorpus.SHADOW_ADVISOR_PATH)
+        for (path in listOf(OutcomeCorpus.CORPUS_PATH, OutcomeCorpus.DECISIONS_PATH, OutcomeCorpus.CAREER_STATE_PATH, OutcomeCorpus.SHADOW_ADVISOR_PATH)) {
             assertTrue(path.startsWith(OutcomeCorpus.OUTCOMES_DIR + "/"), "$path is under ${OutcomeCorpus.OUTCOMES_DIR}/")
             assertTrue(path.endsWith(".jsonl"), "$path is a .jsonl file")
         }
+    }
+
+    @Test
+    fun `the sweep covers the shadow advisor stream like any other outcomes jsonl`(
+        @TempDir tempDir: File,
+    ) {
+        val shadow = File(tempDir, "shadow_advisor.jsonl").apply { writeText("""{"type":"shadow_advisor","seq":7}""" + "\n") }
+        val bytes = shadow.readBytes()
+        OutcomeCorpus.ensureJsonlReadable(tempDir)
+        assertTrue(shadow.isFile && shadow.canRead(), "the shadow stream is swept and readable")
+        assertArrayEquals(bytes, shadow.readBytes(), "the shadow stream bytes are unchanged")
     }
 
     // ---- appendLineAndMakeReadable: exact bytes, append-only, newline preserved ----

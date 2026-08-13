@@ -92,7 +92,7 @@ function parseArgs(argv) {
 /** Places each telemetry file into tempDir. Required files must appear; careers.jsonl may be absent. */
 function acquireFiles(opts, tempDir) {
     const present = []
-    for (const filename of [TELEMETRY_FILENAMES.decisions, TELEMETRY_FILENAMES.careerState, TELEMETRY_FILENAMES.careers]) {
+    for (const filename of [TELEMETRY_FILENAMES.decisions, TELEMETRY_FILENAMES.careerState, TELEMETRY_FILENAMES.careers, TELEMETRY_FILENAMES.shadowAdvisor]) {
         const dest = join(tempDir, filename)
         const required = REQUIRED_FILENAMES.includes(filename)
         if (opts.fromDir !== null) {

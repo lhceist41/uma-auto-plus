@@ -17,7 +17,7 @@ export const MANIFEST_VERSION = "1"
 export const DEVICE_OUTCOMES_DIR = "/storage/emulated/0/Android/data/com.lhceist41.uma_auto_plus/files/outcomes"
 
 /** The three telemetry file names the writer produces. decisions + careerState are required; careers optional. */
-export const TELEMETRY_FILENAMES = { decisions: "decisions.jsonl", careerState: "career_state.jsonl", careers: "careers.jsonl" } as const
+export const TELEMETRY_FILENAMES = { decisions: "decisions.jsonl", careerState: "career_state.jsonl", careers: "careers.jsonl", shadowAdvisor: "shadow_advisor.jsonl" } as const
 export const REQUIRED_FILENAMES: readonly string[] = [TELEMETRY_FILENAMES.decisions, TELEMETRY_FILENAMES.careerState]
 
 /** The device path to pull one telemetry file from (forward-slash, POSIX device path). */
@@ -343,6 +343,7 @@ export function buildManifest(params: BuildManifestParams): Manifest {
             [TELEMETRY_FILENAMES.decisions]: present.has(TELEMETRY_FILENAMES.decisions),
             [TELEMETRY_FILENAMES.careerState]: present.has(TELEMETRY_FILENAMES.careerState),
             [TELEMETRY_FILENAMES.careers]: present.has(TELEMETRY_FILENAMES.careers),
+            [TELEMETRY_FILENAMES.shadowAdvisor]: present.has(TELEMETRY_FILENAMES.shadowAdvisor),
         },
         files,
         careerTokens: params.analysis.tokens,
