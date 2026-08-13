@@ -161,6 +161,20 @@ describe("storageForm + stableHash + identity", () => {
         expect(launchConfigIdentity(a).hash).not.toBe(launchConfigIdentity(b).hash)
     })
 
+    it("changing the required support deck (runQueue.supportDeckIndex) changes the hash -- category coverage", () => {
+        // Deck 2 vs Deck 5 materially changes the career configuration, so it must move the launch
+        // identity. runQueue is a launch-critical category, so the new field is hashed automatically.
+        const off = makeSettings()
+        off.runQueue.supportDeckIndex = 0
+        const deck5 = makeSettings()
+        deck5.runQueue.supportDeckIndex = 5
+        const deck2 = makeSettings()
+        deck2.runQueue.supportDeckIndex = 2
+        expect(launchConfigIdentity(off).hash).not.toBe(launchConfigIdentity(deck5).hash)
+        expect(launchConfigIdentity(deck2).hash).not.toBe(launchConfigIdentity(deck5).hash)
+        expect(LAUNCH_CRITICAL_CATEGORIES).toContain("runQueue")
+    })
+
     it("bumpSettingsRevision increments immutably and clamps malformed values", () => {
         expect(bumpSettingsRevision(makeSettings({ revision: 4 })).general.settingsRevision).toBe(5)
         expect(bumpSettingsRevision({ general: { settingsRevision: "oops" } } as any).general.settingsRevision).toBe(1)

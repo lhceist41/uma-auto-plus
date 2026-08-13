@@ -202,6 +202,22 @@ const RunQueueSettings = () => {
                                     className="mt-4"
                                 />
 
+                                <CustomSlider
+                                    searchId="run-queue-support-deck-index"
+                                    value={runQueueSettings.supportDeckIndex}
+                                    placeholder={defaultSettings.runQueue.supportDeckIndex}
+                                    onValueChange={(value) => updateSetting("supportDeckIndex", value)}
+                                    onSlidingComplete={(value) => updateSetting("supportDeckIndex", value)}
+                                    min={0}
+                                    max={10}
+                                    step={1}
+                                    label="Required Support Deck"
+                                    showValue={true}
+                                    showLabels={true}
+                                    description="Require a specific saved support formation (Deck 1-10) at career start. The bot selects that deck on the Support Formation screen, verifies it before and after the friend borrow, and refuses to start the career (no TP spent) if it cannot -- so it can never launch on the game's default deck by mistake. Setting this also suppresses Auto-Fill. 0 = off: use whatever deck the game shows."
+                                    className="mt-4"
+                                />
+
                                 <CustomCheckbox
                                     searchId="run-queue-tp-restore-items"
                                     checked={runQueueSettings.enableTpRestoreWithItems}

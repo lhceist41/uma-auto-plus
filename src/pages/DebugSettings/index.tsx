@@ -39,6 +39,7 @@ const DebugSettings = () => {
         "debugMode_startTrackblazerBuyItemsTest",
         "debugMode_startTraineeSelectTest",
         "debugMode_startDeckStatReadTest",
+        "debugMode_startDeckNumberReadTest",
         "debugMode_startRainbowDetectionTest",
     ] as const
 
@@ -589,6 +590,15 @@ const DebugSettings = () => {
                                 onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startDeckStatReadTest", checked)}
                                 label="Start Deck Stat Read Test"
                                 description="Read-only [DECK] calibration. Park the game on the deck-selection screen (the one with Start Career! and Perks), then start the bot: it logs the support-card count it reads for each stat type and the build's core stat, without tapping anything, so the count-row OCR regions can be tuned. Tagged [DECK-TEST] in the log."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-deck-number-read-test"
+                                checked={bsc.settings.debug.debugMode_startDeckNumberReadTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startDeckNumberReadTest", checked)}
+                                label="Start Deck Number Read Test"
+                                description="Read-only [DECK-NUM] calibration for the Required Support Deck feature. Park the game on the career-start Support Formation screen (the one with the Deck N label and left/right deck arrows), then start the bot: it logs the raw OCR and parsed deck number without tapping anything, so the Deck N label region can be tuned. Tagged [DECK-NUM-TEST] in the log."
                                 style={{ marginTop: 10 }}
                             />
 

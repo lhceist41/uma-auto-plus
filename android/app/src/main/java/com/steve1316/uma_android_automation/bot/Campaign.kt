@@ -994,6 +994,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startSkillListBuyTest" to skillPlan::startSkillListBuyTest,
                 "debugMode_startTraineeSelectTest" to ::startTraineeSelectTest,
                 "debugMode_startDeckStatReadTest" to ::startDeckStatReadTest,
+                "debugMode_startDeckNumberReadTest" to ::startDeckNumberReadTest,
                 "debugMode_startRainbowDetectionTest" to ::startRainbowDetectionTest,
             )
 
@@ -1041,6 +1042,17 @@ abstract class Campaign(game: Game) : Task(game) {
     open fun startDeckStatReadTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only deck composition OCR diagnostic...")
         CareerLaunchNavigator(game.myContext).debugDeckStatRead(game.imageUtils)
+    }
+
+    /**
+     * Read-only "Deck N" selector diagnostic for calibrating the explicit-deck gate's number read.
+     * Reuses the running bot's image utils and logs the raw OCR + parsed deck number off the
+     * career-start Support Formation screen without tapping anything. Park the game on that screen
+     * (the one with the Deck N label + left/right deck arrows) first.
+     */
+    open fun startDeckNumberReadTest() {
+        MessageLog.i(TAG, "\n[TEST] Running read-only Deck-number OCR diagnostic...")
+        CareerLaunchNavigator(game.myContext).debugDeckNumberRead(game.imageUtils)
     }
 
     /**

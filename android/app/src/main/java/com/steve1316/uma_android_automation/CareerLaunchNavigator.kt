@@ -528,6 +528,16 @@ class CareerLaunchNavigator(private val context: Context) {
     // flow even though the pill checks missed.
     private var forceBorrowReplacement: Boolean = false
 
+    // Explicit saved-support-formation selection (2026-08-13 wrong-deck incident). When a run
+    // requires a specific saved deck (runQueue.supportDeckIndex; 1..10, 0 = off), the navigator
+    // must select and positively verify that deck on the career-start Support Formation screen
+    // before Auto-Fill, Smart Borrow, or Start Career, and re-verify it after the borrow. Null =
+    // no explicit deck (legacy: leave whatever formation the screen shows). All reset per navigate().
+    private var requestedSupportDeckIndex: Int? = null
+    private var supportDeckPreBorrowVerified: Boolean = false
+    private var supportDeckPostBorrowVerified: Boolean = false
+    private var supportDeckAutoFillSuppressedLogged: Boolean = false
+
     // The finalization-verdict token captured when this navigation began (null when none was
     // armed). Only a verdict matching it may govern this navigation's Complete Career / Finish
     // clicks - see CareerFinalizeGate for the lifecycle.
@@ -650,6 +660,13 @@ class CareerLaunchNavigator(private val context: Context) {
         borrowExcludedCharacters.clear()
         lastBorrowPickEntry = null
         forceBorrowReplacement = false
+        // Explicit saved-support-formation contract for THIS launch. 0 = off (null, legacy); a
+        // non-zero value is carried through even if out of range, so the deck screen fails closed on
+        // it rather than silently clamping. Verification latches reset so a prior run cannot vouch.
+        requestedSupportDeckIndex = SupportDeckSelector.requestedIndexOrNull(SettingsHelper.getIntSetting("runQueue", "supportDeckIndex", 0))
+        supportDeckPreBorrowVerified = false
+        supportDeckPostBorrowVerified = false
+        supportDeckAutoFillSuppressedLogged = false
         // Finalization-guard context for THIS navigation: the verdict present when the
         // navigation begins is the one career this navigation may finalize - a verdict armed
         // later (a different career) can never match the captured token. Guard activity follows
@@ -3879,10 +3896,52 @@ class CareerLaunchNavigator(private val context: Context) {
             )
         }
 
+        // Explicit saved-support-formation gate (2026-08-13 wrong-deck incident). When a run requires
+        // a specific saved deck, select and positively verify it on THIS screen BEFORE Auto-Fill,
+        // Smart Borrow, or Start Career. Reaching here on the game's default deck (Deck 2) when Deck 5
+        // was required is exactly the incident; a stale, unreadable, or wrong deck fails closed below
+        // so no TP is ever spent on the wrong formation. The guard keys on the required deck, not the
+        // reuse flag, so reuseLastLaunchSetup can never bypass it.
+        val requiredDeck = requestedSupportDeckIndex
+        if (requiredDeck != null && !supportDeckPreBorrowVerified) {
+            when (
+                val outcome =
+                    SupportDeckSelector.run(
+                        requested = requiredDeck,
+                        readDeck = { readDeckNumber(iu.getSourceBitmap()) },
+                        tapArrow = { direction -> tapDeckArrow(direction) },
+                    )
+            ) {
+                is SupportDeckSelector.Outcome.Verified -> {
+                    supportDeckPreBorrowVerified = true
+                    MessageLog.i(TAG, "[SUPPORT_DECK] requested=$requiredDeck current=$requiredDeck verified before borrow.")
+                    return TransitionResult.Continue
+                }
+                is SupportDeckSelector.Outcome.Blocked -> {
+                    MessageLog.e(TAG, "[SUPPORT_DECK] expected Deck $requiredDeck but the deck identity could not be verified; refusing Start Career (${outcome.reason}).")
+                    return TransitionResult.Failed(
+                        reason =
+                            "Required support Deck $requiredDeck could not be selected or verified on the Support Formation screen (${outcome.reason}). " +
+                                "Start Career refused so no TP is spent on the wrong deck.",
+                        transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                        recommendedAction = "Open the Support Formation screen, select Deck $requiredDeck by hand, and restart the queue; or set the required deck to 0 (off) in Run Queue settings.",
+                    )
+                }
+            }
+        }
+
         // If autoFillSupports is enabled AND we haven't already clicked Auto-Fill in this
         // navigation session, click the Auto-Fill button to fill empty slots.
         // The flag prevents infinite loops since Auto-Fill stays visible after clicking.
-        if (autoFillSupports && !autoFillAlreadyDone) {
+        //
+        // An explicit required deck OWNS the five owned slots, so Auto-Fill (which rebuilds them with
+        // the game's own logic) must never run over it. Suppress it here rather than failing closed so
+        // a preset that left Auto-Fill on still launches on the required deck; logged once, never silent.
+        if (autoFillSupports && requiredDeck != null && !supportDeckAutoFillSuppressedLogged) {
+            MessageLog.i(TAG, "[SUPPORT_DECK] Auto-Fill suppressed: an explicit Deck $requiredDeck is required, so the saved formation owns the five slots.")
+            supportDeckAutoFillSuppressedLogged = true
+        }
+        if (autoFillSupports && requiredDeck == null && !autoFillAlreadyDone) {
             MessageLog.i(TAG, "[NAV] Auto-Fill enabled. Looking for Auto-Fill button...")
             val clicked =
                 when {
@@ -4081,6 +4140,50 @@ class CareerLaunchNavigator(private val context: Context) {
             ButtonStartCareerOffset.check(iu, sourceBitmap = bitmap) ||
             ButtonStartCareerRight.check(iu, sourceBitmap = bitmap)
         ) {
+            // Post-borrow re-verification (explicit-deck gate). Opening/closing the Borrow Card picker
+            // returns to this screen; re-read the deck number and refuse Start Career unless it is
+            // still exactly the required deck, so a borrow that disturbed the active formation cannot
+            // start the wrong deck. Belt-and-suspenders: both verifications must hold before the click.
+            if (requiredDeck != null) {
+                if (!supportDeckPostBorrowVerified) {
+                    val postBorrow = readDeckNumber(bitmap)
+                    when {
+                        postBorrow == null -> {
+                            MessageLog.e(TAG, "[SUPPORT_DECK] expected Deck $requiredDeck but the deck identity was unreadable after borrow; refusing Start Career.")
+                            return TransitionResult.Failed(
+                                reason =
+                                    "Required support Deck $requiredDeck was unreadable on the Support Formation screen after the borrow; " +
+                                        "Start Career refused so no TP is spent on an unverified deck.",
+                                transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                                recommendedAction =
+                                    "Confirm Deck $requiredDeck is selected on the Support Formation screen and restart the queue; " +
+                                        "or set the required deck to 0 (off) in Run Queue settings.",
+                            )
+                        }
+                        postBorrow != requiredDeck -> {
+                            MessageLog.e(TAG, "[SUPPORT_DECK] deck is Deck $postBorrow after borrow, expected Deck $requiredDeck; refusing Start Career.")
+                            return TransitionResult.Failed(
+                                reason =
+                                    "The active support deck became Deck $postBorrow after the borrow, but Deck $requiredDeck is required; " +
+                                        "Start Career refused so no TP is spent on the wrong deck.",
+                                transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                                recommendedAction = "Re-select Deck $requiredDeck on the Support Formation screen and restart the queue; or set the required deck to 0 (off) in Run Queue settings.",
+                            )
+                        }
+                        else -> {
+                            supportDeckPostBorrowVerified = true
+                            MessageLog.i(TAG, "[SUPPORT_DECK] requested=$requiredDeck current=$postBorrow verified after borrow.")
+                        }
+                    }
+                }
+                if (!supportDeckPreBorrowVerified || !supportDeckPostBorrowVerified) {
+                    return TransitionResult.Failed(
+                        reason = "Support Deck $requiredDeck verification is incomplete (pre-borrow=$supportDeckPreBorrowVerified post-borrow=$supportDeckPostBorrowVerified); Start Career refused.",
+                        transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                        recommendedAction = "Restart the queue with Deck $requiredDeck selected on the Support Formation screen, or set the required deck to 0 (off) in Run Queue settings.",
+                    )
+                }
+            }
             if (startCareerClickAttempts >= 5) {
                 return TransitionResult.Failed(
                     reason = "Start Career was clicked $startCareerClickAttempts times with no screen transition. An empty or invalid deck slot is the usual cause.",
@@ -4199,6 +4302,97 @@ class CareerLaunchNavigator(private val context: Context) {
     private val deckCountRowYFraction = 0.677f
     private val deckCountBoxW = 0.085f
     private val deckCountBoxH = 0.02f
+
+    // Geometry of the "Deck N" selector label + its left/right arrows on the career-start Support
+    // Formation screen (the explicit-deck gate reads/navigates these). ESTIMATES anchored to the
+    // shared deck-panel layout (deckCountRowYFraction above matches the editor's type-count row), to
+    // be tuned on-device with the read-only debugDeckNumberRead diagnostic
+    // (debugMode_startDeckNumberReadTest) during the zero-TP device proof -- exactly as the
+    // deckCount* fractions were tuned via debugDeckStatRead. Fractions of a 1080x1920 capture; the
+    // label box is centred on deckNumberColFraction.
+    private val deckNumberColFraction = 0.18f
+    private val deckNumberRowYFraction = 0.20f
+    private val deckNumberBoxW = 0.20f
+    private val deckNumberBoxH = 0.035f
+    private val deckArrowLeftXFraction = 0.05f
+    private val deckArrowRightXFraction = 0.955f
+    private val deckArrowYFraction = 0.46f
+
+    /**
+     * Reads the "Deck N" selector label off the career-start Support Formation screen into an exact
+     * 1..10 identity via [SupportDeckSelector.parseDeckLabel], or null when unreadable/ambiguous. The
+     * explicit-deck gate treats null as failure (no fuzzy nearest-deck). Never throws except on interrupt.
+     */
+    private fun readDeckNumber(bitmap: Bitmap): Int? {
+        val boxW = (bitmap.width * deckNumberBoxW).toInt()
+        val boxH = (bitmap.height * deckNumberBoxH).toInt()
+        val x = (bitmap.width * deckNumberColFraction).toInt() - boxW / 2
+        val y = (bitmap.height * deckNumberRowYFraction).toInt()
+        val raw =
+            try {
+                iu.performOCROnRegion(
+                    bitmap,
+                    x,
+                    y,
+                    boxW,
+                    boxH,
+                    useThreshold = true,
+                    useGrayscale = true,
+                    scale = 2.0,
+                    debugName = "support_deck_number",
+                )
+            } catch (e: InterruptedException) {
+                throw e
+            } catch (_: Exception) {
+                ""
+            }
+        return SupportDeckSelector.parseDeckLabel(raw)
+    }
+
+    /**
+     * Taps the Support Formation deck-selector arrow for [direction] and lets the UI settle before the
+     * next fresh read. Coordinates are fractions of the current capture (both supported configs render
+     * game content at 1080px width).
+     */
+    private fun tapDeckArrow(direction: SupportDeckSelector.Direction) {
+        val bitmap = iu.getSourceBitmap()
+        val xFraction = if (direction == SupportDeckSelector.Direction.LEFT) deckArrowLeftXFraction else deckArrowRightXFraction
+        val x = (bitmap.width * xFraction).toDouble()
+        val y = (bitmap.height * deckArrowYFraction).toDouble()
+        gestureUtils.tap(x, y, "support_deck_arrow_${direction.name.lowercase()}")
+        waitSafe(1.0)
+    }
+
+    /**
+     * Read-only diagnostic for calibrating the "Deck N" selector read against a live device. Park the
+     * game on the career-start Support Formation screen, enable `debugMode_startDeckNumberReadTest`,
+     * and start the bot. Logs the raw OCR, the parsed deck number, and the OCR box so
+     * [deckNumberColFraction] / [deckNumberRowYFraction] / deckNumberBox* can be tuned. Taps nothing.
+     */
+    fun debugDeckNumberRead(injectedUtils: CustomImageUtils? = null) {
+        if (injectedUtils != null) {
+            imageUtils = injectedUtils
+        } else if (!ensureInitialised()) {
+            MessageLog.e(TAG, "[DECK-NUM-TEST] Failed to initialise image utils.")
+            return
+        }
+        val bitmap = iu.getSourceBitmap()
+        val boxW = (bitmap.width * deckNumberBoxW).toInt()
+        val boxH = (bitmap.height * deckNumberBoxH).toInt()
+        val x = (bitmap.width * deckNumberColFraction).toInt() - boxW / 2
+        val y = (bitmap.height * deckNumberRowYFraction).toInt()
+        MessageLog.i(TAG, "[DECK-NUM-TEST] ===== Deck-number read-only diagnostic (${bitmap.width}x${bitmap.height}) =====")
+        val raw =
+            try {
+                iu.performOCROnRegion(bitmap, x, y, boxW, boxH, useThreshold = true, useGrayscale = true, scale = 2.0, debugName = "support_deck_number")
+            } catch (e: InterruptedException) {
+                throw e
+            } catch (e: Exception) {
+                "<ocr failed: ${e.message}>"
+            }
+        MessageLog.i(TAG, "[DECK-NUM-TEST] raw OCR='${raw.replace("\n", " ").trim()}' -> parsed=${SupportDeckSelector.parseDeckLabel(raw)} (box x=$x y=$y w=$boxW h=$boxH)")
+        MessageLog.i(TAG, "[DECK-NUM-TEST] If the parsed number is wrong or null, tune deckNumberColFraction / deckNumberRowYFraction / deckNumberBox*. ===== end =====")
+    }
 
     /** Raw OCR of the header band (carries the "Trainee Select" title). */
     private fun readTraineeHeaderText(bitmap: Bitmap): String {
@@ -5365,6 +5559,23 @@ class CareerLaunchNavigator(private val context: Context) {
                 reason = "This launch expected trainee '$singleRunTraineeTarget' (applied preset) but Trainee Select was not verified before Start Career; the wrong trainee may be selected.",
                 transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
                 recommendedAction = "Select the trainee manually in-game and start from the deck screen, or re-apply the intended preset and start again.",
+            )
+        }
+
+        // Explicit-deck defense-in-depth (2026-08-13 wrong-deck incident). The required deck is
+        // selected + verified on the Support Formation screen, which fails closed on a wrong/unknown
+        // deck before this final Start Career. If the flow reached this screen without that
+        // verification -- a skipped or misread deck screen, or a resume that landed here -- refuse
+        // rather than start an unverified deck. Legacy launches (no required deck) are unaffected.
+        val requiredDeck = requestedSupportDeckIndex
+        if (requiredDeck != null && !(supportDeckPreBorrowVerified && supportDeckPostBorrowVerified)) {
+            return TransitionResult.Failed(
+                reason =
+                    "Reached the final Start Career confirmation without a verified required " +
+                        "Deck $requiredDeck (pre-borrow=$supportDeckPreBorrowVerified post-borrow=$supportDeckPostBorrowVerified); " +
+                        "Start Career refused so no TP is spent on an unverified deck.",
+                transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
+                recommendedAction = "Restart the queue from Home so the Support Formation screen selects and verifies Deck $requiredDeck; or set the required deck to 0 (off) in Run Queue settings.",
             )
         }
 

@@ -847,6 +847,13 @@ const searchConfig: SearchOption[] = [
             "When the bot fills the empty friend slot before a career (queued or single run), scrolls down through the Borrow Card list and borrows the best card it finds from a curated list of great picks, skipping duplicates of your own deck.",
         page: "RunQueueSettings",
     },
+    {
+        id: "run-queue-support-deck-index",
+        title: "Required Support Deck",
+        description:
+            "Require a specific saved support formation (Deck 1-10) at career start. The bot selects and verifies that deck on the Support Formation screen before and after the friend borrow, refusing to start (no TP spent) if it cannot, and suppresses Auto-Fill. 0 = off.",
+        page: "RunQueueSettings",
+    },
 ]
 
 export default searchConfig

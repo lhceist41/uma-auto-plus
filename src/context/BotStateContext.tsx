@@ -249,6 +249,7 @@ export interface Settings {
         debugMode_startTrackblazerBuyItemsTest: boolean
         debugMode_startTraineeSelectTest: boolean
         debugMode_startDeckStatReadTest: boolean
+        debugMode_startDeckNumberReadTest: boolean
         debugMode_startRainbowDetectionTest: boolean
         enableScreenRecording: boolean
         recordingBitRate: number
@@ -274,6 +275,13 @@ export interface Settings {
         stopOnError: boolean
         reuseLastLaunchSetup: boolean
         autoFillSupports: boolean
+        // Explicit saved-support-formation contract (2026-08-13 wrong-deck incident). The bot leaves
+        // whatever formation the career-start Support Formation screen shows (the game's last-used
+        // deck), so it once launched the mission on Deck 2 instead of the hand-built Deck 5. Set this
+        // to 1..10 to REQUIRE that saved deck: the bot selects it on the deck screen, verifies it
+        // before the borrow and again after, and refuses Start Career (no TP spent) if it cannot. 0 =
+        // off (legacy: use whatever deck is shown). An explicit deck also suppresses Auto-Fill.
+        supportDeckIndex: number
         // Smart Borrow: when the queue fills the empty friend slot, scroll down through the Borrow
         // Card list and borrow the best card found from the bot's curated priority list. The scan
         // is bounded (a very deep followed pool can run past it), so it takes the best card it
@@ -728,6 +736,7 @@ export const defaultSettings: Settings = {
         debugMode_startTrackblazerBuyItemsTest: false,
         debugMode_startTraineeSelectTest: false,
         debugMode_startDeckStatReadTest: false,
+        debugMode_startDeckNumberReadTest: false,
         debugMode_startRainbowDetectionTest: false,
         enableScreenRecording: false,
         recordingBitRate: 6,
@@ -749,6 +758,7 @@ export const defaultSettings: Settings = {
         stopOnError: false,
         reuseLastLaunchSetup: true,
         autoFillSupports: true,
+        supportDeckIndex: 0,
         enableSmartBorrow: true,
         preferredBorrowName: "",
         enableTpRestoreWithItems: false,
