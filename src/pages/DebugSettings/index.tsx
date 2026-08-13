@@ -42,6 +42,7 @@ const DebugSettings = () => {
         "debugMode_startTraineeSelectTest",
         "debugMode_startDeckStatReadTest",
         "debugMode_startDeckNumberReadTest",
+        "debugMode_startSupportDeckRehearsalTest",
         "debugMode_startRainbowDetectionTest",
     ] as const
 
@@ -601,6 +602,15 @@ const DebugSettings = () => {
                                 onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startDeckNumberReadTest", checked)}
                                 label="Start Deck Number Read Test"
                                 description="Read-only [DECK-NUM] calibration for the Required Support Deck feature. Park the game on the career-start Support Formation screen (the one with the Deck N label and left/right deck arrows), then start the bot: it logs the raw OCR and parsed deck number without tapping anything, so the Deck N label region can be tuned. Tagged [DECK-NUM-TEST] in the log."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-support-deck-rehearsal-test"
+                                checked={bsc.settings.debug.debugMode_startSupportDeckRehearsalTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startSupportDeckRehearsalTest", checked)}
+                                label="Start Support Deck Rehearsal Test"
+                                description="Rehearses the Required Support Deck selector on the real career-start Support Formation screen. Park the game on that screen and set Required Support Deck to 1..10 first, then start the bot: it moves the saved-deck arrows with the production selector, reads each Deck N, and verifies the exact target deck. Smart Borrow is not exercised. It never presses Start Career and spends no TP. Tagged [DECK-REHEARSAL] in the log."
                                 style={{ marginTop: 10 }}
                             />
 

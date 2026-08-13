@@ -35,6 +35,7 @@ internal object DebugTestGate {
             "debugMode_startTraineeSelectTest",
             "debugMode_startDeckStatReadTest",
             "debugMode_startDeckNumberReadTest",
+            "debugMode_startSupportDeckRehearsalTest",
             "debugMode_startRainbowDetectionTest",
         )
 

@@ -995,6 +995,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startTraineeSelectTest" to ::startTraineeSelectTest,
                 "debugMode_startDeckStatReadTest" to ::startDeckStatReadTest,
                 "debugMode_startDeckNumberReadTest" to ::startDeckNumberReadTest,
+                "debugMode_startSupportDeckRehearsalTest" to ::startSupportDeckRehearsalTest,
                 "debugMode_startRainbowDetectionTest" to ::startRainbowDetectionTest,
             )
 
@@ -1053,6 +1054,18 @@ abstract class Campaign(game: Game) : Task(game) {
     open fun startDeckNumberReadTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only Deck-number OCR diagnostic...")
         CareerLaunchNavigator(game.myContext).debugDeckNumberRead(game.imageUtils)
+    }
+
+    /**
+     * Support-deck selector rehearsal diagnostic. Park the game on the career-start Support Formation
+     * screen and set Required Support Deck (runQueue.supportDeckIndex) to 1..10 first: the diagnostic
+     * runs the EXACT production saved-deck selector -- real OCR reads and real arrow taps -- to select
+     * and positively verify the requested deck, then stops. It never borrows, never presses Start
+     * Career, and spends no TP. Tagged [DECK-REHEARSAL] in the log.
+     */
+    open fun startSupportDeckRehearsalTest() {
+        MessageLog.i(TAG, "\n[TEST] Running support-deck selector rehearsal diagnostic...")
+        CareerLaunchNavigator(game.myContext).rehearseRequiredSupportDeck(game.imageUtils)
     }
 
     /**

@@ -4324,7 +4324,15 @@ class CareerLaunchNavigator(private val context: Context) {
      * 1..10 identity via [SupportDeckSelector.parseDeckLabel], or null when unreadable/ambiguous. The
      * explicit-deck gate treats null as failure (no fuzzy nearest-deck). Never throws except on interrupt.
      */
-    private fun readDeckNumber(bitmap: Bitmap): Int? {
+    private fun readDeckNumber(bitmap: Bitmap): Int? = readDeckNumberWithRaw(bitmap).second
+
+    /**
+     * OCRs the "Deck N" selector label, returning the raw OCR text alongside the parsed 1..10 identity
+     * ([SupportDeckSelector.parseDeckLabel], null when unreadable/ambiguous). [readDeckNumber] is the
+     * parsed-only view the production gate uses; the rehearsal diagnostic uses the raw for its log.
+     * Never throws except on interrupt.
+     */
+    private fun readDeckNumberWithRaw(bitmap: Bitmap): Pair<String, Int?> {
         val boxW = (bitmap.width * deckNumberBoxW).toInt()
         val boxH = (bitmap.height * deckNumberBoxH).toInt()
         val x = (bitmap.width * deckNumberColFraction).toInt() - boxW / 2
@@ -4347,7 +4355,7 @@ class CareerLaunchNavigator(private val context: Context) {
             } catch (_: Exception) {
                 ""
             }
-        return SupportDeckSelector.parseDeckLabel(raw)
+        return raw to SupportDeckSelector.parseDeckLabel(raw)
     }
 
     /**
@@ -4357,11 +4365,15 @@ class CareerLaunchNavigator(private val context: Context) {
      */
     private fun tapDeckArrow(direction: SupportDeckSelector.Direction) {
         val bitmap = iu.getSourceBitmap()
-        val xFraction = if (direction == SupportDeckSelector.Direction.LEFT) deckArrowLeftXFraction else deckArrowRightXFraction
-        val x = (bitmap.width * xFraction).toDouble()
-        val y = (bitmap.height * deckArrowYFraction).toDouble()
+        val (x, y) = deckArrowPoint(direction, bitmap.width, bitmap.height)
         gestureUtils.tap(x, y, "support_deck_arrow_${direction.name.lowercase()}")
         waitSafe(1.0)
+    }
+
+    /** The exact pixel point [tapDeckArrow] taps for [direction] on a [width]x[height] capture. */
+    private fun deckArrowPoint(direction: SupportDeckSelector.Direction, width: Int, height: Int): Pair<Double, Double> {
+        val xFraction = if (direction == SupportDeckSelector.Direction.LEFT) deckArrowLeftXFraction else deckArrowRightXFraction
+        return (width * xFraction).toDouble() to (height * deckArrowYFraction).toDouble()
     }
 
     /**
@@ -4393,6 +4405,120 @@ class CareerLaunchNavigator(private val context: Context) {
             }
         MessageLog.i(TAG, "[DECK-NUM-TEST] raw OCR='${raw.replace("\n", " ").trim()}' -> parsed=${SupportDeckSelector.parseDeckLabel(raw)} (box x=$x y=$y w=$boxW h=$boxH)")
         MessageLog.i(TAG, "[DECK-NUM-TEST] If the parsed number is wrong or null, tune deckNumberColFraction / deckNumberRowYFraction / deckNumberBox*. ===== end =====")
+    }
+
+    /**
+     * Support-deck selector REHEARSAL diagnostic. Park the game on the career-start Support Formation
+     * screen, set Required Support Deck (runQueue.supportDeckIndex) to 1..10, enable
+     * `debugMode_startSupportDeckRehearsalTest`, and start the bot. This exercises the EXACT production
+     * saved-deck path -- [SupportDeckSelector.run] driven by the production [readDeckNumber] OCR reader
+     * and [tapDeckArrow] arrow taps -- to select and positively verify the requested deck, logging
+     * every read/tap/decision under [DECK-REHEARSAL]. It then STOPS: it never borrows, never presses
+     * Start Career, never enters normal launch navigation, and spends no TP. Smart Borrow is
+     * intentionally not rehearsed here (it is entangled with the Start-Career-owning
+     * handleSupportDeckScreen loop), so post-borrow verification is out of this diagnostic's scope.
+     * Fails closed (logs + returns) on an off/invalid setting, the wrong screen, an unreadable deck, or
+     * a selector block. Taps only the saved-deck arrows -- never Start Career.
+     */
+    internal fun rehearseRequiredSupportDeck(injectedUtils: CustomImageUtils? = null): SupportDeckRehearsalResult {
+        if (injectedUtils != null) {
+            imageUtils = injectedUtils
+        } else if (!ensureInitialised()) {
+            MessageLog.e(TAG, "[DECK-REHEARSAL] Failed to initialise image utils. Stopping.")
+            return SupportDeckRehearsalResult(SupportDeckRehearsalResult.Status.NOT_ON_SUPPORT_FORMATION, failureReason = "image utils unavailable")
+        }
+        MessageLog.i(TAG, "[DECK-REHEARSAL] ===== Support-deck selector rehearsal (never presses Start Career) =====")
+
+        val requested = SupportDeckSelector.requestedIndexOrNull(SettingsHelper.getIntSetting("runQueue", "supportDeckIndex", 0))
+        if (requested == null) {
+            MessageLog.e(TAG, "[DECK-REHEARSAL] Required Support Deck is 0/off; set it to 1..10 in Run Queue settings first. Stopping. ===== end =====")
+            return SupportDeckRehearsalResult(SupportDeckRehearsalResult.Status.SETTING_OFF, failureReason = "supportDeckIndex is 0 (off)")
+        }
+        if (requested !in SupportDeckSelector.MIN_DECK..SupportDeckSelector.MAX_DECK) {
+            MessageLog.e(TAG, "[DECK-REHEARSAL] Required Support Deck $requested is outside ${SupportDeckSelector.MIN_DECK}..${SupportDeckSelector.MAX_DECK}. Stopping. ===== end =====")
+            return SupportDeckRehearsalResult(SupportDeckRehearsalResult.Status.INVALID_TARGET, requestedDeck = requested, failureReason = "supportDeckIndex $requested outside 1..10")
+        }
+        if (!LabelSupportFormation.check(iu, sourceBitmap = iu.getSourceBitmap())) {
+            MessageLog.e(TAG, "[DECK-REHEARSAL] Not on the career-start Support Formation screen (LabelSupportFormation not matched). Park the game there first. Stopping. ===== end =====")
+            return SupportDeckRehearsalResult(SupportDeckRehearsalResult.Status.NOT_ON_SUPPORT_FORMATION, requestedDeck = requested, failureReason = "not on Support Formation")
+        }
+
+        var reads = 0
+        var taps = 0
+        var lastParsed: Int? = null
+        val (initialRaw, initialParsed) = readDeckNumberWithRaw(iu.getSourceBitmap())
+        reads++
+        lastParsed = initialParsed
+        MessageLog.i(TAG, "[DECK-REHEARSAL] target=$requested initialRaw='${initialRaw.replace("\n", " ").trim()}' initial=$initialParsed")
+
+        // Production selector, driven by the exact production reader + arrow taps. The lambdas add
+        // logging only; the read -> decide -> step -> re-read loop and every fail-closed rule live in
+        // SupportDeckSelector.run, and the tap coordinate comes from the same deckArrowPoint the
+        // production gate taps. No selector logic is duplicated here.
+        val outcome =
+            SupportDeckSelector.run(
+                requested = requested,
+                readDeck = {
+                    val (raw, parsed) = readDeckNumberWithRaw(iu.getSourceBitmap())
+                    reads++
+                    lastParsed = parsed
+                    MessageLog.i(TAG, "[DECK-REHEARSAL] read #$reads raw='${raw.replace("\n", " ").trim()}' parsed=$parsed target=$requested")
+                    parsed
+                },
+                tapArrow = { direction ->
+                    val bmp = iu.getSourceBitmap()
+                    val (ax, ay) = deckArrowPoint(direction, bmp.width, bmp.height)
+                    taps++
+                    MessageLog.i(TAG, "[DECK-REHEARSAL] tap #$taps action=$direction at (${ax.toInt()},${ay.toInt()}) from=$lastParsed target=$requested step=$taps/${SupportDeckSelector.MAX_STEPS}")
+                    tapDeckArrow(direction)
+                },
+            )
+
+        val result =
+            when (outcome) {
+                is SupportDeckSelector.Outcome.Verified -> {
+                    MessageLog.i(TAG, "[DECK-REHEARSAL] target=$requested final=$lastParsed preBorrowVerified=true (production selector verified the exact deck; no borrow, no Start Career).")
+                    SupportDeckRehearsalResult(
+                        SupportDeckRehearsalResult.Status.PRE_BORROW_VERIFIED,
+                        requestedDeck = requested,
+                        initialDeck = initialParsed,
+                        finalDeck = lastParsed,
+                        selectorSteps = taps,
+                        reads = reads,
+                        taps = taps,
+                        preBorrowVerified = true,
+                    )
+                }
+                is SupportDeckSelector.Outcome.Blocked -> {
+                    MessageLog.e(TAG, "[DECK-REHEARSAL] target=$requested final=$lastParsed BLOCKED: ${outcome.reason}. Start Career remains unreachable.")
+                    SupportDeckRehearsalResult(
+                        SupportDeckRehearsalResult.Status.SELECTOR_BLOCKED,
+                        requestedDeck = requested,
+                        initialDeck = initialParsed,
+                        finalDeck = lastParsed,
+                        selectorSteps = taps,
+                        reads = reads,
+                        taps = taps,
+                        failureReason = outcome.reason,
+                    )
+                }
+            }
+
+        MessageLog.i(
+            TAG,
+            "[DECK-REHEARSAL] SMART_BORROW_REHEARSAL_NOT_INCLUDED: the production Smart Borrow path is " +
+                "entangled with the Start-Career-owning handleSupportDeckScreen loop; it needs its own " +
+                "contained extraction before it can be rehearsed safely.",
+        )
+        MessageLog.i(
+            TAG,
+            "[DECK-REHEARSAL] result: requested=${result.requestedDeck} initial=${result.initialDeck} " +
+                "final=${result.finalDeck} steps=${result.selectorSteps} reads=${result.reads} taps=${result.taps} " +
+                "preBorrowVerified=${result.preBorrowVerified} smartBorrowAttempted=${result.smartBorrowAttempted} " +
+                "postBorrowVerified=${result.postBorrowVerified} status=${result.status}" +
+                (result.failureReason?.let { " reason=$it" } ?: "") + " ===== end =====",
+        )
+        return result
     }
 
     /** Raw OCR of the header band (carries the "Trainee Select" title). */
