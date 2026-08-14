@@ -252,6 +252,8 @@ export interface Settings {
         debugMode_startDeckNumberReadTest: boolean
         // Rehearses the production saved-deck selector on the Support Formation screen (real OCR + arrow taps) and stops before Start Career; requires Required Support Deck 1..10.
         debugMode_startSupportDeckRehearsalTest: boolean
+        // Rehearses the production Smart Borrow flow + exact post-borrow deck verification on the Support Formation screen and stops before Start Career; requires Required Support Deck 1..10 already showing and an empty Friends slot.
+        debugMode_startSmartBorrowRehearsalTest: boolean
         debugMode_startRainbowDetectionTest: boolean
         enableScreenRecording: boolean
         recordingBitRate: number
@@ -740,6 +742,7 @@ export const defaultSettings: Settings = {
         debugMode_startDeckStatReadTest: false,
         debugMode_startDeckNumberReadTest: false,
         debugMode_startSupportDeckRehearsalTest: false,
+        debugMode_startSmartBorrowRehearsalTest: false,
         debugMode_startRainbowDetectionTest: false,
         enableScreenRecording: false,
         recordingBitRate: 6,

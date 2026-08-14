@@ -996,6 +996,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startDeckStatReadTest" to ::startDeckStatReadTest,
                 "debugMode_startDeckNumberReadTest" to ::startDeckNumberReadTest,
                 "debugMode_startSupportDeckRehearsalTest" to ::startSupportDeckRehearsalTest,
+                "debugMode_startSmartBorrowRehearsalTest" to ::startSmartBorrowRehearsalTest,
                 "debugMode_startRainbowDetectionTest" to ::startRainbowDetectionTest,
             )
 
@@ -1066,6 +1067,19 @@ abstract class Campaign(game: Game) : Task(game) {
     open fun startSupportDeckRehearsalTest() {
         MessageLog.i(TAG, "\n[TEST] Running support-deck selector rehearsal diagnostic...")
         CareerLaunchNavigator(game.myContext).rehearseRequiredSupportDeck(game.imageUtils)
+    }
+
+    /**
+     * Smart Borrow rehearsal diagnostic. Park the game on the career-start Support Formation screen
+     * with Required Support Deck (runQueue.supportDeckIndex) set to 1..10 AND already showing on that
+     * screen, and the Friends slot empty, then start the bot: it runs the production Smart Borrow
+     * sub-flow (open the friend slot, pick, replace a duplicate/trainee-conflict borrow) through the
+     * shared boundary the launch uses, then verifies the required deck is still active on a fresh
+     * post-borrow read. It never presses Start Career and spends no TP. Tagged [BORROW-REHEARSAL].
+     */
+    open fun startSmartBorrowRehearsalTest() {
+        MessageLog.i(TAG, "\n[TEST] Running Smart Borrow rehearsal diagnostic...")
+        CareerLaunchNavigator(game.myContext).rehearseSmartBorrowForRequiredDeck(game.imageUtils)
     }
 
     /**

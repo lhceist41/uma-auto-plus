@@ -43,6 +43,7 @@ const DebugSettings = () => {
         "debugMode_startDeckStatReadTest",
         "debugMode_startDeckNumberReadTest",
         "debugMode_startSupportDeckRehearsalTest",
+        "debugMode_startSmartBorrowRehearsalTest",
         "debugMode_startRainbowDetectionTest",
     ] as const
 
@@ -611,6 +612,15 @@ const DebugSettings = () => {
                                 onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startSupportDeckRehearsalTest", checked)}
                                 label="Start Support Deck Rehearsal Test"
                                 description="Rehearses the Required Support Deck selector on the real career-start Support Formation screen. Park the game on that screen and set Required Support Deck to 1..10 first, then start the bot: it moves the saved-deck arrows with the production selector, reads each Deck N, and verifies the exact target deck. Smart Borrow is not exercised. It never presses Start Career and spends no TP. Tagged [DECK-REHEARSAL] in the log."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-smart-borrow-rehearsal-test"
+                                checked={bsc.settings.debug.debugMode_startSmartBorrowRehearsalTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startSmartBorrowRehearsalTest", checked)}
+                                label="Start Smart Borrow Rehearsal Test"
+                                description="Park the game on the career-start Support Formation with Required Support Deck already matching the visible deck and the Friends slot empty. Exercises the production Smart Borrow flow (open the friend slot, pick a card, replace a duplicate or trainee-conflict borrow) and the exact post-borrow deck verification. Never presses Start Career and spends no TP. Tagged [BORROW-REHEARSAL] in the log."
                                 style={{ marginTop: 10 }}
                             />
 

@@ -3975,163 +3975,13 @@ class CareerLaunchNavigator(private val context: Context) {
 
         val bitmap = iu.getSourceBitmap()
 
-        // The game renders Start Career as enabled but silently ignores it while the friend
-        // slot is empty, and the borrowed card never carries over between careers - so with
-        // reuseLastLaunchSetup the deck always arrives here one card short. Borrow the first card
-        // in the Borrow Card list to complete the deck. A single row tap selects the card and
-        // closes the picker.
-        if (IconFriendSlotEmpty.check(iu, sourceBitmap = bitmap)) {
-            if (friendSlotFillAttempts >= 2) {
-                return TransitionResult.Failed(
-                    reason = "Friend slot is empty and the Borrow Card flow failed to fill it after $friendSlotFillAttempts attempts.",
-                    transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
-                    recommendedAction = "Select a friend support card manually, then restart the queue.",
-                )
-            }
-            friendSlotFillAttempts++
-            MessageLog.i(TAG, "[NAV] Friend slot is empty. Opening the Borrow Card picker (attempt $friendSlotFillAttempts)...")
-            IconFriendSlotEmpty.click(iu, sourceBitmap = bitmap)
-            waitSafe(2.0)
-            val (removeLocation, _) = ButtonBorrowCardRemove.find(iu)
-            if (removeLocation != null) {
-                // Smart Borrow (default ON): scroll down through the Borrow Card list, up to
-                // MAX_BORROW_SCAN_PAGES, for the best card on the curated priority list and pick it
-                // wherever it sits. The scan is bounded, so a card sitting past the last scanned
-                // page is not seen - it takes the best card it reaches. First attempt only - if
-                // the tap does not commit, the bounded retry must fall back to the default
-                // pick instead of repeating the same one. (A pick whose character is already in
-                // the deck DOES commit - the duplicate check below handles that.)
-                if (SettingsHelper.getBooleanSetting("runQueue", "enableSmartBorrow", true) && friendSlotFillAttempts == 1) {
-                    if (trySmartBorrowPick()) {
-                        waitSafe(2.0)
-                        return TransitionResult.Continue
-                    }
-                    // The picker was closed on failure; the next iteration reopens it and
-                    // attempt 2 runs the default pick.
-                    MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow made no pick - the retry will use the default pick.")
-                    waitSafe(1.5)
-                    return TransitionResult.Continue
-                }
-                // Prefer the user's strong friend card when it is visible (template:
-                // borrow_preferred_card.png). Blind first-row borrows produced measurably
-                // weaker careers. Tap at the row's center X, not on the card art, which opens
-                // card details.
-                val (preferredLocation, _) = IconBorrowPreferredCard.find(iu)
-                if (preferredLocation != null) {
-                    MessageLog.i(TAG, "[NAV] Borrow Card list open. Preferred card found - selecting its row at (540, ${preferredLocation.y.toInt()})...")
-                    gestureUtils.tap(540.0, preferredLocation.y, "borrow_preferred_row")
-                } else {
-                    // Validated default pick: take the first row that is neither pill-tagged nor an
-                    // excluded character (the active trainee included). The old blind first-row tap
-                    // once borrowed the trainee's own card here - the game then disables Start
-                    // Career and the launch is unrecoverable by clicking.
-                    //
-                    // The search walks the bounded list instead of the one visible screen. When the
-                    // top of the pool is all "! Duplicate Support" rows nothing valid is in view,
-                    // and stopping there reported "no valid support available" with the rest of the
-                    // list never read.
-                    val selection =
-                        selectFromBorrowList(borrowWalker()) { text ->
-                            borrowTapApproved(text, null, borrowExcludedCharacters, borrowLaunchTraineeTarget)
-                        }
-                    MessageLog.i(
-                        TAG,
-                        "[NAV] [BORROW] Default pick scan read ${selection.walk.screensInspected} screen(s) over ${selection.walk.pageGestures} page gesture(s); ended ${selection.walk.end}.",
-                    )
-                    val pick = selection.row
-                    if (pick == null) {
-                        ButtonClose.click(iu)
-                        return TransitionResult.Failed(
-                            reason = "No valid borrowed support available: every Borrow Card row in the scanned list is the active trainee's own character, already refused this launch, or blocked by the game.",
-                            transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
-                            recommendedAction = "Follow more trainers or borrow a card of a different character manually, then restart the queue.",
-                        )
-                    }
-                    MessageLog.i(
-                        TAG,
-                        "[NAV] Borrow Card list open. Preferred card not visible - selecting the first valid card \"${borrowLogText(pick.second)}\" at (540, ${pick.first.toInt()})...",
-                    )
-                    lastBorrowPickEntry = pick.second
-                    gestureUtils.tap(540.0, pick.first, "borrow_card_first_valid_row")
-                }
-                waitSafe(2.0)
-            } else {
-                MessageLog.w(TAG, "[NAV] Tapped the friend slot but the Borrow Card list did not appear. Re-detecting...")
-            }
-            return TransitionResult.Continue
-        }
-
-        // A borrowed card of a character already in the deck commits in the picker just fine -
-        // the game only blocks at Start Career ("Cannot proceed with duplicate Umamusume in the
-        // Support Card deck", a transient toast) while marking both clashing cards with a
-        // persistent "! Duplicate Support" pill. A borrowed card of the ACTIVE TRAINEE's own
-        // character behaves the same way with a red "! Trainee" pill and a DISABLED Start Career
-        // ("Includes a character identical to the Trainee."). Clicking Start into either wall
-        // wastes the whole launch, so replace the borrow instead: reopen the picker through the
-        // slot's Friends banner, exclude the refused character, and take the next-best card.
-        val duplicateDeckPill = LabelDuplicateSupportDeck.check(iu, sourceBitmap = bitmap)
-        val traineeDeckPill = !duplicateDeckPill && LabelTraineeConflictDeck.check(iu, sourceBitmap = bitmap)
-        if (SettingsHelper.getBooleanSetting("runQueue", "enableSmartBorrow", true) &&
-            (duplicateDeckPill || traineeDeckPill || forceBorrowReplacement)
-        ) {
-            val viaMessage = forceBorrowReplacement && !duplicateDeckPill && !traineeDeckPill
-            forceBorrowReplacement = false
-            if (borrowDuplicateReplacements >= MAX_BORROW_DUPLICATE_REPLACEMENTS) {
-                return TransitionResult.Failed(
-                    reason =
-                        if (traineeDeckPill || viaMessage) {
-                            "INVALID_SUPPORT_FORMATION: the borrowed friend card is the active trainee's own character (the game disables Start Career), and $borrowDuplicateReplacements replacements did not resolve it. No valid borrowed support available."
-                        } else {
-                            "The borrowed friend card duplicates a character already in the support deck, and $borrowDuplicateReplacements replacements did not resolve it."
-                        },
-                    transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
-                    recommendedAction = "Borrow a card of a different character manually, then restart the queue.",
-                )
-            }
-            borrowDuplicateReplacements++
-            val refused = lastBorrowPickEntry?.let { borrowEntryCharacter(it) }
-            refused?.let { borrowExcludedCharacters.add(it) }
-            lastBorrowPickEntry = null
-            if (traineeDeckPill || viaMessage) {
-                // Whatever the pick was, the game says it is the trainee's character - make sure
-                // the trainee is in the exclusion set even when the pick's OCR text was noisy.
-                borrowEntryCharacter(borrowLaunchTraineeTarget).takeIf { it.isNotEmpty() }?.let { borrowExcludedCharacters.add(it) }
-                MessageLog.w(
-                    TAG,
-                    "[NAV] [BORROW] Smart Borrow rejected candidate: game reported trainee conflict (\"! Trainee\"" +
-                        (refused?.let { ", \"$it\"" } ?: "") +
-                        "). Candidate excluded for this launch; replacing it (attempt $borrowDuplicateReplacements/$MAX_BORROW_DUPLICATE_REPLACEMENTS)...",
-                )
-            } else {
-                MessageLog.w(
-                    TAG,
-                    "[NAV] [BORROW] Smart Borrow rejected candidate: duplicate support" +
-                        (refused?.let { " (\"$it\")" } ?: "") +
-                        ". Candidate excluded for this launch; replacing it (attempt $borrowDuplicateReplacements/$MAX_BORROW_DUPLICATE_REPLACEMENTS)...",
-                )
-            }
-            val (bannerLocation, _) = LabelFriendSlotBanner.find(iu)
-            if (bannerLocation == null) {
-                MessageLog.w(TAG, "[NAV] [BORROW] Friend slot banner not found - re-detecting before retrying the replacement.")
-                waitSafe(2.0)
-                return TransitionResult.Continue
-            }
-            // Tap the card body above the banner; the banner strip itself may not be tappable.
-            gestureUtils.tap(bannerLocation.x, bannerLocation.y - 180, "borrow_slot_reopen")
-            waitSafe(2.0)
-            if (ButtonBorrowCardRemove.find(iu).first == null) {
-                MessageLog.w(TAG, "[NAV] [BORROW] Tapped the friend slot but the Borrow Card list did not appear. Re-detecting...")
-                return TransitionResult.Continue
-            }
-            if (trySmartBorrowPick(replaceMode = true)) {
-                MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow selected valid replacement.")
-                waitSafe(2.0)
-            } else {
-                MessageLog.w(TAG, "[NAV] [BORROW] No replacement candidate found - the next pass retries until the replacement budget runs out.")
-                waitSafe(1.5)
-            }
-            return TransitionResult.Continue
-        }
+        // Fill the empty friend slot, or replace a borrow the game flagged as a duplicate /
+        // active-trainee conflict, through the shared runBorrowStep boundary; null means no borrow
+        // action is needed this pass and the deck is ready for the Start Career gate below. The
+        // Smart Borrow rehearsal diagnostic drives this SAME boundary in its own bounded loop, so
+        // the borrow it rehearses is exactly the borrow production runs. runBorrowStep never presses
+        // Start Career.
+        runBorrowStep(bitmap)?.let { return it }
 
         // Deck is already complete OR autoFillSupports is off. Click Start Career. The right-crop
         // variant matches when the trainee chibi is idling over the button's left edge, which held
@@ -4237,6 +4087,200 @@ class CareerLaunchNavigator(private val context: Context) {
 
         MessageLog.i(TAG, "[NAV] Deck screen detected but 'Start Career!' not visible yet. Waiting...")
         waitSafe(2.0)
+        return TransitionResult.Continue
+    }
+
+    /**
+     * One pass of the Smart Borrow sub-flow on the Support Formation screen, shared by the normal
+     * launch ([handleSupportDeckScreen]) and the Smart Borrow rehearsal diagnostic
+     * ([rehearseSmartBorrowForRequiredDeck]). Performs at most one borrow action -- fill the empty
+     * friend slot (open the Borrow Card picker and pick), or replace a borrow the game flagged as a
+     * duplicate / active-trainee conflict -- and returns its [TransitionResult] (Continue after an
+     * action, Failed when a bounded retry budget is exhausted), or null when no borrow action is
+     * needed this pass so the deck is ready for the caller's next step. It NEVER presses
+     * Start Career and never enters launch confirmation, so the diagnostic consumes the null signal
+     * safely instead of falling through into a Start Career gate.
+     */
+    private fun runBorrowStep(bitmap: Bitmap): TransitionResult? {
+        // The game renders Start Career as enabled but silently ignores it while the friend
+        // slot is empty, and the borrowed card never carries over between careers - so with
+        // reuseLastLaunchSetup the deck always arrives here one card short. Borrow the first card
+        // in the Borrow Card list to complete the deck. A single row tap selects the card and
+        // closes the picker.
+        if (IconFriendSlotEmpty.check(iu, sourceBitmap = bitmap)) {
+            return fillEmptyFriendSlot(bitmap)
+        }
+
+        // A borrowed card of a character already in the deck commits in the picker just fine -
+        // the game only blocks at Start Career ("Cannot proceed with duplicate Umamusume in the
+        // Support Card deck", a transient toast) while marking both clashing cards with a
+        // persistent "! Duplicate Support" pill. A borrowed card of the ACTIVE TRAINEE's own
+        // character behaves the same way with a red "! Trainee" pill and a DISABLED Start Career
+        // ("Includes a character identical to the Trainee."). Clicking Start into either wall
+        // wastes the whole launch, so replace the borrow instead: reopen the picker through the
+        // slot's Friends banner, exclude the refused character, and take the next-best card.
+        val duplicateDeckPill = LabelDuplicateSupportDeck.check(iu, sourceBitmap = bitmap)
+        val traineeDeckPill = !duplicateDeckPill && LabelTraineeConflictDeck.check(iu, sourceBitmap = bitmap)
+        if (SettingsHelper.getBooleanSetting("runQueue", "enableSmartBorrow", true) &&
+            (duplicateDeckPill || traineeDeckPill || forceBorrowReplacement)
+        ) {
+            val viaMessage = forceBorrowReplacement && !duplicateDeckPill && !traineeDeckPill
+            forceBorrowReplacement = false
+            return performBorrowReplacement(duplicateDeckPill, traineeDeckPill, viaMessage)
+        }
+        return null
+    }
+
+    /**
+     * Fills the empty friend slot: opens the Borrow Card picker and selects a card (Smart Borrow on
+     * the first attempt, else the validated default pick). Bounded by [friendSlotFillAttempts]. The
+     * caller must have confirmed [IconFriendSlotEmpty] on [bitmap]. Behavior is the former inline
+     * friend-slot block verbatim, so the launch and the rehearsal diagnostic run the exact same
+     * borrow. Never presses Start Career.
+     */
+    private fun fillEmptyFriendSlot(bitmap: Bitmap): TransitionResult {
+        if (friendSlotFillAttempts >= 2) {
+            return TransitionResult.Failed(
+                reason = "Friend slot is empty and the Borrow Card flow failed to fill it after $friendSlotFillAttempts attempts.",
+                transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                recommendedAction = "Select a friend support card manually, then restart the queue.",
+            )
+        }
+        friendSlotFillAttempts++
+        MessageLog.i(TAG, "[NAV] Friend slot is empty. Opening the Borrow Card picker (attempt $friendSlotFillAttempts)...")
+        IconFriendSlotEmpty.click(iu, sourceBitmap = bitmap)
+        waitSafe(2.0)
+        val (removeLocation, _) = ButtonBorrowCardRemove.find(iu)
+        if (removeLocation != null) {
+            // Smart Borrow (default ON): scroll down through the Borrow Card list, up to
+            // MAX_BORROW_SCAN_PAGES, for the best card on the curated priority list and pick it
+            // wherever it sits. The scan is bounded, so a card sitting past the last scanned
+            // page is not seen - it takes the best card it reaches. First attempt only - if
+            // the tap does not commit, the bounded retry must fall back to the default
+            // pick instead of repeating the same one. (A pick whose character is already in
+            // the deck DOES commit - the duplicate check below handles that.)
+            if (SettingsHelper.getBooleanSetting("runQueue", "enableSmartBorrow", true) && friendSlotFillAttempts == 1) {
+                if (trySmartBorrowPick()) {
+                    waitSafe(2.0)
+                    return TransitionResult.Continue
+                }
+                // The picker was closed on failure; the next iteration reopens it and
+                // attempt 2 runs the default pick.
+                MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow made no pick - the retry will use the default pick.")
+                waitSafe(1.5)
+                return TransitionResult.Continue
+            }
+            // Prefer the user's strong friend card when it is visible (template:
+            // borrow_preferred_card.png). Blind first-row borrows produced measurably
+            // weaker careers. Tap at the row's center X, not on the card art, which opens
+            // card details.
+            val (preferredLocation, _) = IconBorrowPreferredCard.find(iu)
+            if (preferredLocation != null) {
+                MessageLog.i(TAG, "[NAV] Borrow Card list open. Preferred card found - selecting its row at (540, ${preferredLocation.y.toInt()})...")
+                gestureUtils.tap(540.0, preferredLocation.y, "borrow_preferred_row")
+            } else {
+                // Validated default pick: take the first row that is neither pill-tagged nor an
+                // excluded character (the active trainee included). The old blind first-row tap
+                // once borrowed the trainee's own card here - the game then disables Start
+                // Career and the launch is unrecoverable by clicking.
+                //
+                // The search walks the bounded list instead of the one visible screen. When the
+                // top of the pool is all "! Duplicate Support" rows nothing valid is in view,
+                // and stopping there reported "no valid support available" with the rest of the
+                // list never read.
+                val selection =
+                    selectFromBorrowList(borrowWalker()) { text ->
+                        borrowTapApproved(text, null, borrowExcludedCharacters, borrowLaunchTraineeTarget)
+                    }
+                MessageLog.i(
+                    TAG,
+                    "[NAV] [BORROW] Default pick scan read ${selection.walk.screensInspected} screen(s) over ${selection.walk.pageGestures} page gesture(s); ended ${selection.walk.end}.",
+                )
+                val pick = selection.row
+                if (pick == null) {
+                    ButtonClose.click(iu)
+                    return TransitionResult.Failed(
+                        reason = "No valid borrowed support available: every Borrow Card row in the scanned list is the active trainee's own character, already refused this launch, or blocked by the game.",
+                        transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                        recommendedAction = "Follow more trainers or borrow a card of a different character manually, then restart the queue.",
+                    )
+                }
+                MessageLog.i(
+                    TAG,
+                    "[NAV] Borrow Card list open. Preferred card not visible - selecting the first valid card \"${borrowLogText(pick.second)}\" at (540, ${pick.first.toInt()})...",
+                )
+                lastBorrowPickEntry = pick.second
+                gestureUtils.tap(540.0, pick.first, "borrow_card_first_valid_row")
+            }
+            waitSafe(2.0)
+        } else {
+            MessageLog.w(TAG, "[NAV] Tapped the friend slot but the Borrow Card list did not appear. Re-detecting...")
+        }
+        return TransitionResult.Continue
+    }
+
+    /**
+     * Replaces a committed borrow the game flagged as a duplicate ([duplicateDeckPill]) or an
+     * active-trainee conflict ([traineeDeckPill], or [viaMessage] when the refusal came from the
+     * transient toast rather than a pill): reopens the picker via the friend-slot banner, excludes
+     * the refused character, and Smart-Borrows a replacement. Bounded by [borrowDuplicateReplacements].
+     * Behavior is the former inline replacement block verbatim. Never presses Start Career.
+     */
+    private fun performBorrowReplacement(duplicateDeckPill: Boolean, traineeDeckPill: Boolean, viaMessage: Boolean): TransitionResult {
+        if (borrowDuplicateReplacements >= MAX_BORROW_DUPLICATE_REPLACEMENTS) {
+            return TransitionResult.Failed(
+                reason =
+                    if (traineeDeckPill || viaMessage) {
+                        "INVALID_SUPPORT_FORMATION: the borrowed friend card is the active trainee's own character (the game disables Start Career), and $borrowDuplicateReplacements replacements did not resolve it. No valid borrowed support available."
+                    } else {
+                        "The borrowed friend card duplicates a character already in the support deck, and $borrowDuplicateReplacements replacements did not resolve it."
+                    },
+                transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                recommendedAction = "Borrow a card of a different character manually, then restart the queue.",
+            )
+        }
+        borrowDuplicateReplacements++
+        val refused = lastBorrowPickEntry?.let { borrowEntryCharacter(it) }
+        refused?.let { borrowExcludedCharacters.add(it) }
+        lastBorrowPickEntry = null
+        if (traineeDeckPill || viaMessage) {
+            // Whatever the pick was, the game says it is the trainee's character - make sure
+            // the trainee is in the exclusion set even when the pick's OCR text was noisy.
+            borrowEntryCharacter(borrowLaunchTraineeTarget).takeIf { it.isNotEmpty() }?.let { borrowExcludedCharacters.add(it) }
+            MessageLog.w(
+                TAG,
+                "[NAV] [BORROW] Smart Borrow rejected candidate: game reported trainee conflict (\"! Trainee\"" +
+                    (refused?.let { ", \"$it\"" } ?: "") +
+                    "). Candidate excluded for this launch; replacing it (attempt $borrowDuplicateReplacements/$MAX_BORROW_DUPLICATE_REPLACEMENTS)...",
+            )
+        } else {
+            MessageLog.w(
+                TAG,
+                "[NAV] [BORROW] Smart Borrow rejected candidate: duplicate support" +
+                    (refused?.let { " (\"$it\")" } ?: "") +
+                    ". Candidate excluded for this launch; replacing it (attempt $borrowDuplicateReplacements/$MAX_BORROW_DUPLICATE_REPLACEMENTS)...",
+            )
+        }
+        val (bannerLocation, _) = LabelFriendSlotBanner.find(iu)
+        if (bannerLocation == null) {
+            MessageLog.w(TAG, "[NAV] [BORROW] Friend slot banner not found - re-detecting before retrying the replacement.")
+            waitSafe(2.0)
+            return TransitionResult.Continue
+        }
+        // Tap the card body above the banner; the banner strip itself may not be tappable.
+        gestureUtils.tap(bannerLocation.x, bannerLocation.y - 180, "borrow_slot_reopen")
+        waitSafe(2.0)
+        if (ButtonBorrowCardRemove.find(iu).first == null) {
+            MessageLog.w(TAG, "[NAV] [BORROW] Tapped the friend slot but the Borrow Card list did not appear. Re-detecting...")
+            return TransitionResult.Continue
+        }
+        if (trySmartBorrowPick(replaceMode = true)) {
+            MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow selected valid replacement.")
+            waitSafe(2.0)
+        } else {
+            MessageLog.w(TAG, "[NAV] [BORROW] No replacement candidate found - the next pass retries until the replacement budget runs out.")
+            waitSafe(1.5)
+        }
         return TransitionResult.Continue
     }
 
@@ -4515,6 +4559,276 @@ class CareerLaunchNavigator(private val context: Context) {
             "[DECK-REHEARSAL] result: requested=${result.requestedDeck} initial=${result.initialDeck} " +
                 "final=${result.finalDeck} steps=${result.selectorSteps} reads=${result.reads} taps=${result.taps} " +
                 "preBorrowVerified=${result.preBorrowVerified} smartBorrowAttempted=${result.smartBorrowAttempted} " +
+                "postBorrowVerified=${result.postBorrowVerified} status=${result.status}" +
+                (result.failureReason?.let { " reason=$it" } ?: "") + " ===== end =====",
+        )
+        return result
+    }
+
+    /**
+     * Smart Borrow REHEARSAL diagnostic. Park the game on the career-start Support Formation screen
+     * with the visible deck already equal to Required Support Deck (runQueue.supportDeckIndex; select
+     * it by hand or with the selector rehearsal first) and the Friends slot EMPTY, then enable
+     * `debugMode_startSmartBorrowRehearsalTest` and start the bot. This exercises the EXACT production
+     * Smart Borrow sub-flow -- the shared [runBorrowStep] boundary the launch uses (open the empty
+     * friend slot and pick, and replace a duplicate / active-trainee conflict borrow) -- then takes a
+     * fresh exact post-borrow "Deck N" read and requires it still equals the requested deck. It STOPS
+     * there: it never presses Start Career, never enters launch navigation, and spends no TP. Every
+     * load-bearing step is logged under [BORROW-REHEARSAL]. Fails closed (logs + returns) on an
+     * off/invalid setting, the wrong screen, a pre-borrow deck mismatch, a populated friend slot, a
+     * borrow failure, a failure to return to Support Formation, or an unreadable/mismatched post-borrow
+     * deck. The saved-deck SELECTOR is intentionally NOT driven here (it has its own rehearsal); the
+     * operator establishes the required deck before the rehearsal.
+     */
+    internal fun rehearseSmartBorrowForRequiredDeck(injectedUtils: CustomImageUtils? = null): SmartBorrowRehearsalResult {
+        if (injectedUtils != null) {
+            imageUtils = injectedUtils
+        } else if (!ensureInitialised()) {
+            MessageLog.e(TAG, "[BORROW-REHEARSAL] Failed to initialise image utils. Stopping.")
+            return SmartBorrowRehearsalResult(SmartBorrowRehearsalResult.Status.NOT_ON_SUPPORT_FORMATION, failureReason = "image utils unavailable")
+        }
+        MessageLog.i(TAG, "[BORROW-REHEARSAL] ===== Smart Borrow rehearsal (never presses Start Career) =====")
+
+        val requested = SupportDeckSelector.requestedIndexOrNull(SettingsHelper.getIntSetting("runQueue", "supportDeckIndex", 0))
+        if (requested == null) {
+            MessageLog.e(TAG, "[BORROW-REHEARSAL] Required Support Deck is 0/off; set it to 1..10 in Run Queue settings first. Stopping. ===== end =====")
+            return SmartBorrowRehearsalResult(SmartBorrowRehearsalResult.Status.SETTING_OFF, failureReason = "supportDeckIndex is 0 (off)")
+        }
+        if (requested !in SupportDeckSelector.MIN_DECK..SupportDeckSelector.MAX_DECK) {
+            MessageLog.e(TAG, "[BORROW-REHEARSAL] Required Support Deck $requested is outside ${SupportDeckSelector.MIN_DECK}..${SupportDeckSelector.MAX_DECK}. Stopping. ===== end =====")
+            return SmartBorrowRehearsalResult(SmartBorrowRehearsalResult.Status.INVALID_TARGET, requestedDeck = requested, failureReason = "supportDeckIndex $requested outside 1..10")
+        }
+        if (!LabelSupportFormation.check(iu, sourceBitmap = iu.getSourceBitmap())) {
+            MessageLog.e(TAG, "[BORROW-REHEARSAL] Not on the career-start Support Formation screen (LabelSupportFormation not matched). Park the game there first. Stopping. ===== end =====")
+            return SmartBorrowRehearsalResult(SmartBorrowRehearsalResult.Status.NOT_ON_SUPPORT_FORMATION, requestedDeck = requested, failureReason = "not on Support Formation")
+        }
+
+        // Seed the borrow bookkeeping the shared boundary reads/writes. navigate() does this per launch;
+        // the diagnostic does not run navigate(), so it establishes the same clean state here. The
+        // saved-deck selector is never invoked -- the operator parks the game on the required deck first.
+        friendSlotFillAttempts = 0
+        borrowDuplicateReplacements = 0
+        forceBorrowReplacement = false
+        borrowExcludedCharacters.clear()
+        lastBorrowPickEntry = null
+        requestedSupportDeckIndex = requested
+        supportDeckPreBorrowVerified = false
+        supportDeckPostBorrowVerified = false
+        // Seed the active-trainee exclusion exactly as navigate() does (rotation vs applied preset) so
+        // the borrow rejects the trainee's own character the same way the launch does.
+        borrowLaunchTraineeTarget =
+            if (SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false)) {
+                SettingsHelper.getStringSetting("queueState", "currentTrainee")
+            } else {
+                SettingsHelper.getStringSetting("general", "appliedPresetTrainee")
+            }
+        borrowEntryCharacter(borrowLaunchTraineeTarget).takeIf { it.isNotEmpty() }?.let {
+            borrowExcludedCharacters.add(it)
+            MessageLog.i(TAG, "[BORROW-REHEARSAL] Active trainee \"$it\" excluded from borrow candidates.")
+        }
+        val smartBorrowEnabled = SettingsHelper.getBooleanSetting("runQueue", "enableSmartBorrow", true)
+        if (!smartBorrowEnabled) {
+            MessageLog.w(TAG, "[BORROW-REHEARSAL] enableSmartBorrow is OFF; the shared boundary will use the validated default pick instead of the curated Smart Borrow scan.")
+        }
+
+        // Pre-borrow exact deck gate: require the visible deck already equals the requested deck. The
+        // selector is NOT run here; a stale/unreadable/wrong deck fails closed with zero friend-slot
+        // action so nothing is borrowed against the wrong formation.
+        val (preRaw, preParsed) = readDeckNumberWithRaw(iu.getSourceBitmap())
+        MessageLog.i(TAG, "[BORROW-REHEARSAL] targetDeck=$requested preBorrowRaw='${preRaw.replace("\n", " ").trim()}' preBorrowDeck=$preParsed")
+        if (preParsed == null || preParsed != requested) {
+            MessageLog.e(TAG, "[BORROW-REHEARSAL] pre-borrow deck ${preParsed ?: "unreadable"} != required $requested; no friend-slot action taken. Stopping. ===== end =====")
+            return SmartBorrowRehearsalResult(
+                SmartBorrowRehearsalResult.Status.PRE_BORROW_DECK_MISMATCH,
+                requestedDeck = requested,
+                preBorrowDeck = preParsed,
+                failureReason = "pre-borrow deck ${preParsed ?: "unreadable"} != required $requested",
+            )
+        }
+        supportDeckPreBorrowVerified = true
+
+        // Friend-slot precondition: the live proof starts with Friends empty. Require the empty-slot
+        // icon before touching anything; a populated slot fails closed rather than replacing an unknown
+        // borrowed card.
+        if (!IconFriendSlotEmpty.check(iu, sourceBitmap = iu.getSourceBitmap())) {
+            MessageLog.e(TAG, "[BORROW-REHEARSAL] Friend slot is not empty; start the rehearsal with an empty Friends slot. Stopping. ===== end =====")
+            return SmartBorrowRehearsalResult(
+                SmartBorrowRehearsalResult.Status.FRIEND_SLOT_NOT_AVAILABLE,
+                requestedDeck = requested,
+                preBorrowDeck = preParsed,
+                failureReason = "friend slot not empty at start",
+            )
+        }
+
+        // Drive the SAME shared runBorrowStep boundary the launch uses, in a bounded loop, until it
+        // reports no borrow action is needed (null) or fails closed. runBorrowStep never presses Start
+        // Career, so this loop cannot start a career. The cap mirrors the outer FSM's per-state limit;
+        // the fill/replace budgets inside the boundary (friendSlotFillAttempts, borrowDuplicateReplacements)
+        // are the real bounds and fail closed first.
+        var friendSlotOpened = false
+        var smartBorrowAttempted = false
+        var replacementPasses = 0
+        var duplicateConflictObserved = false
+        var traineeConflictObserved = false
+        var borrowComplete = false
+        for (pass in 1..MAX_STUCK_ITERATIONS) {
+            if (!BotService.isRunning || StartModule.queueStopRequested) {
+                MessageLog.w(TAG, "[BORROW-REHEARSAL] Stopped during the borrow loop. ===== end =====")
+                return SmartBorrowRehearsalResult(
+                    SmartBorrowRehearsalResult.Status.BORROW_PICK_FAILED,
+                    requestedDeck = requested,
+                    preBorrowDeck = preParsed,
+                    friendSlotOpened = friendSlotOpened,
+                    smartBorrowAttempted = smartBorrowAttempted,
+                    replacementPasses = replacementPasses,
+                    duplicateConflictObserved = duplicateConflictObserved,
+                    traineeConflictObserved = traineeConflictObserved,
+                    failureReason = "stopped during borrow",
+                )
+            }
+            val bitmap = iu.getSourceBitmap()
+            val slotEmpty = IconFriendSlotEmpty.check(iu, sourceBitmap = bitmap)
+            val duplicatePill = LabelDuplicateSupportDeck.check(iu, sourceBitmap = bitmap)
+            val traineePill = !duplicatePill && LabelTraineeConflictDeck.check(iu, sourceBitmap = bitmap)
+            MessageLog.i(TAG, "[BORROW-REHEARSAL] pass=$pass slotEmpty=$slotEmpty duplicatePill=$duplicatePill traineePill=$traineePill")
+            val step = runBorrowStep(bitmap)
+            if (step == null) {
+                borrowComplete = true
+                break
+            }
+            // Classify what the shared boundary did this pass from the pre-observed screen state: an
+            // empty slot means it filled/picked; a pill (and no empty slot) means it replaced.
+            if (slotEmpty) {
+                friendSlotOpened = true
+                smartBorrowAttempted = true
+                MessageLog.i(TAG, "[BORROW-REHEARSAL] friendSlotOpened=true smartBorrowAttempted=true")
+            } else if (duplicatePill || traineePill) {
+                if (duplicatePill) duplicateConflictObserved = true
+                if (traineePill) traineeConflictObserved = true
+                smartBorrowAttempted = true
+                if (step is TransitionResult.Continue) {
+                    replacementPasses++
+                    MessageLog.i(TAG, "[BORROW-REHEARSAL] replacement pass $replacementPasses (duplicate=$duplicatePill trainee=$traineePill)")
+                }
+            }
+            if (step is TransitionResult.Failed) {
+                MessageLog.e(TAG, "[BORROW-REHEARSAL] borrow step failed: ${step.reason}. Start Career not reachable. Stopping. ===== end =====")
+                return SmartBorrowRehearsalResult(
+                    SmartBorrowRehearsalResult.Status.BORROW_PICK_FAILED,
+                    requestedDeck = requested,
+                    preBorrowDeck = preParsed,
+                    friendSlotOpened = friendSlotOpened,
+                    smartBorrowAttempted = smartBorrowAttempted,
+                    replacementPasses = replacementPasses,
+                    duplicateConflictObserved = duplicateConflictObserved,
+                    traineeConflictObserved = traineeConflictObserved,
+                    failureReason = step.reason,
+                )
+            }
+        }
+
+        if (!borrowComplete) {
+            MessageLog.e(TAG, "[BORROW-REHEARSAL] borrow did not settle within $MAX_STUCK_ITERATIONS passes. Stopping. ===== end =====")
+            return SmartBorrowRehearsalResult(
+                SmartBorrowRehearsalResult.Status.RETURN_TO_SUPPORT_FORMATION_FAILED,
+                requestedDeck = requested,
+                preBorrowDeck = preParsed,
+                friendSlotOpened = friendSlotOpened,
+                smartBorrowAttempted = smartBorrowAttempted,
+                replacementPasses = replacementPasses,
+                duplicateConflictObserved = duplicateConflictObserved,
+                traineeConflictObserved = traineeConflictObserved,
+                failureReason = "borrow did not settle in $MAX_STUCK_ITERATIONS passes",
+            )
+        }
+
+        // Return-to-Support-Formation gate on a fresh capture: the borrow is done only when the screen
+        // is the Support Formation again AND the friend slot is filled.
+        val doneBitmap = iu.getSourceBitmap()
+        val onFormation = LabelSupportFormation.check(iu, sourceBitmap = doneBitmap)
+        val slotStillEmpty = IconFriendSlotEmpty.check(iu, sourceBitmap = doneBitmap)
+        val smartBorrowSelected = !slotStillEmpty
+        MessageLog.i(TAG, "[BORROW-REHEARSAL] returnedToSupportFormation=$onFormation slotStillEmpty=$slotStillEmpty smartBorrowSelected=$smartBorrowSelected")
+        if (!onFormation || slotStillEmpty) {
+            MessageLog.e(TAG, "[BORROW-REHEARSAL] did not return to a filled Support Formation after the borrow. Stopping. ===== end =====")
+            return SmartBorrowRehearsalResult(
+                SmartBorrowRehearsalResult.Status.RETURN_TO_SUPPORT_FORMATION_FAILED,
+                requestedDeck = requested,
+                preBorrowDeck = preParsed,
+                friendSlotOpened = friendSlotOpened,
+                smartBorrowAttempted = smartBorrowAttempted,
+                smartBorrowSelected = smartBorrowSelected,
+                replacementPasses = replacementPasses,
+                duplicateConflictObserved = duplicateConflictObserved,
+                traineeConflictObserved = traineeConflictObserved,
+                returnedToSupportFormation = onFormation,
+                failureReason = "not on a filled Support Formation after borrow",
+            )
+        }
+
+        // Post-borrow EXACT deck verification: fresh read via the exact production reader; require it
+        // still equals the requested deck. This is the same read + comparison the launch's Start Career
+        // gate performs (readDeckNumber delegates to readDeckNumberWithRaw; null or != required fails).
+        val (postRaw, postParsed) = readDeckNumberWithRaw(doneBitmap)
+        MessageLog.i(TAG, "[BORROW-REHEARSAL] postBorrowRaw='${postRaw.replace("\n", " ").trim()}' postBorrowDeck=$postParsed target=$requested")
+        val result =
+            when {
+                postParsed == null ->
+                    SmartBorrowRehearsalResult(
+                        SmartBorrowRehearsalResult.Status.POST_BORROW_DECK_UNREADABLE,
+                        requestedDeck = requested,
+                        preBorrowDeck = preParsed,
+                        friendSlotOpened = friendSlotOpened,
+                        smartBorrowAttempted = smartBorrowAttempted,
+                        smartBorrowSelected = smartBorrowSelected,
+                        replacementPasses = replacementPasses,
+                        duplicateConflictObserved = duplicateConflictObserved,
+                        traineeConflictObserved = traineeConflictObserved,
+                        returnedToSupportFormation = true,
+                        postBorrowDeck = null,
+                        failureReason = "post-borrow deck unreadable",
+                    )
+                postParsed != requested ->
+                    SmartBorrowRehearsalResult(
+                        SmartBorrowRehearsalResult.Status.POST_BORROW_DECK_MISMATCH,
+                        requestedDeck = requested,
+                        preBorrowDeck = preParsed,
+                        friendSlotOpened = friendSlotOpened,
+                        smartBorrowAttempted = smartBorrowAttempted,
+                        smartBorrowSelected = smartBorrowSelected,
+                        replacementPasses = replacementPasses,
+                        duplicateConflictObserved = duplicateConflictObserved,
+                        traineeConflictObserved = traineeConflictObserved,
+                        returnedToSupportFormation = true,
+                        postBorrowDeck = postParsed,
+                        failureReason = "post-borrow deck $postParsed != required $requested",
+                    )
+                else -> {
+                    supportDeckPostBorrowVerified = true
+                    SmartBorrowRehearsalResult(
+                        SmartBorrowRehearsalResult.Status.POST_BORROW_VERIFIED,
+                        requestedDeck = requested,
+                        preBorrowDeck = preParsed,
+                        friendSlotOpened = friendSlotOpened,
+                        smartBorrowAttempted = smartBorrowAttempted,
+                        smartBorrowSelected = smartBorrowSelected,
+                        replacementPasses = replacementPasses,
+                        duplicateConflictObserved = duplicateConflictObserved,
+                        traineeConflictObserved = traineeConflictObserved,
+                        returnedToSupportFormation = true,
+                        postBorrowDeck = postParsed,
+                        postBorrowVerified = true,
+                    )
+                }
+            }
+
+        MessageLog.i(
+            TAG,
+            "[BORROW-REHEARSAL] result: requested=${result.requestedDeck} preBorrow=${result.preBorrowDeck} " +
+                "friendSlotOpened=${result.friendSlotOpened} smartBorrowAttempted=${result.smartBorrowAttempted} " +
+                "smartBorrowSelected=${result.smartBorrowSelected} replacementPasses=${result.replacementPasses} " +
+                "duplicateConflict=${result.duplicateConflictObserved} traineeConflict=${result.traineeConflictObserved} " +
+                "returnedToSupportFormation=${result.returnedToSupportFormation} postBorrow=${result.postBorrowDeck} " +
                 "postBorrowVerified=${result.postBorrowVerified} status=${result.status}" +
                 (result.failureReason?.let { " reason=$it" } ?: "") + " ===== end =====",
         )
