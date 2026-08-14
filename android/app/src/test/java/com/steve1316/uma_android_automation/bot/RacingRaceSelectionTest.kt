@@ -4,6 +4,7 @@ import com.steve1316.uma_android_automation.bot.Racing.Companion.FAN_EMERGENCY_T
 import com.steve1316.uma_android_automation.bot.Racing.Companion.indexOfBestByTierThenFans
 import com.steve1316.uma_android_automation.bot.Racing.Companion.isFanEmergency
 import com.steve1316.uma_android_automation.bot.Racing.Companion.mergePredictionAnchors
+import com.steve1316.uma_android_automation.bot.Racing.Companion.requirementForcesExtraRace
 import com.steve1316.uma_android_automation.types.PredictionTier
 import com.steve1316.uma_android_automation.utils.CustomImageUtils.RaceDetails
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -45,6 +46,68 @@ class RacingRaceSelectionTest {
     @DisplayName("Fan emergency stays off when the turns-remaining OCR failed")
     fun fanEmergencyOcrFailure() {
         assertFalse(isFanEmergency(hasFanRequirement = true, turnsRemaining = -1))
+    }
+
+    // ////////////////////////////////////////////////////////////////////////////////////////////
+    // requirementForcesExtraRace - the extra-race eligibility gate (integration boundary for the
+    // Grand Concert fan-deferral: a deferred fan requirement must not re-force a race here).
+
+    @Test
+    @DisplayName("Case A: a deferred fan requirement alone does not force an extra race")
+    fun deferredFanRequirementAloneDoesNotForceRace() {
+        // Fan requirement active, deferred this turn, nothing else: the eligibility gate must not
+        // force a race. Before the fan arm was excluded here, this same flag re-forced the race the
+        // campaign had just deferred - the leak this test locks shut.
+        assertFalse(
+            requirementForcesExtraRace(
+                enableForceRacing = false,
+                hasFanRequirement = true,
+                hasTrophyRequirement = false,
+                hasInsufficientGoalRacePtsRequirement = false,
+                ignoreFanRequirement = true,
+            ),
+        )
+    }
+
+    @Test
+    @DisplayName("Case B: an independent race reason still forces a race under a deferred fan requirement")
+    fun independentReasonStillForcesRaceWhileFanDeferred() {
+        // Trophy, goal-points, and force-racing each still force the race even while the fan arm is
+        // deferred; only the fan arm is suppressed.
+        assertTrue(
+            requirementForcesExtraRace(false, hasFanRequirement = true, hasTrophyRequirement = true, hasInsufficientGoalRacePtsRequirement = false, ignoreFanRequirement = true),
+        )
+        assertTrue(
+            requirementForcesExtraRace(false, hasFanRequirement = true, hasTrophyRequirement = false, hasInsufficientGoalRacePtsRequirement = true, ignoreFanRequirement = true),
+        )
+        assertTrue(
+            requirementForcesExtraRace(enableForceRacing = true, hasFanRequirement = true, hasTrophyRequirement = false, hasInsufficientGoalRacePtsRequirement = false, ignoreFanRequirement = true),
+        )
+    }
+
+    @Test
+    @DisplayName("Case C: a non-deferred fan requirement forces a race exactly as before")
+    fun nonDeferredFanRequirementStillForcesRace() {
+        assertTrue(
+            requirementForcesExtraRace(false, hasFanRequirement = true, hasTrophyRequirement = false, hasInsufficientGoalRacePtsRequirement = false, ignoreFanRequirement = false),
+        )
+    }
+
+    @Test
+    @DisplayName("Case D: the default (non-GC) caller is unchanged; no requirement means no forced race")
+    fun defaultCallerUnchanged() {
+        // ignoreFanRequirement = false is the default for every existing caller, so a fan requirement
+        // still forces a race and an empty requirement set still does not.
+        assertTrue(
+            requirementForcesExtraRace(false, hasFanRequirement = true, hasTrophyRequirement = false, hasInsufficientGoalRacePtsRequirement = false, ignoreFanRequirement = false),
+        )
+        assertFalse(
+            requirementForcesExtraRace(false, hasFanRequirement = false, hasTrophyRequirement = false, hasInsufficientGoalRacePtsRequirement = false, ignoreFanRequirement = false),
+        )
+        // The ignore flag only affects the fan arm: with no fan requirement it changes nothing.
+        assertFalse(
+            requirementForcesExtraRace(false, hasFanRequirement = false, hasTrophyRequirement = false, hasInsufficientGoalRacePtsRequirement = false, ignoreFanRequirement = true),
+        )
     }
 
     // ////////////////////////////////////////////////////////////////////////////////////////////

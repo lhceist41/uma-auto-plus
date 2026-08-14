@@ -618,6 +618,28 @@ class Training(private val game: Game, private val campaign: Campaign) {
          * OCR. Mid-band of the observed per-training gains (roughly 8 to 25). */
         const val GC_ASSUMED_GAIN_WHEN_UNREAD = 12
 
+        /** Raised boost ceiling for a cycle that is behind its own floor AND within
+         * [GC_CONCERT_NEAR_TURNS] of the concert: the per-cycle song deadline is imminent, so
+         * point income that feeds it earns more. 0.8 keeps the multiplier at 1.8x, still strictly
+         * below a real rainbow's 2.0x so point steering never outranks a rainbow on its own. */
+        const val GC_POINT_BOOST_MAX_URGENT = 0.8
+
+        /** Boost ceiling for the total-target-only arm (cycle floor met, but the career trails the
+         * 18-song cadence). Smaller than [GC_POINT_BOOST_MAX] so income keeps chasing the total
+         * without overpowering ordinary stat play when the immediate cycle is already secure. */
+        const val GC_POINT_BOOST_MAX_TOTAL_ONLY = 0.35
+
+        /** Concert-proximity windows for the point bias. At or inside [GC_CONCERT_NEAR_TURNS] the
+         * boost is amplified; at or inside the tighter [GC_CONCERT_URGENT_TURNS] more so. Both are
+         * below the default test proximity (7 turns) so the calm-window behaviour is unchanged. */
+        const val GC_CONCERT_NEAR_TURNS = 4
+        const val GC_CONCERT_URGENT_TURNS = 2
+
+        /** Boost amplifiers inside the near and urgent concert windows. Applied to the boost before
+         * the ceiling clamp, so they tighten steering near a deadline without uncapping it. */
+        const val GC_PROXIMITY_MULTIPLIER_NEAR = 1.25
+        const val GC_PROXIMITY_MULTIPLIER_URGENT = 1.5
+
         /** Race calculations value stat points past 1200 at half weight (July 2026 rebalance). */
         private const val SOFT_CAP_STAT_VALUE = 1200
 
@@ -1296,19 +1318,30 @@ class Training(private val game: Game, private val campaign: Campaign) {
          * The Grand Concert point-income multiplier for [training], 1.0 outside the scenario or
          * whenever the bias is disarmed.
          *
-         * Armed only while the cycle is behind its purchased-song floor with a concert remaining
-         * (context.behindPace). Each point the facility's previewed gain contributes toward the
-         * target song's per-type deficit adds [GC_POINT_BOOST_PER_POINT], capped at
-         * [GC_POINT_BOOST_MAX] total. The contribution is clamped to both the remaining deficit
-         * and the cap headroom, because overflow above a type's cap is lost (research-confirmed),
-         * so a +20 preview into a nearly-capped type is genuinely worth only the headroom. A gain
-         * whose glyph was detected but whose amount resisted OCR contributes a conservative
-         * [GC_ASSUMED_GAIN_WHEN_UNREAD]: the TYPE is the dominant signal and is pixel-read, while
-         * the number is the fragile OCR half.
+         * Armed while the cycle is behind its purchased-song floor with a concert remaining
+         * (context.behindPace) OR while the career total trails the 18-song cadence with a concert
+         * remaining (context.behindTotalTarget) - the second arm is what keeps point steering alive
+         * through a cycle that already met its own floor but is behind the total, the Senior case
+         * where the old floor-only bias disarmed and income stopped chasing songs.
+         *
+         * Each point the facility's previewed gain contributes toward the target song's per-type
+         * deficit adds [GC_POINT_BOOST_PER_POINT]. The contribution is clamped to both the remaining
+         * deficit and the cap headroom, because overflow above a type's cap is lost
+         * (research-confirmed), so a +20 preview into a nearly-capped type is genuinely worth only
+         * the headroom. A gain whose glyph was detected but whose amount resisted OCR contributes a
+         * conservative [GC_ASSUMED_GAIN_WHEN_UNREAD]: the TYPE is the dominant signal and is
+         * pixel-read, while the number is the fragile OCR half.
+         *
+         * Two deadline shapers tighten the boost without uncapping it: an approaching concert
+         * amplifies it ([GC_PROXIMITY_MULTIPLIER_NEAR]/[GC_PROXIMITY_MULTIPLIER_URGENT] inside the
+         * [GC_CONCERT_NEAR_TURNS]/[GC_CONCERT_URGENT_TURNS] windows), and the ceiling rises to
+         * [GC_POINT_BOOST_MAX_URGENT] for a behind-floor cycle at a near concert. The total-only arm
+         * is capped lower ([GC_POINT_BOOST_MAX_TOTAL_ONLY]). Every ceiling stays strictly below a
+         * real rainbow's 2.0x so the bias re-ranks near-peers rather than overruling the big signals.
          */
         fun calculateGrandConcertPointMultiplier(config: TrainingConfig, training: TrainingOption): Double {
             val ctx = config.grandConcertPoints ?: return 1.0
-            if (!ctx.behindPace || training.performanceGains.isEmpty()) return 1.0
+            if (!ctx.biasArmed || training.performanceGains.isEmpty()) return 1.0
             var effectivePoints = 0
             for ((type, amount) in training.performanceGains) {
                 val need = ctx.deficit[type] ?: continue
@@ -1318,7 +1351,22 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 effectivePoints += minOf(contribution, need)
             }
             if (effectivePoints <= 0) return 1.0
-            return 1.0 + minOf(GC_POINT_BOOST_MAX, GC_POINT_BOOST_PER_POINT * effectivePoints)
+            var boost = GC_POINT_BOOST_PER_POINT * effectivePoints
+            val turns = ctx.turnsUntilConcert
+            boost *=
+                when {
+                    turns == null -> 1.0
+                    turns <= GC_CONCERT_URGENT_TURNS -> GC_PROXIMITY_MULTIPLIER_URGENT
+                    turns <= GC_CONCERT_NEAR_TURNS -> GC_PROXIMITY_MULTIPLIER_NEAR
+                    else -> 1.0
+                }
+            val ceiling =
+                when {
+                    ctx.behindPace && turns != null && turns <= GC_CONCERT_NEAR_TURNS -> GC_POINT_BOOST_MAX_URGENT
+                    ctx.behindPace -> GC_POINT_BOOST_MAX
+                    else -> GC_POINT_BOOST_MAX_TOTAL_ONLY
+                }
+            return 1.0 + minOf(ceiling, boost)
         }
     }
 
@@ -2507,7 +2555,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 "[TRAINING] [GC_POINTS] $balancesLine | $gainsLine | songs=${grandConcertPoints.songsBoughtThisCycle}/" +
                     "${grandConcertPoints.purchasedFloor} concertIn=${grandConcertPoints.turnsUntilConcert} " +
                     "deficit=${grandConcertPoints.deficit.entries.joinToString(",") { "${it.key.displayName.take(2)}:${it.value}" }.ifEmpty { "none" }} " +
-                    "biasArmed=${grandConcertPoints.behindPace}",
+                    "biasArmed=${grandConcertPoints.biasArmed} pace=${grandConcertPoints.behindPace} " +
+                    "total=${grandConcertPoints.behindTotalTarget} " +
+                    "careerSongs=${grandConcertPoints.songsBoughtThisCareer}/${grandConcertPoints.expectedSongsByNow}",
             )
         }
 

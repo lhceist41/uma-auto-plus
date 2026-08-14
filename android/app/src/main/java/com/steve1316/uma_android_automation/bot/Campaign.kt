@@ -2256,6 +2256,16 @@ abstract class Campaign(game: Game) : Task(game) {
     open fun grandConcertPointContext(balances: Map<PerformancePointType, Int?>?): GrandConcertPointContext? = null
 
     /**
+     * Scenario hook: whether a detected fan requirement may be deferred for a training turn THIS
+     * turn instead of being raced immediately. The base returns false, so every scenario keeps the
+     * historical behaviour of racing a fan requirement the moment it appears. Grand Concert
+     * overrides it with a fail-closed slack policy (see [GrandConcertFanPolicy]); the override also
+     * records the fan-decision telemetry. Only the fan arm is ever eligible - a trophy or
+     * goal-points requirement always races - and the override is responsible for enforcing that.
+     */
+    open fun considerFanRaceDeferral(): Boolean = false
+
+    /**
      * Public accessor for the grade of the most recent race processed in this career.
      *
      * Exposes the protected [racing.lastRaceGrade] field so that base classes like [DialogHandler]
@@ -3684,9 +3694,22 @@ abstract class Campaign(game: Game) : Task(game) {
         // turn the requirement needed. If no races turn out to be available, Racing resets the flags
         // and the turn falls back to training, so routing here is safe on a raceless day.
         val isRacingRequirementActive = racing.hasFanRequirement || racing.hasTrophyRequirement || racing.hasInsufficientGoalRacePtsRequirement
+        // Turn-local: true only when the fan-requirement arm was explicitly deferred this turn. It is
+        // threaded into the later extra-race eligibility gate so the same fan requirement cannot
+        // re-force the race it was just deferred from; every other race reason there stays intact.
+        var fanRequirementDeferredThisTurn = false
         if (isRacingRequirementActive) {
-            MessageLog.i(TAG, "[INFO] Racing requirement is active. Bypassing health and mood checks.")
-            return choose(MainScreenAction.RACE, "racing requirement active (fan/trophy/goal-pts)")
+            if (considerFanRaceDeferral()) {
+                // A scenario fan policy proved enough schedule slack to spend this turn training
+                // instead of racing the fan requirement; fall through to the rest of the cascade.
+                // The base implementation never defers, so every non-overriding scenario keeps the
+                // historical force-race behaviour unchanged.
+                fanRequirementDeferredThisTurn = true
+                MessageLog.i(TAG, "[INFO] Fan requirement deferred for a training turn by the scenario policy.")
+            } else {
+                MessageLog.i(TAG, "[INFO] Racing requirement is active. Bypassing health and mood checks.")
+                return choose(MainScreenAction.RACE, "racing requirement active (fan/trophy/goal-pts)")
+            }
         }
 
         if (mustRestBeforeSummer && (date.year == DateYear.CLASSIC || date.year == DateYear.SENIOR) && date.month == DateMonth.JUNE && date.phase == DatePhase.LATE) {
@@ -3738,7 +3761,7 @@ abstract class Campaign(game: Game) : Task(game) {
         }
         tracerRejected.add(DecisionTracer.RejectedAlternative("RECOVER_MOOD", "mood ${trainee.mood} at/above floor $moodFloor"))
 
-        val extraRaceEligible = racing.checkEligibilityToStartExtraRacingProcess()
+        val extraRaceEligible = racing.checkEligibilityToStartExtraRacingProcess(ignoreFanRequirement = fanRequirementDeferredThisTurn)
         // Record eligibility from the caller so it fires on every turn an extra race is considered,
         // across all scenarios. checkEligibility has many early returns (Trackblazer interval, fan
         // emergency, mandatory plan) that bypass its standard-racing block, so recording inside it

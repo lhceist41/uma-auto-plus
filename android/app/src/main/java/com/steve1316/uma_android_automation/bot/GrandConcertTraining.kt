@@ -118,9 +118,29 @@ data class GrandConcertPointContext(
     val purchasedFloor: Int,
     val turnsUntilConcert: Int?,
     val songTargetTitle: String? = null,
+    /** Purchased-song career total (excludes the free "Make Debut!"), for the total-target bias. */
+    val songsBoughtThisCareer: Int = 0,
+    /** The purchased-song cumulative a healthy run has by the START of this cycle: the sum of the
+     * 3-4-4-3-3 cadence for the concerts already performed. Zero before the first concert (nothing
+     * is owed yet) and by default (which keeps the total-target bias disarmed for callers that do
+     * not supply it). */
+    val expectedSongsByNow: Int = 0,
 ) {
     /** True while this cycle still owes songs to the Great Success floor and a concert remains. */
     val behindPace: Boolean get() = turnsUntilConcert != null && songsBoughtThisCycle < purchasedFloor
+
+    /** True while the purchased-song career total trails the cadence trajectory and a concert still
+     * remains to spend income before. Distinct from [behindPace]: it stays armed through a cycle
+     * that already met its own floor but is behind the 18-song total - the exact Senior case where
+     * the old floor-only bias disarmed and point income stopped chasing songs. */
+    val behindTotalTarget: Boolean get() = turnsUntilConcert != null && songsBoughtThisCareer < expectedSongsByNow
+
+    /** How many purchased songs the career total trails the cadence trajectory by, floored at zero. */
+    val totalSongDeficit: Int get() = (expectedSongsByNow - songsBoughtThisCareer).coerceAtLeast(0)
+
+    /** The point bias is armed while the cycle is behind its own floor OR the career is behind the
+     * total-song cadence, and a concert remains to spend the income before. */
+    val biasArmed: Boolean get() = behindPace || behindTotalTarget
 
     /** Room left under [type]'s cap, or null when the balance was unreadable (never guess
      * headroom against an unread balance). */

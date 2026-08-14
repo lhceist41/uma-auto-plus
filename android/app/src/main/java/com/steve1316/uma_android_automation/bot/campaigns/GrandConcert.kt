@@ -6,6 +6,7 @@ import com.steve1316.uma_android_automation.bot.CampaignBreakpointException
 import com.steve1316.uma_android_automation.bot.ConcertSegment
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.LessonCardKind
+import com.steve1316.uma_android_automation.bot.GrandConcertFanPolicy
 import com.steve1316.uma_android_automation.bot.GrandConcertHandoff
 import com.steve1316.uma_android_automation.bot.GrandConcertHandoffReason
 import com.steve1316.uma_android_automation.bot.GrandConcertLessonReader
@@ -651,7 +652,49 @@ class GrandConcert(game: Game) : Campaign(game) {
             purchasedFloor = GrandConcertPolicy.songTargetForCycle(concertsPassed),
             turnsUntilConcert = lessonContext.turnsUntilConcert,
             songTargetTitle = lastSongTargetTitle,
+            songsBoughtThisCareer = songsBoughtThisCareer,
+            // The cadence total a healthy run has by the START of this cycle (the sum of the
+            // 3-4-4-3-3 purchased targets for concerts already performed). Behind this, the bias
+            // stays armed on the total even after the current cycle floor is met.
+            expectedSongsByNow = GrandConcertPolicy.PURCHASED_SONG_TARGETS.take(concertsPassed).sum(),
         )
+    }
+
+    /**
+     * Grand Concert fan-vs-training deferral. A detected fan requirement is normally raced the turn
+     * it appears; here it MAY instead yield to a training turn when [GrandConcertFanPolicy] can
+     * prove enough schedule slack, because Grand Concert makes its performance points only by
+     * training and the concerts supply most of the fans anyway.
+     *
+     * Fail-closed by construction: the two inputs the policy needs to prove slack - the fan-goal
+     * deadline and a per-race fan estimate - are not yet reliably available for Grand Concert
+     * ([com.steve1316.uma_android_automation.utils.CustomImageUtils.determineTurnsRemainingBeforeNextGoal]
+     * deliberately stands the goal-deadline OCR down for this scenario and returns -1), so both are
+     * passed as null and the policy resolves to a fail-safe race. The [GC_FAN] line records the
+     * inputs and the resulting decision every turn the question is asked, which is exactly the
+     * telemetry a later, live-validated deadline reader needs to be tuned and switched on. Only the
+     * fan arm is eligible; a trophy or goal-points requirement always races.
+     */
+    override fun considerFanRaceDeferral(): Boolean {
+        if (!racing.hasFanRequirement || racing.hasTrophyRequirement || racing.hasInsufficientGoalRacePtsRequirement) return false
+        val concertBehindPace = grandConcertPointContext(null)?.behindPace ?: false
+        // No reliable Grand Concert fan-goal deadline or per-race fan estimate exists yet; passing
+        // them as null makes the policy fail safe (force-race), preserving the fan-goal safeguard.
+        val turnsUntilDeadline: Int? = null
+        val racesStillNeeded: Int? = null
+        val decision =
+            GrandConcertFanPolicy.decide(
+                fanRequirementActive = true,
+                turnsUntilDeadline = turnsUntilDeadline,
+                racesStillNeeded = racesStillNeeded,
+                concertBehindPace = concertBehindPace,
+            )
+        MessageLog.i(
+            TAG,
+            "[GRAND_CONCERT] [GC_FAN] fanReq=true fans=${trainee.fans} deadline=${turnsUntilDeadline ?: "unknown"} " +
+                "racesNeeded=${racesStillNeeded ?: "unknown"} concertBehindPace=$concertBehindPace decision=$decision",
+        )
+        return decision == GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING
     }
 
     /**
@@ -898,10 +941,17 @@ class GrandConcert(game: Game) : Campaign(game) {
     private fun logLessonScores(list: LessonList, context: LessonScoreContext) {
         val report = GrandConcertPolicy.describeLessonOffer(list, HypeTier.UNKNOWN, context)
         report.ranked.forEach { line ->
+            // Log the actual per-type point cost as read off the card (never a score-derived
+            // stand-in), so the next real career can measure what songs truly cost against balances.
+            val costText =
+                line.rawCost?.let { c ->
+                    PerformancePointType.entries.joinToString(",") { "${it.displayName.take(2)}:${c[it] ?: "?"}" }
+                } ?: "unreadable"
             MessageLog.i(
                 TAG,
                 "[GRAND_CONCERT] [LESSON_SCORE] #${line.slot} \"${line.title}\" ${line.kind} score=${line.score} " +
-                    "affordable=${line.affordable ?: "unknown"}${if (line.scheduled) " scheduled" else ""}",
+                    "affordable=${line.affordable ?: "unknown"}${if (line.scheduled) " scheduled" else ""} " +
+                    "cost=$costText costTotal=${line.rawCostTotal ?: "?"}",
             )
         }
         report.notes.forEach { MessageLog.i(TAG, "[GRAND_CONCERT] [LESSON_SCORE] note: $it") }

@@ -524,6 +524,29 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             return hasFanRequirement && turnsRemaining in 0..FAN_EMERGENCY_TURN_WINDOW
         }
 
+        /**
+         * Whether an active career race requirement forces an extra race at the eligibility gate.
+         *
+         * [ignoreFanRequirement] suppresses ONLY the fan-requirement arm and only for this turn:
+         * the caller sets it when the campaign has already made an explicit turn-local decision to
+         * defer the fan requirement to a training turn (Grand Concert). It never touches the
+         * force-racing, trophy, or goal-points arms, each of which remains an independent reason to
+         * race even while the fan requirement is deferred. Without this guard a deferred fan
+         * requirement leaks back into a forced race here, because the same [hasFanRequirement] flag
+         * is still set - the exact defect this predicate exists to make impossible and testable.
+         */
+        internal fun requirementForcesExtraRace(
+            enableForceRacing: Boolean,
+            hasFanRequirement: Boolean,
+            hasTrophyRequirement: Boolean,
+            hasInsufficientGoalRacePtsRequirement: Boolean,
+            ignoreFanRequirement: Boolean,
+        ): Boolean =
+            enableForceRacing ||
+                (hasFanRequirement && !ignoreFanRequirement) ||
+                hasTrophyRequirement ||
+                hasInsufficientGoalRacePtsRequirement
+
         /** Merges double- and single-star prediction matches into one row-deduplicated list.
          *
          * The single-star template can also weakly match inside a taller star stack, so any
@@ -1212,7 +1235,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      *
      * @return True if the current date is okay to start the extra racing process and false otherwise.
      */
-    fun checkEligibilityToStartExtraRacingProcess(): Boolean {
+    fun checkEligibilityToStartExtraRacingProcess(ignoreFanRequirement: Boolean = false): Boolean {
         MessageLog.i(TAG, "\n[RACE] Now determining eligibility to start the extra racing process...")
         val turnsRemaining = game.imageUtils.determineTurnsRemainingBeforeNextGoal()
         MessageLog.i(TAG, "[RACE] Current remaining number of days before the next mandatory race: $turnsRemaining.")
@@ -1326,7 +1349,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
 
         // If the setting to force racing extra races is enabled or we have a specific requirement, always return true.
-        if (enableForceRacing || hasFanRequirement || hasTrophyRequirement || hasInsufficientGoalRacePtsRequirement) {
+        // A fan requirement the campaign already deferred for a training turn ([ignoreFanRequirement])
+        // is excluded here; every other requirement arm still forces the race.
+        if (requirementForcesExtraRace(enableForceRacing, hasFanRequirement, hasTrophyRequirement, hasInsufficientGoalRacePtsRequirement, ignoreFanRequirement)) {
             Log.d(TAG, "[DEBUG] checkEligibilityToStartExtraRacingProcess:: Force racing or requirement is active so eligibility will be true.")
             return true
         }
@@ -1361,8 +1386,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
 
         // If fan or trophy requirement is detected, bypass smart racing logic to force racing.
-        // Both requirements are independent of racing plan and farming fans settings.
-        if (hasFanRequirement) {
+        // Both requirements are independent of racing plan and farming fans settings. The fan arm
+        // is skipped when the campaign already deferred it for a training turn this turn; the trophy
+        // arm below is unaffected.
+        if (hasFanRequirement && !ignoreFanRequirement) {
             MessageLog.i(TAG, "[RACE] Fan requirement detected. Bypassing smart racing logic to fulfill requirement.")
             return !raceRepeatWarningCheck
         } else if (hasTrophyRequirement) {

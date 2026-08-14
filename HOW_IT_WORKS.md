@@ -1382,14 +1382,37 @@ fill plus the glyph's white outline, two-factor because warm background art alon
 single-hue test). The campaign contributes `GrandConcertPointContext`: the cheapest readable song
 the shop last offered (remembered across turns; offers do not expire), the per-type deficit against
 the balances, computed caps (200 base, +50 per concert on any success tier, never OCR'd), and the
-cycle's song count. While the cycle is under its floor, `calculateGrandConcertPointMultiplier`
-boosts a facility by 4% per effective point its gain feeds into the deficit, capped at +60%, the
-same ceiling as the anticipatory-rainbow multiplier and strictly below a real rainbow's 2.0x, so
-point steering re-ranks near-peers without overruling the big signals. Effective means clamped to
-both the remaining deficit and the cap headroom, because income above a type's cap is lost. A gain
-whose number resists OCR still contributes its pixel-read type at a conservative assumed amount.
-Every recommendation turn logs a `[GC_POINTS]` line: balances against caps, each facility's
-observed types and amounts, the deficit, and whether the bias armed.
+cycle's song count, plus the career total measured against the 3-4-4-3-3 song cadence.
+`calculateGrandConcertPointMultiplier` arms when the cycle is under its own floor OR when the
+career total trails that cadence with a concert still to come, so income keeps chasing songs
+through a cycle that already met its floor but is behind the 18-song total (the old floor-only
+bias went silent there, which is where a real career's Senior training stopped converting to
+songs). It boosts a facility by 4% per effective point its gain feeds into the deficit. Effective
+means clamped to both the remaining deficit and the cap headroom, because income above a type's
+cap is lost. The boost is deadline-shaped: an approaching concert amplifies it (x1.25 within four
+turns, x1.5 within two). Every ceiling stays strictly below a real rainbow's 2.0x so point steering
+never overrules a rainbow: a behind-floor cycle caps at +60% (or +80% at a near concert), the
+total-only arm at a smaller +35%. A gain whose number resists OCR still contributes its pixel-read
+type at a conservative assumed amount. Every recommendation turn logs a `[GC_POINTS]` line:
+balances against caps, each facility's observed types and amounts, the deficit, whether the bias
+armed and on which arm, and the career-song trajectory.
+
+**Fan-vs-training deferral (wired and tested, not yet live).** Grand Concert also carries a
+fail-closed policy (`GrandConcertFanPolicy`) for the case where the game's fan requirement would
+otherwise force racing on turns whose training income the song economy needs. When a fan
+requirement is active, the campaign asks the policy whether this one turn can be safely deferred to
+training; if so, a turn-local flag (`ignoreFanRequirement`) suppresses only the fan arm of the
+later extra-race eligibility gate, while trophy, goal-points, forced, and any independent race
+reason still race, and the next turn re-evaluates from scratch. The policy defers ONLY when it can
+prove a deferred turn still leaves room to satisfy the requirement before its deadline. That proof
+needs a reliable fan-goal deadline, which Grand Concert does not expose yet
+(`determineTurnsRemainingBeforeNextGoal` stands the OCR down for the scenario and returns -1), so
+the policy currently receives no deadline and always fails safe to racing. Live fan deferral is
+therefore NOT active today: the wiring is in place and tested, but behaviour is unchanged until a
+validated deadline reader supplies the input. The slack proof also assumes remaining turns are
+raceable, which concert and mandatory actions can consume; refining that is part of the future
+deadline-reader work, not a live risk while the policy stays inert. Each turn the question is asked
+logs a `[GC_FAN]` line with the inputs and the decision.
 
 **The spend loop.** `spendVisit` is greedy with a stop rule, and every purchase is transactional.
 `attemptLearn` taps the card, reads the confirmation dialog, and commits **only** on

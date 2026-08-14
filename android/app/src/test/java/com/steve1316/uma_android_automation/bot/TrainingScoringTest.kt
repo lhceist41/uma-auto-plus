@@ -1634,7 +1634,18 @@ class TrainingScoringTest {
         songsBoughtThisCycle: Int = 1,
         purchasedFloor: Int = 3,
         turnsUntilConcert: Int? = 7,
-    ) = GrandConcertPointContext(balances, caps, deficit, songsBoughtThisCycle, purchasedFloor, turnsUntilConcert)
+        songsBoughtThisCareer: Int = 0,
+        expectedSongsByNow: Int = 0,
+    ) = GrandConcertPointContext(
+        balances,
+        caps,
+        deficit,
+        songsBoughtThisCycle,
+        purchasedFloor,
+        turnsUntilConcert,
+        songsBoughtThisCareer = songsBoughtThisCareer,
+        expectedSongsByNow = expectedSongsByNow,
+    )
 
     private fun gcTraining(gains: Map<PerformancePointType, Int?>) = createDefaultTrainingOption().copy(performanceGains = gains)
 
@@ -1699,5 +1710,67 @@ class TrainingScoringTest {
         val with = calculateRawTrainingScore(createDefaultConfig().copy(grandConcertPoints = gcContext()), training)
         assertTrue(without > 0.0)
         assertEquals(without * 1.4, with, 1e-6)
+    }
+
+    @Test
+    @DisplayName("GC bias stays armed on the career total after the cycle floor is met, at a smaller ceiling")
+    fun testGrandConcertPointMultiplierTotalTargetArm() {
+        val training = gcTraining(mapOf(PerformancePointType.VOCAL to 10))
+        // Cycle floor met (3/3, so not behindPace) but the career total trails the cadence (5 of 8):
+        // the total arm keeps the bias alive where the old floor-only bias disarmed to 1.0.
+        val behindTotal =
+            createDefaultConfig().copy(
+                grandConcertPoints = gcContext(songsBoughtThisCycle = 3, songsBoughtThisCareer = 5, expectedSongsByNow = 8),
+            )
+        // 10 points -> 0.04 x 10 = 0.4 boost, clamped to the total-only ceiling 0.35 -> 1.35.
+        assertEquals(1.35, Training.calculateGrandConcertPointMultiplier(behindTotal, training), 1e-9)
+        // Caught up on the total (8 of 8) and at the cycle floor: nothing to chase, back to 1.0.
+        val caughtUp =
+            createDefaultConfig().copy(
+                grandConcertPoints = gcContext(songsBoughtThisCycle = 3, songsBoughtThisCareer = 8, expectedSongsByNow = 8),
+            )
+        assertEquals(1.0, Training.calculateGrandConcertPointMultiplier(caughtUp, training))
+    }
+
+    @Test
+    @DisplayName("GC bias amplifies as the concert nears and stays strictly below a rainbow")
+    fun testGrandConcertPointMultiplierProximity() {
+        val training = gcTraining(mapOf(PerformancePointType.VOCAL to 10))
+
+        fun mult(turns: Int?) =
+            Training.calculateGrandConcertPointMultiplier(
+                createDefaultConfig().copy(grandConcertPoints = gcContext(turnsUntilConcert = turns)),
+                training,
+            )
+        // Calm window (7 turns) is unchanged at 1.4; the near window (<=4) amplifies x1.25 -> 1.5;
+        // the urgent window (<=2) amplifies x1.5 -> 1.6. Value rises monotonically as the deadline nears.
+        assertEquals(1.4, mult(7), 1e-9)
+        assertEquals(1.5, mult(3), 1e-9)
+        assertEquals(1.6, mult(1), 1e-9)
+        assertTrue(mult(7) < mult(3) && mult(3) < mult(1), "boost rises as the concert approaches")
+
+        // A rainbow feeding two large deficits in the urgent window hits the raised ceiling 0.8
+        // (1.8x) - still strictly below a real rainbow's 2.0x, so the bias never outranks a rainbow.
+        val urgentBig =
+            createDefaultConfig().copy(
+                grandConcertPoints =
+                    gcContext(
+                        turnsUntilConcert = 1,
+                        deficit = mapOf(PerformancePointType.VOCAL to 40, PerformancePointType.DANCE to 40),
+                    ),
+            )
+        val big = Training.calculateGrandConcertPointMultiplier(urgentBig, gcTraining(mapOf(PerformancePointType.VOCAL to 20, PerformancePointType.DANCE to 20)))
+        assertEquals(1.8, big, 1e-9)
+        assertTrue(big < 2.0, "the point bias must stay strictly below a rainbow multiplier")
+    }
+
+    @Test
+    @DisplayName("GC bias is deterministic for identical inputs")
+    fun testGrandConcertPointMultiplierDeterministic() {
+        val config = createDefaultConfig().copy(grandConcertPoints = gcContext(turnsUntilConcert = 2))
+        val training = gcTraining(mapOf(PerformancePointType.VOCAL to 15))
+        val first = Training.calculateGrandConcertPointMultiplier(config, training)
+        val second = Training.calculateGrandConcertPointMultiplier(config, training)
+        assertEquals(first, second, 0.0)
     }
 }
