@@ -1409,10 +1409,32 @@ needs a reliable fan-goal deadline, which Grand Concert does not expose yet
 (`determineTurnsRemainingBeforeNextGoal` stands the OCR down for the scenario and returns -1), so
 the policy currently receives no deadline and always fails safe to racing. Live fan deferral is
 therefore NOT active today: the wiring is in place and tested, but behaviour is unchanged until a
-validated deadline reader supplies the input. The slack proof also assumes remaining turns are
-raceable, which concert and mandatory actions can consume; refining that is part of the future
-deadline-reader work, not a live risk while the policy stays inert. Each turn the question is asked
-logs a `[GC_FAN]` line with the inputs and the decision.
+validated deadline reader supplies the input.
+
+Two of the three inputs a safe deferral needs are, on investigation, not obtainable from current
+local data, which is why the policy stays inert:
+
+- **The fan-goal deadline.** Fan-count goals with target turns exist nowhere in the objective
+  master data (`character_objectives.json` carries only mandatory race-placement goals; the
+  scraper keeps only `target_type == 1`, and the master-data compiler emits no goal type), and the
+  runtime only ever learns a fan goal from a one-time goal-introduction screen the OCR path stands
+  down for Grand Concert. So the deadline turn cannot be read reliably.
+- **Conservative races-needed.** Every stored per-race `fans` value (races, objectives, compiled
+  races) is the FIRST-PLACE reward, i.e. the best case; the placement-to-payout curve that would
+  give a safe lower bound is discarded at scrape time. `deficit / storedReward` would therefore
+  under-count the races a deficit needs, which is optimistic and unsafe.
+
+The third input, raceable slack, IS provable and is implemented as `GrandConcertRaceCalendar`: a
+pure model of which turns can host a fan-earning race, excluding the pre-debut window, Summer camp
+(turns 37-40 and 61-64), and the finale season, and counting concert turns as ordinary raceable
+turns (a concert does not consume the turn). It answers "how many real race opportunities lie
+between two turns", the term a naive turn count gets wrong. It is not yet wired into the decision
+because the deadline it would be measured against is unknown; today it only feeds `[GC_FAN]`
+telemetry as a factual `raceableToNextConcert` reference. Activating deferral needs a future task to
+supply the deadline and a conservative races-needed bound, from either an extended scraper (capture
+fan-count objectives and the placement-payout curve) or a live-validated goal-introduction reader.
+Each turn the fan question is asked logs a `[GC_FAN]` line with the inputs, their provenance, and
+the decision.
 
 **The spend loop.** `spendVisit` is greedy with a stop rule, and every purchase is transactional.
 `attemptLearn` taps the card, reads the confirmation dialog, and commits **only** on

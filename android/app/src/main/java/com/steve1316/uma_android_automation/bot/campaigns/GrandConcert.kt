@@ -12,6 +12,7 @@ import com.steve1316.uma_android_automation.bot.GrandConcertHandoffReason
 import com.steve1316.uma_android_automation.bot.GrandConcertLessonReader
 import com.steve1316.uma_android_automation.bot.GrandConcertPointContext
 import com.steve1316.uma_android_automation.bot.GrandConcertPolicy
+import com.steve1316.uma_android_automation.bot.GrandConcertRaceCalendar
 import com.steve1316.uma_android_automation.bot.GrandConcertScenario
 import com.steve1316.uma_android_automation.bot.GrandConcertState
 import com.steve1316.uma_android_automation.bot.HypeTier
@@ -678,8 +679,13 @@ class GrandConcert(game: Game) : Campaign(game) {
     override fun considerFanRaceDeferral(): Boolean {
         if (!racing.hasFanRequirement || racing.hasTrophyRequirement || racing.hasInsufficientGoalRacePtsRequirement) return false
         val concertBehindPace = grandConcertPointContext(null)?.behindPace ?: false
-        // No reliable Grand Concert fan-goal deadline or per-race fan estimate exists yet; passing
-        // them as null makes the policy fail safe (force-race), preserving the fan-goal safeguard.
+        // The two inputs the policy needs to prove safe deferral are still unavailable for Grand
+        // Concert, so both are passed null and the policy fail-safe races (preserving the fan-goal
+        // safeguard). Provenance, not a heuristic: the fan-goal deadline has no local source (fan-
+        // count goals with target turns are absent from the objective master data and the compiler,
+        // and the goal-deadline OCR is stood down for this scenario), and races-needed has no safe
+        // lower bound (every stored race fan value is the first-place/best-case reward, so a
+        // deficit/reward count would under-count races). See GrandConcertRaceCalendar / docs.
         val turnsUntilDeadline: Int? = null
         val racesStillNeeded: Int? = null
         val decision =
@@ -689,10 +695,19 @@ class GrandConcert(game: Game) : Campaign(game) {
                 racesStillNeeded = racesStillNeeded,
                 concertBehindPace = concertBehindPace,
             )
+        // Calendar-aware raceable slack toward the next concert: a factual reference figure (NOT the
+        // fan-goal deadline, which is unknown) that a future deadline reader can be validated against.
+        val turn = date.day
+        val nextConcert = CONCERT_TURNS.firstOrNull { it > turn }
+        val raceableToNextConcert = nextConcert?.let { GrandConcertRaceCalendar.raceableTurnsBetween(turn, it) }
         MessageLog.i(
             TAG,
-            "[GRAND_CONCERT] [GC_FAN] fanReq=true fans=${trainee.fans} deadline=${turnsUntilDeadline ?: "unknown"} " +
-                "racesNeeded=${racesStillNeeded ?: "unknown"} concertBehindPace=$concertBehindPace decision=$decision",
+            "[GRAND_CONCERT] [GC_FAN] fanReq=true turn=$turn fans=${trainee.fans} " +
+                "deadline=${turnsUntilDeadline ?: "unknown"}(src=none) " +
+                "racesNeeded=${racesStillNeeded ?: "unknown"}(src=none) " +
+                "turnsToNextConcert=${nextConcert?.let { it - turn } ?: "none"} " +
+                "raceableToNextConcert=${raceableToNextConcert ?: "none"} " +
+                "concertBehindPace=$concertBehindPace decision=$decision",
         )
         return decision == GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING
     }
