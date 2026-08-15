@@ -142,6 +142,56 @@ describe("compileMasterData - objective fan goals", () => {
     })
 })
 
+// ---- Objective race-entry fan gate (fansNeeded) ----
+
+describe("compileMasterData - objective fansNeeded", () => {
+    // "Marine Cup" @ turn 10 resolves against the default six() race set.
+    const withOption = (option: Record<string, unknown>) => ({
+        C1: { name: "C1", mandatoryRaces: [{ turn: 10, isChoice: false, options: [{ raceName: "Marine Cup", ...option }] }] },
+    })
+
+    it("accepts a positive integer gate", () => {
+        expect(compileMasterData(six({ objectives: withOption({ fans: 10000, fansNeeded: 12000 }) })).ok).toBe(true)
+    })
+
+    it("accepts a zero gate", () => {
+        expect(compileMasterData(six({ objectives: withOption({ fans: 1800, fansNeeded: 0 }) })).ok).toBe(true)
+    })
+
+    it("accepts an absent gate (backwards-compatible)", () => {
+        expect(compileMasterData(six({ objectives: withOption({ fans: 1800 }) })).ok).toBe(true)
+    })
+
+    it.each([
+        ["negative", -1],
+        ["non-integer float", 12.5],
+        ["string", "12000"],
+        ["null", null],
+    ])("rejects a %s gate as a hard error", (_label, value) => {
+        const r = compileMasterData(six({ objectives: withOption({ fansNeeded: value }) }))
+        expect(r.ok).toBe(false)
+        expect(r.artifacts).toBeNull()
+        expect(r.errors.map((e) => e.code)).toContain("objectiveFansNeededMalformed")
+    })
+
+    it("lets fanGoals, mandatoryRaces, and fansNeeded coexist", () => {
+        const objectives = {
+            C1: {
+                name: "C1",
+                mandatoryRaces: [{ turn: 10, isChoice: false, options: [{ raceName: "Marine Cup", fans: 10000, fansNeeded: 12000 }] }],
+                fanGoals: [{ turn: 24, targetFans: 3000, scenarioGroupId: 100, appliesToScenarioIds: [1, 2, 3, 4] }],
+            },
+        }
+        expect(compileMasterData(six({ objectives })).ok).toBe(true)
+    })
+
+    it("changes the fingerprint deterministically when only fansNeeded changes", () => {
+        const fp = (n: number) => compileMasterData(six({ objectives: withOption({ fans: 10000, fansNeeded: n }) })).manifest!.fingerprint
+        expect(fp(12000)).toBe(fp(12000)) // deterministic for identical input
+        expect(fp(12000)).not.toBe(fp(9000)) // objectives raw SHA participates in the fingerprint
+    })
+})
+
 // ---- Part U: synthetic negative tests ----
 
 describe("compileMasterData - hard errors (no artifact written)", () => {

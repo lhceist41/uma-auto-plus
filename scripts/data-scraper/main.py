@@ -2141,7 +2141,7 @@ class CharacterObjectivesScraper(BaseScraper):
                         "isChoice": false,
                         "options": [
                             { "raceName": "Shinzan Kinen", "grade": "G3", "surface": "Turf",
-                              "distanceType": "Mile", "fans": 3800 }
+                              "distanceType": "Mile", "fans": 3800, "fansNeeded": 0 }
                         ]
                     }
                 ]
@@ -2214,19 +2214,32 @@ class CharacterObjectivesScraper(BaseScraper):
                             "grade": grade,
                             "surface": self.TERRAIN_CODES.get(r.get("terrain"), "Turf"),
                             "distanceType": self._distance_type(meters),
+                            # fans is the race REWARD (fans_gained); fansNeeded is the fan ENTRY GATE
+                            # (fans_needed) the game requires before this mandatory race. They are the
+                            # two different fan mechanisms and must never be conflated.
                             "fans": r.get("fans_gained", 0),
+                            "fansNeeded": r.get("fans_needed", 0),
                         }
                     )
 
             mandatory_races: List[Dict[str, Any]] = []
             for turn in sorted(by_turn.keys()):
-                seen = set()
+                # Map each dedup identity to the fansNeeded gate its first occurrence carried. Current
+                # variants of the same race identity share one gate value, so dedup is safe; but a
+                # future source drift that produced a DIFFERENT gate for the same identity must fail
+                # loudly rather than silently keep the first and drop the conflicting gate.
+                seen: Dict[Tuple[str, str, str], int] = {}
                 deduped: List[Dict[str, Any]] = []
                 for o in by_turn[turn]:
                     k = (o["raceName"], o["distanceType"], o["surface"])
                     if k in seen:
+                        if seen[k] != o["fansNeeded"]:
+                            raise ValueError(
+                                f"Conflicting fansNeeded for {name} turn {turn} race {k}: "
+                                f"{seen[k]} vs {o['fansNeeded']}; refusing to silently drop a gate."
+                            )
                         continue
-                    seen.add(k)
+                    seen[k] = o["fansNeeded"]
                     deduped.append(o)
                 mandatory_races.append({"turn": turn, "isChoice": len(deduped) > 1, "options": deduped})
 

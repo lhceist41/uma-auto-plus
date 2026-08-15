@@ -67,9 +67,12 @@ describe("Grand Concert fan goals (master.mdb route data)", () => {
 describe("Grand Concert race payout curves (bulk-refreshed)", () => {
     const all = Object.values(races)
 
-    it("has exactly 402 races, each with a non-empty payout curve", () => {
+    it("has exactly 402 races, each with a full 18-place payout curve", () => {
         expect(all).toHaveLength(402)
-        for (const r of all) expect((r.fanPayoutsByPlace ?? []).length).toBeGreaterThan(0)
+        // 18-place lock: the conservative-floor proof depends on every committed curve covering all
+        // finishing places up to the game's max field size (18). A future refresh that shipped a
+        // shorter curve must fail here and revisit the floor argument rather than silently weaken it.
+        for (const r of all) expect(r.fanPayoutsByPlace).toHaveLength(18)
     })
 
     it("every curve is place-sorted, has unique places, and place-1 equals the scalar fans", () => {
@@ -108,5 +111,57 @@ describe("Grand Concert race payout curves (bulk-refreshed)", () => {
         // The globally-proven minimum across the committed dataset (master single_mode_fan_count min is
         // 5; the committed races reference only tables whose smallest tail is 7).
         expect(globalMin).toBeGreaterThanOrEqual(5)
+    })
+})
+
+describe("Grand Concert mandatory-race fan-entry gate (fansNeeded)", () => {
+    type Option = { raceName: string; fans: number; fansNeeded?: number }
+    type MRace = { turn: number; options: Option[] }
+    const allOptions: { char: string; turn: number; opt: Option }[] = []
+    for (const [name, c] of Object.entries(chars)) {
+        for (const mr of (c.mandatoryRaces ?? []) as MRace[]) {
+            for (const opt of mr.options) allOptions.push({ char: name, turn: mr.turn, opt })
+        }
+    }
+    const gateFor = (char: string, raceName: string, turn: number) =>
+        allOptions.find((x) => x.char === char && x.opt.raceName === raceName && x.turn === turn)?.opt
+
+    it("Copano Rickey Champions Cup (turn 47) requires 12000 fans to enter", () => {
+        const opt = gateFor("Copano Rickey", "Champions Cup", 47)
+        expect(opt?.fansNeeded).toBe(12000)
+        expect(opt?.fans).not.toBe(opt?.fansNeeded) // reward (10000) is not the gate (12000)
+    })
+
+    it("Copano Rickey February Stakes (turn 52) requires 12000 fans to enter", () => {
+        expect(gateFor("Copano Rickey", "February Stakes", 52)?.fansNeeded).toBe(12000)
+    })
+
+    it("a factual low gate exists: Copano Rickey Fukuryu Stakes (turn 31) = 350", () => {
+        expect(gateFor("Copano Rickey", "Fukuryu Stakes", 31)?.fansNeeded).toBe(350)
+    })
+
+    it("a factual high gate exists: Agnes Tachyon Arima Kinen (turn 72) = 25000", () => {
+        expect(gateFor("Agnes Tachyon", "Arima Kinen", 72)?.fansNeeded).toBe(25000)
+    })
+
+    it("every committed gate is a non-negative integer", () => {
+        for (const { opt } of allOptions) {
+            if (opt.fansNeeded === undefined) continue
+            expect(Number.isInteger(opt.fansNeeded)).toBe(true)
+            expect(opt.fansNeeded).toBeGreaterThanOrEqual(0)
+        }
+    })
+
+    it("no semantically identical mandatory-race option carries conflicting gates", () => {
+        // Identity mirrors the scraper dedup: (character, turn, raceName). A recurrence with a
+        // different gate would be a data-integrity break, not a legitimate variant.
+        const byKey = new Map<string, number>()
+        for (const { char, turn, opt } of allOptions) {
+            if (opt.fansNeeded === undefined) continue
+            const key = `${char}|${turn}|${opt.raceName}`
+            const prev = byKey.get(key)
+            if (prev !== undefined) expect(opt.fansNeeded).toBe(prev)
+            byKey.set(key, opt.fansNeeded)
+        }
     })
 })

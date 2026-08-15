@@ -473,6 +473,12 @@ function validateObjectives(raw: Record<string, unknown>, raceKeySet: Set<string
                     continue
                 }
                 checked++
+                // Optional race-entry fan gate (fans_needed): absent is legacy/ungated-compatible;
+                // when present it must be a non-negative integer (never coerce a string/float/null to
+                // zero). Distinct from the option's `fans`, which is the race's fan reward.
+                if (opt.fansNeeded !== undefined && (!isInt(opt.fansNeeded) || opt.fansNeeded < 0)) {
+                    errors.push({ code: "objectiveFansNeededMalformed", detail: `objective "${char}" turn ${mr.turn} option "${opt.raceName}" has a malformed fansNeeded ${JSON.stringify(opt.fansNeeded)}` })
+                }
                 // Disambiguate by (raceName, turn) against the composite race key - never a bare-name join.
                 if (!raceKeySet.has(raceKeyString(opt.raceName, mr.turn))) {
                     unresolved++

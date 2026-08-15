@@ -1437,6 +1437,20 @@ The data a safe deferral needs is now committed, but the runtime is deliberately
   need_fan_count`, a distinct concept from a fan-count goal's target) is also not yet ingested for
   the same id-mapping reason; both are deferred and neither blocks the conservative floor above.
 
+There are two distinct fan mechanisms, and they must never be conflated:
+
+- **Fan goal** (`fanGoals`, from live master route data): reach X cumulative fans by deadline turn
+  Y. This is the career-spanning target above.
+- **Race-entry gate** (`fansNeeded`, now shipped on each `mandatoryRaces[].options[]`): you must
+  already have at least X fans for the game to let you enter/proceed with THAT specific mandatory
+  race. Its source is the GameTora `ura-objectives` race row `fans_needed`, cross-validated against
+  master `single_mode_program.need_fan_count` (a direct instance-id join, no fuzzy matching). It sits
+  beside the option's `fans`, which remains the race's fan REWARD: reward and requirement are
+  separate numbers and are not interchangeable (Copano Rickey's Champions Cup rewards 10000 fans but
+  gates entry at 12000). The 12000-fan entry wall a real Grand Concert career hit late in its run was
+  this second mechanism, not the fan goal. The committed data now carries the gate for every
+  mandatory-race option; the runtime does not consume it yet.
+
 The **raceable-slack calendar** (`GrandConcertRaceCalendar`) is corrected to the game's own
 `single_mode_turn.race_entry_type` for the Grand Concert turn set: every career turn 12..72 is
 race-entry legal, Summer (37-40, 61-64) and concert turns included, so the raceable window is
