@@ -1488,6 +1488,21 @@ the fan question is asked logs a `[GC_FAN]` line with the resolved facts, their 
 decision. The generated `gc_fan_runtime.json` asset is guarded in CI: a root-data change that is not
 regenerated fails the build.
 
+**Fan-efficient forced-race choice.** Deferral stays disabled, but when a fan race is already
+unavoidable the choice of WHICH race to enter can still clear the requirement in fewer turns.
+`GrandConcertFanRaceSelector` (pure, unit-tested) ranks the enterable candidates for fan efficiency in
+pure Grand Concert fan pressure only (no trophy or goal-race-points requirement active): prediction
+tier stays the primary safety priority (a double-star race still beats a bigger single-star one, no
+expected-placement guess), but Rival status is demoted from an absolute override to an exact-tie
+breaker, so a much larger same-tier non-Rival race is no longer skipped just because a Rival race is
+present. The displayed fan value is an optimization signal, not a guaranteed realized payout; an
+unreadable value never outranks a known one, and if every candidate's fan value is unknown the legacy
+selection stands. This ranking currently applies to the already-visible candidate set only; a
+below-the-fold full-list scan is intentionally NOT wired yet (the standard selector opens each row to
+read its fans, and scanning/re-selecting across pages needs device evidence before it can be trusted
+not to mis-tap). Non-Grand-Concert racing and every mixed-requirement case keep the legacy selection
+unchanged. A `[GC_FAN_RACE_SELECT]` line records the candidates, the winner, and the ranking reason.
+
 **The spend loop.** `spendVisit` is greedy with a stop rule, and every purchase is transactional.
 `attemptLearn` taps the card, reads the confirmation dialog, and commits **only** on
 `EXACT_MATCH` against the card it intended; a Schedule dialog (the card was not actually

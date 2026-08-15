@@ -4272,16 +4272,38 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             "[RACE] Detected extra races (fans/tier): ${filteredRaces.joinToString(", ") { "${it.fans}/${it.predictionTier}" }}",
         )
 
-        // Evaluate which race to select based on Rival priority, then prediction tier, then fans.
-        // Tier outranks raw fans: a weak predicted placement scales the realized fan payout down
-        // more than a smaller race's lower base, so a double-star race beats a bigger single-star one.
-        val index =
+        // Legacy pick: Rival races first, then prediction tier, then fans. Tier outranks raw fans: a
+        // weak predicted placement scales the realized fan payout down more than a smaller race's
+        // lower base, so a double-star race beats a bigger single-star one.
+        fun legacyIndex(): Int =
             if (filteredRaces.any { it.isRival }) {
                 MessageLog.v(TAG, "[RACE] Rival Race(s) detected. Prioritizing Rival Races.")
                 val rivalIndices = filteredRaces.indices.filter { filteredRaces[it].isRival }
                 rivalIndices[indexOfBestByTierThenFans(rivalIndices.map { filteredRaces[it] })]
             } else {
                 indexOfBestByTierThenFans(filteredRaces)
+            }
+
+        // Grand Concert pure fan pressure: when a race is forced only to clear a fan deficit (no
+        // trophy or goal-points requirement), rank for fan efficiency instead of the legacy
+        // Rival-first pick, so the forced streak clears in fewer turns. Tier stays the primary safety
+        // priority; Rival is demoted to an exact-tie breaker; an all-unknown fan read falls back to
+        // the legacy selection. Scope is the already-walked candidate set only - a below-the-fold
+        // full-list scan is intentionally NOT wired here (it needs device evidence first).
+        val gcFanEfficient =
+            GrandConcertFanRaceSelector.appliesToForcedRace(
+                scenarioIsGrandConcert = GrandConcertScenario.matches(game.scenario),
+                fanPressureActive = bFanEmergencyActive || hasFanRequirement,
+                hasTrophyRequirement = hasTrophyRequirement,
+                hasInsufficientGoalRacePtsRequirement = hasInsufficientGoalRacePtsRequirement,
+            )
+        val index =
+            if (gcFanEfficient) {
+                val selection = GrandConcertFanRaceSelector.select(filteredRaces)
+                MessageLog.i(TAG, GrandConcertFanRaceSelector.telemetryLine(campaign.date.day, filteredRaces, selection, scanScope = "visible-page"))
+                if (selection.useLegacyFallback || selection.index < 0) legacyIndex() else selection.index
+            } else {
+                legacyIndex()
             }
 
         // Determine the grade of the selected race and store it for retry purposes.
