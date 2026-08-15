@@ -20,7 +20,7 @@ import {
     EXIT_WARNINGS,
     EXIT_VALIDATION,
 } from "./types.ts"
-import type { RawInput, RawFamily, CompiledSkill, CompiledRace, MasterDataManifest, RawSourceEntry, CompiledArtifactEntry, ValidationFinding, CompileError, CompileResult } from "./types.ts"
+import type { RawInput, RawFamily, CompiledSkill, CompiledRace, RaceFanPayout, MasterDataManifest, RawSourceEntry, CompiledArtifactEntry, ValidationFinding, CompileError, CompileResult } from "./types.ts"
 
 const SKILLS_ARTIFACT_PATH = "src/data/compiled/skills.json"
 const RACES_ARTIFACT_PATH = "src/data/compiled/races.json"
@@ -37,7 +37,7 @@ const MAX_TURN_NUMBER = 120
 
 /** Known raw keys per compiled family, for additive schema-drift detection (Part J). */
 const KNOWN_SKILL_KEYS = new Set(["id", "name_en", "desc_en", "icon_id", "cost", "eval_pt", "condition", "precondition", "inherited", "community_tier", "upgrade", "downgrade"])
-const KNOWN_RACE_KEYS = new Set(["name", "date", "raceTrack", "course", "direction", "grade", "terrain", "distanceType", "distanceMeters", "fans", "turnNumber", "nameFormatted"])
+const KNOWN_RACE_KEYS = new Set(["name", "date", "raceTrack", "course", "direction", "grade", "terrain", "distanceType", "distanceMeters", "fans", "fanPayoutsByPlace", "turnNumber", "nameFormatted"])
 
 /** Large-change thresholds vs a previous manifest (Part K): warn past 20% or 10 rows, whichever is larger. */
 const LARGE_CHANGE_ABS = 10
@@ -357,6 +357,28 @@ function compileRaces(raw: Record<string, unknown>, errors: CompileError[], warn
 
         if (value.course === null) nullCourse++
 
+        // Optional placement-to-fans payout curve: carried through (order-sorted) when the raw
+        // record has it, omitted otherwise. Backwards-compatible - a race scraped before the field
+        // simply lacks it, and the current committed data has none, so this changes no current output.
+        let fanPayoutsByPlace: RaceFanPayout[] | undefined
+        const rawPayouts = value.fanPayoutsByPlace
+        if (rawPayouts !== undefined) {
+            const bad =
+                !Array.isArray(rawPayouts) ||
+                rawPayouts.some((p) => {
+                    if (!isObject(p)) return true
+                    const place = p.place
+                    const fansAtPlace = p.fans
+                    if (!isInt(place) || !isInt(fansAtPlace)) return true
+                    return place < 1 || fansAtPlace < 0
+                })
+            if (bad) {
+                errors.push({ code: "raceInvalidNumeric", detail: `race "${name}" has invalid fanPayoutsByPlace ${JSON.stringify(rawPayouts)}` })
+                continue
+            }
+            fanPayoutsByPlace = (rawPayouts as RaceFanPayout[]).map((p) => ({ place: p.place, fans: p.fans })).sort((a, b) => a.place - b.place)
+        }
+
         races.push({
             key: { name, turnNumber },
             name,
@@ -370,6 +392,7 @@ function compileRaces(raw: Record<string, unknown>, errors: CompileError[], warn
             distanceType: value.distanceType as string,
             distanceMeters,
             fans,
+            ...(fanPayoutsByPlace !== undefined ? { fanPayoutsByPlace } : {}),
             nameFormatted: asStringOrNull(value.nameFormatted),
         })
     }

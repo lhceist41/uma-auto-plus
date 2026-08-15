@@ -1411,28 +1411,40 @@ the policy currently receives no deadline and always fails safe to racing. Live 
 therefore NOT active today: the wiring is in place and tested, but behaviour is unchanged until a
 validated deadline reader supplies the input.
 
-Two of the three inputs a safe deferral needs are, on investigation, not obtainable from current
-local data, which is why the policy stays inert:
+The three inputs a safe deferral needs each have a known status:
 
-- **The fan-goal deadline.** Fan-count goals with target turns exist nowhere in the objective
-  master data (`character_objectives.json` carries only mandatory race-placement goals; the
-  scraper keeps only `target_type == 1`, and the master-data compiler emits no goal type), and the
-  runtime only ever learns a fan goal from a one-time goal-introduction screen the OCR path stands
-  down for Grand Concert. So the deadline turn cannot be read reliably.
-- **Conservative races-needed.** Every stored per-race `fans` value (races, objectives, compiled
-  races) is the FIRST-PLACE reward, i.e. the best case; the placement-to-payout curve that would
-  give a safe lower bound is discarded at scrape time. `deficit / storedReward` would therefore
-  under-count the races a deficit needs, which is optimistic and unsafe.
+- **The fan-goal deadline.** The GameTora objective manifest the scraper uses carries no fan-count
+  goal (only race-placement objectives), but the game's own `master.mdb` does: `single_mode_route`
+  maps a trainee to a route, and `single_mode_route_race` rows with `condition_type = 3` are
+  fan-count goals whose `condition_value_1` is the fan target and `turn` is the deadline. This is a
+  character route goal shared across scenarios (scenario_group 100 covers URA, Unity Cup, and Grand
+  Concert), so Grand Concert inherits it rather than defining its own. For Copano Rickey the row is
+  3000 fans by turn 24, which reconstructs the observed "Earn 3000 fans / 12 Turns to Reach Goal"
+  exactly (turn 24 minus the debut turn 12). The deadline is thus a per-character turn (23/24/25
+  across characters), NOT a value derived from the concert schedule, so it aligns with the first
+  concert for Copano only by coincidence. The remaining gap is delivery: `master.mdb` is a local
+  developer file, not shipped data, so a future task must bring these rows into the pipeline.
+- **Conservative races-needed.** The scraper and compiler now preserve the full placement-to-fans
+  payout curve (`fanPayoutsByPlace`, an order-sorted `{place, fans}` list) alongside the scalar
+  first-place `fans`, so a later model can read the payout for any finishing position instead of
+  assuming a win. Every listed placement pays positive fans with no zero/DNF rows. What is NOT yet
+  proven is that the worst listed placement is a guaranteed lower bound: most curves list to place
+  18 or 20 but a few list only to 14, and confirming the field never exceeds the listed places
+  needs field-size data not in this manifest. So the curve is preserved but the safe lower bound is
+  unproven, and races-needed stays unknown until that is settled. (The bulk raw-data refresh that
+  writes the new field onto every existing race is a clean follow-up; the current committed data is
+  unchanged.)
 
 The third input, raceable slack, IS provable and is implemented as `GrandConcertRaceCalendar`: a
 pure model of which turns can host a fan-earning race, excluding the pre-debut window, Summer camp
 (turns 37-40 and 61-64), and the finale season, and counting concert turns as ordinary raceable
-turns (a concert does not consume the turn). It answers "how many real race opportunities lie
-between two turns", the term a naive turn count gets wrong. It is not yet wired into the decision
-because the deadline it would be measured against is unknown; today it only feeds `[GC_FAN]`
-telemetry as a factual `raceableToNextConcert` reference. Activating deferral needs a future task to
-supply the deadline and a conservative races-needed bound, from either an extended scraper (capture
-fan-count objectives and the placement-payout curve) or a live-validated goal-introduction reader.
+turns (a concert does not consume the turn; whether the voluntary extra-race menu is specifically
+enterable on a concert turn is not yet proven, though mandatory races do land on them). It answers
+"how many real race opportunities lie between two turns", the term a naive turn count gets wrong. It
+is not yet wired into the decision because the deadline it would be measured against is not yet in
+the pipeline; today it only feeds `[GC_FAN]` telemetry as a factual `raceableToNextConcert`
+reference. Activating deferral needs a future task to bring the `master.mdb` fan-goal rows into the
+data pipeline and to settle the conservative races-needed lower bound.
 Each turn the fan question is asked logs a `[GC_FAN]` line with the inputs, their provenance, and
 the decision.
 

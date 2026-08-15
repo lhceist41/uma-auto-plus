@@ -76,6 +76,42 @@ describe("compileMasterData - valid baseline", () => {
     })
 })
 
+// ---- Race fan payout curve (optional, backwards-compatible) ----
+
+describe("compileMasterData - race fan payout curve", () => {
+    // Isolate the race under test: empty objectives so nothing references the default races.
+    const noObjectives = { C1: { name: "C1", mandatoryRaces: [] } }
+    const racesOf = (races: Record<string, unknown>) =>
+        JSON.parse(compileMasterData(six({ races, objectives: noObjectives })).artifacts!.races).races as Record<string, unknown>[]
+
+    it("carries the full placement curve, order-sorted, when the raw race has it", () => {
+        const withCurve = race("Curve Cup", 10, { fans: 500, fanPayoutsByPlace: [{ place: 3, fans: 125 }, { place: 1, fans: 500 }, { place: 2, fans: 200 }] })
+        const races = racesOf({ r1: withCurve })
+        expect(races).toHaveLength(1)
+        expect(races[0].fanPayoutsByPlace).toEqual([{ place: 1, fans: 500 }, { place: 2, fans: 200 }, { place: 3, fans: 125 }])
+        // The scalar first-place fans is unchanged and equals the curve's place-1 payout.
+        expect(races[0].fans).toBe(500)
+    })
+
+    it("omits the curve for a race whose raw record predates the field (backwards-compatible)", () => {
+        const races = racesOf({ r1: race("No Curve", 10) })
+        expect(races[0]).not.toHaveProperty("fanPayoutsByPlace")
+    })
+
+    it("rejects a malformed payout curve (bad place) as a hard error", () => {
+        const r = compileMasterData(six({ races: { r1: race("Bad Curve", 10, { fanPayoutsByPlace: [{ place: 0, fans: 5 }] }) }, objectives: noObjectives }))
+        expect(r.ok).toBe(false)
+        expect(r.artifacts).toBeNull()
+        expect(r.errors.map((e) => e.code)).toContain("raceInvalidNumeric")
+    })
+
+    it("rejects a non-array payout field as a hard error", () => {
+        const r = compileMasterData(six({ races: { r1: race("Bad Curve 2", 10, { fanPayoutsByPlace: "nope" }) }, objectives: noObjectives }))
+        expect(r.ok).toBe(false)
+        expect(r.errors.map((e) => e.code)).toContain("raceInvalidNumeric")
+    })
+})
+
 // ---- Part U: synthetic negative tests ----
 
 describe("compileMasterData - hard errors (no artifact written)", () => {

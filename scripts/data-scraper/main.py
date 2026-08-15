@@ -1200,12 +1200,33 @@ class RaceScraper(BaseScraper):
             return "Medium"
         return "Long"
 
+    @staticmethod
+    def _fan_payouts_by_place(entry_fans: list) -> list:
+        """The full placement-to-fans payout curve from a race-fans manifest entry's `fans` list.
+
+        Keeps every listed placement (not only first place), each as {"place", "fans"}, sorted by
+        place ascending. The upstream `fans` list is [{order, fans}, ...] and may arrive in any order.
+
+        Args:
+            entry_fans (list): A race-fans entry's `fans` list of {"order", "fans"} rows.
+
+        Returns:
+            An order-sorted list of {"place", "fans"} payout rows.
+        """
+        return sorted(({"place": f["order"], "fans": f["fans"]} for f in entry_fans), key=lambda p: p["place"])
+
     def start(self):
         """Builds the race list from GameTora's race_instances + race-fans JSON datasets (no browser needed)."""
         self.data = {}
         instances = fetch_gametora_manifest_data("race_instances")
         race_fans = fetch_gametora_manifest_data("race-fans")
         first_place_fans = {entry["id"]: next((f["fans"] for f in entry["fans"] if f["order"] == 1), 0) for entry in race_fans}
+        # Preserve the FULL placement-to-fans payout curve, not only first place. The scalar `fans`
+        # field above stays the first-place value for backwards compatibility; this carries every
+        # listed placement (order -> fans), sorted by place, so a later races-needed model can read
+        # the payout for any finishing position rather than assuming a win. Upstream lists positive
+        # payouts for placements 1..N with no zero/DNF rows.
+        fan_payouts_by_place = {entry["id"]: self._fan_payouts_by_place(entry["fans"]) for entry in race_fans}
 
         for instance in instances:
             # Skip the fixed special races (Make Debut, Maiden, URA Finals, etc.) and any race from an
@@ -1241,6 +1262,7 @@ class RaceScraper(BaseScraper):
                 "distanceType": distance_type,
                 "distanceMeters": distance_meters,
                 "fans": first_place_fans[instance["fans_gain"]],
+                "fanPayoutsByPlace": fan_payouts_by_place.get(instance["fans_gain"], []),
                 "turnNumber": (instance["year"] - 1) * 24 + (instance["month"] - 1) * 2 + (1 if instance["half"] == 1 else 2),
                 "nameFormatted": name_formatted,
             }

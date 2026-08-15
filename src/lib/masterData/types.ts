@@ -74,6 +74,12 @@ export interface RaceKey {
     turnNumber: number
 }
 
+/** One placement's fan payout: finishing position [place] pays [fans] fans. */
+export interface RaceFanPayout {
+    place: number
+    fans: number
+}
+
 /** A compiled race. Identity is the composite key; no numeric race id is invented. Null course is preserved. */
 export interface CompiledRace {
     key: RaceKey
@@ -87,7 +93,12 @@ export interface CompiledRace {
     terrain: string
     distanceType: string
     distanceMeters: number
+    /** First-place (win) fan reward. Kept scalar for backwards compatibility. */
     fans: number
+    /** The full placement-to-fans payout curve when the source provides it (order-sorted by
+     * [RaceFanPayout.place]); omitted for races whose raw record predates the field. [fans] equals
+     * the place-1 payout. A later races-needed model reads this instead of assuming a win. */
+    fanPayoutsByPlace?: RaceFanPayout[]
     nameFormatted: string | null
 }
 
