@@ -556,8 +556,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
          * @param doubles Locations matched by the double-star template.
          * @param singles Locations matched by the single-star template.
          * @param starless Star-column points derived from fans-icon matches (rows showing no
-         *    prediction icon at all). Any point on the same row as a star match is dropped —
-         *    the real prediction tier always wins over the icon-less fallback.
+         *    prediction icon at all). A point on the same row as a star match re-anchors that row
+         *    onto the fans glyph (the reliable name line) while keeping the star's tier, rather
+         *    than being dropped; the star only supplies the tier, the fans glyph supplies the row.
          * @param rowProximityPx Maximum distance for two matches to count as the same row. Race
          *    list rows are ~200px tall, so 80px is safely under one row.
          * @return The merged list of [PredictionAnchor] entries.
@@ -579,12 +580,20 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 }
             }
             for (point in starless) {
-                val sameRow =
-                    merged.any {
+                val sameRowIndex =
+                    merged.indexOfFirst {
                         abs(it.location.y - point.y) < rowProximityPx && abs(it.location.x - point.x) < rowProximityPx
                     }
-                if (!sameRow) {
+                if (sameRowIndex < 0) {
                     merged.add(PredictionAnchor(point, PredictionTier.NONE))
+                } else {
+                    // A star match and this row's fans glyph coincide. The fans glyph reliably marks the
+                    // row's name line, but a star can sit off that line: a distance-aptitude star renders
+                    // below the name and even cross-fires the single-star template. Re-anchor the row on
+                    // the fans point so the name OCR reads the correct row, keeping the star's tier. Fixes
+                    // a Grand Concert row whose aptitude star shadowed its real fans anchor and mislocated
+                    // the OCR crop onto the "Turf" distance tag.
+                    merged[sameRowIndex] = PredictionAnchor(point, merged[sameRowIndex].tier)
                 }
             }
             return merged.sortedBy { it.location.y }

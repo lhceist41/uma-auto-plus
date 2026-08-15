@@ -194,6 +194,46 @@ class RacingRaceSelectionTest {
         assertEquals(2, merged.size)
     }
 
+    @Test
+    @DisplayName("A fans row re-anchors a coincident single star onto the fans glyph, keeping tier")
+    fun mergeReanchorsSingleOntoFansRow() {
+        // Grand Concert regression (live turn-14 fixture): a row's distance-aptitude star cross-fires
+        // the single-star template ~47px below the row's name line, while the row's fans glyph projects
+        // onto the name line. The row must survive at the fans-glyph position (correct name OCR), not at
+        // the aptitude star's y, and keep the star-derived tier.
+        val fansRow1 = Point(881.0, 1194.5) // Hakodate row fans glyph, no nearby star
+        val fansRow2 = Point(881.0, 1424.5) // Chukyo row fans glyph, on the name line
+        val aptitudeStar = Point(881.0, 1471.0) // Chukyo aptitude star, below the name line
+        val merged = mergePredictionAnchors(emptyList(), listOf(aptitudeStar), listOf(fansRow1, fansRow2))
+        assertEquals(2, merged.size)
+        assertEquals(PredictionTier.NONE, merged[0].tier)
+        assertEquals(1194.5, merged[0].location.y)
+        // Re-anchored from the aptitude star (1471) onto the fans glyph (1424.5); tier kept.
+        assertEquals(PredictionTier.SINGLE, merged[1].tier)
+        assertEquals(1424.5, merged[1].location.y)
+    }
+
+    @Test
+    @DisplayName("A double star coincident with a fans glyph re-anchors onto the fans point")
+    fun mergeReanchorsDoubleOntoFansRow() {
+        val merged = mergePredictionAnchors(listOf(Point(900.0, 400.0)), emptyList(), listOf(Point(900.0, 405.0)))
+        assertEquals(1, merged.size)
+        assertEquals(PredictionTier.DOUBLE, merged[0].tier)
+        assertEquals(405.0, merged[0].location.y)
+    }
+
+    @Test
+    @DisplayName("With no starless points, star anchors keep their own positions (production path)")
+    fun mergeWithoutStarlessKeepsStarPositions() {
+        // findPredictionAnchors(includeStarless = false) passes no starless points, so the re-anchor
+        // branch never runs and every anchor stays at its star match. This is the production Standard
+        // Racing initial-detection path and must be unchanged by the fans re-anchor fix.
+        val merged = mergePredictionAnchors(listOf(Point(900.0, 400.0)), listOf(Point(900.0, 650.0)))
+        assertEquals(2, merged.size)
+        assertEquals(400.0, merged[0].location.y)
+        assertEquals(650.0, merged[1].location.y)
+    }
+
     // ////////////////////////////////////////////////////////////////////////////////////////////
     // indexOfBestByTierThenFans
 
