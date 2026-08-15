@@ -6,13 +6,14 @@ import com.steve1316.uma_android_automation.bot.CampaignBreakpointException
 import com.steve1316.uma_android_automation.bot.ConcertSegment
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.LessonCardKind
+import com.steve1316.uma_android_automation.bot.GrandConcertFanFacts
 import com.steve1316.uma_android_automation.bot.GrandConcertFanPolicy
+import com.steve1316.uma_android_automation.bot.GrandConcertFanPressure
 import com.steve1316.uma_android_automation.bot.GrandConcertHandoff
 import com.steve1316.uma_android_automation.bot.GrandConcertHandoffReason
 import com.steve1316.uma_android_automation.bot.GrandConcertLessonReader
 import com.steve1316.uma_android_automation.bot.GrandConcertPointContext
 import com.steve1316.uma_android_automation.bot.GrandConcertPolicy
-import com.steve1316.uma_android_automation.bot.GrandConcertRaceCalendar
 import com.steve1316.uma_android_automation.bot.GrandConcertScenario
 import com.steve1316.uma_android_automation.bot.GrandConcertState
 import com.steve1316.uma_android_automation.bot.HypeTier
@@ -90,6 +91,11 @@ class GrandConcert(game: Game) : Campaign(game) {
 
     /** Reads the live Lesson list into telemetry. Never taps - navigation stays here in the campaign. */
     private val lessonReader = GrandConcertLessonReader(game)
+
+    /** The committed Grand Concert fan facts (goals, mandatory gates, payout floor), loaded once from
+     * the packaged asset. Null when the asset is missing or malformed, which the fan-pressure snapshot
+     * degrades to an UNKNOWN telemetry line without affecting the fail-safe policy. */
+    private val fanFacts: GrandConcertFanFacts? by lazy { GrandConcertFanFacts.loadFromAssets(game.myContext) }
 
     /** How many Lesson-shop visits this run has performed, capped by [MAX_LESSON_VISITS_PER_RUN]. */
     private var lessonVisitsThisRun = 0
@@ -667,48 +673,39 @@ class GrandConcert(game: Game) : Campaign(game) {
      * prove enough schedule slack, because Grand Concert makes its performance points only by
      * training and the concerts supply most of the fans anyway.
      *
-     * Fail-closed by construction: the two inputs the policy needs to prove slack - the fan-goal
-     * deadline and a per-race fan estimate - are not yet reliably available for Grand Concert
-     * ([com.steve1316.uma_android_automation.utils.CustomImageUtils.determineTurnsRemainingBeforeNextGoal]
-     * deliberately stands the goal-deadline OCR down for this scenario and returns -1), so both are
-     * passed as null and the policy resolves to a fail-safe race. The [GC_FAN] line records the
-     * inputs and the resulting decision every turn the question is asked, which is exactly the
-     * telemetry a later, live-validated deadline reader needs to be tuned and switched on. Only the
-     * fan arm is eligible; a trophy or goal-points requirement always races.
+     * Fail-closed by construction, and deliberately so even now that the facts exist. The committed
+     * data ([GrandConcertFanFacts]) does carry the fan target/deadline, the mandatory-race entry
+     * gates, and a universal payout floor, and [GrandConcertFanPressure] turns them into an exact
+     * factual snapshot (deficit, calendar slack, a conservative race bound). But the two policy proof
+     * inputs stay review-gated to null via [GrandConcertFanPressure.reviewGatedPolicyInputs] until
+     * that reader/calculation is independently reviewed, so the policy still resolves to a fail-safe
+     * race. The [GC_FAN] line records the full snapshot and the decision every turn the question is
+     * asked - the telemetry a review needs before any activation. Only the fan arm is eligible; a
+     * trophy or goal-points requirement always races. The goal-deadline OCR
+     * ([com.steve1316.uma_android_automation.utils.CustomImageUtils.determineTurnsRemainingBeforeNextGoal])
+     * remains stood down for this scenario and is not consulted here.
      */
     override fun considerFanRaceDeferral(): Boolean {
         if (!racing.hasFanRequirement || racing.hasTrophyRequirement || racing.hasInsufficientGoalRacePtsRequirement) return false
         val concertBehindPace = grandConcertPointContext(null)?.behindPace ?: false
-        // The two inputs the policy needs to prove safe deferral are still unavailable for Grand
-        // Concert, so both are passed null and the policy fail-safe races (preserving the fan-goal
-        // safeguard). Provenance, not a heuristic: the fan-goal deadline has no local source (fan-
-        // count goals with target turns are absent from the objective master data and the compiler,
-        // and the goal-deadline OCR is stood down for this scenario), and races-needed has no safe
-        // lower bound (every stored race fan value is the first-place/best-case reward, so a
-        // deficit/reward count would under-count races). See GrandConcertRaceCalendar / docs.
-        val turnsUntilDeadline: Int? = null
-        val racesStillNeeded: Int? = null
+
+        // Factual fan-pressure snapshot from the committed runtime data. Telemetry only: it never
+        // feeds the policy in this build.
+        val snapshot = GrandConcertFanPressure.evaluate(fanFacts, trainee.name, date.day, trainee.fans)
+
+        // The policy proof inputs are held to null even when the snapshot knows an exact deadline and
+        // deficit, so a real fan requirement fail-safe races exactly as it did before this reader
+        // existed. Only an independent review may replace reviewGatedPolicyInputs with the snapshot's
+        // figures.
+        val policyInputs = GrandConcertFanPressure.reviewGatedPolicyInputs(snapshot)
         val decision =
             GrandConcertFanPolicy.decide(
                 fanRequirementActive = true,
-                turnsUntilDeadline = turnsUntilDeadline,
-                racesStillNeeded = racesStillNeeded,
+                turnsUntilDeadline = policyInputs.turnsUntilDeadline,
+                racesStillNeeded = policyInputs.racesStillNeeded,
                 concertBehindPace = concertBehindPace,
             )
-        // Calendar-aware raceable slack toward the next concert: a factual reference figure (NOT the
-        // fan-goal deadline, which is unknown) that a future deadline reader can be validated against.
-        val turn = date.day
-        val nextConcert = CONCERT_TURNS.firstOrNull { it > turn }
-        val raceableToNextConcert = nextConcert?.let { GrandConcertRaceCalendar.raceableTurnsBetween(turn, it) }
-        MessageLog.i(
-            TAG,
-            "[GRAND_CONCERT] [GC_FAN] fanReq=true turn=$turn fans=${trainee.fans} " +
-                "deadline=${turnsUntilDeadline ?: "unknown"}(src=none) " +
-                "racesNeeded=${racesStillNeeded ?: "unknown"}(src=none) " +
-                "turnsToNextConcert=${nextConcert?.let { it - turn } ?: "none"} " +
-                "raceableToNextConcert=${raceableToNextConcert ?: "none"} " +
-                "concertBehindPace=$concertBehindPace decision=$decision",
-        )
+        MessageLog.i(TAG, GrandConcertFanPressure.telemetryLine(snapshot, concertBehindPace, policyInputs, decision))
         return decision == GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING
     }
 

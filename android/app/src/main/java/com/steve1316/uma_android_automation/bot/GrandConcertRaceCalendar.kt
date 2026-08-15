@@ -10,11 +10,11 @@ package com.steve1316.uma_android_automation.bot
  * factual question "is turn N a raceable career turn, and how many raceable turns lie in a window".
  * It makes no defer/force decision and reads no pixels.
  *
- * It is deliberately NOT wired into a live deferral decision. The fan-goal deadline this slack would
- * be measured against is not yet in the data pipeline (the master-route fan-count goals exist in the
- * game's `master.mdb` but not in the shipped/compiled data yet), so [GrandConcertFanPolicy] still
- * fail-safe races. This model is the proven, reusable piece for when that deadline exists; today it
- * is exercised only as [GC_FAN] telemetry.
+ * It is deliberately NOT wired into a live deferral decision. The fan-goal deadline this slack is
+ * measured against now ships in committed data ([GrandConcertFanFacts]), and [GrandConcertFanPressure]
+ * consumes this calendar for the raceable-slack term, but the production policy inputs stay review-
+ * gated to null, so [GrandConcertFanPolicy] still fail-safe races. Today this model is exercised only
+ * as [GC_FAN] telemetry.
  *
  * Raceability source: the game's own `single_mode_turn.race_entry_type` for the Grand Concert turn
  * set (turn_set_id 3), read from `master.mdb`. It marks EVERY turn 12..72 as race-entry legal

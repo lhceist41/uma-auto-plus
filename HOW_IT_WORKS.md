@@ -1404,14 +1404,21 @@ requirement is active, the campaign asks the policy whether this one turn can be
 training; if so, a turn-local flag (`ignoreFanRequirement`) suppresses only the fan arm of the
 later extra-race eligibility gate, while trophy, goal-points, forced, and any independent race
 reason still race, and the next turn re-evaluates from scratch. The policy defers ONLY when it can
-prove a deferred turn still leaves room to satisfy the requirement before its deadline. That proof
-needs a reliable fan-goal deadline, which Grand Concert does not expose yet
-(`determineTurnsRemainingBeforeNextGoal` stands the OCR down for the scenario and returns -1), so
-the policy currently receives no deadline and always fails safe to racing. Live fan deferral is
-therefore NOT active today: the wiring is in place and tested, but behaviour is unchanged until a
-validated deadline reader supplies the input.
+prove a deferred turn still leaves room to satisfy the requirement before its deadline. The native
+runtime now READS that proof material from committed data: a fan-facts reader (`GrandConcertFanFacts`,
+parsed from the generated `gc_fan_runtime.json` asset) and a pure calculation
+(`GrandConcertFanPressure`) resolve the active trainee, the next fan goal and its deadline, the next
+mandatory-race entry gate, the fan deficit, the raceable calendar slack, and a conservative
+completed-race bound. Those figures are logged every turn, but they are deliberately withheld from the
+policy: the two policy proof inputs stay review-gated to null
+(`GrandConcertFanPressure.reviewGatedPolicyInputs`), so the policy still receives no deadline and
+always fails safe to racing. The goal-deadline OCR (`determineTurnsRemainingBeforeNextGoal`) remains
+stood down for the scenario (it returns -1) and is not consulted. Live fan deferral is therefore NOT
+active today: the reader, the calculation, and the wiring are in place and tested, but behaviour is
+unchanged until the reader is independently reviewed and its figures are wired into the policy.
 
-The data a safe deferral needs is now committed, but the runtime is deliberately still not wired:
+The data a safe deferral needs is committed, and the native runtime now reads and explains it, but the
+policy inputs are deliberately still review-gated:
 
 - **The fan-goal target and deadline.** The GameTora objective manifest carries no fan-count goal,
   but the game's own `master.mdb` does: `single_mode_route` maps a trainee to a route, and
@@ -1456,11 +1463,12 @@ The **raceable-slack calendar** (`GrandConcertRaceCalendar`) is corrected to the
 race-entry legal, Summer (37-40, 61-64) and concert turns included, so the raceable window is
 exactly 12..72. An earlier version wrongly excluded Summer; the game data disproves that. This is
 base race-entry legality, not guaranteed free slack after mandatory actions. The calendar is not yet
-wired into a decision; it feeds `[GC_FAN]` telemetry today. Live fan deferral remains fail-closed
-(the policy still receives null deadline/races-needed and races) until a later task reads the
-committed `fanGoals` at runtime and computes the deficit and races-needed. Data availability does
-not activate runtime behaviour. Each turn the fan question is asked logs a `[GC_FAN]` line with the
-inputs, their provenance, and the decision.
+wired into a decision; `GrandConcertFanPressure` consumes it for the raceable-slack term of the
+`[GC_FAN]` telemetry. Live fan deferral remains fail-closed: the native runtime now reads the
+committed `fanGoals` and mandatory gates and computes the deficit, raceable slack, and a conservative
+race bound, but the policy still receives null deadline/races-needed (review-gated) and races. Data
+availability and readability do not activate runtime behaviour. Each turn the fan question is asked
+logs a `[GC_FAN]` line with the resolved facts, their provenance, and the decision.
 
 **The spend loop.** `spendVisit` is greedy with a stop rule, and every purchase is transactional.
 `attemptLearn` taps the card, reads the confirmation dialog, and commits **only** on

@@ -31,9 +31,10 @@ object GrandConcertFanPolicy {
         FORCE_RACE,
 
         /** Deadline or deficit information is missing or insufficient to PROVE safe deferral, so the
-         * requirement is raced now. This is the current Grand Concert reality - the goal-deadline
-         * indicator is deliberately stood down for the scenario - and it is what preserves the
-         * historical force-race behaviour until a live-validated deadline reader supplies the input. */
+         * requirement is raced now. For Grand Concert the factual inputs can now be READ from committed
+         * data ([GrandConcertFanFacts] / [GrandConcertFanPressure]), but the production caller keeps
+         * passing null here on purpose: those inputs stay review-gated until the reader/calculation is
+         * independently reviewed, so this preserves the historical force-race behaviour until then. */
         FAIL_SAFE_FORCE_RACE,
     }
 
