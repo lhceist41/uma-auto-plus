@@ -6,7 +6,7 @@
     "skillsSchemaVersion": 1,
     "racesSchemaVersion": 1
   },
-  "fingerprint": "d04d8a30fcadb4e33eb42275c178dca1d95120af14ca47069e58abe03c996665",
+  "fingerprint": "aa90c0c0af00ab6b3e26dd184c841dfbc1362fef05fb9a89e05f6bef069b0a59",
   "knownProvenance": {
     "generator": "scripts/data-scraper",
     "recordedSourceVersion": null,
@@ -17,7 +17,7 @@
     {
       "family": "objectives",
       "path": "src/data/character_objectives.json",
-      "sha256": "ac948ac35115900a6904748a5ec165347cbd6340e3768c0c274644ef940de3aa",
+      "sha256": "845bab1b94d04320f65688e258796b4943f4061ec74fe084e77b749997203ac3",
       "recordCount": 63,
       "provenance": {
         "origin": "data-scraper",
@@ -37,7 +37,7 @@
     {
       "family": "races",
       "path": "src/data/races.json",
-      "sha256": "5d3c70282b960b49c75c85ba85dd25d0c0e5afbfa1b0cff6a802a26a1f00f13c",
+      "sha256": "878fbabf26d570d9cb938d718d493dc80989e75f2b3ab2282fa595a0f2b2e2c5",
       "recordCount": 402,
       "provenance": {
         "origin": "data-scraper",
@@ -78,7 +78,7 @@
   "compiled": [
     {
       "path": "src/data/compiled/races.json",
-      "sha256": "c617cbd7938c76657c3c3b9d94cc30f52de7df00d40c532a91b40124093079f7",
+      "sha256": "6415ceac1f9c8836715041e4de893af39e2661a2299f825598827878e4d91809",
       "recordCount": 402
     },
     {

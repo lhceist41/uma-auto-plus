@@ -1411,42 +1411,42 @@ the policy currently receives no deadline and always fails safe to racing. Live 
 therefore NOT active today: the wiring is in place and tested, but behaviour is unchanged until a
 validated deadline reader supplies the input.
 
-The three inputs a safe deferral needs each have a known status:
+The data a safe deferral needs is now committed, but the runtime is deliberately still not wired:
 
-- **The fan-goal deadline.** The GameTora objective manifest the scraper uses carries no fan-count
-  goal (only race-placement objectives), but the game's own `master.mdb` does: `single_mode_route`
-  maps a trainee to a route, and `single_mode_route_race` rows with `condition_type = 3` are
-  fan-count goals whose `condition_value_1` is the fan target and `turn` is the deadline. This is a
-  character route goal shared across scenarios (scenario_group 100 covers URA, Unity Cup, and Grand
-  Concert), so Grand Concert inherits it rather than defining its own. For Copano Rickey the row is
-  3000 fans by turn 24, which reconstructs the observed "Earn 3000 fans / 12 Turns to Reach Goal"
-  exactly (turn 24 minus the debut turn 12). The deadline is thus a per-character turn (23/24/25
-  across characters), NOT a value derived from the concert schedule, so it aligns with the first
-  concert for Copano only by coincidence. The remaining gap is delivery: `master.mdb` is a local
-  developer file, not shipped data, so a future task must bring these rows into the pipeline.
-- **Conservative races-needed.** The scraper and compiler now preserve the full placement-to-fans
-  payout curve (`fanPayoutsByPlace`, an order-sorted `{place, fans}` list) alongside the scalar
-  first-place `fans`, so a later model can read the payout for any finishing position instead of
-  assuming a win. Every listed placement pays positive fans with no zero/DNF rows. What is NOT yet
-  proven is that the worst listed placement is a guaranteed lower bound: most curves list to place
-  18 or 20 but a few list only to 14, and confirming the field never exceeds the listed places
-  needs field-size data not in this manifest. So the curve is preserved but the safe lower bound is
-  unproven, and races-needed stays unknown until that is settled. (The bulk raw-data refresh that
-  writes the new field onto every existing race is a clean follow-up; the current committed data is
-  unchanged.)
+- **The fan-goal target and deadline.** The GameTora objective manifest carries no fan-count goal,
+  but the game's own `master.mdb` does: `single_mode_route` maps a trainee to a route, and
+  `single_mode_route_race` rows with `condition_type = 3` are fan-count goals whose
+  `condition_value_1` is the fan target and `turn` is the deadline turn. A checked-in extractor
+  (`scripts/extract-master-route-data.mjs`, read-only, deterministic, testable against a synthetic
+  fixture) reads these and enriches each character in `character_objectives.json` with a `fanGoals`
+  array. Grand-Concert applicability is decided by scenario-group membership: a goal applies iff its
+  `single_mode_scenario_group` contains scenario id 3 (never a hardcoded group number). For Copano
+  Rickey that is 3000 fans by turn 24, reconstructing the observed "Earn 3000 fans / 12 Turns to
+  Reach Goal" exactly (turn 24 minus the debut turn 12). The deadline is a per-character turn
+  (23-48 across the roster), NOT derived from the concert schedule, so its alignment with the first
+  concert for Copano is a coincidence. The data ships; only the runtime wiring remains a later task.
+- **Conservative races-needed.** Every committed race now carries the full placement-to-fans payout
+  curve (`fanPayoutsByPlace`, an order-sorted `{place, fans}` list) alongside the scalar first-place
+  `fans`. Because every committed race lists all 18 finishing places and the game's maximum field
+  size (`race.entry_num`) is 18, the minimum payout in a race's own curve is a proven conservative
+  floor for a completed race (the worst finish it can produce is covered by the curve); the global
+  minimum across the committed data is 7 fans. A tighter per-race floor would need each race's exact
+  field size, which is not mappable from the current manifests (`race.entry_num` lives in
+  `master.mdb` under a race-id namespace the GameTora races do not share), but it is unnecessary for
+  the committed data. The race-entry fan GATE for later mandatory races (`single_mode_program.
+  need_fan_count`, a distinct concept from a fan-count goal's target) is also not yet ingested for
+  the same id-mapping reason; both are deferred and neither blocks the conservative floor above.
 
-The third input, raceable slack, IS provable and is implemented as `GrandConcertRaceCalendar`: a
-pure model of which turns can host a fan-earning race, excluding the pre-debut window, Summer camp
-(turns 37-40 and 61-64), and the finale season, and counting concert turns as ordinary raceable
-turns (a concert does not consume the turn; whether the voluntary extra-race menu is specifically
-enterable on a concert turn is not yet proven, though mandatory races do land on them). It answers
-"how many real race opportunities lie between two turns", the term a naive turn count gets wrong. It
-is not yet wired into the decision because the deadline it would be measured against is not yet in
-the pipeline; today it only feeds `[GC_FAN]` telemetry as a factual `raceableToNextConcert`
-reference. Activating deferral needs a future task to bring the `master.mdb` fan-goal rows into the
-data pipeline and to settle the conservative races-needed lower bound.
-Each turn the fan question is asked logs a `[GC_FAN]` line with the inputs, their provenance, and
-the decision.
+The **raceable-slack calendar** (`GrandConcertRaceCalendar`) is corrected to the game's own
+`single_mode_turn.race_entry_type` for the Grand Concert turn set: every career turn 12..72 is
+race-entry legal, Summer (37-40, 61-64) and concert turns included, so the raceable window is
+exactly 12..72. An earlier version wrongly excluded Summer; the game data disproves that. This is
+base race-entry legality, not guaranteed free slack after mandatory actions. The calendar is not yet
+wired into a decision; it feeds `[GC_FAN]` telemetry today. Live fan deferral remains fail-closed
+(the policy still receives null deadline/races-needed and races) until a later task reads the
+committed `fanGoals` at runtime and computes the deficit and races-needed. Data availability does
+not activate runtime behaviour. Each turn the fan question is asked logs a `[GC_FAN]` line with the
+inputs, their provenance, and the decision.
 
 **The spend loop.** `spendVisit` is greedy with a stop rule, and every purchase is transactional.
 `attemptLearn` taps the card, reads the confirmation dialog, and commits **only** on

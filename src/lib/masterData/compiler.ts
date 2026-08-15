@@ -441,6 +441,21 @@ function validateObjectives(raw: Record<string, unknown>, raceKeySet: Set<string
             errors.push({ code: "objectiveNotObject", detail: `objective "${char}" is not an object` })
             continue
         }
+        // Optional fan-count route goals extracted from master.mdb (target fans by a deadline turn).
+        // Validated for shape here; not compiled into an artifact, but the raw layer carries them.
+        const fanGoals = obj.fanGoals
+        if (fanGoals !== undefined) {
+            const bad =
+                !Array.isArray(fanGoals) ||
+                fanGoals.some((g) => {
+                    if (!isObject(g)) return true
+                    const { turn, targetFans, scenarioGroupId, appliesToScenarioIds } = g
+                    if (!isInt(turn) || !isInt(targetFans) || !isInt(scenarioGroupId)) return true
+                    if (turn < 1 || targetFans <= 0) return true
+                    return !Array.isArray(appliesToScenarioIds) || appliesToScenarioIds.some((s) => !isInt(s))
+                })
+            if (bad) errors.push({ code: "objectiveFanGoalMalformed", detail: `objective "${char}" has a malformed fanGoals entry` })
+        }
         const mrs = obj.mandatoryRaces
         if (mrs === undefined) continue // a character with no mandatory races is valid.
         if (!Array.isArray(mrs)) {

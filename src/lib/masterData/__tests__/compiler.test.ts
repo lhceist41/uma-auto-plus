@@ -112,6 +112,36 @@ describe("compileMasterData - race fan payout curve", () => {
     })
 })
 
+// ---- Objective fan goals (master-route data) ----
+
+describe("compileMasterData - objective fan goals", () => {
+    const withFanGoals = (fanGoals: unknown) => ({
+        C1: { name: "C1", mandatoryRaces: [{ turn: 10, isChoice: false, options: [{ raceName: "Marine Cup" }] }], fanGoals },
+    })
+
+    it("accepts a well-formed fanGoals array", () => {
+        const r = compileMasterData(six({ objectives: withFanGoals([{ turn: 24, targetFans: 3000, scenarioGroupId: 100, appliesToScenarioIds: [1, 2, 3, 4] }]) }))
+        expect(r.ok).toBe(true)
+    })
+
+    it("rejects a malformed fan goal (non-positive target) as a hard error", () => {
+        const r = compileMasterData(six({ objectives: withFanGoals([{ turn: 24, targetFans: 0, scenarioGroupId: 100, appliesToScenarioIds: [3] }]) }))
+        expect(r.ok).toBe(false)
+        expect(r.errors.map((e) => e.code)).toContain("objectiveFanGoalMalformed")
+    })
+
+    it("rejects a non-array fanGoals field as a hard error", () => {
+        const r = compileMasterData(six({ objectives: withFanGoals("nope") }))
+        expect(r.ok).toBe(false)
+        expect(r.errors.map((e) => e.code)).toContain("objectiveFanGoalMalformed")
+    })
+
+    it("a character with no fanGoals still compiles (backwards-compatible)", () => {
+        const r = compileMasterData(six())
+        expect(r.ok).toBe(true)
+    })
+})
+
 // ---- Part U: synthetic negative tests ----
 
 describe("compileMasterData - hard errors (no artifact written)", () => {

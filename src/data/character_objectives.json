@@ -599,6 +599,30 @@
                     }
                 ]
             }
+        ],
+        "fanGoals": [
+            {
+                "turn": 24,
+                "targetFans": 3000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            },
+            {
+                "turn": 29,
+                "targetFans": 6000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            }
         ]
     },
     "Biwa Hayahide": {
@@ -824,6 +848,19 @@
                     }
                 ]
             }
+        ],
+        "fanGoals": [
+            {
+                "turn": 24,
+                "targetFans": 3000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            }
         ]
     },
     "Curren Chan": {
@@ -918,6 +955,19 @@
                         "distanceType": "Sprint",
                         "fans": 13000
                     }
+                ]
+            }
+        ],
+        "fanGoals": [
+            {
+                "turn": 23,
+                "targetFans": 3000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
                 ]
             }
         ]
@@ -1400,6 +1450,19 @@
                         "distanceType": "Long",
                         "fans": 30000
                     }
+                ]
+            }
+        ],
+        "fanGoals": [
+            {
+                "turn": 24,
+                "targetFans": 3000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
                 ]
             }
         ]
@@ -1947,6 +2010,41 @@
                     }
                 ]
             }
+        ],
+        "fanGoals": [
+            {
+                "turn": 37,
+                "targetFans": 5000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            },
+            {
+                "turn": 45,
+                "targetFans": 9000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            },
+            {
+                "turn": 48,
+                "targetFans": 12000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            }
         ]
     },
     "Hishi Akebono": {
@@ -2041,6 +2139,30 @@
                         "distanceType": "Mile",
                         "fans": 11000
                     }
+                ]
+            }
+        ],
+        "fanGoals": [
+            {
+                "turn": 23,
+                "targetFans": 3000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            },
+            {
+                "turn": 37,
+                "targetFans": 10000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
                 ]
             }
         ]
@@ -2261,6 +2383,19 @@
                     }
                 ]
             }
+        ],
+        "fanGoals": [
+            {
+                "turn": 24,
+                "targetFans": 3000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            }
         ]
     },
     "Ines Fujin": {
@@ -2477,6 +2612,19 @@
                         "distanceType": "Medium",
                         "fans": 10500
                     }
+                ]
+            }
+        ],
+        "fanGoals": [
+            {
+                "turn": 31,
+                "targetFans": 7000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
                 ]
             }
         ]
@@ -2710,6 +2858,19 @@
                     }
                 ]
             }
+        ],
+        "fanGoals": [
+            {
+                "turn": 30,
+                "targetFans": 5000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            }
         ]
     },
     "Manhattan Cafe": {
@@ -2817,6 +2978,19 @@
                         "distanceType": "Long",
                         "fans": 30000
                     }
+                ]
+            }
+        ],
+        "fanGoals": [
+            {
+                "turn": 26,
+                "targetFans": 4000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
                 ]
             }
         ]
@@ -3275,6 +3449,19 @@
                     }
                 ]
             }
+        ],
+        "fanGoals": [
+            {
+                "turn": 37,
+                "targetFans": 10000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            }
         ]
     },
     "Meisho Doto": {
@@ -3356,6 +3543,30 @@
                         "distanceType": "Long",
                         "fans": 30000
                     }
+                ]
+            }
+        ],
+        "fanGoals": [
+            {
+                "turn": 31,
+                "targetFans": 6000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            },
+            {
+                "turn": 44,
+                "targetFans": 15000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
                 ]
             }
         ]
@@ -3459,6 +3670,19 @@
                         "distanceType": "Medium",
                         "fans": 15000
                     }
+                ]
+            }
+        ],
+        "fanGoals": [
+            {
+                "turn": 30,
+                "targetFans": 6000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
                 ]
             }
         ]
@@ -3762,6 +3986,19 @@
                     }
                 ]
             }
+        ],
+        "fanGoals": [
+            {
+                "turn": 24,
+                "targetFans": 3000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            }
         ]
     },
     "Mejiro Palmer": {
@@ -3843,6 +4080,19 @@
                         "distanceType": "Long",
                         "fans": 30000
                     }
+                ]
+            }
+        ],
+        "fanGoals": [
+            {
+                "turn": 35,
+                "targetFans": 9000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
                 ]
             }
         ]
@@ -4595,6 +4845,19 @@
                     }
                 ]
             }
+        ],
+        "fanGoals": [
+            {
+                "turn": 24,
+                "targetFans": 3000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            }
         ]
     },
     "Rice Shower": {
@@ -5166,6 +5429,19 @@
                     }
                 ]
             }
+        ],
+        "fanGoals": [
+            {
+                "turn": 25,
+                "targetFans": 3000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            }
         ]
     },
     "Silence Suzuka": {
@@ -5247,6 +5523,19 @@
                         "distanceType": "Medium",
                         "fans": 15000
                     }
+                ]
+            }
+        ],
+        "fanGoals": [
+            {
+                "turn": 27,
+                "targetFans": 5000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
                 ]
             }
         ]
@@ -5877,6 +6166,19 @@
                     }
                 ]
             }
+        ],
+        "fanGoals": [
+            {
+                "turn": 28,
+                "targetFans": 5000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
+                ]
+            }
         ]
     },
     "Taiki Shuttle": {
@@ -6041,6 +6343,19 @@
                         "distanceType": "Long",
                         "fans": 30000
                     }
+                ]
+            }
+        ],
+        "fanGoals": [
+            {
+                "turn": 29,
+                "targetFans": 5000,
+                "scenarioGroupId": 100,
+                "appliesToScenarioIds": [
+                    1,
+                    2,
+                    3,
+                    4
                 ]
             }
         ]
