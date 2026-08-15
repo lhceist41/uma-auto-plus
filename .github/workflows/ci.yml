@@ -31,6 +31,14 @@ jobs:
       - name: Jest
         run: yarn jest --ci
 
+      # Proves the checked-in Grand Concert fan-runtime asset is regenerated whenever its root data
+      # changes. Narrow by design: only this generator's test runs here (it uses node:test + node:fs
+      # and is Node 20 compatible), NOT a scripts/*.test.mjs glob that would pull in node:sqlite tooling.
+      - name: Grand Concert fan-runtime asset freshness
+        run: |
+          node --test scripts/generate-gc-fan-runtime-data.test.mjs
+          node scripts/generate-gc-fan-runtime-data.mjs --check
+
   android:
     name: Kotlin unit tests
     runs-on: ubuntu-latest

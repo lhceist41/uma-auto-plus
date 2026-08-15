@@ -139,6 +139,10 @@ class GrandConcertFanFacts private constructor(
                                     val option = optionsArray.getJSONObject(j)
                                     GrandConcertGateOption(option.getString("raceName"), option.getInt("fansNeeded"))
                                 }
+                            // A gate with no options is malformed: minFansNeeded/maxFansNeeded would throw
+                            // in the pressure calculation. Fail the whole parse closed to null (UNKNOWN)
+                            // rather than let an empty list reach minOf/maxOf. The generator never emits one.
+                            check(options.isNotEmpty()) { "mandatory gate at turn ${gate.getInt("turn")} has no options" }
                             GrandConcertMandatoryGate(gate.getInt("turn"), gate.getBoolean("isChoice"), options)
                         }
                     byName[name] = GrandConcertCharacterFanFacts(goals, gates)

@@ -1405,20 +1405,33 @@ training; if so, a turn-local flag (`ignoreFanRequirement`) suppresses only the 
 later extra-race eligibility gate, while trophy, goal-points, forced, and any independent race
 reason still race, and the next turn re-evaluates from scratch. The policy defers ONLY when it can
 prove a deferred turn still leaves room to satisfy the requirement before its deadline. The native
-runtime now READS that proof material from committed data: a fan-facts reader (`GrandConcertFanFacts`,
+runtime READS that proof material from committed data: a fan-facts reader (`GrandConcertFanFacts`,
 parsed from the generated `gc_fan_runtime.json` asset) and a pure calculation
 (`GrandConcertFanPressure`) resolve the active trainee, the next fan goal and its deadline, the next
-mandatory-race entry gate, the fan deficit, the raceable calendar slack, and a conservative
-completed-race bound. Those figures are logged every turn, but they are deliberately withheld from the
-policy: the two policy proof inputs stay review-gated to null
+mandatory-race entry gate, the fan deficit, the future race slots if training now, and a conservative
+completed-race bound. That reader is reviewed and its calendar windows are corrected: the race-slot
+count for a mandatory gate now ends at the turn BEFORE the gated race, because the gated race cannot
+earn the fans needed to enter itself, while a fan goal's deadline turn is currently counted as usable
+-- an empirical assumption that a future activation must prove against the game's check timing, or
+conservatively drop. Those figures are
+logged every turn, but the two policy proof inputs stay null
 (`GrandConcertFanPressure.reviewGatedPolicyInputs`), so the policy still receives no deadline and
 always fails safe to racing. The goal-deadline OCR (`determineTurnsRemainingBeforeNextGoal`) remains
 stood down for the scenario (it returns -1) and is not consulted. Live fan deferral is therefore NOT
-active today: the reader, the calculation, and the wiring are in place and tested, but behaviour is
-unchanged until the reader is independently reviewed and its figures are wired into the policy.
+active today, and not merely for want of review. The blocking gap is evidence: no authoritative data
+proves a deferral that is both safe and useful. Single-mode career fans come only from races (the
+payout curves); the Grand Concert concerts award songs, performance points, and master bonuses, but
+NO fans (the concert tables in `master.mdb` carry no fan reward), so there is no guaranteed non-race
+credit that could shrink a deficit while the bot trains. Per-race payout-curve minima are stronger
+guaranteed bounds than the global `ceil(deficit / universal-floor)` figure, but they do not rescue a
+deferral: even choosing the best guaranteed-minimum race on every available Junior turn yields only
+about 398 guaranteed fans against Copano's 3000-fan target. So no useful fail-closed deferral proof
+exists for the original over-racing failure. A bound strong enough would require a per-race
+expected-reward model, i.e. race-choice planning, which is out of scope, so the seam stays null until
+a guaranteed-fan or per-race conservative-reward data foundation exists.
 
-The data a safe deferral needs is committed, and the native runtime now reads and explains it, but the
-policy inputs are deliberately still review-gated:
+The data a safe deferral needs is only partly committed, and the native runtime reads and explains
+what exists, but the policy inputs are deliberately still null:
 
 - **The fan-goal target and deadline.** The GameTora objective manifest carries no fan-count goal,
   but the game's own `master.mdb` does: `single_mode_route` maps a trainee to a route, and
@@ -1463,12 +1476,17 @@ The **raceable-slack calendar** (`GrandConcertRaceCalendar`) is corrected to the
 race-entry legal, Summer (37-40, 61-64) and concert turns included, so the raceable window is
 exactly 12..72. An earlier version wrongly excluded Summer; the game data disproves that. This is
 base race-entry legality, not guaranteed free slack after mandatory actions. The calendar is not yet
-wired into a decision; `GrandConcertFanPressure` consumes it for the raceable-slack term of the
-`[GC_FAN]` telemetry. Live fan deferral remains fail-closed: the native runtime now reads the
-committed `fanGoals` and mandatory gates and computes the deficit, raceable slack, and a conservative
-race bound, but the policy still receives null deadline/races-needed (review-gated) and races. Data
-availability and readability do not activate runtime behaviour. Each turn the fan question is asked
-logs a `[GC_FAN]` line with the resolved facts, their provenance, and the decision.
+wired into a decision; `GrandConcertFanPressure` consumes it for the future-race-slot term of the
+`[GC_FAN]` telemetry, applying the type-specific window (a fan-goal deadline turn is counted, a
+mandatory-gate turn is not). Live fan deferral remains fail-closed: the native runtime reads the
+committed `fanGoals` and mandatory gates and computes the deficit, future race slots, and a
+conservative race bound, but the policy still receives null deadline/races-needed and races, because
+no authoritative data proves a useful safe deferral (concerts award no fans, and even the stronger
+per-race guaranteed minima fall far short of the target). Data availability and readability do not
+activate runtime behaviour. Each turn
+the fan question is asked logs a `[GC_FAN]` line with the resolved facts, their provenance, and the
+decision. The generated `gc_fan_runtime.json` asset is guarded in CI: a root-data change that is not
+regenerated fails the build.
 
 **The spend loop.** `spendVisit` is greedy with a stop rule, and every purchase is transactional.
 `attemptLearn` taps the card, reads the confirmation dialog, and commits **only** on

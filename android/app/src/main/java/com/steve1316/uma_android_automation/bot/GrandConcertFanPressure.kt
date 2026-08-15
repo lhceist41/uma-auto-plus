@@ -6,10 +6,19 @@ package com.steve1316.uma_android_automation.bot
  * formats the [GC_FAN] telemetry line. It reads no pixels, mutates no runtime state, and makes no
  * defer/force decision.
  *
- * Crucially, the production policy inputs it exposes are deliberately review-gated to null (see
- * [reviewGatedPolicyInputs]). The factual snapshot may carry an exact deadline, deficit, calendar
- * slack, and a conservative race bound, but none of them is fed to [GrandConcertFanPolicy] until the
- * reader/calculation is independently reviewed, so production fan deferral stays fail-closed.
+ * Crucially, the production policy inputs it exposes are deliberately held to null (see
+ * [reviewGatedPolicyInputs]). The factual snapshot carries an exact deadline, deficit, calendar slack
+ * (measured with the correct type-specific window), and a universal-floor race bound, but none is fed
+ * to [GrandConcertFanPolicy], so production fan deferral stays fail-closed. The reason the seam stays
+ * null is not that the facts are unread: it is that no authoritative guaranteed non-race fan source
+ * exists to make a deferral safe AND useful. Single-mode career fans come only from races (the payout
+ * curves); Grand Concert concerts award songs, performance points, and master bonuses, not fans (the
+ * concert tables carry no fan reward). Per-race payout-curve minima are stronger guaranteed bounds
+ * than the global [Snapshot.guaranteedRacesUpperBound] = ceil(deficit / universal-floor), but they do
+ * not rescue a defer: even the best guaranteed-minimum race on every available Junior turn totals only
+ * about 398 guaranteed fans against a 3000-fan target. A bound strong enough would require a per-race
+ * expected-reward model, i.e. race-choice planning, which is out of scope. So the seam stays null until
+ * a guaranteed-fan or per-race conservative-reward data foundation exists.
  */
 object GrandConcertFanPressure {
     /** Where a requirement's turn sits relative to the current turn (or that there is none). */
@@ -49,24 +58,37 @@ object GrandConcertFanPressure {
         val effectiveTurn: Int?,
         val effectiveExact: Boolean,
         val bothSameTurn: Boolean,
-        // Derived, only when the effective requirement has an exact target.
+        // Derived. [futureRaceOpportunitiesIfTrainNow] and [turnsUntilRequirement] are calendar facts
+        // present whenever an effective requirement turn exists; [deficit] and
+        // [guaranteedRacesUpperBound] need an exact target.
         val deficit: Int?,
         val turnsUntilRequirement: Int?,
-        val raceableOpportunities: Int?,
+        // Base race-entry-legal future turns available AFTER choosing TRAIN on the current turn and
+        // before the effective requirement must already be met. The current turn is excluded (its
+        // action becomes training); a fan-goal deadline turn is itself included (an empirical
+        // assumption, not yet proven against the game's check timing), but a mandatory-gate turn is
+        // excluded because the gated race cannot earn the fans needed to enter itself. Base legality,
+        // not guaranteed-free slots: mandatory actions may consume some.
+        val futureRaceOpportunitiesIfTrainNow: Int?,
         val guaranteedRacesUpperBound: Int?,
     )
 
     /**
-     * The two policy proof inputs, held separately from the factual snapshot so the review gate is a
-     * single obvious seam. Both are null today.
+     * The two policy proof inputs, held separately from the factual snapshot so the gate is a single
+     * obvious seam. Both are null today.
      */
     data class ReviewGatedPolicyInputs(val turnsUntilDeadline: Int?, val racesStillNeeded: Int?)
 
     /**
      * Returns the policy inputs the production deferral path may use. Deliberately null regardless of
-     * how complete [snapshot] is: the factual reader is not yet reviewed, so production stays fail-
-     * closed. Only an explicit review may replace this with snapshot-derived values; until then a
-     * real fan requirement resolves exactly as it did before this reader existed.
+     * how complete [snapshot] is. The reader itself is reviewed and its calendar windows are corrected,
+     * but the seam stays null because no authoritative data proves a deferral that is both safe and
+     * useful: there is no guaranteed non-race fan source (concerts award no fans), and the conservative
+     * race bounds available (the universal floor, and the stronger per-race curve minima) are still far
+     * too weak to ever permit a defer -- the best guaranteed-minimum race every Junior turn totals only
+     * about 398 fans against a 3000-fan target. Wiring a non-null value here needs a guaranteed-fan or
+     * per-race conservative-reward data foundation that does not yet exist. Until then a real fan
+     * requirement resolves exactly as it did before.
      */
     @Suppress("UNUSED_PARAMETER")
     fun reviewGatedPolicyInputs(snapshot: Snapshot): ReviewGatedPolicyInputs = ReviewGatedPolicyInputs(null, null)
@@ -120,7 +142,7 @@ object GrandConcertFanPressure {
             bothSameTurn = false,
             deficit = null,
             turnsUntilRequirement = null,
-            raceableOpportunities = null,
+            futureRaceOpportunitiesIfTrainNow = null,
             guaranteedRacesUpperBound = null,
         )
 
@@ -173,15 +195,25 @@ object GrandConcertFanPressure {
             null -> Unit
         }
 
-        // Derived values are computed only when the effective requirement carries an exact target.
-        var deficit: Int? = null
+        // Calendar-fact derivations: present whenever an effective requirement turn exists (both an
+        // exact goal/gate and an ambiguous choice gate carry a turn). The race-slot window is
+        // type-specific: a fan goal's deadline turn is counted as usable (an empirical assumption, not
+        // yet proven), but a mandatory-gate turn is the gated race itself and cannot earn its own entry
+        // fans, so its window ends at turn - 1. Both windows
+        // exclude the current turn (its action becomes TRAIN), so the count is exactly the opportunities
+        // remaining after choosing to train now; raceableTurnsBetween returns 0 for an inverted window.
         var turnsUntilRequirement: Int? = null
-        var raceableOpportunities: Int? = null
-        var guaranteedRacesUpperBound: Int? = null
-        if (effectiveExact && effectiveTarget != null && effectiveTurn != null) {
-            deficit = (effectiveTarget - currentFans).coerceAtLeast(0)
+        var futureRaceOpportunitiesIfTrainNow: Int? = null
+        if (effectiveTurn != null) {
             turnsUntilRequirement = effectiveTurn - currentTurn
-            raceableOpportunities = GrandConcertRaceCalendar.raceableTurnsBetween(currentTurn, effectiveTurn)
+            val windowEnd = if (effectiveType == RequirementType.MANDATORY_GATE) effectiveTurn - 1 else effectiveTurn
+            futureRaceOpportunitiesIfTrainNow = GrandConcertRaceCalendar.raceableTurnsBetween(currentTurn, windowEnd)
+        }
+        // Deficit and the universal-floor race bound need an exact target.
+        var deficit: Int? = null
+        var guaranteedRacesUpperBound: Int? = null
+        if (effectiveExact && effectiveTarget != null) {
+            deficit = (effectiveTarget - currentFans).coerceAtLeast(0)
             guaranteedRacesUpperBound = if (deficit > 0 && floor > 0) ceilDiv(deficit, floor) else 0
         }
 
@@ -214,7 +246,7 @@ object GrandConcertFanPressure {
             bothSameTurn = bothSameTurn,
             deficit = deficit,
             turnsUntilRequirement = turnsUntilRequirement,
-            raceableOpportunities = raceableOpportunities,
+            futureRaceOpportunitiesIfTrainNow = futureRaceOpportunitiesIfTrainNow,
             guaranteedRacesUpperBound = guaranteedRacesUpperBound,
         )
     }
@@ -276,10 +308,10 @@ object GrandConcertFanPressure {
             "match=${snapshot.matchStatus}$nameTag reason=${snapshot.reason} " +
             "goal=$goal gate=$gate bothSameTurn=${snapshot.bothSameTurn} " +
             "eff=$effective deficit=${snapshot.deficit ?: "unknown"} " +
-            "raceableToReq=${snapshot.raceableOpportunities ?: "unknown"} floor=${snapshot.universalFloor} " +
+            "futureRaceSlotsIfTrainNow=${snapshot.futureRaceOpportunitiesIfTrainNow ?: "unknown"} floor=${snapshot.universalFloor} " +
             "guaranteedRacesUB=${snapshot.guaranteedRacesUpperBound ?: "unknown"} " +
             "concertBehindPace=$concertBehindPace " +
-            "policyDeadline=${policyInputs.turnsUntilDeadline ?: "review-gated"} " +
-            "policyRacesNeeded=${policyInputs.racesStillNeeded ?: "review-gated"} decision=$decision"
+            "policyDeadline=${policyInputs.turnsUntilDeadline ?: "gated"} " +
+            "policyRacesNeeded=${policyInputs.racesStillNeeded ?: "gated"} decision=$decision"
     }
 }

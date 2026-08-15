@@ -673,15 +673,21 @@ class GrandConcert(game: Game) : Campaign(game) {
      * prove enough schedule slack, because Grand Concert makes its performance points only by
      * training and the concerts supply most of the fans anyway.
      *
-     * Fail-closed by construction, and deliberately so even now that the facts exist. The committed
-     * data ([GrandConcertFanFacts]) does carry the fan target/deadline, the mandatory-race entry
-     * gates, and a universal payout floor, and [GrandConcertFanPressure] turns them into an exact
-     * factual snapshot (deficit, calendar slack, a conservative race bound). But the two policy proof
-     * inputs stay review-gated to null via [GrandConcertFanPressure.reviewGatedPolicyInputs] until
-     * that reader/calculation is independently reviewed, so the policy still resolves to a fail-safe
-     * race. The [GC_FAN] line records the full snapshot and the decision every turn the question is
-     * asked - the telemetry a review needs before any activation. Only the fan arm is eligible; a
-     * trophy or goal-points requirement always races. The goal-deadline OCR
+     * Fail-closed by construction, and deliberately so even though the reader is reviewed and its
+     * calendar windows are corrected (a mandatory-gate turn no longer counts as its own race slot).
+     * The committed data ([GrandConcertFanFacts]) carries the fan target/deadline, the mandatory-race
+     * entry gates, and a universal payout floor, and [GrandConcertFanPressure] turns them into an exact
+     * factual snapshot. But the two policy proof inputs stay null via
+     * [GrandConcertFanPressure.reviewGatedPolicyInputs], so the policy still resolves to a fail-safe
+     * race. The reason is not that the facts are unread: no authoritative data proves a deferral that
+     * is both safe and useful. Single-mode fans come only from races; Grand Concert concerts award no
+     * fans, so there is no guaranteed non-race credit to shrink a deficit, and the conservative race
+     * bounds available (the universal floor and the stronger per-race curve minima) are far too weak to
+     * ever permit a defer -- the best guaranteed-minimum race every Junior turn totals only about 398
+     * fans against a 3000-fan target. Activation needs a guaranteed-fan or per-race conservative-reward
+     * data foundation that does not yet exist.
+     * The [GC_FAN] line records the full corrected snapshot and the decision every turn. Only the fan
+     * arm is eligible; a trophy or goal-points requirement always races. The goal-deadline OCR
      * ([com.steve1316.uma_android_automation.utils.CustomImageUtils.determineTurnsRemainingBeforeNextGoal])
      * remains stood down for this scenario and is not consulted here.
      */

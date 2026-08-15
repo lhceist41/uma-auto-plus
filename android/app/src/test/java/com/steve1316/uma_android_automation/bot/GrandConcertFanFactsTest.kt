@@ -58,7 +58,15 @@ class GrandConcertFanFactsTest {
               ]
             },
             "TM Opera O": { "fanGoals": [{ "turn": 20, "targetFans": 2000 }], "mandatoryRaces": [] },
-            "T.M. Opera O": { "fanGoals": [{ "turn": 20, "targetFans": 2000 }], "mandatoryRaces": [] }
+            "T.M. Opera O": { "fanGoals": [{ "turn": 20, "targetFans": 2000 }], "mandatoryRaces": [] },
+            "Gate 24": {
+              "fanGoals": [],
+              "mandatoryRaces": [{ "turn": 24, "isChoice": false, "options": [{ "raceName": "Z", "fansNeeded": 99999 }] }]
+            },
+            "Tie Char": {
+              "fanGoals": [{ "turn": 40, "targetFans": 8000 }],
+              "mandatoryRaces": [{ "turn": 40, "isChoice": false, "options": [{ "raceName": "Y", "fansNeeded": 5000 }] }]
+            }
           }
         }
         """.trimIndent()
@@ -75,6 +83,19 @@ class GrandConcertFanFactsTest {
         assertNull(GrandConcertFanFacts.parse("not json"))
         assertNull(GrandConcertFanFacts.parse("""{ "schemaVersion": 999, "universalCompletedRaceFanFloor": 7, "characters": {} }"""))
         assertNull(GrandConcertFanFacts.parse("""{ "schemaVersion": 1, "universalCompletedRaceFanFloor": 0, "characters": {} }"""))
+    }
+
+    @Test
+    @DisplayName("a gate with empty or malformed options fails the whole parse closed to null, never reaching minOf/maxOf")
+    fun parseFailsClosedOnBadGate() {
+        val emptyOptions =
+            """{ "schemaVersion": 1, "universalCompletedRaceFanFloor": 7, "characters": {
+                "X": { "fanGoals": [], "mandatoryRaces": [{ "turn": 24, "isChoice": false, "options": [] }] } } }"""
+        assertNull(GrandConcertFanFacts.parse(emptyOptions))
+        val missingFansNeeded =
+            """{ "schemaVersion": 1, "universalCompletedRaceFanFloor": 7, "characters": {
+                "X": { "fanGoals": [], "mandatoryRaces": [{ "turn": 24, "isChoice": false, "options": [{ "raceName": "R" }] }] } } }"""
+        assertNull(GrandConcertFanFacts.parse(missingFansNeeded))
     }
 
     // ---- identity ----
@@ -192,8 +213,8 @@ class GrandConcertFanFactsTest {
         assertEquals(24, s.effectiveTurn)
         assertEquals(900, s.deficit)
         assertEquals(9, s.turnsUntilRequirement)
-        // Calendar slack is exclusive of the current turn, inclusive of the requirement turn: 16..24.
-        assertEquals(9, s.raceableOpportunities)
+        // A fan goal's deadline turn is usable, so the window is (15, 24] = 16..24 = 9 slots.
+        assertEquals(9, s.futureRaceOpportunitiesIfTrainNow)
         assertEquals(7, s.universalFloor)
         // Conservative upper bound: ceil(900 / 7) = 129 completed races guarantee the deficit.
         assertEquals(129, s.guaranteedRacesUpperBound)
@@ -219,11 +240,57 @@ class GrandConcertFanFactsTest {
     }
 
     @Test
-    @DisplayName("a differing-threshold gate contributes a min/max range but no guaranteed-races bound")
+    @DisplayName("a differing-threshold gate has no exact-target bound but still a factual gate-window slot count")
     fun ambiguousGateNoBound() {
         val s = snapshot("Choice Char", turn = 20, fans = 500)
-        assertNull(s.guaranteedRacesUpperBound)
-        assertNull(s.raceableOpportunities)
+        assertNull(s.guaranteedRacesUpperBound) // no exact target -> no bound
+        // The slot count is still a calendar fact for the gate at turn 30: gate window (20, 30) -> 21..29 = 9.
+        assertEquals(9, s.futureRaceOpportunitiesIfTrainNow)
+    }
+
+    // ---- gate-turn window exclusion (fans must exist before the gated race) + boundary cases ----
+
+    @Test
+    @DisplayName("a mandatory-gate turn is excluded from the race window; a fan-goal deadline turn is included")
+    fun gateTurnExcludedGoalTurnIncluded() {
+        // Same current turn 15, same requirement turn 24: the fan goal counts turn 24, the gate does not.
+        assertEquals(9, snapshot("Copano Rickey", turn = 15, fans = 2100).futureRaceOpportunitiesIfTrainNow) // goal 24: (15,24]
+        val gate = snapshot("Gate 24", turn = 15, fans = 0)
+        assertEquals(RequirementType.MANDATORY_GATE, gate.effectiveType)
+        assertEquals(24, gate.effectiveTurn)
+        assertEquals(8, gate.futureRaceOpportunitiesIfTrainNow) // gate 24: (15,24) = 16..23 = 8, one fewer than the goal
+    }
+
+    @Test
+    @DisplayName("choosing TRAIN on the requirement turn itself leaves zero future race slots, for goal and gate alike")
+    fun dueNowLeavesZeroSlots() {
+        assertEquals(0, snapshot("Copano Rickey", turn = 24, fans = 0).futureRaceOpportunitiesIfTrainNow) // goal due now
+        assertEquals(0, snapshot("Gate 24", turn = 24, fans = 0).futureRaceOpportunitiesIfTrainNow) // gate due now
+    }
+
+    @Test
+    @DisplayName("a choice gate is satisfied once the cheaper option is enterable, with no false exact 1750 target")
+    fun choiceGateSatisfiedAtMin() {
+        // Matikanefukukitaru-style: options 1250 / 1750, current fans 1500. The 1250 option is enterable,
+        // so career-progression fan pressure for that turn is met; the blocked 1750 alternative is not survival.
+        val s = snapshot("Choice Char", turn = 20, fans = 1500)
+        assertEquals(RequirementStatus.SATISFIED, s.gateStatus)
+        assertEquals(RequirementType.NONE, s.effectiveType)
+        assertNull(s.effectiveTarget) // never a false exact 1750
+    }
+
+    @Test
+    @DisplayName("an exact goal and exact gate on the same turn: the larger cumulative target dominates, both stay visible")
+    fun sameTurnTie() {
+        val s = snapshot("Tie Char", turn = 30, fans = 0) // goal 8000@40 and gate 5000@40
+        assertTrue(s.bothSameTurn)
+        assertEquals(RequirementType.FAN_GOAL, s.effectiveType) // 8000 goal > 5000 gate
+        assertEquals(8000, s.effectiveTarget)
+        assertEquals(40, s.effectiveTurn)
+        // Both underlying facts remain visible in the snapshot.
+        assertEquals(8000, s.goalTarget)
+        assertEquals(40, s.gateTurn)
+        assertEquals(5000, s.gateSharedThreshold)
     }
 
     // ---- unknown / fail-safe snapshots ----
@@ -288,8 +355,9 @@ class GrandConcertFanFactsTest {
         assertTrue(line.contains("eff=FAN_GOAL"))
         assertTrue(line.contains("deficit=900"))
         assertTrue(line.contains("floor=7"))
-        assertTrue(line.contains("policyDeadline=review-gated"))
-        assertTrue(line.contains("policyRacesNeeded=review-gated"))
+        assertTrue(line.contains("futureRaceSlotsIfTrainNow=9"))
+        assertTrue(line.contains("policyDeadline=gated"))
+        assertTrue(line.contains("policyRacesNeeded=gated"))
         assertTrue(line.contains("decision=FAIL_SAFE_FORCE_RACE"))
     }
 
