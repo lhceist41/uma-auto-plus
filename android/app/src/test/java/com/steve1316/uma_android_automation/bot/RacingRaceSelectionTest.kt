@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.uma_android_automation.bot.Racing.Companion.FAN_EMERGENCY_TURN_WINDOW
+import com.steve1316.uma_android_automation.bot.Racing.Companion.canonicalizeRaceLabelForLookup
 import com.steve1316.uma_android_automation.bot.Racing.Companion.indexOfBestByTierThenFans
 import com.steve1316.uma_android_automation.bot.Racing.Companion.isFanEmergency
 import com.steve1316.uma_android_automation.bot.Racing.Companion.mergePredictionAnchors
@@ -297,5 +298,37 @@ class RacingRaceSelectionTest {
     fun raceDetailsTierDefault() {
         assertEquals(PredictionTier.DOUBLE, RaceDetails(1000, true).predictionTier)
         assertEquals(PredictionTier.NONE, RaceDetails(1000, false).predictionTier)
+    }
+
+    // ////////////////////////////////////////////////////////////////////////////////////////////
+    // canonicalizeRaceLabelForLookup (O/0 distance-token fix)
+
+    @Test
+    @DisplayName("an uppercase O inside a distance token is fixed to 0")
+    fun canonFixesDistanceToken() {
+        assertEquals("Chukyo Turf 1600m (Mile) Left", canonicalizeRaceLabelForLookup("Chukyo Turf 160Om (Mile) Left"))
+        assertEquals("1600m", canonicalizeRaceLabelForLookup("160Om"))
+    }
+
+    @Test
+    @DisplayName("multiple O in one distance token are all fixed")
+    fun canonFixesMultipleO() {
+        assertEquals("Kyoto Turf 1600m (Mile) Right", canonicalizeRaceLabelForLookup("Kyoto Turf 16OOm (Mile) Right"))
+    }
+
+    @Test
+    @DisplayName("a valid distance token is left unchanged")
+    fun canonLeavesValidDistance() {
+        assertEquals("Chukyo Turf 1600m (Mile) Left", canonicalizeRaceLabelForLookup("Chukyo Turf 1600m (Mile) Left"))
+    }
+
+    @Test
+    @DisplayName("venue words, grade badges, and unrelated O characters are never rewritten")
+    fun canonLeavesNonDistanceO() {
+        assertEquals("Tokyo Turf 2400m (Long) Left", canonicalizeRaceLabelForLookup("Tokyo Turf 2400m (Long) Left")) // Tokyo O untouched
+        assertEquals("Ooi Dirt 2000m (Long) Left", canonicalizeRaceLabelForLookup("Ooi Dirt 2000m (Long) Left")) // Ooi venue untouched
+        assertEquals("OP", canonicalizeRaceLabelForLookup("OP")) // grade badge untouched
+        assertEquals("O", canonicalizeRaceLabelForLookup("O")) // a lone O is not a distance token
+        assertEquals("Om", canonicalizeRaceLabelForLookup("Om")) // no digit -> not a distance token
     }
 }

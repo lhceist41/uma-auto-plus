@@ -1,15 +1,15 @@
 package com.steve1316.uma_android_automation.bot
 
-import com.steve1316.uma_android_automation.types.PredictionTier
-import com.steve1316.uma_android_automation.utils.CustomImageUtils.RaceDetails
-
 /**
  * Pure, inert groundwork for a future Grand Concert below-the-fold fan-race scan. It models the
  * candidates a non-committing name-only list scan would collect (one detected row per page), applies
  * the fail-closed DB-identity trust policy, deduplicates overlapping pages by trusted identity, and
- * ranks the union with the already-landed [GrandConcertFanRaceSelector] contract. It knows nothing of
+ * ranks the union with the fans-first [GrandConcertFanRaceSelector] contract. It knows nothing of
  * [Game], bitmaps, taps, or scrolling, and is NOT wired into any production path - the live selection
  * still uses the visible-page selector only.
+ *
+ * No prediction tier is carried: Grand Concert forced racing ignores the row star, so this planner
+ * models only the truthful fan/aptitude/rival inputs.
  *
  * DB-identity trust policy (proven offline over all 402 committed races): the runtime lookup keys a
  * row on `(turnNumber, nameFormatted)` - the OCR'd track/distance/direction label - not the race
@@ -18,7 +18,7 @@ import com.steve1316.uma_android_automation.utils.CustomImageUtils.RaceDetails
  * has an almost-zero same-turn margin (a one-digit "1600m" vs "1800m" slip scores ~0.99). So a DB fan
  * value is trusted ONLY for a UNIQUE EXACT resolution; a multi-match or any fuzzy match carries
  * `dbFans = unknown` and never outranks a trusted row. An untrusted row stays enterable; it just
- * contributes no DB fan signal, and the caller falls back to the landed visible-page ranking.
+ * contributes no DB fan signal.
  */
 object GrandConcertFanRaceScanPlanner {
     /** The resolution tier of one row against the turn-scoped race database. Mirrors the runtime
@@ -27,7 +27,8 @@ object GrandConcertFanRaceScanPlanner {
 
     /**
      * One row a non-committing first-pass scan would collect. [dbFans] is the fan value of a single
-     * resolved match, if any; it is only ever USED through [trustedDbFans].
+     * resolved match, if any; it is only ever USED through [trustedDbFans]. [aptitudeCompatible] is the
+     * surface+distance>=B soft preference of the resolved race, meaningful only for a trusted row.
      */
     data class ScanCandidate(
         val detectedName: String,
@@ -35,7 +36,7 @@ object GrandConcertFanRaceScanPlanner {
         val lookupTier: LookupTier,
         val matchCount: Int,
         val dbFans: Int?,
-        val predictionTier: PredictionTier,
+        val aptitudeCompatible: Boolean?,
         val isRival: Boolean,
         val pageOrdinal: Int,
     ) {
@@ -45,6 +46,9 @@ object GrandConcertFanRaceScanPlanner {
         /** DB fans is trusted ONLY for a unique exact resolution; a multi-match (a same-turn formatted
          * -name collision) or any fuzzy match is unknown so it can never mis-rank a row. */
         val trustedDbFans: Int? get() = if (isTrusted) dbFans else null
+
+        /** Aptitude is trusted only for a trusted identity; an untrusted row's aptitude is unknown. */
+        val trustedAptitudeCompatible: Boolean? get() = if (isTrusted) aptitudeCompatible else null
     }
 
     /** The stable cross-page identity of a trusted row on [turn]; null for untrusted rows, which are
@@ -58,15 +62,15 @@ object GrandConcertFanRaceScanPlanner {
         val winnerIndex: Int,
         val reason: String,
         val bottomProven: Boolean,
-        val useLegacyFallback: Boolean,
         val deduped: List<ScanCandidate>,
     )
 
     /**
      * Deduplicates a multi-page scan by trusted identity, then ranks the union using only trusted DB
-     * fans through the landed [GrandConcertFanRaceSelector] contract (tier first, known fans within a
-     * tier, Rival as an exact-tie breaker). Untrusted rows carry an unknown fan value and so never
-     * outrank a trusted one.
+     * fans through the fans-first [GrandConcertFanRaceSelector] contract (larger known fans first,
+     * aptitude as an exact-fan tie-break, Rival as a remaining tie-break). Untrusted rows carry an
+     * unknown fan value and so never outrank a trusted one; an all-untrusted union still yields a
+     * deterministic winner (index 0) rather than aborting.
      *
      * @param turn the current career turn (the DB lookup scope).
      * @param candidates the rows collected across all scanned pages, in scan order.
@@ -76,10 +80,10 @@ object GrandConcertFanRaceScanPlanner {
         val deduped = dedupe(turn, candidates)
         val forRanking =
             deduped.map { row ->
-                RaceDetails(row.trustedDbFans ?: -1, row.predictionTier == PredictionTier.DOUBLE, row.isRival, row.predictionTier)
+                GrandConcertFanRaceSelector.Candidate(row.trustedDbFans, row.trustedAptitudeCompatible, row.isRival)
             }
         val selection = GrandConcertFanRaceSelector.select(forRanking)
-        return Plan(selection.index, selection.reason, bottomProven, selection.useLegacyFallback, deduped)
+        return Plan(selection.index, selection.reason, bottomProven, deduped)
     }
 
     /** Collapses rows that share a trusted identity across overlapping pages, keeping the first; every

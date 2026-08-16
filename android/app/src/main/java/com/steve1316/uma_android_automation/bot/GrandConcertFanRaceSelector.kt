@@ -1,33 +1,36 @@
 package com.steve1316.uma_android_automation.bot
 
-import com.steve1316.uma_android_automation.utils.CustomImageUtils.RaceDetails
-
 /**
- * Pure fan-efficient ranking for a Grand Concert forced fan-pressure extra race. It answers only
- * "given that racing is already mandatory this turn, which enterable race clears the fan requirement
- * fastest", never "should we race or train" - that decision is unchanged and still fail-closed.
+ * Pure fan-first ranking for a Grand Concert forced fan-pressure extra race. It answers only "given
+ * that racing is already mandatory this turn, which visible race clears the fan requirement fastest",
+ * never "should we race or train" - that decision is unchanged and still fail-closed.
  *
- * Two things differ from the legacy standard-racing pick, and only inside pure Grand Concert fan
- * pressure:
- *   1. Rival status is demoted from an absolute override to an exact-tie breaker. Under a plain fan
- *      deficit a Rival race carries no survival benefit, so letting a Rival beat a much larger
- *      same-tier non-Rival race wastes forced-race turns.
- *   2. An unknown (OCR-failed, `fans < 0`) fan value never outranks a known one within a tier, and
- *      when every candidate's fan value is unknown the caller is told to keep its legacy selection
- *      (this is an optimization, never a reason to abort an otherwise necessary race).
+ * Grand Concert forced racing does NOT use the row prediction star as a safety gate. On a live GC race
+ * list the rows draw no finish-prediction mark, and the yellow distance-aptitude star false-matches the
+ * single-star template - so a row-star tier is neither present nor trustworthy here. The row-star model
+ * remains valid in non-GC contexts (Trackblazer, generic Standard Racing); this selector is scoped to
+ * pure GC fan pressure only.
  *
- * Prediction tier stays the primary safety priority (DOUBLE over SINGLE over NONE) exactly as the
- * legacy selector, because a weaker predicted placement can scale the realized payout down more than
- * a larger base makes up. No expected-placement formula is introduced.
+ * The contract is fans-first with a soft aptitude preference, fail-open:
+ *   1. a known fan value always beats an unknown one;
+ *   2. among known fan values the larger wins;
+ *   3. aptitude compatibility only breaks an exact fan tie (never overrides a larger fan value);
+ *   4. Rival only breaks a remaining exact tie;
+ *   5. the earliest row breaks any final tie;
+ *   6. if every visible row's fan value is unknown, a deterministic row (index 0) is still chosen so a
+ *      required fan race is never skipped just because OCR could not identify any race.
+ *
+ * No placement probability, stat-vs-race formula, grade penalty, or expected-value model is introduced.
+ * Aptitude is a boolean soft preference only, never a hard filter.
  *
  * This object knows nothing about [Game], bitmaps, taps, or scrolling. It ranks an already-collected
- * candidate set; the caller is responsible for how that set was gathered and for re-detecting the
- * winner before tapping.
+ * candidate set; the caller gathers that set from the universal fans-row anchors and re-detects the
+ * winner geometry before tapping.
  */
 object GrandConcertFanRaceSelector {
     /**
-     * Whether the fan-efficient ranking applies to the current forced extra race. Pure fan pressure
-     * only: an independent trophy or goal-race-points requirement keeps the legacy selection, so
+     * Whether the fan-first ranking applies to the current forced extra race. Pure fan pressure only:
+     * an independent trophy or goal-race-points requirement keeps the legacy generic selection, so
      * "maximize fans" can never override another requirement in a mixed-requirement state.
      *
      * @param scenarioIsGrandConcert whether the active scenario is Grand Concert.
@@ -46,53 +49,80 @@ object GrandConcertFanRaceSelector {
             !hasTrophyRequirement &&
             !hasInsufficientGoalRacePtsRequirement
 
-    /** The chosen candidate index, a short reason, and whether the caller should fall back to its
-     * legacy selection instead (because no candidate carried a usable fan signal). */
-    data class Selection(val index: Int, val reason: String, val useLegacyFallback: Boolean)
+    /**
+     * One visible GC race row's truthful inputs. No prediction tier is carried: GC selection ignores
+     * the row star entirely.
+     *
+     * @property fans the trusted DB fan value when the row resolves to a unique exact DB race; null when
+     *    the DB identity is untrusted (fuzzy, ambiguous, or unresolved).
+     * @property aptitudeCompatible true when the exact resolved race has surface AND distance aptitude
+     *    at least B; false when the exact race is known and fails that; null when the identity is
+     *    untrusted/unknown. A tie-break only.
+     * @property isRival whether the row is a Rival race. A tie-break only.
+     */
+    data class Candidate(val fans: Int?, val aptitudeCompatible: Boolean?, val isRival: Boolean)
+
+    /** The chosen candidate index and a short reason. Index -1 means no candidates were supplied. */
+    data class Selection(val index: Int, val reason: String)
 
     /**
-     * Picks the most fan-efficient candidate among already-collected enterable rows. Highest
-     * prediction tier first; within the top tier the highest KNOWN displayed fan value; Rival breaks
-     * only an exact (tier, fans) tie; earliest index breaks any remaining tie. Returns a
-     * legacy-fallback signal (index -1) when every candidate's fan value is unknown.
+     * Picks the most fan-efficient visible candidate. Highest KNOWN fan value first; aptitude
+     * compatibility breaks an exact fan tie; Rival breaks a remaining tie; earliest index breaks any
+     * final tie. When every candidate's fan value is unknown, index 0 is still chosen (a required fan
+     * race must not be skipped over an OCR miss).
      *
-     * @param candidates the enterable rows already walked and read, in list order.
+     * @param candidates the visible rows already enumerated and resolved, in list order.
      */
-    fun select(candidates: List<RaceDetails>): Selection {
-        if (candidates.isEmpty()) return Selection(-1, "no-candidates", useLegacyFallback = false)
-        if (candidates.all { it.fans < 0 }) return Selection(-1, "all-fan-values-unknown", useLegacyFallback = true)
+    fun select(candidates: List<Candidate>): Selection {
+        if (candidates.isEmpty()) return Selection(-1, "no-candidates")
+        if (candidates.all { it.fans == null }) return Selection(0, "all-fan-values-unknown-required-race-fallback")
         var best = 0
         for (i in 1 until candidates.size) {
             if (isBetter(candidates[i], candidates[best])) best = i
         }
-        return Selection(best, "tier-then-fans-rival-tiebreak", useLegacyFallback = false)
+        return Selection(best, "fans-first-aptitude-tiebreak")
     }
 
-    /** True when [a] is a strictly better fan-efficient pick than the current best [b]. */
-    private fun isBetter(a: RaceDetails, b: RaceDetails): Boolean {
-        if (a.predictionTier != b.predictionTier) return a.predictionTier > b.predictionTier
-        val aKnown = a.fans >= 0
-        val bKnown = b.fans >= 0
-        if (aKnown != bKnown) return aKnown // a known fan value beats an unknown one within the same tier
-        if (a.fans != b.fans) return a.fans > b.fans
-        return a.isRival && !b.isRival // Rival breaks an otherwise exact tier+fans tie
+    /** True when [a] is a strictly better fan-first pick than the current best [b]. */
+    private fun isBetter(a: Candidate, b: Candidate): Boolean {
+        val aKnown = a.fans != null
+        val bKnown = b.fans != null
+        if (aKnown != bKnown) return aKnown // a known fan value always beats an unknown one
+        if (aKnown && bKnown && a.fans != b.fans) return a.fans!! > b.fans!! // larger known fan value wins
+        // Exact fan tie (or both unknown): soft aptitude preference, then Rival, then earliest index.
+        val aApt = a.aptitudeCompatible == true
+        val bApt = b.aptitudeCompatible == true
+        if (aApt != bApt) return aApt
+        return a.isRival && !b.isRival
     }
 
     /**
-     * Compact `[GC_FAN_RACE_SELECT]` telemetry for one selection over a candidate set. [scanScope]
-     * records how the set was gathered (currently the already-visible page only; a full-list scan is
-     * not yet wired), so a later reader can tell whether below-the-fold candidates were considered.
+     * Compact `[GC_FAN_RACE_SELECT]` telemetry for one selection. Reports the truthful inputs (fans and
+     * aptitude state per row) with no tier or placement claim, so a later reader can audit the decision.
+     * [scanScope] records how the set was gathered (currently the visible page only; a full-list scan is
+     * not wired).
      */
-    fun telemetryLine(turn: Int, candidates: List<RaceDetails>, selection: Selection, scanScope: String): String {
+    fun telemetryLine(turn: Int, candidates: List<Candidate>, selection: Selection, scanScope: String): String {
         val summary =
             candidates.joinToString(" ") { row ->
-                val fansText = if (row.fans < 0) "?" else "${row.fans}"
-                "$fansText/${row.predictionTier}${if (row.isRival) "/R" else ""}"
+                val fansText = row.fans?.toString() ?: "?"
+                val aptText = aptitudeState(row.aptitudeCompatible)
+                "$fansText/apt$aptText${if (row.isRival) "/R" else ""}"
             }
         val winner = selection.index.takeIf { it >= 0 }?.let { candidates[it] }
-        val winnerFans = winner?.fans?.takeIf { it >= 0 }?.toString() ?: "unknown"
+        val winnerFans = winner?.fans?.toString() ?: "unknown"
+        val winnerApt = aptitudeState(winner?.aptitudeCompatible)
+        val unknownFallback = selection.reason == "all-fan-values-unknown-required-race-fallback"
         return "[GRAND_CONCERT] [GC_FAN_RACE_SELECT] turn=$turn scope=$scanScope candidates=${candidates.size} " +
-            "[$summary] winnerIdx=${selection.index} winnerFans=$winnerFans winnerTier=${winner?.predictionTier ?: "none"} " +
-            "winnerRival=${winner?.isRival ?: false} reason=${selection.reason} legacyFallback=${selection.useLegacyFallback}"
+            "[$summary] winnerIdx=${selection.index} winnerFans=$winnerFans winnerApt=$winnerApt " +
+            "winnerRival=${winner?.isRival ?: false} reason=${selection.reason} unknownFanFallback=$unknownFallback tierIgnored=true"
     }
+
+    /** Compact aptitude state for telemetry: Y (compatible), N (incompatible), ? (unknown identity). */
+    private fun aptitudeState(aptitudeCompatible: Boolean?): String =
+        when (aptitudeCompatible) {
+            null -> "?"
+            true -> "Y"
+            false -> "N"
+        }
 }

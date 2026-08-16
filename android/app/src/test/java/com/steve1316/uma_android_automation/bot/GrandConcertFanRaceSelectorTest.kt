@@ -1,8 +1,5 @@
 package com.steve1316.uma_android_automation.bot
 
-import com.steve1316.uma_android_automation.bot.Racing.Companion.indexOfBestByTierThenFans
-import com.steve1316.uma_android_automation.types.PredictionTier
-import com.steve1316.uma_android_automation.utils.CustomImageUtils.RaceDetails
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -11,16 +8,17 @@ import org.junit.jupiter.api.Test
 import java.io.File
 
 /**
- * The pure Grand Concert fan-efficient race selector: it ranks an already-collected candidate set,
- * demoting Rival to a tie-break while preserving tier-first safety, and never invents an
- * expected-placement estimate. The forced-race decision itself is unchanged; these tests cover the
- * ranking, the activation predicate, and the fail-safe fallback.
+ * The pure Grand Concert fan-first race selector: it ranks an already-collected candidate set of
+ * visible rows with no dependence on the row prediction star, using fans first and aptitude only as a
+ * soft tie-break, and never skips a required fan race over an OCR miss. The forced-race decision itself
+ * is unchanged; these tests cover the ranking, the activation predicate, the fail-open fallback, and
+ * the Copano turn-14 counterfactual.
  */
-@DisplayName("Grand Concert fan-efficient race selection")
+@DisplayName("Grand Concert fan-first race selection")
 class GrandConcertFanRaceSelectorTest {
-    /** RaceDetails is (fans, hasDoublePredictions, isRival, predictionTier). */
-    private fun d(fans: Int, tier: PredictionTier = PredictionTier.DOUBLE, rival: Boolean = false) =
-        RaceDetails(fans, tier == PredictionTier.DOUBLE, rival, tier)
+    /** Candidate is (fans: Int?, aptitudeCompatible: Boolean?, isRival). */
+    private fun c(fans: Int?, apt: Boolean? = null, rival: Boolean = false) =
+        GrandConcertFanRaceSelector.Candidate(fans, apt, rival)
 
     // ---- activation predicate ----
 
@@ -39,86 +37,98 @@ class GrandConcertFanRaceSelectorTest {
     // ---- ranking ----
 
     @Test
-    @DisplayName("Rival is demoted: a larger same-tier non-Rival race beats a Rival race")
-    fun rivalDemoted() {
-        // Legacy would discard all non-Rival rows and pick the Rival 5000; the GC selector picks 10000.
-        val races = listOf(d(1200), d(5000, rival = true), d(10000))
-        val legacy = if (races.any { it.isRival }) races.indices.filter { races[it].isRival }.let { r -> r[indexOfBestByTierThenFans(r.map { races[it] })] } else indexOfBestByTierThenFans(races)
-        assertEquals(1, legacy) // legacy picks the Rival 5000
-        assertEquals(2, GrandConcertFanRaceSelector.select(races).index) // GC picks the 10000 non-Rival
+    @DisplayName("fans primary: a larger fan value wins even when the smaller race is aptitude-compatible")
+    fun fansPrimary() {
+        // Pins the Copano counterfactual: 3100 (aptitude false) beats 1600 (aptitude true).
+        assertEquals(0, GrandConcertFanRaceSelector.select(listOf(c(3100, apt = false), c(1600, apt = true))).index)
     }
 
     @Test
-    @DisplayName("tier stays the primary safety priority: a DOUBLE beats a much larger SINGLE")
-    fun tierFirst() {
-        val races = listOf(d(15000, PredictionTier.SINGLE), d(3000, PredictionTier.DOUBLE))
-        assertEquals(1, GrandConcertFanRaceSelector.select(races).index)
+    @DisplayName("aptitude breaks an exact fan tie")
+    fun aptitudeSoftTie() {
+        assertEquals(1, GrandConcertFanRaceSelector.select(listOf(c(3000, apt = false), c(3000, apt = true))).index)
     }
 
     @Test
-    @DisplayName("within a tier, the highest known fan value wins")
-    fun fansWithinTier() {
-        assertEquals(2, GrandConcertFanRaceSelector.select(listOf(d(1000), d(1500), d(5000))).index)
+    @DisplayName("aptitude never overrides a larger fan value")
+    fun aptitudeDoesNotOverrideFans() {
+        assertEquals(0, GrandConcertFanRaceSelector.select(listOf(c(5000, apt = false), c(3000, apt = true))).index)
     }
 
     @Test
-    @DisplayName("an unknown fan value never outranks a known one in the same tier")
-    fun unknownLosesToKnown() {
-        val sel = GrandConcertFanRaceSelector.select(listOf(d(-1), d(5000)))
-        assertEquals(1, sel.index)
-        assertFalse(sel.useLegacyFallback)
+    @DisplayName("a known fan value beats an unknown one")
+    fun knownBeatsUnknown() {
+        assertEquals(1, GrandConcertFanRaceSelector.select(listOf(c(null), c(1000))).index)
     }
 
     @Test
-    @DisplayName("when every fan value is unknown, defer to the legacy selection")
-    fun allUnknownFallsBack() {
-        val sel = GrandConcertFanRaceSelector.select(listOf(d(-1), d(-1, PredictionTier.SINGLE)))
-        assertTrue(sel.useLegacyFallback)
-        assertEquals(-1, sel.index)
+    @DisplayName("when every fan value is unknown, a deterministic required-race row is still chosen")
+    fun allUnknownRequiredRaceFallback() {
+        val sel = GrandConcertFanRaceSelector.select(listOf(c(null), c(null, rival = true)))
+        assertEquals(0, sel.index) // index 0, never a legacy tier fallback
+        assertEquals("all-fan-values-unknown-required-race-fallback", sel.reason)
     }
 
     @Test
-    @DisplayName("Rival breaks only an exact tier-and-fans tie")
+    @DisplayName("Rival breaks only an exact fans-and-aptitude tie")
     fun rivalTieBreak() {
-        // Two identical DOUBLE 5000 rows, the second is the Rival: it wins the exact tie.
-        assertEquals(1, GrandConcertFanRaceSelector.select(listOf(d(5000), d(5000, rival = true))).index)
+        assertEquals(1, GrandConcertFanRaceSelector.select(listOf(c(5000, apt = true), c(5000, apt = true, rival = true))).index)
     }
 
     @Test
-    @DisplayName("a candidate set collected across pages ranks correctly (full-set ranking, scan deferred)")
-    fun crossPageRanking() {
-        // As if page 0 yielded [1000, 1500] and page 1 yielded [5000]; the selector ranks the union.
-        assertEquals(2, GrandConcertFanRaceSelector.select(listOf(d(1000), d(1500), d(5000))).index)
+    @DisplayName("the earliest index breaks a total tie")
+    fun earliestFinalTie() {
+        assertEquals(0, GrandConcertFanRaceSelector.select(listOf(c(5000, apt = true), c(5000, apt = true))).index)
+    }
+
+    @Test
+    @DisplayName("markless rows (no tier is carried) rank purely by fans: row 1 with 3100 wins")
+    fun marklessRowsPickFans() {
+        // Even though on a live GC list row 2 carries a false SINGLE aptitude star, no tier reaches the
+        // candidate, so 3100 wins over 1600 regardless of any star telemetry.
+        assertEquals(0, GrandConcertFanRaceSelector.select(listOf(c(3100, apt = false), c(1600, apt = false))).index)
+    }
+
+    @Test
+    @DisplayName("an empty candidate set returns no winner")
+    fun empty() {
+        assertEquals(-1, GrandConcertFanRaceSelector.select(emptyList()).index)
     }
 
     // ---- telemetry ----
 
     @Test
-    @DisplayName("the GC_FAN_RACE_SELECT line records candidates, the winner, and the scan scope")
+    @DisplayName("the GC_FAN_RACE_SELECT line records fans, aptitude, the winner, scope, and tier-ignored")
     fun telemetry() {
-        val races = listOf(d(1200), d(5000, rival = true), d(10000))
+        val races = listOf(c(3100, apt = false), c(1600, apt = true))
         val sel = GrandConcertFanRaceSelector.select(races)
         val line = GrandConcertFanRaceSelector.telemetryLine(turn = 17, candidates = races, selection = sel, scanScope = "visible-page")
         assertTrue(line.contains("[GC_FAN_RACE_SELECT]"))
         assertTrue(line.contains("turn=17"))
         assertTrue(line.contains("scope=visible-page"))
-        assertTrue(line.contains("winnerIdx=2"))
-        assertTrue(line.contains("winnerFans=10000"))
-        assertTrue(line.contains("winnerRival=false"))
-        assertTrue(line.contains("legacyFallback=false"))
+        assertTrue(line.contains("winnerIdx=0"))
+        assertTrue(line.contains("winnerFans=3100"))
+        assertTrue(line.contains("winnerApt=N"))
+        assertTrue(line.contains("tierIgnored=true"))
+        assertTrue(line.contains("unknownFanFallback=false"))
     }
 
-    // ---- source guards: null-seam untouched, activation is predicate-gated, full scan not wired ----
+    // ---- source guards: null seam untouched, one gated GC seam, no tier in the GC contract ----
 
     @Test
-    @DisplayName("the fan-deferral null seam is untouched and the selector is used only under the pure-fan predicate")
+    @DisplayName("the fan-deferral null seam is untouched and GC selection is a single predicate-gated seam")
     fun sourceGuards() {
         val pressure = source("bot/GrandConcertFanPressure.kt")
         assertTrue(pressure.contains("ReviewGatedPolicyInputs(null, null)"), "the fan-deferral seam must stay null")
         val racing = source("bot/Racing.kt")
-        assertTrue(racing.contains("GrandConcertFanRaceSelector.appliesToForcedRace("), "selection must be gated by the pure-fan predicate")
-        assertTrue(racing.contains("if (gcFanEfficient)"), "the fan-efficient branch must be predicate-gated")
-        assertTrue(racing.contains("legacyIndex()"), "a legacy fallback path must remain")
+        assertTrue(racing.contains("GrandConcertFanRaceSelector.appliesToForcedRace("), "GC selection must be predicate-gated")
+        assertTrue(racing.contains("processGrandConcertForcedFanRace()"), "the dedicated pure-GC branch must exist")
+        assertFalse(racing.contains("if (gcFanEfficient)"), "the old late tier-based GC branch must be removed")
+        assertTrue(racing.contains("val index = legacyIndex()"), "the generic tail must use the legacy pick")
+        val planner = source("bot/GrandConcertFanRaceScanPlanner.kt")
+        assertFalse(planner.contains("PredictionTier"), "the GC planner must not carry a prediction tier")
+        val selector = source("bot/GrandConcertFanRaceSelector.kt")
+        assertFalse(selector.contains("PredictionTier"), "the GC selector must not depend on a prediction tier")
     }
 
     private fun source(relative: String): String {

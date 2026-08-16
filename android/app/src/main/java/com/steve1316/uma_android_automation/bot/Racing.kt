@@ -194,11 +194,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      * screens where the OCR anchor is unavailable. Int.MAX_VALUE when unknown. */
     var goalDeadlineTurnsRemaining = Int.MAX_VALUE
 
-    /** Fan-emergency mode: an unmet fan goal is due within [FAN_EMERGENCY_TURN_WINDOW] turns.
-     * While active, race selection accepts single-star prediction races instead of skipping to
-     * training. A weak trainee (e.g. an early-Junior Medium specialist) can draw single-star
-     * predictions on its whole race pool; without this, every extra race is invisible and the
-     * career force-ends at the fan checkpoint. */
+    /** Fan-emergency mode: an unmet fan goal is due within [FAN_EMERGENCY_TURN_WINDOW] turns. It
+     * still gates the GENERIC (non-Grand-Concert) fan-pressure path, where it admits single-star
+     * prediction races and the Junior scroll instead of skipping to training, so a weak trainee whose
+     * whole pool draws only single-star predictions is not left with every extra race invisible. Pure
+     * Grand Concert fan pressure no longer relies on this: it takes a dedicated fans-first branch
+     * (processGrandConcertForcedFanRace) that ignores the row star, because a GC list draws no
+     * finish-prediction mark and its distance-aptitude star false-matches the single-star template. */
     var bFanEmergencyActive = false
 
     /** Tracks the specific day to race based on opportunity cost analysis. */
@@ -616,6 +618,22 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             }
             return bestIndex
         }
+
+        /** A distance-meter token: a run of digits (and OCR-confused uppercase O) that contains at
+         * least one real digit and ends in "m", at word boundaries. Requiring a digit keeps pure-letter
+         * tokens (a stray "Om") out, so only real distances like "1600m"/"160Om" ever match. */
+        private val DISTANCE_METER_TOKEN = Regex("\\b[0-9O]*[0-9][0-9O]*m\\b")
+
+        /**
+         * Canonicalizes an OCR'd race label for database lookup by fixing the one proven OCR confusion:
+         * an uppercase letter O misread for the digit 0 INSIDE a distance-meter token (live example
+         * "Chukyo Turf 160Om (Mile) Left" -> "...1600m..."). Scoped to a digits/O run ending in "m" and
+         * containing at least one digit, so venue words and unrelated O characters (Tokyo, OP, Ooi) are
+         * never touched. Audited to rewrite none of the 402 committed race labels. Returns the input
+         * unchanged when nothing matches; never mutates a stored DB string.
+         */
+        internal fun canonicalizeRaceLabelForLookup(detectedName: String): String =
+            DISTANCE_METER_TOKEN.replace(detectedName) { match -> match.value.replace('O', '0') }
     }
 
     init {
@@ -2068,6 +2086,14 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     private fun lookupRaceInDatabase(turnNumber: Int, detectedName: String): ArrayList<RaceData> {
         // Default to NONE; only the two found-returns below promote it to EXACT/FUZZY for telemetry.
         lastLookupTier = LookupTier.NONE
+        // Fix the one proven OCR confusion before matching: an uppercase O for the digit 0 inside a
+        // distance token (e.g. "160Om" -> "1600m"). Scoped to distance tokens, so no other label is
+        // altered, and the exact-only trust policy is preserved (a normalized label still matches by
+        // exact turn-scoped identity). Stored DB strings are never mutated.
+        val lookupName = canonicalizeRaceLabelForLookup(detectedName)
+        if (lookupName != detectedName) {
+            MessageLog.i(TAG, "[RACE] Canonicalized race label for lookup: \"$detectedName\" -> \"$lookupName\".")
+        }
         val settingsManager = SQLiteSettingsManager(game.myContext)
         if (!settingsManager.isAvailable()) {
             MessageLog.e(TAG, "[ERROR] lookupRaceInDatabase:: Database not available for race lookup.")
@@ -2100,7 +2126,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                         RACES_COLUMN_TURN_NUMBER,
                     ),
                     "$RACES_COLUMN_TURN_NUMBER = ? AND $RACES_COLUMN_NAME_FORMATTED = ?",
-                    arrayOf(turnNumber.toString(), detectedName),
+                    arrayOf(turnNumber.toString(), lookupName),
                     null,
                     null,
                     null,
@@ -2177,7 +2203,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
             do {
                 val nameFormatted = fuzzyCursor.getString(3)
-                val similarity = similarityService.score(detectedName, nameFormatted)
+                val similarity = similarityService.score(lookupName, nameFormatted)
 
                 if (similarity >= SIMILARITY_THRESHOLD) {
                     // Per-row guard, same as the exact loop above: skip an unmappable row instead of
@@ -4117,6 +4143,19 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     private fun processStandardRacing(): Boolean {
         MessageLog.v(TAG, "[RACE] Using traditional racing logic for extra races...")
 
+        // Pure Grand Concert fan pressure takes a dedicated fans-first branch that does not depend on
+        // the row prediction star (absent/false on a live GC list). Every other context - non-GC, or a
+        // mixed trophy/goal-points requirement - keeps the generic tier-gated path below unchanged.
+        if (GrandConcertFanRaceSelector.appliesToForcedRace(
+                scenarioIsGrandConcert = GrandConcertScenario.matches(game.scenario),
+                fanPressureActive = bFanEmergencyActive || hasFanRequirement,
+                hasTrophyRequirement = hasTrophyRequirement,
+                hasInsufficientGoalRacePtsRequirement = hasInsufficientGoalRacePtsRequirement,
+            )
+        ) {
+            return processGrandConcertForcedFanRace()
+        }
+
         // Fan-emergency (or force racing) admits single-star prediction races. Outside of that,
         // singles are detected for logging only and the old double-star-only entry gate stands.
         val allowSingles = bFanEmergencyActive || enableForceRacing
@@ -4293,27 +4332,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 indexOfBestByTierThenFans(filteredRaces)
             }
 
-        // Grand Concert pure fan pressure: when a race is forced only to clear a fan deficit (no
-        // trophy or goal-points requirement), rank for fan efficiency instead of the legacy
-        // Rival-first pick, so the forced streak clears in fewer turns. Tier stays the primary safety
-        // priority; Rival is demoted to an exact-tie breaker; an all-unknown fan read falls back to
-        // the legacy selection. Scope is the already-walked candidate set only - a below-the-fold
-        // full-list scan is intentionally NOT wired here (it needs device evidence first).
-        val gcFanEfficient =
-            GrandConcertFanRaceSelector.appliesToForcedRace(
-                scenarioIsGrandConcert = GrandConcertScenario.matches(game.scenario),
-                fanPressureActive = bFanEmergencyActive || hasFanRequirement,
-                hasTrophyRequirement = hasTrophyRequirement,
-                hasInsufficientGoalRacePtsRequirement = hasInsufficientGoalRacePtsRequirement,
-            )
-        val index =
-            if (gcFanEfficient) {
-                val selection = GrandConcertFanRaceSelector.select(filteredRaces)
-                MessageLog.i(TAG, GrandConcertFanRaceSelector.telemetryLine(campaign.date.day, filteredRaces, selection, scanScope = "visible-page"))
-                if (selection.useLegacyFallback || selection.index < 0) legacyIndex() else selection.index
-            } else {
-                legacyIndex()
-            }
+        // Pure Grand Concert fan pressure is handled earlier by processGrandConcertForcedFanRace(), so
+        // this generic tail only runs for non-GC and mixed-requirement contexts. They keep the legacy
+        // tier-first pick unchanged.
+        val index = legacyIndex()
 
         // Determine the grade of the selected race and store it for retry purposes.
         // IMPORTANT: `index` is a position into `filteredRaces` (potentially a subset of the original list
@@ -4341,5 +4363,96 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         )
 
         return true
+    }
+
+    /**
+     * Dedicated pure Grand Concert fan-pressure race selection. GC race rows carry no trustworthy
+     * finish-prediction star (a live list draws none, and the distance-aptitude star false-matches the
+     * single-star template), so this branch never uses the row star as a gate. It enumerates every
+     * visible row from the universal fans-icon anchors, resolves each to the turn-scoped race DB (with
+     * the O/0 label fix), and ranks fans-first with aptitude only as a soft tie-break. A required fan
+     * race is never skipped over an absent star or an OCR miss: if rows exist but none resolves, a
+     * deterministic visible row is still chosen. Only a total row-detection failure returns false.
+     * Visible page only; no scrolling and no below-the-fold scan are wired here.
+     */
+    private fun processGrandConcertForcedFanRace(): Boolean {
+        val bitmap: Bitmap = game.imageUtils.getSourceBitmap()
+
+        // Raw star telemetry, evidence only: GC ranking ignores these counts, but logging them answers
+        // the state-dependent prediction-rendering question in future careers for free.
+        val doubleHits = IconRaceListPredictionDoubleStar.findAll(game.imageUtils, sourceBitmap = bitmap).size
+        val singleHits = IconRaceListPredictionSingleStar.findAll(game.imageUtils, sourceBitmap = bitmap).size
+
+        // Enumerate visible rows from the fans anchors only. Singles are excluded because the aptitude
+        // star false-matches the single template; the fans glyph is on every row and the merge repair
+        // gives reliable row geometry. A genuine double still merges, but its tier is ignored here.
+        val anchors = findPredictionAnchors(includeSingles = false, sourceBitmap = bitmap, includeStarless = true)
+        if (anchors.isEmpty()) {
+            MessageLog.w(TAG, "[WARN] [GRAND_CONCERT] processGrandConcertForcedFanRace:: No visible race rows detected (fans-anchor CV failure). Canceling racing process.")
+            return false
+        }
+
+        campaign.updateDate(isOnMainScreen = false)
+        val turn = campaign.date.day
+
+        val candidates = ArrayList<GrandConcertFanRaceSelector.Candidate>()
+        val resolvedGrades = ArrayList<RaceGrade?>()
+        val resolvedFans = ArrayList<Int>()
+        for (anchor in anchors) {
+            val detectedName = game.imageUtils.extractRaceName(anchor.location)
+            val matches = lookupRaceInDatabase(turn, detectedName)
+            // Trust DB fans and aptitude ONLY for a unique exact resolution; a fuzzy/ambiguous row stays
+            // enterable but carries an unknown fan value so it can never mis-rank.
+            val trusted = lastLookupTier == LookupTier.EXACT && matches.size == 1
+            val fans: Int? = if (trusted) matches[0].fans else null
+            val aptitude: Boolean? = if (trusted) checkRaceAptitudeMatch(matches[0]) else null
+            val isRival = detectRowRival(bitmap, anchor.location)
+            candidates.add(GrandConcertFanRaceSelector.Candidate(fans, aptitude, isRival))
+            resolvedGrades.add(if (trusted) matches[0].grade else matches.firstOrNull()?.grade)
+            resolvedFans.add(if (trusted) matches[0].fans else 0)
+        }
+
+        val selection = GrandConcertFanRaceSelector.select(candidates)
+        MessageLog.i(
+            TAG,
+            "[GRAND_CONCERT] [GC_FAN_RACE_INPUT] turn=$turn rows=${anchors.size} doubleHits=$doubleHits singleHits=$singleHits tierIgnored=true",
+        )
+        MessageLog.i(TAG, GrandConcertFanRaceSelector.telemetryLine(turn, candidates, selection, scanScope = "visible-page"))
+        if (selection.index < 0) {
+            MessageLog.w(TAG, "[WARN] [GRAND_CONCERT] processGrandConcertForcedFanRace:: Selector returned no winner despite ${anchors.size} row(s). Canceling.")
+            return false
+        }
+
+        lastRaceGrade = resolvedGrades[selection.index]
+        lastRaceFans = resolvedFans[selection.index]
+        lastRaceIsRival = candidates[selection.index].isRival
+
+        val winner = anchors[selection.index]
+        MessageLog.i(
+            TAG,
+            "[GRAND_CONCERT] Selecting fan-pressure race at row #${selection.index + 1} (fans=${candidates[selection.index].fans ?: "unknown"}).",
+        )
+        // Fans-row geometry only: the same fresh anchor is used for OCR and the winner tap, with no
+        // prediction-star template path and no scroll.
+        game.tap(winner.location.x, winner.location.y, IconRaceListFansIcon.template.path, ignoreWaiting = true)
+        return true
+    }
+
+    /**
+     * Read-only per-row Rival check from the visible list without opening a row: crops the row band
+     * around the fans anchor and matches the Rival badge, mirroring the Trackblazer list scan. Rival is
+     * only a tie-break for GC, so a miss (or a crop failure) simply reports false.
+     */
+    private fun detectRowRival(sourceBitmap: Bitmap, anchorLocation: Point): Boolean {
+        val rivalBitmap =
+            game.imageUtils.createSafeBitmap(
+                sourceBitmap,
+                game.imageUtils.relX(anchorLocation.x, -165),
+                game.imageUtils.relY(anchorLocation.y, -165),
+                game.imageUtils.relWidth(340),
+                game.imageUtils.relHeight(80),
+                "gc fan race rival scan",
+            )
+        return rivalBitmap != null && LabelRivalRacer.check(game.imageUtils, region = intArrayOf(0, 0, 0, 0), sourceBitmap = rivalBitmap)
     }
 }

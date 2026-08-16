@@ -1488,20 +1488,27 @@ the fan question is asked logs a `[GC_FAN]` line with the resolved facts, their 
 decision. The generated `gc_fan_runtime.json` asset is guarded in CI: a root-data change that is not
 regenerated fails the build.
 
-**Fan-efficient forced-race choice.** Deferral stays disabled, but when a fan race is already
-unavoidable the choice of WHICH race to enter can still clear the requirement in fewer turns.
-`GrandConcertFanRaceSelector` (pure, unit-tested) ranks the enterable candidates for fan efficiency in
-pure Grand Concert fan pressure only (no trophy or goal-race-points requirement active): prediction
-tier stays the primary safety priority (a double-star race still beats a bigger single-star one, no
-expected-placement guess), but Rival status is demoted from an absolute override to an exact-tie
-breaker, so a much larger same-tier non-Rival race is no longer skipped just because a Rival race is
-present. The displayed fan value is an optimization signal, not a guaranteed realized payout; an
-unreadable value never outranks a known one, and if every candidate's fan value is unknown the legacy
-selection stands. This ranking currently applies to the already-visible candidate set only; a
-below-the-fold full-list scan is intentionally NOT wired yet (the standard selector opens each row to
-read its fans, and scanning/re-selecting across pages needs device evidence before it can be trusted
-not to mis-tap). Non-Grand-Concert racing and every mixed-requirement case keep the legacy selection
-unchanged. A `[GC_FAN_RACE_SELECT]` line records the candidates, the winner, and the ranking reason.
+**Fan-first forced-race choice (Grand Concert).** Deferral stays disabled, but when a fan race is
+already unavoidable the choice of WHICH race to enter can still clear the requirement in fewer turns.
+Pure Grand Concert fan pressure (no trophy or goal-race-points requirement active) takes a dedicated
+branch that does NOT use the row prediction star as a safety gate: a live GC race list draws no
+finish-prediction mark, and the yellow distance-aptitude star false-matches the single-star template,
+so the row star is neither present nor trustworthy here. Instead the branch enumerates every visible
+row from the universal fans-icon anchor, reads each race's identity by OCR (with a scoped O-for-0
+distance-token fix so a misread "160Om" resolves as "1600m"), and looks it up in the turn-scoped race
+database. It then ranks fans first: the larger trusted DB fan value wins; aptitude compatibility
+(surface and distance both at least B) only breaks an exact fan tie; Rival only breaks a remaining
+tie; the earliest row breaks any final tie. A DB fan value is trusted only for a unique exact
+identity, so a fuzzy or ambiguous row carries an unknown fan value and never mis-ranks. A required fan
+race is never skipped over an absent star or an OCR miss: if rows exist but none resolves a
+deterministic visible row is still chosen, and only a total row-detection failure cancels.
+`GrandConcertFanRaceSelector` (pure, unit-tested) does the ranking; `[GC_FAN_RACE_INPUT]` records the
+raw star counts (evidence only, ignored by the decision) and `[GC_FAN_RACE_SELECT]` records the
+fan/aptitude inputs, the winner, and the reason. This applies to the already-visible page only; a
+below-the-fold full-list scan is intentionally NOT wired yet (it needs multi-page device proof, and
+the pure `GrandConcertFanRaceScanPlanner` groundwork stays disabled). Non-Grand-Concert racing keeps
+its prediction-tier logic (Trackblazer, generic Standard Racing) and every mixed-requirement case
+keeps the legacy selection unchanged.
 
 **The spend loop.** `spendVisit` is greedy with a stop rule, and every purchase is transactional.
 `attemptLearn` taps the card, reads the confirmation dialog, and commits **only** on

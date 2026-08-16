@@ -2,7 +2,6 @@ package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.uma_android_automation.bot.GrandConcertFanRaceScanPlanner.LookupTier
 import com.steve1316.uma_android_automation.bot.GrandConcertFanRaceScanPlanner.ScanCandidate
-import com.steve1316.uma_android_automation.types.PredictionTier
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -12,8 +11,9 @@ import org.junit.jupiter.api.Test
 
 /**
  * Pure groundwork for the future below-the-fold fan-race scan: the fail-closed DB-identity trust
- * policy, cross-page dedup, ranking over the page union, and the second-pass restoration guard. None
- * of this is wired into production; the live path still ranks only the visible page.
+ * policy, cross-page dedup, fans-first ranking over the page union, and the second-pass restoration
+ * guard. No prediction tier is carried. None of this is wired into production; the live path still
+ * ranks only the visible page.
  */
 @DisplayName("Grand Concert fan-race scan planner (groundwork, not wired)")
 class GrandConcertFanRaceScanPlannerTest {
@@ -23,10 +23,10 @@ class GrandConcertFanRaceScanPlannerTest {
         tier: LookupTier = LookupTier.EXACT,
         matchCount: Int = 1,
         dbFans: Int? = 0,
-        pred: PredictionTier = PredictionTier.DOUBLE,
+        apt: Boolean? = null,
         rival: Boolean = false,
         page: Int = 0,
-    ) = ScanCandidate(name, canonical, tier, matchCount, dbFans, pred, rival, page)
+    ) = ScanCandidate(name, canonical, tier, matchCount, dbFans, apt, rival, page)
 
     // ---- DB-identity trust policy (exact-only) ----
 
@@ -37,6 +37,14 @@ class GrandConcertFanRaceScanPlannerTest {
         assertNull(c(dbFans = 5000, tier = LookupTier.EXACT, matchCount = 2).trustedDbFans) // same-turn collision
         assertNull(c(dbFans = 5000, tier = LookupTier.FUZZY, matchCount = 1).trustedDbFans) // fuzzy is never trusted
         assertNull(c(dbFans = null, tier = LookupTier.NONE, matchCount = 0, canonical = null).trustedDbFans) // no match
+    }
+
+    @Test
+    @DisplayName("aptitude is trusted only for a unique exact resolution")
+    fun aptitudeTrust() {
+        assertEquals(true, c(apt = true, tier = LookupTier.EXACT, matchCount = 1).trustedAptitudeCompatible)
+        assertNull(c(apt = true, tier = LookupTier.FUZZY, matchCount = 1).trustedAptitudeCompatible)
+        assertNull(c(apt = true, tier = LookupTier.EXACT, matchCount = 2).trustedAptitudeCompatible)
     }
 
     @Test
@@ -73,7 +81,7 @@ class GrandConcertFanRaceScanPlannerTest {
         assertEquals(3, plan.deduped.size) // 1 trusted A + 2 untrusted fuzzy rows
     }
 
-    // ---- ranking union + fuzzy safety ----
+    // ---- fans-first ranking union + fuzzy safety ----
 
     @Test
     @DisplayName("ranks the page union by trusted DB fans: a page-1 5000 beats a page-0 1500")
@@ -85,6 +93,20 @@ class GrandConcertFanRaceScanPlannerTest {
     }
 
     @Test
+    @DisplayName("fans-first: a larger fan value beats an aptitude-compatible smaller one")
+    fun fansPrimaryOverAptitude() {
+        val cands = listOf(c(canonical = "Big", dbFans = 3100, apt = false), c(canonical = "Small", dbFans = 1600, apt = true))
+        assertEquals(0, GrandConcertFanRaceScanPlanner.plan(24, cands, bottomProven = true).winnerIndex)
+    }
+
+    @Test
+    @DisplayName("aptitude breaks an exact trusted fan tie")
+    fun aptitudeExactFanTie() {
+        val cands = listOf(c(canonical = "Plain", dbFans = 3000, apt = false), c(canonical = "Fit", dbFans = 3000, apt = true))
+        assertEquals(1, GrandConcertFanRaceScanPlanner.plan(24, cands, bottomProven = true).winnerIndex)
+    }
+
+    @Test
     @DisplayName("an untrusted fuzzy 10000 never outranks a trusted exact 5000")
     fun fuzzyNeverOutranksTrusted() {
         val cands =
@@ -92,19 +114,21 @@ class GrandConcertFanRaceScanPlannerTest {
                 c(name = "Fuzzy Big", canonical = null, tier = LookupTier.FUZZY, matchCount = 1, dbFans = 10000, page = 0),
                 c(canonical = "Exact Mid", dbFans = 5000, page = 0),
             )
-        // The fuzzy row's DB fans is untrusted (-1), so the exact 5000 wins.
+        // The fuzzy row's DB fans is untrusted (unknown), so the exact 5000 wins.
         assertEquals(1, GrandConcertFanRaceScanPlanner.plan(24, cands, bottomProven = true).winnerIndex)
     }
 
     @Test
-    @DisplayName("when no row carries a trusted DB fan value, defer to the legacy selection")
-    fun allUntrustedFallsBack() {
+    @DisplayName("when no row carries a trusted DB fan value, a deterministic row (index 0) is still chosen")
+    fun allUntrustedDeterministicFallback() {
         val cands =
             listOf(
                 c(name = "F1", canonical = null, tier = LookupTier.FUZZY, matchCount = 1, dbFans = 9000),
                 c(name = "F2", canonical = null, tier = LookupTier.NONE, matchCount = 0, dbFans = null),
             )
-        assertTrue(GrandConcertFanRaceScanPlanner.plan(24, cands, bottomProven = true).useLegacyFallback)
+        val plan = GrandConcertFanRaceScanPlanner.plan(24, cands, bottomProven = true)
+        assertEquals(0, plan.winnerIndex)
+        assertEquals("all-fan-values-unknown-required-race-fallback", plan.reason)
     }
 
     @Test
