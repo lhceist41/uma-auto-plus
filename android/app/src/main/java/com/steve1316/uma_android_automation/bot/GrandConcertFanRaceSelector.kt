@@ -11,17 +11,25 @@ package com.steve1316.uma_android_automation.bot
  * remains valid in non-GC contexts (Trackblazer, generic Standard Racing); this selector is scoped to
  * pure GC fan pressure only.
  *
- * The contract is fans-first with a soft aptitude preference, fail-open:
- *   1. a known fan value always beats an unknown one;
- *   2. among known fan values the larger wins;
- *   3. aptitude compatibility only breaks an exact fan tie (never overrides a larger fan value);
+ * The contract is known-first, aptitude-first, fans-second, fail-open:
+ *   1. a known fan value always beats an unknown one (trusted identity is load-bearing);
+ *   2. among two known-fan rows an aptitude-compatible race outranks a not-compatible one, even at a
+ *      lower face value: an incompatible high-face race finishes near the back and realizes almost
+ *      nothing, while a compatible lower-face race realizes far more;
+ *   3. within one aptitude class the larger known fan value wins;
  *   4. Rival only breaks a remaining exact tie;
  *   5. the earliest row breaks any final tie;
  *   6. if every visible row's fan value is unknown, a deterministic row (index 0) is still chosen so a
- *      required fan race is never skipped just because OCR could not identify any race.
+ *      required fan race is never skipped just because OCR could not identify any race; aptitude is
+ *      not consulted in that all-unknown fallback (no trusted identity means no trusted aptitude).
+ *
+ * Fail-open: when no known-fan row is aptitude-compatible, ranking is exactly the prior fans-first
+ * behavior (larger known fans, then Rival, then earliest), so an all-incompatible page is never made
+ * worse by the aptitude preference.
  *
  * No placement probability, stat-vs-race formula, grade penalty, or expected-value model is introduced.
- * Aptitude is a boolean soft preference only, never a hard filter.
+ * Aptitude is a boolean preference that reorders known-fan rows; it is never a hard filter (an
+ * incompatible race is still chosen when it is the only or best trusted option).
  *
  * This object knows nothing about [Game], bitmaps, taps, or scrolling. It ranks an already-collected
  * candidate set; the caller gathers that set from the universal fans-row anchors and re-detects the
@@ -57,7 +65,8 @@ object GrandConcertFanRaceSelector {
      *    the DB identity is untrusted (fuzzy, ambiguous, or unresolved).
      * @property aptitudeCompatible true when the exact resolved race has surface AND distance aptitude
      *    at least B; false when the exact race is known and fails that; null when the identity is
-     *    untrusted/unknown. A tie-break only.
+     *    untrusted/unknown. Primary rank among known-fan rows (compatible outranks not-compatible),
+     *    ahead of face value; a null/false pair is not distinguished (both are not-compatible).
      * @property isRival whether the row is a Rival race. A tie-break only.
      */
     data class Candidate(val fans: Int?, val aptitudeCompatible: Boolean?, val isRival: Boolean)
@@ -66,10 +75,11 @@ object GrandConcertFanRaceSelector {
     data class Selection(val index: Int, val reason: String)
 
     /**
-     * Picks the most fan-efficient visible candidate. Highest KNOWN fan value first; aptitude
-     * compatibility breaks an exact fan tie; Rival breaks a remaining tie; earliest index breaks any
-     * final tie. When every candidate's fan value is unknown, index 0 is still chosen (a required fan
-     * race must not be skipped over an OCR miss).
+     * Picks the best visible candidate. Known fan value first; among known rows an aptitude-compatible
+     * race outranks a not-compatible one (even at a lower face value), then higher face value within an
+     * aptitude class; Rival breaks a remaining exact tie; earliest index breaks any final tie. When
+     * every candidate's fan value is unknown, index 0 is still chosen (a required fan race must not be
+     * skipped over an OCR miss).
      *
      * @param candidates the visible rows already enumerated and resolved, in list order.
      */
@@ -80,20 +90,42 @@ object GrandConcertFanRaceSelector {
         for (i in 1 until candidates.size) {
             if (isBetter(candidates[i], candidates[best])) best = i
         }
-        return Selection(best, "fans-first-aptitude-tiebreak")
+        return Selection(best, reasonFor(candidates, best))
     }
 
-    /** True when [a] is a strictly better fan-first pick than the current best [b]. */
+    /** True when [a] is a strictly better known-first, aptitude-first, fans-second pick than [b]. */
     private fun isBetter(a: Candidate, b: Candidate): Boolean {
         val aKnown = a.fans != null
         val bKnown = b.fans != null
-        if (aKnown != bKnown) return aKnown // a known fan value always beats an unknown one
-        if (aKnown && bKnown && a.fans != b.fans) return a.fans!! > b.fans!! // larger known fan value wins
-        // Exact fan tie (or both unknown): soft aptitude preference, then Rival, then earliest index.
-        val aApt = a.aptitudeCompatible == true
-        val bApt = b.aptitudeCompatible == true
-        if (aApt != bApt) return aApt
+        if (aKnown != bKnown) return aKnown // a known fan value always beats an unknown one (before aptitude)
+        if (aKnown && bKnown) {
+            // Among known-fan rows, an aptitude-compatible race outranks a not-compatible one even at a
+            // lower face value: an incompatible high-face race finishes near the back and realizes almost
+            // nothing, while a compatible lower-face race realizes far more. Face value only decides
+            // within one aptitude class.
+            val aApt = a.aptitudeCompatible == true
+            val bApt = b.aptitudeCompatible == true
+            if (aApt != bApt) return aApt
+            if (a.fans != b.fans) return a.fans!! > b.fans!!
+        }
+        // Both unknown, or an exact tie within the same aptitude class: Rival, then earliest index.
         return a.isRival && !b.isRival
+    }
+
+    /**
+     * Names why the winner won so an aptitude-over-fans override is auditable from the log:
+     * `aptitude-first` when a compatible row beat a strictly-higher-face not-compatible known row (the
+     * lever this ranking added); otherwise `higher-fans` (the winner led its aptitude class on face
+     * value, or on a Rival/earliest tie-break). The all-unknown case keeps its own fallback reason.
+     */
+    private fun reasonFor(candidates: List<Candidate>, winner: Int): String {
+        val w = candidates[winner]
+        if (w.fans == null) return "all-fan-values-unknown-required-race-fallback"
+        val winnerCompatible = w.aptitudeCompatible == true
+        val aptitudeOverrodeFans =
+            winnerCompatible &&
+                candidates.any { it.fans != null && it.aptitudeCompatible != true && it.fans!! > w.fans!! }
+        return if (aptitudeOverrodeFans) "aptitude-first" else "higher-fans"
     }
 
     /**

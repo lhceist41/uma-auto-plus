@@ -8,13 +8,13 @@ import org.junit.jupiter.api.Test
 import java.io.File
 
 /**
- * The pure Grand Concert fan-first race selector: it ranks an already-collected candidate set of
- * visible rows with no dependence on the row prediction star, using fans first and aptitude only as a
- * soft tie-break, and never skips a required fan race over an OCR miss. The forced-race decision itself
- * is unchanged; these tests cover the ranking, the activation predicate, the fail-open fallback, and
- * the Copano turn-14 counterfactual.
+ * The pure Grand Concert forced fan-race selector: it ranks an already-collected candidate set of
+ * visible rows with no dependence on the row prediction star, known-first then aptitude-first then
+ * fans-second, and never skips a required fan race over an OCR miss. The forced-race decision itself is
+ * unchanged; these tests cover the ranking order, the activation predicate, the no-compatible-row
+ * fail-open fallback, and the completed-career regret case.
  */
-@DisplayName("Grand Concert fan-first race selection")
+@DisplayName("Grand Concert forced fan-race selection")
 class GrandConcertFanRaceSelectorTest {
     /** Candidate is (fans: Int?, aptitudeCompatible: Boolean?, isRival). */
     private fun c(fans: Int?, apt: Boolean? = null, rival: Boolean = false) =
@@ -34,59 +34,96 @@ class GrandConcertFanRaceSelectorTest {
         assertFalse(p(gc = true, fan = true, trophy = false, goalPts = true)) // goal-points requirement excluded
     }
 
-    // ---- ranking ----
+    // ---- ranking: known status first ----
+
+    private fun winner(vararg rows: GrandConcertFanRaceSelector.Candidate) =
+        GrandConcertFanRaceSelector.select(rows.toList()).index
 
     @Test
-    @DisplayName("fans primary: a larger fan value wins even when the smaller race is aptitude-compatible")
-    fun fansPrimary() {
-        // Pins the Copano counterfactual: 3100 (aptitude false) beats 1600 (aptitude true).
-        assertEquals(0, GrandConcertFanRaceSelector.select(listOf(c(3100, apt = false), c(1600, apt = true))).index)
+    @DisplayName("a known fan value beats an unknown one, even when the unknown row looks aptitude-compatible")
+    fun knownBeatsUnknownBeforeAptitude() {
+        assertEquals(0, winner(c(1600, apt = false), c(null, apt = true))) // known incompatible beats unknown compatible
+        assertEquals(0, winner(c(1000, apt = true), c(null, apt = false))) // known compatible beats unknown
+        assertEquals(1, winner(c(null), c(1000))) // plain known beats unknown
     }
 
     @Test
-    @DisplayName("aptitude breaks an exact fan tie")
-    fun aptitudeSoftTie() {
-        assertEquals(1, GrandConcertFanRaceSelector.select(listOf(c(3000, apt = false), c(3000, apt = true))).index)
-    }
-
-    @Test
-    @DisplayName("aptitude never overrides a larger fan value")
-    fun aptitudeDoesNotOverrideFans() {
-        assertEquals(0, GrandConcertFanRaceSelector.select(listOf(c(5000, apt = false), c(3000, apt = true))).index)
-    }
-
-    @Test
-    @DisplayName("a known fan value beats an unknown one")
-    fun knownBeatsUnknown() {
-        assertEquals(1, GrandConcertFanRaceSelector.select(listOf(c(null), c(1000))).index)
-    }
-
-    @Test
-    @DisplayName("when every fan value is unknown, a deterministic required-race row is still chosen")
+    @DisplayName("when every fan value is unknown, a deterministic required-race row is still chosen (no aptitude sort)")
     fun allUnknownRequiredRaceFallback() {
-        val sel = GrandConcertFanRaceSelector.select(listOf(c(null), c(null, rival = true)))
-        assertEquals(0, sel.index) // index 0, never a legacy tier fallback
+        val sel = GrandConcertFanRaceSelector.select(listOf(c(null, apt = false), c(null, apt = true, rival = true)))
+        assertEquals(0, sel.index) // index 0, never aptitude-sorted among untrusted rows
         assertEquals("all-fan-values-unknown-required-race-fallback", sel.reason)
     }
 
+    // ---- ranking: aptitude-first among known rows ----
+
     @Test
-    @DisplayName("Rival breaks only an exact fans-and-aptitude tie")
+    @DisplayName("a compatible lower-face race beats an incompatible higher-face race")
+    fun compatibleLowerBeatsIncompatibleHigher() {
+        assertEquals(1, winner(c(4200, apt = false), c(1600, apt = true))) // the core new contract
+        assertEquals("aptitude-first", GrandConcertFanRaceSelector.select(listOf(c(4200, apt = false), c(1600, apt = true))).reason)
+    }
+
+    @Test
+    @DisplayName("a compatible lower-face race beats an unknown-aptitude higher-face race")
+    fun compatibleBeatsNullHigher() {
+        assertEquals(1, winner(c(5000, apt = null), c(1200, apt = true)))
+    }
+
+    @Test
+    @DisplayName("within the same aptitude class the larger face value wins")
+    fun higherFansWithinAptitudeClass() {
+        assertEquals(1, winner(c(1600, apt = true), c(3100, apt = true))) // compatible vs compatible
+        assertEquals(1, winner(c(1600, apt = false), c(3100, apt = false))) // incompatible vs incompatible
+        assertEquals(1, winner(c(1600, apt = null), c(3100, apt = false))) // null vs false: both not-compatible -> fans
+    }
+
+    // ---- ranking: Rival and index tie-breaks ----
+
+    @Test
+    @DisplayName("Rival breaks only an exact fans-and-aptitude-class tie")
     fun rivalTieBreak() {
-        assertEquals(1, GrandConcertFanRaceSelector.select(listOf(c(5000, apt = true), c(5000, apt = true, rival = true))).index)
+        assertEquals(1, winner(c(1600, apt = true, rival = false), c(1600, apt = true, rival = true)))
+    }
+
+    @Test
+    @DisplayName("aptitude class outranks Rival")
+    fun aptitudeBeatsRival() {
+        assertEquals(0, winner(c(1600, apt = true, rival = false), c(1600, apt = false, rival = true)))
+    }
+
+    @Test
+    @DisplayName("a larger face value outranks Rival when the aptitude class ties")
+    fun higherFansBeatsRival() {
+        assertEquals(0, winner(c(3100, apt = true, rival = false), c(1600, apt = true, rival = true)))
     }
 
     @Test
     @DisplayName("the earliest index breaks a total tie")
     fun earliestFinalTie() {
-        assertEquals(0, GrandConcertFanRaceSelector.select(listOf(c(5000, apt = true), c(5000, apt = true))).index)
+        assertEquals(0, winner(c(5000, apt = true), c(5000, apt = true)))
     }
 
+    // ---- fail-open: no compatible known row reproduces the prior fans-first winner ----
+
     @Test
-    @DisplayName("markless rows (no tier is carried) rank purely by fans: row 1 with 3100 wins")
-    fun marklessRowsPickFans() {
-        // Even though on a live GC list row 2 carries a false SINGLE aptitude star, no tier reaches the
-        // candidate, so 3100 wins over 1600 regardless of any star telemetry.
-        assertEquals(0, GrandConcertFanRaceSelector.select(listOf(c(3100, apt = false), c(1600, apt = false))).index)
+    @DisplayName("with no aptitude-compatible known row, ranking is exactly the prior fans-first behavior")
+    fun failOpenMatchesFansFirst() {
+        assertEquals(0, winner(c(4200, apt = false), c(1600, apt = false))) // higher fans, both incompatible
+        assertEquals(0, winner(c(4200, apt = null), c(1600, apt = null))) // higher fans, both unknown-aptitude
+        // reason stays higher-fans (aptitude did not override anything).
+        assertEquals("higher-fans", GrandConcertFanRaceSelector.select(listOf(c(4200, apt = false), c(1600, apt = false))).reason)
+    }
+
+    // ---- the completed-career regret case ----
+
+    @Test
+    @DisplayName("a high-face race the trainee is unsuited for loses to a lower-face race she is suited for")
+    fun compatibleLowerFaceBeatsIncompatibleHighFace() {
+        // A high-face turf race (aptitude false) versus a lower-face dirt race (aptitude true): the
+        // suited race wins, because the unsuited high-face race would finish near the back and realize
+        // almost none of its face fans.
+        assertEquals(1, winner(c(3800, apt = false), c(1600, apt = true)))
     }
 
     @Test
@@ -98,17 +135,21 @@ class GrandConcertFanRaceSelectorTest {
     // ---- telemetry ----
 
     @Test
-    @DisplayName("the GC_FAN_RACE_SELECT line records fans, aptitude, the winner, scope, and tier-ignored")
+    @DisplayName("the GC_FAN_RACE_SELECT line makes an aptitude-over-fans override auditable")
     fun telemetry() {
+        // A compatible 1600 beats an incompatible 3100: the line shows the lower-face compatible winner
+        // next to the higher-face incompatible row, so the override is auditable.
         val races = listOf(c(3100, apt = false), c(1600, apt = true))
         val sel = GrandConcertFanRaceSelector.select(races)
         val line = GrandConcertFanRaceSelector.telemetryLine(turn = 17, candidates = races, selection = sel, scanScope = "visible-page")
         assertTrue(line.contains("[GC_FAN_RACE_SELECT]"))
         assertTrue(line.contains("turn=17"))
         assertTrue(line.contains("scope=visible-page"))
-        assertTrue(line.contains("winnerIdx=0"))
-        assertTrue(line.contains("winnerFans=3100"))
-        assertTrue(line.contains("winnerApt=N"))
+        assertTrue(line.contains("winnerIdx=1"))
+        assertTrue(line.contains("winnerFans=1600"))
+        assertTrue(line.contains("winnerApt=Y"))
+        assertTrue(line.contains("reason=aptitude-first"))
+        assertTrue(line.contains("3100/aptN")) // the higher-face incompatible row is visible in the summary
         assertTrue(line.contains("tierIgnored=true"))
         assertTrue(line.contains("unknownFanFallback=false"))
     }

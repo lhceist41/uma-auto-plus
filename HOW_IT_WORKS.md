@@ -1496,10 +1496,15 @@ finish-prediction mark, and the yellow distance-aptitude star false-matches the 
 so the row star is neither present nor trustworthy here. Instead the branch enumerates every visible
 row from the universal fans-icon anchor, reads each race's identity by OCR (with a scoped O-for-0
 distance-token fix so a misread "160Om" resolves as "1600m"), and looks it up in the turn-scoped race
-database. It then ranks fans first: the larger trusted DB fan value wins; aptitude compatibility
-(surface and distance both at least B) only breaks an exact fan tie; Rival only breaks a remaining
-tie; the earliest row breaks any final tie. A DB fan value is trusted only for a unique exact
-identity, so a fuzzy or ambiguous row carries an unknown fan value and never mis-ranks. A required fan
+database. It then ranks known-first, aptitude-first, fans-second: a trusted (known) fan value beats an
+unknown one; among two known rows an aptitude-compatible race (surface and distance both at least B)
+outranks a not-compatible one even at a lower face value, because an incompatible high-face race
+finishes near the back and realizes almost none of its face fans while a compatible lower-face race
+realizes far more; the larger face value decides only within one aptitude class; Rival only breaks a
+remaining exact tie; the earliest row breaks any final tie. When no known row is aptitude-compatible
+the order is exactly the prior fans-first behavior, so an all-incompatible page is never made worse. A
+DB fan value is trusted only for a unique exact identity, so a fuzzy or ambiguous row carries an
+unknown fan value and never mis-ranks. A required fan
 race is never skipped over an absent star or an OCR miss: if rows exist but none resolves a
 deterministic visible row is still chosen, and only a total row-detection failure cancels.
 `GrandConcertFanRaceSelector` (pure, unit-tested) does the ranking; `[GC_FAN_RACE_INPUT]` records the

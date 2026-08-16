@@ -11,9 +11,10 @@ import org.junit.jupiter.api.Test
 
 /**
  * Pure groundwork for the future below-the-fold fan-race scan: the fail-closed DB-identity trust
- * policy, cross-page dedup, fans-first ranking over the page union, and the second-pass restoration
- * guard. No prediction tier is carried. None of this is wired into production; the live path still
- * ranks only the visible page.
+ * policy, cross-page dedup, known-first/aptitude-first/fans-second ranking over the page union (it
+ * delegates to the visible selector, so both always agree), and the second-pass restoration guard. No
+ * prediction tier is carried. None of this is wired into production; the live path still ranks only
+ * the visible page.
  */
 @DisplayName("Grand Concert fan-race scan planner (groundwork, not wired)")
 class GrandConcertFanRaceScanPlannerTest {
@@ -81,10 +82,10 @@ class GrandConcertFanRaceScanPlannerTest {
         assertEquals(3, plan.deduped.size) // 1 trusted A + 2 untrusted fuzzy rows
     }
 
-    // ---- fans-first ranking union + fuzzy safety ----
+    // ---- ranking union (delegates to the selector: known-first, aptitude-first, fans-second) ----
 
     @Test
-    @DisplayName("ranks the page union by trusted DB fans: a page-1 5000 beats a page-0 1500")
+    @DisplayName("ranks the page union by trusted DB fans within one aptitude class: a page-1 5000 beats a page-0 1500")
     fun rankingUnion() {
         val cands = listOf(c(canonical = "Small", dbFans = 1500, page = 0), c(canonical = "Big", dbFans = 5000, page = 1))
         val plan = GrandConcertFanRaceScanPlanner.plan(24, cands, bottomProven = true)
@@ -93,17 +94,24 @@ class GrandConcertFanRaceScanPlannerTest {
     }
 
     @Test
-    @DisplayName("fans-first: a larger fan value beats an aptitude-compatible smaller one")
-    fun fansPrimaryOverAptitude() {
+    @DisplayName("aptitude-first: a compatible smaller-face trusted race beats an incompatible larger-face one")
+    fun aptitudeFirstAmongTrusted() {
         val cands = listOf(c(canonical = "Big", dbFans = 3100, apt = false), c(canonical = "Small", dbFans = 1600, apt = true))
+        assertEquals(1, GrandConcertFanRaceScanPlanner.plan(24, cands, bottomProven = true).winnerIndex)
+    }
+
+    @Test
+    @DisplayName("fail-open: with no compatible trusted row, the larger trusted fan value still wins")
+    fun aptitudeFailOpenMatchesFansFirst() {
+        val cands = listOf(c(canonical = "Big", dbFans = 3100, apt = false), c(canonical = "Small", dbFans = 1600, apt = false))
         assertEquals(0, GrandConcertFanRaceScanPlanner.plan(24, cands, bottomProven = true).winnerIndex)
     }
 
     @Test
-    @DisplayName("aptitude breaks an exact trusted fan tie")
-    fun aptitudeExactFanTie() {
+    @DisplayName("within one aptitude class the larger trusted fan value wins")
+    fun higherFansWithinClass() {
         val cands = listOf(c(canonical = "Plain", dbFans = 3000, apt = false), c(canonical = "Fit", dbFans = 3000, apt = true))
-        assertEquals(1, GrandConcertFanRaceScanPlanner.plan(24, cands, bottomProven = true).winnerIndex)
+        assertEquals(1, GrandConcertFanRaceScanPlanner.plan(24, cands, bottomProven = true).winnerIndex) // tie -> aptitude
     }
 
     @Test

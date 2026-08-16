@@ -4,7 +4,8 @@ package com.steve1316.uma_android_automation.bot
  * Pure, inert groundwork for a future Grand Concert below-the-fold fan-race scan. It models the
  * candidates a non-committing name-only list scan would collect (one detected row per page), applies
  * the fail-closed DB-identity trust policy, deduplicates overlapping pages by trusted identity, and
- * ranks the union with the fans-first [GrandConcertFanRaceSelector] contract. It knows nothing of
+ * ranks the union with the known-first, aptitude-first, fans-second [GrandConcertFanRaceSelector]
+ * contract (it delegates ranking, so the visible selector and this planner always agree). It knows nothing of
  * [Game], bitmaps, taps, or scrolling, and is NOT wired into any production path - the live selection
  * still uses the visible-page selector only.
  *
@@ -67,10 +68,10 @@ object GrandConcertFanRaceScanPlanner {
 
     /**
      * Deduplicates a multi-page scan by trusted identity, then ranks the union using only trusted DB
-     * fans through the fans-first [GrandConcertFanRaceSelector] contract (larger known fans first,
-     * aptitude as an exact-fan tie-break, Rival as a remaining tie-break). Untrusted rows carry an
-     * unknown fan value and so never outrank a trusted one; an all-untrusted union still yields a
-     * deterministic winner (index 0) rather than aborting.
+     * fans through the [GrandConcertFanRaceSelector] contract (known fans first; among known rows an
+     * aptitude-compatible race outranks a not-compatible one; then higher fans; then Rival). Untrusted
+     * rows carry an unknown fan value and so never outrank a trusted one; an all-untrusted union still
+     * yields a deterministic winner (index 0) rather than aborting.
      *
      * @param turn the current career turn (the DB lookup scope).
      * @param candidates the rows collected across all scanned pages, in scan order.

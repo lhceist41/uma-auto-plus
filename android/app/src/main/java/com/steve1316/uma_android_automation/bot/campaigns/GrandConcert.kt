@@ -672,7 +672,8 @@ class GrandConcert(game: Game) : Campaign(game) {
      * Grand Concert fan-vs-training deferral. A detected fan requirement is normally raced the turn
      * it appears; here it MAY instead yield to a training turn when [GrandConcertFanPolicy] can
      * prove enough schedule slack, because Grand Concert makes its performance points only by
-     * training and the concerts supply most of the fans anyway.
+     * training. Concert turns can add some fans through events, but that gain is variable and is not
+     * treated as a guaranteed fan source for this policy.
      *
      * Fail-closed by construction, and deliberately so even though the reader is reviewed and its
      * calendar windows are corrected (a mandatory-gate turn no longer counts as its own race slot).
