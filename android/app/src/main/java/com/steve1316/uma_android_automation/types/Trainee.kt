@@ -909,6 +909,24 @@ class Trainee {
     }
 
     /**
+     * Records an observed fan count. Every valid observation is written (write-always). A real fan
+     * total never decreases, but the fan OCR has no range/plausibility check and no independent source
+     * to later correct a false-high, so a max/reject-lower rule would let a single false-high read
+     * stick for the entire career (and could wrongly mark a fan goal complete). Accepting the newest
+     * readable value keeps that self-healing: a false-low costs at most a temporary extra-race bias,
+     * and a false-high is overwritten by the next correct read. An observation below the previous one
+     * is a suspicious reading worth logging as evidence, but it is still accepted. The caller must pass
+     * only a value the OCR already parsed as valid; a fresh career starts at the constructor default.
+     */
+    fun observeFanCount(observedFans: Int) {
+        val previous = fans
+        if (observedFans < previous) {
+            MessageLog.v(TAG, "[TRAINEE] Fan observation decreased: previous=$previous observed=$observedFans. Accepting observation.")
+        }
+        fans = observedFans
+    }
+
+    /**
      * Sets up stat targets for different race distances by reading values from SQLite settings.
      *
      * These targets are used to determine training priorities based on the expected race distance of the current campaign goal.

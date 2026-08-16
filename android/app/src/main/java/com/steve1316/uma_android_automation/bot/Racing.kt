@@ -1255,6 +1255,50 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 }
             }
         }
+
+        // Grand Concert derives its fan requirement from committed route facts, applied here as the
+        // authoritative per-turn value. The race_criteria_fans template is dead in Grand Concert
+        // (verified live), so a template miss above must not veto a facts-derived requirement, and a
+        // met current scope must clear it. Non-facts scenarios return Unknown and keep the template
+        // result untouched. With clearRacingRequirementFlags this keeps hasFanRequirement written
+        // from the single requirement-refresh path. Placed after the Summer early-return above, so a
+        // Summer turn (no race entries) never re-arms it from facts.
+        val scenarioFanRequirement = campaign.currentFanRequirementFromScenarioFacts()
+        hasFanRequirement = GrandConcertFanRequirement.resolveHasFanRequirement(hasFanRequirement, scenarioFanRequirement)
+        logScenarioFanRequirement(scenarioFanRequirement)
+    }
+
+    /**
+     * Logs one compact [GC_FAN_REQ] provenance line per requirement refresh when the scenario
+     * actually supplied a facts signal. Silent for non-facts scenarios (the base no-scenario-facts
+     * sentinel), so URA/Unity Cup/Trackblazer turns add no Grand Concert noise.
+     */
+    private fun logScenarioFanRequirement(result: GrandConcertFanRequirement.Result) {
+        val fans = campaign.trainee.fans
+        val turn = campaign.date.day
+        when (result) {
+            is GrandConcertFanRequirement.Result.Active ->
+                MessageLog.i(
+                    TAG,
+                    "[GRAND_CONCERT] [GC_FAN_REQ] active=true source=GC_FACTS match=${result.match} type=${result.type} " +
+                        "target=${result.targetFans} turn=${result.requirementTurn} fans=$fans deficit=${result.deficit} " +
+                        "goalUnmet=${result.goalUnmet} gateUnmet=${result.gateUnmet}",
+                )
+            is GrandConcertFanRequirement.Result.Inactive ->
+                MessageLog.i(
+                    TAG,
+                    "[GRAND_CONCERT] [GC_FAN_REQ] active=false source=GC_FACTS match=${result.match} " +
+                        "reason=${result.reason} turn=$turn fans=$fans",
+                )
+            is GrandConcertFanRequirement.Result.Unknown ->
+                if (result.reason != GrandConcertFanRequirement.REASON_NO_SCENARIO_FACTS) {
+                    MessageLog.i(
+                        TAG,
+                        "[GRAND_CONCERT] [GC_FAN_REQ] active=$hasFanRequirement source=GC_FACTS match=UNKNOWN " +
+                            "reason=${result.reason} turn=$turn fans=$fans",
+                    )
+                }
+        }
     }
 
     /**

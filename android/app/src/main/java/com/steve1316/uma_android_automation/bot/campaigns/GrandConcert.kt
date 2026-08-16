@@ -9,6 +9,7 @@ import com.steve1316.uma_android_automation.bot.LessonCardKind
 import com.steve1316.uma_android_automation.bot.GrandConcertFanFacts
 import com.steve1316.uma_android_automation.bot.GrandConcertFanPolicy
 import com.steve1316.uma_android_automation.bot.GrandConcertFanPressure
+import com.steve1316.uma_android_automation.bot.GrandConcertFanRequirement
 import com.steve1316.uma_android_automation.bot.GrandConcertHandoff
 import com.steve1316.uma_android_automation.bot.GrandConcertHandoffReason
 import com.steve1316.uma_android_automation.bot.GrandConcertLessonReader
@@ -714,6 +715,17 @@ class GrandConcert(game: Game) : Campaign(game) {
         MessageLog.i(TAG, GrandConcertFanPressure.telemetryLine(snapshot, concertBehindPace, policyInputs, decision))
         return decision == GrandConcertFanPolicy.FanRaceDecision.DEFER_TO_TRAINING
     }
+
+    /**
+     * Grand Concert's fan requirement comes from the committed route facts, not the dead
+     * `race_criteria_fans` template (verified missing live): the earliest goal-or-gate period at or
+     * after this turn, active only while its threshold is unmet at the current fan count. Reuses the
+     * already-loaded [fanFacts], the trainee identity, and the tracked fan count, and
+     * makes no screen reads. Racing.checkRacingRequirements applies the result as the authoritative
+     * per-turn `hasFanRequirement`.
+     */
+    override fun currentFanRequirementFromScenarioFacts(): GrandConcertFanRequirement.Result =
+        GrandConcertFanRequirement.evaluate(fanFacts, trainee.name, date.day, trainee.fans)
 
     /**
      * The greedy-with-stop-rule spend loop over an open lesson list. Buys the best affordable

@@ -331,4 +331,50 @@ class RacingRaceSelectionTest {
         assertEquals("O", canonicalizeRaceLabelForLookup("O")) // a lone O is not a distance token
         assertEquals("Om", canonicalizeRaceLabelForLookup("Om")) // no digit -> not a distance token
     }
+
+    // ---- routing reachability for a facts-derived Grand Concert fan requirement ----
+    // These pin, without touching routing code, that once checkRacingRequirements sets
+    // hasFanRequirement=true from committed Grand Concert facts, the existing consumers force the
+    // race and reach the dedicated forced-fan selector branch.
+
+    @Test
+    @DisplayName("a facts-derived fan requirement forces extra-race eligibility, and a reviewed defer suppresses only the fan arm")
+    fun factsFanRequirementForcesEligibility() {
+        // hasFanRequirement=true (from facts) forces eligibility even with force racing and farming off.
+        assertTrue(
+            requirementForcesExtraRace(false, hasFanRequirement = true, hasTrophyRequirement = false, hasInsufficientGoalRacePtsRequirement = false, ignoreFanRequirement = false),
+        )
+        // A future reviewed deferral (ignoreFanRequirement=true) suppresses ONLY the fan arm.
+        assertFalse(
+            requirementForcesExtraRace(false, hasFanRequirement = true, hasTrophyRequirement = false, hasInsufficientGoalRacePtsRequirement = false, ignoreFanRequirement = true),
+        )
+        // Trophy and goal-points remain independent reasons to race even while the fan arm is suppressed.
+        assertTrue(
+            requirementForcesExtraRace(false, hasFanRequirement = true, hasTrophyRequirement = true, hasInsufficientGoalRacePtsRequirement = false, ignoreFanRequirement = true),
+        )
+        assertTrue(
+            requirementForcesExtraRace(false, hasFanRequirement = true, hasTrophyRequirement = false, hasInsufficientGoalRacePtsRequirement = true, ignoreFanRequirement = true),
+        )
+    }
+
+    @Test
+    @DisplayName("a facts-derived fan requirement reaches the GC forced-fan branch (trophy/goal-points absent, GC only)")
+    fun factsFanRequirementReachesGcBranch() {
+        // processStandardRacing computes fanPressureActive = bFanEmergencyActive || hasFanRequirement.
+        // With hasFanRequirement=true from facts (bFanEmergencyActive stays false in GC), the branch applies.
+        assertTrue(
+            GrandConcertFanRaceSelector.appliesToForcedRace(scenarioIsGrandConcert = true, fanPressureActive = true, hasTrophyRequirement = false, hasInsufficientGoalRacePtsRequirement = false),
+        )
+        // A trophy or goal-points requirement keeps the generic path; the GC fan branch does not apply.
+        assertFalse(
+            GrandConcertFanRaceSelector.appliesToForcedRace(scenarioIsGrandConcert = true, fanPressureActive = true, hasTrophyRequirement = true, hasInsufficientGoalRacePtsRequirement = false),
+        )
+        assertFalse(
+            GrandConcertFanRaceSelector.appliesToForcedRace(scenarioIsGrandConcert = true, fanPressureActive = true, hasTrophyRequirement = false, hasInsufficientGoalRacePtsRequirement = true),
+        )
+        // A non-Grand-Concert scenario never takes the GC fan branch even under fan pressure.
+        assertFalse(
+            GrandConcertFanRaceSelector.appliesToForcedRace(scenarioIsGrandConcert = false, fanPressureActive = true, hasTrophyRequirement = false, hasInsufficientGoalRacePtsRequirement = false),
+        )
+    }
 }

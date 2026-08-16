@@ -1375,7 +1375,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 }
                 val fans = game.imageUtils.getUmamusumeClassDialogFanCount(croppedBitmap)
                 if (fans != null) {
-                    trainee.fans = fans
+                    trainee.observeFanCount(fans)
                     bNeedToCheckFans = false
                     MessageLog.i(TAG, "[INFO] Updated fan count: ${trainee.fans}")
                 } else {
@@ -2264,6 +2264,16 @@ abstract class Campaign(game: Game) : Task(game) {
      * goal-points requirement always races - and the override is responsible for enforcing that.
      */
     open fun considerFanRaceDeferral(): Boolean = false
+
+    /**
+     * The current-scope fan requirement derived from committed scenario route facts, if this scenario
+     * has any. The base returns [GrandConcertFanRequirement.Result.Unknown] with the no-scenario-facts
+     * sentinel, so every non-facts scenario keeps its legacy template-driven fan requirement
+     * unchanged. Grand Concert overrides it because the `race_criteria_fans` template is dead there.
+     * Pure: reads no pixels, performs no navigation, has no side effects.
+     */
+    open fun currentFanRequirementFromScenarioFacts(): GrandConcertFanRequirement.Result =
+        GrandConcertFanRequirement.Result.Unknown(GrandConcertFanRequirement.REASON_NO_SCENARIO_FACTS)
 
     /**
      * Public accessor for the grade of the most recent race processed in this career.
@@ -4185,7 +4195,7 @@ abstract class Campaign(game: Game) : Task(game) {
                     // the whole run (aborting a stopOnError queue) at career end. Keep the last value on a
                     // bad read instead of crashing.
                     val cleanedFans = fansText.replace(Regex("[^0-9]"), "")
-                    cleanedFans.toIntOrNull()?.let { trainee.fans = it }
+                    cleanedFans.toIntOrNull()?.let { trainee.observeFanCount(it) }
                         ?: MessageLog.w(TAG, "[WARN] process:: Could not detect final fan count for the end of the Career from OCR: $fansText")
 
                     // Now click the button to open the details dialog for aptitude and stat updates.
