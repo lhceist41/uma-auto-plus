@@ -43,6 +43,7 @@ class GrandConcertProbeFixtureTest {
             "bonuses_updated", "concert_on_stage", "active_bonuses_panel",
             "grand_confirm_unchecked", "grand_confirm_checked",
             "training_panel_vi_gain", "training_panel_rainbow", "training_panel_hidden",
+            "training_panel_gain_single_digit", "training_panel_gain_row3_bg",
         )
 
     @Test
@@ -309,6 +310,7 @@ class GrandConcertProbeFixtureTest {
             val panelFixtures =
                 setOf(
                     "training_guts_before", "training_panel_vi_gain", "training_panel_rainbow",
+                    "training_panel_gain_single_digit", "training_panel_gain_row3_bg",
                     "career_after_training", "career_scheduled",
                 )
             for (name in panelFixtures) {

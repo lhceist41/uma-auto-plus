@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.bot
 
 import android.graphics.Bitmap
+import com.steve1316.uma_android_automation.utils.GrandConcertGainDigits
 import com.steve1316.uma_android_automation.utils.GrandConcertTrainingGeometry
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.grandConcertPerformancePanelPresent
@@ -46,10 +47,15 @@ class GrandConcertTrainingReader(private val game: Game) {
 
         val gains = LinkedHashMap<PerformancePointType, Int?>()
         for (row in selectedTrainingPerformanceRows(sampler)) {
-            val amount = ocrNumber(sourceBitmap, GrandConcertTrainingGeometry.perfGainAmountOcrRegion(row), "gc_train_gain_$row")
-            // Observed per-training gains run 7..30; the first live run OCR'd a "+99" out of glyph
-            // noise, so the sanity band stays just above the plausible ceiling, not at two digits.
-            gains[GrandConcertTrainingGeometry.PERF_ROW_TYPES[row]] = amount?.takeIf { it in 1..40 }
+            // The pixel digit reader recognises the warm "+N" glyph directly and is both far more
+            // reliable than general OCR on this stylised number and range-bounded by construction;
+            // it falls back to the OCR path only on the reads it declines, preserving prior behaviour
+            // there. Observed per-training gains run 7..30; the first live run OCR'd a "+99" out of
+            // glyph noise, so the OCR sanity band stays just above the plausible ceiling.
+            val amount =
+                GrandConcertGainDigits.readGainAmount(sampler, row)
+                    ?: ocrNumber(sourceBitmap, GrandConcertTrainingGeometry.perfGainAmountOcrRegion(row), "gc_train_gain_$row")?.takeIf { it in 1..40 }
+            gains[GrandConcertTrainingGeometry.PERF_ROW_TYPES[row]] = amount
         }
         return FacilityPanelRead(balances = balances, gains = gains)
     }

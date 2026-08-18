@@ -177,6 +177,16 @@ with warm pixels), these four pin the gain-row detector's two-factor rule: warm 
 AND the glyph's thick white outline, at most two rows. Measured separation: art tops out at 37
 white samples, the faintest real glyph reads 115+.
 
+| Fixture | Screen |
+|---|---|
+| training_panel_gain_single_digit.png | Wit training granting a single-digit "+7" beside the Co row. Pins the one-digit read for the pixel digit reader. |
+| training_panel_gain_row3_bg.png | Guts training with a "+11" beside the Vi (row 3) glyph floating directly over warm stadium art. A plain warm-column scan fuses the last digit with that background blob; this pins that the white-outline enclosure test separates the digit and the amount still reads 11. |
+
+These two calibrate the pixel "+N" digit reader (GrandConcertGainDigits): it isolates each digit
+as a warm connected component enclosed by white outline, resizes to a fixed grid, and template-
+matches font digits measured from a full career capture corpus. They are channel-swapped into the
+fixture orientation like every other bot-saved frame.
+
 ## Screens still needed before further automation
 
 1. The lesson list immediately after a successful LEARN (the refresh; we have only after-schedule)
