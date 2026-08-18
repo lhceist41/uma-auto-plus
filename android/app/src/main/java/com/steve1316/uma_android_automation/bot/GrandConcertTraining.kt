@@ -346,3 +346,101 @@ object GrandConcertTransition {
 
     private fun countdownDroppedByOne(before: Int?, after: Int?): Boolean = before != null && after != null && before - after == 1
 }
+
+/**
+ * The per-turn Grand Concert performance-point income record: which facility was trained this turn
+ * and the per-color points its own on-screen "+N" preview promised for it.
+ *
+ * The income is training-attributable BY CONSTRUCTION. The number is the game's per-facility award,
+ * read off that facility's panel ([GrandConcertTrainingReader]); it is never a differenced balance
+ * and never the static [GrandConcertFacilityModel] prior. Because it is not a before/after
+ * subtraction, no unrelated concert bonus, event reward, or lesson spend can leak into it -- the
+ * classic "ambiguous interval" failure mode does not exist at this hook. There is no clean
+ * post-training balance read to difference anyway: the only live performance-point read on a
+ * training turn is the pre-training panel balance ([Training.gcTurnBalances]), and
+ * [GrandConcertTransition] (which would verify a before/after delta) is unwired. So the record
+ * carries the previewed award plus the pre-training balance anchor, and never invents a ppAfter or
+ * ppDelta it cannot observe.
+ *
+ * Pure and Android-free like the rest of this file; the live emit gathers the inputs in [Training]
+ * and formats through [format].
+ */
+object GrandConcertPointIncome {
+    /** How trustworthy the trained facility's per-color income read is. Qualifies the INCOME only;
+     * the pre-training balance anchor is reported separately, with its own per-type unknowns. */
+    enum class Attribution {
+        /** Every observed gain type carried a readable amount: the income is fully attributed. */
+        TRAINING,
+
+        /** A gain type was observed but its amount would not OCR (glyph seen, number unread): the
+         * color is attributed, the magnitude is not, so no amount is asserted for that type. */
+        AMBIGUOUS,
+
+        /** No gain was read at all (empty preview). Never rendered as a fabricated zero: a Grand
+         * Concert facility always awards some point, so an empty read is unknown, not zero. */
+        UNKNOWN,
+    }
+
+    /** Classifies the trained facility's [gains] (its observed per-type "+N"; a null amount means
+     * the glyph was seen but the number was unreadable). */
+    fun classify(gains: Map<PerformancePointType, Int?>): Attribution =
+        when {
+            gains.isEmpty() -> Attribution.UNKNOWN
+            gains.values.all { it != null } -> Attribution.TRAINING
+            else -> Attribution.AMBIGUOUS
+        }
+
+    private fun code(type: PerformancePointType): String = type.displayName.take(2)
+
+    /** "Da+13,Pa+8", an unread amount as "Vi+?", or "none" when nothing was read. Ordered by the
+     * enum so every record's colors line up for parsing. */
+    private fun incomeString(gains: Map<PerformancePointType, Int?>): String =
+        PerformancePointType.entries
+            .filter { gains.containsKey(it) }
+            .joinToString(",") { "${code(it)}+${gains[it] ?: "?"}" }
+            .ifEmpty { "none" }
+
+    private fun observedString(gains: Map<PerformancePointType, Int?>): String =
+        PerformancePointType.entries
+            .filter { gains.containsKey(it) }
+            .joinToString(",") { code(it) }
+            .ifEmpty { "none" }
+
+    private fun balanceString(balances: Map<PerformancePointType, Int?>?): String =
+        PerformancePointType.entries.joinToString(",") { "${code(it)}=${balances?.get(it) ?: "?"}" }
+
+    private fun demandString(demand: Map<PerformancePointType, Int>): String =
+        PerformancePointType.entries
+            .filter { (demand[it] ?: 0) > 0 }
+            .joinToString(",") { "${code(it)}:${demand[it]}" }
+            .ifEmpty { "none" }
+
+    /**
+     * Formats one compact, machine-parseable income record for the turn's trained facility. All
+     * inputs are plain values so this stays JUnit-pinned; the caller supplies the trained facility's
+     * observed gains, the pre-training balances, and the turn's point context.
+     */
+    fun format(
+        turn: Int,
+        selected: StatName,
+        gains: Map<PerformancePointType, Int?>,
+        ppBefore: Map<PerformancePointType, Int?>?,
+        concertIn: Int?,
+        songsBoughtThisCycle: Int,
+        purchasedFloor: Int,
+        songsBoughtThisCareer: Int,
+        expectedSongsByNow: Int,
+        currentSongDemand: Map<PerformancePointType, Int>,
+        nextSongDemand: Map<PerformancePointType, Int>,
+        numRainbow: Int,
+        numSkillHints: Int,
+    ): String {
+        val attribution = classify(gains).name.lowercase()
+        return "[TRAINING] [GC_PP_INCOME] turn=$turn selected=${selected.name} " +
+            "income=[${incomeString(gains)}] observed=${observedString(gains)} attribution=$attribution " +
+            "ppBefore=[${balanceString(ppBefore)}] concertIn=${concertIn ?: "?"} " +
+            "cycleSongs=$songsBoughtThisCycle/$purchasedFloor careerSongs=$songsBoughtThisCareer/$expectedSongsByNow " +
+            "demand=[song:${demandString(currentSongDemand)} next:${demandString(nextSongDemand)}] " +
+            "rainbows=$numRainbow hints=$numSkillHints"
+    }
+}

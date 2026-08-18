@@ -312,6 +312,31 @@ class GrandConcertScenarioTest {
         }
 
         /**
+         * The per-turn PP-income record ([GrandConcertPointIncome]) is Grand Concert only. Its emit
+         * in the shared training loop is guarded on a non-null point context, and the base campaign
+         * hook returns null for every other scenario, so no non-Grand-Concert career can ever produce
+         * a `[GC_PP_INCOME]` line. Both halves of that guarantee are single lines a refactor could
+         * drop, so they are pinned.
+         */
+        @Test
+        fun `the point-income record is emitted only on the Grand Concert path`() {
+            val training = source("bot/Training.kt")
+            assertTrue(
+                training.contains("GrandConcertPointIncome.format("),
+                "the income record no longer formats through GrandConcertPointIncome",
+            )
+            assertTrue(
+                training.contains("if (gcPoints != null && trainingSelected != null) {"),
+                "the income emit lost its non-null Grand Concert context guard",
+            )
+            val campaign = source("bot/Campaign.kt")
+            assertTrue(
+                campaign.contains("open fun grandConcertPointContext(balances: Map<PerformancePointType, Int?>?): GrandConcertPointContext? = null"),
+                "the base point-context hook no longer returns null for non-Grand-Concert scenarios",
+            )
+        }
+
+        /**
          * The spend loop's two cadence behaviors: the pre-concert hold (a revealed song carries
          * across the concert as next cycle's first lesson credit, and any purchase would refresh
          * it away) and the milestone song target feeding both the song-first pick and the

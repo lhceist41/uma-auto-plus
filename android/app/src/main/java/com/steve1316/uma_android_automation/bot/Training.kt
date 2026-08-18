@@ -3151,6 +3151,36 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         )
                     }
                 }
+
+                // Grand Concert: record the turn's training-attributable per-color point income,
+                // tagged to the facility actually being trained. The income is that facility's own
+                // on-screen "+N" preview (the game's per-facility award), so it needs no before/after
+                // differencing to attribute; see GrandConcertPointIncome for why there is no truthful
+                // ppAfter at this hook. The context call is idempotent (already made this turn by
+                // recommendTraining and considerFanRaceDeferral) and returns null off Grand Concert.
+                val gcPoints = campaign.grandConcertPointContext(gcTurnBalances)
+                if (gcPoints != null && trainingSelected != null) {
+                    val trained = trainingMap[trainingSelected]
+                    MessageLog.i(
+                        TAG,
+                        GrandConcertPointIncome.format(
+                            turn = campaign.date.day,
+                            selected = trainingSelected,
+                            gains = trained?.performanceGains ?: emptyMap(),
+                            ppBefore = gcTurnBalances,
+                            concertIn = gcPoints.turnsUntilConcert,
+                            songsBoughtThisCycle = gcPoints.songsBoughtThisCycle,
+                            purchasedFloor = gcPoints.purchasedFloor,
+                            songsBoughtThisCareer = gcPoints.songsBoughtThisCareer,
+                            expectedSongsByNow = gcPoints.expectedSongsByNow,
+                            currentSongDemand = gcPoints.currentSongDemand,
+                            nextSongDemand = gcPoints.nextSongDemand,
+                            numRainbow = trained?.numRainbow ?: 0,
+                            numSkillHints = trained?.numSkillHints ?: 0,
+                        ),
+                    )
+                }
+
                 executeTraining(trainingSelected)
                 firstTrainingCheck = false
                 advanced = true

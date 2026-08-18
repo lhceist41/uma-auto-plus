@@ -1397,6 +1397,18 @@ type at a conservative assumed amount. Every recommendation turn logs a `[GC_POI
 balances against caps, each facility's observed types and amounts, the deficit, whether the bias
 armed and on which arm, and the career-song trajectory.
 
+Every turn that actually trains a facility also logs a `[GC_PP_INCOME]` line, tagged to the
+facility being trained: its own observed per-color "+N" gain (the training-attributable income),
+the pre-training balances, the concert countdown, the cycle and career song counts, the current-
+and next-song demand, and the rainbow and skill-hint counts for later correlation. The income is
+the game's own per-facility award read off that facility's panel, not a before/after subtraction,
+so an unrelated concert bonus or event reward cannot leak into it. There is no post-training
+balance read to difference on this hook, so the record never states a `ppAfter` or a measured
+delta it did not observe; an amount that would not read is kept as `?` and the record is marked
+`ambiguous`, and a facility whose gain was wholly unread is marked `unknown` rather than a
+fabricated zero. Offline, joining these records by turn reconstructs each color's income timeline
+against song demand across a cycle.
+
 **Fan-vs-training deferral (wired and tested, not yet live).** Grand Concert also carries a
 fail-closed policy (`GrandConcertFanPolicy`) for the case where the game's fan requirement would
 otherwise force racing on turns whose training income the song economy needs. When a fan
