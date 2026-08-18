@@ -117,6 +117,25 @@ object GrandConcertSongCatalog {
         )
 
     /**
+     * The cheapest unpurchased, non-free song available in the current stage ([CatalogSong.phase] at
+     * or below [currentPhase]) for the training scorer's one-step next-song lookahead. Excludes free
+     * songs (no point cost, and GIRLS' LEGEND U is out of the mission count), any song already bought
+     * this career (each purchased title matched back to the catalog by [match], so OCR spelling
+     * differences still exclude the right song), and, when supplied, [excludeTitle] - the song
+     * currently on offer, which is still technically unpurchased and must not be returned as its own
+     * "next" song (which would double-count its colors). [excludeTitle] is canonicalized through the
+     * same [match] path as the purchased titles. Null when every stage song is already bought, free, or
+     * excluded. Pure: it reads only this static catalog and makes no purchase decision.
+     */
+    fun cheapestUnpurchasedInStage(currentPhase: Int, purchasedTitles: Set<String>, excludeTitle: String? = null): CatalogSong? {
+        val purchasedCanonical = purchasedTitles.mapNotNull { match(it)?.title }.toSet()
+        val excludedCanonical = excludeTitle?.let { match(it)?.title }
+        return songs
+            .filter { !it.free && it.phase <= currentPhase && it.title !in purchasedCanonical && it.title != excludedCanonical && (it.cost.total() ?: 0) > 0 }
+            .minByOrNull { it.cost.total() ?: Int.MAX_VALUE }
+    }
+
+    /**
      * Finds the catalog song for an OCR'd title, or null. Matching is deliberately layered for
      * the failure modes the captures actually showed: exact fold, then prefix (the card truncates
      * long titles, observed as "...Where the Cent"), then a small edit distance (observed

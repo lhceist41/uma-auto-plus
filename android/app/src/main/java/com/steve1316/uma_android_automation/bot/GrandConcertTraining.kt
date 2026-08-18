@@ -125,6 +125,13 @@ data class GrandConcertPointContext(
      * is owed yet) and by default (which keeps the total-target bias disarmed for callers that do
      * not supply it). */
     val expectedSongsByNow: Int = 0,
+    /** Telemetry provenance for the widened demand set (the scorer consumes only the merged
+     * [deficit]): the current song target's raw per-type cost ("song"), the cheapest gate-advancing
+     * technique's cost while the song gate is closed ("gate"), and one cheapest unpurchased next song
+     * while the career trails the cadence ("next-song"). Empty maps for callers that do not widen. */
+    val currentSongDemand: Map<PerformancePointType, Int> = emptyMap(),
+    val gateTechniqueDemand: Map<PerformancePointType, Int> = emptyMap(),
+    val nextSongDemand: Map<PerformancePointType, Int> = emptyMap(),
 ) {
     /** True while this cycle still owes songs to the Great Success floor and a concert remains. */
     val behindPace: Boolean get() = turnsUntilConcert != null && songsBoughtThisCycle < purchasedFloor
@@ -148,6 +155,68 @@ data class GrandConcertPointContext(
         val balance = balances[type] ?: return null
         val cap = caps[type] ?: return null
         return (cap - balance).coerceAtLeast(0)
+    }
+}
+
+/**
+ * The pure Grand Concert training-demand merge: the widened per-color point demand the training scorer
+ * steers by, built from three bounded components and reduced by the current balances. [Merged.deficit]
+ * is what the scorer consumes; the component maps are kept for telemetry. Reads no pixels and makes no
+ * purchase decision.
+ *
+ * Sequential-demand model: the active primary purchase (the current song when the song gate is open,
+ * else the cheapest gate-advancing technique - never both, only one is buyable in a turn) and the
+ * one-step next-song lookahead are made SEQUENTIALLY, so their per-color costs add; the current
+ * balance covers part of that sequence and is subtracted once. A surplus color earns no credit.
+ */
+object GrandConcertPointDemand {
+    data class Merged(
+        val deficit: Map<PerformancePointType, Int>,
+        val currentSongDemand: Map<PerformancePointType, Int>,
+        val gateTechniqueDemand: Map<PerformancePointType, Int>,
+        val nextSongDemand: Map<PerformancePointType, Int>,
+    )
+
+    /**
+     * @param currentSongCost the remembered current song target's cost, or null.
+     * @param gateTechniqueCost the cheapest gate-advancing technique's cost, or null.
+     * @param offerHadSong whether the last lesson read showed a song (the song-gate state): it selects
+     *   the current song vs the gate technique as the active primary purchase.
+     * @param nextSongCost the cheapest unpurchased next song's cost when the career trails the cadence,
+     *   else null (the caller gates this on the cumulative-behind condition).
+     * @param balances the per-type point balances read this turn.
+     */
+    fun merge(
+        currentSongCost: PerformancePointVector?,
+        gateTechniqueCost: PerformancePointVector?,
+        offerHadSong: Boolean,
+        nextSongCost: PerformancePointVector?,
+        balances: Map<PerformancePointType, Int?>,
+    ): Merged {
+        val currentSongDemand = perType(if (offerHadSong) currentSongCost else null)
+        val gateTechniqueDemand = perType(if (!offerHadSong) gateTechniqueCost else null)
+        val nextSongDemand = perType(nextSongCost)
+        val primary = if (offerHadSong) currentSongDemand else gateTechniqueDemand
+        val deficit = LinkedHashMap<PerformancePointType, Int>()
+        for (type in PerformancePointType.entries) {
+            val combined = (primary[type] ?: 0) + (nextSongDemand[type] ?: 0)
+            if (combined <= 0) continue
+            val b = balances[type] ?: continue
+            deficit[type] = (combined - b).coerceAtLeast(0)
+        }
+        return Merged(deficit, currentSongDemand, gateTechniqueDemand, nextSongDemand)
+    }
+
+    /** A vector's positive per-type entries as a plain map (empty when null): a component's raw
+     * demand before the merge subtracts the balance. */
+    private fun perType(cost: PerformancePointVector?): Map<PerformancePointType, Int> {
+        if (cost == null) return emptyMap()
+        val out = LinkedHashMap<PerformancePointType, Int>()
+        for (type in PerformancePointType.entries) {
+            val c = cost[type] ?: continue
+            if (c > 0) out[type] = c
+        }
+        return out
     }
 }
 

@@ -624,11 +624,6 @@ class Training(private val game: Game, private val campaign: Campaign) {
          * below a real rainbow's 2.0x so point steering never outranks a rainbow on its own. */
         const val GC_POINT_BOOST_MAX_URGENT = 0.8
 
-        /** Boost ceiling for the total-target-only arm (cycle floor met, but the career trails the
-         * 18-song cadence). Smaller than [GC_POINT_BOOST_MAX] so income keeps chasing the total
-         * without overpowering ordinary stat play when the immediate cycle is already secure. */
-        const val GC_POINT_BOOST_MAX_TOTAL_ONLY = 0.35
-
         /** Concert-proximity windows for the point bias. At or inside [GC_CONCERT_NEAR_TURNS] the
          * boost is amplified; at or inside the tighter [GC_CONCERT_URGENT_TURNS] more so. Both are
          * below the default test proximity (7 turns) so the calm-window behaviour is unchanged. */
@@ -1335,9 +1330,10 @@ class Training(private val game: Game, private val campaign: Campaign) {
          * Two deadline shapers tighten the boost without uncapping it: an approaching concert
          * amplifies it ([GC_PROXIMITY_MULTIPLIER_NEAR]/[GC_PROXIMITY_MULTIPLIER_URGENT] inside the
          * [GC_CONCERT_NEAR_TURNS]/[GC_CONCERT_URGENT_TURNS] windows), and the ceiling rises to
-         * [GC_POINT_BOOST_MAX_URGENT] for a behind-floor cycle at a near concert. The total-only arm
-         * is capped lower ([GC_POINT_BOOST_MAX_TOTAL_ONLY]). Every ceiling stays strictly below a
-         * real rainbow's 2.0x so the bias re-ranks near-peers rather than overruling the big signals.
+         * [GC_POINT_BOOST_MAX_URGENT] for a behind-floor cycle at a near concert. A behind-floor cycle
+         * and a behind-total-cadence career share the [GC_POINT_BOOST_MAX] ceiling (the total-song
+         * deficit is mission-critical). Every ceiling stays strictly below a real rainbow's 2.0x so
+         * the bias re-ranks near-peers rather than overruling the big signals.
          */
         fun calculateGrandConcertPointMultiplier(config: TrainingConfig, training: TrainingOption): Double {
             val ctx = config.grandConcertPoints ?: return 1.0
@@ -1363,8 +1359,10 @@ class Training(private val game: Game, private val campaign: Campaign) {
             val ceiling =
                 when {
                     ctx.behindPace && turns != null && turns <= GC_CONCERT_NEAR_TURNS -> GC_POINT_BOOST_MAX_URGENT
-                    ctx.behindPace -> GC_POINT_BOOST_MAX
-                    else -> GC_POINT_BOOST_MAX_TOTAL_ONLY
+                    // Behind the cycle floor OR behind the whole-career song cadence both use the same
+                    // 0.6 ceiling: the total-song deficit is mission-critical (18 countable songs), so
+                    // it is no longer capped weaker than a behind-floor cycle.
+                    else -> GC_POINT_BOOST_MAX
                 }
             return 1.0 + minOf(ceiling, boost)
         }
@@ -2550,11 +2548,17 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 PerformancePointType.entries.joinToString(" ") {
                     "${it.displayName.take(2)}=${grandConcertPoints.balances[it] ?: "?"}/${grandConcertPoints.caps[it]}"
                 }
+
+            fun demandStr(m: Map<PerformancePointType, Int>): String =
+                m.entries.joinToString(",") { "${it.key.displayName.take(2)}:${it.value}" }.ifEmpty { "none" }
             MessageLog.i(
                 TAG,
                 "[TRAINING] [GC_POINTS] $balancesLine | $gainsLine | songs=${grandConcertPoints.songsBoughtThisCycle}/" +
                     "${grandConcertPoints.purchasedFloor} concertIn=${grandConcertPoints.turnsUntilConcert} " +
-                    "deficit=${grandConcertPoints.deficit.entries.joinToString(",") { "${it.key.displayName.take(2)}:${it.value}" }.ifEmpty { "none" }} " +
+                    "demand=[song:${demandStr(grandConcertPoints.currentSongDemand)} " +
+                    "gate:${demandStr(grandConcertPoints.gateTechniqueDemand)} " +
+                    "next-song:${demandStr(grandConcertPoints.nextSongDemand)}] " +
+                    "deficit=${demandStr(grandConcertPoints.deficit)} " +
                     "biasArmed=${grandConcertPoints.biasArmed} pace=${grandConcertPoints.behindPace} " +
                     "total=${grandConcertPoints.behindTotalTarget} " +
                     "careerSongs=${grandConcertPoints.songsBoughtThisCareer}/${grandConcertPoints.expectedSongsByNow}",

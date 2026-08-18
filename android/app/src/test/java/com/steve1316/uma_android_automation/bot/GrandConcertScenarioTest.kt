@@ -300,8 +300,14 @@ class GrandConcertScenarioTest {
                 "GrandConcert no longer overrides the point-context hook",
             )
             assertTrue(
-                campaign.contains("rememberSongTarget(it)"),
-                "the settled list read no longer refreshes the point-steering song target",
+                campaign.contains("rememberLessonState(it)"),
+                "the settled list read no longer refreshes the point-steering lesson state",
+            )
+            // The next-song lookahead excludes the current song only while it is actually on offer; a
+            // stale target during a gate phase (lastOfferHadSong == false) stays eligible.
+            assertTrue(
+                campaign.contains("lastSongTargetTitle.takeIf { lastOfferHadSong }"),
+                "the next-song lookahead no longer gates the current-song exclusion on lastOfferHadSong",
             )
         }
 

@@ -1713,7 +1713,7 @@ class TrainingScoringTest {
     }
 
     @Test
-    @DisplayName("GC bias stays armed on the career total after the cycle floor is met, at a smaller ceiling")
+    @DisplayName("GC bias stays armed on the career total after the cycle floor is met, at the same 0.6 ceiling")
     fun testGrandConcertPointMultiplierTotalTargetArm() {
         val training = gcTraining(mapOf(PerformancePointType.VOCAL to 10))
         // Cycle floor met (3/3, so not behindPace) but the career total trails the cadence (5 of 8):
@@ -1722,8 +1722,24 @@ class TrainingScoringTest {
             createDefaultConfig().copy(
                 grandConcertPoints = gcContext(songsBoughtThisCycle = 3, songsBoughtThisCareer = 5, expectedSongsByNow = 8),
             )
-        // 10 points -> 0.04 x 10 = 0.4 boost, clamped to the total-only ceiling 0.35 -> 1.35.
-        assertEquals(1.35, Training.calculateGrandConcertPointMultiplier(behindTotal, training), 1e-9)
+        // 10 points -> 0.04 x 10 = 0.4 boost, under the 0.6 ceiling the total arm now shares with a
+        // behind-floor cycle (previously capped weaker at 0.35 -> 1.35) -> 1.4.
+        assertEquals(1.4, Training.calculateGrandConcertPointMultiplier(behindTotal, training), 1e-9)
+        // A larger boost in the total arm clamps at the shared 0.6 ceiling, not the old 0.35: 40
+        // effective points -> 1.6 raw boost -> clamped to 0.6 -> 1.6 (was 1.35 under the old cap).
+        val behindTotalBig =
+            createDefaultConfig().copy(
+                grandConcertPoints =
+                    gcContext(
+                        songsBoughtThisCycle = 3,
+                        songsBoughtThisCareer = 5,
+                        expectedSongsByNow = 8,
+                        deficit = mapOf(PerformancePointType.VOCAL to 40, PerformancePointType.DANCE to 40),
+                    ),
+            )
+        val big = gcTraining(mapOf(PerformancePointType.VOCAL to 20, PerformancePointType.DANCE to 20))
+        assertEquals(1.6, Training.calculateGrandConcertPointMultiplier(behindTotalBig, big), 1e-9)
+        assertTrue(Training.calculateGrandConcertPointMultiplier(behindTotalBig, big) < 2.0, "the total arm stays strictly below a rainbow")
         // Caught up on the total (8 of 8) and at the cycle floor: nothing to chase, back to 1.0.
         val caughtUp =
             createDefaultConfig().copy(
@@ -1772,5 +1788,45 @@ class TrainingScoringTest {
         val first = Training.calculateGrandConcertPointMultiplier(config, training)
         val second = Training.calculateGrandConcertPointMultiplier(config, training)
         assertEquals(first, second, 0.0)
+    }
+
+    @Test
+    @DisplayName("the GC point bias does not overturn a survival/stat-floor Stamina winner")
+    fun testGrandConcertPointBiasDoesNotOverturnStaminaFloor() {
+        // A Stamina far below its Long-distance target versus a Wit already well above target. The Wit
+        // training feeds the GC point deficit (Composure) while the career trails the cadence, so it
+        // takes the full GC multiplier; the Stamina training takes none. The bounded mission bias must
+        // not overturn the survival/stat-floor winner - the precedence the completed career relied on.
+        val stamina = createDefaultTrainingOption(name = StatName.STAMINA, statGains = mapOf(StatName.STAMINA to 30))
+        val wit =
+            createDefaultTrainingOption(name = StatName.WIT, statGains = mapOf(StatName.WIT to 15))
+                .copy(performanceGains = mapOf(PerformancePointType.COMPOSURE to 20))
+        val config =
+            createDefaultConfig(
+                currentStats =
+                    mapOf(
+                        StatName.SPEED to 9999,
+                        StatName.STAMINA to 100,
+                        StatName.POWER to 9999,
+                        StatName.GUTS to 9999,
+                        StatName.WIT to 9999,
+                    ),
+                preferredDistance = "Long",
+                scenario = "Grand Concert",
+            ).copy(
+                grandConcertPoints =
+                    gcContext(
+                        deficit = mapOf(PerformancePointType.COMPOSURE to 40),
+                        songsBoughtThisCycle = 3,
+                        songsBoughtThisCareer = 5,
+                        expectedSongsByNow = 8,
+                    ),
+            )
+        // The GC bias really is boosting the Wit option (precedence, not a no-op).
+        assertTrue(Training.calculateGrandConcertPointMultiplier(config, wit) > 1.0, "the GC bias must actually boost the Wit option")
+        // ...yet the below-floor Stamina training still outranks it.
+        val staminaScore = calculateRawTrainingScore(config, stamina)
+        val witScore = calculateRawTrainingScore(config, wit)
+        assertTrue(staminaScore > witScore, "survival/stat-floor Stamina ($staminaScore) must outrank the GC-biased Wit ($witScore)")
     }
 }

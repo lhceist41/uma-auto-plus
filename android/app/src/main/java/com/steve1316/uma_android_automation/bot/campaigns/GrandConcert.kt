@@ -14,8 +14,10 @@ import com.steve1316.uma_android_automation.bot.GrandConcertHandoff
 import com.steve1316.uma_android_automation.bot.GrandConcertHandoffReason
 import com.steve1316.uma_android_automation.bot.GrandConcertLessonReader
 import com.steve1316.uma_android_automation.bot.GrandConcertPointContext
+import com.steve1316.uma_android_automation.bot.GrandConcertPointDemand
 import com.steve1316.uma_android_automation.bot.GrandConcertPolicy
 import com.steve1316.uma_android_automation.bot.GrandConcertScenario
+import com.steve1316.uma_android_automation.bot.GrandConcertSongCatalog
 import com.steve1316.uma_android_automation.bot.GrandConcertState
 import com.steve1316.uma_android_automation.bot.HypeTier
 import com.steve1316.uma_android_automation.bot.LearnVerdict
@@ -138,6 +140,20 @@ class GrandConcert(game: Game) : Campaign(game) {
      * target (the offer does not expire, so the remembered cost stays actionable). */
     private var lastSongTargetCost: PerformancePointVector? = null
     private var lastSongTargetTitle: String? = null
+
+    /** The cheapest readable, unscheduled TECHNIQUE cost on the last settled lesson read, and whether
+     * that read showed any readable unscheduled SONG. Together they let the training scorer add
+     * gate-advancing-technique colors to the demand set while the song gate is closed (no song on
+     * offer) - the phase the old current-song-only demand went blind on. Null technique cost when the
+     * read showed no readable technique. */
+    private var lastGateTechniqueCost: PerformancePointVector? = null
+    private var lastOfferHadSong: Boolean = false
+
+    /** Titles of the songs bought this career (observation only, recorded at the purchase site). Used
+     * to find the cheapest UNPURCHASED next song in the current-stage catalog for the one-step
+     * cumulative-behind lookahead; it does not influence what is bought. Per-career (the campaign is
+     * rebuilt each career), so it starts empty and only grows. */
+    private val purchasedSongTitles = mutableSetOf<String>()
 
     /** Set once the end-of-career Lessons drain has run, so skill-screen entry retries never
      * repeat it. */
@@ -443,25 +459,30 @@ class GrandConcert(game: Game) : Campaign(game) {
                 game.wait(1.0)
             }
         }
-        best?.let { rememberSongTarget(it) }
+        best?.let { rememberLessonState(it) }
         return best
     }
 
-    /** Remembers the cheapest readable, unscheduled song on [list] as the training scorer's
-     * point-steering target. Song absent or cost unreadable keeps the previous target. */
-    private fun rememberSongTarget(list: LessonList) {
-        val song =
-            list.cards
-                .filter { it.kind == LessonCardKind.SONG && it.scheduled != true && it.cost.fullyKnown }
-                .minByOrNull { it.cost.total() ?: Int.MAX_VALUE }
-                ?: return
-        lastSongTargetCost = song.cost
-        lastSongTargetTitle = song.title
-        MessageLog.i(
-            TAG,
-            "[GRAND_CONCERT] [LESSON_READ] Point-steering target: \"${song.title}\" " +
-                "cost=${PerformancePointType.entries.joinToString("/") { "${it.displayName.take(2)}${song.cost[it]}" }}",
-        )
+    /** Remembers the training scorer's point-steering inputs from a settled lesson read: the cheapest
+     * readable, unscheduled SONG cost (the current target; absent or unreadable keeps the previous
+     * target), whether any readable unscheduled song was on offer (the song-gate state), and the
+     * cheapest readable, unscheduled TECHNIQUE cost (the gate-advancing purchase while the gate is
+     * closed). Reads only; it buys nothing and changes no purchase decision. */
+    private fun rememberLessonState(list: LessonList) {
+        val readableUnscheduled = list.cards.filter { it.readable && it.scheduled != true }
+        val song = readableUnscheduled.filter { it.kind == LessonCardKind.SONG }.minByOrNull { it.cost.total() ?: Int.MAX_VALUE }
+        lastOfferHadSong = song != null
+        if (song != null) {
+            lastSongTargetCost = song.cost
+            lastSongTargetTitle = song.title
+            MessageLog.i(
+                TAG,
+                "[GRAND_CONCERT] [LESSON_READ] Point-steering target: \"${song.title}\" " +
+                    "cost=${PerformancePointType.entries.joinToString("/") { "${it.displayName.take(2)}${song.cost[it]}" }}",
+            )
+        }
+        lastGateTechniqueCost =
+            readableUnscheduled.filter { it.kind == LessonCardKind.TECHNIQUE }.minByOrNull { it.cost.total() ?: Int.MAX_VALUE }?.cost
     }
 
     /**
@@ -641,19 +662,38 @@ class GrandConcert(game: Game) : Campaign(game) {
         val concertsPassed = CONCERT_TURNS.count { it < day }
         val caps = PerformancePointType.entries.associateWith { 200 + 50 * concertsPassed }
         val balancesMap = balances ?: emptyMap()
-        val deficit = LinkedHashMap<PerformancePointType, Int>()
-        val cost = lastSongTargetCost
-        if (cost != null) {
-            for (type in PerformancePointType.entries) {
-                val c = cost[type] ?: continue
-                val b = balancesMap[type] ?: continue
-                deficit[type] = (c - b).coerceAtLeast(0)
+        val expectedSongsByNow = GrandConcertPolicy.PURCHASED_SONG_TARGETS.take(concertsPassed).sum()
+
+        // Widened per-color demand (see [GrandConcertPointDemand] and [GrandConcertPointContext]): the
+        // current-song-only demand went blind during technique-gate phases (no song on offer) and did
+        // not prepare for the next song while the career trailed the cadence. The next-song lookahead
+        // is a bounded one step (the cheapest unpurchased song in the current stage catalog), taken
+        // only while behind the cadence; the gate technique fills in when the song gate is closed.
+        val behindTotal = songsBoughtThisCareer < expectedSongsByNow
+        val nextSongCost =
+            if (behindTotal) {
+                // Exclude the current song target while it is actually on offer: it is still
+                // "unpurchased" until bought, so without this the next-song lookahead could return the
+                // same song and double-count its colors. During a gate phase (no song on offer) the
+                // stale target is NOT excluded - it may legitimately be the next song after the gate.
+                val excludeCurrent = lastSongTargetTitle.takeIf { lastOfferHadSong }
+                GrandConcertSongCatalog.cheapestUnpurchasedInStage(concertsPassed + 1, purchasedSongTitles, excludeCurrent)?.cost
+            } else {
+                null
             }
-        }
+        val demand =
+            GrandConcertPointDemand.merge(
+                currentSongCost = lastSongTargetCost,
+                gateTechniqueCost = lastGateTechniqueCost,
+                offerHadSong = lastOfferHadSong,
+                nextSongCost = nextSongCost,
+                balances = balancesMap,
+            )
+
         return GrandConcertPointContext(
             balances = balancesMap,
             caps = caps,
-            deficit = deficit,
+            deficit = demand.deficit,
             songsBoughtThisCycle = songsBoughtThisCycle,
             // The bias chases the cycle's milestone target (3-4-4-3-3), not just the Great
             // Success floor: wanting a fourth song means wanting the income for it too.
@@ -664,7 +704,10 @@ class GrandConcert(game: Game) : Campaign(game) {
             // The cadence total a healthy run has by the START of this cycle (the sum of the
             // 3-4-4-3-3 purchased targets for concerts already performed). Behind this, the bias
             // stays armed on the total even after the current cycle floor is met.
-            expectedSongsByNow = GrandConcertPolicy.PURCHASED_SONG_TARGETS.take(concertsPassed).sum(),
+            expectedSongsByNow = expectedSongsByNow,
+            currentSongDemand = demand.currentSongDemand,
+            gateTechniqueDemand = demand.gateTechniqueDemand,
+            nextSongDemand = demand.nextSongDemand,
         )
     }
 
@@ -842,6 +885,9 @@ class GrandConcert(game: Game) : Campaign(game) {
             if (intended.kind == LessonCardKind.SONG) {
                 songsBoughtThisCycle++
                 songsBoughtThisCareer++
+                // Record the purchased title (observation only) so the training scorer's next-song
+                // lookahead can skip songs already bought. It changes no purchase decision.
+                intended.title?.let { purchasedSongTitles.add(it) }
             }
 
             game.wait(1.2)
