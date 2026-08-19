@@ -214,6 +214,10 @@ object LabelRaceCriteriaFans : ComponentInterface {
     override val template = Template("components/label/race_criteria_fans", region = Region.topHalf)
 }
 
+object LabelRaceCriteriaG1 : ComponentInterface {
+    override val template = Template("components/label/race_criteria_g1", region = Region.topHalf)
+}
+
 object LabelRaceCriteriaG3OrAbove : ComponentInterface {
     override val template = Template("components/label/race_criteria_g3_or_above", region = Region.topHalf)
 }

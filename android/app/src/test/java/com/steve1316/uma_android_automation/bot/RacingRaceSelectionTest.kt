@@ -6,6 +6,7 @@ import com.steve1316.uma_android_automation.bot.Racing.Companion.indexOfBestByTi
 import com.steve1316.uma_android_automation.bot.Racing.Companion.isFanEmergency
 import com.steve1316.uma_android_automation.bot.Racing.Companion.mergePredictionAnchors
 import com.steve1316.uma_android_automation.bot.Racing.Companion.requirementForcesExtraRace
+import com.steve1316.uma_android_automation.bot.Racing.Companion.restrictsToG1Only
 import com.steve1316.uma_android_automation.types.PredictionTier
 import com.steve1316.uma_android_automation.utils.CustomImageUtils.RaceDetails
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -376,5 +377,51 @@ class RacingRaceSelectionTest {
         assertFalse(
             GrandConcertFanRaceSelector.appliesToForcedRace(scenarioIsGrandConcert = false, fanPressureActive = true, hasTrophyRequirement = false, hasInsufficientGoalRacePtsRequirement = false),
         )
+    }
+
+    // ////////////////////////////////////////////////////////////////////////////////////////////
+    // restrictsToG1Only - the positive goal-criteria decision that gates race-list filtering.
+    //
+    // These pin the correctness core of the goal-tier reader: race selection restricts to G1 only
+    // when the criteria line was positively read as "In G1,", and never from a mere failure to read
+    // Pre-OP or G3. An unread tier (null) must stay permissive, or a criteria line the game shrank
+    // to fit its slot filters the list to zero on a G1-less turn and cancels required racing until
+    // the career goal expires. The scale-sweep template match and readGoalCriteriaTier() themselves
+    // need OpenCV and a real Bitmap, so they are validated on-device, not here - the same boundary
+    // upstream draws by unit-testing only the pure decision.
+
+    @Test
+    @DisplayName("A positively read Pre-OP-or-above goal never restricts to G1")
+    fun preOpDoesNotRestrictToG1() {
+        assertFalse(restrictsToG1Only(GoalCriteriaTier.PRE_OP_OR_ABOVE))
+    }
+
+    @Test
+    @DisplayName("A positively read G3-or-above goal never restricts to G1")
+    fun g3DoesNotRestrictToG1() {
+        assertFalse(restrictsToG1Only(GoalCriteriaTier.G3_OR_ABOVE))
+    }
+
+    @Test
+    @DisplayName("A positively read G1-only goal restricts to G1")
+    fun g1OnlyRestrictsToG1() {
+        assertTrue(restrictsToG1Only(GoalCriteriaTier.G1_ONLY))
+    }
+
+    @Test
+    @DisplayName("An unreadable criteria tier (null) stays permissive and does not restrict to G1")
+    fun unknownTierStaysPermissive() {
+        // The career-loss regression guard: an unread goal must race any grade rather than be treated
+        // as G1-only, which on a turn with no G1 in the pool would cancel racing and expire the goal.
+        assertFalse(restrictsToG1Only(null))
+    }
+
+    @Test
+    @DisplayName("G1_ONLY is the only tier that restricts race selection to G1")
+    fun onlyG1OnlyRestricts() {
+        // Enumerate every tier plus the unread case so a future tier added to the enum cannot silently
+        // start restricting to G1 without a deliberate decision here.
+        val restricting = (GoalCriteriaTier.entries + listOf<GoalCriteriaTier?>(null)).filter { restrictsToG1Only(it) }
+        assertEquals(listOf(GoalCriteriaTier.G1_ONLY), restricting)
     }
 }

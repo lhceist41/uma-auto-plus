@@ -27,6 +27,7 @@ import com.steve1316.uma_android_automation.components.ButtonRacesGrandConcert
 import com.steve1316.uma_android_automation.components.ButtonSkip
 import com.steve1316.uma_android_automation.components.ButtonTryAgainAlt
 import com.steve1316.uma_android_automation.components.ButtonViewResults
+import com.steve1316.uma_android_automation.components.ComponentInterface
 import com.steve1316.uma_android_automation.components.IconRaceAgendaEmpty
 import com.steve1316.uma_android_automation.components.IconRaceDayRibbon
 import com.steve1316.uma_android_automation.components.IconRaceListFansIcon
@@ -39,6 +40,7 @@ import com.steve1316.uma_android_automation.components.IconScrollListTopLeft
 import com.steve1316.uma_android_automation.components.LabelCongratulations
 import com.steve1316.uma_android_automation.components.LabelFirstPlace
 import com.steve1316.uma_android_automation.components.LabelRaceCriteriaFans
+import com.steve1316.uma_android_automation.components.LabelRaceCriteriaG1
 import com.steve1316.uma_android_automation.components.LabelRaceCriteriaG3OrAbove
 import com.steve1316.uma_android_automation.components.LabelRaceCriteriaMaiden
 import com.steve1316.uma_android_automation.components.LabelRaceCriteriaPreOpOrAbove
@@ -62,6 +64,36 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.opencv.core.Point
 import kotlin.math.abs
+
+/**
+ * Factors to shrink a career-goal criteria line template by, ordered most likely first.
+ *
+ * The game shrinks the criteria line to fit a fixed-width slot, so a long goal string renders smaller than the captured template and never matches at full size. Measured on
+ * "In Pre-OP or above, earn first place 2 time(s)." the only passing factors were 0.88 and 0.89, so the step has to stay at 0.01 or a sweep can straddle the window entirely. The game only ever
+ * shrinks text to fit, never enlarges it, so nothing above 1.0 is worth probing.
+ *
+ * The 0.80 floor is empirical rather than derived - the shrink is slot width over natural text width, which nothing bounds at 0.80. A goal string long enough to fall below it reads as an unknown
+ * tier, which races anyway and logs a warning, so the warning is the tripwire for widening this.
+ */
+private val GOAL_CRITERIA_SHRINK_FACTORS: List<Double> = (100 downTo 80).map { it / 100.0 }
+
+/** How far above the goal's progress counter the criteria line search band starts. The line sits ~28px above the counter's center, so this leaves room for a taller or wrapped one. */
+private const val GOAL_CRITERIA_BAND_ABOVE_COUNTER = 90
+
+/**
+ * Which race grades satisfy a trophy goal, as named by the criteria line above the goal's progress counter. Declaration order is the order the lines are probed in.
+ *
+ * G1 has its own "In G1," line rather than being inferred from the other two failing to match, so that a goal the bot genuinely cannot read stays distinguishable from a real G1 goal. Conflating
+ * the two is what let a missed Pre-OP line silently become "G1 races only" and cost a whole career.
+ *
+ * @property label The criteria line that identifies this tier on the main screen.
+ * @property description How the tier reads in the log.
+ */
+enum class GoalCriteriaTier(val label: ComponentInterface, val description: String) {
+    PRE_OP_OR_ABOVE(LabelRaceCriteriaPreOpOrAbove, "Pre-OP or above criteria"),
+    G3_OR_ABOVE(LabelRaceCriteriaG3OrAbove, "G3 or above criteria"),
+    G1_ONLY(LabelRaceCriteriaG1, "G1 criteria"),
+}
 
 /**
  * Manage and orchestrate the racing process, including mandatory, maiden, and extra races.
@@ -176,11 +208,23 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** Indicates that a trophy requirement has been detected on the main screen. */
     var hasTrophyRequirement = false
 
+    /** Which race grades the active trophy goal accepts, or null when a trophy goal is active but its criteria line matched none of the known tiers. */
+    var goalCriteriaTier: GoalCriteriaTier? = null
+
     /** Indicates that a Pre-OP or above requirement has been detected. */
-    var hasPreOpOrAboveRequirement = false
+    val hasPreOpOrAboveRequirement: Boolean get() = goalCriteriaTier == GoalCriteriaTier.PRE_OP_OR_ABOVE
 
     /** Indicates that a G3 or above requirement has been detected. */
-    var hasG3OrAboveRequirement = false
+    val hasG3OrAboveRequirement: Boolean get() = goalCriteriaTier == GoalCriteriaTier.G3_OR_ABOVE
+
+    /** Indicates that a positively read G1-only requirement has been detected. Never true from a mere failure to read the other tiers - see [restrictsToG1Only]. */
+    val hasG1OnlyRequirement: Boolean get() = restrictsToG1Only(goalCriteriaTier)
+
+    /** How the active trophy goal's criteria reads in the log, including the case where its tier could not be read at all. */
+    private val goalCriteriaDescription: String get() = goalCriteriaTier?.description ?: "an unread criteria tier"
+
+    /** The shrink factor that last matched a goal criteria line, retried first so the full sweep only runs once per goal. */
+    private var lastGoalCriteriaShrinkFactor: Double? = null
 
     /** Indicates that an insufficient goal race result pts requirement has been detected. */
     var hasInsufficientGoalRacePtsRequirement = false
@@ -549,6 +593,15 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 hasTrophyRequirement ||
                 hasInsufficientGoalRacePtsRequirement
 
+        /**
+         * Whether race-list selection must be restricted to G1 races only, given the goal criteria [tier] read from the main screen.
+         *
+         * True for exactly one case: a positively read [GoalCriteriaTier.G1_ONLY]. Pre-OP, G3, and an unread tier (null) all stay permissive. Deriving G1-only from the absence of a Pre-OP or G3
+         * read is the defect this replaces: a criteria line the game shrank to fit its slot failed both templates, was taken for "G1 races only", filtered the list down to zero on a G1-less turn,
+         * and cancelled required racing until the goal expired and the career was lost. An unread tier must therefore race any grade, never restrict to G1.
+         */
+        internal fun restrictsToG1Only(tier: GoalCriteriaTier?): Boolean = tier == GoalCriteriaTier.G1_ONLY
+
         /** Merges double- and single-star prediction matches into one row-deduplicated list.
          *
          * The single-star template can also weakly match inside a taller star stack, so any
@@ -696,9 +749,43 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     fun clearRacingRequirementFlags() {
         hasFanRequirement = false
         hasTrophyRequirement = false
-        hasPreOpOrAboveRequirement = false
-        hasG3OrAboveRequirement = false
+        goalCriteriaTier = null
+        lastGoalCriteriaShrinkFactor = null
         hasInsufficientGoalRacePtsRequirement = false
+    }
+
+    /**
+     * Reads which race grades satisfy the active trophy goal from the criteria line above the goal's progress counter.
+     *
+     * Both the tier order and the scale list are cached from the last successful read and retried first. A goal keeps the same wording for as long as it is active, so after the first turn this
+     * settles into a single template match instead of sweeping every grade at every scale.
+     *
+     * @param sourceBitmap The screenshot to search.
+     * @param counterLocation The center of the matched progress counter, used to anchor the search band onto the criteria line above it.
+     * @return The grade tier that matched, or null when the line matched none of the known ones.
+     */
+    private fun readGoalCriteriaTier(sourceBitmap: Bitmap, counterLocation: Point): GoalCriteriaTier? {
+        // Search a band above the counter rather than the whole top half, which keeps even a full miss - every tier at every factor - roughly ten times cheaper than searching the half screen.
+        val bandTop = game.imageUtils.relY(counterLocation.y, -GOAL_CRITERIA_BAND_ABOVE_COUNTER).coerceAtLeast(0)
+        val bandHeight = (game.imageUtils.relY(counterLocation.y, 5) - bandTop).coerceAtLeast(1)
+        val region = intArrayOf(0, bandTop, game.imageUtils.displayWidth, bandHeight)
+
+        // Try the factor that worked last time first, but always probe the tiers in their declared order. "In G1," is much shorter than the other two lines and so the most substring-prone, and
+        // promoting it on the strength of a previous goal could let it shadow a longer line on the next one.
+        val orderedFactors = GOAL_CRITERIA_SHRINK_FACTORS.sortedByDescending { it == lastGoalCriteriaShrinkFactor }
+
+        GoalCriteriaTier.entries.forEach { tier ->
+            val matchedFactor = tier.label.checkAtScales(game.imageUtils, sourceBitmap = sourceBitmap, shrinkFactors = orderedFactors, region = region, confidence = 0.9)
+            if (matchedFactor != null) {
+                if (matchedFactor != lastGoalCriteriaShrinkFactor && matchedFactor != 1.0) {
+                    MessageLog.i(TAG, "[RACE] Matched \"${tier.label.template.basename}\" at ${matchedFactor}x - the game shrank the goal line to fit its slot.")
+                }
+                lastGoalCriteriaShrinkFactor = matchedFactor
+                return tier
+            }
+        }
+
+        return null
     }
 
     /** The parsed racing plan, memoized for the Phase 2A critical-race plan arm. Respects
@@ -1218,31 +1305,18 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 hasFanRequirement = false
             }
 
-            // Check for trophy requirement on the main screen.
-            val needsTrophyRequirement = LabelRaceCriteriaTrophies.check(game.imageUtils, sourceBitmap = sourceBitmapToUse, confidence = 0.9)
-            if (needsTrophyRequirement) {
+            // Check for trophy requirement on the main screen. The counter doubles as the anchor for the criteria line sitting directly above it.
+            val trophyCounterLocation = LabelRaceCriteriaTrophies.findImageWithBitmap(game.imageUtils, sourceBitmap = sourceBitmapToUse, confidence = 0.9)
+            if (trophyCounterLocation != null) {
                 hasTrophyRequirement = true
 
-                // Check for Pre-OP or above criteria.
-                val needsPreOpOrAbove = LabelRaceCriteriaPreOpOrAbove.check(game.imageUtils, sourceBitmap = sourceBitmapToUse, confidence = 0.9)
-                if (needsPreOpOrAbove) {
-                    hasPreOpOrAboveRequirement = true
-                    MessageLog.i(TAG, "[RACE] Trophy requirement with Pre-OP or above criteria detected. Any race can be run to fulfill the requirement.")
-                } else {
-                    hasPreOpOrAboveRequirement = false
-                }
-
-                // Check for G3 or above criteria.
-                val needsG3OrAbove = LabelRaceCriteriaG3OrAbove.check(game.imageUtils, sourceBitmap = sourceBitmapToUse, confidence = 0.9)
-                if (needsG3OrAbove) {
-                    hasG3OrAboveRequirement = true
-                    MessageLog.i(TAG, "[RACE] Trophy requirement with G3 or above criteria detected. Any race can be run to fulfill the requirement.")
-                } else {
-                    hasG3OrAboveRequirement = false
-                }
-
-                if (!hasPreOpOrAboveRequirement && !hasG3OrAboveRequirement) {
-                    MessageLog.i(TAG, "[RACE] Trophy requirement criteria detected on main screen. Forcing racing to fulfill requirement (G1 races only).")
+                // Read which grades satisfy the goal positively, one explicit tier or unknown - never G1-only inferred from two failed reads.
+                goalCriteriaTier = readGoalCriteriaTier(sourceBitmapToUse, trophyCounterLocation)
+                when (val tier = goalCriteriaTier) {
+                    // Which grades qualify is genuinely unknown, so race every turn rather than sit out. Skipping turns is what loses a career when the goal actually accepts lesser grades.
+                    null -> MessageLog.w(TAG, "[WARN] checkRacingRequirements:: Trophy requirement detected but its criteria line matched none of the known grades. Racing every turn to be safe.")
+                    GoalCriteriaTier.G1_ONLY -> MessageLog.i(TAG, "[RACE] Trophy requirement with ${tier.description} detected. Only G1 races will fulfill the requirement.")
+                    else -> MessageLog.i(TAG, "[RACE] Trophy requirement with ${tier.description} detected. Any race can be run to fulfill the requirement.")
                 }
             } else {
                 // Clear the flags if requirement is no longer present.
@@ -1250,8 +1324,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     MessageLog.i(TAG, "[RACE] Trophy requirement no longer detected on main screen. Clearing flags.")
                     // Clear trophy and criteria flags together since they are related.
                     hasTrophyRequirement = false
-                    hasPreOpOrAboveRequirement = false
-                    hasG3OrAboveRequirement = false
+                    goalCriteriaTier = null
+                    lastGoalCriteriaShrinkFactor = null
                 }
             }
         }
@@ -1464,16 +1538,13 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             MessageLog.i(TAG, "[RACE] Fan requirement detected. Bypassing smart racing logic to fulfill requirement.")
             return !raceRepeatWarningCheck
         } else if (hasTrophyRequirement) {
-            if (hasPreOpOrAboveRequirement || hasG3OrAboveRequirement) {
-                if (hasPreOpOrAboveRequirement) {
-                    MessageLog.i(TAG, "[RACE] Trophy requirement with Pre-OP or above criteria detected. Proceeding to racing screen.")
-                } else {
-                    MessageLog.i(TAG, "[RACE] Trophy requirement with G3 or above criteria detected. Proceeding to racing screen.")
-                }
+            if (!hasG1OnlyRequirement) {
+                // Pre-OP, G3, or an unread tier: any grade satisfies the goal, so proceed without gating on G1 availability. An unread tier stays here rather than falling into the G1-only branch.
+                MessageLog.i(TAG, "[RACE] Trophy requirement with $goalCriteriaDescription detected. Proceeding to racing screen.")
                 return !raceRepeatWarningCheck
             }
 
-            // Check if G1 races exist at current turn before proceeding.
+            // Positively read G1-only: check if G1 races exist at current turn before proceeding.
             // If no G1 races are available, it will still allow regular racing if it's a regular race day or smart racing day.
             if (!hasG1RacesAtTurn(campaign.date.day)) {
                 // Skip interval check if Racing Plan is enabled.
@@ -3649,19 +3720,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             if (hasFanRequirement) MessageLog.v(TAG, "[RACE] Fan requirement criteria detected. This race must be completed to meet the requirement.")
             if (hasInsufficientGoalRacePtsRequirement) MessageLog.v(TAG, "[RACE] Goal race result pts requirement criteria detected. This race must be completed to meet the requirement.")
             if (hasTrophyRequirement) {
-                when {
-                    hasPreOpOrAboveRequirement -> {
-                        MessageLog.v(TAG, "[RACE] Trophy requirement with Pre-OP or above criteria detected. Any race can be selected to meet the requirement.")
-                    }
-
-                    hasG3OrAboveRequirement -> {
-                        MessageLog.v(TAG, "[RACE] Trophy requirement with G3 or above criteria detected. Any race can be selected to meet the requirement.")
-                    }
-
-                    else -> {
-                        MessageLog.v(TAG, "[RACE] Trophy requirement criteria detected. Only G1 races will be selected to meet the requirement.")
-                    }
-                }
+                val selectable = if (hasG1OnlyRequirement) "Only G1 races will be selected" else "Any race can be selected"
+                MessageLog.v(TAG, "[RACE] Trophy requirement with $goalCriteriaDescription detected. $selectable to meet the requirement.")
             }
 
             // Determine whether to use smart racing with user-selected races or standard racing.
@@ -3947,28 +4007,21 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         }
         MessageLog.i(TAG, "[RACE] Successfully matched ${currentRaces.size} races in database.")
 
-        // If trophy requirement is active, filter to only G1 races.
-        // Trophy requirement is independent of racing plan and farming fans settings.
-        // If Pre-OP or G3 criteria is active, any race can fulfill the requirement.
+        // Filter to only G1 races only for a positively read G1-only goal. Trophy requirement is independent of racing plan and farming fans settings. Pre-OP, G3, and an unread criteria tier all
+        // accept any grade, so they use the full list - an unread tier must never restrict to G1, which on a G1-less turn would cancel racing and let the goal expire.
         val racesForSelection =
-            if (hasTrophyRequirement && !hasPreOpOrAboveRequirement && !hasG3OrAboveRequirement) {
+            if (hasG1OnlyRequirement) {
                 val g1Races = currentRaces.filter { it.grade == RaceGrade.G1 }
                 if (g1Races.isEmpty()) {
-                    // No G1 races available. Cancel since trophy requirement specifically needs G1 races.
+                    // No G1 races available. Cancel since a G1-only goal specifically needs G1 races.
                     MessageLog.v(TAG, "[RACE] Trophy requirement active but no G1 races available. Canceling racing process (independent of racing plan/farming fans).")
                     return false
                 } else {
                     MessageLog.i(TAG, "[RACE] Trophy requirement active. Filtering to ${g1Races.size} G1 races: ${g1Races.map { it.name }}.")
                     g1Races
                 }
-            } else if (hasTrophyRequirement && (hasPreOpOrAboveRequirement || hasG3OrAboveRequirement)) {
-                if (hasPreOpOrAboveRequirement) {
-                    MessageLog.i(TAG, "[RACE] Trophy requirement with Pre-OP or above criteria active. Using all ${currentRaces.size} races.")
-                } else {
-                    MessageLog.i(TAG, "[RACE] Trophy requirement with G3 or above criteria active. Using all ${currentRaces.size} races.")
-                }
-                currentRaces
             } else {
+                if (hasTrophyRequirement) MessageLog.i(TAG, "[RACE] Trophy requirement with $goalCriteriaDescription active. Using all ${currentRaces.size} races.")
                 currentRaces
             }
 
@@ -3994,10 +4047,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             if (bFanEmergencyActive) {
                 plannedRaces.filter { checkRaceAptitudeMatch(it) }
             } else if (hasTrophyRequirement) {
-                if (hasPreOpOrAboveRequirement || hasG3OrAboveRequirement) {
-                    MessageLog.i(TAG, "[RACE] Trophy requirement active. Bypassing min fan threshold for all valid races.")
-                } else {
+                if (hasG1OnlyRequirement) {
                     MessageLog.i(TAG, "[RACE] Trophy requirement active. Bypassing min fan threshold for G1 races.")
+                } else {
+                    MessageLog.i(TAG, "[RACE] Trophy requirement active. Bypassing min fan threshold for all valid races.")
                 }
                 filterRacesByCriteria(plannedRaces, bypassMinFans = true)
             } else {
@@ -4210,15 +4263,17 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         /** Entries the bot may actually enter under the current policy. */
         fun enterable(list: List<PredictionAnchor>) = list.filter { allowSingles || it.tier == PredictionTier.DOUBLE }
 
-        // If no enterable race was found and a fans/Pre-OP/G3/GoalPts requirement is active, scroll to
-        // find more. Originally this never ran in Junior year; the fan emergency extends it there
+        // If no enterable race was found and a requirement that any grade can satisfy is active, scroll
+        // to find more. Originally this never ran in Junior year; the fan emergency extends it there
         // because the Junior fan checkpoint is exactly when weak trainees need below-the-fold races.
         // bFanEmergencyActive is a member of the disjunction in its own right: the OCR-driven
         // emergency arms without hasFanRequirement (that flag's template family is dead), and the
         // weak-prediction trainee it exists for is exactly the one whose visible rows draw no icon.
+        // A trophy goal that is not positively G1-only (Pre-OP, G3, or unread) also scrolls, since any
+        // grade below the fold can satisfy it; a G1-only goal is gated separately and does not scroll here.
         if (enterable(anchors).isEmpty() &&
             (campaign.date.year != DateYear.JUNIOR || bFanEmergencyActive) &&
-            (hasFanRequirement || bFanEmergencyActive || hasPreOpOrAboveRequirement || hasG3OrAboveRequirement || hasInsufficientGoalRacePtsRequirement)
+            (hasFanRequirement || bFanEmergencyActive || (hasTrophyRequirement && !hasG1OnlyRequirement) || hasInsufficientGoalRacePtsRequirement)
         ) {
             val maxScrollAttempts = 5
             MessageLog.i(TAG, "[RACE] No enterable predictions found on initial screen. Scrolling to find races to satisfy requirements...")
@@ -4259,10 +4314,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val onlyAnchorTemplatePath =
             if (onlyAnchor.tier == PredictionTier.SINGLE) IconRaceListPredictionSingleStar.template.path else IconRaceListPredictionDoubleStar.template.path
 
-        // If only one race is enterable, check if it's G1 when trophy requirement is active.
-        // If Pre-OP or G3 criteria is active, any race is acceptable.
+        // If only one race is enterable, require G1 only for a positively read G1-only goal.
+        // Pre-OP, G3, and an unread criteria tier all accept any grade, so the single race is selected.
         if (maxCount == 1) {
-            if (hasTrophyRequirement && !hasPreOpOrAboveRequirement && !hasG3OrAboveRequirement) {
+            if (hasG1OnlyRequirement) {
                 campaign.updateDate(isOnMainScreen = false)
                 val raceName = game.imageUtils.extractRaceName(onlyAnchor.location)
                 val raceDataList = lookupRaceInDatabase(campaign.date.day, raceName)
@@ -4272,20 +4327,16 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     game.tap(onlyAnchor.location.x, onlyAnchor.location.y, onlyAnchorTemplatePath, ignoreWaiting = true)
                     return true
                 } else {
-                    // Not G1. Trophy requirement specifically needs G1 races, so cancel.
+                    // Not G1. A G1-only goal specifically needs G1 races, so cancel.
                     MessageLog.i(TAG, "[RACE] Trophy requirement active but only non-G1 race available. Canceling racing process...")
                     return false
                 }
-            } else if (hasTrophyRequirement && (hasPreOpOrAboveRequirement || hasG3OrAboveRequirement)) {
-                if (hasPreOpOrAboveRequirement) {
-                    MessageLog.i(TAG, "[RACE] Only one enterable race (${onlyAnchor.tier}) and Pre-OP or above criteria active. Selecting it.")
-                } else {
-                    MessageLog.i(TAG, "[RACE] Only one enterable race (${onlyAnchor.tier}) and G3 or above criteria active. Selecting it.")
-                }
-                game.tap(onlyAnchor.location.x, onlyAnchor.location.y, onlyAnchorTemplatePath, ignoreWaiting = true)
-                return true
             } else {
-                MessageLog.i(TAG, "[RACE] Only one enterable race (${onlyAnchor.tier}). Selecting it.")
+                if (hasTrophyRequirement) {
+                    MessageLog.i(TAG, "[RACE] Only one enterable race (${onlyAnchor.tier}) and $goalCriteriaDescription active. Selecting it.")
+                } else {
+                    MessageLog.i(TAG, "[RACE] Only one enterable race (${onlyAnchor.tier}). Selecting it.")
+                }
                 game.tap(onlyAnchor.location.x, onlyAnchor.location.y, onlyAnchorTemplatePath, ignoreWaiting = true)
                 return true
             }
@@ -4319,9 +4370,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
             listOfRaces.add(raceDetails)
         }
 
-        // If trophy requirement is active, filter to only G1 races.
+        // Filter to only G1 races only for a positively read G1-only goal; Pre-OP, G3, and an unread tier all keep the full list.
         val (filteredRaces, filteredLocations, filteredNames) =
-            if (hasTrophyRequirement && !hasPreOpOrAboveRequirement && !hasG3OrAboveRequirement) {
+            if (hasG1OnlyRequirement) {
                 campaign.updateDate(isOnMainScreen = false)
                 val g1Indices =
                     raceNamesList.mapIndexedNotNull { index, raceName ->
@@ -4331,7 +4382,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     }
 
                 if (g1Indices.isEmpty()) {
-                    // No G1 races available. Cancel since trophy requirement specifically needs G1 races.
+                    // No G1 races available. Cancel since a G1-only goal specifically needs G1 races.
                     // Trophy requirement is independent of racing plan and farming fans settings.
                     MessageLog.i(TAG, "[RACE] Trophy requirement active but no G1 races available. Canceling racing process (independent of racing plan/farming fans).")
                     return false
@@ -4342,14 +4393,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     val filteredNames = g1Indices.map { raceNamesList[it] }
                     Triple(filtered, filteredLocations, filteredNames)
                 }
-            } else if (hasTrophyRequirement && (hasPreOpOrAboveRequirement || hasG3OrAboveRequirement)) {
-                if (hasPreOpOrAboveRequirement) {
-                    MessageLog.i(TAG, "[RACE] Trophy requirement with Pre-OP or above criteria active. Using all ${listOfRaces.size} races.")
-                } else {
-                    MessageLog.i(TAG, "[RACE] Trophy requirement with G3 or above criteria active. Using all ${listOfRaces.size} races.")
-                }
-                Triple(listOfRaces, extraRaceLocations, raceNamesList)
             } else {
+                if (hasTrophyRequirement) MessageLog.i(TAG, "[RACE] Trophy requirement with $goalCriteriaDescription active. Using all ${listOfRaces.size} races.")
                 Triple(listOfRaces, extraRaceLocations, raceNamesList)
             }
 
