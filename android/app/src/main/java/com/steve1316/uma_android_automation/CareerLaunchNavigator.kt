@@ -3741,15 +3741,27 @@ class CareerLaunchNavigator(private val context: Context) {
             return TransitionResult.Continue
         }
 
-        // Event-period "REWARDS" points summary: a button-less tap-to-advance overlay (detected by
-        // its lime section-header bars, see detectScreenState). It has no advance button for the
-        // cascade below to click, so advance it with a single body tap on a neutral display area.
-        // The tap collects and selects nothing - the event rewards are already granted by the time
-        // this tally shows - so a center tap only proceeds to the next screen. Gated on the same
-        // positive structural read so it can never fire on another screen.
+        // Event-period "REWARDS" points summary (detected by its lime section-header bars, see
+        // detectScreenState). It advances via a "Next" button at the bottom, NOT a body tap: the
+        // 2026-08-19 "Days Flying By" event summary showed a real Next button, and the old
+        // centre-body tap never advanced it - the queue cycled here for 15 iterations and halted.
+        // Click Next by template; fall back to its fixed bottom-centre position when the event
+        // styling defeats the template. This collects and selects nothing (the event rewards are
+        // already granted by the time this tally shows), and the fallback position stays a bottom
+        // body tap that also advances any genuinely button-less variant. Gated on the same positive
+        // structural read so it can never fire on another screen.
         if (isEventPointsRewardsScreen(bitmap)) {
-            MessageLog.i(TAG, "[NAV] Event rewards summary detected; tapping the body to advance (this screen has no button).")
-            CoordinateTap.tap(gestureUtils, bitmap.width * 0.5, bitmap.height * 0.5, "nav_event_rewards_summary_advance")
+            if (ButtonNext.click(iu, sourceBitmap = bitmap)) {
+                MessageLog.i(TAG, "[NAV] Event rewards summary detected; clicked Next to advance.")
+            } else {
+                MessageLog.i(TAG, "[NAV] Event rewards summary detected; Next template missed, tapping its fixed bottom position.")
+                CoordinateTap.tap(
+                    gestureUtils,
+                    (bitmap.width * eventRewardsNextFraction[0]).toDouble(),
+                    (bitmap.height * eventRewardsNextFraction[1]).toDouble(),
+                    "nav_event_rewards_summary_advance",
+                )
+            }
             waitSafe(1.5)
             return TransitionResult.Continue
         }
@@ -4491,6 +4503,12 @@ class CareerLaunchNavigator(private val context: Context) {
      * the frame (measured 2026-08-19). Its own position, tapped directly so the protected roster
      * window never reaches for the generic ButtonConfirm. */
     private val chooseCareerModeConfirmFraction = floatArrayOf(0.72f, 0.923f)
+
+    /** Centre of the "Next" button at the bottom of the event-period REWARDS points summary, as a
+     * fraction of the frame (measured 2026-08-19 on the "Days Flying By" event). The summary does
+     * carry a Next button after all - a body tap never advanced it - so this is the coordinate
+     * fallback when the Next template misses the event-styled button. */
+    private val eventRewardsNextFraction = floatArrayOf(0.50f, 0.923f)
 
     // ---- Support-deck composition (the [DECK] concentration advisory) ----
     // The deck-selection screen (PRE_RUN_CONFIRMATION) shows a row of support-type icons
