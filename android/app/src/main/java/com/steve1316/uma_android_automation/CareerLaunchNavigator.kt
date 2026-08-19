@@ -56,6 +56,7 @@ import com.steve1316.uma_android_automation.bot.sparkSelectionDrivable
 import com.steve1316.uma_android_automation.components.*
 import com.steve1316.uma_android_automation.bot.QuickModeAction
 import com.steve1316.uma_android_automation.bot.QuickModePlanner
+import com.steve1316.uma_android_automation.utils.BoundedExecution
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.PostCareerScreenProbes
@@ -2048,22 +2049,34 @@ class CareerLaunchNavigator(private val context: Context) {
 
     /** OCR one fixed spark-screen text region ([x, y, w, h]); null on failure. */
     private fun readSparkOcrRegion(bitmap: Bitmap, region: IntArray, debugName: String): String? =
-        try {
-            iu.performOCROnRegion(
-                bitmap,
-                region[0],
-                region[1],
-                region[2],
-                region[3],
-                useThreshold = false,
-                useGrayscale = true,
-                ocrEngine = "mlkit",
-                debugName = debugName,
-            ).trim().ifEmpty { null }
-        } catch (e: InterruptedException) {
-            throw e
-        } catch (_: Exception) {
-            null
+        // Bounded so a wedged OCR (Tesseract runs behind a process-wide lock inside a JNI call, and
+        // a native/monitor wait ignores interruption) cannot hang the caller. This helper feeds both
+        // spark-screen detection and the keep handler; a timeout here degrades to an unreadable read
+        // (null), which every caller already treats as a miss rather than confirming anything blind.
+        BoundedExecution.runWithDeadline(
+            timeoutMs = SPARK_OCR_READ_DEADLINE_MS,
+            onTimeout = {
+                MessageLog.w(TAG, "[SPARKS] OCR read \"$debugName\" exceeded ${SPARK_OCR_READ_DEADLINE_MS / 1000}s; treating it as unreadable.")
+                null
+            },
+        ) {
+            try {
+                iu.performOCROnRegion(
+                    bitmap,
+                    region[0],
+                    region[1],
+                    region[2],
+                    region[3],
+                    useThreshold = false,
+                    useGrayscale = true,
+                    ocrEngine = "mlkit",
+                    debugName = debugName,
+                ).trim().ifEmpty { null }
+            } catch (e: InterruptedException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
         }
 
     /** The terminal failure for a selection screen that cannot be driven safely. The career is
@@ -2596,8 +2609,44 @@ class CareerLaunchNavigator(private val context: Context) {
      * one build - misclassified as the post-reroll selection confirmation, which blocked a
      * completed no-spend career with a message claiming the header named the rerolled set
      * (2026-07-19). It names nothing of the sort; it says "Sparks".
+     *
+     * The body runs under a wall-clock ceiling ([handleSparksKeepConfirmationInner]). A career-end
+     * capture or OCR that wedged here once hung the queue silently past both the navigation deadline
+     * and the stall watchdog (2026-08-19, Taiki Shuttle GC): the read never returned, so the thread
+     * stopped logging and never tapped, and interrupt-based recovery cannot free a native/monitor
+     * wait. On overrun the handler fails bounded WITHOUT tapping - the game keeps the rolled set on
+     * its own, so a bounded failure spends no TP and loses nothing.
      */
     private fun handleSparksKeepConfirmation(): TransitionResult {
+        val abandoned = java.util.concurrent.atomic.AtomicBoolean(false)
+        return BoundedExecution.runWithDeadline(
+            timeoutMs = SPARK_KEEP_CONFIRM_DEADLINE_MS,
+            shouldAbort = { !BotService.isRunning || StartModule.queueStopRequested },
+            onTimeout = {
+                // Flip the gate so a late-unblocking worker cannot fire the Confirm tap behind us.
+                abandoned.set(true)
+                SparkRerollGate.transaction?.block(
+                    "keep confirmation exceeded ${SPARK_KEEP_CONFIRM_DEADLINE_MS / 1000}s (capture or OCR wedged); not confirming",
+                )
+                MessageLog.e(
+                    TAG,
+                    "[SPARKS] keep_confirmation_deadline exceeded ${SPARK_KEEP_CONFIRM_DEADLINE_MS / 1000}s; failing bounded without confirming " +
+                        "(no TP spent, the game keeps the rolled set).",
+                )
+                TransitionResult.Failed(
+                    reason =
+                        "Spark keep confirmation did not complete within ${SPARK_KEEP_CONFIRM_DEADLINE_MS / 1000}s (a capture or OCR call wedged " +
+                            "below the log line). Failed bounded; no TP was spent and the game keeps the rolled set.",
+                    transition = "SPARKS_KEEP_CONFIRMATION -> POST_RUN_RESULTS",
+                    recommendedAction = "Confirm the Sparks by hand (keeping the rolled set is always safe), then restart the queue.",
+                )
+            },
+        ) {
+            handleSparksKeepConfirmationInner(abandoned)
+        }
+    }
+
+    private fun handleSparksKeepConfirmationInner(abandoned: java.util.concurrent.atomic.AtomicBoolean): TransitionResult {
         val transition = "SPARKS_KEEP_CONFIRMATION -> POST_RUN_RESULTS"
         val transaction = SparkRerollGate.transaction
         val bitmap = iu.getSourceBitmap()
@@ -2731,6 +2780,11 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.i(TAG, "[SPARKS] Keep confirmation verified (pill: ${pill.name.lowercase()}, ${dialogReading.rows.size} rows); confirming the rolled set.")
         }
 
+        // If the deadline wrapper already gave up on us (this worker overran and was abandoned), do
+        // not tap or mutate the transaction behind the bounded failure it already reported.
+        if (abandoned.get()) {
+            return TransitionResult.Continue
+        }
         if (!ButtonConfirm.click(iu, sourceBitmap = bitmap)) {
             CoordinateTap.tap(gestureUtils, SPARK_CONFIRMATION_CONFIRM_X.toDouble(), SPARK_CONFIRMATION_CONFIRM_Y.toDouble(), "spark_keep_confirm")
         }
@@ -2935,6 +2989,18 @@ class CareerLaunchNavigator(private val context: Context) {
         waitSafe(1.5)
         return ButtonRerollSparksConfirm.click(iu, tries = 3)
     }
+
+    /** Wall-clock ceiling for one spark OCR read (pill / title / heading). The legitimate read
+     * finishes in well under a second; the ceiling exists only so a wedged Tesseract call cannot
+     * hang spark-screen detection or the keep handler. Well under the 180s stall watchdog so a
+     * bounded miss always wins the race to recover. */
+    private val SPARK_OCR_READ_DEADLINE_MS = 20_000L
+
+    /** Wall-clock ceiling for the whole keep-confirmation handler. Its legitimate work (pill read
+     * plus up to two star-retry frames) takes a few seconds; the ceiling turns a capture/OCR wedge
+     * into a bounded, queue-stopping failure before the 180s stall watchdog would hard-kill the
+     * process, and without ever tapping. */
+    private val SPARK_KEEP_CONFIRM_DEADLINE_MS = 90_000L
 
     /** One-shot flag: the full spark set was read off the keep-set confirmation dialog. */
     private var sparksFullSetRecorded = false
