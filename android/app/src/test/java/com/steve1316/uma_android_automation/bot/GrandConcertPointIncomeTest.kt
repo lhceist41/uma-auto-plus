@@ -28,6 +28,8 @@ class GrandConcertPointIncomeTest {
     private fun format(
         gains: Map<PerformancePointType, Int?>,
         selected: StatName = StatName.STAMINA,
+        turn: Int = 59,
+        seq: Int? = null,
         ppBefore: Map<PerformancePointType, Int?>? = balances(10, 20, 30, 40, 50),
         currentSongDemand: Map<PerformancePointType, Int> = emptyMap(),
         nextSongDemand: Map<PerformancePointType, Int> = emptyMap(),
@@ -35,7 +37,8 @@ class GrandConcertPointIncomeTest {
         numSkillHints: Int = 0,
     ): String =
         GrandConcertPointIncome.format(
-            turn = 59,
+            turn = turn,
+            seq = seq,
             selected = selected,
             gains = gains,
             ppBefore = ppBefore,
@@ -167,6 +170,55 @@ class GrandConcertPointIncomeTest {
         fun `a null balance map prints all components unknown`() {
             val line = format(gains = mapOf(pa to 8), ppBefore = null)
             assertTrue(line.contains("ppBefore=[Da=?,Pa=?,Vo=?,Vi=?,Co=?]"), line)
+        }
+    }
+
+    /**
+     * The committed-action sequence is the record's stable per-career identity. `turn` alone is not
+     * unique: every Pre-Debut training resolves to the same canonical turn (the Debut race turn), so
+     * only `seq` distinguishes those records and joins them to the decision streams.
+     */
+    @Nested
+    @DisplayName("committed-action seq identity")
+    inner class ActionSeqIdentity {
+        @Test
+        fun `distinct Pre-Debut trainings share one canonical turn but carry distinct monotonic seq`() {
+            // Two real Pre-Debut trainings. The game exposes no per-turn date in Pre-Debut, so both
+            // resolve to the same canonical turn (12, the Debut race turn); the sequence is what tells
+            // them apart. This is the exact ambiguity the field exists to remove.
+            val first = format(gains = mapOf(pa to 5), selected = StatName.SPEED, turn = 12, seq = 1)
+            val second = format(gains = mapOf(da to 7), selected = StatName.STAMINA, turn = 12, seq = 2)
+
+            assertTrue(first.contains("turn=12 seq=1 selected=SPEED"), first)
+            assertTrue(second.contains("turn=12 seq=2 selected=STAMINA"), second)
+            // Same canonical turn, different identity: the records are no longer indistinguishable.
+            assertTrue(first.contains("turn=12"), first)
+            assertTrue(second.contains("turn=12"), second)
+            assertFalse(first.contains("seq=2"), first)
+            assertFalse(second.contains("seq=1"), second)
+        }
+
+        @Test
+        fun `seq stays monotonic across the Pre-Debut to post-debut turn transition`() {
+            // The last Pre-Debut training and the first normal dated turn after Make Debut. The canonical
+            // turn jumps 12 -> 13, and seq keeps counting committed actions without resetting or colliding.
+            val preDebut = format(gains = mapOf(pa to 5), turn = 12, seq = 11)
+            val postDebut = format(gains = mapOf(pa to 9), turn = 13, seq = 12)
+
+            assertTrue(preDebut.contains("turn=12 seq=11 "), preDebut)
+            assertTrue(postDebut.contains("turn=13 seq=12 "), postDebut)
+        }
+
+        @Test
+        fun `seq is placed between turn and selected and omitted entirely when absent`() {
+            // Non-debug build: no CareerState is built, so no seq is allocated. The field is omitted, not
+            // filled with a placeholder, matching the decision-trace honesty rule.
+            val withSeq = format(gains = mapOf(pa to 5), turn = 20, seq = 4)
+            val noSeq = format(gains = mapOf(pa to 5), turn = 20, seq = null)
+
+            assertTrue(withSeq.contains("turn=20 seq=4 selected="), withSeq)
+            assertTrue(noSeq.contains("turn=20 selected="), noSeq)
+            assertFalse(noSeq.contains("seq="), noSeq)
         }
     }
 }

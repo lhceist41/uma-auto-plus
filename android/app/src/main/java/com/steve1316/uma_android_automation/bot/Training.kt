@@ -3165,6 +3165,10 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         TAG,
                         GrandConcertPointIncome.format(
                             turn = campaign.date.day,
+                            // The turn's committed-action seq, so distinct Pre-Debut trainings that share
+                            // one canonical turn (turn=12) stay individually identifiable and join the
+                            // decision_trace/career_state streams. Null (omitted) in a non-debug build.
+                            seq = campaign.currentDecisionSeq(),
                             selected = trainingSelected,
                             gains = trained?.performanceGains ?: emptyMap(),
                             ppBefore = gcTurnBalances,

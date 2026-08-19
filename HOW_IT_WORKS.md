@@ -1406,8 +1406,14 @@ so an unrelated concert bonus or event reward cannot leak into it. There is no p
 balance read to difference on this hook, so the record never states a `ppAfter` or a measured
 delta it did not observe; an amount that would not read is kept as `?` and the record is marked
 `ambiguous`, and a facility whose gain was wholly unread is marked `unknown` rather than a
-fabricated zero. Offline, joining these records by turn reconstructs each color's income timeline
-against song demand across a cycle.
+fabricated zero. Each line also carries `seq`, the turn's per-career committed-action sequence (the
+same monotonic seq the `decision_trace` and `career_state` streams stamp), which advances once per
+committed training. `turn` alone is not a unique key: the Pre-Debut UI has no per-turn calendar date,
+so every Pre-Debut training resolves to the same canonical turn (the Debut race turn) and those lines
+share one `turn=`. Order and join committed records by `seq`, not `turn` alone; it is present whenever
+the decision streams exist (a debug build or Debug Mode) and omitted otherwise. Offline, joining these
+records by `seq` reconstructs each color's income timeline against song demand across a cycle and lines
+them up with the decision streams for the same action.
 
 **Fan-vs-training deferral (wired and tested, not yet live).** Grand Concert also carries a
 fail-closed policy (`GrandConcertFanPolicy`) for the case where the game's fan requirement would

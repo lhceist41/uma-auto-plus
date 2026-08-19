@@ -963,6 +963,19 @@ abstract class Campaign(game: Game) : Task(game) {
     }
 
     /**
+     * This turn's committed-action decision sequence, or null when no CareerState was built this turn
+     * (release/non-debug, or a swallowed build). It is the SAME per-career monotonic seq that
+     * [appendDecisionTrace] stamps on `decision_trace` and [appendCareerState] on `career_state`, read
+     * from the same [careerStateSeq] holder, so a scenario telemetry line that carries it joins those
+     * streams on `careerToken + seq`. Read-only: exposing it cannot allocate or advance the sequence.
+     *
+     * Read during [executeAction] (after the turn's build/retain, before the next turn's allocate), so
+     * it returns the current turn's seq. Grand Concert's `[GC_PP_INCOME]` uses it to disambiguate the
+     * several Pre-Debut trainings that share one canonical turn number.
+     */
+    fun currentDecisionSeq(): Int? = careerStateSeq.current()
+
+    /**
      * Rearm the CareerState build latch for a new main-screen decision turn. Invariant: every
      * turn-advancing path that resets [bHasCheckedDateThisTurn] must also rearm CareerState here, or
      * that turn produces no shadow snapshot. [executeAction]'s own advancing branches do this inline;

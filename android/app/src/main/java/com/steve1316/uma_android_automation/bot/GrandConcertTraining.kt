@@ -419,9 +419,18 @@ object GrandConcertPointIncome {
      * Formats one compact, machine-parseable income record for the turn's trained facility. All
      * inputs are plain values so this stays JUnit-pinned; the caller supplies the trained facility's
      * observed gains, the pre-training balances, and the turn's point context.
+     *
+     * [turn] is the canonical game-calendar turn number. It is deliberately NOT unique per record: the
+     * Pre-Debut UI has no per-turn calendar date, so every Pre-Debut training resolves to the same
+     * canonical turn (the Debut race turn), and multiple distinct trainings then share one `turn=`.
+     * [seq] is this turn's per-career committed-action sequence (the same monotonic seq the
+     * `decision_trace`/`career_state` streams carry), which advances once per committed action even when
+     * `turn` repeats, so it disambiguates those Pre-Debut records and joins them to the decision streams.
+     * It is OMITTED, never placeholder-filled, when null (release/non-debug build, where no seq exists).
      */
     fun format(
         turn: Int,
+        seq: Int?,
         selected: StatName,
         gains: Map<PerformancePointType, Int?>,
         ppBefore: Map<PerformancePointType, Int?>?,
@@ -436,7 +445,10 @@ object GrandConcertPointIncome {
         numSkillHints: Int,
     ): String {
         val attribution = classify(gains).name.lowercase()
-        return "[TRAINING] [GC_PP_INCOME] turn=$turn selected=${selected.name} " +
+        // Omit seq entirely when absent rather than printing a placeholder, matching the decision-trace
+        // honesty rule: a missing seq means "no committed-action sequence was allocated this turn".
+        val seqField = seq?.let { "seq=$it " } ?: ""
+        return "[TRAINING] [GC_PP_INCOME] turn=$turn ${seqField}selected=${selected.name} " +
             "income=[${incomeString(gains)}] observed=${observedString(gains)} attribution=$attribution " +
             "ppBefore=[${balanceString(ppBefore)}] concertIn=${concertIn ?: "?"} " +
             "cycleSongs=$songsBoughtThisCycle/$purchasedFloor careerSongs=$songsBoughtThisCareer/$expectedSongsByNow " +
