@@ -98,6 +98,18 @@ internal fun <K> argMaxAboveFloor(scores: Map<K, Double>, floor: Double): K? {
     return if (best.value >= floor) best.key else null
 }
 
+/**
+ * A scrollbar rail and its thumb are tall, narrow, vertical slivers, and nothing else in the scrollbar's column is. Hue and saturation are deliberately left unconstrained in
+ * [CustomImageUtils.detectScrollBar] so the near-grey widget survives device rendering variance, so this shape gate is what keeps a pale badge or a rounded card corner from being crowned the
+ * largest contour and returned as the bar. Measured on the reference device: the rail is 10x607 and the thumb 10x425, so both clear the 2:1 ratio by a wide margin. Pure so it is unit-testable
+ * without OpenCV.
+ *
+ * @param width The bounding-rect width of the candidate contour.
+ * @param height The bounding-rect height of the candidate contour.
+ * @return True when the contour is tall and narrow enough to be a scrollbar sliver.
+ */
+internal fun isPlausibleScrollBarShape(width: Int, height: Int): Boolean = height > width * 2
+
 /** Utility functions for image processing via CV like OpenCV. */
 class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(context) {
     /** OCR threshold for text recognition. */
@@ -3853,9 +3865,6 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         val srcImage = Mat()
         Utils.bitmapToMat(bitmap, srcImage)
 
-        val image = Mat()
-        Imgproc.cvtColor(srcImage, image, Imgproc.COLOR_RGB2GRAY)
-
         val hsvImage = Mat()
         Imgproc.cvtColor(srcImage, hsvImage, Imgproc.COLOR_RGB2HSV)
 
@@ -3865,16 +3874,25 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
             saveBitmap(resultBitmap, "detectScrollBar_hsvImage", fullRes = true)
         }
 
+        // The rail and the thumb are both near-greys, and hue on a near-grey is numerically unstable - it is a ratio over a channel spread of only 10-22, so a single unit of difference swings it
+        // by several degrees. The old windows pinned hue to a 2-degree band and pinned saturation and value to the exact values one device produced, leaving ZERO margin: the rail measured H=126
+        // S=12 V=219 against a window of H[125..126] S[10..12] V[216..219], sitting on the upper edge of all three. Any device rendering a single unit higher - a wide-gamut panel, a night-light
+        // filter, vendor colour processing - lost the scrollbar entirely, which is why detection worked for some users and not others on identical screen sizes.
+        //
+        // So hue is dropped: it carries no information here. Value does the work instead, and it separates all three things cleanly - the panel behind the scrollbar is near-white (measured V=241
+        // and V=249), the rail sits at V=219 and the thumb at V=142, so the two windows below are disjoint from each other and from the backdrop. Saturation is left wide open on purpose: it is as
+        // unstable as hue on a near-grey (the rail's brightest channel is its blue one, so a blue-reducing night filter collapses its channel spread and its saturation with it), so pinning it would
+        // just reintroduce the same cliff on a different axis. Shape is what rejects anything else that happens to be this bright - see detectFromMask.
         val thumbColorRange: Pair<Scalar, Scalar> =
             Pair(
-                standardHsvToOpenCvHsvScalar(252, 14, 52), // approx #787388
-                standardHsvToOpenCvHsvScalar(254, 16, 56), // approx #7d788e
+                Scalar(0.0, 25.0, 115.0), // approx #787388, measured H=127 S=40 V=142
+                Scalar(179.0, 60.0, 170.0),
             )
 
         val barColorRange: Pair<Scalar, Scalar> =
             Pair(
-                standardHsvToOpenCvHsvScalar(251, 4, 85), // approx #d3d1db
-                standardHsvToOpenCvHsvScalar(253, 5, 86), // approx #d3d1db
+                Scalar(0.0, 5.0, 205.0), // approx #d3d1db, measured H=126 S=12 V=219
+                Scalar(179.0, 70.0, 232.0),
             )
 
         val combinedColorRange: List<Pair<Scalar, Scalar>> =
@@ -3961,6 +3979,11 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
 
                 val rect = Imgproc.boundingRect(cnt)
 
+                // With hue and saturation deliberately unconstrained, this shape gate is what stops a pale badge or a rounded card corner from being returned as the bar. See isPlausibleScrollBarShape.
+                if (!isPlausibleScrollBarShape(rect.width, rect.height)) {
+                    continue
+                }
+
                 // Do not include any rects that are touching the bounding region.
                 if (rect.x <= 0 ||
                     rect.y <= 0 ||
@@ -4031,7 +4054,6 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         barMask.release()
         thumbMask.release()
         hsvImage.release()
-        image.release()
         srcImage.release()
 
         if (debugMode) {
