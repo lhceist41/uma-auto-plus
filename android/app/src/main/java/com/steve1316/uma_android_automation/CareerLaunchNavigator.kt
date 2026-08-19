@@ -3507,6 +3507,37 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
+     * True when the current frame is the "Choose Career Mode" screen a story event inserts between
+     * Scenario Select and Trainee Select (Normal Mode vs the event's own mode, with a Confirm). Read
+     * from the top title band (the same band the Rewards Collected title uses, NOT the mid-screen
+     * roster header) where the green "Choose Career Mode" header sits; that phrase the Trainee Select
+     * ("Trainee Select") and Scenario Select headers never carry. First seen 2026-08-19 with the
+     * Trainer Aptitude Test event, where it halted the queue one screen before Trainee Select.
+     */
+    private fun isChooseCareerModeScreen(bitmap: Bitmap): Boolean {
+        val title =
+            try {
+                iu.performOCROnRegion(
+                    bitmap,
+                    (bitmap.width * rewardsTitleRegion[0]).toInt(),
+                    (bitmap.height * rewardsTitleRegion[1]).toInt(),
+                    (bitmap.width * rewardsTitleRegion[2]).toInt(),
+                    (bitmap.height * rewardsTitleRegion[3]).toInt(),
+                    useThreshold = false,
+                    useGrayscale = true,
+                    scale = 2.0,
+                    debugName = "nav_choose_career_mode_title",
+                )
+            } catch (e: InterruptedException) {
+                throw e
+            } catch (_: Exception) {
+                ""
+            }
+        val upper = title.uppercase()
+        return upper.contains("CAREER") && upper.contains("MODE")
+    }
+
+    /**
      * True when the current frame is the event-period "REWARDS" points summary the game shows after
      * a career completes while a story event is running. A button-less tap-to-advance overlay
      * recognized OCR-free by its two full-width lime section-header bars (see [PostCareerScreenProbes]).
@@ -3584,6 +3615,25 @@ class CareerLaunchNavigator(private val context: Context) {
         // that never clears still fails closed. SkillList / Umamusume Details / Complete Career are
         // career-end artifacts that precede Home and cannot occur in this window - they stay in the
         // legacy handler below the hook.
+        // A running story event inserts a "Choose Career Mode" screen (Normal Mode vs the event's own
+        // mode) between Scenario Select and Trainee Select. It carries a Confirm button so it reads as
+        // POST_RUN_RESULTS, but the roster expectation suppresses the generic Confirm and would time out
+        // here (2026-08-19, Trainer Aptitude Test event). Positively identified by its header, so its
+        // Confirm is the mode-select confirm, not the trainee-advancing Next; confirm the default Normal
+        // Mode to reach Trainee Select. This selects nothing about the trainee and keeps the roster
+        // obligation pending, and it counts toward the timeout above so a screen that never clears still
+        // fails closed.
+        if (isChooseCareerModeScreen(fresh)) {
+            MessageLog.i(TAG, "[NAV] [EXPECT_TRAINEE] \"Choose Career Mode\" event screen in the roster window; confirming the default (Normal Mode) to reach Trainee Select (attempt $rosterExpectationReprobes/$MAX_ROSTER_EXPECTATION_REPROBES).")
+            CoordinateTap.tap(
+                gestureUtils,
+                (fresh.width * chooseCareerModeConfirmFraction[0]).toDouble(),
+                (fresh.height * chooseCareerModeConfirmFraction[1]).toDouble(),
+                "expect_trainee_choose_career_mode_confirm",
+            )
+            waitSafe(1.5)
+            return TransitionResult.Continue
+        }
         if (isRewardsCollectedDialog(fresh)) {
             MessageLog.i(TAG, "[NAV] [EXPECT_TRAINEE] Benign Rewards Collected popup in the roster window; closing by its dedicated geometry, roster obligation still pending (attempt $rosterExpectationReprobes/$MAX_ROSTER_EXPECTATION_REPROBES).")
             CoordinateTap.tap(
@@ -4370,6 +4420,11 @@ class CareerLaunchNavigator(private val context: Context) {
 
     /** Centre of that dialog's wide Close button, as a fraction of the frame. */
     private val rewardsCloseFraction = floatArrayOf(0.50f, 0.923f)
+
+    /** Centre of the Confirm button on the story-event "Choose Career Mode" screen, as a fraction of
+     * the frame (measured 2026-08-19). Its own position, tapped directly so the protected roster
+     * window never reaches for the generic ButtonConfirm. */
+    private val chooseCareerModeConfirmFraction = floatArrayOf(0.72f, 0.923f)
 
     // ---- Support-deck composition (the [DECK] concentration advisory) ----
     // The deck-selection screen (PRE_RUN_CONFIRMATION) shows a row of support-type icons
@@ -6365,15 +6420,21 @@ class CareerLaunchNavigator(private val context: Context) {
             val bitmap = iu.getSourceBitmap()
             if (targetLogo.check(iu, sourceBitmap = bitmap)) {
                 MessageLog.i(TAG, "[NAV] Scenario Select shows \"$target\". Advancing to trainee setup.")
-                return if (ButtonNext.click(iu)) {
+                if (ButtonNext.click(iu)) {
                     waitSafe(2.0)
-                    TransitionResult.Continue
-                } else {
-                    TransitionResult.Failed(
-                        reason = "Scenario Select shows \"$target\" but the Next button could not be clicked.",
-                        transition = "SCENARIO_SELECT -> TRAINEE_SETUP",
-                    )
+                    return TransitionResult.Continue
                 }
+                // A running story event decorates this Next button with an "Event Underway" banner
+                // across its top, which breaks the plain ButtonNext template match and halted the queue
+                // here before any career could start (2026-08-19, Trainer Aptitude Test event). The
+                // button's POSITION on this screen is fixed and we only reach this line with the target
+                // scenario positively matched, so fall back to a coordinate tap on the button's green
+                // centre - the same "tap what we cannot always detect" approach the carousel chevron
+                // below already uses. y=0.85 is the clean green centre, clear of the top banner.
+                MessageLog.w(TAG, "[NAV] Scenario Select Next template did not match (event banner over the button?). Tapping the fixed Next position.")
+                CoordinateTap.tap(gestureUtils, bitmap.width * 0.5, bitmap.height * 0.85, "scenario_select_next_fallback")
+                waitSafe(2.0)
+                return TransitionResult.Continue
             }
             // Name the card actually on screen, not just "not the target". A blind miss log hid a
             // swipe that paged two entries at a time for as long as the carousel had three cards;
