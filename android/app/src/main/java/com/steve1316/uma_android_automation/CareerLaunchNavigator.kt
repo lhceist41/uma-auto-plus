@@ -58,6 +58,7 @@ import com.steve1316.uma_android_automation.bot.QuickModeAction
 import com.steve1316.uma_android_automation.bot.QuickModePlanner
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
+import com.steve1316.uma_android_automation.utils.PostCareerScreenProbes
 import com.steve1316.uma_android_automation.utils.QuickModeGeometry
 import com.steve1316.uma_android_automation.utils.QuickModeOption
 import com.steve1316.uma_android_automation.utils.RosterScanPolicy
@@ -1280,6 +1281,17 @@ class CareerLaunchNavigator(private val context: Context) {
         // UNKNOWN and the unknown-screen counter runs out (2026-07-28: five straight UNKNOWNs from
         // POST_RUN_RESULTS, queue halted). Its handler owns the geometric close.
         if (isRewardsCollectedDialog(bitmap)) {
+            return LaunchScreenState.POST_RUN_RESULTS
+        }
+
+        // The event-period "REWARDS" points summary (a running story event's tally, shown after a
+        // career completes on the way back to Home) is a full-screen tap-to-advance overlay with no
+        // Next/OK/Close/Confirm button and no dialog gradient, so it matches nothing above. Five
+        // straight UNKNOWNs on it stopped the queue one step past a COMPLETE career (2026-08-19,
+        // nav_failure_unknown_state_20260819_045953). Its two full-width lime section-header bars are
+        // an OCR-free fingerprint (PostCareerScreenProbes); route to POST_RUN_RESULTS, whose handler
+        // taps the body to advance. Event-agnostic: the same layout carries any story event's tally.
+        if (isEventPointsRewardsScreen(bitmap)) {
             return LaunchScreenState.POST_RUN_RESULTS
         }
 
@@ -3495,6 +3507,18 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
+     * True when the current frame is the event-period "REWARDS" points summary the game shows after
+     * a career completes while a story event is running. A button-less tap-to-advance overlay
+     * recognized OCR-free by its two full-width lime section-header bars (see [PostCareerScreenProbes]).
+     */
+    private fun isEventPointsRewardsScreen(bitmap: Bitmap): Boolean =
+        PostCareerScreenProbes.isEventPointsRewardsSummary(
+            SparkPixelSampler { x, y -> bitmap.getPixel(x, y) },
+            bitmap.width,
+            bitmap.height,
+        )
+
+    /**
      * Cold-start Trainee Select liveness expectation.
      *
      * The 2026-08-10 cold-start failure: from a popup-heavy Home a pre-career scenario/event intro
@@ -3597,6 +3621,19 @@ class CareerLaunchNavigator(private val context: Context) {
                 (bitmap.height * rewardsCloseFraction[1]).toDouble(),
                 "nav_rewards_collected_close",
             )
+            waitSafe(1.5)
+            return TransitionResult.Continue
+        }
+
+        // Event-period "REWARDS" points summary: a button-less tap-to-advance overlay (detected by
+        // its lime section-header bars, see detectScreenState). It has no advance button for the
+        // cascade below to click, so advance it with a single body tap on a neutral display area.
+        // The tap collects and selects nothing - the event rewards are already granted by the time
+        // this tally shows - so a center tap only proceeds to the next screen. Gated on the same
+        // positive structural read so it can never fire on another screen.
+        if (isEventPointsRewardsScreen(bitmap)) {
+            MessageLog.i(TAG, "[NAV] Event rewards summary detected; tapping the body to advance (this screen has no button).")
+            CoordinateTap.tap(gestureUtils, bitmap.width * 0.5, bitmap.height * 0.5, "nav_event_rewards_summary_advance")
             waitSafe(1.5)
             return TransitionResult.Continue
         }
