@@ -8,6 +8,7 @@ import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
+import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.FinalizeVerdict
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.GrandConcertScenario
@@ -2122,7 +2123,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 ButtonOk.click(iu, sourceBitmap = bitmap)
         if (!advanced) {
             // The intro's single bottom button sits at a fixed position on the card.
-            gestureUtils.tap(SPARK_INTRO_BUTTON_X.toDouble(), SPARK_INTRO_BUTTON_Y.toDouble(), "spark_intro_advance")
+            CoordinateTap.tap(gestureUtils, SPARK_INTRO_BUTTON_X.toDouble(), SPARK_INTRO_BUTTON_Y.toDouble(), "spark_intro_advance")
         }
         waitSafe(2.0)
         return TransitionResult.Continue
@@ -2447,7 +2448,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         "never committing a set the bot could not read on a guessed coordinate",
                 )
             }
-            gestureUtils.tap(SPARK_PAGER_CONFIRM_X.toDouble(), SPARK_PAGER_CONFIRM_Y.toDouble(), "spark_pager_confirm")
+            CoordinateTap.tap(gestureUtils, SPARK_PAGER_CONFIRM_X.toDouble(), SPARK_PAGER_CONFIRM_Y.toDouble(), "spark_pager_confirm")
         }
         waitSafe(2.0)
         return TransitionResult.Continue
@@ -2557,7 +2558,7 @@ class CareerLaunchNavigator(private val context: Context) {
         }
         MessageLog.i(TAG, "[SPARKS] [CHOOSER] Confirmation header verified (${pillSide.wire}); pressing the final Confirm.")
         if (!ButtonConfirm.click(iu, sourceBitmap = bitmap)) {
-            gestureUtils.tap(SPARK_CONFIRMATION_CONFIRM_X.toDouble(), SPARK_CONFIRMATION_CONFIRM_Y.toDouble(), "spark_conf_confirm")
+            CoordinateTap.tap(gestureUtils, SPARK_CONFIRMATION_CONFIRM_X.toDouble(), SPARK_CONFIRMATION_CONFIRM_Y.toDouble(), "spark_conf_confirm")
         }
         val completed = transaction.complete()
         if (!completed.ok) {
@@ -2719,7 +2720,7 @@ class CareerLaunchNavigator(private val context: Context) {
         }
 
         if (!ButtonConfirm.click(iu, sourceBitmap = bitmap)) {
-            gestureUtils.tap(SPARK_CONFIRMATION_CONFIRM_X.toDouble(), SPARK_CONFIRMATION_CONFIRM_Y.toDouble(), "spark_keep_confirm")
+            CoordinateTap.tap(gestureUtils, SPARK_CONFIRMATION_CONFIRM_X.toDouble(), SPARK_CONFIRMATION_CONFIRM_Y.toDouble(), "spark_keep_confirm")
         }
         // No reroll happened on this career: the transaction's work is done. declineSpend is
         // idempotent for an already-terminal transaction, so a re-entry cannot double-record.
@@ -2732,7 +2733,7 @@ class CareerLaunchNavigator(private val context: Context) {
 
     private fun clickSparkConfirmationCancel(bitmap: Bitmap) {
         if (!ButtonCancel.click(iu, sourceBitmap = bitmap)) {
-            gestureUtils.tap(SPARK_CONFIRMATION_CANCEL_X.toDouble(), SPARK_CONFIRMATION_CANCEL_Y.toDouble(), "spark_conf_cancel")
+            CoordinateTap.tap(gestureUtils, SPARK_CONFIRMATION_CANCEL_X.toDouble(), SPARK_CONFIRMATION_CANCEL_Y.toDouble(), "spark_conf_cancel")
         }
     }
 
@@ -3307,7 +3308,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * returning; NO_QUANTITY_OK leaves the screen as-is for the caller to re-detect.
      */
     private fun driveTpRestorePicker(anchorX: Double, anchorY: Double): TpRestoreOutcome {
-        gestureUtils.tap(anchorX + TP_RESTORE_FROM_NO_DX, anchorY, "tp_restore_button")
+        CoordinateTap.tap(gestureUtils, anchorX + TP_RESTORE_FROM_NO_DX, anchorY, "tp_restore_button")
         waitSafe(1.5)
 
         // Item ladder: Toughness 30 (farmed) -> Star Fruit (event stock) -> Carats (premium,
@@ -3336,7 +3337,7 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.w(TAG, "[NAV] No Toughness 30 or Star Fruit stock left. Max-filling TP with Carats (last resort per the enabled setting).")
         }
 
-        gestureUtils.tap(rowLocation.x + TP_USE_FROM_DRINK_DX, rowLocation.y + TP_USE_FROM_DRINK_DY, "tp_use_button")
+        CoordinateTap.tap(gestureUtils, rowLocation.x + TP_USE_FROM_DRINK_DX, rowLocation.y + TP_USE_FROM_DRINK_DY, "tp_use_button")
         waitSafe(1.2)
 
         val okLocation = ButtonOk.find(iu).first
@@ -3350,7 +3351,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // Max not found: fall back to a single +30 via the plus button above OK.
         if (!ButtonMax.click(iu)) {
             MessageLog.w(TAG, "[NAV] Max button not found on the TP quantity popup; falling back to a single +30 use.")
-            gestureUtils.tap(okLocation.x + TP_PLUS_FROM_OK_DX, okLocation.y + TP_PLUS_FROM_OK_DY, "tp_plus_one")
+            CoordinateTap.tap(gestureUtils, okLocation.x + TP_PLUS_FROM_OK_DX, okLocation.y + TP_PLUS_FROM_OK_DY, "tp_plus_one")
         }
         waitSafe(0.6)
         ButtonOk.click(iu)
@@ -3561,7 +3562,8 @@ class CareerLaunchNavigator(private val context: Context) {
         // legacy handler below the hook.
         if (isRewardsCollectedDialog(fresh)) {
             MessageLog.i(TAG, "[NAV] [EXPECT_TRAINEE] Benign Rewards Collected popup in the roster window; closing by its dedicated geometry, roster obligation still pending (attempt $rosterExpectationReprobes/$MAX_ROSTER_EXPECTATION_REPROBES).")
-            gestureUtils.tap(
+            CoordinateTap.tap(
+                gestureUtils,
                 (fresh.width * rewardsCloseFraction[0]).toDouble(),
                 (fresh.height * rewardsCloseFraction[1]).toDouble(),
                 "expect_trainee_rewards_collected_close",
@@ -3589,7 +3591,8 @@ class CareerLaunchNavigator(private val context: Context) {
         // nothing, the rewards are already granted by the time this dialog appears.
         if (isRewardsCollectedDialog(bitmap)) {
             MessageLog.i(TAG, "[NAV] Rewards Collected dialog detected; closing it by geometry (its Close does not template-match).")
-            gestureUtils.tap(
+            CoordinateTap.tap(
+                gestureUtils,
                 (bitmap.width * rewardsCloseFraction[0]).toDouble(),
                 (bitmap.height * rewardsCloseFraction[1]).toDouble(),
                 "nav_rewards_collected_close",
@@ -3656,7 +3659,7 @@ class CareerLaunchNavigator(private val context: Context) {
             // (observed 2026-07-08 on a Palmer -> next-run hand-off).
             if (isUmamusumeDetailsScreen(bitmap)) {
                 if (!ButtonCloseWide.click(iu, sourceBitmap = bitmap)) {
-                    gestureUtils.tap(bitmap.width * 0.5, bitmap.height * 0.86, "umamusume_details_close")
+                    CoordinateTap.tap(gestureUtils, bitmap.width * 0.5, bitmap.height * 0.86, "umamusume_details_close")
                 }
                 MessageLog.i(TAG, "[NAV] Dismissed the post-career \"Umamusume Details\" summary card to continue the between-run hand-off.")
                 waitSafe(1.5)
@@ -3847,7 +3850,7 @@ class CareerLaunchNavigator(private val context: Context) {
             // already established HOME_SCREEN.
             val tapX = (bitmap.width * 0.75).toDouble()
             val tapY = (bitmap.height * 0.86).toDouble()
-            gestureUtils.tap(tapX, tapY, "career_ocr_tap")
+            CoordinateTap.tap(gestureUtils, tapX, tapY, "career_ocr_tap")
             waitSafe(3.0)
             return TransitionResult.Continue
         }
@@ -4177,7 +4180,7 @@ class CareerLaunchNavigator(private val context: Context) {
             val (preferredLocation, _) = IconBorrowPreferredCard.find(iu)
             if (preferredLocation != null) {
                 MessageLog.i(TAG, "[NAV] Borrow Card list open. Preferred card found - selecting its row at (540, ${preferredLocation.y.toInt()})...")
-                gestureUtils.tap(540.0, preferredLocation.y, "borrow_preferred_row")
+                CoordinateTap.tap(gestureUtils, 540.0, preferredLocation.y, "borrow_preferred_row")
             } else {
                 // Validated default pick: take the first row that is neither pill-tagged nor an
                 // excluded character (the active trainee included). The old blind first-row tap
@@ -4210,7 +4213,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     "[NAV] Borrow Card list open. Preferred card not visible - selecting the first valid card \"${borrowLogText(pick.second)}\" at (540, ${pick.first.toInt()})...",
                 )
                 lastBorrowPickEntry = pick.second
-                gestureUtils.tap(540.0, pick.first, "borrow_card_first_valid_row")
+                CoordinateTap.tap(gestureUtils, 540.0, pick.first, "borrow_card_first_valid_row")
             }
             waitSafe(2.0)
         } else {
@@ -4268,7 +4271,7 @@ class CareerLaunchNavigator(private val context: Context) {
             return TransitionResult.Continue
         }
         // Tap the card body above the banner; the banner strip itself may not be tappable.
-        gestureUtils.tap(bannerLocation.x, bannerLocation.y - 180, "borrow_slot_reopen")
+        CoordinateTap.tap(gestureUtils, bannerLocation.x, bannerLocation.y - 180, "borrow_slot_reopen")
         waitSafe(2.0)
         if (ButtonBorrowCardRemove.find(iu).first == null) {
             MessageLog.w(TAG, "[NAV] [BORROW] Tapped the friend slot but the Borrow Card list did not appear. Re-detecting...")
@@ -4410,7 +4413,7 @@ class CareerLaunchNavigator(private val context: Context) {
     private fun tapDeckArrow(direction: SupportDeckSelector.Direction) {
         val bitmap = iu.getSourceBitmap()
         val (x, y) = deckArrowPoint(direction, bitmap.width, bitmap.height)
-        gestureUtils.tap(x, y, "support_deck_arrow_${direction.name.lowercase()}")
+        CoordinateTap.tap(gestureUtils, x, y, "support_deck_arrow_${direction.name.lowercase()}")
         waitSafe(1.0)
     }
 
@@ -5203,7 +5206,8 @@ class CareerLaunchNavigator(private val context: Context) {
                     break
                 }
             }
-            gestureUtils.tap(
+            CoordinateTap.tap(
+                gestureUtils,
                 (jumpBitmap.width * traineeColFractions[rCol]).toDouble(),
                 (jumpBitmap.height * (traineeRow0Fraction + rRow * traineeRowStepFraction)).toDouble(),
                 "trainee_remembered_c${rCol}_r$rRow",
@@ -5421,7 +5425,8 @@ class CareerLaunchNavigator(private val context: Context) {
     private fun readRosterCell(bitmap: Bitmap, page: Int, col: Int, row: Int): String {
         var attempt = 0
         while (true) {
-            gestureUtils.tap(
+            CoordinateTap.tap(
+                gestureUtils,
                 (bitmap.width * traineeColFractions[col]).toDouble(),
                 (bitmap.height * (traineeRow0Fraction + row * traineeRowStepFraction)).toDouble(),
                 "trainee_grid_c${col}_r$row",
@@ -5465,7 +5470,8 @@ class CareerLaunchNavigator(private val context: Context) {
                 )
             }
             val anchorBmp = iu.getSourceBitmap()
-            gestureUtils.tap(
+            CoordinateTap.tap(
+                gestureUtils,
                 (anchorBmp.width * traineeColFractions[0]).toDouble(),
                 (anchorBmp.height * traineeRow0Fraction).toDouble(),
                 "trainee_anchor_top",
@@ -5664,7 +5670,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     if (borrowTapApproved(text, priorities[pageBest.first], borrowExcludedCharacters, borrowLaunchTraineeTarget)) {
                         MessageLog.i(TAG, "[NAV] [BORROW] \"${priorities[pageBest.first]}\" found. Selecting it at (540, ${centerY.toInt()}).")
                         lastBorrowPickEntry = priorities[pageBest.first]
-                        gestureUtils.tap(540.0, centerY, "borrow_smart_row")
+                        CoordinateTap.tap(gestureUtils, 540.0, centerY, "borrow_smart_row")
                         tapped = true
                         return@walk true
                     }
@@ -5803,7 +5809,7 @@ class CareerLaunchNavigator(private val context: Context) {
         )
         val row = selection.row ?: return BorrowReselect(null, reopened = true)
         MessageLog.i(TAG, "[NAV] [BORROW] Selecting \"${borrowLogText(row.second)}\" at (540, ${row.first.toInt()}).")
-        gestureUtils.tap(540.0, row.first, "borrow_smart_row")
+        CoordinateTap.tap(gestureUtils, 540.0, row.first, "borrow_smart_row")
         return BorrowReselect(row, reopened = true)
     }
 
@@ -5832,7 +5838,7 @@ class CareerLaunchNavigator(private val context: Context) {
         if (!replaceMode) return IconFriendSlotEmpty.click(iu)
         val (bannerLocation, _) = LabelFriendSlotBanner.find(iu)
         if (bannerLocation == null) return false
-        gestureUtils.tap(bannerLocation.x, bannerLocation.y - 180, "borrow_slot_reopen")
+        CoordinateTap.tap(gestureUtils, bannerLocation.x, bannerLocation.y - 180, "borrow_slot_reopen")
         return true
     }
 
@@ -6078,7 +6084,7 @@ class CareerLaunchNavigator(private val context: Context) {
             return
         }
         MessageLog.i(TAG, "[NAV] Event Boost is OFF. Ticking the checkbox to double event rewards (TP cost also doubles)...")
-        gestureUtils.tap(barLocation.x + EVENT_BOOST_CHECKBOX_DX, barLocation.y + EVENT_BOOST_CHECKBOX_DY, "event_boost_checkbox")
+        CoordinateTap.tap(gestureUtils, barLocation.x + EVENT_BOOST_CHECKBOX_DX, barLocation.y + EVENT_BOOST_CHECKBOX_DY, "event_boost_checkbox")
         waitSafe(0.8)
         // Verify the tick landed by re-reading the checkbox colour (a fresh capture - the state changed).
         if (isCheckboxGreen(iu.getSourceBitmap(), cbX, cbY)) {
@@ -6174,7 +6180,7 @@ class CareerLaunchNavigator(private val context: Context) {
     private fun handleTapToContinue(): TransitionResult {
         val bitmap = iu.getSourceBitmap()
         MessageLog.i(TAG, "[NAV] TAP_TO_CONTINUE: body-tapping to advance the in-career screen.")
-        gestureUtils.tap((bitmap.width * 0.5).toDouble(), (bitmap.height * 0.677).toDouble(), "tap_to_continue_advance")
+        CoordinateTap.tap(gestureUtils, (bitmap.width * 0.5).toDouble(), (bitmap.height * 0.677).toDouble(), "tap_to_continue_advance")
         waitSafe(0.8)
         return TransitionResult.Continue
     }
@@ -6204,11 +6210,11 @@ class CareerLaunchNavigator(private val context: Context) {
         val tapY = (bitmap.height * 0.962).toDouble()
 
         MessageLog.i(TAG, "[NAV] Tapping Skip button (1st click) at ($tapX, $tapY)...")
-        gestureUtils.tap(tapX, tapY, "skip_toggle_tap_1")
+        CoordinateTap.tap(gestureUtils, tapX, tapY, "skip_toggle_tap_1")
         waitSafe(0.6)
 
         MessageLog.i(TAG, "[NAV] Tapping Skip button (2nd click) at ($tapX, $tapY)...")
-        gestureUtils.tap(tapX, tapY, "skip_toggle_tap_2")
+        CoordinateTap.tap(gestureUtils, tapX, tapY, "skip_toggle_tap_2")
         waitSafe(0.6)
 
         skipToggleAlreadyDone = true
@@ -6225,11 +6231,11 @@ class CareerLaunchNavigator(private val context: Context) {
             when (val action = QuickModePlanner.plan(configured, quickModeSelectedIndex(dialogSampler))) {
                 is QuickModeAction.Select -> {
                     MessageLog.i(TAG, "[NAV] Quick Mode: selecting \"${QuickModeOption.entries[action.rowIndex].label}\".")
-                    gestureUtils.tap(QuickModeGeometry.RADIO_X.toDouble(), QuickModeGeometry.ROW_YS[action.rowIndex].toDouble(), "quickmode_select")
+                    CoordinateTap.tap(gestureUtils, QuickModeGeometry.RADIO_X.toDouble(), QuickModeGeometry.ROW_YS[action.rowIndex].toDouble(), "quickmode_select")
                     waitSafe(0.8)
                     val verifyBitmap = iu.getSourceBitmap()
                     if (quickModeSelectedIndex(SparkPixelSampler { x, y -> verifyBitmap.getPixel(x, y) }) == action.rowIndex) {
-                        gestureUtils.tap(QuickModeGeometry.CONFIRM_X.toDouble(), QuickModeGeometry.CONFIRM_Y.toDouble(), "quickmode_confirm")
+                        CoordinateTap.tap(gestureUtils, QuickModeGeometry.CONFIRM_X.toDouble(), QuickModeGeometry.CONFIRM_Y.toDouble(), "quickmode_confirm")
                         waitSafe(2.0)
                     } else {
                         MessageLog.w(TAG, "[NAV] Quick Mode: the selection did not take; not confirming this tick.")
@@ -6237,7 +6243,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 }
                 QuickModeAction.ConfirmOnly -> {
                     MessageLog.i(TAG, "[NAV] Quick Mode: configured option already selected; confirming.")
-                    gestureUtils.tap(QuickModeGeometry.CONFIRM_X.toDouble(), QuickModeGeometry.CONFIRM_Y.toDouble(), "quickmode_confirm")
+                    CoordinateTap.tap(gestureUtils, QuickModeGeometry.CONFIRM_X.toDouble(), QuickModeGeometry.CONFIRM_Y.toDouble(), "quickmode_confirm")
                     waitSafe(2.0)
                 }
                 is QuickModeAction.HandOff -> {
@@ -6355,7 +6361,7 @@ class CareerLaunchNavigator(private val context: Context) {
             // threshold to straddle. Its POSITION is fixed on this screen, which is all we need; the
             // earlier note about the chevron matching unreliably at ~0.55 was about DETECTING it as a
             // template, and we do not have to detect what we can simply tap.
-            gestureUtils.tap(bitmap.width * 0.949, bitmap.height * 0.458, "scenario_carousel_next")
+            CoordinateTap.tap(gestureUtils, bitmap.width * 0.949, bitmap.height * 0.458, "scenario_carousel_next")
             waitSafe(1.5)
         }
         return TransitionResult.Failed(

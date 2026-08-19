@@ -3,6 +3,7 @@ package com.steve1316.uma_android_automation.bot.misc
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.uma_android_automation.MainActivity
+import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonClose
@@ -202,7 +203,7 @@ class ResourceRechargeHelper(private val game: Game) {
         val y = SharedData.displayHeight * PLUS_Y_RATIO
 
         MessageLog.v(TAG, "[RECHARGE] Tapping $pool + at ($x, $y).")
-        game.gestureUtils.tap(x, y, "${pool.name.lowercase()}_plus_button")
+        CoordinateTap.tap(game.gestureUtils, x, y, "${pool.name.lowercase()}_plus_button")
         // tap() returns Unit in the automation-library; treat the call as successful unless
         // the subsequent popup-open check disagrees. The caller handles that verification.
         return true
@@ -260,7 +261,7 @@ class ResourceRechargeHelper(private val game: Game) {
         val x = SharedData.displayWidth * USE_X_RATIO
         val y = SharedData.displayHeight * yRatio
         MessageLog.v(TAG, "[RECHARGE] Tapping Use at ($x, $y).")
-        game.gestureUtils.tap(x, y, "recharge_use_row_y_${"%.2f".format(yRatio)}")
+        CoordinateTap.tap(game.gestureUtils, x, y, "recharge_use_row_y_${"%.2f".format(yRatio)}")
     }
 
     /**

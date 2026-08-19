@@ -286,7 +286,7 @@ class GrandConcert(game: Game) : Campaign(game) {
                 "(Great Success needs ${GrandConcertPolicy.GREAT_SUCCESS_SONG_FLOOR.value}; career purchased total " +
                 "$songsBoughtThisCareer).",
         )
-        game.tap(GrandConcertEscort.CONCERT_BUTTON_X.toDouble(), GrandConcertEscort.CONCERT_BUTTON_Y.toDouble(), "gc_concert_open")
+        game.tapCoordinate(GrandConcertEscort.CONCERT_BUTTON_X.toDouble(), GrandConcertEscort.CONCERT_BUTTON_Y.toDouble(), "gc_concert_open")
         game.wait(1.2)
 
         var confirmSeen = false
@@ -312,11 +312,11 @@ class GrandConcert(game: Game) : Campaign(game) {
             when {
                 grandConcertPlaybackSkipPresent(sampler) -> {
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Playback detected; skipping the performance.")
-                    game.tap(GrandConcertEscort.SKIP_GLYPH_X.toDouble(), GrandConcertEscort.SKIP_GLYPH_Y.toDouble(), "gc_concert_skip")
+                    game.tapCoordinate(GrandConcertEscort.SKIP_GLYPH_X.toDouble(), GrandConcertEscort.SKIP_GLYPH_Y.toDouble(), "gc_concert_skip")
                     game.wait(2.0)
                 }
                 grandConcertResultNextPresent(sampler) -> {
-                    game.tap(GrandConcertEscort.NEXT_BUTTON_X.toDouble(), GrandConcertEscort.NEXT_BUTTON_Y.toDouble(), "gc_concert_next")
+                    game.tapCoordinate(GrandConcertEscort.NEXT_BUTTON_X.toDouble(), GrandConcertEscort.NEXT_BUTTON_Y.toDouble(), "gc_concert_next")
                     game.wait(1.5)
                 }
                 grandConcertBonusesUpdatedPresent(sampler) -> {
@@ -324,20 +324,20 @@ class GrandConcert(game: Game) : Campaign(game) {
                     // it; Confirm opens the Active Concert Bonuses detail panel (the escort once
                     // confirmed itself onto that panel and had to hand off).
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Bonuses Updated acknowledgment; closing.")
-                    game.tap(GrandConcertEscort.BONUSES_CLOSE_X.toDouble(), GrandConcertEscort.BONUSES_CLOSE_Y.toDouble(), "gc_concert_bonuses_close")
+                    game.tapCoordinate(GrandConcertEscort.BONUSES_CLOSE_X.toDouble(), GrandConcertEscort.BONUSES_CLOSE_Y.toDouble(), "gc_concert_bonuses_close")
                     game.wait(1.2)
                 }
                 grandConcertActiveBonusesPanelPresent(sampler) -> {
                     // Defensive: the detail panel behind the Bonuses Updated dialog's Confirm.
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Active Concert Bonuses panel; closing.")
-                    game.tap(GrandConcertEscort.ACTIVE_BONUSES_CLOSE_X.toDouble(), GrandConcertEscort.ACTIVE_BONUSES_CLOSE_Y.toDouble(), "gc_concert_active_bonuses_close")
+                    game.tapCoordinate(GrandConcertEscort.ACTIVE_BONUSES_CLOSE_X.toDouble(), GrandConcertEscort.ACTIVE_BONUSES_CLOSE_Y.toDouble(), "gc_concert_active_bonuses_close")
                     game.wait(1.2)
                 }
                 grandConcertOnStagePresent(sampler) -> {
                     // The Grand's "ON STAGE!" huddle (observed live at the finale, where it
                     // exhausted the first escort's budget); one tap on the medallion proceeds.
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] ON STAGE huddle; tapping to proceed.")
-                    game.tap(GrandConcertEscort.ON_STAGE_TAP_X.toDouble(), GrandConcertEscort.ON_STAGE_TAP_Y.toDouble(), "gc_concert_on_stage")
+                    game.tapCoordinate(GrandConcertEscort.ON_STAGE_TAP_X.toDouble(), GrandConcertEscort.ON_STAGE_TAP_Y.toDouble(), "gc_concert_on_stage")
                     game.wait(2.0)
                 }
                 grandConcertConcertConfirmPresent(sampler) -> {
@@ -388,11 +388,11 @@ class GrandConcert(game: Game) : Campaign(game) {
             when (grandConcertCutsceneCheckboxState(sampler)) {
                 GrandCutsceneCheckbox.UNCHECKED -> {
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Grand finale confirm: checking the cutscene-skip box.")
-                    game.tap(GrandConcertEscort.GRAND_CONFIRM_CHECKBOX_X.toDouble(), GrandConcertEscort.GRAND_CONFIRM_CHECKBOX_Y.toDouble(), "gc_grand_cutscene_skip")
+                    game.tapCoordinate(GrandConcertEscort.GRAND_CONFIRM_CHECKBOX_X.toDouble(), GrandConcertEscort.GRAND_CONFIRM_CHECKBOX_Y.toDouble(), "gc_grand_cutscene_skip")
                     game.wait(0.8)
                 }
                 GrandCutsceneCheckbox.CHECKED, GrandCutsceneCheckbox.ABSENT -> {
-                    game.tap(GrandConcertEscort.CONFIRM_START_X.toDouble(), GrandConcertEscort.CONFIRM_START_Y.toDouble(), "gc_concert_start")
+                    game.tapCoordinate(GrandConcertEscort.CONFIRM_START_X.toDouble(), GrandConcertEscort.CONFIRM_START_Y.toDouble(), "gc_concert_start")
                     game.wait(2.0)
                 }
             }
@@ -428,7 +428,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             game.wait(1.0)
         }
         MessageLog.i(TAG, "[GRAND_CONCERT] [CAREER_COMPLETE] Opening the skill screen via the Complete Career layout's Skills button.")
-        game.tap(GrandConcertCareerComplete.SKILLS_X.toDouble(), GrandConcertCareerComplete.SKILLS_Y.toDouble(), "gc_career_complete_skills")
+        game.tapCoordinate(GrandConcertCareerComplete.SKILLS_X.toDouble(), GrandConcertCareerComplete.SKILLS_Y.toDouble(), "gc_career_complete_skills")
     }
 
     /**
@@ -497,7 +497,7 @@ class GrandConcert(game: Game) : Campaign(game) {
      * missed tap as a completed drain.
      */
     private fun drainLessonsAtCareerComplete(): Int {
-        game.tap(GrandConcertCareerComplete.LESSONS_X.toDouble(), GrandConcertCareerComplete.LESSONS_Y.toDouble(), "gc_career_complete_lessons")
+        game.tapCoordinate(GrandConcertCareerComplete.LESSONS_X.toDouble(), GrandConcertCareerComplete.LESSONS_Y.toDouble(), "gc_career_complete_lessons")
         game.wait(1.5)
         val list = readLessonListSettled()
         if (list == null) {
@@ -579,7 +579,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             "[GRAND_CONCERT] [LESSON_READ] Lessons button state=$slot; opening shop for visit " +
                 "$lessonVisitsThisRun/$MAX_LESSON_VISITS_PER_RUN.",
         )
-        game.tap(GrandConcertTheme.LESSON_SLOT_X.toDouble(), GrandConcertTheme.LESSON_SLOT_Y.toDouble(), "gc_open_lessons")
+        game.tapCoordinate(GrandConcertTheme.LESSON_SLOT_X.toDouble(), GrandConcertTheme.LESSON_SLOT_Y.toDouble(), "gc_open_lessons")
         game.wait(1.0)
 
         val list = readLessonListSettled()
@@ -928,7 +928,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             TAG,
             "[GRAND_CONCERT] [LESSON_BUY] Attempting slot ${intended.slot} \"${intended.title}\" (${intended.kind}, score=$score).",
         )
-        game.tap(540.0, (GrandConcertLessonGeometry.CARD_HEADER_YS[intended.slot] + 120).toDouble(), "gc_lesson_card")
+        game.tapCoordinate(540.0, (GrandConcertLessonGeometry.CARD_HEADER_YS[intended.slot] + 120).toDouble(), "gc_lesson_card")
         game.wait(1.0)
 
         var confirmation = lessonReader.readConfirmation(game.imageUtils.getSourceBitmap())
@@ -956,7 +956,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             return false
         }
 
-        game.tap(GrandConcertLessonGeometry.CONFIRM_AFFIRMATIVE_X.toDouble(), GrandConcertLessonGeometry.CONFIRM_AFFIRMATIVE_Y.toDouble(), "gc_lesson_learn")
+        game.tapCoordinate(GrandConcertLessonGeometry.CONFIRM_AFFIRMATIVE_X.toDouble(), GrandConcertLessonGeometry.CONFIRM_AFFIRMATIVE_Y.toDouble(), "gc_lesson_learn")
         game.wait(1.6)
         val after = game.imageUtils.getSourceBitmap()
         val stillUp = grandConcertDialogHeaderPresent(SparkPixelSampler { x, y -> after.getPixel(x, y) })
@@ -969,7 +969,7 @@ class GrandConcert(game: Game) : Campaign(game) {
     }
 
     private fun tapCancel() {
-        game.tap(GrandConcertLessonGeometry.CONFIRM_CANCEL_X.toDouble(), GrandConcertLessonGeometry.CONFIRM_CANCEL_Y.toDouble(), "gc_lesson_cancel")
+        game.tapCoordinate(GrandConcertLessonGeometry.CONFIRM_CANCEL_X.toDouble(), GrandConcertLessonGeometry.CONFIRM_CANCEL_Y.toDouble(), "gc_lesson_cancel")
         game.wait(0.8)
     }
 
@@ -999,7 +999,7 @@ class GrandConcert(game: Game) : Campaign(game) {
      * not back yet, so the main loop always re-converges.
      */
     private fun exitLessonShop() {
-        game.tap(GrandConcertLessonGeometry.LIST_BACK_X.toDouble(), GrandConcertLessonGeometry.LIST_BACK_Y.toDouble(), "gc_lesson_back")
+        game.tapCoordinate(GrandConcertLessonGeometry.LIST_BACK_X.toDouble(), GrandConcertLessonGeometry.LIST_BACK_Y.toDouble(), "gc_lesson_back")
         game.wait(1.0)
         if (checkMainScreen()) return
         ButtonCancel.click(game.imageUtils)

@@ -3,6 +3,7 @@ package com.steve1316.uma_android_automation.bot.campaigns
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.uma_android_automation.bot.Campaign
+import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.components.ButtonHomeFansInfo
 import com.steve1316.uma_android_automation.components.ButtonOk
@@ -95,12 +96,12 @@ class UraFinale(game: Game) : Campaign(game) {
             val current = readDuelHeader("ura_duel_option_$attempt")
             MessageLog.i(TAG, "[URA_DUEL] Attempt $attempt option text: \"$current\"")
             if (current.contains(targetKeyword)) break
-            game.gestureUtils.tap(rightArrowX, rightArrowY, "ura_duel_right_arrow")
+            CoordinateTap.tap(game.gestureUtils, rightArrowX, rightArrowY, "ura_duel_right_arrow")
             game.wait(0.5)
         }
 
         if (!ButtonOk.click(game.imageUtils)) {
-            game.gestureUtils.tap(SharedData.displayWidth * 0.5, SharedData.displayHeight * 0.88, "ura_duel_confirm")
+            CoordinateTap.tap(game.gestureUtils, SharedData.displayWidth * 0.5, SharedData.displayHeight * 0.88, "ura_duel_confirm")
         }
 
         game.wait(1.0)

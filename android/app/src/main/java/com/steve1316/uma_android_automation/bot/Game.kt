@@ -438,6 +438,18 @@ class Game(val myContext: Context) {
     }
 
     /**
+     * Intentional fixed-coordinate tap that keeps [tap]'s post-tap loading wait.
+     *
+     * Use this for a deliberate tap at a known coordinate whose [label] is descriptive tracing only
+     * (no backing template asset). It jitters like the library's coordinate fallback but taps with
+     * `imageName = null`, so there is no spurious missing-asset error. See [CoordinateTap].
+     */
+    fun tapCoordinate(x: Double, y: Double, label: String, taps: Int = 1, ignoreWaiting: Boolean = false) {
+        val (jx, jy) = CoordinateTap.resolve(x, y, label)
+        tap(jx.toDouble(), jy.toDouble(), null, taps = taps, ignoreWaiting = ignoreWaiting)
+    }
+
+    /**
      * Checks if the bot is at a "Now Loading..." screen or if the game is awaiting a server response.
      *
      * This may cause significant delays in normal bot processes.

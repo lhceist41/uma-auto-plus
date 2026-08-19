@@ -3,6 +3,7 @@ package com.steve1316.uma_android_automation.bot.misc
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SettingsHelper
+import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.TaskResult
 import com.steve1316.uma_android_automation.bot.TaskResultCode
@@ -326,7 +327,7 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
         val y: Double = SharedData.displayHeight * ratioY
 
         MessageLog.v(TAG, "[STATE] handleSelectOpponent:: picking $opponentPick row at ($x, $y).")
-        game.gestureUtils.tap(x, y, "select_opponent_${opponentPick.name.lowercase()}")
+        CoordinateTap.tap(game.gestureUtils, x, y, "select_opponent_${opponentPick.name.lowercase()}")
         game.wait(2.5)
     }
 
@@ -357,7 +358,7 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
         MessageLog.v(TAG, "[STATE] handleItemsSelected:: skipping item picker, clicking Race!.")
         val x: Double = SharedData.displayWidth * 0.713
         val y: Double = SharedData.displayHeight * 0.714
-        game.gestureUtils.tap(x, y, "items_selected_race_confirm")
+        CoordinateTap.tap(game.gestureUtils, x, y, "items_selected_race_confirm")
         matchInProgress = true
         game.wait(3.0)
     }
@@ -388,7 +389,7 @@ class TeamTrialsTask(game: Game) : MiscTask(game) {
             val x = SharedData.displayWidth * 0.5
             val y = SharedData.displayHeight * 0.925
             MessageLog.v(TAG, "[STATE] handlePostMatchResults:: coord-fallback tap on See All Race Results at ($x, $y).")
-            game.gestureUtils.tap(x, y, "see_all_race_results_coord_fallback")
+            CoordinateTap.tap(game.gestureUtils, x, y, "see_all_race_results_coord_fallback")
             game.wait(2.5)
             return
         }

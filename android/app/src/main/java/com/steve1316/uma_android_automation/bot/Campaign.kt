@@ -4228,7 +4228,7 @@ abstract class Campaign(game: Game) : Task(game) {
                     // between-run navigator uses for this card (wide Close template, else the card's fixed bottom-center Close position).
                     val closeBitmap = game.imageUtils.getSourceBitmap()
                     if (!ButtonCloseWide.click(game.imageUtils, sourceBitmap = closeBitmap)) {
-                        game.gestureUtils.tap(closeBitmap.width * 0.5, closeBitmap.height * 0.86, "umamusume_details_close")
+                        CoordinateTap.tap(game.gestureUtils, closeBitmap.width * 0.5, closeBitmap.height * 0.86, "umamusume_details_close")
                     }
                     game.wait(1.0)
                 }

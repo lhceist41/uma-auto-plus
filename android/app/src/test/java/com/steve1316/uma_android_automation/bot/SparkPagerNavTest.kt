@@ -299,7 +299,7 @@ class SparkPagerNavTest {
             // 1. A degraded evaluation must never commit on the fixed coordinate. The refusal has
             // to be reached BEFORE the anchor tap, which stays available to a certain comparison.
             val degradedRefusal = body.indexOf("transaction.choice?.certain == false")
-            val anchorTap = body.indexOf("gestureUtils.tap(SPARK_PAGER_CONFIRM_X")
+            val anchorTap = body.indexOf("CoordinateTap.tap(gestureUtils, SPARK_PAGER_CONFIRM_X")
             assertTrue(degradedRefusal >= 0, "the degraded-commit refusal must exist in the pager handler")
             assertTrue(anchorTap >= 0, "the certain path keeps its fixed Confirm anchor")
             assertTrue(degradedRefusal < anchorTap, "an uncertain evaluation must be refused before the anchor tap is reachable")

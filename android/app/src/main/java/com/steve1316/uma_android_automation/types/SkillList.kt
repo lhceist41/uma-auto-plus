@@ -620,7 +620,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
      */
     fun parseDetailsSkillsTab(): DetailsSkillsResult {
         // Switch from the default Conditions tab to the Skills tab (a fixed position in the modal).
-        game.tap(SharedData.displayWidth * 0.736, SharedData.displayHeight * 0.496, "details_skills_tab")
+        game.tapCoordinate(SharedData.displayWidth * 0.736, SharedData.displayHeight * 0.496, "details_skills_tab")
         game.wait(0.5, skipWaitingForLoading = true)
 
         val ownedNames = LinkedHashSet<String>()

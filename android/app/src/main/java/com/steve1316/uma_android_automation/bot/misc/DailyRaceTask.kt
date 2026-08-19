@@ -3,6 +3,7 @@ package com.steve1316.uma_android_automation.bot.misc
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SettingsHelper
+import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.TaskResult
 import com.steve1316.uma_android_automation.bot.TaskResultCode
@@ -390,7 +391,7 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         val y: Double = SharedData.displayHeight * ratioY
 
         MessageLog.v(TAG, "[STATE] handleDifficultyPick:: picking $targetDifficulty at ($x, $y).")
-        game.gestureUtils.tap(x, y, "daily_race_difficulty_${targetDifficulty.lowercase()}")
+        CoordinateTap.tap(game.gestureUtils, x, y, "daily_race_difficulty_${targetDifficulty.lowercase()}")
         game.wait(2.5)
     }
 
@@ -409,7 +410,7 @@ class DailyRaceTask(game: Game) : MiscTask(game) {
         val y: Double = SharedData.displayHeight * 0.651
         MessageLog.v(TAG, "[STATE] handleMultiRacePopup:: clicking Race! (3/3) at ($x, $y).")
         raceSequenceCommitted = true
-        game.gestureUtils.tap(x, y, "multi_race_popup_race_confirm")
+        CoordinateTap.tap(game.gestureUtils, x, y, "multi_race_popup_race_confirm")
         game.wait(3.0)
     }
 
