@@ -332,8 +332,12 @@ fun segmentLegacyBlocks(rows: List<LegacyRowCell>): List<LegacyAncestorBlock> {
 // -- OCR regions and evidence anchors (x, y, w, h on 1080x1920 frames) ---------------------------
 
 /** The factor-name text band for a row centered at [rowY]: left of the star column. Fed to
- * performOCROnRegion by the navigator; the fixture tests pin it inside the measured text band. */
-fun legacyNameOcrRegion(rowY: Int): IntArray = intArrayOf(250, rowY - 34, 470, 68)
+ * performOCROnRegion by the navigator; the fixture tests pin it inside the measured text band.
+ * The x-start sits in the empty gap between each row's leading open-circle glyph (ink ends at
+ * x=279 on the live 1080x1920 fixtures) and the name text (ink starts at x=288), so the circle no
+ * longer OCRs as a spurious leading "O"/"0" that polluted displayText / factorFingerprint. Right
+ * edge held at x=720, well left of the first star column (816). */
+fun legacyNameOcrRegion(rowY: Int): IntArray = intArrayOf(284, rowY - 34, 436, 68)
 
 /** The rail portrait+rank crop for a stat row at [rowY], retained as identity evidence. Rank text
  * is a stylized badge that is not reliably OCR-able offline, so this task keeps the crop reference

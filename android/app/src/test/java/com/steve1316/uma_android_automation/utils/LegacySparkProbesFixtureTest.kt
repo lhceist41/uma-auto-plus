@@ -181,5 +181,17 @@ class LegacySparkProbesFixtureTest {
             assertTrue(x + w <= LEGACY_STAR_XS.first(), "the name band ends left of the first star column")
             assertTrue(h in 40..90, "one row tall")
         }
+
+        @Test
+        fun `the name region starts past the leading circle glyph but still covers the name text`() {
+            // On the live 1080x1920 fixtures the row's leading open-circle glyph draws to x=279, an
+            // 8px empty gap follows, and the name text begins at x=288. Anchoring the x-start inside
+            // that gap keeps the circle out of OCR (it had been read as a spurious leading "O"/"0")
+            // while still covering the full name. Independent of rowY, since the x-start is fixed.
+            val region = legacyNameOcrRegion(rowY = 705)
+            val x = region[0]
+            assertTrue(x in 280..288, "x-start sits between the circle glyph (ends x=279) and the name text (starts x=288)")
+            assertTrue(region[0] + region[2] == 720, "right edge held at the measured, already-validated name-band end")
+        }
     }
 }
