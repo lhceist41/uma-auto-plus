@@ -128,19 +128,21 @@ export interface VeteranCompleteness {
 
 /** Where a Veteran's evidence was observed. Overlapping corpus pulls make `files` length > 1 common. */
 export interface VeteranProvenance {
-    /** Distinct corpus file identifiers this Veteran's identical evidence appeared in, sorted, deduped. */
+    /** Distinct corpus file identifiers a REAL observation of this career appeared in, sorted, deduped. */
     readonly files: readonly string[]
-    /** How many raw kept-bearing career instances collapsed into this Veteran (>=1). */
+    /** How many real (non-finalize-only) kept-bearing observations of this career were seen (>=1). */
     readonly observations: number
-    /** True when the anchoring outcome is a finalize-only re-report (turn=null): a known ghost class. */
-    readonly finalizeOnly: boolean
+    /** Finalize-only re-reports that shared this career's final-state identity and were folded in as duplicates. */
+    readonly finalizeOnlyCollapsed: number
 }
 
 /**
  * One account-owned Veteran, reconstructed read-only from corpus. `veteranId` is a DERIVED, LOCAL,
- * content-addressed fingerprint of the normalized career evidence -- deterministic and stable across
- * rebuilds and corpus ordering. It is NOT an in-game Veteran ID. `sourceCareerToken` is null in PL-3:
- * outcome telemetry carries a config-arm fingerprint (`fp`), which is not a career token.
+ * content-addressed fingerprint of the career's FINAL SAVED STATE (trainee, scenario, fans, stats, skill
+ * points, kept sparks) -- deterministic and stable across rebuilds and corpus ordering, and identical for
+ * every observation of the one career. It is NOT an in-game Veteran ID. Every confirmed Veteran is anchored
+ * by at least one real (non-finalize-only) observation. `sourceCareerToken` is null in PL-3: outcome
+ * telemetry carries a config-arm fingerprint (`fp`), which is not a career token.
  */
 export interface Veteran {
     readonly schema: typeof PARENTLAB_SCHEMA
@@ -179,14 +181,22 @@ export interface SparkCategoryCoverage {
 export interface VeteranLibraryDiagnostics {
     /** Distinct career outcomes present in the input corpus (pre-join, pre-dedupe). */
     readonly careerOutcomes: number
-    /** Raw kept-bearing career instances found across all files, before identity dedupe. */
+    /** Raw kept-bearing career instances found across all files, before identity dedupe (real + finalize-only). */
     readonly keptCareerInstances: number
+    /** Raw kept-bearing instances that are REAL (non-finalize-only) observations. */
+    readonly realKeptInstances: number
     /** Confirmed Veterans emitted (== library length). */
     readonly confirmedVeterans: number
-    /** Raw kept instances that collapsed into an existing Veteran (keptCareerInstances - confirmedVeterans). */
+    /** Real kept instances that collapsed into an existing Veteran (realKeptInstances - confirmedVeterans). */
     readonly duplicatesCollapsed: number
     /** Careers carrying spark evidence but NO confirmed kept set (original/rerolled only): not finalized. */
     readonly incompleteCareersSkipped: number
+    /** Finalize-only kept observations seen (re-reports of an already-finished career; not new completions). */
+    readonly finalizeOnlyObservations: number
+    /** Finalize-only observations that shared a confirmed Veteran's final-state identity and folded in as duplicates. */
+    readonly finalizeOnlyCollapsed: number
+    /** Finalize-only observations whose final-state identity matched no real career: admitted as NO Veteran, surfaced here. */
+    readonly finalizeOnlyOrphans: number
     /** Spark records associated to some career by joinSparks (all phases). */
     readonly sparkRecordsJoined: number
     /** Spark records joinSparks could not associate (no preceding career / hard mismatch). */
@@ -196,8 +206,6 @@ export interface VeteranLibraryDiagnostics {
     /** Distinct normalized trainees across confirmed Veterans. */
     readonly traineeCount: number
     readonly categoryCoverage: SparkCategoryCoverage
-    /** Confirmed Veterans whose anchoring outcome is a finalize-only re-report (turn=null): a known ghost class. */
-    readonly finalizeOnlyVeterans: number
     /** Distinct canonical serializations that hash-collided onto one veteranId (expected 0). */
     readonly identityCollisions: number
 }

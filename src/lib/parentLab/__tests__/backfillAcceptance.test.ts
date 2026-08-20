@@ -11,25 +11,30 @@ import type { VeteranCorpusInput } from "../types.ts"
 // maintainer's machine), and skips with a note where it is absent (a fresh clone / CI). The hermetic
 // behavioral coverage in buildVeteranLibrary.test.ts is what always runs.
 //
-// Expected counts are the ParentLab architecture audit's targets, reproduced exactly from this corpus:
-//   204 unique Veterans, 32 trainees, 4724 joined spark records, 0 unjoined, 204/204 blue+red+green.
-// If a future corpus change moves these, do NOT casually edit the numbers here: confirm the change is
-// legitimate, then update with the reason recorded.
+// Truthful counts for this corpus. The architecture audit's provisional 204 included 4 finalize-only
+// re-reports (Complete Career screens the bot re-read without playing); those are not saved Veterans, so
+// the admission invariant excludes them, giving 200. Counts derived, not assumed (204 - 4 is a coincidence
+// of this corpus, not the rule). If a future corpus change moves these, do NOT casually edit the numbers:
+// confirm the change is legitimate, then update with the reason recorded.
 
 const CORPUS_DIR = join(process.cwd(), "validation", "corpus")
 const AVAILABLE = existsSync(CORPUS_DIR)
 
 const EXPECT = {
-    veterans: 204,
+    veterans: 200,
     trainees: 32,
     joinedSparks: 4724,
     unjoined: 0,
-    coverage: 204,
-    // The 10 overlapping pulls carry 2005 raw kept-bearing career instances; content-addressed identity
-    // collapses them to 204 (1801 duplicates). These pin that the real cross-pull dedupe ran -- a loader that
-    // fused the pulls under one file id would report 204 kept instances and 0 collapsed instead.
+    coverage: 200,
+    // 2005 raw kept-bearing instances across the 10 overlapping pulls: 1965 real completions + 40
+    // finalize-only re-reports. The 1965 real instances collapse to 200 Veterans (1765 duplicates); all 40
+    // finalize-only observations are orphans (no real career shares their final state) and admit no Veteran.
     keptInstances: 2005,
-    duplicatesCollapsed: 1801,
+    realKeptInstances: 1965,
+    duplicatesCollapsed: 1765,
+    finalizeOnlyObservations: 40,
+    finalizeOnlyCollapsed: 0,
+    finalizeOnlyOrphans: 40,
 } as const
 
 function collectCareerFiles(path: string, depth = 0): string[] {
@@ -64,7 +69,7 @@ if (!AVAILABLE) {
 suite("PL-3 full-backfill acceptance (real corpus)", () => {
     const lib = AVAILABLE ? buildVeteranLibrary(loadCorpus()) : null
 
-    it("emits exactly 204 confirmed Veterans across 32 trainees", () => {
+    it("emits exactly 200 confirmed Veterans across 32 trainees", () => {
         expect(lib!.veterans).toHaveLength(EXPECT.veterans)
         expect(lib!.diagnostics.confirmedVeterans).toBe(EXPECT.veterans)
         expect(lib!.diagnostics.traineeCount).toBe(EXPECT.trainees)
@@ -75,7 +80,7 @@ suite("PL-3 full-backfill acceptance (real corpus)", () => {
         expect(lib!.diagnostics.sparkRecordsUnjoined).toBe(EXPECT.unjoined)
     })
 
-    it("has blue, red, and green coverage on all 204 Veterans", () => {
+    it("has blue, red, and green coverage on all 200 Veterans", () => {
         const c = lib!.diagnostics.categoryCoverage
         expect(c.blue).toBe(EXPECT.coverage)
         expect(c.red).toBe(EXPECT.coverage)
@@ -83,10 +88,19 @@ suite("PL-3 full-backfill acceptance (real corpus)", () => {
         expect(c.blueRedGreen).toBe(EXPECT.coverage)
     })
 
+    it("excludes every finalize-only re-report as an orphan, admitting no ghost Veteran", () => {
+        expect(lib!.diagnostics.finalizeOnlyObservations).toBe(EXPECT.finalizeOnlyObservations)
+        expect(lib!.diagnostics.finalizeOnlyOrphans).toBe(EXPECT.finalizeOnlyOrphans)
+        expect(lib!.diagnostics.finalizeOnlyCollapsed).toBe(EXPECT.finalizeOnlyCollapsed)
+        // Every emitted Veteran is anchored by a real observation with real result evidence.
+        expect(lib!.veterans.every((v) => v.completeness.resultCaptured)).toBe(true)
+    })
+
     it("collapses the overlapping pulls by content identity (no collisions) and rebuilds deep-equal", () => {
         expect(lib!.diagnostics.keptCareerInstances).toBe(EXPECT.keptInstances)
+        expect(lib!.diagnostics.realKeptInstances).toBe(EXPECT.realKeptInstances)
         expect(lib!.diagnostics.duplicatesCollapsed).toBe(EXPECT.duplicatesCollapsed)
-        expect(lib!.diagnostics.duplicatesCollapsed).toBe(lib!.diagnostics.keptCareerInstances - EXPECT.veterans)
+        expect(lib!.diagnostics.duplicatesCollapsed).toBe(lib!.diagnostics.realKeptInstances - EXPECT.veterans)
         expect(lib!.diagnostics.identityCollisions).toBe(0)
         expect(buildVeteranLibrary(loadCorpus())).toEqual(lib)
     })

@@ -123,7 +123,8 @@ describe("4. overlapping corpus dedupe", () => {
 
 describe("5. distinct-career preservation", () => {
     it("keeps two careers with the same trainee/quality/score but different real evidence distinct", () => {
-        // Same trainee, same fans/stats/quality; different ts AND different kept spark set -> two Veterans.
+        // Same trainee, same fans/stats/quality; different kept spark set -> two distinct final states -> two Veterans.
+        // (ts is observation provenance, not identity, so distinctness must come from real final-state evidence.)
         const a = confirmedFile("a.jsonl", { ts: 1000, quality: "WIN" }, [["Speed", 3, "stat"], ["Long", 2, "aptitude"], ["Corner Recovery", 1, "unique"]])
         const b = confirmedFile("b.jsonl", { ts: 2000, quality: "WIN" }, [["Speed", 2, "stat"], ["Long", 1, "aptitude"], ["Corner Recovery", 3, "unique"]])
         const lib = buildVeteranLibrary(corpusFrom([a, b]))
@@ -225,14 +226,39 @@ describe("11. no canonical-ID fabrication", () => {
     })
 })
 
-describe("finalize-only re-reports", () => {
-    it("confirms a turn=null re-report but flags it and lowers its completeness", () => {
-        const file = { name: "a.jsonl", lines: [careerLine({ ts: 1, turn: null, outcome: "COMPLETED" }), sparkLine("kept", BRG)] }
-        const lib = buildVeteranLibrary(corpusFrom([file]))
+describe("finalize-only re-reports (admission invariant)", () => {
+    it("collapses a finalize-only re-report into the real career sharing its final state (one Veteran)", () => {
+        // Real completed career, then a turn=null re-report of the SAME final state (trainee/stats/fans/kept).
+        const real = confirmedFile("a.jsonl", { ts: 1000, turn: 75 }, BRG)
+        const reReport = { name: "b.jsonl", lines: [careerLine({ ts: 2000, turn: null, outcome: "COMPLETED" }), sparkLine("kept", BRG)] }
+        const lib = buildVeteranLibrary(corpusFrom([real, reReport]))
         expect(lib.veterans).toHaveLength(1)
-        expect(lib.veterans[0].provenance.finalizeOnly).toBe(true)
-        expect(lib.veterans[0].completeness.resultCaptured).toBe(false)
-        expect(lib.diagnostics.finalizeOnlyVeterans).toBe(1)
+        // The Veteran is anchored by the REAL observation: real result evidence, not the ghost's.
+        expect(lib.veterans[0].completeness.resultCaptured).toBe(true)
+        expect(lib.veterans[0].result.turn).toBe(75)
+        expect(lib.veterans[0].provenance.observations).toBe(1)
+        expect(lib.veterans[0].provenance.finalizeOnlyCollapsed).toBe(1)
+        expect(lib.diagnostics.finalizeOnlyCollapsed).toBe(1)
+        expect(lib.diagnostics.finalizeOnlyOrphans).toBe(0)
+        expect(lib.diagnostics.confirmedVeterans).toBe(1)
+    })
+
+    it("admits an orphan finalize-only row as NO Veteran and surfaces it in diagnostics", () => {
+        // A finalize-only re-report whose final state matches no real career: not a saved Veteran.
+        const orphan = { name: "a.jsonl", lines: [careerLine({ ts: 1, turn: null, outcome: "COMPLETED" }), sparkLine("kept", BRG)] }
+        const lib = buildVeteranLibrary(corpusFrom([orphan]))
+        expect(lib.veterans).toHaveLength(0)
+        expect(lib.diagnostics.finalizeOnlyObservations).toBe(1)
+        expect(lib.diagnostics.finalizeOnlyOrphans).toBe(1)
+        expect(lib.diagnostics.finalizeOnlyCollapsed).toBe(0)
+        expect(lib.diagnostics.confirmedVeterans).toBe(0)
+    })
+
+    it("treats turn<=1 COMPLETED as finalize-only too (not just turn=null)", () => {
+        const orphan = { name: "a.jsonl", lines: [careerLine({ ts: 1, turn: 1, outcome: "COMPLETED" }), sparkLine("kept", BRG)] }
+        const lib = buildVeteranLibrary(corpusFrom([orphan]))
+        expect(lib.veterans).toHaveLength(0)
+        expect(lib.diagnostics.finalizeOnlyOrphans).toBe(1)
     })
 })
 

@@ -3,8 +3,9 @@
 // buildVeteranLibrary(corpus) reconstructs a deterministic, read-only library of account-owned Veterans
 // from existing career telemetry. It REUSES `joinSparks` (never re-implements the spark<->career join),
 // keeps only careers with a confirmed kept set, and collapses the heavy overlap between corpus pulls by
-// content-addressed identity (identity.ts). No filesystem writes, no ordering dependence, no fabrication:
-// same input -> deep-equal output; reversed/shuffled input -> same output; overlapping sources -> one Veteran.
+// content-addressed final-state identity (identity.ts). No filesystem writes, no ordering dependence, no
+// fabrication: same input -> deep-equal output; reversed/shuffled input -> same output; overlapping
+// sources -> one Veteran; a finalize-only re-report -> never a Veteran of its own.
 
 import { joinSparks, isFinalizeOnly } from "../outcomeAnalysis.ts"
 import type { CareerSparks, SparkRecord } from "../outcomeAnalysis.ts"
@@ -94,20 +95,53 @@ function veteranFrom(c: CareerSparks, kept: SparkRecord, veteranId: string): Omi
     }
 }
 
-interface Accumulator {
-    base: Omit<Veteran, "provenance">
-    files: Set<string>
-    observations: number
+/** One kept-bearing observation of a career, tagged with the finalize-only classification. */
+interface Observation {
+    c: CareerSparks
+    kept: SparkRecord
     finalizeOnly: boolean
-    canonical: string
+}
+
+interface Group {
+    /** Every kept-bearing observation sharing this final-state identity (real completions and re-reports). */
+    observations: Observation[]
     /** Distinct canonical strings seen under this veteranId (>1 signals a hash collision). */
     canonicalVariants: Set<string>
 }
 
 /**
+ * Deterministic anchor for a career group: the real observation ordered first by (ts, turn, result,
+ * outcome, quality, file). Every real observation in a group shares the final-state identity, so their
+ * Veteran-facing fields are identical; the ordering only makes the choice order-independent.
+ */
+function pickAnchor(reals: Observation[]): Observation {
+    return reals.reduce((best, cur) => (anchorCmp(cur.c, best.c) < 0 ? cur : best))
+}
+
+function anchorCmp(a: CareerSparks, b: CareerSparks): number {
+    const x = a.outcome
+    const y = b.outcome
+    const num = (v: number | null | undefined) => v ?? Number.MAX_SAFE_INTEGER
+    return (
+        num(x.ts) - num(y.ts) ||
+        num(x.turn) - num(y.turn) ||
+        x.result.localeCompare(y.result) ||
+        x.outcome.localeCompare(y.outcome) ||
+        (x.quality ?? "").localeCompare(y.quality ?? "") ||
+        (x.file ?? "").localeCompare(y.file ?? "")
+    )
+}
+
+/**
  * Builds the Veteran shadow library from a merged corpus (outcomes + spark records). Pure and deterministic.
- * The single source of "which spark belongs to which career" is `joinSparks`; this function only decides which
+ * The single source of "which spark belongs to which career" is `joinSparks`; this function decides which
  * joined careers become Veterans, how duplicates collapse, and how the result is shaped and sorted.
+ *
+ * A career is grouped by its final-state identity (identity.ts). ADMISSION INVARIANT: a group becomes a
+ * Veteran only when a real (non-finalize-only) observation anchors it. A finalize-only observation -- a
+ * re-report of an already-finished Complete Career screen, which the bot walks without ever playing the
+ * career -- never creates a Veteran: it either folds into a matching real career as a duplicate, or, when
+ * no real career shares its final state, is surfaced as an orphan and admitted as no Veteran at all.
  */
 export function buildVeteranLibrary(corpus: VeteranCorpusInput): VeteranLibrary {
     const outcomes = corpus.outcomes as Parameters<typeof joinSparks>[0]
@@ -117,8 +151,10 @@ export function buildVeteranLibrary(corpus: VeteranCorpusInput): VeteranLibrary 
     const malformedSparkRows = corpus.sparks.reduce((sum, s) => sum + s.droppedRows, 0)
 
     let keptCareerInstances = 0
+    let realKeptInstances = 0
+    let finalizeOnlyObservations = 0
     let incompleteCareersSkipped = 0
-    const acc = new Map<string, Accumulator>()
+    const groups = new Map<string, Group>()
 
     for (const c of join.careers) {
         const kept = finalKeptRecord(c)
@@ -128,36 +164,41 @@ export function buildVeteranLibrary(corpus: VeteranCorpusInput): VeteranLibrary 
             continue
         }
         keptCareerInstances++
+        const finalizeOnly = isFinalizeOnly(c.outcome)
+        if (finalizeOnly) finalizeOnlyObservations++
+        else realKeptInstances++
         const canonical = canonicalCareerEvidence(c, kept)
         const veteranId = veteranIdFor(canonical)
-        const file = c.outcome.file ?? ""
-        const existing = acc.get(veteranId)
-        if (existing) {
-            existing.files.add(file)
-            existing.observations++
-            existing.canonicalVariants.add(canonical)
-            continue
+        let g = groups.get(veteranId)
+        if (!g) {
+            g = { observations: [], canonicalVariants: new Set() }
+            groups.set(veteranId, g)
         }
-        acc.set(veteranId, {
-            base: veteranFrom(c, kept, veteranId),
-            files: new Set([file]),
-            observations: 1,
-            finalizeOnly: isFinalizeOnly(c.outcome),
-            canonical,
-            canonicalVariants: new Set([canonical]),
-        })
+        g.observations.push({ c, kept, finalizeOnly })
+        g.canonicalVariants.add(canonical)
     }
 
     let identityCollisions = 0
+    let finalizeOnlyCollapsed = 0
+    let finalizeOnlyOrphans = 0
     const veterans: Veteran[] = []
-    for (const a of acc.values()) {
-        if (a.canonicalVariants.size > 1) identityCollisions += a.canonicalVariants.size - 1
+    for (const [veteranId, g] of groups) {
+        if (g.canonicalVariants.size > 1) identityCollisions += g.canonicalVariants.size - 1
+        const reals = g.observations.filter((o) => !o.finalizeOnly)
+        const finCount = g.observations.length - reals.length
+        if (reals.length === 0) {
+            // Orphan: only finalize-only re-reports share this final state, and none is a played career.
+            finalizeOnlyOrphans += finCount
+            continue
+        }
+        finalizeOnlyCollapsed += finCount
+        const anchor = pickAnchor(reals)
         veterans.push({
-            ...a.base,
+            ...veteranFrom(anchor.c, anchor.kept, veteranId),
             provenance: {
-                files: [...a.files].sort(),
-                observations: a.observations,
-                finalizeOnly: a.finalizeOnly,
+                files: [...new Set(reals.map((o) => o.c.outcome.file ?? ""))].sort(),
+                observations: reals.length,
+                finalizeOnlyCollapsed: finCount,
             },
         })
     }
@@ -173,15 +214,18 @@ export function buildVeteranLibrary(corpus: VeteranCorpusInput): VeteranLibrary 
     const diagnostics: VeteranLibraryDiagnostics = {
         careerOutcomes: corpus.outcomes.length,
         keptCareerInstances,
+        realKeptInstances,
         confirmedVeterans: veterans.length,
-        duplicatesCollapsed: keptCareerInstances - veterans.length,
+        duplicatesCollapsed: realKeptInstances - veterans.length,
         incompleteCareersSkipped,
+        finalizeOnlyObservations,
+        finalizeOnlyCollapsed,
+        finalizeOnlyOrphans,
         sparkRecordsJoined: join.joinedCount,
         sparkRecordsUnjoined: join.unjoined.length,
         malformedSparkRows,
         traineeCount: new Set(veterans.map((v) => v.trainee)).size,
         categoryCoverage: coverageOf(veterans),
-        finalizeOnlyVeterans: veterans.filter((v) => v.provenance.finalizeOnly).length,
         identityCollisions,
     }
 

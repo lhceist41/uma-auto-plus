@@ -1,11 +1,14 @@
 // ParentLab PL-3 - deterministic content-addressed Veteran identity. Pure, dependency-free.
 //
 // Outcome telemetry carries NO career token (the record's `fp` is a config-arm fingerprint, not a career
-// id), so a Veteran's identity is a content hash of the normalized career evidence -- not ingestion order,
-// not corpus filename. Two re-pulls of the same physical career copy the record verbatim (identical ts,
-// stats, kept rows) and therefore hash equal; two genuinely distinct careers differ in the evidence tuple
-// (distinct ts/turn/stats/kept set) and stay separate. The kept spark set is folded in so a reroll that
-// changed only the retained sparks is not collapsed with the pre-reroll career.
+// id), so a Veteran's identity is a content hash of the FINAL SAVED STATE of the career -- not ingestion
+// order, not corpus filename, and deliberately NOT the observation-level fields (`ts`, `turn`, `result`,
+// `outcome`, `quality`). Identity is the inheritable end state: trainee, scenario, fans, final stats,
+// skill points, and the kept spark set. Two re-pulls of one career copy that state verbatim and hash
+// equal; two genuinely distinct careers differ somewhere in that state and stay separate. `ts`/`turn`
+// are observation provenance, handled by the builder -- keeping them OUT of identity is what stops a
+// finalize-only re-report (which re-reads the screen with a fresh timestamp and turn) from ever forging a
+// second identity for a career that is already represented (see buildVeteranLibrary.ts).
 
 import type { CareerSparks, SparkRecord } from "../outcomeAnalysis.ts"
 
@@ -20,9 +23,13 @@ export function finalKeptRecord(c: CareerSparks): SparkRecord | null {
 }
 
 /**
- * Canonical, stable serialization of one confirmed career's evidence. Deterministic: field order is fixed
- * and the kept rows are sorted, so the string does not depend on corpus/file/row ordering. Only evidence
- * the corpus actually carries goes in -- never a filename, line number, or ingestion index.
+ * Canonical, stable serialization of one career's FINAL SAVED STATE. Deterministic: field order is fixed
+ * and the kept rows are sorted, so the string does not depend on corpus/file/row ordering. Only the
+ * inheritable end state goes in -- trainee, scenario, fans, final stats, skill points, kept spark set.
+ * Observation-level fields (`ts`, `turn`, `result`, `outcome`, `quality`) are deliberately excluded so that
+ * every observation of one career -- a normal completion or a later finalize-only re-report -- serializes
+ * to the SAME identity. The builder then keeps a career only when a real (non-finalize-only) observation
+ * anchors it, and merges the rest as provenance.
  */
 export function canonicalCareerEvidence(c: CareerSparks, kept: SparkRecord): string {
     const o = c.outcome
@@ -32,21 +39,12 @@ export function canonicalCareerEvidence(c: CareerSparks, kept: SparkRecord): str
         .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0) || (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0) || a[2] - b[2])
     // A fixed-key object serialized with JSON.stringify: key order is the literal's insertion order, stable.
     return JSON.stringify({
-        v: 1,
+        v: 2,
         trainee: o.trainee,
         scenario: o.scenario,
-        turn: o.turn,
-        result: o.result,
-        outcome: o.outcome,
-        quality: o.quality ?? null,
         fans: o.fans,
         stats: [o.spd, o.sta, o.pwr, o.grt, o.wit],
         skillPts: o.skillPts,
-        finaleRaces: o.finaleRaces ?? null,
-        finaleWins: o.finaleWins ?? null,
-        // ts is written once on-device and copied verbatim on every pull: identical across duplicates of one
-        // physical career, distinct between careers. It is career evidence (when it ended), not ingestion order.
-        ts: o.ts ?? null,
         kept: keptRows,
     })
 }
