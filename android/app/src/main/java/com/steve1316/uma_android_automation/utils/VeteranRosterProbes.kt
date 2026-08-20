@@ -198,18 +198,26 @@ fun parseCareerScenario(raw: String): String? {
     return m.groupValues[1].trim().takeIf { it.isNotEmpty() }
 }
 
-/** "Rating   10,192" in the Career Info block -> 10192. Separate crop from the header rating pill,
- * kept as its own parser so a mismatch between the two reads is visible rather than assumed equal. */
+/** "Rating   10,192" (or just "10,192") in the Career Info block -> 10192. Separate crop from the
+ * header rating pill, kept as its own parser so a mismatch between the two reads is visible rather
+ * than assumed equal. The pill label is read label-optionally: on a live capture OCR does not
+ * reliably return the "Rating" label for this row, only the value, so requiring the label reported
+ * UNAVAILABLE for a value that was read perfectly. A 4+ digit run with the career-rating plausibility
+ * range still rejects a wrong-tab crop (verified live: the Skills-tab crop at this position carries no
+ * such number). */
 fun parseCareerRatingValue(raw: String): Int? {
-    val m = Regex("""Rating\D*(\d[\d,]*)""", RegexOption.IGNORE_CASE).find(raw) ?: return null
-    return m.groupValues[1].replace(",", "").toIntOrNull()
+    val digits = Regex("""\d[\d,]{3,}""").find(raw)?.value?.replace(",", "") ?: return null
+    return digits.toIntOrNull()?.takeIf { it in 1000..999_999 }
 }
 
-/** "Date Acquired   Aug 10, 2026" -> "2026-08-10". Null on an unrecognised month abbreviation rather
- * than guessing a number. */
+/** "Date Acquired   Aug 10, 2026" (or just "Aug 10, 2026") -> "2026-08-10". The "Date Acquired" label
+ * is read label-optionally for the same reason as [parseCareerRatingValue]: OCR returns only the date
+ * value for this row on a live capture. The strict "Mon DD, YYYY" shape plus month-name validation
+ * and the day/year ranges reject a wrong-tab crop that has no such date. Null on an unrecognised month
+ * abbreviation rather than guessing a number. */
 fun parseDateAcquired(raw: String): String? {
     val m =
-        Regex("""Date Acquired\D*([A-Za-z]{3})[a-z]*\s+(\d{1,2}),\s*(\d{4})""", RegexOption.IGNORE_CASE)
+        Regex("""([A-Za-z]{3})[a-z]*\s+(\d{1,2}),\s*(\d{4})""", RegexOption.IGNORE_CASE)
             .find(raw.replace("\n", " "))
             ?: return null
     val month = MONTH_ABBREVIATIONS[m.groupValues[1].lowercase()] ?: return null

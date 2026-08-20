@@ -113,18 +113,31 @@ class VeteranRosterProbesTest {
         }
 
         @Test
-        fun `career rating reads independently of the header rating pill`() {
+        fun `career rating reads with or without the pill label`() {
             assertEquals(10192, parseCareerRatingValue("Rating   10,192"))
+            // Live capture: OCR returns only the value for this row, not the "Rating" pill label.
+            assertEquals(10192, parseCareerRatingValue("10,192"))
         }
 
         @Test
-        fun `date acquired normalizes to ISO`() {
+        fun `career rating stays unresolved on a wrong-tab crop with no number`() {
+            // The exact Skills-tab OCR seen live at the Career Rating crop position.
+            assertNull(parseCareerRatingValue("TTIe"))
+            assertNull(parseCareerRatingValue(""))
+        }
+
+        @Test
+        fun `date acquired normalizes to ISO with or without the pill label`() {
             assertEquals("2026-08-10", parseDateAcquired("Date Acquired   Aug 10, 2026"))
+            // Live capture: OCR returns only the date value for this row, not the label.
+            assertEquals("2026-08-10", parseDateAcquired("Aug 10, 2026"))
         }
 
         @Test
-        fun `date acquired with an unrecognised month stays unresolved`() {
-            assertNull(parseDateAcquired("Date Acquired   Zzz 10, 2026"))
+        fun `date acquired with an unrecognised month or a wrong-tab crop stays unresolved`() {
+            assertNull(parseDateAcquired("Zzz 10, 2026"))
+            // The exact Skills-tab OCR seen live at the Date Acquired crop position.
+            assertNull(parseDateAcquired("a Medium"))
         }
     }
 
