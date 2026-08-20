@@ -153,6 +153,26 @@ fun parseRegistered(raw: String): Pair<Int, Int>? {
     return used to capacity
 }
 
+/** Which Veteran screen a captured frame is on. */
+enum class RosterScreenKind { ROSTER_LIST, UMAMUSUME_DETAILS, UNKNOWN }
+
+/**
+ * Classifies a frame from the two cheap probes: a non-null [registered] read ("Registered X/Y") is
+ * the roster LIST; otherwise a title containing "DETAIL" (the "Umamusume Details" dialog header) is
+ * the DETAILS dialog; anything else is UNKNOWN.
+ *
+ * UNKNOWN is deliberately conservative. At session start the bot's own "Automation is now running"
+ * foreground-service notification peeks as a heads-up banner over the title band, so a valid Details
+ * dialog momentarily reads its title as "Status ... Automation is now running" (no "DETAIL"). The
+ * reader retries a few captures on UNKNOWN to outlast that banner rather than trusting the first frame.
+ */
+fun classifyRosterScreen(registered: Pair<Int, Int>?, titleRaw: String): RosterScreenKind =
+    when {
+        registered != null -> RosterScreenKind.ROSTER_LIST
+        titleRaw.uppercase().contains("DETAIL") -> RosterScreenKind.UMAMUSUME_DETAILS
+        else -> RosterScreenKind.UNKNOWN
+    }
+
 /** "Filters: OFF" -> true, "Filters: ON" -> false, anything else -> null (never assume OFF). */
 fun parseFiltersOff(raw: String): Boolean? {
     val upper = raw.uppercase()

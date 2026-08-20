@@ -78,8 +78,10 @@ import com.steve1316.uma_android_automation.utils.STAT_COL_X
 import com.steve1316.uma_android_automation.utils.STAT_LABELS
 import com.steve1316.uma_android_automation.utils.STAT_ROW_Y
 import com.steve1316.uma_android_automation.utils.RosterIdentityEvidence
+import com.steve1316.uma_android_automation.utils.RosterScreenKind
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.classifyFavoriteMarker
+import com.steve1316.uma_android_automation.utils.classifyRosterScreen
 import com.steve1316.uma_android_automation.utils.parseAptitudeGrade
 import com.steve1316.uma_android_automation.utils.parseCareerRatingValue
 import com.steve1316.uma_android_automation.utils.parseCareerRecord
@@ -97,6 +99,15 @@ import com.steve1316.uma_android_automation.utils.parseStatCell
 import com.steve1316.uma_android_automation.utils.rosterFingerprint
 
 private const val TAG = "[VeteranRosterReader]"
+
+/**
+ * How many times [VeteranRosterReader.debugRead] captures and classifies before trusting an UNKNOWN
+ * verdict, and how long it waits between tries. Sized to outlast the bot's own "Automation is now
+ * running" heads-up notification, which peeks over the title band for the first few seconds of a
+ * session (this diagnostic runs at session start, before any navigation delay).
+ */
+private const val CLASSIFY_ATTEMPTS = 6
+private const val CLASSIFY_RETRY_DELAY_MS = 1500L
 
 /**
  * Zero-gesture, read-only calibration diagnostic for the Veteran Roster list and the
@@ -126,23 +137,38 @@ class VeteranRosterReader(private val iu: CustomImageUtils) {
         }
 
     fun debugRead() {
-        val bitmap = iu.getSourceBitmap()
+        // This diagnostic runs at session start (startTests, before any navigation delay), so its first
+        // capture lands while the bot's own "Automation is now running" foreground-service notification
+        // is still peeking as a heads-up banner over the top of the screen. That banner covers the
+        // "Umamusume Details" title (OCR reads "Status ... Automation is now running"), misclassifying a
+        // valid Details dialog as UNKNOWN. Re-capture a few times so the heads-up dismisses before we
+        // trust an UNKNOWN verdict; a genuinely wrong screen still ends UNKNOWN after the last attempt.
+        var bitmap = iu.getSourceBitmap()
+        var registeredRaw = ""
+        var registered: Pair<Int, Int>? = null
+        var titleRaw = ""
+        var kind = RosterScreenKind.UNKNOWN
+        for (attempt in 1..CLASSIFY_ATTEMPTS) {
+            registeredRaw = ocr(bitmap, ROSTER_REGISTERED_X, ROSTER_REGISTERED_Y, ROSTER_REGISTERED_W, ROSTER_REGISTERED_H, "registered")
+            registered = parseRegistered(registeredRaw)
+            titleRaw = ocr(bitmap, DETAIL_TITLE_X, DETAIL_TITLE_Y, DETAIL_TITLE_W, DETAIL_TITLE_H, "title")
+            kind = classifyRosterScreen(registered, titleRaw)
+            if (kind != RosterScreenKind.UNKNOWN || attempt == CLASSIFY_ATTEMPTS) break
+            Thread.sleep(CLASSIFY_RETRY_DELAY_MS)
+            bitmap = iu.getSourceBitmap()
+        }
+
         MessageLog.i(TAG, "[ROSTER-TEST] ===== Veteran Roster read-only diagnostic (${bitmap.width}x${bitmap.height}) =====")
-
-        val registeredRaw = ocr(bitmap, ROSTER_REGISTERED_X, ROSTER_REGISTERED_Y, ROSTER_REGISTERED_W, ROSTER_REGISTERED_H, "registered")
-        val registered = parseRegistered(registeredRaw)
-        val titleRaw = ocr(bitmap, DETAIL_TITLE_X, DETAIL_TITLE_Y, DETAIL_TITLE_W, DETAIL_TITLE_H, "title")
-
-        when {
-            registered != null -> readRosterList(bitmap, registeredRaw, registered)
-            titleRaw.uppercase().contains("DETAIL") -> readUmamusumeDetails(bitmap)
-            else -> {
+        when (kind) {
+            // classifyRosterScreen returns ROSTER_LIST only when registered parsed non-null.
+            RosterScreenKind.ROSTER_LIST -> readRosterList(bitmap, registeredRaw, registered!!)
+            RosterScreenKind.UMAMUSUME_DETAILS -> readUmamusumeDetails(bitmap)
+            RosterScreenKind.UNKNOWN ->
                 MessageLog.w(
                     TAG,
                     "[ROSTER-TEST] screenKind=UNKNOWN - registered OCR='$registeredRaw' title OCR='$titleRaw'. " +
                         "Park the game on the Veteran Roster list or an open Umamusume Details dialog and re-run.",
                 )
-            }
         }
         MessageLog.i(TAG, "[ROSTER-TEST] ===== end =====")
     }

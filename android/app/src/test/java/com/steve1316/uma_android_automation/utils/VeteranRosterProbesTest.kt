@@ -266,4 +266,30 @@ class VeteranRosterProbesTest {
             assertEquals(false, rosterFingerprint(a) == rosterFingerprint(b))
         }
     }
+
+    @Nested
+    @DisplayName("Screen classification")
+    inner class ScreenClassification {
+        @Test
+        fun `a registered read is the roster list`() {
+            assertEquals(RosterScreenKind.ROSTER_LIST, classifyRosterScreen(257 to 260, "anything"))
+        }
+
+        @Test
+        fun `an umamusume details title is the details dialog`() {
+            assertEquals(RosterScreenKind.UMAMUSUME_DETAILS, classifyRosterScreen(null, "Umamusume Details"))
+        }
+
+        @Test
+        fun `the startup notification banner never reads as a details dialog`() {
+            // The bot's own "Automation is now running" heads-up notification covers the title band at
+            // session start; its OCR must classify UNKNOWN so the reader re-captures, never DETAILS.
+            assertEquals(RosterScreenKind.UNKNOWN, classifyRosterScreen(null, "Status  now  Automation is now running"))
+        }
+
+        @Test
+        fun `an unreadable frame stays unknown`() {
+            assertEquals(RosterScreenKind.UNKNOWN, classifyRosterScreen(null, ""))
+        }
+    }
 }
