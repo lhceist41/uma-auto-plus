@@ -13,6 +13,7 @@
 // No RaceLab/ReplayLab/Android/runtime imports: this is a leaf analysis module like shadowAdvisor/types.
 
 import type { OutcomeRecord, SparkRecord } from "../outcomeAnalysis.ts"
+import type { LineageEventRecord } from "./lineage.ts"
 
 /** Library schema discriminator + version. Bumped only on a breaking Veteran/library shape change. Not the app version. */
 export const PARENTLAB_SCHEMA = "parent_lab_veteran" as const
@@ -54,20 +55,58 @@ export interface VeteranSpark {
     readonly canonicalResolved: boolean
 }
 
-/** Lineage capture status. PL-3 only ever produces `uncaptured` (current automation reads no parents). */
-export type LineageCaptureStatus = "uncaptured"
+/**
+ * Lineage capture status. Historical Veterans (and any future one whose launch did not read the
+ * legacy summary, or whose lineage read failed) are `uncaptured`; a Veteran joined to a successful
+ * lineage event is `captured`, or `partial` when the device read fewer than six clean ancestors.
+ */
+export type LineageCaptureStatus = "uncaptured" | "captured" | "partial"
+
+/** One observed inherited factor on a lineage ancestor. Star/kind are pixel-classified; displayText
+ * is raw OCR (may be empty when unreadable). */
+export interface VeteranLineageFactor {
+    readonly kind: string
+    readonly displayText: string
+    readonly stars: number
+    readonly ambiguous: boolean
+    readonly clipped: boolean
+}
+
+/** One ancestor (a parent or grandparent) as read from the Legacy Select Sparks view. Identity stays
+ * probable at best (the legacy flow shows no names); `rank`/`probableVeteranId` are unresolved here. */
+export interface VeteranLineageAncestor {
+    readonly role: string
+    readonly slotIndex: number
+    readonly portraitObserved: boolean
+    readonly rank: string | null
+    readonly ownership: string
+    readonly matchStatus: string
+    readonly probableVeteranId: string | null
+    readonly hasLeadTriple: boolean
+    readonly completeness: number
+    readonly factorFingerprint: string
+    readonly factors: readonly VeteranLineageFactor[]
+}
 
 /**
- * A Veteran's lineage. Current automation does not read selected parents/grandparents, so historical
- * Veterans have `captureStatus: "uncaptured"` with parents/grandparents null. Null here means "the
- * capture never happened", explicitly distinct from a known-empty lineage (which would be `[]`).
+ * A Veteran's lineage. Historical Veterans have `captureStatus: "uncaptured"` with everything null:
+ * null means "the capture never happened", explicitly distinct from a known-empty lineage (`[]`). A
+ * Veteran joined to a lineage event carries its `launchTransactionId`, the affinity glyph if read,
+ * and the observed `ancestors`. `parents`/`grandparents` remain null: the ancestor detail lives in
+ * `ancestors`, and the two legacy fields are kept only so existing readers do not break.
  */
 export interface VeteranLineage {
     readonly captureStatus: LineageCaptureStatus
-    /** null = not captured (NOT known-empty). A future capture stage sets this to a concrete array. */
+    /** Always null; ancestor detail is in `ancestors`. Retained for backward compatibility. */
     readonly parents: null
-    /** null = not captured (NOT known-empty). */
+    /** Always null; ancestor detail is in `ancestors`. Retained for backward compatibility. */
     readonly grandparents: null
+    /** The launch id the joined lineage event carried, or null when uncaptured. */
+    readonly launchTransactionId: string | null
+    /** The aggregate affinity glyph observation if the device read one, else null. */
+    readonly overallAffinity: string | null
+    /** The observed ancestors (up to six), or null when uncaptured (NOT known-empty). */
+    readonly ancestors: readonly VeteranLineageAncestor[] | null
 }
 
 /**
@@ -227,4 +266,7 @@ export interface VeteranLibrary {
 export interface VeteranCorpusInput {
     readonly outcomes: readonly OutcomeRecord[]
     readonly sparks: readonly SparkRecord[]
+    /** Optional `lineage_selected` events (lineage.jsonl). When present, they are joined to Veterans
+     * by `launchTransactionId`; absent or unmatched, every Veteran stays `lineage.uncaptured`. */
+    readonly lineageEvents?: readonly LineageEventRecord[]
 }

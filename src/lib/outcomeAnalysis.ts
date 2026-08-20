@@ -20,6 +20,10 @@ export interface OutcomeRecord {
     app?: string
     /** Config-arm fingerprint (JSONL only). */
     fp?: string
+    /** The launch-transaction id this career adopted at attachment (JSONL only; absent on hand-played
+     * or restart-resumed careers, and on records predating the feature). Joins a career to the lineage
+     * read taken during its launch. NOT part of Veteran identity: it is observation-level, like `ts`. */
+    launchTransactionId?: string
     result: string
     outcome: string
     forceEndReason?: string
@@ -373,6 +377,7 @@ export function parseCorpus(text: string, file?: string): ParsedCorpus {
             ts: obj.ts,
             app: obj.app,
             fp: obj.fp,
+            launchTransactionId: obj.launchTransactionId !== undefined ? String(obj.launchTransactionId) : undefined,
             result: String(obj.result),
             outcome: String(obj.outcome ?? "COMPLETED"),
             forceEndReason: obj.forceEndReason,

@@ -15,15 +15,79 @@ import {
     SPARK_KIND_TO_CATEGORY,
 } from "./types.ts"
 import type {
+    LineageCaptureStatus,
     SparkCategory,
     SparkCategoryCoverage,
     Veteran,
     VeteranCorpusInput,
     VeteranLibrary,
     VeteranLibraryDiagnostics,
+    VeteranLineageAncestor,
     VeteranSpark,
 } from "./types.ts"
+import type { LineageAncestorRecord, LineageEventRecord } from "./lineage.ts"
 import { canonicalCareerEvidence, finalKeptRecord, normalizeSparkNameForIdentity, veteranIdFor } from "./identity.ts"
+
+/** Deterministically index lineage events by their launch id, keeping the strongest per id (more
+ * ancestors, then a captured over a partial read, then the later timestamp) so a re-emitted event
+ * cannot make the join order-dependent. Events with no launch id cannot join and are dropped. */
+function indexLineageEvents(events: readonly LineageEventRecord[]): Map<string, LineageEventRecord> {
+    const rank = (s: LineageEventRecord["captureStatus"]) => (s === "captured" ? 2 : s === "partial" ? 1 : 0)
+    const better = (a: LineageEventRecord, b: LineageEventRecord): boolean =>
+        a.ancestors.length !== b.ancestors.length
+            ? a.ancestors.length > b.ancestors.length
+            : rank(a.captureStatus) !== rank(b.captureStatus)
+              ? rank(a.captureStatus) > rank(b.captureStatus)
+              : (a.ts ?? 0) > (b.ts ?? 0)
+    const byId = new Map<string, LineageEventRecord>()
+    for (const e of events) {
+        if (!e.launchTransactionId) continue
+        const cur = byId.get(e.launchTransactionId)
+        if (!cur || better(e, cur)) byId.set(e.launchTransactionId, e)
+    }
+    return byId
+}
+
+/** Map one parsed lineage-event ancestor to its Veteran-facing shape (structurally identical). */
+function mapLineageAncestor(a: LineageAncestorRecord): VeteranLineageAncestor {
+    return {
+        role: a.role,
+        slotIndex: a.slotIndex,
+        portraitObserved: a.portraitObserved,
+        rank: a.rank,
+        ownership: a.ownership,
+        matchStatus: a.matchStatus,
+        probableVeteranId: a.probableVeteranId,
+        hasLeadTriple: a.hasLeadTriple,
+        completeness: a.completeness,
+        factorFingerprint: a.factorFingerprint,
+        factors: a.factors.map((f) => ({ kind: f.kind, displayText: f.displayText, stars: f.stars, ambiguous: f.ambiguous, clipped: f.clipped })),
+    }
+}
+
+/**
+ * Fold a joined lineage event into a Veteran's lineage and completeness. A `failed` (or ancestor-less)
+ * event leaves the Veteran uncaptured - a failed read is not a capture. Otherwise the Veteran records
+ * the launch id, the ancestors, and `captured`/`partial`, and `completeness.lineageCaptured` flips to
+ * true (the score reflects one more of the six tracked dimensions).
+ */
+function withLineage(base: Omit<Veteran, "provenance">, launchTransactionId: string, event: LineageEventRecord): Omit<Veteran, "provenance"> {
+    if (event.captureStatus === "failed" || event.ancestors.length === 0) return base
+    const status: LineageCaptureStatus = event.captureStatus === "captured" ? "captured" : "partial"
+    const flags = [base.completeness.resultCaptured, true /* kept */, true /* lineage */, false, false, false]
+    return {
+        ...base,
+        lineage: {
+            captureStatus: status,
+            parents: null,
+            grandparents: null,
+            launchTransactionId,
+            overallAffinity: event.overallAffinity,
+            ancestors: event.ancestors.map(mapLineageAncestor),
+        },
+        completeness: { ...base.completeness, lineageCaptured: true, score: flags.filter(Boolean).length / flags.length },
+    }
+}
 
 /** Maps a raw telemetry spark kind to its color category, degrading unknown kinds to `other`. */
 function categoryOf(kind: string): SparkCategory {
@@ -82,7 +146,7 @@ function veteranFrom(c: CareerSparks, kept: SparkRecord, veteranId: string): Omi
             score: null,
         },
         sparks: veteranSparks(kept),
-        lineage: { captureStatus: "uncaptured", parents: null, grandparents: null },
+        lineage: { captureStatus: "uncaptured", parents: null, grandparents: null, launchTransactionId: null, overallAffinity: null, ancestors: null },
         completeness: {
             resultCaptured,
             keptSparksCaptured: true,
@@ -147,6 +211,7 @@ export function buildVeteranLibrary(corpus: VeteranCorpusInput): VeteranLibrary 
     const outcomes = corpus.outcomes as Parameters<typeof joinSparks>[0]
     const sparks = corpus.sparks as Parameters<typeof joinSparks>[1]
     const join = joinSparks(outcomes, sparks)
+    const lineageByTxId = indexLineageEvents(corpus.lineageEvents ?? [])
 
     const malformedSparkRows = corpus.sparks.reduce((sum, s) => sum + s.droppedRows, 0)
 
@@ -193,8 +258,14 @@ export function buildVeteranLibrary(corpus: VeteranCorpusInput): VeteranLibrary 
         }
         finalizeOnlyCollapsed += finCount
         const anchor = pickAnchor(reals)
+        // Join by launchTransactionId only (never timestamp guessing): the id lives on the career's
+        // real observation, and one launch maps to exactly one career. No id, or no matching event,
+        // leaves the Veteran's lineage uncaptured - which every historical Veteran is.
+        const launchTxId = reals.map((o) => o.c.outcome.launchTransactionId).find((id): id is string => !!id) ?? null
+        const event = launchTxId ? lineageByTxId.get(launchTxId) : undefined
+        const base = veteranFrom(anchor.c, anchor.kept, veteranId)
         veterans.push({
-            ...veteranFrom(anchor.c, anchor.kept, veteranId),
+            ...(event ? withLineage(base, launchTxId as string, event) : base),
             provenance: {
                 files: [...new Set(reals.map((o) => o.c.outcome.file ?? ""))].sort(),
                 observations: reals.length,

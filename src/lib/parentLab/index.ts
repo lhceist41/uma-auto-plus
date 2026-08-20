@@ -3,6 +3,7 @@
 // PL-3 is only the trustworthy account-owned Veteran data foundation later stages build on.
 
 export * from "./types.ts"
+export * from "./lineage.ts"
 export { buildVeteranLibrary } from "./buildVeteranLibrary.ts"
 export {
     canonicalCareerEvidence,
