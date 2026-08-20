@@ -45,6 +45,7 @@ const DebugSettings = () => {
         "debugMode_startSupportDeckRehearsalTest",
         "debugMode_startSmartBorrowRehearsalTest",
         "debugMode_startRainbowDetectionTest",
+        "debugMode_startVeteranRosterReadTest",
     ] as const
 
     /**
@@ -630,6 +631,15 @@ const DebugSettings = () => {
                                 onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startRainbowDetectionTest", checked)}
                                 label="Start Rainbow Detection Test"
                                 description="Disables normal bot operations and starts the Rainbow detection test. Run it while the game shows the Training screen: it detects the rainbow glow ring on each support face circle for a few seconds, logs the per-support hue metrics and the derived rainbow count, and saves an annotated crop for calibration."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-veteran-roster-read-test"
+                                checked={bsc.settings.debug.debugMode_startVeteranRosterReadTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startVeteranRosterReadTest", checked)}
+                                label="Start Veteran Roster Read Test"
+                                description="Read-only Veteran Roster calibration. Park the game on the Veteran Roster list (Home > Enhance > Veteran Umamusume > List) or an open Umamusume Details dialog, then start the bot: it logs every field it can read (name, outfit, rank, Rating, stats, aptitudes, Career Info block) without tapping, swiping, or changing tabs. Tagged [ROSTER-TEST] in the log."
                                 style={{ marginTop: 10 }}
                             />
                         </View>

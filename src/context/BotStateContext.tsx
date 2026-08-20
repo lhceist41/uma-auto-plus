@@ -255,6 +255,8 @@ export interface Settings {
         // Rehearses the production Smart Borrow flow + exact post-borrow deck verification on the Support Formation screen and stops before Start Career; requires Required Support Deck 1..10 already showing and an empty Friends slot.
         debugMode_startSmartBorrowRehearsalTest: boolean
         debugMode_startRainbowDetectionTest: boolean
+        // Read-only Veteran Roster / Umamusume Details calibration (PL-R1a). Park the game on the Veteran Roster list or an open Umamusume Details dialog; taps nothing.
+        debugMode_startVeteranRosterReadTest: boolean
         enableScreenRecording: boolean
         recordingBitRate: number
         recordingFrameRate: number
@@ -750,6 +752,7 @@ export const defaultSettings: Settings = {
         debugMode_startSupportDeckRehearsalTest: false,
         debugMode_startSmartBorrowRehearsalTest: false,
         debugMode_startRainbowDetectionTest: false,
+        debugMode_startVeteranRosterReadTest: false,
         enableScreenRecording: false,
         recordingBitRate: 6,
         recordingFrameRate: 30,

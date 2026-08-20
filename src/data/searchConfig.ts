@@ -816,6 +816,13 @@ const searchConfig: SearchOption[] = [
         page: "DebugSettings",
     },
     {
+        id: "debug-veteran-roster-read-test",
+        title: "Start Veteran Roster Read Test",
+        description:
+            "Disables normal bot operations and starts the read-only Veteran Roster calibration test. Park the game on the Veteran Roster list or an open Umamusume Details dialog: it logs every field it can read (name, outfit, rank, Rating, stats, aptitudes, Career Info block) without tapping, swiping, or changing tabs.",
+        page: "DebugSettings",
+    },
+    {
         id: "debug-trackblazer-race-selection-test",
         title: "Start Trackblazer Race Selection Test",
         description:

@@ -12,6 +12,7 @@ import com.steve1316.automation_library.utils.SQLiteSettingsManager
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.BuildConfig
 import com.steve1316.uma_android_automation.CareerLaunchNavigator
+import com.steve1316.uma_android_automation.VeteranRosterReader
 import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
@@ -1011,6 +1012,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startSupportDeckRehearsalTest" to ::startSupportDeckRehearsalTest,
                 "debugMode_startSmartBorrowRehearsalTest" to ::startSmartBorrowRehearsalTest,
                 "debugMode_startRainbowDetectionTest" to ::startRainbowDetectionTest,
+                "debugMode_startVeteranRosterReadTest" to ::startVeteranRosterReadTest,
             )
 
         var bDidAnyTestsRun = false
@@ -1068,6 +1070,17 @@ abstract class Campaign(game: Game) : Task(game) {
     open fun startDeckNumberReadTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only Deck-number OCR diagnostic...")
         CareerLaunchNavigator(game.myContext).debugDeckNumberRead(game.imageUtils)
+    }
+
+    /**
+     * Read-only Veteran Roster / Umamusume Details calibration diagnostic (PL-R1a). Reuses the
+     * running bot's image utils and logs every field it can read off the currently parked screen
+     * without tapping, swiping, or changing tabs. Park the game on the Veteran Roster list (Home ->
+     * Enhance -> Veteran Umamusume -> List) or an open Umamusume Details dialog first.
+     */
+    open fun startVeteranRosterReadTest() {
+        MessageLog.i(TAG, "\n[TEST] Running read-only Veteran Roster OCR diagnostic...")
+        VeteranRosterReader(game.imageUtils).debugRead()
     }
 
     /**
