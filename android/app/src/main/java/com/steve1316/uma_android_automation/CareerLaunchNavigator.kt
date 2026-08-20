@@ -11,6 +11,7 @@ import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
 import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.FinalizeVerdict
 import com.steve1316.uma_android_automation.bot.Game
+import com.steve1316.uma_android_automation.bot.LaunchTransactionGate
 import com.steve1316.uma_android_automation.bot.GrandConcertScenario
 import com.steve1316.uma_android_automation.bot.SPARK_UNREADABLE_NAME
 import com.steve1316.uma_android_automation.bot.SparkChooserProfile
@@ -663,6 +664,11 @@ class CareerLaunchNavigator(private val context: Context) {
         borrowExcludedCharacters.clear()
         lastBorrowPickEntry = null
         forceBorrowReplacement = false
+        // Mint the launch-transaction id for THIS launch pass. It correlates a lineage read taken on
+        // Legacy Select (which happens here, before the new career attaches) to the career that
+        // attaches later - and, by minting fresh, can never carry the previous run's id. Any un-adopted
+        // pending from a launch that never attached is discarded. The career adopts it in Game.start.
+        LaunchTransactionGate.beginLaunch(System.currentTimeMillis())
         // Explicit saved-support-formation contract for THIS launch. 0 = off (null, legacy); a
         // non-zero value is carried through even if out of range, so the deck screen fails closed on
         // it rather than silently clamping. Verification latches reset so a prior run cannot vouch.

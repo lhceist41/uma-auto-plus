@@ -872,6 +872,11 @@ class Game(val myContext: Context) {
                 queueRun = queueRun,
                 nowMs = System.currentTimeMillis(),
             )
+            // Adopt the pending launch-transaction id minted by the launch navigation into this
+            // career's active correlation, so the career's own telemetry stamps its own launch id and
+            // a lineage read taken during that launch can be joined to this career. A resumed career
+            // (no launch navigation) mints a fresh active id here instead; no lineage event joins it.
+            LaunchTransactionGate.adopt(System.currentTimeMillis())
             // Capture the launch-critical config identity for this career. The React Start barrier
             // verified this same settingsRevision on disk before launching; logging it here makes
             // the cross-layer identity explicit, so a mid-career settings drift is visible.

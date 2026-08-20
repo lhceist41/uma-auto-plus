@@ -3978,6 +3978,10 @@ abstract class Campaign(game: Game) : Task(game) {
                 put("ts", System.currentTimeMillis())
                 put("app", BuildConfig.VERSION_NAME)
                 put("fp", careerEndFp)
+                // The launch-transaction id this career adopted at attachment (Game.start). It joins
+                // this career's Veteran to the lineage read taken during its launch. Absent when no
+                // launch navigation minted one (a hand-played or restart-resumed career).
+                LaunchTransactionGate.active?.id?.let { put("launchTransactionId", it) }
                 put("result", result.code.name.removePrefix("TASK_RESULT_"))
                 put("outcome", outcome)
                 forceEndReason?.let { put("forceEndReason", it) }
