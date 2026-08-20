@@ -65,8 +65,71 @@ val APTITUDE_GRADE_BOXES: Map<String, GlyphBox> =
         "end" to GlyphBox(956, 726, 992, 764),
     )
 
+/** The ten aptitude roles in [APTITUDE_GRADE_BOXES] order, so a positional aptitude list (the scan
+ * records, the roster fingerprint) and the box map can never drift apart. */
+val APTITUDE_ROLES: List<String> = APTITUDE_GRADE_BOXES.keys.toList()
+
 /** The circular rank medal region (medal + "RANK" ribbon). */
 val RANK_MEDAL_BOX: GlyphBox = GlyphBox(350, 168, 478, 288)
+
+// -- Detail dialog chevrons: enabled/disabled by counting the chevron's vivid green outline --------
+
+/**
+ * The next/prev chevron sample boxes. Deliberately generous rather than a point sample: the glyph
+ * pulses horizontally by several pixels between frames (the two committed fixtures happen to catch
+ * it at different offsets), so the stable signal is how much chevron green lives inside the box, not
+ * what colour any one pixel is.
+ */
+val CHEVRON_NEXT_BOX: GlyphBox = GlyphBox(1010, 630, 1074, 740)
+val CHEVRON_PREV_BOX: GlyphBox = GlyphBox(6, 630, 70, 740)
+
+/** Whether the chevron is pressable. UNKNOWN is a real answer, not a failure: the walk keeps going
+ * on UNKNOWN and lets the account's own Registered count decide the end. */
+enum class ChevronState { ENABLED, DISABLED, UNKNOWN }
+
+/** Measured on both committed fixtures: 174 and 178 green samples inside the enabled chevron box,
+ * and 0 in every control region beside and below it. 60 sits an order of magnitude clear of the
+ * background and well under the observed population, so a partially clipped or recoloured chevron
+ * still reads ENABLED, while a greyed-out or absent one reads DISABLED. */
+const val CHEVRON_ENABLED_MIN_GREEN = 60
+const val CHEVRON_DISABLED_MAX_GREEN = 10
+
+private fun isChevronGreen(argb: Int): Boolean {
+    val r = (argb shr 16) and 0xFF
+    val g = (argb shr 8) and 0xFF
+    val b = argb and 0xFF
+    return g > 110 && (g - r) > 40 && (g - b) > 60
+}
+
+/** How many sampled pixels in [box] carry the chevron's vivid green. Exposed so a calibration run
+ * can log the raw population next to the verdict instead of only the verdict. */
+fun countChevronGreen(sampler: SparkPixelSampler, box: GlyphBox): Int {
+    var count = 0
+    var y = box.y0
+    while (y < box.y1) {
+        var x = box.x0
+        while (x < box.x1) {
+            if (isChevronGreen(sampler.argb(x, y))) count++
+            x += 2
+        }
+        y += 2
+    }
+    return count
+}
+
+/**
+ * The chevron's state from its green population. The DISABLED branch is the one PL-R1 could not
+ * capture a fixture for (no last-entry frame existed), so it is written to need positive evidence of
+ * an absent chevron; anything in between reports UNKNOWN and the walk continues.
+ */
+fun classifyChevron(sampler: SparkPixelSampler, box: GlyphBox = CHEVRON_NEXT_BOX): ChevronState {
+    val green = countChevronGreen(sampler, box)
+    return when {
+        green >= CHEVRON_ENABLED_MIN_GREEN -> ChevronState.ENABLED
+        green <= CHEVRON_DISABLED_MAX_GREEN -> ChevronState.DISABLED
+        else -> ChevronState.UNKNOWN
+    }
+}
 
 // -- Colour classification --------------------------------------------------------------------
 

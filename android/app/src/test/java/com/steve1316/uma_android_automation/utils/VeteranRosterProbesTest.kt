@@ -222,4 +222,66 @@ class VeteranRosterProbesTest {
             assertEquals(RosterScreenKind.UNKNOWN, classifyRosterScreen(null, ""))
         }
     }
+
+    @Nested
+    @DisplayName("Walk geometry and the tap deny list")
+    inner class WalkSafety {
+        /** Every coordinate the roster walk is allowed to tap, with the screen it is tapped on. */
+        private val allowedTaps =
+            listOf(
+                Triple("first_card", RosterScreenKind.ROSTER_LIST, ROSTER_FIRST_CARD_X to ROSTER_FIRST_CARD_Y),
+                Triple("roster_back", RosterScreenKind.ROSTER_LIST, ROSTER_BACK_X to ROSTER_BACK_Y),
+                Triple("next_chevron", RosterScreenKind.UMAMUSUME_DETAILS, DETAIL_NEXT_CHEVRON_X to DETAIL_NEXT_CHEVRON_Y),
+                Triple("detail_close", RosterScreenKind.UMAMUSUME_DETAILS, DETAIL_CLOSE_X to DETAIL_CLOSE_Y),
+            )
+
+        @Test
+        fun `every deny zone rejects its own centre`() {
+            for (zone in ROSTER_DENY_ZONES) {
+                val cx = (zone.x0 + zone.x1) / 2
+                val cy = (zone.y0 + zone.y1) / 2
+                assertEquals(zone.label, deniedZoneAt(zone.screen, cx, cy)?.label, "${zone.label} centre")
+            }
+        }
+
+        @Test
+        fun `a deny zone only applies to its own screen`() {
+            val favorite = ROSTER_DENY_ZONES.first { it.label == "detail_favorite_marker" }
+            val cx = (favorite.x0 + favorite.x1) / 2
+            val cy = (favorite.y0 + favorite.y1) / 2
+            assertNull(deniedZoneAt(RosterScreenKind.ROSTER_LIST, cx, cy))
+        }
+
+        @Test
+        fun `no allowed tap lands in a deny zone, jitter included`() {
+            // CoordinateTap jitters a coordinate tap by up to half its 25x25 fallback region per axis.
+            // Asserting the whole half-region envelope is stricter than the actual [-6, +6] draw, so a
+            // future jitter change cannot quietly walk a tap into a Transfer or Batch Favorite button.
+            val envelope = com.steve1316.uma_android_automation.bot.CoordinateTap.REGION / 2
+            for ((label, screen, point) in allowedTaps) {
+                for (dx in -envelope..envelope) {
+                    for (dy in -envelope..envelope) {
+                        val hit = deniedZoneAt(screen, point.first + dx, point.second + dy)
+                        assertNull(hit, "$label jittered to (${point.first + dx}, ${point.second + dy}) hit ${hit?.label}")
+                    }
+                }
+            }
+        }
+
+        @Test
+        fun `the deny list covers every irreversible control PL-R1 identified on these two screens`() {
+            val labels = ROSTER_DENY_ZONES.map { it.label }.toSet()
+            assertEquals(
+                setOf("roster_transfer", "roster_batch_favorite", "detail_favorite_marker", "detail_share", "detail_change_outfit", "detail_epithet_pencil"),
+                labels,
+            )
+        }
+
+        @Test
+        fun `the favorite marker sample point sits inside its own deny zone`() {
+            // The marker is read by pixel and must never be tapped; pinning the read point inside the
+            // deny rect keeps the two definitions of "where the favorite glyph is" from drifting.
+            assertEquals("detail_favorite_marker", deniedZoneAt(RosterScreenKind.UMAMUSUME_DETAILS, DETAIL_FAVORITE_CX, DETAIL_FAVORITE_CY)?.label)
+        }
+    }
 }

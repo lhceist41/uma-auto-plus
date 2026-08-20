@@ -61,6 +61,15 @@ object OutcomeCorpus {
     const val LINEAGE_PATH = "$OUTCOMES_DIR/lineage.jsonl"
 
     /**
+     * Relative path of the read-only Veteran roster scan stream: one `type:"roster_scan"` header
+     * followed by its `type:"roster_entry"` rows per chevron walk of the roster. A separate record
+     * type from every stream above and never joined by career token - a roster scan is a snapshot of
+     * what the account owns right now, not an observation of a career - so it gets its own file and
+     * the other parsers never see it.
+     */
+    const val ROSTER_SCAN_PATH = "$OUTCOMES_DIR/roster_scan.jsonl"
+
+    /**
      * Appends one [record] as a JSON line to [path]. Writing must never disturb the calling
      * path: any failure is swallowed after a MessageLog warning. MessageLog is safe here -
      * the career path that logs the ledger line via MessageLog immediately after, and the

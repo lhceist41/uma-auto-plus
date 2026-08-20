@@ -2,6 +2,7 @@ package com.steve1316.uma_android_automation.utils
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -106,6 +107,41 @@ class VeteranBadgeClassifierTest {
         @Test
         fun `a blank aptitude cell stays unresolved`() {
             assertNull(classifyAptitudeGrade(blank, APTITUDE_GRADE_BOXES.getValue("turf")))
+        }
+    }
+
+    @Nested
+    @DisplayName("Detail dialog chevrons - green population, not a point sample")
+    inner class Chevrons {
+        @Test
+        fun `both fixtures read both chevrons as enabled`() {
+            for ((name, s) in listOf("taiki" to taiki, "copano" to copano)) {
+                assertEquals(ChevronState.ENABLED, classifyChevron(s, CHEVRON_NEXT_BOX), "$name next")
+                assertEquals(ChevronState.ENABLED, classifyChevron(s, CHEVRON_PREV_BOX), "$name prev")
+            }
+        }
+
+        @Test
+        fun `the enabled population sits far above the accept threshold on both fixtures`() {
+            // The chevron pulses horizontally between frames, so the two fixtures catch it at
+            // different offsets; the population is what stays stable, which is why the classifier
+            // counts rather than sampling a point.
+            for ((name, s) in listOf("taiki" to taiki, "copano" to copano)) {
+                val green = countChevronGreen(s, CHEVRON_NEXT_BOX)
+                assertTrue(green > CHEVRON_ENABLED_MIN_GREEN * 2, "$name next green=$green")
+            }
+        }
+
+        @Test
+        fun `a region beside the chevron carries no chevron green at all`() {
+            // The separation the thresholds rely on: control boxes level with and below the chevron.
+            assertEquals(0, countChevronGreen(taiki, GlyphBox(930, 630, 994, 740)))
+            assertEquals(0, countChevronGreen(taiki, GlyphBox(1010, 745, 1074, 800)))
+        }
+
+        @Test
+        fun `an absent chevron classifies disabled instead of unknown`() {
+            assertEquals(ChevronState.DISABLED, classifyChevron(blank, CHEVRON_NEXT_BOX))
         }
     }
 }

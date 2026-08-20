@@ -76,6 +76,10 @@ const val FAVORITE_SATURATION_THRESHOLD = 20
  * pixel classifiers / digit OCR in [VeteranBadgeClassifier], not by generic full-cell OCR. */
 val STAT_LABELS: List<String> = listOf("Speed", "Stamina", "Power", "Guts", "Wit")
 
+/** The same five stats as the short keys the outcome corpus and PL-3 identity already use, so a
+ * roster entry and a career record can be compared field-for-field without a translation table. */
+val STAT_KEYS: List<String> = listOf("spd", "sta", "pwr", "grt", "wit")
+
 /** Standard Uma aptitude grade domain - one letter, no plus (unlike stat grades). */
 val APTITUDE_GRADES: Set<String> = setOf("S", "A", "B", "C", "D", "E", "F", "G")
 
@@ -225,6 +229,47 @@ fun parseDateAcquired(raw: String): String? {
     val year = m.groupValues[3].toIntOrNull()?.takeIf { it in 2000..2100 } ?: return null
     return "%04d-%02d-%02d".format(year, month, day)
 }
+
+// -- Roster walk: the only coordinates the scanner is allowed to tap, and the ones it must not -----
+
+/**
+ * Centre of the first roster grid card (row 0, column 0): the portrait circle, not the score pill,
+ * so the +/-6px jitter [com.steve1316.uma_android_automation.bot.CoordinateTap] applies stays well
+ * inside the card. Measured on the live `01-veteran-roster-list-top.png` capture.
+ */
+const val ROSTER_FIRST_CARD_X = 137
+const val ROSTER_FIRST_CARD_Y = 270
+
+/** The detail dialog's next chevron. The glyph pulses horizontally by a few pixels between frames,
+ * so this is its rest centre; the classifier below reads a box, not this point. */
+const val DETAIL_NEXT_CHEVRON_X = 1043
+const val DETAIL_NEXT_CHEVRON_Y = 683
+
+/** The detail dialog's Close button, and the roster list's Back button: the two exit taps. */
+const val DETAIL_CLOSE_X = 539
+const val DETAIL_CLOSE_Y = 1772
+const val ROSTER_BACK_X = 110
+const val ROSTER_BACK_Y = 1618
+
+/** A rectangular region on one roster screen that must never be tapped. Each entry costs real
+ * account state if pressed - a transfer is irreversible, the rest mutate favorite/outfit/epithet or
+ * open an outbound share sheet - so the deny list lives in code and is asserted against every tap
+ * coordinate the scanner declares, rather than being an implicit "we just do not tap there". */
+data class RosterDenyZone(val label: String, val screen: RosterScreenKind, val x0: Int, val y0: Int, val x1: Int, val y1: Int)
+
+val ROSTER_DENY_ZONES: List<RosterDenyZone> =
+    listOf(
+        RosterDenyZone("roster_transfer", RosterScreenKind.ROSTER_LIST, 800, 1555, 1060, 1685),
+        RosterDenyZone("roster_batch_favorite", RosterScreenKind.ROSTER_LIST, 745, 45, 1060, 135),
+        RosterDenyZone("detail_favorite_marker", RosterScreenKind.UMAMUSUME_DETAILS, 15, 145, 145, 270),
+        RosterDenyZone("detail_share", RosterScreenKind.UMAMUSUME_DETAILS, 950, 155, 1065, 268),
+        RosterDenyZone("detail_change_outfit", RosterScreenKind.UMAMUSUME_DETAILS, 860, 280, 1055, 365),
+        RosterDenyZone("detail_epithet_pencil", RosterScreenKind.UMAMUSUME_DETAILS, 960, 355, 1065, 458),
+    )
+
+/** The deny zone (x, y) falls inside on [screen], or null when the point is safe to tap there. */
+fun deniedZoneAt(screen: RosterScreenKind, x: Int, y: Int): RosterDenyZone? =
+    ROSTER_DENY_ZONES.firstOrNull { it.screen == screen && x >= it.x0 && x <= it.x1 && y >= it.y0 && y <= it.y1 }
 
 // -- Favorite marker: classified by colour saturation, never by icon shape ------------------------
 
