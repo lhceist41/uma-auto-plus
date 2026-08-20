@@ -318,6 +318,12 @@ export interface Settings {
         // uses only OWNED umas (free), which suits farming your own spark parents. New players with weak
         // owned umas may prefer it ON to inherit stronger borrowed 3-star parents.
         enableLegacyIncludeGuests: boolean
+        // Passive lineage capture: after Auto-Select fills the legacy slots, open the Legacy Select
+        // "Sparks" view and read the six ancestors (both parents and all four grandparents) with their
+        // factor sets, recording them as observational telemetry correlated to the career about to
+        // launch. OFF by default -> the launch flow is byte-for-byte unchanged. Purely observational: a
+        // read failure never blocks a career, and it never changes the selected parents.
+        enableLineageCapture: boolean
         // Trainee rotation: instead of repeating one trainee, cycle through a list, switching every
         // switchEveryNRuns careers, each playing under HER own preset. Default off -> the validated
         // same-trainee queue is byte-for-byte unchanged. When on, the frontend precomputes each
@@ -771,6 +777,7 @@ export const defaultSettings: Settings = {
         enableEventBoost: false,
         enableSparkReroll: false,
         enableLegacyIncludeGuests: false,
+        enableLineageCapture: false,
         enableTraineeRotation: false,
         switchEveryNRuns: 3,
         traineeRotation: [],

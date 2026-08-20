@@ -254,6 +254,15 @@ const RunQueueSettings = () => {
                                     className="mt-4"
                                 />
 
+                                <CustomCheckbox
+                                    searchId="run-queue-lineage-capture"
+                                    checked={runQueueSettings.enableLineageCapture}
+                                    onCheckedChange={(checked) => updateSetting("enableLineageCapture", checked)}
+                                    label="Capture Lineage Data"
+                                    description="After Auto-Select fills the legacy slots, briefly open the Legacy Select 'Sparks' view and record the six ancestors (both parents and all four grandparents) with their inherited factors, saved as data for later analysis. OFF by default. Purely observational: it never changes the selected parents and never blocks a career - if the read fails for any reason the launch continues normally. Adds a few seconds and some extra taps to each launch while it reads the list."
+                                    className="mt-4"
+                                />
+
                                 <View style={styles.rotationCard}>
                                     <CustomCheckbox
                                         searchId="run-queue-trainee-rotation"

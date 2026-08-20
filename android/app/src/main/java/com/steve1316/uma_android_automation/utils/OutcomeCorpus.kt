@@ -53,6 +53,14 @@ object OutcomeCorpus {
     const val SHADOW_ADVISOR_PATH = "$OUTCOMES_DIR/shadow_advisor.jsonl"
 
     /**
+     * Relative path of the passive lineage stream (`type:"lineage_selected"` records): one record
+     * per career launch that read the populated Legacy Select summary, carrying the six ancestor
+     * observations correlated by `launchTransactionId`. A separate record type joined offline to the
+     * career outcome by that id; kept out of the other files so their parsers never see it.
+     */
+    const val LINEAGE_PATH = "$OUTCOMES_DIR/lineage.jsonl"
+
+    /**
      * Appends one [record] as a JSON line to [path]. Writing must never disturb the calling
      * path: any failure is swallowed after a MessageLog warning. MessageLog is safe here -
      * the career path that logs the ledger line via MessageLog immediately after, and the

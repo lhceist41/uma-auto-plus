@@ -85,6 +85,15 @@ import com.steve1316.uma_android_automation.utils.SPARK_PAGER_HEADING_OCR_REGION
 import com.steve1316.uma_android_automation.utils.SPARK_REROLLED_TITLE_OCR_REGION
 import com.steve1316.uma_android_automation.utils.SparkListGeometry
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.LEGACY_EXPECTED_ANCESTORS
+import com.steve1316.uma_android_automation.utils.LegacyAncestorBlock
+import com.steve1316.uma_android_automation.utils.LegacyLineageAccumulator
+import com.steve1316.uma_android_automation.utils.legacyNameOcrRegion
+import com.steve1316.uma_android_automation.utils.readLegacySparkRows
+import com.steve1316.uma_android_automation.bot.LineageAncestorObservation
+import com.steve1316.uma_android_automation.bot.LineageFactorObservation
+import com.steve1316.uma_android_automation.bot.assembleLineageEvent
+import com.steve1316.uma_android_automation.bot.serializeLineageEvent
 import com.steve1316.uma_android_automation.utils.TraineeGridScroll
 import com.steve1316.uma_android_automation.utils.SparkRowCell
 import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
@@ -472,6 +481,11 @@ class CareerLaunchNavigator(private val context: Context) {
     // navigator would re-enter Legacy Select handling each iteration instead of clicking Next.
     private var legacyAutoSelectAlreadyDone: Boolean = false
 
+    // Session-scoped flag: passive lineage capture has already run (or been attempted) on the
+    // populated Legacy Select summary this launch. The post-Auto-Select branch re-enters each
+    // iteration, so without this the capture would repeat; it must run at most once per launch.
+    private var lineageCaptureAttempted: Boolean = false
+
     // Session-scoped flag: Skip toggle has already been maxed (Skip >>) in this session.
     private var skipToggleAlreadyDone: Boolean = false
 
@@ -659,6 +673,7 @@ class CareerLaunchNavigator(private val context: Context) {
         autoFillAlreadyDone = false
         skipToggleAlreadyDone = false
         legacyAutoSelectAlreadyDone = false
+        lineageCaptureAttempted = false
         careerLaunchInitiated = false
         borrowDuplicateReplacements = 0
         borrowExcludedCharacters.clear()
@@ -6125,6 +6140,17 @@ class CareerLaunchNavigator(private val context: Context) {
         }
 
         if (legacyAutoSelectAlreadyDone) {
+            // Passive lineage capture: on the populated summary, before Next. Observational and
+            // fail-open - any failure is swallowed here so the launch always proceeds to Next, it
+            // runs at most once, and it is off unless enableLineageCapture is set.
+            if (!lineageCaptureAttempted && SettingsHelper.getBooleanSetting("runQueue", "enableLineageCapture", false)) {
+                lineageCaptureAttempted = true
+                try {
+                    captureLineageTelemetry()
+                } catch (e: Exception) {
+                    MessageLog.w(TAG, "[LINEAGE] Passive lineage capture failed; continuing the launch unchanged. $e")
+                }
+            }
             MessageLog.i(TAG, "[NAV] Legacy Auto-Select already done this session. Clicking Next to advance...")
             if (ButtonNext.click(iu)) {
                 waitSafe(2.0)
@@ -6175,6 +6201,119 @@ class CareerLaunchNavigator(private val context: Context) {
             transition = "LEGACY_SELECT_SCREEN -> next screen",
             recommendedAction = "Manually click OK on the Confirm Auto-Select dialog and restart the queue.",
         )
+    }
+
+    // Populated-summary anchors for the passive lineage capture, calibrated on 1080x1920 (the
+    // resolution the LegacySparkProbes geometry is measured for). Coordinate taps, like the spark
+    // reroll flow's, because these controls have no template.
+    private val lineageSparksButtonX = 935.0
+    private val lineageSparksButtonY = 1615.0
+    private val lineageCloseButtonX = 538.0
+    private val lineageCloseButtonY = 1774.0
+
+    /**
+     * Passive lineage telemetry capture on the populated Legacy Select summary (Auto-Select done,
+     * before Next). Opens the reversible "Sparks" view, reads the six ancestors (both parents and
+     * all four grandparents) with their factor sets across a bounded scroll, returns to Legacy
+     * Select, and appends one lineage_selected record correlated to the launch about to start.
+     *
+     * Strictly observational: it never touches the selected parents, never clicks Change, and never
+     * gates the launch. The caller wraps this in a try that continues to Next on any failure; the
+     * internal recovery here (return to Legacy Select) is best-effort on top of that. Bounded: at
+     * most [maxScrolls] swipes, and the accumulator stops once six ancestors are captured or two
+     * consecutive frames add nothing.
+     */
+    private fun captureLineageTelemetry() {
+        val maxScrolls = 12
+        val scrollX = 540f
+        val scrollFromY = 1400f
+        // Advance ~6 rows per swipe so consecutive frames overlap by half a screen: a block clipped
+        // at one frame's bottom is read whole from the next, never skipped.
+        val scrollToY = scrollFromY - 124f * 6
+
+        val launchTxId = LaunchTransactionGate.pending?.id
+        val scenario = SettingsHelper.getStringSetting("general", "scenario").ifBlank { "unknown" }
+        val trainee = singleRunTraineeTarget.ifBlank { "unknown" }
+        val guestsIncluded = SettingsHelper.getBooleanSetting("runQueue", "enableLegacyIncludeGuests", false)
+
+        MessageLog.i(TAG, "[LINEAGE] Opening the Legacy Sparks view for passive capture (launchTx=${launchTxId ?: "none"}).")
+        CoordinateTap.tap(gestureUtils, lineageSparksButtonX, lineageSparksButtonY, "legacy_sparks_open")
+        waitSafe(1.5)
+
+        var bitmap = iu.getSourceBitmap()
+        var rows = readLegacySparkRows(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.height)
+        if (rows.none { it.kind == SparkRowKind.STAT }) {
+            MessageLog.w(TAG, "[LINEAGE] The Sparks view did not open (no factor rows found); skipping capture.")
+            returnFromLegacySparksView()
+            return
+        }
+
+        val accumulator = LegacyLineageAccumulator()
+        val observed = mutableListOf<LineageAncestorObservation>()
+        var scrolls = 0
+        while (true) {
+            val alreadyHave = accumulator.ancestors.size
+            accumulator.offerFrame(rows)
+            val nowHave = accumulator.ancestors
+            for (i in alreadyHave until nowHave.size) {
+                observed.add(ocrLineageAncestorBlock(bitmap, nowHave[i]))
+            }
+            if (accumulator.complete || accumulator.stalledRounds >= 2 || scrolls >= maxScrolls) break
+            gestureUtils.swipe(scrollX, scrollFromY, scrollX, scrollToY, duration = 900L)
+            scrolls++
+            waitSafe(0.9)
+            bitmap = iu.getSourceBitmap()
+            rows = readLegacySparkRows(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.height)
+        }
+
+        val event =
+            assembleLineageEvent(
+                launchTransactionId = launchTxId,
+                ts = System.currentTimeMillis(),
+                scenario = scenario,
+                trainee = trainee,
+                overallAffinity = null,
+                guestsIncluded = guestsIncluded,
+                observedAncestors = observed,
+            )
+        MessageLog.i(
+            TAG,
+            "[LINEAGE] Captured ${event.ancestors.size}/$LEGACY_EXPECTED_ANCESTORS ancestors, status=${event.captureStatus} after $scrolls scroll(s).",
+        )
+        OutcomeCorpus.append(context, serializeLineageEvent(event), OutcomeCorpus.LINEAGE_PATH)
+
+        returnFromLegacySparksView()
+    }
+
+    /** OCR each factor-row name of one accepted ancestor block against [bitmap], pairing it with the
+     * pixel-classified kind and stars. An unreadable name stays as empty evidence, never dropped. */
+    private fun ocrLineageAncestorBlock(bitmap: Bitmap, block: LegacyAncestorBlock): LineageAncestorObservation {
+        val factors =
+            block.rows.map { row ->
+                val region = legacyNameOcrRegion(row.rowY)
+                val name =
+                    try {
+                        iu.performOCROnRegion(bitmap, region[0], region[1], region[2], region[3], debugName = "legacy_factor").trim()
+                    } catch (e: Exception) {
+                        ""
+                    }
+                LineageFactorObservation(row.kind, name, row.filledStars, row.ambiguousStars > 0, row.clipped)
+            }
+        return LineageAncestorObservation(portraitObserved = block.statRow?.portraitOnRail ?: false, factors = factors)
+    }
+
+    /** Best-effort return from the Sparks view to Legacy Select. Bounded; if it cannot confirm the
+     * return, the launch loop's own state detection re-converges - the caller proceeds regardless. */
+    private fun returnFromLegacySparksView() {
+        for (attempt in 0 until 3) {
+            CoordinateTap.tap(gestureUtils, lineageCloseButtonX, lineageCloseButtonY, "legacy_sparks_close")
+            waitSafe(1.2)
+            val bitmap = iu.getSourceBitmap()
+            if (ButtonAutoSelect.check(iu, sourceBitmap = bitmap) || LabelLegacySelectTitle.check(iu, sourceBitmap = bitmap)) {
+                return
+            }
+        }
+        MessageLog.w(TAG, "[LINEAGE] Could not confirm return to Legacy Select after closing the Sparks view; the launch loop will re-detect the screen.")
     }
 
     private fun handlePreRunConfirmation(): TransitionResult {

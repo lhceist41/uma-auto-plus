@@ -854,6 +854,13 @@ const searchConfig: SearchOption[] = [
             "Require a specific saved support formation (Deck 1-10) at career start. The bot selects and verifies that deck on the Support Formation screen before and after the friend borrow, refusing to start (no TP spent) if it cannot, and suppresses Auto-Fill. 0 = off.",
         page: "RunQueueSettings",
     },
+    {
+        id: "run-queue-lineage-capture",
+        title: "Capture Lineage Data",
+        description:
+            "After Auto-Select fills the legacy slots, briefly open the Legacy Select Sparks view and record the six ancestors (both parents and all four grandparents) with their inherited factors as data for later analysis. Off by default. Observational only: it never changes the selected parents and never blocks a career.",
+        page: "RunQueueSettings",
+    },
 ]
 
 export default searchConfig
