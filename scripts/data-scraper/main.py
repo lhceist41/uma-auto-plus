@@ -274,6 +274,22 @@ class BaseScraper:
             json.dump(sorted_data, f, ensure_ascii=False, indent=4)
         logging.info(f"Saved {len(self.data)} items to {self.output_filename}.")
 
+    def _read_existing(self) -> Dict[str, Any]:
+        """Reads this scraper's current output file from disk.
+
+        Returns:
+            The existing file contents, or an empty dict when the file is missing or unreadable.
+        """
+        if not os.path.exists(self.output_filename):
+            return {}
+        try:
+            with open(self.output_filename, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            logging.warning(f"Could not read existing {os.path.basename(self.output_filename)} ({exc.__class__.__name__}).")
+            return {}
+
+
 class SkillScraper(BaseScraper):
     """Scrapes the skills from the website."""
 
@@ -649,21 +665,6 @@ class TrainingEventScraper(BaseScraper):
             True when the name or any option contains Japanese characters.
         """
         return bool(EVENT_CJK_PATTERN.search(name)) or any(EVENT_CJK_PATTERN.search(o) for o in options)
-
-    def _read_existing(self) -> Dict[str, Dict[str, List[str]]]:
-        """Reads this scraper's current output file from disk.
-
-        Returns:
-            The existing file contents, or an empty dict when the file is missing or unreadable.
-        """
-        if not os.path.exists(self.output_filename):
-            return {}
-        try:
-            with open(self.output_filename, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError) as exc:
-            logging.warning(f"Could not read existing {os.path.basename(self.output_filename)} ({exc.__class__.__name__}).")
-            return {}
 
     def _render_reward(self, reward: Dict[str, Any], card_char: str, energy_mult: float, stat_mult: float) -> str:
         """Renders one reward object into its displayed line, mirroring GameTora's English templates.
@@ -2179,7 +2180,16 @@ class CharacterObjectivesScraper(BaseScraper):
         return "Long"
 
     def start(self):
-        """Fetches the URA objectives + characters manifests and writes the mandatory-race file."""
+        """Fetches the URA objectives + characters manifests and writes the mandatory-race file.
+
+        `fanGoals` is a repo-owned augmentation this scraper does not produce: scripts/extract-master-route-data.mjs
+        writes it separately from the installed game's master.mdb (Grand Concert fan-count goals GameTora does not
+        expose). This is a full rebuild every run (characters that left the EN server must not linger), so a bare
+        rebuild would silently delete every character's fanGoals. Carrying it over from the file on disk before the
+        rebuild keeps a plain `python update.py` safe without requiring a manual re-merge or a live master.mdb.
+        """
+        preserved_fan_goals = {name: entry["fanGoals"] for name, entry in self._read_existing().items() if isinstance(entry, dict) and "fanGoals" in entry}
+
         # Full rebuild every run so characters that left the EN server do not linger.
         self.data = {}
 
@@ -2246,7 +2256,15 @@ class CharacterObjectivesScraper(BaseScraper):
             if mandatory_races:
                 self.data[name] = {"name": name, "mandatoryRaces": mandatory_races}
 
-        logging.info(f"Scraped mandatory objectives for {len(self.data)} EN-playable characters.")
+        for name, fan_goals in preserved_fan_goals.items():
+            if name in self.data:
+                self.data[name]["fanGoals"] = fan_goals
+            else:
+                # Report rather than resurrect: a stale record would misrepresent this character as
+                # still EN-playable/objective-bearing when the fresh GameTora data says otherwise.
+                logging.warning(f"{name} carried curated fanGoals but is no longer EN-playable with mandatory objectives; fanGoals dropped, investigate before shipping.")
+
+        logging.info(f"Scraped mandatory objectives for {len(self.data)} EN-playable characters ({len(preserved_fan_goals)} carrying preserved fanGoals).")
         self.save_data()
 
 

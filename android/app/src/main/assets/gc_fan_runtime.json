@@ -4043,6 +4043,111 @@
         }
       ]
     },
+    "Seeking the Pearl": {
+      "fanGoals": [],
+      "mandatoryRaces": [
+        {
+          "turn": 21,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Daily Hai Junior Stakes",
+              "fansNeeded": 375
+            }
+          ]
+        },
+        {
+          "turn": 23,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Hanshin Juvenile Fillies",
+              "fansNeeded": 1000
+            }
+          ]
+        },
+        {
+          "turn": 31,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Oka Sho",
+              "fansNeeded": 4500
+            }
+          ]
+        },
+        {
+          "turn": 33,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "NHK Mile Cup",
+              "fansNeeded": 5000
+            }
+          ]
+        },
+        {
+          "turn": 41,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Rose Stakes",
+              "fansNeeded": 1750
+            }
+          ]
+        },
+        {
+          "turn": 46,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Mile Championship",
+              "fansNeeded": 15000
+            }
+          ]
+        },
+        {
+          "turn": 54,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Takamatsunomiya Kinen",
+              "fansNeeded": 15000
+            }
+          ]
+        },
+        {
+          "turn": 59,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Yasuda Kinen",
+              "fansNeeded": 15000
+            }
+          ]
+        },
+        {
+          "turn": 66,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Sprinters Stakes",
+              "fansNeeded": 15000
+            }
+          ]
+        },
+        {
+          "turn": 70,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Mile Championship",
+              "fansNeeded": 15000
+            }
+          ]
+        }
+      ]
+    },
     "Seiun Sky": {
       "fanGoals": [
         {
