@@ -6,7 +6,7 @@
     "skillsSchemaVersion": 1,
     "racesSchemaVersion": 1
   },
-  "fingerprint": "f4ab25e2c01994adfa01b4058d1a2b4c8aadfd3d66732456b1265e1b87f2387e",
+  "fingerprint": "e500b84c7517f510e1236bab64ceb1e96eedd38a69c34446b1da9e46776474a8",
   "knownProvenance": {
     "generator": "scripts/data-scraper",
     "recordedSourceVersion": null,
@@ -17,8 +17,8 @@
     {
       "family": "objectives",
       "path": "src/data/character_objectives.json",
-      "sha256": "620afef7e135a001c6da0c52d1a084bcc0ca8b0ddeb845fbb8f08cf05894466b",
-      "recordCount": 63,
+      "sha256": "1f7c185b1d6d194f141c0b579e6c2e82a00435632ba133cf060387d5584a7636",
+      "recordCount": 64,
       "provenance": {
         "origin": "data-scraper",
         "sourceVersion": null
@@ -27,8 +27,8 @@
     {
       "family": "characters",
       "path": "src/data/characters.json",
-      "sha256": "d074b63dbbf40724b8d3c0d8dbaddeb1a1e51edf9a734912cc627baab97dc066",
-      "recordCount": 63,
+      "sha256": "6f6e1fbab266657d62538a7a9ceaa08830ecd1e63d68bff631f628fb4c99df98",
+      "recordCount": 64,
       "provenance": {
         "origin": "data-scraper",
         "sourceVersion": null
@@ -57,8 +57,8 @@
     {
       "family": "skills",
       "path": "src/data/skills.json",
-      "sha256": "716094e63c3f775aca94dea08126a63ce6ac19df489762ec0796d4529302c7f9",
-      "recordCount": 694,
+      "sha256": "1f2f3e98c03cac038196c8ef3592e578292b9e95a64f642ad601dfe230bbb7c9",
+      "recordCount": 695,
       "provenance": {
         "origin": "data-scraper",
         "sourceVersion": null
@@ -67,8 +67,8 @@
     {
       "family": "supports",
       "path": "src/data/supports.json",
-      "sha256": "24e000f0cd5cf81db3f9bccef2c79f350f3c2c081c3602aa0a808eddd5a5a68c",
-      "recordCount": 82,
+      "sha256": "8d2a9569cc2ba6949bc92c3cb99e4ac773c55c9e540c3e89cd5f813f4eb93116",
+      "recordCount": 84,
       "provenance": {
         "origin": "data-scraper",
         "sourceVersion": null
@@ -83,16 +83,12 @@
     },
     {
       "path": "src/data/compiled/skills.json",
-      "sha256": "b18c470d721eca7a99b1e8f0dac04a1c05e00c6feaa204ccf0e9341a2a64ad02",
-      "recordCount": 694
+      "sha256": "54bda92451e6765743690d047c539ac8af4a908c63622938941de48035f48afa",
+      "recordCount": 695
     }
   ],
   "validation": {
     "warnings": [
-      {
-        "code": "chainReferenceUnresolved",
-        "detail": "skill 201102 downgrade -> 201103 references a skill absent from this dataset"
-      },
       {
         "code": "chainReferenceUnresolved",
         "detail": "skill 201211 downgrade -> 201212 references a skill absent from this dataset"
@@ -109,7 +105,7 @@
       },
       {
         "code": "nullFieldPrevalence",
-        "detail": "skills: tier is null on 694/694 records"
+        "detail": "skills: tier is null on 695/695 records"
       },
       {
         "code": "provenanceUnavailable",

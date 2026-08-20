@@ -369,18 +369,18 @@ describe("real committed dataset", () => {
 
     it("current snapshot counts (update intentionally when the scrape changes)", () => {
         const r = compileMasterData(inputs())
-        expect(r.stats.skillCompiledCount).toBe(694)
-        expect(r.stats.uniqueSkillIdCount).toBe(694)
+        expect(r.stats.skillCompiledCount).toBe(695)
+        expect(r.stats.uniqueSkillIdCount).toBe(695)
         expect(r.stats.raceCompiledCount).toBe(402)
         expect(r.stats.uniqueRaceKeyCount).toBe(402)
         expect(r.stats.distinctBareRaceNameCount).toBe(296)
         expect(r.stats.bareNameCollisionCount).toBe(106)
-        expect(r.stats.objectiveReferencesChecked).toBe(494)
+        expect(r.stats.objectiveReferencesChecked).toBe(504)
     })
 
-    // Part D: pin the exact unresolved-chain reference set so a third dangling ref cannot pass silently
+    // Part D: pin the exact unresolved-chain reference set so a second dangling ref cannot pass silently
     // merely by sharing the warning class. Refs are extracted structurally from the deterministic detail.
-    it("the unresolved-chain warning set is exactly the two known dangling downgrades", () => {
+    it("the unresolved-chain warning set is exactly the one known dangling downgrade", () => {
         const r = compileMasterData(inputs())
         const refs = r.validation.warnings
             .filter((w) => w.code === "chainReferenceUnresolved")
@@ -390,7 +390,7 @@ describe("real committed dataset", () => {
                 return `${m[1]}/${m[2]}/${m[3]}`
             })
             .sort()
-        expect(refs).toEqual(["201102/downgrade/201103", "201211/downgrade/201212"])
+        expect(refs).toEqual(["201211/downgrade/201212"])
         // They stay warnings, and the real compile still succeeds with warning status.
         expect(r.ok).toBe(true)
         expect(r.exitCode).toBe(1)

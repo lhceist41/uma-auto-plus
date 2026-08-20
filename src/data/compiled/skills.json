@@ -5420,6 +5420,20 @@
       "downgrade": 201103
     },
     {
+      "id": 201103,
+      "name": "Flash Forward",
+      "desc": "Increase velocity on a straight. (Medium)",
+      "iconId": 20012,
+      "cost": 150,
+      "evalPt": 508,
+      "condition": "distance_type==3&straight_random==1",
+      "precondition": "",
+      "inherited": false,
+      "tier": null,
+      "upgrade": 201102,
+      "downgrade": null
+    },
+    {
       "id": 201111,
       "name": "Medium Corners ◎",
       "desc": "Moderately increase velocity on a corner. (Medium)",
@@ -8305,7 +8319,7 @@
     },
     {
       "id": 202401,
-      "name": "Flash Forward",
+      "name": "Lightning Surge",
       "desc": "Increase acceleration when trying to pass another runner from the back late-race. (Sprint/Mile)",
       "iconId": 20042,
       "cost": 180,
