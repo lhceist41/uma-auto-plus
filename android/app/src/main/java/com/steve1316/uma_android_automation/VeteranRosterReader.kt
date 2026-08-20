@@ -2,21 +2,7 @@ package com.steve1316.uma_android_automation
 
 import android.graphics.Bitmap
 import com.steve1316.automation_library.utils.MessageLog
-import com.steve1316.uma_android_automation.utils.APTITUDE_DISTANCE_CELL_H
-import com.steve1316.uma_android_automation.utils.APTITUDE_DISTANCE_CELL_W
-import com.steve1316.uma_android_automation.utils.APTITUDE_DISTANCE_COL_X
-import com.steve1316.uma_android_automation.utils.APTITUDE_DISTANCE_LABELS
-import com.steve1316.uma_android_automation.utils.APTITUDE_DISTANCE_Y
-import com.steve1316.uma_android_automation.utils.APTITUDE_STYLE_CELL_H
-import com.steve1316.uma_android_automation.utils.APTITUDE_STYLE_CELL_W
-import com.steve1316.uma_android_automation.utils.APTITUDE_STYLE_COL_X
-import com.steve1316.uma_android_automation.utils.APTITUDE_STYLE_LABELS
-import com.steve1316.uma_android_automation.utils.APTITUDE_STYLE_Y
-import com.steve1316.uma_android_automation.utils.APTITUDE_TRACK_CELL_H
-import com.steve1316.uma_android_automation.utils.APTITUDE_TRACK_CELL_W
-import com.steve1316.uma_android_automation.utils.APTITUDE_TRACK_COL_X
-import com.steve1316.uma_android_automation.utils.APTITUDE_TRACK_LABELS
-import com.steve1316.uma_android_automation.utils.APTITUDE_TRACK_Y
+import com.steve1316.uma_android_automation.utils.APTITUDE_GRADE_BOXES
 import com.steve1316.uma_android_automation.utils.CAREER_DATE_ACQUIRED_H
 import com.steve1316.uma_android_automation.utils.CAREER_DATE_ACQUIRED_W
 import com.steve1316.uma_android_automation.utils.CAREER_DATE_ACQUIRED_X
@@ -38,16 +24,10 @@ import com.steve1316.uma_android_automation.utils.CAREER_SCENARIO_W
 import com.steve1316.uma_android_automation.utils.CAREER_SCENARIO_X
 import com.steve1316.uma_android_automation.utils.CAREER_SCENARIO_Y
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
-import com.steve1316.uma_android_automation.utils.DETAIL_FAVORITE_CX
-import com.steve1316.uma_android_automation.utils.DETAIL_FAVORITE_CY
 import com.steve1316.uma_android_automation.utils.DETAIL_NAME_OUTFIT_H
 import com.steve1316.uma_android_automation.utils.DETAIL_NAME_OUTFIT_W
 import com.steve1316.uma_android_automation.utils.DETAIL_NAME_OUTFIT_X
 import com.steve1316.uma_android_automation.utils.DETAIL_NAME_OUTFIT_Y
-import com.steve1316.uma_android_automation.utils.DETAIL_RANK_H
-import com.steve1316.uma_android_automation.utils.DETAIL_RANK_W
-import com.steve1316.uma_android_automation.utils.DETAIL_RANK_X
-import com.steve1316.uma_android_automation.utils.DETAIL_RANK_Y
 import com.steve1316.uma_android_automation.utils.DETAIL_RATING_H
 import com.steve1316.uma_android_automation.utils.DETAIL_RATING_W
 import com.steve1316.uma_android_automation.utils.DETAIL_RATING_X
@@ -72,30 +52,29 @@ import com.steve1316.uma_android_automation.utils.ROSTER_SORT_H
 import com.steve1316.uma_android_automation.utils.ROSTER_SORT_W
 import com.steve1316.uma_android_automation.utils.ROSTER_SORT_X
 import com.steve1316.uma_android_automation.utils.ROSTER_SORT_Y
-import com.steve1316.uma_android_automation.utils.STAT_CELL_H
-import com.steve1316.uma_android_automation.utils.STAT_CELL_W
-import com.steve1316.uma_android_automation.utils.STAT_COL_X
+import com.steve1316.uma_android_automation.utils.STAT_GRADE_GLYPH_BOXES
 import com.steve1316.uma_android_automation.utils.STAT_LABELS
-import com.steve1316.uma_android_automation.utils.STAT_ROW_Y
+import com.steve1316.uma_android_automation.utils.STAT_VALUE_BOXES
 import com.steve1316.uma_android_automation.utils.RosterIdentityEvidence
 import com.steve1316.uma_android_automation.utils.RosterScreenKind
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.classifyAptitudeGrade
 import com.steve1316.uma_android_automation.utils.classifyFavoriteMarker
+import com.steve1316.uma_android_automation.utils.classifyRankMedal
 import com.steve1316.uma_android_automation.utils.classifyRosterScreen
-import com.steve1316.uma_android_automation.utils.parseAptitudeGrade
+import com.steve1316.uma_android_automation.utils.classifyStatGrade
 import com.steve1316.uma_android_automation.utils.parseCareerRatingValue
 import com.steve1316.uma_android_automation.utils.parseCareerRecord
 import com.steve1316.uma_android_automation.utils.parseCareerScenario
 import com.steve1316.uma_android_automation.utils.parseDateAcquired
 import com.steve1316.uma_android_automation.utils.parseFansEarned
 import com.steve1316.uma_android_automation.utils.parseFiltersOff
-import com.steve1316.uma_android_automation.utils.parseNameOutfit
-import com.steve1316.uma_android_automation.utils.parseRank
 import com.steve1316.uma_android_automation.utils.parseRating
 import com.steve1316.uma_android_automation.utils.parseRegistered
 import com.steve1316.uma_android_automation.utils.parseSortDirection
 import com.steve1316.uma_android_automation.utils.parseSortKey
-import com.steve1316.uma_android_automation.utils.parseStatCell
+import com.steve1316.uma_android_automation.utils.parseStatValue
+import com.steve1316.uma_android_automation.utils.resolveNameOutfit
 import com.steve1316.uma_android_automation.utils.rosterFingerprint
 
 private const val TAG = "[VeteranRosterReader]"
@@ -112,22 +91,34 @@ private const val CLASSIFY_RETRY_DELAY_MS = 1500L
 /**
  * Zero-gesture, read-only calibration diagnostic for the Veteran Roster list and the
  * `Umamusume Details` dialog (PL-R1a). The operator parks the game by hand on either screen; this
- * captures ONE frame, decides which screen it is on, logs every field it can read (raw OCR string
- * alongside the parsed value) tagged `[ROSTER-TEST]`, and stops. It never taps, swipes, changes tabs,
- * presses a chevron, or touches sort/filter/favorite/memo state - see PL-R1 design doc Part 1's deny
- * list. The 257-entry chevron walk is PL-R1b, not this task.
+ * captures ONE frame, decides which screen it is on, logs every field it can read tagged
+ * `[ROSTER-TEST]`, and stops. It never taps, swipes, changes tabs, presses a chevron, or touches
+ * sort/filter/favorite/memo state - see PL-R1 design doc Part 1's deny list. The 257-entry chevron
+ * walk is PL-R1b, not this task.
  *
- * Header identity fields (name/outfit/rank/rating/stats/aptitudes) are read whenever the dialog is
- * open, since that band sits above the tab strip and is visible on every tab. The Career Info fields
- * only resolve once the operator has manually opened that tab and scrolled the Career block into
- * view; if the label OCR at those fixed positions does not match the expected text (because a
- * different tab or scroll position is showing), the field is logged as unavailable rather than
- * trusting whatever text happens to sit there.
+ * The styled identity fields are read by field-appropriate readers rather than generic OCR: the
+ * rank medal and every grade badge by pixel classifiers ([classifyRankMedal], [classifyStatGrade],
+ * [classifyAptitudeGrade]), the character/outfit by OCR snapped onto the known-name domain
+ * ([resolveNameOutfit]), and each stat value by digit-only OCR of its own box (keeping the coloured
+ * badge out of the number read). The Career Info fields only resolve once the operator has manually
+ * opened that tab and scrolled the Career block into view; a field whose label OCR does not match is
+ * logged unavailable rather than trusting whatever text sits there.
  */
 class VeteranRosterReader(private val iu: CustomImageUtils) {
-    private fun ocr(bitmap: Bitmap, x: Int, y: Int, w: Int, h: Int, debugName: String): String =
+    private fun ocr(bitmap: Bitmap, x: Int, y: Int, w: Int, h: Int, debugName: String, digitsOnly: Boolean = false): String =
         try {
-            iu.performOCROnRegion(bitmap, x, y, w, h, useThreshold = true, useGrayscale = true, scale = 2.0, debugName = "roster_$debugName")
+            iu.performOCROnRegion(
+                bitmap,
+                x,
+                y,
+                w,
+                h,
+                useThreshold = true,
+                useGrayscale = true,
+                scale = 2.0,
+                ocrEngine = if (digitsOnly) "tesseract_digits" else "tesseract",
+                debugName = "roster_$debugName",
+            )
                 .replace("\r", "")
                 .trim()
         } catch (e: InterruptedException) {
@@ -196,41 +187,38 @@ class VeteranRosterReader(private val iu: CustomImageUtils) {
 
     private fun readUmamusumeDetails(bitmap: Bitmap) {
         MessageLog.i(TAG, "[ROSTER-TEST] screenKind=UMAMUSUME_DETAILS")
+        val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
 
         val nameOutfitRaw = ocr(bitmap, DETAIL_NAME_OUTFIT_X, DETAIL_NAME_OUTFIT_Y, DETAIL_NAME_OUTFIT_W, DETAIL_NAME_OUTFIT_H, "name_outfit")
-        val (outfit, name) = parseNameOutfit(nameOutfitRaw)
+        val identity = resolveNameOutfit(nameOutfitRaw)
+        val outfit = identity.outfit
+        val name = identity.name
         MessageLog.i(TAG, "[ROSTER-TEST] Name/Outfit OCR='${nameOutfitRaw.replace("\n", " | ")}' -> outfit=${outfit ?: "UNRESOLVED"} name=${name ?: "UNRESOLVED"}")
 
-        val rankRaw = ocr(bitmap, DETAIL_RANK_X, DETAIL_RANK_Y, DETAIL_RANK_W, DETAIL_RANK_H, "rank")
-        val rank = parseRank(rankRaw)
-        MessageLog.i(TAG, "[ROSTER-TEST] Rank OCR='${rankRaw.replace("\n", " | ")}' -> rank=${rank ?: "UNRESOLVED"}")
+        val rank = classifyRankMedal(sampler)
+        MessageLog.i(TAG, "[ROSTER-TEST] Rank medal classifier -> rank=${rank ?: "UNRESOLVED"}")
 
         val ratingRaw = ocr(bitmap, DETAIL_RATING_X, DETAIL_RATING_Y, DETAIL_RATING_W, DETAIL_RATING_H, "rating")
         val rating = parseRating(ratingRaw)
         MessageLog.i(TAG, "[ROSTER-TEST] Rating OCR='$ratingRaw' -> rating=${rating ?: "UNRESOLVED"}")
 
         val stats = mutableListOf<Int?>()
-        for (i in STAT_COL_X.indices) {
-            val raw = ocr(bitmap, STAT_COL_X[i], STAT_ROW_Y, STAT_CELL_W, STAT_CELL_H, "stat_${STAT_LABELS[i]}")
-            val cell = parseStatCell(raw)
-            stats.add(cell.value)
-            MessageLog.i(TAG, "[ROSTER-TEST] ${STAT_LABELS[i]} OCR='${raw.replace("\n", " ")}' -> grade=${cell.grade ?: "UNRESOLVED"} value=${cell.value ?: "UNRESOLVED"}")
+        for (i in STAT_LABELS.indices) {
+            val grade = classifyStatGrade(sampler, STAT_GRADE_GLYPH_BOXES[i])
+            val valueBox = STAT_VALUE_BOXES[i]
+            val valueRaw = ocr(bitmap, valueBox.x0, valueBox.y0, valueBox.x1 - valueBox.x0, valueBox.y1 - valueBox.y0, "stat_${STAT_LABELS[i]}", digitsOnly = true)
+            val value = parseStatValue(valueRaw)
+            stats.add(value)
+            MessageLog.i(TAG, "[ROSTER-TEST] ${STAT_LABELS[i]} grade=${grade ?: "UNRESOLVED"} valueOCR='$valueRaw' -> value=${value ?: "UNRESOLVED"}")
         }
 
         val aptitudes = mutableListOf<Pair<String, String?>>()
-        fun readAptitudeRow(colXs: List<Int>, y: Int, w: Int, h: Int, labels: List<String>) {
-            for (i in colXs.indices) {
-                val raw = ocr(bitmap, colXs[i], y, w, h, "apt_${labels[i]}")
-                val grade = parseAptitudeGrade(raw)
-                aptitudes.add(labels[i] to grade)
-                MessageLog.i(TAG, "[ROSTER-TEST] Aptitude ${labels[i]} OCR='${raw.replace("\n", " ")}' -> grade=${grade ?: "UNRESOLVED"}")
-            }
+        for ((role, box) in APTITUDE_GRADE_BOXES) {
+            val grade = classifyAptitudeGrade(sampler, box)
+            aptitudes.add(role to grade)
+            MessageLog.i(TAG, "[ROSTER-TEST] Aptitude $role -> grade=${grade ?: "UNRESOLVED"}")
         }
-        readAptitudeRow(APTITUDE_TRACK_COL_X, APTITUDE_TRACK_Y, APTITUDE_TRACK_CELL_W, APTITUDE_TRACK_CELL_H, APTITUDE_TRACK_LABELS)
-        readAptitudeRow(APTITUDE_DISTANCE_COL_X, APTITUDE_DISTANCE_Y, APTITUDE_DISTANCE_CELL_W, APTITUDE_DISTANCE_CELL_H, APTITUDE_DISTANCE_LABELS)
-        readAptitudeRow(APTITUDE_STYLE_COL_X, APTITUDE_STYLE_Y, APTITUDE_STYLE_CELL_W, APTITUDE_STYLE_CELL_H, APTITUDE_STYLE_LABELS)
 
-        val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
         val favorite = classifyFavoriteMarker(sampler)
         MessageLog.i(TAG, "[ROSTER-TEST] Favorite marker classification (never tapped) = $favorite")
 

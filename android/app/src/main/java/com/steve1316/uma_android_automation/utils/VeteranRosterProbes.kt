@@ -1,7 +1,5 @@
 package com.steve1316.uma_android_automation.utils
 
-import com.steve1316.uma_scoring.rankLabelToImageIndex
-
 /**
  * Region geometry and pure parsers for the Veteran Roster list status bar and the read-only
  * `Umamusume Details` dialog (Skills tab header + Career Info block).
@@ -57,11 +55,6 @@ const val DETAIL_NAME_OUTFIT_Y = 175
 const val DETAIL_NAME_OUTFIT_W = 500
 const val DETAIL_NAME_OUTFIT_H = 90
 
-const val DETAIL_RANK_X = 355
-const val DETAIL_RANK_Y = 175
-const val DETAIL_RANK_W = 130
-const val DETAIL_RANK_H = 100
-
 const val DETAIL_RATING_X = 130
 const val DETAIL_RATING_Y = 385
 const val DETAIL_RATING_W = 180
@@ -79,31 +72,9 @@ const val FAVORITE_SATURATION_THRESHOLD = 20
 
 // -- Stat row: 5 equal-pitch columns, Speed/Stamina/Power/Guts/Wit ---------------------------------
 
-val STAT_COL_X: List<Int> = listOf(5, 221, 437, 653, 869)
-const val STAT_ROW_Y = 495
-const val STAT_CELL_W = 210
-const val STAT_CELL_H = 85
+/** Stat labels in header order, for logging. The grade badges and numeric values are read by the
+ * pixel classifiers / digit OCR in [VeteranBadgeClassifier], not by generic full-cell OCR. */
 val STAT_LABELS: List<String> = listOf("Speed", "Stamina", "Power", "Guts", "Wit")
-
-// -- Aptitude grid: Track (2 cols), Distance (4 cols), Style (4 cols) ------------------------------
-
-val APTITUDE_TRACK_COL_X: List<Int> = listOf(240, 480)
-const val APTITUDE_TRACK_Y = 600
-const val APTITUDE_TRACK_CELL_W = 240
-const val APTITUDE_TRACK_CELL_H = 55
-val APTITUDE_TRACK_LABELS: List<String> = listOf("turf", "dirt")
-
-val APTITUDE_DISTANCE_COL_X: List<Int> = listOf(240, 450, 660, 870)
-const val APTITUDE_DISTANCE_Y = 660
-const val APTITUDE_DISTANCE_CELL_W = 210
-const val APTITUDE_DISTANCE_CELL_H = 55
-val APTITUDE_DISTANCE_LABELS: List<String> = listOf("sprint", "mile", "medium", "long")
-
-val APTITUDE_STYLE_COL_X: List<Int> = listOf(240, 450, 660, 870)
-const val APTITUDE_STYLE_Y = 720
-const val APTITUDE_STYLE_CELL_W = 210
-const val APTITUDE_STYLE_CELL_H = 55
-val APTITUDE_STYLE_LABELS: List<String> = listOf("front", "pace", "late", "end")
 
 /** Standard Uma aptitude grade domain - one letter, no plus (unlike stat grades). */
 val APTITUDE_GRADES: Set<String> = setOf("S", "A", "B", "C", "D", "E", "F", "G")
@@ -199,61 +170,11 @@ fun parseSortDirection(raw: String): String? {
     }
 }
 
-/** "[Wild Frontier]\nTaiki Shuttle" -> (outfit="Wild Frontier", name="Taiki Shuttle"). Either side
- * comes back null on its own if that line was not read, instead of failing the whole pair. */
-fun parseNameOutfit(raw: String): Pair<String?, String?> {
-    val lines = raw.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
-    val outfitLine = lines.firstOrNull { it.startsWith("[") }
-    val outfit = outfitLine?.removePrefix("[")?.removeSuffix("]")?.trim()?.takeIf { it.isNotEmpty() }
-    val name = lines.firstOrNull { it != outfitLine }?.trim()?.takeIf { it.isNotEmpty() }
-    return outfit to name
-}
-
-/** Validates the badge OCR against the game's real rank-tier domain by reusing
- * [rankLabelToImageIndex] (the same 298-tier ladder [com.steve1316.uma_scoring.RankEstimate] already
- * carries for career RANK) rather than inventing a second rank vocabulary. */
-fun parseRank(raw: String): String? {
-    val candidateLine =
-        raw.split("\n").map { it.trim() }.firstOrNull { it.isNotEmpty() && !it.equals("RANK", ignoreCase = true) }
-            ?: return null
-    val candidate = candidateLine.uppercase().replace(Regex("""[^A-Z0-9+]"""), "")
-    return candidate.takeIf { it.isNotEmpty() && rankLabelToImageIndex(it) >= 0 }
-}
-
 /** Exact integer Rating, e.g. "10,192" -> 10192. Rejects an implausibly large misread. */
 fun parseRating(raw: String): Int? {
     val digits = raw.filter { it.isDigit() }
     val value = digits.toIntOrNull() ?: return null
     return value.takeIf { it in 0..999_999 }
-}
-
-/** One stat cell, e.g. "A+ 949" -> grade="A+", value=949. Either half can resolve independently. */
-data class StatCellRead(val grade: String?, val value: Int?)
-
-fun parseStatCell(raw: String): StatCellRead {
-    val cleaned = raw.replace("\n", " ")
-    // Stat grades share the same tier vocabulary as the overall RANK badge (a Speed of 1164 reads
-    // "SS+", not "A+") - see the PL-R1 fixture 08-details-chevron-next-entry.png second Veteran,
-    // which caught a first draft that only matched a single letter. [SABCDEFG]{1,2} covers both the
-    // single-letter tiers and the doubled "SS"/"SS+" tier; [rankLabelToImageIndex] then rejects any
-    // two-letter combination that is not actually in the ladder (e.g. a misread "AB").
-    //
-    // Trailing lookahead (whitespace or end), not \b: "+" is a non-word char, so a \b assertion
-    // right after it would fail whenever "+" is itself followed by a space (the normal case, e.g.
-    // "A+ 949"), silently dropping the plus. The lookahead also still rejects a mid-word letter
-    // (e.g. the "B" in a hypothetical "Best"), which a bare \b-less match would not.
-    val candidate = Regex("""\b[SABCDEFG]{1,2}\+?(?=\s|$)""").find(cleaned)?.value
-    val grade = candidate?.takeIf { rankLabelToImageIndex(it) >= 0 }
-    val value = cleaned.filter { it.isDigit() }.toIntOrNull()?.takeIf { it in 0..2500 }
-    return StatCellRead(grade, value)
-}
-
-/** One aptitude cell, e.g. "Medium E" -> "E". The label words never contain a lone capital letter
- * token, so the last standalone single-letter match is always the grade glyph, never the label. */
-fun parseAptitudeGrade(raw: String): String? {
-    val cleaned = raw.replace("\n", " ")
-    val candidate = Regex("""\b([SABCDEFG])\b""").findAll(cleaned).lastOrNull()?.groupValues?.get(1)
-    return candidate?.takeIf { it in APTITUDE_GRADES }
 }
 
 /** "Career Record   Races: 18  Wins: 13" -> (18, 13). Rejects wins>races as an impossible read. */

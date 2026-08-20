@@ -68,33 +68,8 @@ class VeteranRosterProbesTest {
     }
 
     @Nested
-    @DisplayName("Umamusume Details header")
+    @DisplayName("Umamusume Details header - rating (grade badges are pixel-classified, see VeteranBadgeClassifierTest)")
     inner class HeaderParsing {
-        @Test
-        fun `name and outfit split the two-line fixture read`() {
-            val (outfit, name) = parseNameOutfit("[Wild Frontier]\nTaiki Shuttle")
-            assertEquals("Wild Frontier", outfit)
-            assertEquals("Taiki Shuttle", name)
-        }
-
-        @Test
-        fun `a missing outfit bracket leaves outfit unresolved but keeps the name`() {
-            val (outfit, name) = parseNameOutfit("Taiki Shuttle")
-            assertNull(outfit)
-            assertEquals("Taiki Shuttle", name)
-        }
-
-        @Test
-        fun `rank validates against the real rank-tier domain`() {
-            assertEquals("A", parseRank("A\nRANK"))
-            assertEquals("SS", parseRank("SS\nRANK"))
-        }
-
-        @Test
-        fun `rank outside the known domain stays unresolved`() {
-            assertNull(parseRank("ZZ\nRANK"))
-        }
-
         @Test
         fun `rating reads the exact fixture integer`() {
             assertEquals(10192, parseRating("10,192"))
@@ -104,71 +79,13 @@ class VeteranRosterProbesTest {
         fun `rating rejects an unreadable region`() {
             assertNull(parseRating(""))
         }
-    }
-
-    @Nested
-    @DisplayName("Stat cells - all 5 final stats")
-    inner class StatCellParsing {
-        @Test
-        fun `every fixture stat cell reads grade and value together`() {
-            // Taiki Shuttle (fixture 02/05/06)
-            assertEquals(StatCellRead("A+", 949), parseStatCell("A+ 949"))
-            assertEquals(StatCellRead("B", 699), parseStatCell("B 699"))
-            assertEquals(StatCellRead("B", 648), parseStatCell("B 648"))
-            assertEquals(StatCellRead("B", 687), parseStatCell("B 687"))
-            assertEquals(StatCellRead("C", 420), parseStatCell("C 420"))
-        }
 
         @Test
-        fun `a doubled-letter tier grade reads whole, not just its first letter`() {
-            // Copano Rickey (fixture 08): Speed 1164 reads "SS+", not "S+" - this is the exact
-            // second-Veteran case the design doc's "prevent a one-card overfit" note called for.
-            assertEquals(StatCellRead("SS+", 1164), parseStatCell("SS+ 1164"))
-            assertEquals(StatCellRead("D", 344), parseStatCell("D 344"))
-        }
-
-        @Test
-        fun `a missing grade still resolves the value`() {
-            assertEquals(StatCellRead(null, 949), parseStatCell("949"))
-        }
-
-        @Test
-        fun `an implausible stat value is rejected, not clamped`() {
-            assertEquals(StatCellRead("A", null), parseStatCell("A 25000"))
-        }
-    }
-
-    @Nested
-    @DisplayName("Aptitude cells - all 10 aptitude grades")
-    inner class AptitudeCellParsing {
-        @Test
-        fun `every fixture aptitude cell resolves to its grade`() {
-            assertEquals("A", parseAptitudeGrade("Turf A"))
-            assertEquals("B", parseAptitudeGrade("Dirt B"))
-            assertEquals("A", parseAptitudeGrade("Sprint A"))
-            assertEquals("A", parseAptitudeGrade("Mile A"))
-            assertEquals("E", parseAptitudeGrade("Medium E"))
-            assertEquals("G", parseAptitudeGrade("Long G"))
-            assertEquals("C", parseAptitudeGrade("Front C"))
-            assertEquals("A", parseAptitudeGrade("Pace A"))
-            assertEquals("E", parseAptitudeGrade("Late E"))
-            assertEquals("G", parseAptitudeGrade("End G"))
-        }
-
-        @Test
-        fun `the second fixture's aptitude cells resolve too (Copano Rickey, fixture 08)`() {
-            assertEquals("F", parseAptitudeGrade("Turf F"))
-            assertEquals("S", parseAptitudeGrade("Pace S"))
-        }
-
-        @Test
-        fun `a cell with no grade glyph stays unresolved`() {
-            assertNull(parseAptitudeGrade("Sprint"))
-        }
-
-        @Test
-        fun `a glyph outside S-G stays unresolved, never guessed`() {
-            assertNull(parseAptitudeGrade("Sprint Z"))
+        fun `stat value parses digits and rejects an implausible read`() {
+            assertEquals(949, parseStatValue("949"))
+            assertEquals(1164, parseStatValue("1164"))
+            assertNull(parseStatValue("25000"))
+            assertNull(parseStatValue(""))
         }
     }
 
