@@ -48,6 +48,37 @@ val STAT_VALUE_BOXES: List<GlyphBox> =
         GlyphBox(928, 505, 1016, 576),
     )
 
+/**
+ * Badge-aware recovery boxes for the stat number, index-aligned with [STAT_LABELS] and used only when
+ * the primary [STAT_VALUE_BOXES] read is unacceptable or suspiciously low (never on the common path).
+ *
+ * The number is right-aligned in its cell, so the right edge is a stable anchor and the LEFT edge is
+ * where a 4-digit value collides with layout: measured on the PL-R1b evidence crops, a 4-digit "10xx"
+ * value's leading "1" falls a few px LEFT of the primary box and clips, and the digit-OCR then reads
+ * the clipped "1" as "7"/"L" (7042, 8001, ...) - every one out of [STAT_VALUE_MAX] range, which is why
+ * they failed closed rather than minting a wrong stat. These boxes extend the left edge into the white
+ * gap between the grade badge and the number so the whole leading digit is captured. The gap bounds,
+ * from the fixture set (grade-"+" tail max x / 4-digit leading-digit min x): sta 308/326, pwr 510/524,
+ * grt 710/725; the extended edge sits between them, clear of the badge "+" (which shares the number's
+ * hue) and left of the leading digit.
+ *
+ * Speed keeps the primary geometry (its box already fits a 4-digit value - Copano's 1164 reads cleanly)
+ * so it has no widened box and is recovered by preprocessing variants alone.
+ *
+ * Wit is the special case: a rounded grey UI element overlaps the top and right of that column
+ * (measured absY < 523 and absX > 1010, entirely outside the digits, which sit at y[523..554] and end
+ * by x1010 on every fixture). Its recovery box is trimmed on the top and right to drop the grey and
+ * extended left for a possible 4-digit value.
+ */
+val STAT_VALUE_RECOVERY_BOXES: List<GlyphBox?> =
+    listOf(
+        null,
+        GlyphBox(315, 505, 416, 576),
+        GlyphBox(516, 505, 612, 576),
+        GlyphBox(717, 505, 814, 576),
+        GlyphBox(918, 521, 1011, 556),
+    )
+
 /** Aptitude-grade letter boxes keyed by role. Each box is tight around the grade letter at the
  * right of its pill, past the brown label word (same hue as an orange grade) and short of the green
  * next-entry chevron on the two outermost columns. */
@@ -574,6 +605,54 @@ fun classifyRankMedalDetailed(sampler: SparkPixelSampler): RankMedalRead {
 const val STAT_VALUE_MIN = 10
 const val STAT_VALUE_MAX = 2500
 
+/**
+ * Corpus-backed suspicious-low threshold. Every genuine stat in the 1810-sample career corpus is
+ * >= 90; a parsed value below it is almost always a dropped-digit artifact (610 read as "61", a
+ * clipped leading digit, a stray UI mark). Below this floor a single read is NOT trusted into
+ * identity - it needs independent corroboration or the field stays unresolved. This is an
+ * identity-safety policy for the roster fingerprint, deliberately NOT a claim about the game's
+ * theoretical minimum stat: a real low value can still be accepted when two independent reads agree.
+ */
+const val STAT_VALUE_SUSPICIOUS_MIN = 90
+
 /** Digits-only stat value parse (e.g. "949" -> 949), rejecting an implausible read. Kept as a pure
  * parser so the digit-OCR result stays testable even though the OCR itself needs the device. */
 fun parseStatValue(raw: String): Int? = raw.filter { it.isDigit() }.toIntOrNull()?.takeIf { it in STAT_VALUE_MIN..STAT_VALUE_MAX }
+
+/**
+ * One geometry's digit-OCR read of a stat number: the plausibility-parsed [value] (already through
+ * [parseStatValue], so in [STAT_VALUE_MIN]..[STAT_VALUE_MAX]), the read [variant] that produced it,
+ * and the [rawOcr] kept as evidence. [variant] is the GEOMETRY identity ("primary", "wide"), not the
+ * threshold pass: two candidates corroborate only when they came from genuinely different crops, so a
+ * value the same box merely re-reads under a different threshold can never corroborate itself.
+ */
+data class NumericReadCandidate(val value: Int, val variant: String, val rawOcr: String)
+
+/**
+ * Resolves a stat value from independent read candidates, fail-closed. Never infers a value from
+ * anything but the reads themselves (never from rank, grade, rating, or a neighbouring stat).
+ *
+ * Rules, in order:
+ *  - no candidates -> null (unresolved);
+ *  - a value carried by >= 2 DISTINCT variants wins, even over single-variant dissenters (consensus);
+ *    two different values each reaching that support is a genuine conflict -> null;
+ *  - a single agreed value >= [STAT_VALUE_SUSPICIOUS_MIN] is accepted (one plausible read suffices in
+ *    the trusted range);
+ *  - a single agreed value < [STAT_VALUE_SUSPICIOUS_MIN] is rejected -> null (needs corroboration, and
+ *    a lone read has none);
+ *  - two or more distinct plausible values with no >= 2-variant consensus -> null (conflict).
+ */
+fun resolveStatValue(candidates: List<NumericReadCandidate>): Int? {
+    if (candidates.isEmpty()) return null
+    // Distinct variants (geometries) supporting each value. Threshold re-reads of one box share a
+    // variant tag upstream, so they contribute a single vote and cannot self-corroborate.
+    val support: Map<Int, Int> = candidates.groupBy { it.value }.mapValues { (_, cs) -> cs.map { it.variant }.toSet().size }
+    val maxSupport = support.values.max()
+    if (maxSupport >= 2) {
+        // The consensus value must be unique: a two-way tie at the top is a real disagreement.
+        return support.filterValues { it == maxSupport }.keys.singleOrNull()
+    }
+    // Every candidate value is carried by exactly one variant.
+    val value = support.keys.singleOrNull() ?: return null // conflicting single reads
+    return value.takeIf { it >= STAT_VALUE_SUSPICIOUS_MIN } // a lone suspicious-low read is not trusted
+}

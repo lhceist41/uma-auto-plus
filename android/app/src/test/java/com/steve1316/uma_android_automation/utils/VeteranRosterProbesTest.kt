@@ -102,6 +102,71 @@ class VeteranRosterProbesTest {
     }
 
     @Nested
+    @DisplayName("Stat value resolution - independent-read consensus, fail-closed")
+    inner class StatValueResolution {
+        private fun cand(value: Int, variant: String) = NumericReadCandidate(value, variant, value.toString())
+
+        @Test
+        fun `no candidates stays unresolved`() {
+            assertNull(resolveStatValue(emptyList()))
+        }
+
+        @Test
+        fun `a lone plausible high read is accepted`() {
+            // The Power leading-digit clip: the primary "7042" fell out of range and only the widened
+            // geometry read the value. One trusted-range read is enough.
+            assertEquals(1042, resolveStatValue(listOf(cand(1042, "wide"))))
+        }
+
+        @Test
+        fun `two geometries agreeing form a consensus`() {
+            assertEquals(1042, resolveStatValue(listOf(cand(1042, "primary"), cand(1042, "wide"))))
+        }
+
+        @Test
+        fun `consensus beats a single-variant dissenter`() {
+            assertEquals(
+                500,
+                resolveStatValue(listOf(cand(500, "primary"), cand(500, "wide"), cand(999, "tight"))),
+            )
+        }
+
+        @Test
+        fun `two distinct plausible values with no consensus stay unresolved`() {
+            assertNull(resolveStatValue(listOf(cand(900, "primary"), cand(800, "wide"))))
+        }
+
+        @Test
+        fun `a top tie between two corroborated values is a conflict`() {
+            assertNull(
+                resolveStatValue(listOf(cand(500, "a"), cand(500, "b"), cand(999, "c"), cand(999, "d"))),
+            )
+        }
+
+        @Test
+        fun `a lone suspicious-low read is rejected`() {
+            // 61/41/25/23/10 were accepted under the old flat minimum and minted wrong fingerprints.
+            for (v in listOf(10, 23, 25, 34, 41, 48, 61, 79)) {
+                assertNull(resolveStatValue(listOf(cand(v, "primary"))), "lone $v must not be trusted")
+            }
+        }
+
+        @Test
+        fun `a suspicious-low read the same geometry merely repeats cannot corroborate itself`() {
+            // Two threshold re-reads of one box share the "primary" variant, so they are one vote: a
+            // geometry-driven dropped digit that reads the same wrong low value twice is still unresolved.
+            assertNull(
+                resolveStatValue(listOf(NumericReadCandidate(61, "primary", "61"), NumericReadCandidate(61, "primary", "61"))),
+            )
+        }
+
+        @Test
+        fun `a genuinely low value is accepted only when two independent geometries agree`() {
+            assertEquals(61, resolveStatValue(listOf(cand(61, "primary"), cand(61, "wide"))))
+        }
+    }
+
+    @Nested
     @DisplayName("Career Info block")
     inner class CareerInfoParsing {
         @Test

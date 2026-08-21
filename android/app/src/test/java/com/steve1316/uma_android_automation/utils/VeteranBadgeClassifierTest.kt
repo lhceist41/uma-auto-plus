@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.utils
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
@@ -141,6 +142,96 @@ class VeteranBadgeClassifierTest {
         @Test
         fun `a blank aptitude cell stays unresolved`() {
             assertNull(classifyAptitudeGrade(blank, APTITUDE_GRADE_BOXES.getValue("turf")))
+        }
+    }
+
+    @Nested
+    @DisplayName("Stat value recovery-box geometry - holds the number, cuts in the gap")
+    inner class StatValueRecoveryGeometry {
+        // The five detail fixtures that keep the stat row (Taiki/Copano at 820 rows, the four 600-row
+        // rank fixtures). All stat numbers here are 3-digit in the widened columns, so these pin the
+        // no-regression / no-badge invariants offline; the 4-digit clip recovery is proven live.
+        private val statFixtures =
+            listOf("taiki" to taiki, "copano" to copano, "aplusA" to aplusA, "sA" to sA, "splusA" to splusA)
+
+        /** A brown stat-number glyph pixel (same rule as the offline crop analysis): red-dominant,
+         * moderate saturation, not white background. */
+        private fun isBrown(argb: Int): Boolean {
+            val r = (argb shr 16) and 0xFF
+            val g = (argb shr 8) and 0xFF
+            val b = argb and 0xFF
+            val mx = maxOf(r, g, b)
+            val mn = minOf(r, g, b)
+            if (mx < 60) return false
+            if (mx > 245 && mn > 225) return false
+            val sat = if (mx == 0) 0.0 else (mx - mn).toDouble() / mx
+            return r >= g && r - b >= 28 && sat >= 0.20
+        }
+
+        /** The brown-number bounding box searched from the recovery box's own left edge rightward. That
+         * edge is proven to sit in the white gap clear of the grade badge by the whitespace test, so the
+         * search never picks up a badge glyph; a number clipped on the right or trimmed top/bottom by the
+         * box would still show up touching the box edge. */
+        private fun numberBox(s: SparkPixelSampler, box: GlyphBox): GlyphBox? {
+            var x0 = Int.MAX_VALUE
+            var y0 = Int.MAX_VALUE
+            var x1 = Int.MIN_VALUE
+            var y1 = Int.MIN_VALUE
+            for (y in box.y0 until box.y1) {
+                for (x in box.x0 until (box.x1 + 4)) {
+                    if (isBrown(s.argb(x, y))) {
+                        if (x < x0) x0 = x
+                        if (y < y0) y0 = y
+                        if (x > x1) x1 = x
+                        if (y > y1) y1 = y
+                    }
+                }
+            }
+            return if (x1 < x0) null else GlyphBox(x0, y0, x1, y1)
+        }
+
+        @Test
+        fun `every recovery box fully contains its stat number`() {
+            for ((name, s) in statFixtures) {
+                for (i in STAT_VALUE_RECOVERY_BOXES.indices) {
+                    val box = STAT_VALUE_RECOVERY_BOXES[i] ?: continue
+                    val num = numberBox(s, box)
+                    assertNotNull(num, "$name ${STAT_LABELS[i]}: no number found near recovery box")
+                    assertTrue(
+                        num!!.x0 >= box.x0 && num.x1 <= box.x1 && num.y0 >= box.y0 && num.y1 <= box.y1,
+                        "$name ${STAT_LABELS[i]}: number $num escapes recovery box $box",
+                    )
+                }
+            }
+        }
+
+        @Test
+        fun `every recovery box left edge cuts through the white gap, never a glyph`() {
+            // The widened left edge must land in the whitespace between the grade badge (whose "+"
+            // shares the number's hue) and the number, so it can never grab a badge pixel or bisect a
+            // digit. Checked across the digit y-band on every fixture.
+            for ((name, s) in statFixtures) {
+                for (i in STAT_VALUE_RECOVERY_BOXES.indices) {
+                    val box = STAT_VALUE_RECOVERY_BOXES[i] ?: continue
+                    var glyphPixels = 0
+                    for (y in 523..554) {
+                        for (x in box.x0 - 1..box.x0 + 1) {
+                            if (isBrown(s.argb(x, y))) glyphPixels++
+                        }
+                    }
+                    assertTrue(glyphPixels <= 2, "$name ${STAT_LABELS[i]}: recovery left edge ${box.x0} sits on a glyph ($glyphPixels px)")
+                }
+            }
+        }
+
+        @Test
+        fun `every widened recovery box is wide enough for a four-digit value`() {
+            // A single digit is ~21px wide here; a 4-digit value needs ~84px plus margins. The primary
+            // boxes that clipped are all narrower than this, which is exactly why they clipped.
+            for (i in STAT_VALUE_RECOVERY_BOXES.indices) {
+                val box = STAT_VALUE_RECOVERY_BOXES[i] ?: continue
+                assertTrue(box.x1 - box.x0 >= 88, "${STAT_LABELS[i]} recovery box only ${box.x1 - box.x0}px wide")
+            }
         }
     }
 
