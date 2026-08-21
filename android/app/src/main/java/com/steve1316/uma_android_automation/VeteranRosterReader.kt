@@ -41,6 +41,8 @@ import com.steve1316.uma_android_automation.utils.DETAIL_TITLE_H
 import com.steve1316.uma_android_automation.utils.DETAIL_TITLE_W
 import com.steve1316.uma_android_automation.utils.DETAIL_TITLE_X
 import com.steve1316.uma_android_automation.utils.DETAIL_TITLE_Y
+import com.steve1316.uma_android_automation.utils.GlyphBox
+import com.steve1316.uma_android_automation.utils.NumericReadCandidate
 import com.steve1316.uma_android_automation.utils.ROSTER_ASCDESC_H
 import com.steve1316.uma_android_automation.utils.ROSTER_ASCDESC_W
 import com.steve1316.uma_android_automation.utils.ROSTER_ASCDESC_X
@@ -61,6 +63,8 @@ import com.steve1316.uma_android_automation.utils.RosterScreenKind
 import com.steve1316.uma_android_automation.utils.STAT_GRADE_GLYPH_BOXES
 import com.steve1316.uma_android_automation.utils.STAT_LABELS
 import com.steve1316.uma_android_automation.utils.STAT_VALUE_BOXES
+import com.steve1316.uma_android_automation.utils.STAT_VALUE_RECOVERY_BOXES
+import com.steve1316.uma_android_automation.utils.STAT_VALUE_SUSPICIOUS_MIN
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.VeteranIdentityCatalog
 import com.steve1316.uma_android_automation.utils.classifyAptitudeGrade
@@ -80,6 +84,7 @@ import com.steve1316.uma_android_automation.utils.parseSortDirection
 import com.steve1316.uma_android_automation.utils.parseSortKey
 import com.steve1316.uma_android_automation.utils.parseStatValue
 import com.steve1316.uma_android_automation.utils.resolveNameOutfit
+import com.steve1316.uma_android_automation.utils.resolveStatValue
 
 private const val TAG = "[VeteranRosterReader]"
 
@@ -125,7 +130,7 @@ class VeteranRosterReader(
      * case outfits read unresolved rather than falling back to a guess (see [VeteranIdentityCatalog]). */
     private val catalog: VeteranIdentityCatalog?,
 ) {
-    private fun ocr(bitmap: Bitmap, x: Int, y: Int, w: Int, h: Int, debugName: String, digitsOnly: Boolean = false): String =
+    private fun ocr(bitmap: Bitmap, x: Int, y: Int, w: Int, h: Int, debugName: String, digitsOnly: Boolean = false, thresholdIncrement: Double = 0.0): String =
         try {
             iu.performOCROnRegion(
                 bitmap,
@@ -138,6 +143,7 @@ class VeteranRosterReader(
                 scale = 2.0,
                 ocrEngine = if (digitsOnly) "tesseract_digits" else "tesseract",
                 debugName = "roster_$debugName",
+                thresholdIncrement = thresholdIncrement,
             )
                 .replace("\r", "")
                 .trim()
@@ -146,6 +152,85 @@ class VeteranRosterReader(
         } catch (_: Exception) {
             ""
         }
+
+    /** One stat number resolved from up to two independent geometries, plus the evidence for it. */
+    private data class StatValueRead(val value: Int?, val evidence: String?, val resolvedBy: String)
+
+    /** Threshold increments a single geometry is re-read at, then voted, to shake loose a
+     * threshold-sensitive misread. Mirrors the retry ladder's add-only direction (blacker
+     * binarization). The base pass (0) is always first so the common good read is unchanged. */
+    private val statThresholdVariants = listOf(0.0, 8.0, 16.0)
+
+    /**
+     * Reads stat [i]'s numeric value with a fail-closed multi-pass reader.
+     *
+     * The common path is unchanged: one digit-OCR of the primary box, and a plausible non-suspicious
+     * value (>= [STAT_VALUE_SUSPICIOUS_MIN]) is returned as-is - no extra OCR, byte-identical to before.
+     * Only when that read is unacceptable (out of range / blank) or suspiciously low does the reader
+     * gather corroborating candidates: it votes the primary box across [statThresholdVariants], votes
+     * the badge-aware [STAT_VALUE_RECOVERY_BOXES] geometry the same way (recovering a clipped 4-digit
+     * leading digit or dropping the Wit grey UI), and hands both to [resolveStatValue]. Two independent
+     * geometries agreeing accepts; a lone plausible high read accepts; a lone suspicious-low read, or
+     * a genuine conflict, stays unresolved with its raw candidates kept as evidence.
+     */
+    private fun readStatValue(bitmap: Bitmap, i: Int): StatValueRead {
+        val label = STAT_LABELS[i]
+        val primaryRaw = ocrStatBox(bitmap, STAT_VALUE_BOXES[i], "stat_$label", 0.0)
+        val primary = parseStatValue(primaryRaw)
+        // Fast path: a plausible, non-suspicious primary read is trusted exactly as before.
+        if (primary != null && primary >= STAT_VALUE_SUSPICIOUS_MIN) {
+            return StatValueRead(primary, primaryRaw.ifEmpty { null }, "primary")
+        }
+
+        val candidates = mutableListOf<NumericReadCandidate>()
+        val evidence = mutableListOf<String>()
+        if (primaryRaw.isNotEmpty()) evidence.add(primaryRaw)
+
+        // Geometry 1: the primary box, voted across threshold variants (the base pass is reused).
+        val primaryVote = voteGeometry(bitmap, STAT_VALUE_BOXES[i], "stat_$label", primaryRaw)
+        if (primaryVote.value != null) candidates.add(NumericReadCandidate(primaryVote.value, "primary", primaryVote.raw))
+
+        // Geometry 2: the badge-aware recovery box, when one exists for this column.
+        STAT_VALUE_RECOVERY_BOXES[i]?.let { box ->
+            val wideVote = voteGeometry(bitmap, box, "stat_${label}_wide", firstRaw = null)
+            if (wideVote.raw.isNotEmpty()) evidence.add("wide=${wideVote.raw}")
+            if (wideVote.value != null) candidates.add(NumericReadCandidate(wideVote.value, "wide", wideVote.raw))
+        }
+
+        val value = resolveStatValue(candidates)
+        val resolvedBy =
+            when {
+                value == null -> "unresolved"
+                candidates.count { it.value == value } >= 2 -> "consensus"
+                else -> candidates.first { it.value == value }.variant
+            }
+        return StatValueRead(value, evidence.joinToString("|").ifEmpty { null }, resolvedBy)
+    }
+
+    private data class GeometryVote(val value: Int?, val raw: String)
+
+    private fun ocrStatBox(bitmap: Bitmap, box: GlyphBox, debugName: String, thresholdIncrement: Double): String =
+        ocr(bitmap, box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0, debugName, digitsOnly = true, thresholdIncrement = thresholdIncrement)
+
+    /**
+     * Reads one geometry at every [statThresholdVariants] increment and returns its confident vote:
+     * the plausible value with a strict plurality across the passes (a tie is no vote). [firstRaw],
+     * when supplied, reuses an already-taken base-threshold read so the primary box is not OCR'd twice.
+     */
+    private fun voteGeometry(bitmap: Bitmap, box: GlyphBox, debugName: String, firstRaw: String?): GeometryVote {
+        val values = mutableListOf<Int>()
+        var baseRaw = firstRaw ?: ""
+        statThresholdVariants.forEachIndexed { idx, inc ->
+            val raw = if (idx == 0 && firstRaw != null) firstRaw else ocrStatBox(bitmap, box, debugName, inc)
+            if (idx == 0) baseRaw = raw
+            parseStatValue(raw)?.let { values.add(it) }
+        }
+        if (values.isEmpty()) return GeometryVote(null, baseRaw)
+        val counts = values.groupingBy { it }.eachCount()
+        val max = counts.values.max()
+        val winner = counts.filterValues { it == max }.keys.singleOrNull()
+        return GeometryVote(winner, baseRaw)
+    }
 
     /** Classifies one already-captured frame as the roster list, the details dialog, or unknown. */
     fun classifyScreen(bitmap: Bitmap): RosterScreenRead {
@@ -231,16 +316,20 @@ class VeteranRosterReader(
         val rawStatOcr = mutableListOf<String?>()
         for (i in STAT_LABELS.indices) {
             val grade = classifyStatGrade(sampler, STAT_GRADE_GLYPH_BOXES[i])
-            val valueBox = STAT_VALUE_BOXES[i]
-            val valueRaw = ocr(bitmap, valueBox.x0, valueBox.y0, valueBox.x1 - valueBox.x0, valueBox.y1 - valueBox.y0, "stat_${STAT_LABELS[i]}", digitsOnly = true)
-            val value = parseStatValue(valueRaw)
-            stats.add(value)
+            val read = readStatValue(bitmap, i)
+            stats.add(read.value)
             statGrades.add(grade)
-            // The raw string, kept as evidence and never as a value: parseStatValue already rejected
-            // implausible reads (a dropped digit renders 949 as "1"), and promoting one here would
-            // mint a wrong identity rather than merely lose a field.
-            rawStatOcr.add(valueRaw.ifEmpty { null })
-            if (verbose) MessageLog.i(TAG, "[ROSTER-TEST] ${STAT_LABELS[i]} grade=${grade ?: "UNRESOLVED"} valueOCR='$valueRaw' -> value=${value ?: "UNRESOLVED"}")
+            // The raw string(s), kept as evidence and never as a value: resolveStatValue already
+            // rejected implausible reads (a dropped digit renders 949 as "1") and lone suspicious-low
+            // reads, and promoting one here would mint a wrong identity rather than merely lose a field.
+            rawStatOcr.add(read.evidence)
+            if (verbose) {
+                MessageLog.i(
+                    TAG,
+                    "[ROSTER-TEST] ${STAT_LABELS[i]} grade=${grade ?: "UNRESOLVED"} valueOCR='${read.evidence ?: ""}' " +
+                        "-> value=${read.value ?: "UNRESOLVED"} (${read.resolvedBy})",
+                )
+            }
         }
 
         val aptitudes = mutableListOf<String?>()
