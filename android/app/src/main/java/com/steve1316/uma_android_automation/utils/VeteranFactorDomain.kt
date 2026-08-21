@@ -7,8 +7,10 @@ import com.steve1316.uma_android_automation.bot.SparkRowKind
 import org.json.JSONObject
 
 /** How a factor OCR read was resolved onto a canonical name (or not), kept as evidence so a margin
- * accept is auditable offline and distinguishable from a strong one. Mirrors [OutfitAcceptancePath]. */
-enum class FactorAcceptancePath { STRONG, MARGIN, REJECT }
+ * accept is auditable offline and distinguishable from a strong one. Mirrors [OutfitAcceptancePath].
+ * ABBREVIATION marks a race name the factor card truncated ("Hopeful S." -> "Hopeful Stakes") that the
+ * deterministic race-abbreviation path recovered after the fuzzy scan rejected it. */
+enum class FactorAcceptancePath { STRONG, MARGIN, ABBREVIATION, REJECT }
 
 /**
  * The outcome of snapping one factor-card OCR read onto the canonical factor domain.
@@ -68,12 +70,15 @@ fun factorAcceptancePath(best: Double, second: Double?): FactorAcceptancePath {
  * skills, and a WHITE card against the union of normal skills, races, and scenarios. That conditioning
  * is what keeps a white skill read from ever snapping onto a unique's long distinctive name and back.
  *
- * Resolution has two paths, the PL-R1b safety model:
+ * Resolution has three paths, the PL-R1b safety model plus the PL-R1c race-abbreviation fallback:
  *  - an exact-skeleton hit (the read normalizes to a canonical name's skeleton) is STRONG at once - the
  *    common case for a clean read, and the reason `Firm Conditions ○` and its glyph-less OCR agree;
  *  - otherwise a fuzzy scan picks the best candidate and STRONG/MARGIN/REJECT decides, so `FIRM
- *    CONDITIONSO` and `LONG COMERS` still recover their canonical names, and a garbage/truncated/
- *    off-domain read fails closed.
+ *    CONDITIONSO` and `LONG COMERS` still recover their canonical names, and a garbage/off-domain read
+ *    fails closed;
+ *  - finally, only after a fuzzy REJECT, a race name the card truncated to an abbreviation
+ *    ("Hopeful S.") is recovered by [resolveAbbreviatedRace] when it uniquely identifies one race,
+ *    which is otherwise too short to clear the fuzzy floor against its long canonical.
  *
  * There is deliberately no hard-coded fallback domain. If the asset is missing or malformed the
  * domain is null, every factor reads unresolved, and the semantic fingerprint stays blocked - a loud
@@ -84,6 +89,9 @@ class VeteranFactorDomain private constructor(
     val source: String,
     private val candidatesByKind: Map<SparkRowKind, List<CanonEntry>>,
     private val exactByKind: Map<SparkRowKind, Map<String, String?>>,
+    /** The race family on its own, so the truncated-abbreviation path scores a race read only against
+     * races and never against skills or scenarios (which share the WHITE kind). */
+    private val raceCandidates: List<CanonEntry>,
 ) {
     /** One canonical name and its precomputed normalized skeleton, so a scan never re-normalizes the
      * domain per read. */
@@ -126,6 +134,13 @@ class VeteranFactorDomain private constructor(
         if (best == null) return REJECT
         val second = if (secondScore >= 0.0) secondScore else null
         val path = factorAcceptancePath(bestScore, second)
+        if (path == FactorAcceptancePath.REJECT) {
+            // The fuzzy scan could not place the read. A race name the factor card truncates to an
+            // abbreviation ("Hopeful S.") is simply too short to clear the similarity floor against its
+            // long canonical ("Hopeful Stakes"), so try the deterministic race-abbreviation path before
+            // failing closed. It only fires here, after a reject, so no strong/margin read is affected.
+            resolveAbbreviatedRace(rawOcr, kind, needle)?.let { return it }
+        }
         return FactorResolution(
             canonicalName = if (path == FactorAcceptancePath.REJECT) null else best.canonical,
             bestScore = bestScore,
@@ -135,6 +150,82 @@ class VeteranFactorDomain private constructor(
         )
     }
 
+    /**
+     * Deterministically recovers a race name the factor card truncated to an abbreviation, e.g.
+     * "Hopeful S." -> "Hopeful Stakes", "NHK Mile C." -> "NHK Mile Cup". Race domain only (the WHITE
+     * kind), and only when the raw OCR ended in the abbreviation period.
+     *
+     * The read is tokenized: every complete token must match the corresponding canonical token, and the
+     * final abbreviated token must be a (bounded-error) prefix of the canonical's final token. It
+     * accepts only when EXACTLY ONE race in the domain is compatible, so an abbreviation that could name
+     * two races ("Queen S." -> Queen Sho / Queen Stakes) or is too short to carry a full complete token
+     * ("S.") fails closed. This lowers no threshold and runs only after the fuzzy scan already rejected.
+     */
+    private fun resolveAbbreviatedRace(rawOcr: String, kind: SparkRowKind, needle: String): FactorResolution? {
+        if (kind != SparkRowKind.WHITE) return null
+        val trimmed = rawOcr.trim()
+        if (!trimmed.endsWith('.')) return null
+        val ocrTokens = tokenizeIdentity(trimmed.trimEnd('.').trim())
+        // At least one complete token before the abbreviated tail: a bare "S."/"C." carries no race
+        // identity and must never resolve.
+        if (ocrTokens.size < 2) return null
+
+        var match: CanonEntry? = null
+        for (entry in raceCandidates) {
+            if (abbreviationCompatibleRace(ocrTokens, entry)) {
+                if (match != null) return null // 2+ compatible races: ambiguous, fail closed
+                match = entry
+            }
+        }
+        val resolved = match ?: return null
+        // Diagnostic score only, on the same metric the fuzzy scan uses (how close the raw read was to
+        // the canonical skeleton). The acceptance itself is structural, recorded as ABBREVIATION.
+        return FactorResolution(
+            canonicalName = resolved.canonical,
+            bestScore = similarity(needle, resolved.skeleton),
+            secondScore = null,
+            path = FactorAcceptancePath.ABBREVIATION,
+            sourceFamily = "race",
+        )
+    }
+
+    /** Whether the abbreviated OCR tokens are compatible with one race candidate: same token count,
+     * every complete token matching, and the final token a bounded-error prefix of the canonical's
+     * final (strictly longer) token. */
+    private fun abbreviationCompatibleRace(ocrTokens: List<String>, entry: CanonEntry): Boolean {
+        val canonTokens = tokenizeIdentity(entry.canonical)
+        if (canonTokens.size != ocrTokens.size) return false
+        for (i in 0 until ocrTokens.size - 1) {
+            if (!completeTokenMatches(ocrTokens[i], canonTokens[i])) return false
+        }
+        val last = ocrTokens.last()
+        val canonLast = canonTokens.last()
+        // A genuine truncation: the abbreviation is strictly shorter than the full final word. An
+        // equal-length final token is not truncated and would already have resolved on the fuzzy path.
+        if (last.isEmpty() || canonLast.length <= last.length) return false
+        val prefix = canonLast.take(last.length)
+        return editDistance(last, prefix) <= abbreviationErrorTolerance(last.length)
+    }
+
+    /** A complete (non-abbreviated) OCR token matches its canonical token when identical, or one OCR
+     * error apart in a token long enough (>= 4 chars on both sides) that a single edit cannot flip it
+     * onto a different word. Short tokens must match exactly. */
+    private fun completeTokenMatches(a: String, b: String): Boolean {
+        if (a == b) return true
+        return minOf(a.length, b.length) >= 4 && editDistance(a, b) <= 1
+    }
+
+    /** Allowed OCR edits on the final abbreviated token, matched against the canonical's same-length
+     * prefix. A one-character abbreviation must be exact (a single-letter edit would match almost any
+     * word); two or more characters tolerate a single misread ("Ss." for "St[akes]"). */
+    private fun abbreviationErrorTolerance(len: Int): Int = if (len <= 1) 0 else 1
+
+    /** Splits a raw string on whitespace and reduces each token to its identity skeleton, dropping any
+     * that skeletonize to nothing (stray punctuation). Shared by the OCR read and the canonical race
+     * names so both tokenize identically. */
+    private fun tokenizeIdentity(s: String): List<String> =
+        s.split(WHITESPACE).map { normalizeIdentityText(it) }.filter { it.isNotEmpty() }
+
     private fun familyOf(candidates: List<CanonEntry>, canonical: String): String? =
         candidates.firstOrNull { it.canonical == canonical }?.family
 
@@ -143,6 +234,9 @@ class VeteranFactorDomain private constructor(
 
         const val ASSET_NAME: String = "veteran_factor_domain.json"
         const val SUPPORTED_SCHEMA_VERSION: Int = 1
+
+        /** Whitespace splitter for the abbreviation tokenizer, compiled once. */
+        private val WHITESPACE = Regex("\\s+")
 
         private val REJECT = FactorResolution(null, bestScore = 0.0, secondScore = null, path = FactorAcceptancePath.REJECT, sourceFamily = null)
 
@@ -205,7 +299,7 @@ class VeteranFactorDomain private constructor(
                     return null
                 }
                 if (collisions > 0) Log.w(TAG, "veteran_factor_domain has $collisions ambiguous skeleton(s); those factors fail closed")
-                VeteranFactorDomain(schema, root.optString("source", "unknown"), candidatesByKind, exactByKind)
+                VeteranFactorDomain(schema, root.optString("source", "unknown"), candidatesByKind, exactByKind, byFamily["race"].orEmpty())
             } catch (e: Exception) {
                 Log.w(TAG, "failed to parse veteran_factor_domain: ${e.message}")
                 null

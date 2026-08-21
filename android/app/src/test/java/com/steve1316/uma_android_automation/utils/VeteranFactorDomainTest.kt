@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.utils
 
 import com.steve1316.uma_android_automation.bot.SparkRowKind
+import com.steve1316.uma_android_automation.bot.canonicalFactorToken
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -109,10 +110,107 @@ class VeteranFactorDomainTest {
         }
 
         @Test
-        fun `a truncated race name stays unresolved rather than guessing`() {
-            // The factor card abbreviates a long race name ("Mile Ch." for "Mile Championship"); with
-            // no reliable canonical to reach, it fails closed instead of snapping onto the wrong race.
-            assertNull(domain.resolve("Mile Ch.", SparkRowKind.WHITE).canonicalName)
+        fun `an ambiguous truncated race stays unresolved rather than guessing`() {
+            // A truncation that fits two races ("Kyoto K." -> Kyoto Kimpai / Kyoto Kinen) carries no
+            // unique identity, so it fails closed instead of snapping onto one arbitrarily. A uniquely
+            // identifying truncation does resolve - see the abbreviation tests below.
+            assertNull(domain.resolve("Kyoto K.", SparkRowKind.WHITE).canonicalName)
+        }
+    }
+
+    @Nested
+    @DisplayName("truncated race abbreviations resolve deterministically")
+    inner class Abbreviation {
+        private fun res(raw: String, kind: SparkRowKind = SparkRowKind.WHITE) = domain.resolve(raw, kind)
+        private fun canon(raw: String, kind: SparkRowKind = SparkRowKind.WHITE) = res(raw, kind).canonicalName
+
+        @Test
+        fun `a uniquely identifying truncated race resolves to its full name`() {
+            // The factor card truncates the last word of a race to a leading letter or two followed by a
+            // period. Each of these identifies exactly one race and now resolves; "Hopeful S." and
+            // "Mile Ch." are too short to clear the fuzzy floor and are recovered by the abbreviation
+            // path, while "NHK Mile C." / "Japan C." already cleared it on the fuzzy path. All are
+            // truncated-abbreviation reads that must map to the full canonical name.
+            assertEquals("Hopeful Stakes", canon("Hopeful S."))
+            assertEquals("Mile Championship", canon("Mile Ch."))
+            assertEquals("NHK Mile Cup", canon("NHK Mile C."))
+            assertEquals("Japan Cup", canon("Japan C."))
+        }
+
+        @Test
+        fun `the abbreviation path records its own acceptance path`() {
+            // "Hopeful S." specifically reaches the new path (fuzzy rejects it at 0.62), so it is the one
+            // that carries the ABBREVIATION marker rather than STRONG/MARGIN.
+            val r = res("Hopeful S.")
+            assertEquals("Hopeful Stakes", r.canonicalName)
+            assertEquals(FactorAcceptancePath.ABBREVIATION, r.path)
+            assertEquals("race", r.sourceFamily)
+        }
+
+        @Test
+        fun `the two live spellings of Hopeful Stakes converge on one canonical name`() {
+            // The exact residual PL-R1c targets: one run reads "Hopeful S." (recovered by the abbreviation
+            // path), the other "Hopeful Ss." (already recovered by the fuzzy path). Both must land on the
+            // same canonical name so the re-reads stop splitting the factor's identity.
+            assertEquals("Hopeful Stakes", canon("Hopeful S."))
+            assertEquals("Hopeful Stakes", canon("Hopeful Ss."))
+            assertEquals(canon("Hopeful S."), canon("Hopeful Ss."))
+        }
+
+        @Test
+        fun `both spellings produce the same factor fingerprint token`() {
+            // Same visible race, same stars and kind -> same canonical token, so the two re-reads hash
+            // identically and no longer split a lineage fingerprint.
+            val a = canonicalFactorToken(SparkRowKind.WHITE, canon("Hopeful S."), 3)
+            val b = canonicalFactorToken(SparkRowKind.WHITE, canon("Hopeful Ss."), 3)
+            assertNotNull(a)
+            assertEquals(a, b)
+        }
+
+        @Test
+        fun `a bare single-token abbreviation carries no identity and fails closed`() {
+            assertNull(canon("S."))
+            assertNull(canon("C."))
+            assertNull(canon("Stakes."))
+        }
+
+        @Test
+        fun `an ambiguous truncated race fails closed`() {
+            // These abbreviations each fit two races, so the uniqueness guard refuses them rather than
+            // guessing: "Kyoto K." -> Kimpai/Kinen, "Nakayama K." -> Kimpai/Kinen.
+            assertNull(canon("Kyoto K."))
+            assertNull(canon("Nakayama K."))
+        }
+
+        @Test
+        fun `garbage ending in a period does not snap onto a race`() {
+            assertNull(canon("Xqzzptdf W."))
+            assertNull(canon("Wglmr Qz."))
+        }
+
+        @Test
+        fun `the abbreviation path is race-domain only and never fires off the white kind`() {
+            // Stat, aptitude, and unique cards are pixel-classified and never carry a race name, so a race
+            // abbreviation presented under one of those kinds must not resolve.
+            assertNull(canon("Hopeful S.", SparkRowKind.STAT))
+            assertNull(canon("Hopeful S.", SparkRowKind.APTITUDE))
+            assertNull(canon("Hopeful S.", SparkRowKind.UNIQUE))
+        }
+
+        @Test
+        fun `a read without the abbreviation period is not treated as an abbreviation`() {
+            // The trailing period is the truncation signal. Without it, a too-short read fails closed on
+            // the ordinary fuzzy path rather than being snapped by prefix.
+            assertNull(canon("Hopeful S"))
+        }
+
+        @Test
+        fun `an existing strong race read is unchanged by the abbreviation path`() {
+            // A full clean race name still resolves exactly as before (the abbreviation path only runs
+            // after a fuzzy reject, so it can never override a strong read).
+            val r = res("Yasuda Kinen")
+            assertEquals("Yasuda Kinen", r.canonicalName)
+            assertEquals(FactorAcceptancePath.STRONG, r.path)
         }
     }
 
@@ -157,6 +255,69 @@ class VeteranFactorDomainTest {
         fun `the domain fails closed for a kind whose asset family was empty is impossible - every kind has candidates`() {
             assertTrue(d.candidateCount(SparkRowKind.STAT) > 0)
             assertTrue(d.candidateCount(SparkRowKind.WHITE) >= 3)
+        }
+    }
+
+    @Nested
+    @DisplayName("synthetic domain: abbreviation algorithm in isolation")
+    inner class AbbreviationSynthetic {
+        // Race final words are long enough that the abbreviated reads below fall well under the fuzzy
+        // floor, so every accept here comes from the abbreviation path, not a coincidental fuzzy hit -
+        // and the cases stay deterministic no matter how the shipped races.json evolves.
+        private val json =
+            """
+            {
+              "schemaVersion": 1,
+              "source": "test",
+              "counts": {},
+              "families": {
+                "stat": ["Speed"],
+                "aptitude": ["Mile"],
+                "unique": ["Alpha One"],
+                "skill": ["Zulu Skillcraft"],
+                "race": ["Alpha Championship", "Alpha Charity", "Bravo Invitational"],
+                "scenario": ["Trackblazer"]
+              }
+            }
+            """.trimIndent()
+        private val d = VeteranFactorDomain.parse(json) ?: error("synthetic domain should parse")
+        private fun canon(raw: String, kind: SparkRowKind = SparkRowKind.WHITE) = d.resolve(raw, kind).canonicalName
+
+        @Test
+        fun `a unique exact-prefix truncation resolves through the abbreviation path`() {
+            val r = d.resolve("Bravo I.", SparkRowKind.WHITE)
+            assertEquals("Bravo Invitational", r.canonicalName)
+            assertEquals(FactorAcceptancePath.ABBREVIATION, r.path)
+        }
+
+        @Test
+        fun `a single misread in the final abbreviation still resolves when unique`() {
+            // "Bravo Ix." mis-reads the "n" of "Invitational" as an "x"; the one-edit tolerance on the
+            // final token (against the same-length prefix "In") keeps it compatible with the one race.
+            assertEquals("Bravo Invitational", canon("Bravo Ix."))
+        }
+
+        @Test
+        fun `a prefix shared by two races fails closed until it separates them`() {
+            // "Alpha C." fits both Alpha Championship and Alpha Charity, so the uniqueness guard refuses
+            // it; extending the prefix to "Champ" leaves only Championship, so it resolves.
+            assertNull(canon("Alpha C."))
+            assertEquals("Alpha Championship", canon("Alpha Champ."))
+        }
+
+        @Test
+        fun `a complete token that does not match its canonical counterpart is rejected`() {
+            // "Zzz I." shares no leading token with Bravo Invitational, so the abbreviation is not that
+            // race even though the final letter would prefix "Invitational".
+            assertNull(canon("Zzz I."))
+        }
+
+        @Test
+        fun `a truncated skill or scenario is never rescued as a race`() {
+            // The abbreviation path scores only against the race family, so a WHITE read that is really a
+            // truncated skill/scenario is not snapped onto a race with a matching shape.
+            assertNull(canon("Zulu S."))
+            assertNull(canon("Track B."))
         }
     }
 

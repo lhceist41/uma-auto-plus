@@ -62,7 +62,7 @@ export interface InspirationFactorRecord {
     readonly stars: number
     /** Resolved canonical name, or null when the raw OCR did not snap onto the domain. */
     readonly canonicalName: string | null
-    /** How the canonical name was accepted: "strong" | "margin" | "reject" (null on pre-schema-2 records). */
+    /** How the canonical name was accepted: "strong" | "margin" | "abbreviation" | "reject" (null on pre-schema-2 records). */
     readonly canonicalPath: string | null
     /** Semantic token `kind:CANON:stars`, or null when the factor did not resolve. */
     readonly factorFingerprint: string | null
