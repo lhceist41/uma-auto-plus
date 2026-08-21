@@ -70,6 +70,18 @@ object OutcomeCorpus {
     const val ROSTER_SCAN_PATH = "$OUTCOMES_DIR/roster_scan.jsonl"
 
     /**
+     * Relative path of the read-only Veteran Inspiration stream: one `type:"veteran_inspiration"`
+     * record per Veteran whose Inspiration panel was read, plus one `type:"veteran_inspiration_scan"`
+     * header per batch. Joined to the roster snapshot by `rosterFingerprint`, never by career token.
+     *
+     * Deliberately not [LINEAGE_PATH]. That file records what a career LAUNCH selected as its parents;
+     * this one records what a REGISTERED Veteran carries. They describe different moments of the same
+     * inheritance system and must stay separately readable, so this never overwrites or appends into
+     * the historical lineage stream.
+     */
+    const val VETERAN_INSPIRATION_PATH = "$OUTCOMES_DIR/veteran_inspiration.jsonl"
+
+    /**
      * Appends one [record] as a JSON line to [path]. Writing must never disturb the calling
      * path: any failure is swallowed after a MessageLog warning. MessageLog is safe here -
      * the career path that logs the ledger line via MessageLog immediately after, and the

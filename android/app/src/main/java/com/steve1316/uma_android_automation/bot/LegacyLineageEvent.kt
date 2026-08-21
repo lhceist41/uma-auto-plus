@@ -85,10 +85,24 @@ data class LegacyLineageEvent(
     val ancestors: List<LineageAncestor>,
 )
 
-/** Normalize an OCR factor name for the fingerprint only: trim, collapse whitespace, upper-case. The
- * raw display text is preserved separately. Matches the PL-3 identity normalization so the two sides
- * agree. */
-internal fun normalizeLineageFactorName(raw: String): String = raw.trim().replace(Regex("\\s+"), " ").uppercase()
+/**
+ * A trailing skill-grade marker as OCR renders it. Many skill names end in a small circle, double
+ * circle, or star glyph, and no OCR engine reads those reliably: the SAME card read twice comes back
+ * as "Medium Straightaways O" and then "Medium Straightaways", and "Victoria por plancha *" then
+ * "Victoria por plancha". Five of nineteen Veterans re-read in the PL-R1c validation differed only by
+ * one of these.
+ *
+ * A fingerprint that flips between two values for unchanged evidence is worse than one that cannot
+ * tell a circle skill from its double-circle variant, so the marker is stripped from the normalized
+ * name. The raw display text keeps whatever was read, and the star count is unaffected.
+ */
+private val TRAILING_GRADE_MARKER = Regex("""\s+[O0*@()\u00A9\u00B0\u25CB\u25CE\u2605\u2606]+$""")
+
+/** Normalize an OCR factor name for the fingerprint only: trim, collapse whitespace, upper-case, and
+ * drop a trailing grade marker OCR cannot read consistently. The raw display text is preserved
+ * separately. Matches the PL-3 identity normalization so the two sides agree. */
+internal fun normalizeLineageFactorName(raw: String): String =
+    raw.trim().replace(Regex("\\s+"), " ").uppercase().replace(TRAILING_GRADE_MARKER, "")
 
 /** Deterministic fingerprint of an ancestor's factor set: each factor as `kind:NORMNAME:stars`,
  * sorted, joined by `|`. Order-independent and stable, so PL-4 can later match it against a
