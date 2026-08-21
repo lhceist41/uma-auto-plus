@@ -4,6 +4,8 @@
 
 export * from "./types.ts"
 export * from "./lineage.ts"
+export * from "./roster.ts"
+export * from "./reconcile.ts"
 export { buildVeteranLibrary } from "./buildVeteranLibrary.ts"
 export {
     canonicalCareerEvidence,
