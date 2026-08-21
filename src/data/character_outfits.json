@@ -1,0 +1,912 @@
+{
+    "Admire Vega": {
+        "name": "Admire Vega",
+        "outfits": [
+            {
+                "title": "Starry Nocturne",
+                "cardId": 103301,
+                "releasedEn": "2026-03-05"
+            }
+        ]
+    },
+    "Agnes Digital": {
+        "name": "Agnes Digital",
+        "outfits": [
+            {
+                "title": "Full-Color Fangirling",
+                "cardId": 101901,
+                "releasedEn": "2025-11-19"
+            },
+            {
+                "title": "Fanatic♡Jiangshi",
+                "cardId": 101902,
+                "releasedEn": "2026-08-18"
+            }
+        ]
+    },
+    "Agnes Tachyon": {
+        "name": "Agnes Tachyon",
+        "outfits": [
+            {
+                "title": "tach-nology",
+                "cardId": 103201,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Lunatic Lab",
+                "cardId": 103202,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Air Groove": {
+        "name": "Air Groove",
+        "outfits": [
+            {
+                "title": "Empress Road",
+                "cardId": 101801,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Quercus Civilis",
+                "cardId": 101802,
+                "releasedEn": "2025-08-28"
+            }
+        ]
+    },
+    "Air Shakur": {
+        "name": "Air Shakur",
+        "outfits": [
+            {
+                "title": "unsigned",
+                "cardId": 103601,
+                "releasedEn": "2026-06-18"
+            }
+        ]
+    },
+    "Bamboo Memory": {
+        "name": "Bamboo Memory",
+        "outfits": [
+            {
+                "title": "Iron Ambition",
+                "cardId": 105301,
+                "releasedEn": "2026-07-07"
+            },
+            {
+                "title": "Ultra☆Marine",
+                "cardId": 105302,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Biwa Hayahide": {
+        "name": "Biwa Hayahide",
+        "outfits": [
+            {
+                "title": "pf. Winning Equation...",
+                "cardId": 102301,
+                "releasedEn": "2025-07-10"
+            },
+            {
+                "title": "Rouge Caroler",
+                "cardId": 102302,
+                "releasedEn": "2026-01-05"
+            }
+        ]
+    },
+    "Copano Rickey": {
+        "name": "Copano Rickey",
+        "outfits": [
+            {
+                "title": "Eightfold☆Fortune",
+                "cardId": 109801,
+                "releasedEn": "2026-07-16"
+            }
+        ]
+    },
+    "Curren Chan": {
+        "name": "Curren Chan",
+        "outfits": [
+            {
+                "title": "Fille Éclair",
+                "cardId": 103801,
+                "releasedEn": "2025-07-27"
+            },
+            {
+                "title": "Ma Chérie of the New Moon",
+                "cardId": 103802,
+                "releasedEn": "2026-05-18"
+            }
+        ]
+    },
+    "Daiwa Scarlet": {
+        "name": "Daiwa Scarlet",
+        "outfits": [
+            {
+                "title": "Peak Blue",
+                "cardId": 100901,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Nuit Étoilée de Scarlet",
+                "cardId": 100902,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Eishin Flash": {
+        "name": "Eishin Flash",
+        "outfits": [
+            {
+                "title": "Meisterschaft",
+                "cardId": 103701,
+                "releasedEn": "2025-10-30"
+            },
+            {
+                "title": "Precise Chocolatier",
+                "cardId": 103702,
+                "releasedEn": "2026-02-18"
+            }
+        ]
+    },
+    "El Condor Pasa": {
+        "name": "El Condor Pasa",
+        "outfits": [
+            {
+                "title": "El☆Número 1",
+                "cardId": 101401,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Kukulkan Warrior",
+                "cardId": 101402,
+                "releasedEn": "2025-09-21"
+            }
+        ]
+    },
+    "Fine Motion": {
+        "name": "Fine Motion",
+        "outfits": [
+            {
+                "title": "Noble Seamair",
+                "cardId": 102201,
+                "releasedEn": "2026-01-15"
+            },
+            {
+                "title": "Titania",
+                "cardId": 102202,
+                "releasedEn": "2026-05-18"
+            }
+        ]
+    },
+    "Fuji Kiseki": {
+        "name": "Fuji Kiseki",
+        "outfits": [
+            {
+                "title": "Shooting Star Revue",
+                "cardId": 100501,
+                "releasedEn": "2025-10-02"
+            },
+            {
+                "title": "Succès Étoilé",
+                "cardId": 100502,
+                "releasedEn": "2026-04-05"
+            }
+        ]
+    },
+    "Gold City": {
+        "name": "Gold City",
+        "outfits": [
+            {
+                "title": "Authentic / 1928",
+                "cardId": 104001,
+                "releasedEn": "2025-10-07"
+            },
+            {
+                "title": "Autumn Cosmos",
+                "cardId": 104002,
+                "releasedEn": "2025-12-14"
+            }
+        ]
+    },
+    "Gold Ship": {
+        "name": "Gold Ship",
+        "outfits": [
+            {
+                "title": "Red Strife",
+                "cardId": 100701,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "RUN! RUIN! LAUNCHER!",
+                "cardId": 100702,
+                "releasedEn": "2026-07-02"
+            }
+        ]
+    },
+    "Grass Wonder": {
+        "name": "Grass Wonder",
+        "outfits": [
+            {
+                "title": "Stone-Piercing Blue",
+                "cardId": 101101,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Saintly Jade Cleric",
+                "cardId": 101102,
+                "releasedEn": "2025-09-21"
+            }
+        ]
+    },
+    "Haru Urara": {
+        "name": "Haru Urara",
+        "outfits": [
+            {
+                "title": "Bestest Prize ♪",
+                "cardId": 105201,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "New Year ♪ New Urara!",
+                "cardId": 105202,
+                "releasedEn": "2026-01-29"
+            }
+        ]
+    },
+    "Hishi Akebono": {
+        "name": "Hishi Akebono",
+        "outfits": [
+            {
+                "title": "Buono ☆ Alla Moda",
+                "cardId": 102801,
+                "releasedEn": "2025-11-11"
+            }
+        ]
+    },
+    "Hishi Amazon": {
+        "name": "Hishi Amazon",
+        "outfits": [
+            {
+                "title": "Azure Amazon",
+                "cardId": 101201,
+                "releasedEn": "2025-09-17"
+            },
+            {
+                "title": "Hungry Veil",
+                "cardId": 101202,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Inari One": {
+        "name": "Inari One",
+        "outfits": [
+            {
+                "title": "Edomurasaki",
+                "cardId": 103401,
+                "releasedEn": "2026-05-28"
+            },
+            {
+                "title": "Golden Dream",
+                "cardId": 103402,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Ines Fujin": {
+        "name": "Ines Fujin",
+        "outfits": [
+            {
+                "title": "Always Electrifying",
+                "cardId": 103101,
+                "releasedEn": "2026-04-30"
+            },
+            {
+                "title": "Melt Your Heart",
+                "cardId": 103102,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Kawakami Princess": {
+        "name": "Kawakami Princess",
+        "outfits": [
+            {
+                "title": "Princess of Pink",
+                "cardId": 103901,
+                "releasedEn": "2025-12-01"
+            }
+        ]
+    },
+    "King Halo": {
+        "name": "King Halo",
+        "outfits": [
+            {
+                "title": "King of Emeralds",
+                "cardId": 106101,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Cheerleader in Noble White",
+                "cardId": 106102,
+                "releasedEn": "2026-04-26"
+            }
+        ]
+    },
+    "Kitasan Black": {
+        "name": "Kitasan Black",
+        "outfits": [
+            {
+                "title": "Gilded Shrine to Glory",
+                "cardId": 106801,
+                "releasedEn": "2026-03-12"
+            },
+            {
+                "title": "Crane's Ambition",
+                "cardId": 106802,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Manhattan Cafe": {
+        "name": "Manhattan Cafe",
+        "outfits": [
+            {
+                "title": "Creeping Shadow",
+                "cardId": 102501,
+                "releasedEn": "2025-12-08"
+            }
+        ]
+    },
+    "Maruzensky": {
+        "name": "Maruzensky",
+        "outfits": [
+            {
+                "title": "Formula R",
+                "cardId": 100401,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Hot☆Summer Night",
+                "cardId": 100402,
+                "releasedEn": "2025-10-14"
+            }
+        ]
+    },
+    "Matikanefukukitaru": {
+        "name": "Matikanefukukitaru",
+        "outfits": [
+            {
+                "title": "Rising☆Fortune",
+                "cardId": 105601,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Lucky Tidings",
+                "cardId": 105602,
+                "releasedEn": "2025-11-06"
+            }
+        ]
+    },
+    "Matikanetannhauser": {
+        "name": "Matikanetannhauser",
+        "outfits": [
+            {
+                "title": "Clippety-Tippety-Clop",
+                "cardId": 106201,
+                "releasedEn": "2026-03-12"
+            },
+            {
+                "title": "Blue Turbulence",
+                "cardId": 106202,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Mayano Top Gun": {
+        "name": "Mayano Top Gun",
+        "outfits": [
+            {
+                "title": "Scramble☆Zone",
+                "cardId": 102401,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Sunlight Bouquet",
+                "cardId": 102402,
+                "releasedEn": "2025-08-28"
+            }
+        ]
+    },
+    "Meisho Doto": {
+        "name": "Meisho Doto",
+        "outfits": [
+            {
+                "title": "Turbulent Blue",
+                "cardId": 105801,
+                "releasedEn": "2025-10-21"
+            },
+            {
+                "title": "Dot-o'-Lantern",
+                "cardId": 105802,
+                "releasedEn": "2026-08-18"
+            }
+        ]
+    },
+    "Mejiro Ardan": {
+        "name": "Mejiro Ardan",
+        "outfits": [
+            {
+                "title": "Crystalline",
+                "cardId": 107101,
+                "releasedEn": "2026-02-25"
+            },
+            {
+                "title": "Neige Émeraude",
+                "cardId": 107102,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Mejiro Bright": {
+        "name": "Mejiro Bright",
+        "outfits": [
+            {
+                "title": "Brunissage Line",
+                "cardId": 107401,
+                "releasedEn": "2026-03-26"
+            }
+        ]
+    },
+    "Mejiro Dober": {
+        "name": "Mejiro Dober",
+        "outfits": [
+            {
+                "title": "Off the Line",
+                "cardId": 105901,
+                "releasedEn": "2025-12-28"
+            },
+            {
+                "title": "Sapphire Sojourn",
+                "cardId": 105902,
+                "releasedEn": "2026-06-11"
+            }
+        ]
+    },
+    "Mejiro McQueen": {
+        "name": "Mejiro McQueen",
+        "outfits": [
+            {
+                "title": "Frontline Elegance",
+                "cardId": 101301,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "End of the Skies",
+                "cardId": 101302,
+                "releasedEn": "2025-07-16"
+            },
+            {
+                "title": "Fair Lady of the Waves",
+                "cardId": 101303,
+                "releasedEn": "2026-07-02"
+            }
+        ]
+    },
+    "Mejiro Palmer": {
+        "name": "Mejiro Palmer",
+        "outfits": [
+            {
+                "title": "Line Breakthrough",
+                "cardId": 106401,
+                "releasedEn": "2026-05-10"
+            }
+        ]
+    },
+    "Mejiro Ryan": {
+        "name": "Mejiro Ryan",
+        "outfits": [
+            {
+                "title": "Down the Line",
+                "cardId": 102701,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Marguerite Latte",
+                "cardId": 102702,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Mihono Bourbon": {
+        "name": "Mihono Bourbon",
+        "outfits": [
+            {
+                "title": "MB-19890425",
+                "cardId": 102601,
+                "releasedEn": "2025-07-02"
+            },
+            {
+                "title": "CODE: ICING",
+                "cardId": 102602,
+                "releasedEn": "2026-02-18"
+            }
+        ]
+    },
+    "Narita Brian": {
+        "name": "Narita Brian",
+        "outfits": [
+            {
+                "title": "Maverick",
+                "cardId": 101601,
+                "releasedEn": "2025-08-20"
+            },
+            {
+                "title": "Ravenous Wolf",
+                "cardId": 101602,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Narita Taishin": {
+        "name": "Narita Taishin",
+        "outfits": [
+            {
+                "title": "Nevertheless",
+                "cardId": 105001,
+                "releasedEn": "2025-08-03"
+            },
+            {
+                "title": "Difference Engineer",
+                "cardId": 105002,
+                "releasedEn": "2026-07-27"
+            }
+        ]
+    },
+    "Nice Nature": {
+        "name": "Nice Nature",
+        "outfits": [
+            {
+                "title": "Poinsettia Ribbon",
+                "cardId": 106001,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Run & Win",
+                "cardId": 106002,
+                "releasedEn": "2026-04-26"
+            }
+        ]
+    },
+    "Nishino Flower": {
+        "name": "Nishino Flower",
+        "outfits": [
+            {
+                "title": "Layered Petals",
+                "cardId": 105101,
+                "releasedEn": "2026-04-12"
+            },
+            {
+                "title": "Sweet Juneberry",
+                "cardId": 105102,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Oguri Cap": {
+        "name": "Oguri Cap",
+        "outfits": [
+            {
+                "title": "Starlight Beat",
+                "cardId": 100601,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Ashen Miracle",
+                "cardId": 100602,
+                "releasedEn": "2026-01-05"
+            }
+        ]
+    },
+    "Rice Shower": {
+        "name": "Rice Shower",
+        "outfits": [
+            {
+                "title": "Rosy Dreams",
+                "cardId": 103001,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Vampire Makeover!",
+                "cardId": 103002,
+                "releasedEn": "2025-11-24"
+            }
+        ]
+    },
+    "Sakura Bakushin O": {
+        "name": "Sakura Bakushin O",
+        "outfits": [
+            {
+                "title": "Blossom in Learning",
+                "cardId": 104101,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Red Hot☆Leader",
+                "cardId": 104102,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Sakura Chiyono O": {
+        "name": "Sakura Chiyono O",
+        "outfits": [
+            {
+                "title": "Strength in Full Bloom",
+                "cardId": 106901,
+                "releasedEn": "2026-02-11"
+            },
+            {
+                "title": "Fleur Enneigée",
+                "cardId": 106902,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Satono Diamond": {
+        "name": "Satono Diamond",
+        "outfits": [
+            {
+                "title": "Natural Brilliance",
+                "cardId": 106701,
+                "releasedEn": "2026-03-22"
+            },
+            {
+                "title": "Jade's Prosperity",
+                "cardId": 106702,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Seeking the Pearl": {
+        "name": "Seeking the Pearl",
+        "outfits": [
+            {
+                "title": "Rocket☆Star",
+                "cardId": 104201,
+                "releasedEn": "2026-08-12"
+            }
+        ]
+    },
+    "Seiun Sky": {
+        "name": "Seiun Sky",
+        "outfits": [
+            {
+                "title": "Reeling in the Big One",
+                "cardId": 102001,
+                "releasedEn": "2025-09-07"
+            },
+            {
+                "title": "Soirée des Chatons",
+                "cardId": 102002,
+                "releasedEn": "2026-04-05"
+            }
+        ]
+    },
+    "Silence Suzuka": {
+        "name": "Silence Suzuka",
+        "outfits": [
+            {
+                "title": "Innocent Silence",
+                "cardId": 100201,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Emerald Tidings",
+                "cardId": 100202,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Smart Falcon": {
+        "name": "Smart Falcon",
+        "outfits": [
+            {
+                "title": "LOVE☆4EVER",
+                "cardId": 104601,
+                "releasedEn": "2025-08-11"
+            },
+            {
+                "title": "Twilight Triumph",
+                "cardId": 104602,
+                "releasedEn": "2026-07-22"
+            }
+        ]
+    },
+    "Special Week": {
+        "name": "Special Week",
+        "outfits": [
+            {
+                "title": "Special Dreamer",
+                "cardId": 100101,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Hopp'n♪Happy Heart",
+                "cardId": 100102,
+                "releasedEn": "2025-10-14"
+            },
+            {
+                "title": "Ruler of Japan",
+                "cardId": 100103,
+                "releasedEn": "2026-06-25"
+            }
+        ]
+    },
+    "Super Creek": {
+        "name": "Super Creek",
+        "outfits": [
+            {
+                "title": "Murmuring Stream",
+                "cardId": 104501,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Chiffon-Wrapped Mummy",
+                "cardId": 104502,
+                "releasedEn": "2025-11-24"
+            }
+        ]
+    },
+    "Sweep Tosho": {
+        "name": "Sweep Tosho",
+        "outfits": [
+            {
+                "title": "Platanus Witch",
+                "cardId": 104401,
+                "releasedEn": "2026-06-04"
+            }
+        ]
+    },
+    "Symboli Rudolf": {
+        "name": "Symboli Rudolf",
+        "outfits": [
+            {
+                "title": "Emperor's Path",
+                "cardId": 101701,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Archer by Moonlight",
+                "cardId": 101702,
+                "releasedEn": "2025-12-14"
+            }
+        ]
+    },
+    "TM Opera O": {
+        "name": "TM Opera O",
+        "outfits": [
+            {
+                "title": "O Sole Suo!",
+                "cardId": 101501,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "New Year, Same Radiance!",
+                "cardId": 101502,
+                "releasedEn": "2026-01-29"
+            }
+        ]
+    },
+    "Taiki Shuttle": {
+        "name": "Taiki Shuttle",
+        "outfits": [
+            {
+                "title": "Wild Frontier",
+                "cardId": 101001,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Bubblegum☆Memories",
+                "cardId": 101002,
+                "releasedEn": "2026-06-11"
+            }
+        ]
+    },
+    "Tamamo Cross": {
+        "name": "Tamamo Cross",
+        "outfits": [
+            {
+                "title": "Fast as Lightning",
+                "cardId": 102101,
+                "releasedEn": "2026-01-22"
+            },
+            {
+                "title": "Raging Thunder",
+                "cardId": 102102,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Tokai Teio": {
+        "name": "Tokai Teio",
+        "outfits": [
+            {
+                "title": "Peak Joy",
+                "cardId": 100301,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Beyond the Horizon",
+                "cardId": 100302,
+                "releasedEn": "2025-07-16"
+            }
+        ]
+    },
+    "Tosen Jordan": {
+        "name": "Tosen Jordan",
+        "outfits": [
+            {
+                "title": "Jokester ☆ Vibes",
+                "cardId": 104801,
+                "releasedEn": "2025-12-18"
+            },
+            {
+                "title": "Aurore☆Vacances",
+                "cardId": 104802,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Vodka": {
+        "name": "Vodka",
+        "outfits": [
+            {
+                "title": "Wild Top Gear",
+                "cardId": 100801,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Fiery Aqua Vitae",
+                "cardId": 100802,
+                "releasedEn": null
+            }
+        ]
+    },
+    "Winning Ticket": {
+        "name": "Winning Ticket",
+        "outfits": [
+            {
+                "title": "Get to Winning!",
+                "cardId": 103501,
+                "releasedEn": "2025-06-26"
+            },
+            {
+                "title": "Dream Deliverer",
+                "cardId": 103502,
+                "releasedEn": "2026-07-27"
+            }
+        ]
+    },
+    "Yaeno Muteki": {
+        "name": "Yaeno Muteki",
+        "outfits": [
+            {
+                "title": "Blazed Head, Covered Fists",
+                "cardId": 107201,
+                "releasedEn": "2026-04-20"
+            }
+        ]
+    },
+    "Yukino Bijin": {
+        "name": "Yukino Bijin",
+        "outfits": [
+            {
+                "title": "Darl'n Snowflake",
+                "cardId": 102901,
+                "releasedEn": "2026-08-05"
+            }
+        ]
+    }
+}

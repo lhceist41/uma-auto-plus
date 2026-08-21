@@ -2124,6 +2124,76 @@ class CharacterPresetScraper(BaseScraper):
         self.save_data()
 
 
+class CharacterOutfitScraper(BaseScraper):
+    """Scrapes every EN outfit (costume) title per playable character from GameTora's JSON datasets.
+
+    The Veteran Roster reader has to snap a noisy OCR read of the `Umamusume Details` header onto the
+    exact outfit title the game printed. A base-card-only list cannot do that: a Veteran trained on an
+    alternate costume reads as unresolved, which fail-closed blocks its identity fingerprint. This
+    builds the full domain instead - every card of every EN-playable character, keyed by character so
+    the matcher can score a read against that character's own costumes and nothing else.
+
+    `character-cards` carries `title_en_gl`, the bracketed English global title exactly as the game
+    prints it (`[Wild Frontier]`, `[CODE: ICING]`); the brackets are stripped here because the OCR
+    region often loses them. `title` is a different, non-shipping rendering ("Road of Emperor" where
+    the game says "[Emperor's Path]") and is deliberately not used. Cards whose EN title is known but
+    whose EN release date is not yet set are kept with `releasedEn: null` - the account can only own
+    what shipped, but excluding a card GameTora has simply not dated yet would silently drop a real
+    costume, and a candidate that cannot be owned costs nothing (measured worst-case similarity
+    between two costumes of the SAME character is 0.44, far under the matcher's threshold).
+
+    Full rebuild rather than a delta, so a costume that leaves the EN roster does not linger.
+    Deterministic: characters sorted by name (BaseScraper.save_data), outfits by ascending card id,
+    which puts the base card first.
+
+    Output schema -> `src/data/character_outfits.json`:
+
+        {
+            "<character name>": {
+                "name": "<character name>",
+                "outfits": [
+                    { "title": "Wild Frontier", "cardId": 101001, "releasedEn": "2025-06-26" },
+                    { "title": "Bubblegum☆Memories", "cardId": 101002, "releasedEn": "2026-06-11" }
+                ]
+            }
+        }
+    """
+
+    def __init__(self):
+        super().__init__("https://gametora.com/umamusume/characters", "character_outfits.json")
+
+    def start(self):
+        """Builds the per-character outfit domain from GameTora's `characters` + `character-cards` JSON."""
+        self.data = {}
+        characters = fetch_gametora_manifest_data("characters")
+        cards = fetch_gametora_manifest_data("character-cards")
+
+        names_by_id = {c["char_id"]: c["en_name"] for c in characters if c.get("playable_en") and c.get("en_name")}
+
+        for card in sorted(cards, key=lambda c: c["card_id"]):
+            name = names_by_id.get(card["char_id"])
+            title = card.get("title_en_gl")
+            if not name or not title:
+                continue
+            # The game prints the title in brackets; the OCR crop frequently loses them, and the
+            # repo's own preset naming convention ("Character (Outfit)") carries the unbracketed form.
+            stripped = title.strip().strip("[]").strip()
+            if not stripped:
+                continue
+            entry = self.data.setdefault(name, {"name": name, "outfits": []})
+            if any(o["title"] == stripped for o in entry["outfits"]):
+                continue
+            entry["outfits"].append({"title": stripped, "cardId": card["card_id"], "releasedEn": card.get("release_en") or None})
+
+        missing = [n for n in names_by_id.values() if n not in self.data]
+        if missing:
+            logging.warning(f"No EN outfit title for {len(missing)} playable characters: {', '.join(sorted(missing))}")
+
+        total = sum(len(v["outfits"]) for v in self.data.values())
+        logging.info(f"Built {total} EN outfit titles across {len(self.data)} playable characters from GameTora JSON.")
+        self.save_data()
+
+
 class CharacterObjectivesScraper(BaseScraper):
     """Scrapes each character's mandatory career-objective races (URA scenario) from GameTora.
 
@@ -2291,6 +2361,10 @@ if __name__ == "__main__":
     # Objectives stay on: the racing-plan generator reads character_objectives.json for goal
     # turns (the file is not imported by the app, so it never enters the JS bundle).
     run_scraper_with_retry(CharacterObjectivesScraper())
+
+    # Outfit titles feed the Veteran Roster identity matcher through
+    # scripts/generate-veteran-identity-data.mjs; the file is not imported by the app.
+    run_scraper_with_retry(CharacterOutfitScraper())
 
     end_time = round(time.time() - start_time, 2)
     logging.info(f"Total time for processing all applications: {end_time} seconds or {round(end_time / 60, 2)} minutes.")

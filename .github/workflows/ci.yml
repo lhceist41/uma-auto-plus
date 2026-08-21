@@ -39,6 +39,13 @@ jobs:
           node --test scripts/generate-gc-fan-runtime-data.test.mjs
           node scripts/generate-gc-fan-runtime-data.mjs --check
 
+      # Same contract for the Veteran identity asset: the character/outfit domain the roster reader
+      # matches against must never drift from src/data/characters.json + character_outfits.json.
+      - name: Veteran identity asset freshness
+        run: |
+          node --test scripts/generate-veteran-identity-data.test.mjs
+          node scripts/generate-veteran-identity-data.mjs --check
+
   android:
     name: Kotlin unit tests
     runs-on: ubuntu-latest

@@ -1,0 +1,382 @@
+{
+  "schemaVersion": 1,
+  "outfitSource": "gametora character-cards title_en_gl",
+  "characterCount": 64,
+  "outfitCount": 118,
+  "characters": {
+    "Admire Vega": {
+      "outfits": [
+        "Starry Nocturne"
+      ]
+    },
+    "Agnes Digital": {
+      "outfits": [
+        "Full-Color Fangirling",
+        "Fanatic♡Jiangshi"
+      ]
+    },
+    "Agnes Tachyon": {
+      "outfits": [
+        "tach-nology",
+        "Lunatic Lab"
+      ]
+    },
+    "Air Groove": {
+      "outfits": [
+        "Empress Road",
+        "Quercus Civilis"
+      ]
+    },
+    "Air Shakur": {
+      "outfits": [
+        "unsigned"
+      ]
+    },
+    "Bamboo Memory": {
+      "outfits": [
+        "Iron Ambition",
+        "Ultra☆Marine"
+      ]
+    },
+    "Biwa Hayahide": {
+      "outfits": [
+        "pf. Winning Equation...",
+        "Rouge Caroler"
+      ]
+    },
+    "Copano Rickey": {
+      "outfits": [
+        "Eightfold☆Fortune"
+      ]
+    },
+    "Curren Chan": {
+      "outfits": [
+        "Fille Éclair",
+        "Ma Chérie of the New Moon"
+      ]
+    },
+    "Daiwa Scarlet": {
+      "outfits": [
+        "Peak Blue",
+        "Nuit Étoilée de Scarlet"
+      ]
+    },
+    "Eishin Flash": {
+      "outfits": [
+        "Meisterschaft",
+        "Precise Chocolatier"
+      ]
+    },
+    "El Condor Pasa": {
+      "outfits": [
+        "El☆Número 1",
+        "Kukulkan Warrior"
+      ]
+    },
+    "Fine Motion": {
+      "outfits": [
+        "Noble Seamair",
+        "Titania"
+      ]
+    },
+    "Fuji Kiseki": {
+      "outfits": [
+        "Shooting Star Revue",
+        "Succès Étoilé"
+      ]
+    },
+    "Gold City": {
+      "outfits": [
+        "Authentic / 1928",
+        "Autumn Cosmos"
+      ]
+    },
+    "Gold Ship": {
+      "outfits": [
+        "Red Strife",
+        "RUN! RUIN! LAUNCHER!"
+      ]
+    },
+    "Grass Wonder": {
+      "outfits": [
+        "Stone-Piercing Blue",
+        "Saintly Jade Cleric"
+      ]
+    },
+    "Haru Urara": {
+      "outfits": [
+        "Bestest Prize ♪",
+        "New Year ♪ New Urara!"
+      ]
+    },
+    "Hishi Akebono": {
+      "outfits": [
+        "Buono ☆ Alla Moda"
+      ]
+    },
+    "Hishi Amazon": {
+      "outfits": [
+        "Azure Amazon",
+        "Hungry Veil"
+      ]
+    },
+    "Inari One": {
+      "outfits": [
+        "Edomurasaki",
+        "Golden Dream"
+      ]
+    },
+    "Ines Fujin": {
+      "outfits": [
+        "Always Electrifying",
+        "Melt Your Heart"
+      ]
+    },
+    "Kawakami Princess": {
+      "outfits": [
+        "Princess of Pink"
+      ]
+    },
+    "King Halo": {
+      "outfits": [
+        "King of Emeralds",
+        "Cheerleader in Noble White"
+      ]
+    },
+    "Kitasan Black": {
+      "outfits": [
+        "Gilded Shrine to Glory",
+        "Crane's Ambition"
+      ]
+    },
+    "Manhattan Cafe": {
+      "outfits": [
+        "Creeping Shadow"
+      ]
+    },
+    "Maruzensky": {
+      "outfits": [
+        "Formula R",
+        "Hot☆Summer Night"
+      ]
+    },
+    "Matikanefukukitaru": {
+      "outfits": [
+        "Rising☆Fortune",
+        "Lucky Tidings"
+      ]
+    },
+    "Matikanetannhauser": {
+      "outfits": [
+        "Clippety-Tippety-Clop",
+        "Blue Turbulence"
+      ]
+    },
+    "Mayano Top Gun": {
+      "outfits": [
+        "Scramble☆Zone",
+        "Sunlight Bouquet"
+      ]
+    },
+    "Meisho Doto": {
+      "outfits": [
+        "Turbulent Blue",
+        "Dot-o'-Lantern"
+      ]
+    },
+    "Mejiro Ardan": {
+      "outfits": [
+        "Crystalline",
+        "Neige Émeraude"
+      ]
+    },
+    "Mejiro Bright": {
+      "outfits": [
+        "Brunissage Line"
+      ]
+    },
+    "Mejiro Dober": {
+      "outfits": [
+        "Off the Line",
+        "Sapphire Sojourn"
+      ]
+    },
+    "Mejiro McQueen": {
+      "outfits": [
+        "Frontline Elegance",
+        "End of the Skies",
+        "Fair Lady of the Waves"
+      ]
+    },
+    "Mejiro Palmer": {
+      "outfits": [
+        "Line Breakthrough"
+      ]
+    },
+    "Mejiro Ryan": {
+      "outfits": [
+        "Down the Line",
+        "Marguerite Latte"
+      ]
+    },
+    "Mihono Bourbon": {
+      "outfits": [
+        "MB-19890425",
+        "CODE: ICING"
+      ]
+    },
+    "Narita Brian": {
+      "outfits": [
+        "Maverick",
+        "Ravenous Wolf"
+      ]
+    },
+    "Narita Taishin": {
+      "outfits": [
+        "Nevertheless",
+        "Difference Engineer"
+      ]
+    },
+    "Nice Nature": {
+      "outfits": [
+        "Poinsettia Ribbon",
+        "Run & Win"
+      ]
+    },
+    "Nishino Flower": {
+      "outfits": [
+        "Layered Petals",
+        "Sweet Juneberry"
+      ]
+    },
+    "Oguri Cap": {
+      "outfits": [
+        "Starlight Beat",
+        "Ashen Miracle"
+      ]
+    },
+    "Rice Shower": {
+      "outfits": [
+        "Rosy Dreams",
+        "Vampire Makeover!"
+      ]
+    },
+    "Sakura Bakushin O": {
+      "outfits": [
+        "Blossom in Learning",
+        "Red Hot☆Leader"
+      ]
+    },
+    "Sakura Chiyono O": {
+      "outfits": [
+        "Strength in Full Bloom",
+        "Fleur Enneigée"
+      ]
+    },
+    "Satono Diamond": {
+      "outfits": [
+        "Natural Brilliance",
+        "Jade's Prosperity"
+      ]
+    },
+    "Seeking the Pearl": {
+      "outfits": [
+        "Rocket☆Star"
+      ]
+    },
+    "Seiun Sky": {
+      "outfits": [
+        "Reeling in the Big One",
+        "Soirée des Chatons"
+      ]
+    },
+    "Silence Suzuka": {
+      "outfits": [
+        "Innocent Silence",
+        "Emerald Tidings"
+      ]
+    },
+    "Smart Falcon": {
+      "outfits": [
+        "LOVE☆4EVER",
+        "Twilight Triumph"
+      ]
+    },
+    "Special Week": {
+      "outfits": [
+        "Special Dreamer",
+        "Hopp'n♪Happy Heart",
+        "Ruler of Japan"
+      ]
+    },
+    "Super Creek": {
+      "outfits": [
+        "Murmuring Stream",
+        "Chiffon-Wrapped Mummy"
+      ]
+    },
+    "Sweep Tosho": {
+      "outfits": [
+        "Platanus Witch"
+      ]
+    },
+    "Symboli Rudolf": {
+      "outfits": [
+        "Emperor's Path",
+        "Archer by Moonlight"
+      ]
+    },
+    "TM Opera O": {
+      "outfits": [
+        "O Sole Suo!",
+        "New Year, Same Radiance!"
+      ]
+    },
+    "Taiki Shuttle": {
+      "outfits": [
+        "Wild Frontier",
+        "Bubblegum☆Memories"
+      ]
+    },
+    "Tamamo Cross": {
+      "outfits": [
+        "Fast as Lightning",
+        "Raging Thunder"
+      ]
+    },
+    "Tokai Teio": {
+      "outfits": [
+        "Peak Joy",
+        "Beyond the Horizon"
+      ]
+    },
+    "Tosen Jordan": {
+      "outfits": [
+        "Jokester ☆ Vibes",
+        "Aurore☆Vacances"
+      ]
+    },
+    "Vodka": {
+      "outfits": [
+        "Wild Top Gear",
+        "Fiery Aqua Vitae"
+      ]
+    },
+    "Winning Ticket": {
+      "outfits": [
+        "Get to Winning!",
+        "Dream Deliverer"
+      ]
+    },
+    "Yaeno Muteki": {
+      "outfits": [
+        "Blazed Head, Covered Fists"
+      ]
+    },
+    "Yukino Bijin": {
+      "outfits": [
+        "Darl'n Snowflake"
+      ]
+    }
+  }
+}
