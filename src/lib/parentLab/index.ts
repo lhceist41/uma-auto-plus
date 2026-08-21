@@ -3,6 +3,7 @@
 // PL-3 is only the trustworthy account-owned Veteran data foundation later stages build on.
 
 export * from "./types.ts"
+export * from "./inspiration.ts"
 export * from "./lineage.ts"
 export * from "./roster.ts"
 export * from "./reconcile.ts"

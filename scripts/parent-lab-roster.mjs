@@ -12,8 +12,8 @@
 //
 // Usage:
 //   node scripts/parent-lab-roster.mjs --roster <roster_scan.jsonl> [--careers <careers.jsonl>]
-//                                      [--lineage <lineage.jsonl>] [--scan-id <id>] [--all-scans]
-//                                      [--json] [--out <path>] [--help]
+//                                      [--lineage <lineage.jsonl>] [--inspiration <veteran_inspiration.jsonl>]
+//                                      [--scan-id <id>] [--all-scans] [--json] [--out <path>] [--help]
 //
 // Exit codes: 0 trusted-complete snapshot | 1 snapshot present but incomplete | 2 input/parse failure
 //
@@ -25,6 +25,7 @@ import { parseCorpus } from "../src/lib/outcomeAnalysis.ts"
 import { buildVeteranLibrary } from "../src/lib/parentLab/buildVeteranLibrary.ts"
 import { parseLineageRecords } from "../src/lib/parentLab/lineage.ts"
 import { reconcileRoster } from "../src/lib/parentLab/reconcile.ts"
+import { buildInspirationIndex, joinInspirationToRoster, parseInspirationRecords } from "../src/lib/parentLab/inspiration.ts"
 import { buildRosterSnapshots, parseRosterScanRecords } from "../src/lib/parentLab/roster.ts"
 
 const HELP = `parent-lab-roster - current Veteran roster snapshot + historical reconciliation (read-only)
@@ -33,6 +34,7 @@ Options:
   --roster <path>     Path to roster_scan.jsonl (required).
   --careers <path>    Path to careers.jsonl, to rebuild the PL-3 Veteran library to reconcile against.
   --lineage <path>    Path to lineage.jsonl, joined into the library by launchTransactionId.
+  --inspiration <path> Path to veteran_inspiration.jsonl, joined to the roster by rosterFingerprint.
   --scan-id <id>      Reconcile this scan instead of the newest one.
   --all-scans         List every scan found, with its completeness verdict, then reconcile the chosen one.
   --json              Print the raw snapshot + reconciliation document as JSON.
@@ -42,7 +44,7 @@ Options:
 Exit: 0 trusted-complete | 1 incomplete snapshot | 2 input/parse failure.`
 
 function parseArgs(argv) {
-    const opts = { roster: null, careers: null, lineage: null, scanId: null, allScans: false, json: false, out: null, help: false }
+    const opts = { roster: null, careers: null, lineage: null, inspiration: null, scanId: null, allScans: false, json: false, out: null, help: false }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
         const next = () => {
@@ -59,6 +61,9 @@ function parseArgs(argv) {
                 break
             case "--lineage":
                 opts.lineage = next()
+                break
+            case "--inspiration":
+                opts.inspiration = next()
                 break
             case "--scan-id":
                 opts.scanId = next()
@@ -92,7 +97,7 @@ function pad(value, width) {
     return String(value).padStart(width)
 }
 
-function renderReport(snapshot, reconciliation, library, parsed, allScans) {
+function renderReport(snapshot, reconciliation, library, parsed, allScans, inspiration) {
     const lines = []
     lines.push("=== Veteran roster scans ===")
     if (allScans) {
@@ -137,6 +142,21 @@ function renderReport(snapshot, reconciliation, library, parsed, allScans) {
     if (library.veterans.length === 0) {
         lines.push("")
         lines.push("  No career corpus was supplied (--careers), so every roster entry is ROSTER_ONLY by construction.")
+    }
+
+    if (inspiration) {
+        lines.push("")
+        lines.push("=== Inherited factors (Inspiration captures) ===")
+        lines.push(`  identified entries    ${inspiration.identifiedRosterEntries}`)
+        lines.push(`  captured              ${inspiration.captured}  complete=${inspiration.capturedComplete}  incomplete=${inspiration.capturedIncomplete}`)
+        lines.push(`  not yet captured      ${inspiration.missing}`)
+        lines.push(`  captures from another roster state  ${inspiration.orphanCaptures}`)
+        lines.push(`  factors on complete captures        self=${inspiration.totalSelfFactors} ancestors=${inspiration.totalAncestorFactors}`)
+        const partial = inspiration.views.filter((v) => !v.sparkCaptureComplete)
+        for (const v of partial.slice(0, 20)) {
+            lines.push(`    INCOMPLETE ${v.character ?? "?"} [${v.outfit ?? "?"}] - ${v.unresolvedFields.join(", ")}`)
+        }
+        if (partial.length > 20) lines.push(`    ... and ${partial.length - 20} more`)
     }
 
     const evidence = renderUnresolvedEvidence(snapshot)
@@ -256,8 +276,12 @@ function main(argv) {
 
     let parsed
     let library
+    let inspirationIndex = null
     try {
         parsed = parseRosterScanRecords(readable("--roster", opts.roster), opts.roster)
+        if (opts.inspiration) {
+            inspirationIndex = buildInspirationIndex(parseInspirationRecords(readable("--inspiration", opts.inspiration), opts.inspiration))
+        }
         const corpus = opts.careers ? parseCorpus(readable("--careers", opts.careers), opts.careers) : { outcomes: [], sparks: [] }
         const lineageEvents = opts.lineage ? parseLineageRecords(readable("--lineage", opts.lineage), opts.lineage) : []
         library = buildVeteranLibrary({ outcomes: corpus.outcomes, sparks: corpus.sparks, lineageEvents })
@@ -278,10 +302,11 @@ function main(argv) {
     }
 
     const reconciliation = reconcileRoster(library, snapshot)
-    const document = { snapshot, reconciliation }
+    const inspiration = inspirationIndex ? joinInspirationToRoster(snapshot, inspirationIndex) : null
+    const document = inspiration ? { snapshot, reconciliation, inspiration } : { snapshot, reconciliation }
 
     if (opts.json) console.log(JSON.stringify(document, null, 2))
-    else console.log(renderReport(snapshot, reconciliation, library, parsed, opts.allScans ? snapshots : null))
+    else console.log(renderReport(snapshot, reconciliation, library, parsed, opts.allScans ? snapshots : null, inspiration))
 
     if (opts.out) {
         writeFileSync(opts.out, `${JSON.stringify(document, null, 2)}\n`, "utf8")
