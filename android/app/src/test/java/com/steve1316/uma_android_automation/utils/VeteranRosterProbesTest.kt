@@ -164,6 +164,22 @@ class VeteranRosterProbesTest {
         fun `a genuinely low value is accepted only when two independent geometries agree`() {
             assertEquals(61, resolveStatValue(listOf(cand(61, "primary"), cand(61, "wide"))))
         }
+
+        @Test
+        fun `a suspicious-low read never vetoes a trusted-range read from another geometry`() {
+            // Live: the primary box clipped 1061 to "061" (= 61) while the widened box read the true
+            // 1061. The below-floor artifact must not force the entry unresolved - the widened read is
+            // exactly what it is there to recover.
+            assertEquals(1061, resolveStatValue(listOf(cand(61, "primary"), cand(1061, "wide"))))
+            assertEquals(1079, resolveStatValue(listOf(cand(79, "primary"), cand(1079, "wide"))))
+        }
+
+        @Test
+        fun `two trusted-range values still conflict even with a low read present`() {
+            // Ignoring the below-floor read does not lower the bar for a genuine high-vs-high
+            // disagreement: those still fail closed.
+            assertNull(resolveStatValue(listOf(cand(61, "primary"), cand(900, "wide"), cand(800, "tight"))))
+        }
     }
 
     @Nested

@@ -632,27 +632,32 @@ data class NumericReadCandidate(val value: Int, val variant: String, val rawOcr:
  * Resolves a stat value from independent read candidates, fail-closed. Never infers a value from
  * anything but the reads themselves (never from rank, grade, rating, or a neighbouring stat).
  *
- * Rules, in order:
- *  - no candidates -> null (unresolved);
- *  - a value carried by >= 2 DISTINCT variants wins, even over single-variant dissenters (consensus);
- *    two different values each reaching that support is a genuine conflict -> null;
- *  - a single agreed value >= [STAT_VALUE_SUSPICIOUS_MIN] is accepted (one plausible read suffices in
- *    the trusted range);
- *  - a single agreed value < [STAT_VALUE_SUSPICIOUS_MIN] is rejected -> null (needs corroboration, and
- *    a lone read has none);
- *  - two or more distinct plausible values with no >= 2-variant consensus -> null (conflict).
+ * A read at or above [STAT_VALUE_SUSPICIOUS_MIN] is trustworthy on its own; a read below it is
+ * presumptively a dropped-digit artifact - a clipped leading digit renders 1061 as "061" (= 61). So:
+ *  - if any geometry produced a trusted-range (>= floor) value, resolve among THOSE alone: the single
+ *    dominant one wins, and a below-floor read from another geometry neither wins nor vetoes it (it is
+ *    exactly the artifact the widened geometry exists to correct);
+ *  - if NO geometry cleared the floor, a below-floor value is accepted only when >= 2 DISTINCT
+ *    geometries independently agree on it (a genuine low, corroborated), never from a lone read;
+ *  - a two-way tie for the most distinct-variant support is a real disagreement -> null;
+ *  - no candidates -> null.
+ *
+ * Distinct variants are geometries, not threshold passes: threshold re-reads of one box share a
+ * variant tag upstream, so they contribute a single vote and cannot self-corroborate.
  */
 fun resolveStatValue(candidates: List<NumericReadCandidate>): Int? {
     if (candidates.isEmpty()) return null
-    // Distinct variants (geometries) supporting each value. Threshold re-reads of one box share a
-    // variant tag upstream, so they contribute a single vote and cannot self-corroborate.
-    val support: Map<Int, Int> = candidates.groupBy { it.value }.mapValues { (_, cs) -> cs.map { it.variant }.toSet().size }
+    val trusted = candidates.filter { it.value >= STAT_VALUE_SUSPICIOUS_MIN }
+    if (trusted.isNotEmpty()) return dominantStatValue(trusted)
+    val low = dominantStatValue(candidates) ?: return null // no clear below-floor value either
+    val distinctVariants = candidates.filter { it.value == low }.map { it.variant }.toSet().size
+    return low.takeIf { distinctVariants >= 2 } // a lone below-floor read has no corroboration
+}
+
+/** The value carried by strictly the most distinct variants, or null when two values tie for the most
+ * (a real disagreement). A single value trivially dominates. */
+private fun dominantStatValue(candidates: List<NumericReadCandidate>): Int? {
+    val support = candidates.groupBy { it.value }.mapValues { (_, cs) -> cs.map { it.variant }.toSet().size }
     val maxSupport = support.values.max()
-    if (maxSupport >= 2) {
-        // The consensus value must be unique: a two-way tie at the top is a real disagreement.
-        return support.filterValues { it == maxSupport }.keys.singleOrNull()
-    }
-    // Every candidate value is carried by exactly one variant.
-    val value = support.keys.singleOrNull() ?: return null // conflicting single reads
-    return value.takeIf { it >= STAT_VALUE_SUSPICIOUS_MIN } // a lone suspicious-low read is not trusted
+    return support.filterValues { it == maxSupport }.keys.singleOrNull()
 }
