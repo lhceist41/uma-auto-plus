@@ -17,6 +17,16 @@ package com.steve1316.uma_android_automation
  * [ALL_KEYS] mirrors the Debug Settings `debugTestKeys` UI list (a source-guard test pins the two in
  * sync). It is the union across every campaign's tests, so a test the running campaign does not
  * provide still counts as "requested" and trips the fail-closed rather than being silently ignored.
+ *
+ * Operator arming sequence (the fail-closed above only covers "armed but not run"; it cannot see the
+ * OTHER half, an arm that never took). Writing settings.db over adb while the app/RN is still alive
+ * races the JS settings layer's in-memory copy: RN can persist its stale, un-armed settings back over
+ * the edit, so Kotlin reads "nothing armed" and proceeds as a normal run. A reverted setting is
+ * indistinguishable from one never set, so no in-process check can recover it without a second arming
+ * channel outside settings.db (out of scope here). Arm diagnostics the one way that is race-free:
+ * force-stop the app, THEN write the toggle, THEN cold-launch. On cold launch RN reloads settings.db
+ * fresh and the "[DEBUG-TEST] Armed: ..." line at session start (logged on Home, before any
+ * navigation) confirms the arm took before the bot reaches any screen that could spend TP.
  */
 internal object DebugTestGate {
     /** Every debug-test setting key, mirroring DebugSettings' `debugTestKeys` (kept in sync by test). */

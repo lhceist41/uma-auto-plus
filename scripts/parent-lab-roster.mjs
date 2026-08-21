@@ -112,7 +112,9 @@ function renderReport(snapshot, reconciliation, library, parsed, allScans) {
     lines.push(`  unique fingerprints   ${snapshot.uniqueFingerprints}  duplicates=${snapshot.duplicateFingerprints}  unidentified=${snapshot.unidentified}`)
     lines.push(`  count discrepancy     ${snapshot.countDiscrepancy ?? "n/a"}`)
     lines.push(`  termination           ${snapshot.terminationReason ?? "no header record"}`)
-    lines.push(`  completeness          ${snapshot.trustedComplete ? "TRUSTED_COMPLETE" : "INCOMPLETE"}`)
+    lines.push(`  enumeration complete  ${snapshot.enumerationComplete}  (did the walk cover the whole roster?)`)
+    lines.push(`  identity complete     ${snapshot.identityComplete}  (did every entry resolve to a distinct identity?)`)
+    lines.push(`  trusted for retention ${snapshot.trustedComplete ? "TRUSTED_COMPLETE" : "INCOMPLETE"}`)
     if (snapshot.defects.length > 0) lines.push(`  defects               ${snapshot.defects.join(", ")}`)
     if (parsed.malformedRecords > 0) lines.push(`  malformed lines       ${parsed.malformedRecords}`)
 
