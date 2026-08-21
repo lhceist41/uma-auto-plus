@@ -257,6 +257,10 @@ export interface Settings {
         debugMode_startRainbowDetectionTest: boolean
         // Read-only Veteran Roster / Umamusume Details calibration (PL-R1a). Park the game on the Veteran Roster list or an open Umamusume Details dialog; taps nothing.
         debugMode_startVeteranRosterReadTest: boolean
+        // Read-only Veteran Roster enumeration (PL-R1b). Park the game on the Veteran Roster list; walks the roster with the detail dialog's next chevron and writes roster_scan.jsonl.
+        debugMode_startVeteranRosterScanTest: boolean
+        // How many Veterans the roster scan reads before stopping. 0 walks the whole roster; a small value is the bounded validation run.
+        veteranRosterScanLimit: number
         enableScreenRecording: boolean
         recordingBitRate: number
         recordingFrameRate: number
@@ -753,6 +757,8 @@ export const defaultSettings: Settings = {
         debugMode_startSmartBorrowRehearsalTest: false,
         debugMode_startRainbowDetectionTest: false,
         debugMode_startVeteranRosterReadTest: false,
+        debugMode_startVeteranRosterScanTest: false,
+        veteranRosterScanLimit: 5,
         enableScreenRecording: false,
         recordingBitRate: 6,
         recordingFrameRate: 30,

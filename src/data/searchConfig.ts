@@ -823,6 +823,19 @@ const searchConfig: SearchOption[] = [
         page: "DebugSettings",
     },
     {
+        id: "debug-veteran-roster-scan-test",
+        title: "Start Veteran Roster Scan",
+        description:
+            "Disables normal bot operations and enumerates the whole Veteran roster read-only. Park the game on the Veteran Roster list with Filters: OFF: it opens the first card and walks the roster with the detail dialog's next chevron, recording each Veteran's identity fields. Nothing is transferred, favorited, or edited.",
+        page: "DebugSettings",
+    },
+    {
+        id: "veteran-roster-scan-limit",
+        title: "Veteran Roster Scan Limit",
+        description: "How many Veterans the read-only roster scan reads before it stops. Set 0 to walk the entire roster.",
+        page: "DebugSettings",
+    },
+    {
         id: "debug-trackblazer-race-selection-test",
         title: "Start Trackblazer Race Selection Test",
         description:

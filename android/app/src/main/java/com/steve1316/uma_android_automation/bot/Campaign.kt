@@ -13,6 +13,7 @@ import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.BuildConfig
 import com.steve1316.uma_android_automation.CareerLaunchNavigator
 import com.steve1316.uma_android_automation.VeteranRosterReader
+import com.steve1316.uma_android_automation.VeteranRosterScanner
 import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
@@ -1013,6 +1014,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startSmartBorrowRehearsalTest" to ::startSmartBorrowRehearsalTest,
                 "debugMode_startRainbowDetectionTest" to ::startRainbowDetectionTest,
                 "debugMode_startVeteranRosterReadTest" to ::startVeteranRosterReadTest,
+                "debugMode_startVeteranRosterScanTest" to ::startVeteranRosterScanTest,
             )
 
         var bDidAnyTestsRun = false
@@ -1081,6 +1083,23 @@ abstract class Campaign(game: Game) : Task(game) {
     open fun startVeteranRosterReadTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only Veteran Roster OCR diagnostic...")
         VeteranRosterReader(game.imageUtils).debugRead()
+    }
+
+    /**
+     * Read-only Veteran Roster enumeration (PL-R1b). Park the game on the Veteran Roster list with
+     * Filters: OFF, then start the bot: it opens the first card once and walks the roster with the
+     * detail dialog's next chevron, reading each entry's identity fields and writing one roster_scan
+     * header plus its roster_entry rows to outcomes/roster_scan.jsonl. It taps only the first card,
+     * the next chevron, and Close; every coordinate is checked against the deny list at runtime, and
+     * a missing Registered count or an unconfirmed filter state stops it before the first gesture.
+     *
+     * `veteranRosterScanLimit` caps how many entries are read - the bounded 5-entry and 20-entry
+     * validation runs - and 0 walks the whole roster.
+     */
+    open fun startVeteranRosterScanTest() {
+        val limit = SettingsHelper.getIntSetting("debug", "veteranRosterScanLimit", 5)
+        MessageLog.i(TAG, "\n[TEST] Running read-only Veteran Roster enumeration (entryLimit=${if (limit > 0) limit.toString() else "none"})...")
+        VeteranRosterScanner(game).runScan(limit)
     }
 
     /**

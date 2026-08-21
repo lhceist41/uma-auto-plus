@@ -46,6 +46,7 @@ const DebugSettings = () => {
         "debugMode_startSmartBorrowRehearsalTest",
         "debugMode_startRainbowDetectionTest",
         "debugMode_startVeteranRosterReadTest",
+        "debugMode_startVeteranRosterScanTest",
     ] as const
 
     /**
@@ -641,6 +642,41 @@ const DebugSettings = () => {
                                 label="Start Veteran Roster Read Test"
                                 description="Read-only Veteran Roster calibration. Park the game on the Veteran Roster list (Home > Enhance > Veteran Umamusume > List) or an open Umamusume Details dialog, then start the bot: it logs every field it can read (name, outfit, rank, Rating, stats, aptitudes, Career Info block) without tapping, swiping, or changing tabs. Tagged [ROSTER-TEST] in the log."
                                 style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-veteran-roster-scan-test"
+                                checked={bsc.settings.debug.debugMode_startVeteranRosterScanTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startVeteranRosterScanTest", checked)}
+                                label="Start Veteran Roster Scan"
+                                description="Read-only enumeration of the whole Veteran roster. Park the game on the Veteran Roster list with Filters: OFF, then start the bot: it opens the first card once and walks the roster with the detail dialog's next chevron, recording each Veteran's name, outfit, rank, Rating, stats and aptitudes to a scan file. It presses only the first card, the next chevron and Close, and stops before the first tap if the Registered count or the filter state cannot be read. Nothing is transferred, favorited or edited. Tagged [ROSTER-SCAN] in the log."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomSlider
+                                searchId="veteran-roster-scan-limit"
+                                value={bsc.settings.debug.veteranRosterScanLimit}
+                                placeholder={bsc.defaultSettings.debug.veteranRosterScanLimit}
+                                onValueChange={(value) => {
+                                    bsc.setSettings({
+                                        ...bsc.settings,
+                                        debug: { ...bsc.settings.debug, veteranRosterScanLimit: value },
+                                    })
+                                }}
+                                onSlidingComplete={(value) => {
+                                    bsc.setSettings({
+                                        ...bsc.settings,
+                                        debug: { ...bsc.settings.debug, veteranRosterScanLimit: value },
+                                    })
+                                }}
+                                min={0}
+                                max={300}
+                                step={5}
+                                label="Veteran Roster Scan Limit"
+                                labelUnit=" Veterans"
+                                showValue={true}
+                                showLabels={true}
+                                description="How many Veterans the roster scan reads before it stops. Set 0 to walk the entire roster. A small value is the safe way to confirm the walk is stepping one entry at a time before committing to the full run."
                             />
                         </View>
                     </View>
