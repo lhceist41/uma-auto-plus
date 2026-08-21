@@ -1,20 +1,21 @@
 package com.steve1316.uma_android_automation.utils
 
 /**
- * Canonical trainee and outfit names for the Veteran roster reader, plus the fuzzy matcher that
- * snaps a noisy OCR read onto one of them.
+ * Canonical trainee names for the Veteran roster reader, plus the fuzzy matcher that snaps a noisy
+ * OCR read onto one of them and onto the resolved trainee's own outfit titles.
  *
  * The character name and outfit title on the `Umamusume Details` dialog are brown text over a busy
  * building illustration, which generic OCR reads approximately ("Taiki Shuttle" -> "Taikishuttle",
  * "Wild Frontier" -> "Wild Fronttai"). Because the game only ever shows one of a known, finite set,
  * snapping the OCR onto the nearest canonical name recovers the exact string the fingerprint needs.
  *
- * The two lists are a maintained snapshot of the sources of truth - character keys of
- * `src/data/characters.json`, base-card outfit titles of `characterBaseOutfits` in
- * `src/data/presetMeta.ts` - mirrored here because no compiled character/outfit list reaches the
- * Kotlin side yet. Refresh them when those files change (the same snapshot discipline presetMeta.ts
- * already documents for its own outfit titles). A trainee outside these lists reads as unresolved
- * rather than a wrong guess, which fail-closed blocks the fingerprint.
+ * Outfit titles do NOT live here. They come from [VeteranIdentityCatalog], generated from
+ * `src/data/character_outfits.json`, and are always scored inside the resolved character's own
+ * costumes - see [resolveNameOutfit]. The character list below is the maintained mirror of the keys
+ * of `src/data/characters.json`, kept in code so a trainee name still resolves when the asset does
+ * not load; `VeteranIdentityCatalogTest` pins it against the generated asset so the two cannot
+ * drift. A trainee outside the list reads as unresolved rather than a wrong guess, which fail-closed
+ * blocks the fingerprint.
  */
 object VeteranIdentityNames {
     /** Character keys of src/data/characters.json. */
@@ -85,57 +86,19 @@ object VeteranIdentityNames {
             "Yaeno Muteki",
             "Yukino Bijin",
         )
-
-    /** Base-card outfit titles from characterBaseOutfits in src/data/presetMeta.ts. Alternate
-     * costumes are not covered here; a Veteran in one reads as unresolved rather than mismatched. */
-    val OUTFITS: List<String> =
-        listOf(
-            "Azure Amazon",
-            "Bestest Prize ♪",
-            "Blossom in Learning",
-            "Clippety-Tippety-Clop",
-            "Creeping Shadow",
-            "Down the Line",
-            "Eightfold☆Fortune",
-            "El☆Número 1",
-            "Empress Road",
-            "Fast as Lightning",
-            "Gilded Shrine to Glory",
-            "Innocent Silence",
-            "Jokester ☆ Vibes",
-            "King of Emeralds",
-            "LOVE☆4EVER",
-            "Layered Petals",
-            "Line Breakthrough",
-            "MB-19890425",
-            "Murmuring Stream",
-            "Nevertheless",
-            "Off the Line",
-            "Peak Blue",
-            "Peak Joy",
-            "Platanus Witch",
-            "Poinsettia Ribbon",
-            "Red Strife",
-            "Reeling in the Big One",
-            "Rising☆Fortune",
-            "Scramble☆Zone",
-            "Special Dreamer",
-            "Starlight Beat",
-            "Stone-Piercing Blue",
-            "Turbulent Blue",
-            "Wild Frontier",
-            "Wild Top Gear",
-            "pf. Winning Equation...",
-            "tach-nology",
-        )
 }
 
-/** Lowercase alphanumeric skeleton of a name, dropping spaces, punctuation, brackets, and the
- * decorative symbols outfit titles carry (star, music note, accents), so OCR that mangles those
- * still matches. "[Wild Frontier]" and "Eightfold☆Fortune" reduce to "wildfrontier"/"eightfoldfortune". */
+/** Lowercase ASCII-alphanumeric skeleton of a name, dropping spaces, punctuation, brackets, and the
+ * decorative symbols outfit titles carry (star, music note, heart), so OCR that mangles those still
+ * matches. "[Wild Frontier]" and "Eightfold☆Fortune" reduce to "wildfrontier"/"eightfoldfortune".
+ *
+ * Accented letters are decomposed and folded to their base letter rather than dropped: OCR renders
+ * "El☆Número 1" as "El Numero 1" and "Nuit Étoilée de Scarlet" as "Nuit Etoilee de Scarlet",
+ * so folding both sides to the same skeleton makes those an exact match instead of an edit away. */
 fun normalizeIdentityText(raw: String): String =
     buildString {
-        for (c in raw.lowercase()) {
+        val decomposed = java.text.Normalizer.normalize(raw.lowercase(), java.text.Normalizer.Form.NFD)
+        for (c in decomposed) {
             if (c in 'a'..'z' || c in '0'..'9') append(c)
         }
     }
@@ -173,23 +136,26 @@ const val CANONICAL_MIN_SIMILARITY = 0.68
 const val CANONICAL_MIN_MARGIN = 0.08
 
 /** Best [candidates] entry for a normalized needle and the winning + runner-up scores. */
-private class CandidateScore(val best: String?, val bestScore: Double, val secondScore: Double)
+private class CandidateScore(val best: String?, val bestScore: Double, val second: String?, val secondScore: Double)
 
 private fun scoreCandidates(needle: String, candidates: List<String>): CandidateScore {
     var best: String? = null
     var bestScore = -1.0
+    var second: String? = null
     var secondScore = -1.0
     for (candidate in candidates) {
         val score = similarity(needle, normalizeIdentityText(candidate))
         if (score > bestScore) {
+            second = best
             secondScore = bestScore
             bestScore = score
             best = candidate
         } else if (score > secondScore) {
+            second = candidate
             secondScore = score
         }
     }
-    return CandidateScore(best, bestScore, secondScore)
+    return CandidateScore(best, bestScore, second, secondScore)
 }
 
 /**
@@ -211,38 +177,92 @@ fun canonicalMatch(
     return scored.best
 }
 
-/** A resolved character name and outfit title from the two-line dialog header. */
-data class NameOutfitMatch(val outfit: String?, val name: String?)
+/**
+ * A resolved character name and outfit title from the two-line dialog header, plus the scoring
+ * evidence behind the outfit decision.
+ *
+ * The score fields are diagnostics, never identity: they exist so an unresolved outfit can be
+ * explained offline (was the read close but ambiguous, or nowhere near anything?) without a second
+ * blind scan. Nothing downstream may promote a candidate into [outfit] on the strength of them.
+ */
+data class NameOutfitMatch(
+    val outfit: String?,
+    val name: String?,
+    val nameScore: Double? = null,
+    /** Best-scoring outfit candidate within the resolved character, accepted or not. */
+    val outfitCandidate: String? = null,
+    val outfitScore: Double? = null,
+    val outfitSecondCandidate: String? = null,
+    val outfitSecondScore: Double? = null,
+)
 
 /**
- * Resolves the character and outfit from the raw name/outfit OCR. Each OCR line is scored against
- * both the character and outfit domains and assigned to the domain it fits best, so the read is
- * robust to the outfit brackets being dropped or the two lines arriving out of order. Falls back to
- * matching the whole blob when the OCR did not split into lines.
+ * Resolves the character and then, within that character only, the outfit.
+ *
+ * The order matters. Every OCR line is first scored against the character domain, so the read stays
+ * robust to the outfit brackets being dropped or the two lines arriving out of order. Only once a
+ * character has won confidently are the lines scored against [catalog]'s costumes FOR THAT
+ * CHARACTER - which is what makes it structurally impossible to label a Veteran with another
+ * trainee's costume, and what removes the cross-trainee near-collisions a flat outfit list has to
+ * survive ("Down the Line" vs "Off the Line" score 0.73 against each other).
+ *
+ * Everything stays fail-closed and nothing is inferred:
+ *  - no confident character -> the outfit is left unresolved too, rather than guessed from a global
+ *    list that could name a costume this trainee cannot wear;
+ *  - no catalog (the asset failed to load) -> the outfit is unresolved;
+ *  - a character with no known costume, an off-domain read, or two costumes too close to separate ->
+ *    unresolved.
+ *
+ * The line that won the character match is excluded from the outfit pass when there is more than one
+ * line, so a trainee name can never be scored as a costume.
  */
 fun resolveNameOutfit(
     rawOcr: String,
-    characters: List<String> = VeteranIdentityNames.CHARACTERS,
-    outfits: List<String> = VeteranIdentityNames.OUTFITS,
+    catalog: VeteranIdentityCatalog?,
+    characters: List<String> = catalog?.characters ?: VeteranIdentityNames.CHARACTERS,
 ): NameOutfitMatch {
     val lines = rawOcr.split("\n").map { it.trim() }.filter { it.isNotEmpty() }.ifEmpty { listOf(rawOcr) }
+
     var name: String? = null
     var nameScore = -1.0
-    var outfit: String? = null
-    var outfitScore = -1.0
-    for (line in lines) {
-        val n = normalizeIdentityText(line)
-        if (n.isEmpty()) continue
-        val cs = scoreCandidates(n, characters)
-        if (cs.bestScore >= CANONICAL_MIN_SIMILARITY && cs.bestScore - cs.secondScore >= CANONICAL_MIN_MARGIN && cs.bestScore > nameScore) {
-            nameScore = cs.bestScore
-            name = cs.best
-        }
-        val os = scoreCandidates(n, outfits)
-        if (os.bestScore >= CANONICAL_MIN_SIMILARITY && os.bestScore - os.secondScore >= CANONICAL_MIN_MARGIN && os.bestScore > outfitScore) {
-            outfitScore = os.bestScore
-            outfit = os.best
+    var nameLine = -1
+    for ((index, line) in lines.withIndex()) {
+        val needle = normalizeIdentityText(line)
+        if (needle.isEmpty()) continue
+        val scored = scoreCandidates(needle, characters)
+        if (scored.bestScore < CANONICAL_MIN_SIMILARITY) continue
+        if (scored.secondScore >= 0.0 && scored.bestScore - scored.secondScore < CANONICAL_MIN_MARGIN) continue
+        if (scored.bestScore > nameScore) {
+            nameScore = scored.bestScore
+            name = scored.best
+            nameLine = index
         }
     }
-    return NameOutfitMatch(outfit, name)
+    if (name == null) return NameOutfitMatch(outfit = null, name = null)
+
+    val candidates = catalog?.outfitsFor(name).orEmpty()
+    if (candidates.isEmpty()) return NameOutfitMatch(outfit = null, name = name, nameScore = nameScore)
+
+    var bestOutfit: CandidateScore? = null
+    for ((index, line) in lines.withIndex()) {
+        if (lines.size > 1 && index == nameLine) continue
+        val needle = normalizeIdentityText(line)
+        if (needle.isEmpty()) continue
+        val scored = scoreCandidates(needle, candidates)
+        if (bestOutfit == null || scored.bestScore > bestOutfit.bestScore) bestOutfit = scored
+    }
+    if (bestOutfit == null) return NameOutfitMatch(outfit = null, name = name, nameScore = nameScore)
+
+    val accepted =
+        bestOutfit.bestScore >= CANONICAL_MIN_SIMILARITY &&
+            (bestOutfit.secondScore < 0.0 || bestOutfit.bestScore - bestOutfit.secondScore >= CANONICAL_MIN_MARGIN)
+    return NameOutfitMatch(
+        outfit = if (accepted) bestOutfit.best else null,
+        name = name,
+        nameScore = nameScore,
+        outfitCandidate = bestOutfit.best,
+        outfitScore = bestOutfit.bestScore,
+        outfitSecondCandidate = bestOutfit.second,
+        outfitSecondScore = if (bestOutfit.secondScore >= 0.0) bestOutfit.secondScore else null,
+    )
 }

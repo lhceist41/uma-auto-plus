@@ -90,6 +90,7 @@ import com.steve1316.uma_android_automation.types.Trainee
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.ScrollList
 import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
+import com.steve1316.uma_android_automation.utils.VeteranIdentityCatalog
 import org.json.JSONObject
 import org.opencv.core.Point
 import java.util.concurrent.CountDownLatch
@@ -1082,7 +1083,7 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     open fun startVeteranRosterReadTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only Veteran Roster OCR diagnostic...")
-        VeteranRosterReader(game.imageUtils).debugRead()
+        VeteranRosterReader(game.imageUtils, VeteranIdentityCatalog.loadFromAssets(game.myContext)).debugRead()
     }
 
     /**

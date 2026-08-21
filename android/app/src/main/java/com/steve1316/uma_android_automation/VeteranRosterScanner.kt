@@ -22,6 +22,7 @@ import com.steve1316.uma_android_automation.utils.ROSTER_FIRST_CARD_X
 import com.steve1316.uma_android_automation.utils.ROSTER_FIRST_CARD_Y
 import com.steve1316.uma_android_automation.utils.RosterScreenKind
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.VeteranIdentityCatalog
 import com.steve1316.uma_android_automation.utils.classifyChevron
 import com.steve1316.uma_android_automation.utils.countChevronGreen
 import com.steve1316.uma_android_automation.utils.deniedZoneAt
@@ -73,7 +74,8 @@ private const val STALL_REPEAT_COUNT = 3
  * development run reports INCOMPLETE by construction.
  */
 class VeteranRosterScanner(private val game: Game) {
-    private val reader = VeteranRosterReader(game.imageUtils)
+    private val catalog = VeteranIdentityCatalog.loadFromAssets(game.myContext)
+    private val reader = VeteranRosterReader(game.imageUtils, catalog)
 
     /** Raised when a tap coordinate resolves into a deny zone. Never expected: the coordinates are
      * constants pinned by a test. If it ever fires, the geometry moved and the walk must not tap. */

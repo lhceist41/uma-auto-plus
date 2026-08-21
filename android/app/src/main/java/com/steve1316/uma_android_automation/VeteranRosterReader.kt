@@ -61,6 +61,7 @@ import com.steve1316.uma_android_automation.utils.STAT_GRADE_GLYPH_BOXES
 import com.steve1316.uma_android_automation.utils.STAT_LABELS
 import com.steve1316.uma_android_automation.utils.STAT_VALUE_BOXES
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.VeteranIdentityCatalog
 import com.steve1316.uma_android_automation.utils.classifyAptitudeGrade
 import com.steve1316.uma_android_automation.utils.classifyFavoriteMarker
 import com.steve1316.uma_android_automation.utils.classifyRankMedal
@@ -111,13 +112,18 @@ data class RosterScreenRead(
  *
  * The styled identity fields are read by field-appropriate readers rather than generic OCR: the rank
  * medal and every grade badge by pixel classifiers ([classifyRankMedal], [classifyStatGrade],
- * [classifyAptitudeGrade]), the character/outfit by OCR snapped onto the known-name domain
- * ([resolveNameOutfit]), and each stat value by digit-only OCR of its own box (keeping the coloured
- * badge out of the number read). The Career Info fields only resolve once that tab is open and
+ * [classifyAptitudeGrade]), the character by OCR snapped onto the known-name domain and the outfit
+ * by OCR snapped onto THAT character's own costumes ([resolveNameOutfit] over [catalog]), and each
+ * stat value by digit-only OCR of its own box (keeping the coloured badge out of the number read). The Career Info fields only resolve once that tab is open and
  * scrolled into view; a field whose label OCR does not match is reported unavailable rather than
  * trusting whatever text sits there.
  */
-class VeteranRosterReader(private val iu: CustomImageUtils) {
+class VeteranRosterReader(
+    private val iu: CustomImageUtils,
+    /** The character/outfit identity domain. Null when the generated asset did not load, in which
+     * case outfits read unresolved rather than falling back to a guess (see [VeteranIdentityCatalog]). */
+    private val catalog: VeteranIdentityCatalog?,
+) {
     private fun ocr(bitmap: Bitmap, x: Int, y: Int, w: Int, h: Int, debugName: String, digitsOnly: Boolean = false): String =
         try {
             iu.performOCROnRegion(
@@ -199,7 +205,7 @@ class VeteranRosterReader(private val iu: CustomImageUtils) {
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
 
         val nameOutfitRaw = ocr(bitmap, DETAIL_NAME_OUTFIT_X, DETAIL_NAME_OUTFIT_Y, DETAIL_NAME_OUTFIT_W, DETAIL_NAME_OUTFIT_H, "name_outfit")
-        val identity = resolveNameOutfit(nameOutfitRaw)
+        val identity = resolveNameOutfit(nameOutfitRaw, catalog)
         val rank = classifyRankMedal(sampler)
         val ratingRaw = ocr(bitmap, DETAIL_RATING_X, DETAIL_RATING_Y, DETAIL_RATING_W, DETAIL_RATING_H, "rating")
         val rating = parseRating(ratingRaw)
