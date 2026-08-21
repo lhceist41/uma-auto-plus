@@ -26,6 +26,29 @@ instead of echoing its own source (the same anti-overfit split as Taiki vs Copan
 | `veteran_splus_a_details_top.png` | Symboli Rudolf [Emperor's Path] | S+ | 17022 |
 | `veteran_splus_b_details_top.png` | Mihono Bourbon [CODE: ICING] | S+ | 16885 |
 
+## Rank residual medal crops (PL-R1b margin-aware acceptance, MuMu 2026-08-21)
+
+Nine genuine overall-rank **A** medals from the live full scan `rs-1787321365843-07ccfed7` that the
+absolute-floor-only rule failed closed on: their background corners dragged the whole-medal
+correlation to 0.74-0.83, below the 0.85 strong floor, even though each still beat the A+ sibling by
+>= 0.20. They calibrate and pin the margin fallback in `classifyRankMedalDetailed`. Each file is
+exactly the `RANK_MEDAL_BOX` region (128x120 at absolute origin 350,168) as written by
+`RosterEvidenceWriter`, so `VeteranBadgeClassifierTest` scores it through a sampler that maps the
+absolute medal-box coordinates back onto the crop. The whole-medal NCC each reproduces offline is
+noted; the A+ sibling score is in parentheses.
+
+| File | Trainee | best A NCC (A+ sibling) |
+|---|---|---|
+| `veteran_rank_a_residual_208_medal.png` | Mejiro McQueen | 0.820 (0.583) |
+| `veteran_rank_a_residual_219_medal.png` | Gold City | 0.741 (0.543) |
+| `veteran_rank_a_residual_221_medal.png` | Sakura Bakushin O | 0.820 (0.583) |
+| `veteran_rank_a_residual_222_medal.png` | Mejiro McQueen | 0.820 (0.583) |
+| `veteran_rank_a_residual_231_medal.png` | Gold City | 0.741 (0.543) |
+| `veteran_rank_a_residual_238_medal.png` | Rice Shower | 0.820 (0.583) |
+| `veteran_rank_a_residual_244_medal.png` | Gold City | 0.741 (0.543) |
+| `veteran_rank_a_residual_245_medal.png` | Matikanetannhauser | 0.830 (0.599) |
+| `veteran_rank_a_residual_248_medal.png` | Gold City | 0.741 (0.543) |
+
 Each fixture is the top rows of the original 1080x1920 MediaProjection capture, re-saved as 8-bit RGBA
 non-interlaced PNG so `FixturePng` can decode it. The crop keeps absolute capture coordinates (origin
 unchanged), so the classifier geometry constants apply directly. The Taiki/Copano pair keeps the top

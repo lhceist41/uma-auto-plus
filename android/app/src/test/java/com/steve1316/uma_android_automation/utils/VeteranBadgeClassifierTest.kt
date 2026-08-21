@@ -41,6 +41,20 @@ class VeteranBadgeClassifierTest {
     private val splusA get() = sampler("veteran_splus_a_details_top.png")
     private val splusB get() = sampler("veteran_splus_b_details_top.png")
 
+    // The nine PL-R1b rank residuals: genuine orange A medals whose background corners dragged the
+    // whole-medal correlation to 0.74-0.83 (below the 0.85 strong floor) yet still beat the A+ sibling
+    // by >= 0.20, so the absolute-floor-only rule failed them closed. Each fixture is exactly the
+    // RANK_MEDAL_BOX region saved at origin by RosterEvidenceWriter, so it is scored through a sampler
+    // that maps the absolute medal-box coordinates back onto the crop. Identities in PROVENANCE.
+    private val rankAResidualIndices = listOf(208, 219, 221, 222, 231, 238, 244, 245, 248)
+
+    private fun medalCrop(index: Int): SparkPixelSampler {
+        val name = "veteran_rank_a_residual_${index}_medal.png"
+        val stream = requireNotNull(javaClass.getResourceAsStream("/fixtures/veteranroster/$name")) { "missing fixture $name" }
+        val png = stream.use { FixturePng.read(it) }
+        return SparkPixelSampler { x, y -> png.getRGB(x - RANK_MEDAL_BOX.x0, y - RANK_MEDAL_BOX.y0) }
+    }
+
     /** All white: stands in for a blank/wrong region so every classifier's fail-closed path is pinned. */
     private val blank = SparkPixelSampler { _, _ -> 0xFFFFFFFF.toInt() }
 
@@ -80,6 +94,89 @@ class VeteranBadgeClassifierTest {
         @Test
         fun `a blank medal region stays unresolved`() {
             assertNull(classifyRankMedal(blank))
+        }
+    }
+
+    @Nested
+    @DisplayName("Rank medal - margin-aware acceptance (PL-R1b)")
+    inner class RankMedalMargin {
+        @Test
+        fun `every A residual medal now resolves to A`() {
+            // These are the nine live entries that stayed unresolved under the absolute-floor-only rule.
+            for (index in rankAResidualIndices) {
+                assertEquals("A", classifyRankMedal(medalCrop(index)), "residual $index")
+            }
+        }
+
+        @Test
+        fun `each A residual resolves on the MARGIN path, below the strong floor but above the sibling`() {
+            for (index in rankAResidualIndices) {
+                val read = classifyRankMedalDetailed(medalCrop(index))
+                assertEquals(RankAcceptancePath.MARGIN, read.acceptancePath, "residual $index path")
+                assertEquals("A", read.tier, "residual $index tier")
+                assertEquals('A', read.family, "residual $index family")
+                assertEquals("A", read.chosen, "residual $index chosen")
+                // The whole point of the margin path: accepted despite sitting under the strong floor.
+                assertTrue(read.bestScore!! < 0.85, "residual $index best ${read.bestScore} should be below the strong floor")
+                assertTrue(read.bestScore!! >= 0.68, "residual $index best ${read.bestScore} should clear the relaxed floor")
+                // Decisively A, not A+: the sibling trails by a wide margin.
+                assertTrue(read.bestScore!! - read.secondScore!! >= 0.12, "residual $index margin too small to trust")
+            }
+        }
+
+        @Test
+        fun `the strong tiers still resolve on the STRONG path, unchanged`() {
+            // The margin path is additive: every medal that already cleared the absolute floor still
+            // does, and is reported STRONG rather than being newly routed through the relaxed path.
+            for ((label, s) in listOf("A_taiki" to taiki, "A_copano" to copano, "A+" to aplusB, "S" to sB, "S+" to splusB)) {
+                val read = classifyRankMedalDetailed(s)
+                assertEquals(RankAcceptancePath.STRONG, read.acceptancePath, "$label should stay STRONG")
+                assertTrue(read.bestScore!! >= 0.85, "$label best ${read.bestScore} should clear the strong floor")
+            }
+        }
+
+        @Test
+        fun `a blank medal is REJECT with no family scored`() {
+            val read = classifyRankMedalDetailed(blank)
+            assertEquals(RankAcceptancePath.REJECT, read.acceptancePath)
+            assertNull(read.tier)
+            assertNull(read.family)
+        }
+
+        // The relaxed boundary, exercised directly on rankAcceptancePath so the STRONG/MARGIN/REJECT
+        // decision is pinned without needing a medal for every corner. Scores are (best, sibling).
+        @Test
+        fun `a strong correlation is STRONG regardless of how it is reached`() {
+            assertEquals(RankAcceptancePath.STRONG, rankAcceptancePath(0.96, 0.64)) // real A residual-adjacent strong
+            assertEquals(RankAcceptancePath.STRONG, rankAcceptancePath(0.90, 0.85)) // clears 0.85 and leads by >= 0.04
+        }
+
+        @Test
+        fun `a real A residual score band is MARGIN`() {
+            assertEquals(RankAcceptancePath.MARGIN, rankAcceptancePath(0.7412, 0.5426)) // lowest live A residual
+            assertEquals(RankAcceptancePath.MARGIN, rankAcceptancePath(0.8300, 0.5989)) // highest live A residual
+        }
+
+        @Test
+        fun `a low absolute NCC rejects even with a clear margin`() {
+            // Below the relaxed floor: a genuinely weak correlation is not minted into a rank even when
+            // it leads the sibling by more than the margin. This is the "some margin, still too weak" case.
+            assertEquals(RankAcceptancePath.REJECT, rankAcceptancePath(0.60, 0.35))
+            assertEquals(RankAcceptancePath.REJECT, rankAcceptancePath(0.67, 0.40))
+        }
+
+        @Test
+        fun `close sibling scores reject on the relaxed path`() {
+            // Above the relaxed floor but too close to the "+"/no-"+" sibling to say which side it is.
+            assertEquals(RankAcceptancePath.REJECT, rankAcceptancePath(0.75, 0.66)) // margin 0.09 < 0.12
+            assertEquals(RankAcceptancePath.REJECT, rankAcceptancePath(0.80, 0.72)) // margin 0.08 < 0.12
+        }
+
+        @Test
+        fun `a single-template family cannot margin-accept`() {
+            // No sibling to lead: only the strong floor can accept, never the relaxed path.
+            assertEquals(RankAcceptancePath.STRONG, rankAcceptancePath(0.90, null))
+            assertEquals(RankAcceptancePath.REJECT, rankAcceptancePath(0.75, null))
         }
     }
 

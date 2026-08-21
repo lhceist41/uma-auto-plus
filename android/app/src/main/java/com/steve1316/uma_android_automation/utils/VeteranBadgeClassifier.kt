@@ -360,6 +360,45 @@ private const val RANK_MATCH_MIN_NCC = 0.85
  * it is. Cross-family medals (orange A vs gold S) never compete: the colour gate removes them first. */
 private const val RANK_MATCH_MIN_MARGIN = 0.04
 
+/**
+ * Relaxed floor for the within-family rank margin fallback (PL-R1b). A medal that clears this but not
+ * [RANK_MATCH_MIN_NCC] is accepted only when its colour family is confident and the best tier leads
+ * its sibling by [RANK_MATCH_RELAXED_MIN_MARGIN].
+ *
+ * Calibrated on the live 257-scan rank residuals, all genuine orange A medals whose background corners
+ * pulled the whole-medal correlation down: best(A) ranged 0.741-0.830 while the A+ sibling scored only
+ * 0.543-0.599, a >= 0.20 gap every time. 0.68 sits an order above that sibling ceiling and below every
+ * observed true A, so it rescues a real medal without lowering the strong floor. A medal correlating
+ * below it stays unresolved even with a lead - a genuinely weak match is not minted into a rank. */
+private const val RANK_MATCH_RELAXED_MIN_NCC = 0.68
+
+/** Minimum lead the winning tier must hold over its sibling on the relaxed path - stricter than
+ * [RANK_MATCH_MIN_MARGIN] because a lower absolute correlation demands a larger separation. Every live
+ * residual clears it by >= 0.19; a low-confidence medal too close to its "+"/no-"+" sibling to
+ * separate (margin < this) stays unresolved rather than guessing which side of the "+" it is. */
+private const val RANK_MATCH_RELAXED_MIN_MARGIN = 0.12
+
+/** How the rank medal was accepted (or not), kept as evidence so a margin accept is auditable offline.
+ * Never identity - the resolved tier is [RankMedalRead.tier]. */
+enum class RankAcceptancePath { STRONG, MARGIN, REJECT }
+
+/**
+ * The acceptance decision for a within-family rank correlation, factored out so the STRONG/MARGIN/
+ * REJECT boundary is unit-testable directly. [second] is the sibling tier's score, or null for a
+ * single-template family (no sibling to lead, so only the strong floor can accept). STRONG reproduces
+ * the pre-PL-R1b rule exactly; MARGIN only adds accepts below the absolute floor when the lead over the
+ * sibling is wide.
+ */
+fun rankAcceptancePath(bestScore: Double, second: Double?): RankAcceptancePath {
+    val margin = if (second != null) bestScore - second else Double.POSITIVE_INFINITY
+    return when {
+        bestScore >= RANK_MATCH_MIN_NCC && margin >= RANK_MATCH_MIN_MARGIN -> RankAcceptancePath.STRONG
+        second != null && bestScore >= RANK_MATCH_RELAXED_MIN_NCC && margin >= RANK_MATCH_RELAXED_MIN_MARGIN ->
+            RankAcceptancePath.MARGIN
+        else -> RankAcceptancePath.REJECT
+    }
+}
+
 private class RankMedalTemplate(val label: String, val family: Char, val data: IntArray)
 
 /**
@@ -559,6 +598,9 @@ data class RankMedalRead(
     val bestScore: Double?,
     /** Same-family runner-up, which within a family is the "+"/no-"+" sibling. */
     val secondScore: Double?,
+    /** Which path decided the tier: STRONG (absolute floor), MARGIN (relaxed floor + clear lead over
+     * the sibling), or REJECT (unresolved). Diagnostic only; [tier] is null on REJECT. */
+    val acceptancePath: RankAcceptancePath = RankAcceptancePath.REJECT,
 )
 
 /**
@@ -589,8 +631,19 @@ fun classifyRankMedalDetailed(sampler: SparkPixelSampler): RankMedalRead {
     }
     val second = if (secondScore > Double.NEGATIVE_INFINITY) secondScore else null
     if (best == null) return RankMedalRead(null, ringFamily, null, null, null)
-    val accepted = bestScore >= RANK_MATCH_MIN_NCC && (second == null || bestScore - second >= RANK_MATCH_MIN_MARGIN)
-    return RankMedalRead(if (accepted) best.label else null, ringFamily, best.label, bestScore, second)
+    // Two acceptance paths within the confident colour family. STRONG is byte-identical to the
+    // pre-PL-R1b behavior. MARGIN only ADDS accepts below the absolute floor, and only when the winning
+    // tier leads its "+"/no-"+" sibling by a wide margin - the genuine A medal whose background corners
+    // dragged the whole-medal correlation to 0.74 yet still beat A+ by 0.20.
+    val path = rankAcceptancePath(bestScore, second)
+    return RankMedalRead(
+        if (path == RankAcceptancePath.REJECT) null else best.label,
+        ringFamily,
+        best.label,
+        bestScore,
+        second,
+        path,
+    )
 }
 
 /** Lowest stat value the digit OCR is allowed to believe. Measured over the 1810 stat samples in the
