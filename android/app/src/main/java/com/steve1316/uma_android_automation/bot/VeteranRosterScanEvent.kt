@@ -51,8 +51,13 @@ enum class RosterScanTermination {
     PRECONDITION_FAILED,
 }
 
-/** Whether the snapshot may be treated as the account's current roster. Anything short of
- * TRUSTED_COMPLETE is barred from transfer analysis downstream - see [assembleRosterScan]. */
+/** Whether the snapshot may be treated as the account's current roster - the retention verdict, equal
+ * to `enumerationComplete && identityComplete`. Anything short of TRUSTED_COMPLETE is barred from
+ * transfer analysis downstream - see [assembleRosterScan]. This is deliberately NOT the same fact as
+ * "the walk covered the whole roster": a scan can enumerate all 257 positions cleanly (enumeration
+ * complete) yet leave some entries unidentified (identity incomplete), and collapsing the two is how a
+ * count-complete walk gets mislabelled as if it had missed entries. [VeteranRosterScan] carries the
+ * two component facts separately for exactly that reason. */
 enum class RosterScanCompleteness { TRUSTED_COMPLETE, INCOMPLETE }
 
 /** The roster list status bar as read before the walk. Every field is nullable because "unread" and
@@ -126,6 +131,18 @@ data class VeteranRosterScan(
     val duplicateFingerprintCount: Int,
     val countDiscrepancy: Int?,
     val terminationReason: RosterScanTermination,
+    /** The walk covered exactly the account's own roster: filters confirmed off, the Registered used
+     * count read, that many entries enumerated, and a termination consistent with reaching the end.
+     * True even when some of those entries did not identify - enumeration is about coverage, not
+     * identity. This is the fact the transfer-analysis bar was hiding when only [completeness] existed. */
+    val enumerationComplete: Boolean,
+    /** Every enumerated entry resolved to a distinct identity: at least one entry, none unidentified,
+     * no repeated fingerprint. Independent of [enumerationComplete] - a bounded 5-entry run can be
+     * identity-complete without being enumeration-complete, and the full walk here is the reverse. */
+    val identityComplete: Boolean,
+    /** The retention verdict, `enumerationComplete && identityComplete`. Kept as the [completeness]
+     * enum for wire and reader back-compat; this boolean names it as the doc's `trustedForRetention`. */
+    val trustedForRetention: Boolean,
     val completeness: RosterScanCompleteness,
     val appVersion: String,
     val screenWidth: Int,
@@ -226,13 +243,15 @@ fun assembleRosterScan(
     val duplicates = fingerprints.filterNotNull().size - unique
     val used = list.registeredUsed
     val terminatedAtEnd = termination == RosterScanTermination.COUNT_REACHED || termination == RosterScanTermination.CHEVRON_END
-    val complete =
-        list.filtersOff == true &&
-            used != null &&
-            enumerated == used &&
-            unidentified == 0 &&
-            duplicates == 0 &&
-            terminatedAtEnd
+    // Two orthogonal facts, never one. Enumeration is about coverage (did the walk visit exactly the
+    // account's own count of positions, under a confirmed filter state, ending at a real end);
+    // identity is about resolution (did every visited position resolve to a distinct Veteran). The
+    // retention verdict needs both, but each is recorded on its own so a count-complete walk with
+    // unread fields reads as enumeration-complete rather than being lumped in with a walk that
+    // actually missed entries.
+    val enumerationComplete = list.filtersOff == true && used != null && enumerated == used && terminatedAtEnd
+    val identityComplete = enumerated > 0 && unidentified == 0 && duplicates == 0
+    val trustedForRetention = enumerationComplete && identityComplete
 
     return AssembledRosterScan(
         header =
@@ -249,7 +268,10 @@ fun assembleRosterScan(
                 duplicateFingerprintCount = duplicates,
                 countDiscrepancy = used?.let { enumerated - it },
                 terminationReason = termination,
-                completeness = if (complete) RosterScanCompleteness.TRUSTED_COMPLETE else RosterScanCompleteness.INCOMPLETE,
+                enumerationComplete = enumerationComplete,
+                identityComplete = identityComplete,
+                trustedForRetention = trustedForRetention,
+                completeness = if (trustedForRetention) RosterScanCompleteness.TRUSTED_COMPLETE else RosterScanCompleteness.INCOMPLETE,
                 appVersion = appVersion,
                 screenWidth = screenWidth,
                 screenHeight = screenHeight,
@@ -278,6 +300,9 @@ fun serializeRosterScanHeader(h: VeteranRosterScan): JSONObject =
         put("duplicateFingerprintCount", h.duplicateFingerprintCount)
         h.countDiscrepancy?.let { put("countDiscrepancy", it) }
         put("terminationReason", h.terminationReason.name.lowercase())
+        put("enumerationComplete", h.enumerationComplete)
+        put("identityComplete", h.identityComplete)
+        put("trustedForRetention", h.trustedForRetention)
         put("completeness", h.completeness.name.lowercase())
         put("app", h.appVersion)
         put("screenWidth", h.screenWidth)

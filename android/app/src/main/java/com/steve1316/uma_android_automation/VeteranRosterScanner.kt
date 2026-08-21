@@ -315,7 +315,8 @@ class VeteranRosterScanner(private val game: Game) {
             TAG,
             "[ROSTER-SCAN] scanId=$scanId entries=${h.entriesEnumerated} displayedUsed=${h.list.registeredUsed ?: "UNREAD"} " +
                 "unique=${h.uniqueFingerprints} duplicates=${h.duplicateFingerprintCount} unidentified=${h.unidentifiedCount} " +
-                "discrepancy=${h.countDiscrepancy ?: "n/a"} termination=${h.terminationReason} completeness=${h.completeness} " +
+                "discrepancy=${h.countDiscrepancy ?: "n/a"} termination=${h.terminationReason} " +
+                "enumerationComplete=${h.enumerationComplete} identityComplete=${h.identityComplete} trustedForRetention=${h.trustedForRetention} " +
                 "runtime=${(h.completedAt - h.startedAt) / 1000}s",
         )
         if (h.entriesEnumerated > 0) {

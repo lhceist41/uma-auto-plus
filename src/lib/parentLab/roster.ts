@@ -93,6 +93,11 @@ export interface RosterScanRecord {
     readonly duplicateFingerprintCount: number
     readonly countDiscrepancy: number | null
     readonly terminationReason: RosterScanTermination
+    /** The walk covered exactly the account's own roster, whether or not every entry identified.
+     * Null on pre-split records that predate the field (they only carried the merged `completeness`). */
+    readonly enumerationComplete: boolean | null
+    /** Every enumerated entry resolved to a distinct identity. Null on pre-split records. */
+    readonly identityComplete: boolean | null
     readonly completeness: "trusted_complete" | "incomplete"
     readonly app: string | null
     readonly screenWidth: number | null
@@ -211,6 +216,8 @@ export function parseRosterScanRecords(text: string, file?: string): ParsedRoste
                 duplicateFingerprintCount: num(obj.duplicateFingerprintCount) ?? 0,
                 countDiscrepancy: num(obj.countDiscrepancy),
                 terminationReason: termination as RosterScanTermination,
+                enumerationComplete: typeof obj.enumerationComplete === "boolean" ? obj.enumerationComplete : null,
+                identityComplete: typeof obj.identityComplete === "boolean" ? obj.identityComplete : null,
                 completeness: obj.completeness === "trusted_complete" ? "trusted_complete" : "incomplete",
                 app: str(obj.app),
                 screenWidth: num(obj.screenWidth),
@@ -292,7 +299,16 @@ export interface RosterSnapshot {
     /** scanCount minus the account's own displayed used count. Null when that count was unread. */
     readonly countDiscrepancy: number | null
     readonly terminationReason: RosterScanTermination | null
-    /** True only when EVERY completeness condition holds. Barred from transfer analysis otherwise. */
+    /** The walk covered exactly the account's own roster (filters off, count read, every enumerated
+     * position present, ended at a real end) - recomputed from the records here, not taken on the
+     * header's word. True even when identity is incomplete: this is the fact a 257/257 count-complete
+     * walk carries regardless of how many entries fingerprinted. */
+    readonly enumerationComplete: boolean
+    /** Every enumerated entry resolved to a distinct identity: at least one entry, none unidentified,
+     * no repeated fingerprint. Orthogonal to [enumerationComplete]. */
+    readonly identityComplete: boolean
+    /** True only when EVERY completeness condition holds - `enumerationComplete && identityComplete`
+     * plus the header agreeing. Barred from transfer analysis otherwise. */
     readonly trustedComplete: boolean
     readonly defects: readonly RosterSnapshotDefect[]
     readonly headerPresent: boolean
@@ -303,6 +319,20 @@ export interface RosterSnapshot {
 
 /** Terminations consistent with having actually reached the end of the roster. */
 const END_TERMINATIONS = new Set<RosterScanTermination>(["count_reached", "chevron_end"])
+
+/** Defects that mean the walk did NOT cover the whole roster. Their absence is enumeration
+ * completeness. Kept separate from the identity defects so the two facts never merge again. */
+const ENUMERATION_DEFECTS = new Set<RosterSnapshotDefect>([
+    "no_header_record",
+    "filters_not_confirmed_off",
+    "registered_count_unread",
+    "count_mismatch",
+    "entry_rows_missing",
+    "termination_not_at_end",
+])
+
+/** Defects that mean some enumerated entry did not resolve to a distinct identity. */
+const IDENTITY_DEFECTS = new Set<RosterSnapshotDefect>(["duplicate_fingerprints", "unidentified_entries"])
 
 function snapshotFor(scanId: string, header: RosterScanRecord | undefined, rows: readonly RosterEntryRecord[]): RosterSnapshot {
     const entries = [...rows].sort((a, b) => a.scanIndex - b.scanIndex)
@@ -329,6 +359,11 @@ function snapshotFor(scanId: string, header: RosterScanRecord | undefined, rows:
     const observedAt =
         header?.completedAt ?? header?.startedAt ?? entries.reduce<number | null>((max, e) => (e.observedAt !== null && (max === null || e.observedAt > max) ? e.observedAt : max), null)
 
+    // Derived here from the records, not read off the header: the header's own enumerationComplete is
+    // cross-checked by these but never the sole authority, exactly as trustedComplete already was.
+    const enumerationComplete = !defects.some((d) => ENUMERATION_DEFECTS.has(d))
+    const identityComplete = entries.length > 0 && !defects.some((d) => IDENTITY_DEFECTS.has(d))
+
     return {
         schema: PARENTLAB_ROSTER_SCHEMA,
         schemaVersion: PARENTLAB_ROSTER_SCHEMA_VERSION,
@@ -347,6 +382,8 @@ function snapshotFor(scanId: string, header: RosterScanRecord | undefined, rows:
         unidentified,
         countDiscrepancy: registeredUsed === null ? null : entries.length - registeredUsed,
         terminationReason: header?.terminationReason ?? null,
+        enumerationComplete,
+        identityComplete,
         trustedComplete: defects.length === 0,
         defects,
         headerPresent: header !== undefined,

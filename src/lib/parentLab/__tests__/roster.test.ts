@@ -120,11 +120,38 @@ describe("buildRosterSnapshots completeness", () => {
     it("trusts a scan whose enumerated count matches the account's own used count", () => {
         const snapshot = snapshotOf(cleanScan())
         expect(snapshot.trustedComplete).toBe(true)
+        expect(snapshot.enumerationComplete).toBe(true)
+        expect(snapshot.identityComplete).toBe(true)
         expect(snapshot.defects).toEqual([])
         expect(snapshot.scanCount).toBe(3)
         expect(snapshot.registeredUsed).toBe(3)
         expect(snapshot.countDiscrepancy).toBe(0)
         expect(snapshot.percentFull).toBe(1.2)
+    })
+
+    it("reads a count-complete walk with an unidentified entry as enumeration-complete but not identity-complete", () => {
+        // The split the device now records: the walk covered all three positions and ended at the
+        // count, but one entry did not fingerprint. Enumeration is done; identity is not.
+        const partial = [
+            entryLine("scan-a", 0),
+            entryLine("scan-a", 1),
+            entryLine("scan-a", 2, { rosterFingerprint: undefined, character: undefined, unresolvedFields: ["character"] }),
+            headerLine("scan-a", { unidentifiedCount: 1, uniqueFingerprints: 2, completeness: "incomplete", enumerationComplete: true, identityComplete: false }),
+        ].join("\n")
+        const snapshot = snapshotOf(partial)
+        expect(snapshot.enumerationComplete).toBe(true)
+        expect(snapshot.identityComplete).toBe(false)
+        expect(snapshot.trustedComplete).toBe(false)
+        expect(snapshot.countDiscrepancy).toBe(0)
+    })
+
+    it("reads a bounded development run as identity-complete but not enumeration-complete", () => {
+        const bounded = snapshotOf(
+            cleanScan("scan-a", { displayedRegisteredUsed: 257, entriesEnumerated: 3, completeness: "incomplete", terminationReason: "entry_limit_reached", entryLimit: 3 }),
+        )
+        expect(bounded.enumerationComplete).toBe(false)
+        expect(bounded.identityComplete).toBe(true)
+        expect(bounded.trustedComplete).toBe(false)
     })
 
     it("orders entries by scan index regardless of the order they were written", () => {

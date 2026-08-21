@@ -118,7 +118,26 @@ class VeteranRosterScanEventTest {
         fun `257 displayed and 257 read is trusted`() {
             val scan = assemble(distinct(257), list = listState(used = 257)).header
             assertEquals(RosterScanCompleteness.TRUSTED_COMPLETE, scan.completeness)
+            assertTrue(scan.enumerationComplete)
+            assertTrue(scan.identityComplete)
+            assertTrue(scan.trustedForRetention)
             assertEquals(0, scan.countDiscrepancy)
+        }
+
+        @Test
+        fun `a count-complete walk with unidentified entries is enumeration-complete but not identity-complete`() {
+            // The whole point of the split: the walk visited all 257 positions and ended at the count,
+            // but some entries could not be fingerprinted. That must read as "covered the roster,
+            // identity incomplete" - not be lumped in with a walk that actually missed entries.
+            val rows = distinct(255) + observation(character = null, rating = 90_001) + observation(outfit = null, rating = 90_002)
+            val scan = assemble(rows, list = listState(used = 257)).header
+            assertEquals(257, scan.entriesEnumerated)
+            assertEquals(0, scan.countDiscrepancy)
+            assertEquals(2, scan.unidentifiedCount)
+            assertTrue(scan.enumerationComplete, "the walk covered exactly the account's own count")
+            assertFalse(scan.identityComplete, "two entries did not fingerprint")
+            assertFalse(scan.trustedForRetention)
+            assertEquals(RosterScanCompleteness.INCOMPLETE, scan.completeness)
         }
 
         @Test
@@ -144,6 +163,8 @@ class VeteranRosterScanEventTest {
             assertEquals(0, scan.countDiscrepancy)
             assertEquals(256, scan.uniqueFingerprints)
             assertEquals(1, scan.duplicateFingerprintCount)
+            assertTrue(scan.enumerationComplete, "count matched, so the roster was covered")
+            assertFalse(scan.identityComplete, "a repeated fingerprint leaves the identity set short")
             assertEquals(RosterScanCompleteness.INCOMPLETE, scan.completeness)
         }
 
@@ -186,6 +207,11 @@ class VeteranRosterScanEventTest {
             assertEquals(5, scan.entriesEnumerated)
             assertEquals(5, scan.entryLimit)
             assertEquals(-252, scan.countDiscrepancy)
+            // The five entries all identified cleanly, so identity is complete; enumeration is not,
+            // because the walk stopped 252 short of the account's own count. The split names both.
+            assertFalse(scan.enumerationComplete)
+            assertTrue(scan.identityComplete)
+            assertFalse(scan.trustedForRetention)
             assertEquals(RosterScanCompleteness.INCOMPLETE, scan.completeness)
         }
 
@@ -248,6 +274,9 @@ class VeteranRosterScanEventTest {
             assertEquals(5, json.getInt("entriesEnumerated"))
             assertEquals(-252, json.getInt("countDiscrepancy"))
             assertEquals("entry_limit_reached", json.getString("terminationReason"))
+            assertFalse(json.getBoolean("enumerationComplete"))
+            assertTrue(json.getBoolean("identityComplete"))
+            assertFalse(json.getBoolean("trustedForRetention"))
             assertEquals("incomplete", json.getString("completeness"))
             assertEquals(1080, json.getInt("screenWidth"))
         }
