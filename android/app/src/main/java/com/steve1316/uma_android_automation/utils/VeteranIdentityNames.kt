@@ -103,8 +103,8 @@ fun normalizeIdentityText(raw: String): String =
         }
     }
 
-/** Levenshtein edit distance between two strings. */
-private fun editDistance(a: String, b: String): Int {
+/** Levenshtein edit distance between two strings. Shared with the factor canonicalizer. */
+internal fun editDistance(a: String, b: String): Int {
     if (a.isEmpty()) return b.length
     if (b.isEmpty()) return a.length
     var prev = IntArray(b.length + 1) { it }
@@ -122,8 +122,9 @@ private fun editDistance(a: String, b: String): Int {
     return prev[b.length]
 }
 
-/** Similarity in [0, 1] of two normalized strings: 1 - editDistance / longerLength. */
-private fun similarity(a: String, b: String): Double {
+/** Similarity in [0, 1] of two normalized strings: 1 - editDistance / longerLength. Shared with the
+ * factor canonicalizer so both matchers score identically. */
+internal fun similarity(a: String, b: String): Double {
     if (a.isEmpty() && b.isEmpty()) return 1.0
     val longer = maxOf(a.length, b.length)
     return 1.0 - editDistance(a, b).toDouble() / longer
