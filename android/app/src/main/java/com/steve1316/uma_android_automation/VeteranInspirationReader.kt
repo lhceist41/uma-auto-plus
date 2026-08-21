@@ -24,6 +24,7 @@ import com.steve1316.uma_android_automation.utils.InspirationRowAccumulator
 import com.steve1316.uma_android_automation.utils.InspirationScrollRead
 import com.steve1316.uma_android_automation.utils.RosterScreenKind
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.VeteranFactorDomain
 import com.steve1316.uma_android_automation.utils.VeteranIdentityCatalog
 import com.steve1316.uma_android_automation.utils.deniedZoneAt
 import com.steve1316.uma_android_automation.utils.inspirationFactorListEndsInFrame
@@ -97,7 +98,7 @@ private const val SETTLE_SECONDS = 0.8
  * content, ended at the bottom, merged with no gap, and independently agreed with the scrollbar on
  * how tall the list was.
  */
-class VeteranInspirationReader(private val game: Game) {
+class VeteranInspirationReader(private val game: Game, private val factorDomain: VeteranFactorDomain? = null) {
     private val iu = game.imageUtils
 
     /** One row's per-frame evidence - the two OCR'd names and whether a portrait sat on the rail
@@ -409,6 +410,25 @@ class VeteranInspirationReader(private val game: Game) {
         return observation
     }
 
+    /** Builds one factor, snapping its OCR name onto the canonical factor domain conditioned on the
+     * pixel-classified kind. When the domain did not load, or the name is empty/off-domain, the factor
+     * is left canonically unresolved and its semantic fingerprint stays blocked fail-closed. */
+    private fun buildFactor(rowIndex: Int, column: InspirationColumn, kind: SparkRowKind, name: String, stars: Int, ambiguous: Boolean): InspirationFactor {
+        val res = factorDomain?.resolve(name, kind)
+        return InspirationFactor(
+            rowIndex = rowIndex,
+            column = column,
+            kind = kind,
+            displayName = name,
+            stars = stars,
+            ambiguous = ambiguous,
+            canonicalName = res?.canonicalName,
+            canonicalPath = res?.path ?: com.steve1316.uma_android_automation.utils.FactorAcceptancePath.REJECT,
+            canonicalScore = res?.bestScore ?: 0.0,
+            canonicalSecondScore = res?.secondScore,
+        )
+    }
+
     /** OCRs the names of rows appended since the last call, from the frame that contributed them. */
     private fun ocrNewRows(bitmap: Bitmap, rows: List<InspirationAbsoluteRow>, names: MutableList<RowRead>) {
         for (i in names.size until rows.size) {
@@ -455,27 +475,9 @@ class VeteranInspirationReader(private val game: Game) {
                     val globalIndex = rows.indexOf(absolute)
                     val rowNames = names.getOrNull(globalIndex)
                     val cell = absolute.row
-                    factors.add(
-                        InspirationFactor(
-                            rowIndex = rowIndex,
-                            column = InspirationColumn.LEFT,
-                            kind = cell.left.kind,
-                            displayName = rowNames?.left ?: "",
-                            stars = cell.left.filledStars,
-                            ambiguous = cell.left.ambiguousStars > 0,
-                        ),
-                    )
+                    factors.add(buildFactor(rowIndex, InspirationColumn.LEFT, cell.left.kind, rowNames?.left ?: "", cell.left.filledStars, cell.left.ambiguousStars > 0))
                     cell.right?.let { right ->
-                        factors.add(
-                            InspirationFactor(
-                                rowIndex = rowIndex,
-                                column = InspirationColumn.RIGHT,
-                                kind = right.kind,
-                                displayName = rowNames?.right ?: "",
-                                stars = right.filledStars,
-                                ambiguous = right.ambiguousStars > 0,
-                            ),
-                        )
+                        factors.add(buildFactor(rowIndex, InspirationColumn.RIGHT, right.kind, rowNames?.right ?: "", right.filledStars, right.ambiguousStars > 0))
                     }
                 }
                 val portrait = names.getOrNull(rows.indexOf(blockRows.first()))?.portrait ?: false
@@ -519,6 +521,11 @@ class VeteranInspirationReader(private val game: Game) {
         return observation
     }
 
+    /** One factor rendered for the diagnostic log: kind, raw OCR, the canonical it snapped to (with
+     * acceptance path), and its stars. Lets a repeated capture be compared for semantic determinism. */
+    private fun factorLine(f: InspirationFactor): String =
+        "${f.kind.name.lowercase()} '${f.displayName}'->'${f.canonicalName ?: "?"}'[${f.canonicalPath.name.lowercase()}] ${f.stars}*"
+
     private fun logObservation(o: VeteranInspirationObservation) {
         MessageLog.i(
             TAG,
@@ -526,15 +533,16 @@ class VeteranInspirationReader(private val game: Game) {
         )
         MessageLog.i(
             TAG,
-            "[INSPIRATION-TEST] self ${o.selfFactors.size} factor(s): " +
-                o.selfFactors.joinToString(", ") { "${it.kind.name.lowercase()} '${it.displayName}' ${it.stars}*" },
+            "[INSPIRATION-TEST] self ${o.selfFactors.size} factor(s) trusted=${o.selfFactorSetTrusted} fp=${o.selfFactorFingerprint ?: "UNTRUSTED"}: " +
+                o.selfFactors.joinToString(", ") { factorLine(it) },
         )
         for (ancestor in o.legacyAncestors) {
             MessageLog.i(
                 TAG,
                 "[INSPIRATION-TEST] legacy ancestor ${ancestor.ancestorIndex} portrait=${ancestor.portraitObserved} " +
+                    "trusted=${ancestor.factorSetTrusted} fp=${ancestor.factorFingerprint ?: "UNTRUSTED"} " +
                     "${ancestor.factors.size} factor(s): " +
-                    ancestor.factors.joinToString(", ") { "${it.kind.name.lowercase()} '${it.displayName}' ${it.stars}*" },
+                    ancestor.factors.joinToString(", ") { factorLine(it) },
             )
         }
         val d = o.diagnostics

@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.utils.FactorAcceptancePath
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -24,14 +25,22 @@ import org.json.JSONObject
  * this one is what a REGISTERED Veteran carries. They are different evidence sources about different
  * moments and must stay distinguishable, so this writes its own file and never overwrites that one.
  */
-const val VETERAN_INSPIRATION_SCHEMA_VERSION: Int = 1
+const val VETERAN_INSPIRATION_SCHEMA_VERSION: Int = 2
 
 /** Which column of the two-column grid a factor card occupied. Preserved because the panel's order is
  * deterministic (stat, aptitude, unique, then the white factors in reading order) and that order is
  * itself evidence. */
 enum class InspirationColumn { LEFT, RIGHT }
 
-/** One factor card as read: kind and stars are pixel-classified (authoritative), the name is OCR. */
+/**
+ * One factor card as read: kind and stars are pixel-classified (authoritative), the name is OCR, and
+ * the name is then snapped onto the canonical factor domain so the identity is stable across re-reads.
+ *
+ * [displayName] keeps the raw OCR as evidence; [canonicalName] is the resolved domain name (null when
+ * the read did not resolve), and it is the ONLY input to the semantic [factorFingerprint]. The raw
+ * text jitters (~3.5% of names differ on a re-read), so a fingerprint built off it was not
+ * identity-stable; a fingerprint built off the canonical name is.
+ */
 data class InspirationFactor(
     /** Zero-based grid row within the block, in reading order. */
     val rowIndex: Int,
@@ -41,19 +50,28 @@ data class InspirationFactor(
     val displayName: String,
     val stars: Int,
     val ambiguous: Boolean,
+    /** The canonical factor name the raw OCR resolved to, or null when it did not (garbage, empty,
+     * truncated, or off-domain). Null fails the semantic fingerprint closed. */
+    val canonicalName: String? = null,
+    /** How the canonical name was accepted, for offline audit. REJECT means [canonicalName] is null. */
+    val canonicalPath: FactorAcceptancePath = FactorAcceptancePath.REJECT,
+    /** The winning candidate's similarity, kept so a reject/margin accept is explicable without a rescan. */
+    val canonicalScore: Double = 0.0,
+    /** The runner-up's similarity, or null (exact-skeleton hit or single candidate). */
+    val canonicalSecondScore: Double? = null,
 ) {
-    /** Whitespace-collapsed, upper-cased name, matching PL-4's lineage normalization so a factor read
-     * from this screen and the same factor read from the Legacy Select view normalize identically. */
+    /** Whether the raw OCR snapped onto a known canonical name. */
+    val resolved: Boolean get() = canonicalName != null
+
+    /** Whitespace-collapsed, upper-cased raw name, kept as evidence next to [displayName]. */
     val normalizedName: String get() = normalizeLineageFactorName(displayName)
 
-    /** The deterministic per-factor token: `kind:NORMNAME:stars`. Byte-identical to the component
-     * [ancestorFactorFingerprint] builds its set digest from, so the two sources cross-link directly. */
-    val factorFingerprint: String get() = "${kind.name.lowercase()}:$normalizedName:$stars"
+    /** The deterministic semantic token `kind:CANONNAME:stars`, or null when unresolved. Byte-identical
+     * in format to the PL-4 canonical token, so the two sources cross-link on resolved factors. */
+    val factorFingerprint: String? get() = canonicalFactorToken(kind, canonicalName, stars)
 
-    /** The PL-4 observation shape, so the shared fingerprint helper is genuinely reused rather than
-     * re-implemented against a second, drifting definition. */
-    internal fun asLineageObservation(): LineageFactorObservation =
-        LineageFactorObservation(kind, displayName, stars, ambiguous, clipped = false)
+    /** The name-free `kind:stars` token, always available and stable even when the name did not read. */
+    val structuralFingerprint: String get() = structuralFactorToken(kind, stars)
 }
 
 /** One Legacy Origin ancestor block. [ancestorIndex] is its position in this Veteran's own list and
@@ -65,7 +83,14 @@ data class InspirationAncestor(
     val rank: String?,
     val factors: List<InspirationFactor>,
 ) {
-    val factorFingerprint: String get() = ancestorFactorFingerprint(factors.map { it.asLineageObservation() })
+    /** Trusted canonical set fingerprint, or null when any factor is unresolved (fail closed). */
+    val factorFingerprint: String? get() = canonicalFactorSetFingerprint(factors.map { it.factorFingerprint })
+
+    /** Name-free structural set fingerprint, always available. */
+    val structuralFingerprint: String get() = structuralFactorSetFingerprint(factors.map { it.structuralFingerprint })
+
+    /** Whether every factor resolved to a canonical name, so [factorFingerprint] is a trusted identity. */
+    val factorSetTrusted: Boolean get() = factors.isNotEmpty() && factors.all { it.resolved }
 }
 
 /** Why the traversal of one Veteran's panel stopped. */
@@ -148,7 +173,14 @@ data class VeteranInspirationObservation(
     val unresolvedFields: List<String>,
     val diagnostics: InspirationDiagnostics,
 ) {
-    val selfFactorFingerprint: String get() = ancestorFactorFingerprint(selfFactors.map { it.asLineageObservation() })
+    /** Trusted canonical fingerprint of the Veteran's own Sparks, or null when any factor is unresolved. */
+    val selfFactorFingerprint: String? get() = canonicalFactorSetFingerprint(selfFactors.map { it.factorFingerprint })
+
+    /** Name-free structural fingerprint of the Veteran's own Sparks, always available. */
+    val selfStructuralFingerprint: String get() = structuralFactorSetFingerprint(selfFactors.map { it.structuralFingerprint })
+
+    /** Whether every self factor resolved, so [selfFactorFingerprint] is a trusted identity. */
+    val selfFactorSetTrusted: Boolean get() = selfFactors.isNotEmpty() && selfFactors.all { it.resolved }
 }
 
 /** One block of factor rows as the traversal segmented them, before roles are assigned. */
@@ -202,8 +234,13 @@ fun assembleVeteranInspiration(
     if (selfBlock == null) unresolved.add("selfSparks")
     if (!diagnostics.factorListEndObserved) unresolved.add("factorListEnd")
     for (factor in allFactors) {
-        if (factor.displayName.isEmpty()) unresolved.add("factorName@${factor.kind.name.lowercase()}:${factor.rowIndex}:${factor.column.name.lowercase()}")
-        if (factor.ambiguous) unresolved.add("factorStars@${factor.kind.name.lowercase()}:${factor.rowIndex}:${factor.column.name.lowercase()}")
+        val loc = "${factor.kind.name.lowercase()}:${factor.rowIndex}:${factor.column.name.lowercase()}"
+        if (factor.displayName.isEmpty()) unresolved.add("factorName@$loc")
+        if (factor.ambiguous) unresolved.add("factorStars@$loc")
+        // A name that read but did not snap onto the canonical domain (truncated, off-domain). Kept as
+        // evidence, marked here so the untrusted semantic fingerprint is explicable. This does NOT gate
+        // sparkCaptureComplete - the read was complete; only the canonical identity is unresolved.
+        if (factor.displayName.isNotEmpty() && !factor.resolved) unresolved.add("factorCanonical@$loc")
     }
 
     // Neither `reachedBottom` nor a content-height comparison is one of the checks, and both were
@@ -256,7 +293,12 @@ private fun serializeFactors(factors: List<InspirationFactor>): JSONArray =
                     put("displayName", f.displayName)
                     put("normalizedName", f.normalizedName)
                     put("stars", f.stars)
-                    put("factorFingerprint", f.factorFingerprint)
+                    // Canonical identity (present only when resolved) plus its acceptance path; the raw
+                    // OCR stays above as evidence. The structural token is always present and name-free.
+                    f.canonicalName?.let { put("canonicalName", it) }
+                    put("canonicalPath", f.canonicalPath.name.lowercase())
+                    f.factorFingerprint?.let { put("factorFingerprint", it) }
+                    put("structuralFingerprint", f.structuralFingerprint)
                     if (f.ambiguous) put("ambiguous", true)
                 },
             )
@@ -277,7 +319,9 @@ fun serializeVeteranInspiration(o: VeteranInspirationObservation): JSONObject =
         o.rank?.let { put("rank", it) }
         put("selfPortraitObserved", o.selfPortraitObserved)
         put("selfFactorCount", o.selfFactors.size)
-        put("selfFactorFingerprint", o.selfFactorFingerprint)
+        o.selfFactorFingerprint?.let { put("selfFactorFingerprint", it) }
+        put("selfStructuralFingerprint", o.selfStructuralFingerprint)
+        put("selfFactorSetTrusted", o.selfFactorSetTrusted)
         put("selfFactors", serializeFactors(o.selfFactors))
         put(
             "legacyAncestors",
@@ -289,7 +333,9 @@ fun serializeVeteranInspiration(o: VeteranInspirationObservation): JSONObject =
                             put("portraitObserved", a.portraitObserved)
                             a.rank?.let { put("rank", it) }
                             put("factorCount", a.factors.size)
-                            put("ancestorFactorFingerprint", a.factorFingerprint)
+                            a.factorFingerprint?.let { put("ancestorFactorFingerprint", it) }
+                            put("ancestorStructuralFingerprint", a.structuralFingerprint)
+                            put("factorSetTrusted", a.factorSetTrusted)
                             put("factors", serializeFactors(a.factors))
                         },
                     )

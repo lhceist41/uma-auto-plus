@@ -1,8 +1,11 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.utils.FactorAcceptancePath
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -19,8 +22,27 @@ import org.junit.jupiter.api.Test
  */
 @DisplayName("Veteran Inspiration observation record")
 class VeteranInspirationEventTest {
-    private fun factor(kind: SparkRowKind, name: String, stars: Int, row: Int = 0, column: InspirationColumn = InspirationColumn.LEFT, ambiguous: Boolean = false) =
-        InspirationFactor(rowIndex = row, column = column, kind = kind, displayName = name, stars = stars, ambiguous = ambiguous)
+    /** Builds a factor already snapped onto a canonical name, the way the reader hands them to the
+     * assembler. [canonical] defaults to the display name (a clean, in-domain read); pass null to model
+     * a read that did not resolve. A blank display name resolves to null - the empty OCR case. */
+    private fun factor(
+        kind: SparkRowKind,
+        name: String,
+        stars: Int,
+        row: Int = 0,
+        column: InspirationColumn = InspirationColumn.LEFT,
+        ambiguous: Boolean = false,
+        canonical: String? = name.ifBlank { null },
+    ) = InspirationFactor(
+        rowIndex = row,
+        column = column,
+        kind = kind,
+        displayName = name,
+        stars = stars,
+        ambiguous = ambiguous,
+        canonicalName = canonical,
+        canonicalPath = if (canonical != null) FactorAcceptancePath.STRONG else FactorAcceptancePath.REJECT,
+    )
 
     private fun cleanDiagnostics(blocks: Int, rows: Int) =
         InspirationDiagnostics(
@@ -96,7 +118,7 @@ class VeteranInspirationEventTest {
     @DisplayName("factor fingerprints")
     inner class Fingerprints {
         @Test
-        fun `the same evidence always produces the same token`() {
+        fun `the same canonical evidence always produces the same token`() {
             assertEquals(
                 factor(SparkRowKind.WHITE, "Calm in a Crowd", 2).factorFingerprint,
                 factor(SparkRowKind.WHITE, "Calm in a Crowd", 2, row = 7, column = InspirationColumn.RIGHT).factorFingerprint,
@@ -104,36 +126,39 @@ class VeteranInspirationEventTest {
         }
 
         @Test
-        fun `whitespace and case in the OCR text do not change the token`() {
-            assertEquals(
-                factor(SparkRowKind.WHITE, "Calm in a Crowd", 2).factorFingerprint,
-                factor(SparkRowKind.WHITE, "  calm   IN a Crowd ", 2).factorFingerprint,
-            )
+        fun `the token is built from the canonical name, not the raw OCR text`() {
+            // Two reads of one card whose OCR jittered ("...O" glued on, an internal misread) but that
+            // both snapped onto the same canonical name must hash to the same token. That is the whole
+            // point of PL-R1c: identity comes from the resolved name, never the raw read.
+            val a = factor(SparkRowKind.WHITE, "FIRM CONDITIONSO", 1, canonical = "Firm Conditions")
+            val b = factor(SparkRowKind.WHITE, "Firm Conditions", 1, canonical = "Firm Conditions")
+            assertEquals(a.factorFingerprint, b.factorFingerprint)
+            assertEquals("white:FIRM CONDITIONS:1", a.factorFingerprint)
+            assertEquals("FIRM CONDITIONSO", a.displayName, "the raw OCR is preserved as evidence")
         }
 
         @Test
-        fun `a trailing grade marker OCR cannot read consistently does not change the token`() {
-            // The same card read twice comes back as "Medium Straightaways O" and then "Medium
-            // Straightaways". A fingerprint that flips between two values for unchanged evidence is
-            // useless to a later stage, so the marker is dropped from the token and kept in the text.
-            val bare = factor(SparkRowKind.WHITE, "Medium Straightaways", 1).factorFingerprint
-            for (marker in listOf("O", "0", "*", "@", "()", "○", "◎", "☆")) {
-                assertEquals(bare, factor(SparkRowKind.WHITE, "Medium Straightaways $marker", 1).factorFingerprint, "marker $marker")
-            }
-            assertEquals("Medium Straightaways O", factor(SparkRowKind.WHITE, "Medium Straightaways O", 1).displayName, "the raw text keeps it")
+        fun `an unresolved factor mints no semantic token but keeps a structural one`() {
+            // Fail closed: a name that did not snap onto the domain must NOT produce a trusted
+            // fingerprint. The name-free kind:stars token still stands, since kind and stars are pixel
+            // facts that agree across re-reads.
+            val f = factor(SparkRowKind.WHITE, "Xqzzptdf", 2, canonical = null)
+            assertNull(f.factorFingerprint)
+            assertFalse(f.resolved)
+            assertEquals("white:2", f.structuralFingerprint)
         }
 
         @Test
-        fun `a name that merely ends in an abbreviation or a plus is left alone`() {
-            // "Japan C.", "February S.", "Mile Ch." and "Ignited Spirit: Speed +" are whole names.
+        fun `a name that merely ends in an abbreviation is preserved in the raw evidence`() {
+            // "Japan C.", "Mile Ch." and "Ignited Spirit: Speed +" are whole names; the raw normalized
+            // text keeps them verbatim whether or not they resolve.
             for (name in listOf("Japan C.", "February S.", "Mile Ch.", "Ignited Spirit: Speed +", "Triple 7s")) {
-                assertTrue(factor(SparkRowKind.WHITE, name, 1).normalizedName.isNotEmpty())
                 assertEquals(name.uppercase(), factor(SparkRowKind.WHITE, name, 1).normalizedName, name)
             }
         }
 
         @Test
-        fun `a different star count or name changes the token`() {
+        fun `a different star count or canonical name changes the token`() {
             val base = factor(SparkRowKind.WHITE, "Calm in a Crowd", 2).factorFingerprint
             assertNotEquals(base, factor(SparkRowKind.WHITE, "Calm in a Crowd", 3).factorFingerprint)
             assertNotEquals(base, factor(SparkRowKind.WHITE, "Calm in a Cloud", 2).factorFingerprint)
@@ -141,21 +166,31 @@ class VeteranInspirationEventTest {
         }
 
         @Test
-        fun `the token is byte-identical to the PL-4 lineage reader's for the same factor`() {
-            // The two screens are different evidence sources for the same inheritance system. If their
-            // tokens diverged, nothing could ever be cross-checked between them.
+        fun `the token format matches the PL-4 canonical token for the same factor`() {
+            // The two screens are different evidence sources for the same inheritance system. Both build
+            // identity through the shared canonical token helper, so a resolved factor cross-links.
             val f = factor(SparkRowKind.UNIQUE, "Dancing in the Leaves", 3)
-            assertEquals(
-                ancestorFactorFingerprint(listOf(LineageFactorObservation(SparkRowKind.UNIQUE, "Dancing in the Leaves", 3, ambiguous = false, clipped = false))),
-                f.factorFingerprint,
-            )
+            assertEquals(canonicalFactorToken(SparkRowKind.UNIQUE, "Dancing in the Leaves", 3), f.factorFingerprint)
         }
 
         @Test
         fun `an ancestor's set digest does not depend on the order the rows were read`() {
             val forward = InspirationAncestor(0, true, null, selfBlock.factors)
             val reversed = InspirationAncestor(0, true, null, selfBlock.factors.reversed())
+            assertNotNull(forward.factorFingerprint)
             assertEquals(forward.factorFingerprint, reversed.factorFingerprint)
+        }
+
+        @Test
+        fun `a set with any unresolved factor yields no trusted digest but always a structural one`() {
+            val trusted = InspirationAncestor(0, true, null, selfBlock.factors)
+            assertTrue(trusted.factorSetTrusted)
+            assertNotNull(trusted.factorFingerprint)
+
+            val withGap = InspirationAncestor(0, true, null, selfBlock.factors + factor(SparkRowKind.WHITE, "Xqzzptdf", 1, canonical = null))
+            assertFalse(withGap.factorSetTrusted)
+            assertNull(withGap.factorFingerprint)
+            assertTrue(withGap.structuralFingerprint.isNotEmpty())
         }
     }
 
@@ -286,13 +321,39 @@ class VeteranInspirationEventTest {
         }
 
         @Test
-        fun `every factor carries its raw text, its normalized text and its token`() {
+        fun `a resolved factor carries raw text, normalized text, canonical name and both tokens`() {
             val first = serializeVeteranInspiration(assemble()).getJSONArray("selfFactors").getJSONObject(0)
             assertEquals("Power", first.getString("displayName"))
             assertEquals("POWER", first.getString("normalizedName"))
+            assertEquals("Power", first.getString("canonicalName"))
+            assertEquals("strong", first.getString("canonicalPath"))
             assertEquals("stat:POWER:1", first.getString("factorFingerprint"))
+            assertEquals("stat:1", first.getString("structuralFingerprint"))
             assertEquals("left", first.getString("column"))
             assertFalse(first.has("ambiguous"), "a clean star read writes no honesty flag at all")
+        }
+
+        @Test
+        fun `an unresolved factor omits the canonical name and semantic token but keeps the structural one`() {
+            val blank = selfBlock.copy(factors = listOf(factor(SparkRowKind.WHITE, "Xqzzptdf", 2, canonical = null)))
+            val f = serializeVeteranInspiration(assemble(blocks = listOf(blank, ancestorOne, ancestorTwo))).getJSONArray("selfFactors").getJSONObject(0)
+            assertEquals("Xqzzptdf", f.getString("displayName"))
+            assertFalse(f.has("canonicalName"), "no canonical name when the read did not resolve")
+            assertFalse(f.has("factorFingerprint"), "no trusted semantic token for an unresolved factor")
+            assertEquals("reject", f.getString("canonicalPath"))
+            assertEquals("white:2", f.getString("structuralFingerprint"))
+        }
+
+        @Test
+        fun `a fully resolved self block is marked trusted with a semantic fingerprint`() {
+            val json = serializeVeteranInspiration(assemble())
+            assertTrue(json.getBoolean("selfFactorSetTrusted"))
+            assertTrue(json.getString("selfFactorFingerprint").isNotEmpty())
+            assertTrue(json.getString("selfStructuralFingerprint").isNotEmpty())
+            val ancestor = json.getJSONArray("legacyAncestors").getJSONObject(0)
+            assertTrue(ancestor.getBoolean("factorSetTrusted"))
+            assertTrue(ancestor.getString("ancestorFactorFingerprint").isNotEmpty())
+            assertTrue(ancestor.getString("ancestorStructuralFingerprint").isNotEmpty())
         }
 
         @Test

@@ -20,7 +20,10 @@ function factor(kind: string, name: string, stars: number, rowIndex: number, col
         displayName: name,
         normalizedName: name.toUpperCase(),
         stars,
+        canonicalName: name,
+        canonicalPath: "strong",
         factorFingerprint: `${kind}:${name.toUpperCase()}:${stars}`,
+        structuralFingerprint: `${kind}:${stars}`,
         ambiguous: false,
         ...o,
     }

@@ -20,6 +20,7 @@ import com.steve1316.uma_android_automation.utils.ROSTER_FIRST_CARD_X
 import com.steve1316.uma_android_automation.utils.ROSTER_FIRST_CARD_Y
 import com.steve1316.uma_android_automation.utils.RosterScreenKind
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.VeteranFactorDomain
 import com.steve1316.uma_android_automation.utils.VeteranIdentityCatalog
 import com.steve1316.uma_android_automation.utils.classifyChevron
 import com.steve1316.uma_android_automation.utils.deniedZoneAt
@@ -55,8 +56,9 @@ private const val HARD_BOUND_SLACK = 8
  */
 class VeteranInspirationScanner(private val game: Game) {
     private val catalog = VeteranIdentityCatalog.loadFromAssets(game.myContext)
+    private val factorDomain = VeteranFactorDomain.loadFromAssets(game.myContext)
     private val rosterReader = VeteranRosterReader(game.imageUtils, catalog)
-    private val inspirationReader = VeteranInspirationReader(game)
+    private val inspirationReader = VeteranInspirationReader(game, factorDomain)
 
     private class DeniedTapException(message: String) : IllegalStateException(message)
 

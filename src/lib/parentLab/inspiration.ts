@@ -46,10 +46,12 @@ export type InspirationColumn = "left" | "right"
  * One factor card as the device read it.
  *
  * `kind` and `stars` are pixel-classified and are the authoritative fields: two reads of the same
- * panel agree on them exactly. `displayName` is OCR and does NOT have that guarantee - about one
- * factor name in thirty comes back a glyph different on a re-read - so `factorFingerprint`, which is
- * built from the name, inherits that instability. Treat the fingerprint as a strong hint and the
- * kind/stars as fact until the names are snapped onto a known skill/race domain.
+ * panel agree on them exactly. `displayName` is the raw OCR and does NOT have that guarantee - about
+ * one factor name in thirty comes back a glyph different on a re-read. From schema 2 the device snaps
+ * the raw read onto the canonical factor domain: `canonicalName` is the resolved identity (null when
+ * it did not resolve), `factorFingerprint` is the semantic `kind:CANON:stars` token built from it
+ * (null when unresolved - fail closed), and `structuralFingerprint` (`kind:stars`) is the name-free
+ * fallback that is always present and always stable.
  */
 export interface InspirationFactorRecord {
     readonly rowIndex: number
@@ -58,7 +60,14 @@ export interface InspirationFactorRecord {
     readonly displayName: string
     readonly normalizedName: string
     readonly stars: number
-    readonly factorFingerprint: string
+    /** Resolved canonical name, or null when the raw OCR did not snap onto the domain. */
+    readonly canonicalName: string | null
+    /** How the canonical name was accepted: "strong" | "margin" | "reject" (null on pre-schema-2 records). */
+    readonly canonicalPath: string | null
+    /** Semantic token `kind:CANON:stars`, or null when the factor did not resolve. */
+    readonly factorFingerprint: string | null
+    /** Name-free `kind:stars` token, always present. */
+    readonly structuralFingerprint: string
     readonly ambiguous: boolean
 }
 
@@ -70,7 +79,12 @@ export interface InspirationAncestorRecord {
     /** Always null today: the medal is a small stylized badge the calibrated classifier does not cover. */
     readonly rank: string | null
     readonly factorCount: number
-    readonly ancestorFactorFingerprint: string
+    /** Trusted canonical set fingerprint, or null when any factor is unresolved (fail closed). */
+    readonly ancestorFactorFingerprint: string | null
+    /** Name-free structural set fingerprint, always present from schema 2. */
+    readonly ancestorStructuralFingerprint: string | null
+    /** Whether every factor resolved, so the canonical fingerprint is a trusted identity. */
+    readonly factorSetTrusted: boolean
     readonly factors: readonly InspirationFactorRecord[]
 }
 
@@ -112,7 +126,12 @@ export interface VeteranInspirationRecord {
     readonly rank: string | null
     readonly selfPortraitObserved: boolean
     readonly selfFactorCount: number
-    readonly selfFactorFingerprint: string
+    /** Trusted canonical fingerprint of the Veteran's own Sparks, or null when any factor is unresolved. */
+    readonly selfFactorFingerprint: string | null
+    /** Name-free structural fingerprint of the Veteran's own Sparks, always present from schema 2. */
+    readonly selfStructuralFingerprint: string | null
+    /** Whether every self factor resolved, so the self canonical fingerprint is trusted. */
+    readonly selfFactorSetTrusted: boolean
     readonly selfFactors: readonly InspirationFactorRecord[]
     readonly legacyAncestors: readonly InspirationAncestorRecord[]
     readonly termination: InspirationReadTermination | null
@@ -198,18 +217,23 @@ function parseFactors(v: unknown): InspirationFactorRecord[] {
         if (typeof raw !== "object" || raw === null) continue
         const r = raw as Record<string, unknown>
         const kind = str(r.kind)
-        const fingerprint = str(r.factorFingerprint)
-        // A row with no kind or no fingerprint is not a factor; dropping it is safer than inventing one.
-        if (!kind || !fingerprint) continue
+        // A row with no kind is not a factor. The semantic fingerprint is intentionally absent for an
+        // unresolved factor (schema 2), so gating on it would drop real evidence; gate on kind and keep
+        // the structural token, which is always derivable from the pixel-classified kind and stars.
+        if (!kind) continue
         const column = str(r.column)
+        const stars = num(r.stars) ?? 0
         out.push({
             rowIndex: num(r.rowIndex) ?? 0,
             column: column === "left" || column === "right" ? column : null,
             kind,
             displayName: typeof r.displayName === "string" ? r.displayName : "",
             normalizedName: typeof r.normalizedName === "string" ? r.normalizedName : "",
-            stars: num(r.stars) ?? 0,
-            factorFingerprint: fingerprint,
+            stars,
+            canonicalName: str(r.canonicalName),
+            canonicalPath: str(r.canonicalPath),
+            factorFingerprint: str(r.factorFingerprint),
+            structuralFingerprint: str(r.structuralFingerprint) ?? `${kind}:${stars}`,
             ambiguous: bool(r.ambiguous),
         })
     }
@@ -228,7 +252,9 @@ function parseAncestors(v: unknown): InspirationAncestorRecord[] {
             portraitObserved: bool(r.portraitObserved),
             rank: str(r.rank),
             factorCount: num(r.factorCount) ?? factors.length,
-            ancestorFactorFingerprint: str(r.ancestorFactorFingerprint) ?? "",
+            ancestorFactorFingerprint: str(r.ancestorFactorFingerprint),
+            ancestorStructuralFingerprint: str(r.ancestorStructuralFingerprint),
+            factorSetTrusted: bool(r.factorSetTrusted),
             factors,
         })
     }
@@ -333,7 +359,9 @@ export function parseInspirationRecords(text: string, file?: string): ParsedInsp
                 rank: str(obj.rank),
                 selfPortraitObserved: bool(obj.selfPortraitObserved),
                 selfFactorCount: num(obj.selfFactorCount) ?? 0,
-                selfFactorFingerprint: str(obj.selfFactorFingerprint) ?? "",
+                selfFactorFingerprint: str(obj.selfFactorFingerprint),
+                selfStructuralFingerprint: str(obj.selfStructuralFingerprint),
+                selfFactorSetTrusted: bool(obj.selfFactorSetTrusted),
                 selfFactors: parseFactors(obj.selfFactors),
                 legacyAncestors: parseAncestors(obj.legacyAncestors),
                 termination: READ_TERMINATIONS.has(termination as InspirationReadTermination)
@@ -363,10 +391,18 @@ export interface VeteranInspirationView {
     readonly scanId: string
     readonly selfFactorCount: number
     readonly selfFactors: readonly InspirationFactorRecord[]
-    readonly selfFactorFingerprint: string
+    /** Trusted canonical self fingerprint, or null when any self factor is unresolved. */
+    readonly selfFactorFingerprint: string | null
+    /** Name-free structural self fingerprint, always present from schema 2. */
+    readonly selfStructuralFingerprint: string | null
+    /** Whether every self factor resolved, so the canonical self fingerprint is a trusted identity. */
+    readonly selfFactorSetTrusted: boolean
     readonly legacyAncestorFactorCounts: readonly number[]
     readonly legacyAncestorFactors: readonly (readonly InspirationFactorRecord[])[]
-    readonly legacyAncestorFingerprints: readonly string[]
+    /** Per-ancestor trusted canonical fingerprints; an entry is null when that ancestor is unresolved. */
+    readonly legacyAncestorFingerprints: readonly (string | null)[]
+    /** Per-ancestor name-free structural fingerprints, always present from schema 2. */
+    readonly legacyAncestorStructuralFingerprints: readonly (string | null)[]
     readonly sparkCaptureComplete: boolean
     readonly unresolvedFields: readonly string[]
 }
@@ -406,9 +442,12 @@ export function buildInspirationIndex(parsed: ParsedInspiration): ReadonlyMap<st
             selfFactorCount: entry.selfFactors.length,
             selfFactors: entry.selfFactors,
             selfFactorFingerprint: entry.selfFactorFingerprint,
+            selfStructuralFingerprint: entry.selfStructuralFingerprint,
+            selfFactorSetTrusted: entry.selfFactorSetTrusted,
             legacyAncestorFactorCounts: entry.legacyAncestors.map((a) => a.factors.length),
             legacyAncestorFactors: entry.legacyAncestors.map((a) => a.factors),
             legacyAncestorFingerprints: entry.legacyAncestors.map((a) => a.ancestorFactorFingerprint),
+            legacyAncestorStructuralFingerprints: entry.legacyAncestors.map((a) => a.ancestorStructuralFingerprint),
             sparkCaptureComplete: entry.sparkCaptureComplete,
             unresolvedFields: entry.unresolvedFields,
         })

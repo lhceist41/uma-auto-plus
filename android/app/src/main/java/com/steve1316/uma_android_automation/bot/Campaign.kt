@@ -1120,7 +1120,7 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     open fun startVeteranInspirationReadTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only Veteran Inspiration diagnostic...")
-        VeteranInspirationReader(game).debugRead()
+        VeteranInspirationReader(game, com.steve1316.uma_android_automation.utils.VeteranFactorDomain.loadFromAssets(game.myContext)).debugRead()
     }
 
     /**
