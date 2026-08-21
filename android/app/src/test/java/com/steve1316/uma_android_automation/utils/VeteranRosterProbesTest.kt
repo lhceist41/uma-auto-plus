@@ -93,6 +93,11 @@ class VeteranRosterProbesTest {
             assertEquals(1164, parseStatValue("1164"))
             assertNull(parseStatValue("25000"))
             assertNull(parseStatValue(""))
+            // A dropped-digit read must not enter identity. Both of these were observed live on the
+            // 20-entry walk (Guts "1", Wit "4") and were fingerprinted as if real.
+            assertNull(parseStatValue("1"))
+            assertNull(parseStatValue("4"))
+            assertEquals(90, parseStatValue("90"))
         }
     }
 

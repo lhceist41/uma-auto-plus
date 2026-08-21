@@ -433,6 +433,18 @@ fun classifyRankMedal(sampler: SparkPixelSampler): String? {
     return best?.label
 }
 
+/** Lowest stat value the digit OCR is allowed to believe. Measured over the 1810 stat samples in the
+ * career corpus: every value below 10 is an artifact (the bot's own -1 unread sentinel, or a 1/4/7
+ * from a dropped-digit read), and the smallest genuine value is 90. A single-digit read on a
+ * registered Veteran is therefore a digit dropout, not a real stat.
+ *
+ * This matters more than a missing field would: stat values feed the rosterFingerprint, so an
+ * accepted dropout does not merely lose data, it mints a WRONG identity that silently fails to join
+ * to the Veteran's real history. Rejecting it costs one unresolved entry and keeps identity honest.
+ * Observed live on the 20-entry walk: Guts read as 1 and Wit as 4, both fingerprinted. */
+const val STAT_VALUE_MIN = 10
+const val STAT_VALUE_MAX = 2500
+
 /** Digits-only stat value parse (e.g. "949" -> 949), rejecting an implausible read. Kept as a pure
  * parser so the digit-OCR result stays testable even though the OCR itself needs the device. */
-fun parseStatValue(raw: String): Int? = raw.filter { it.isDigit() }.toIntOrNull()?.takeIf { it in 0..2500 }
+fun parseStatValue(raw: String): Int? = raw.filter { it.isDigit() }.toIntOrNull()?.takeIf { it in STAT_VALUE_MIN..STAT_VALUE_MAX }
