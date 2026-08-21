@@ -74,6 +74,64 @@ class VeteranIdentityCatalogTest {
         }
     }
 
+    @Test
+    fun `the live outfit residuals now resolve via the character-conditioned margin path`() {
+        // The two costumes the absolute-floor-only rule failed closed on the live 257-scan, fed their
+        // exact raw name/outfit OCR from the corpus. Each is a decisive winner inside its trainee's own
+        // costumes (Formula R at 0.625 over a 0.14 runner-up; Saintly Jade Cleric at 0.647 over 0.12).
+        val maru = resolveNameOutfit("Fomua ®J\nMaruzensky", shipped)
+        assertEquals("Maruzensky", maru.name)
+        assertEquals("Formula R", maru.outfit)
+        assertEquals(OutfitAcceptancePath.MARGIN, maru.outfitAcceptancePath)
+
+        val grass = resolveNameOutfit("(Saintly ade detd\nGrass Wonder", shipped)
+        assertEquals("Grass Wonder", grass.name)
+        assertEquals("Saintly Jade Cleric", grass.outfit)
+        assertEquals(OutfitAcceptancePath.MARGIN, grass.outfitAcceptancePath)
+    }
+
+    @Test
+    fun `garbage, empty, wrong-character, and unseen outfit reads stay unresolved`() {
+        // Garbage outfit line, real character: the character still resolves, the outfit does not.
+        val garbage = resolveNameOutfit("zxqw vbnm plkj\nMaruzensky", shipped)
+        assertEquals("Maruzensky", garbage.name)
+        assertNull(garbage.outfit)
+        assertEquals(OutfitAcceptancePath.REJECT, garbage.outfitAcceptancePath)
+
+        // Empty read: nothing resolves at all.
+        assertNull(resolveNameOutfit("", shipped).outfit)
+
+        // Another trainee's costume, scored inside this trainee: "Wild Frontier" is Taiki's, not
+        // Maruzensky's, so it must not be minted as one of Maruzensky's costumes.
+        val wrong = resolveNameOutfit("Wild Frontier\nMaruzensky", shipped)
+        assertEquals("Maruzensky", wrong.name)
+        assertNull(wrong.outfit)
+
+        // A plausible but unseen costume name for a real trainee: no near match in her set.
+        val unseen = resolveNameOutfit("Midnight Gala Serenade\nGrass Wonder", shipped)
+        assertEquals("Grass Wonder", unseen.name)
+        assertNull(unseen.outfit)
+    }
+
+    @Test
+    fun `a single-candidate trainee still needs a meaningful score, and an ambiguous pair rejects`() {
+        // One-candidate trainee: a very poor outfit read is rejected even though there is no rival
+        // costume to disqualify it, because a resolved outfit still needs the relaxed absolute floor.
+        val solo = VeteranIdentityCatalog.parse("""{"schemaVersion":1,"characters":{"Maruzensky":{"outfits":["Formula R"]}}}""")
+        assertNotNull(solo)
+        val poor = resolveNameOutfit("qqqq wwww\nMaruzensky", solo)
+        assertEquals("Maruzensky", poor.name)
+        assertNull(poor.outfit, "a very poor read against the sole costume must not be minted")
+
+        // The relaxed-path boundary, exercised directly. (best, runner-up) pairs.
+        assertEquals(OutfitAcceptancePath.STRONG, outfitAcceptancePath(0.90, 0.20))
+        assertEquals(OutfitAcceptancePath.MARGIN, outfitAcceptancePath(0.625, 0.14)) // a real residual
+        assertEquals(OutfitAcceptancePath.MARGIN, outfitAcceptancePath(0.60, null)) // sole costume, decent read
+        assertEquals(OutfitAcceptancePath.REJECT, outfitAcceptancePath(0.45, null)) // sole costume, poor read
+        assertEquals(OutfitAcceptancePath.REJECT, outfitAcceptancePath(0.65, 0.55)) // ambiguous: margin 0.10 < 0.15
+        assertEquals(OutfitAcceptancePath.REJECT, outfitAcceptancePath(0.50, 0.10)) // below the relaxed floor
+    }
+
     private fun assetFile(relative: String): File {
         var dir: File? = File(System.getProperty("user.dir") ?: ".")
         repeat(5) {

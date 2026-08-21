@@ -135,6 +135,45 @@ const val CANONICAL_MIN_SIMILARITY = 0.68
 /** Default minimum lead the best candidate must hold over the runner-up (rejects ambiguous reads). */
 const val CANONICAL_MIN_MARGIN = 0.08
 
+/**
+ * Relaxed floor for the character-conditioned outfit margin fallback (PL-R1b). A costume that clears
+ * this but not [CANONICAL_MIN_SIMILARITY] is accepted only when it is the unique best inside the
+ * already-resolved trainee's own costumes AND leads the runner-up by [OUTFIT_RELAXED_MIN_MARGIN].
+ *
+ * Calibrated on the live 257-scan residuals: the lowest true costume read is 0.625 (Maruzensky
+ * "Fomua ®J" -> Formula R) and 0.647 (Grass Wonder "(Saintly ade detd" -> Saintly Jade Cleric), each
+ * beating its nearest sibling costume by >= 0.48; the highest a WRONG same-character costume ever
+ * scored across all 15 diagnosed entries is 0.25. 0.58 sits above that wrong-costume ceiling and below
+ * every observed true read, so it rescues the clipped-but-decisive read without lowering the absolute
+ * floor for the common path. A read below it stays unresolved (garbage/empty/unseen fail closed). */
+const val OUTFIT_RELAXED_MIN_SIMILARITY = 0.58
+
+/** Minimum lead the best costume must hold over the runner-up on the relaxed path - deliberately far
+ * stricter than [CANONICAL_MIN_MARGIN], because a lower-confidence absolute read demands a larger
+ * separation to be trusted. Every live residual clears it by >= 0.48; a same-character pair too close
+ * to separate (margin < this) stays unresolved rather than guessing which costume it was. */
+const val OUTFIT_RELAXED_MIN_MARGIN = 0.15
+
+/** How the outfit was accepted (or not), kept as evidence so a margin accept is auditable offline and
+ * distinguishable from a strong one. Never identity - the resolved costume is [NameOutfitMatch.outfit]. */
+enum class OutfitAcceptancePath { STRONG, MARGIN, REJECT }
+
+/**
+ * The acceptance decision for the best costume inside a resolved trainee, factored out so the
+ * STRONG/MARGIN/REJECT boundary is unit-testable directly. [second] is the runner-up costume's score,
+ * or null when the trainee has a single candidate (no runner-up to lead, so the relaxed absolute floor
+ * decides alone). STRONG reproduces the pre-PL-R1b rule exactly; MARGIN only adds accepts below the
+ * absolute floor when the lead over the runner-up is wide.
+ */
+fun outfitAcceptancePath(best: Double, second: Double?): OutfitAcceptancePath {
+    val margin = if (second != null) best - second else Double.POSITIVE_INFINITY
+    return when {
+        best >= CANONICAL_MIN_SIMILARITY && margin >= CANONICAL_MIN_MARGIN -> OutfitAcceptancePath.STRONG
+        best >= OUTFIT_RELAXED_MIN_SIMILARITY && margin >= OUTFIT_RELAXED_MIN_MARGIN -> OutfitAcceptancePath.MARGIN
+        else -> OutfitAcceptancePath.REJECT
+    }
+}
+
 /** Best [candidates] entry for a normalized needle and the winning + runner-up scores. */
 private class CandidateScore(val best: String?, val bestScore: Double, val second: String?, val secondScore: Double)
 
@@ -194,6 +233,9 @@ data class NameOutfitMatch(
     val outfitScore: Double? = null,
     val outfitSecondCandidate: String? = null,
     val outfitSecondScore: Double? = null,
+    /** Which path decided the outfit: STRONG (absolute floor), MARGIN (relaxed floor + clear lead), or
+     * REJECT (unresolved). Diagnostic only; [outfit] is null on REJECT. */
+    val outfitAcceptancePath: OutfitAcceptancePath = OutfitAcceptancePath.REJECT,
 )
 
 /**
@@ -253,16 +295,20 @@ fun resolveNameOutfit(
     }
     if (bestOutfit == null) return NameOutfitMatch(outfit = null, name = name, nameScore = nameScore)
 
-    val accepted =
-        bestOutfit.bestScore >= CANONICAL_MIN_SIMILARITY &&
-            (bestOutfit.secondScore < 0.0 || bestOutfit.bestScore - bestOutfit.secondScore >= CANONICAL_MIN_MARGIN)
+    // Two acceptance paths inside the resolved trainee's own costumes. STRONG is byte-identical to the
+    // pre-PL-R1b behavior, so every costume that already resolved still resolves the same way. MARGIN
+    // only ADDS accepts below the absolute floor, and only when the best costume is the unique winner
+    // by a wide lead - the clipped-but-decisive read (Formula R at 0.625 over a 0.14 runner-up) that
+    // failed closed before.
+    val path = outfitAcceptancePath(bestOutfit.bestScore, if (bestOutfit.secondScore >= 0.0) bestOutfit.secondScore else null)
     return NameOutfitMatch(
-        outfit = if (accepted) bestOutfit.best else null,
+        outfit = if (path == OutfitAcceptancePath.REJECT) null else bestOutfit.best,
         name = name,
         nameScore = nameScore,
         outfitCandidate = bestOutfit.best,
         outfitScore = bestOutfit.bestScore,
         outfitSecondCandidate = bestOutfit.second,
         outfitSecondScore = if (bestOutfit.secondScore >= 0.0) bestOutfit.secondScore else null,
+        outfitAcceptancePath = path,
     )
 }
