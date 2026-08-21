@@ -32,7 +32,24 @@ class VeteranRosterScanEventTest {
         aptitudes: List<String?> = listOf("A", "B", "A", "A", "E", "G", "C", "A", "E", "G"),
         favoriteState: String = "not_set",
         careerInfo: RosterCareerInfoObservation? = null,
-    ) = RosterEntryObservation(character, outfit, rank, rating, stats, statGrades, aptitudes, favoriteState, careerInfo)
+        diagnostics: RosterEntryDiagnostics? = null,
+    ) = RosterEntryObservation(character, outfit, rank, rating, stats, statGrades, aptitudes, favoriteState, careerInfo, diagnostics)
+
+    /** Read evidence of the shape the device actually produces for a dropped-digit stat. */
+    private fun evidence() =
+        RosterEntryDiagnostics(
+            rawNameOutfitOcr = "[Wild Fronttai]\nTaikishuttle",
+            rawRatingOcr = "10192",
+            rawStatOcr = listOf("949", "699", "648", "1", "420"),
+            outfitCandidate = "Wild Frontier",
+            outfitScore = 0.93,
+            outfitSecondCandidate = "Bubblegum☆Memories",
+            outfitSecondScore = 0.21,
+            rankFamily = "A",
+            rankChosen = "A",
+            rankBestScore = 0.94,
+            rankSecondScore = 0.81,
+        )
 
     private fun listState(
         used: Int? = 257,
@@ -349,6 +366,85 @@ class VeteranRosterScanEventTest {
         fun `an unfingerprinted entry omits the fingerprint rather than emitting an empty one`() {
             val entry = assemble(listOf(observation(character = null)), list = listState(used = 1)).entries.single()
             assertFalse(serializeRosterScanEntry("scan-1", entry).has("rosterFingerprint"))
+        }
+    }
+
+    @Nested
+    @DisplayName("read evidence")
+    inner class Evidence {
+        @Test
+        fun `diagnostics change nothing about identity, completeness, or the fingerprint`() {
+            // The whole point of carrying the raw reads: they are inert. If attaching them could move
+            // any derived value, the evidence would be part of identity and a bad OCR string could
+            // change who a Veteran is.
+            val without = assemble(listOf(observation()), list = listState(used = 1)).entries.single()
+            val with = assemble(listOf(observation(diagnostics = evidence())), list = listState(used = 1)).entries.single()
+            assertEquals(without.rosterFingerprint, with.rosterFingerprint)
+            assertEquals(without.unresolvedFields, with.unresolvedFields)
+            assertEquals(without.readCompleteness, with.readCompleteness)
+            assertEquals(without.identityMultiplicity, with.identityMultiplicity)
+        }
+
+        @Test
+        fun `an entry that read cleanly emits no diagnostics even when they were collected`() {
+            val entry = assemble(listOf(observation(diagnostics = evidence())), list = listState(used = 1)).entries.single()
+            assertFalse(serializeRosterScanEntry("scan-1", entry).has("diagnostics"), "a clean entry needs no failure evidence")
+        }
+
+        @Test
+        fun `an entry with an unresolved immutable field emits the raw reads that explain it`() {
+            val entry =
+                assemble(
+                    listOf(observation(stats = listOf(949, 699, 648, null, 420), diagnostics = evidence())),
+                    list = listState(used = 1),
+                ).entries.single()
+            val d = serializeRosterScanEntry("scan-1", entry).getJSONObject("diagnostics")
+            // The rejected digit read is preserved verbatim as evidence; the stat itself stays unread.
+            assertEquals("1", d.getJSONObject("rawStatOcr").getString("grt"))
+            assertFalse(serializeRosterScanEntry("scan-1", entry).getJSONObject("stats").has("grt"))
+            assertTrue(entry.unresolvedFields.contains("stat_grt"))
+            assertEquals("Wild Frontier", d.getString("outfitCandidate"))
+            assertEquals("A", d.getString("rankFamily"))
+        }
+
+        @Test
+        fun `an absent evidence field is omitted rather than written as an empty value`() {
+            val entry =
+                assemble(
+                    listOf(observation(rank = null, diagnostics = RosterEntryDiagnostics(rawNameOutfitOcr = "Taikishuttle"))),
+                    list = listState(used = 1),
+                ).entries.single()
+            val d = serializeRosterScanEntry("scan-1", entry).getJSONObject("diagnostics")
+            assertTrue(d.has("rawNameOutfitOcr"))
+            assertFalse(d.has("rawStatOcr"), "no stat OCR was collected, so no key")
+            assertFalse(d.has("rankFamily"), "the medal matched no family, so there is nothing to record")
+        }
+
+        @Test
+        fun `an entry with no diagnostics at all still serializes`() {
+            val entry = assemble(listOf(observation(rating = null)), list = listState(used = 1)).entries.single()
+            assertFalse(serializeRosterScanEntry("scan-1", entry).has("diagnostics"))
+        }
+
+        @Test
+        fun `the crop count is reported on the header and defaults to zero`() {
+            assertEquals(0, assemble(distinct(2), list = listState(used = 2)).header.evidenceCropCount)
+            val header =
+                assembleRosterScan(
+                    scanId = "scan-1",
+                    startedAt = 1_000L,
+                    completedAt = 2_000L,
+                    list = listState(used = 2),
+                    entryLimit = 0,
+                    observations = distinct(2).mapIndexed { i, o -> (1_000L + i) to o },
+                    termination = RosterScanTermination.COUNT_REACHED,
+                    appVersion = "2.5.9",
+                    screenWidth = 1080,
+                    screenHeight = 1920,
+                    evidenceCropCount = 7,
+                ).header
+            assertEquals(7, header.evidenceCropCount)
+            assertEquals(7, serializeRosterScanHeader(header).getInt("evidenceCropCount"))
         }
     }
 }

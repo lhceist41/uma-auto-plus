@@ -506,16 +506,41 @@ private fun normalizedCrossCorrelation(a: IntArray, b: IntArray): Double {
 
 /**
  * The rank tier from the medal in [RANK_MEDAL_BOX], or null when no calibrated medal matches
- * confidently. Two stages, because grayscale correlation alone cannot tell an orange A medal from a
- * gold S one (their letters downsample too alike) and colour alone cannot tell A from A+:
- *  1. The medal's dominant colour picks the family (orange -> A/A+, gold -> S/S+); an off-palette or
- *     unreadable medal has no family and returns null.
- *  2. Within that family, the medal correlates against each tier's template; the winner is accepted
- *     only when it clears [RANK_MATCH_MIN_NCC] and leads its same-family sibling (the "+"/no-"+"
- *     counterpart) by [RANK_MATCH_MIN_MARGIN]. A medal that sits between the two stays unresolved.
+ * confidently. See [classifyRankMedalDetailed] for the two-stage decision and the scoring evidence
+ * behind it; this is the identity-only view every caller that does not need the evidence uses.
  */
-fun classifyRankMedal(sampler: SparkPixelSampler): String? {
-    val ringFamily = familyOf(glyphStats(sampler, RANK_MEDAL_BOX)) ?: return null
+fun classifyRankMedal(sampler: SparkPixelSampler): String? = classifyRankMedalDetailed(sampler).tier
+
+/**
+ * The rank verdict plus the evidence it was reached from. Only [tier] is identity; the rest exists
+ * so an unresolved medal can be explained offline (was it an off-palette family, a weak correlation,
+ * or two tiers too close to separate?) instead of being re-scanned blind. Nothing may promote
+ * [chosen] into a rank on the strength of the scores.
+ */
+data class RankMedalRead(
+    /** The accepted tier, or null when the medal did not classify confidently. */
+    val tier: String?,
+    /** The colour family the ring gate picked ('A' orange, 'S' gold, 'G' grey), or null when the
+     * medal is off-palette or unreadable and no template was even scored. */
+    val family: Char?,
+    /** Best-correlating template of that family, accepted or not. */
+    val chosen: String?,
+    val bestScore: Double?,
+    /** Same-family runner-up, which within a family is the "+"/no-"+" sibling. */
+    val secondScore: Double?,
+)
+
+/**
+ * [classifyRankMedal] with its working shown. Two stages, because grayscale correlation alone cannot
+ * tell an orange A medal from a gold S one (their letters downsample too alike) and colour alone
+ * cannot tell A from A+:
+ *  1. The medal's dominant colour picks the family (orange -> A/A+, gold -> S/S+); an off-palette or
+ *     unreadable medal has no family and nothing is scored.
+ *  2. Within that family, the medal correlates against each tier's template; the winner is accepted
+ *     only when it clears [RANK_MATCH_MIN_NCC] and leads its sibling by [RANK_MATCH_MIN_MARGIN].
+ */
+fun classifyRankMedalDetailed(sampler: SparkPixelSampler): RankMedalRead {
+    val ringFamily = familyOf(glyphStats(sampler, RANK_MEDAL_BOX)) ?: return RankMedalRead(null, null, null, null, null)
     val sample = downsampleLuma(sampler, RANK_MEDAL_BOX, RANK_TEMPLATE_N)
     var best: RankMedalTemplate? = null
     var bestScore = Double.NEGATIVE_INFINITY
@@ -531,9 +556,10 @@ fun classifyRankMedal(sampler: SparkPixelSampler): String? {
             secondScore = score
         }
     }
-    if (best == null || bestScore < RANK_MATCH_MIN_NCC) return null
-    if (secondScore > Double.NEGATIVE_INFINITY && bestScore - secondScore < RANK_MATCH_MIN_MARGIN) return null
-    return best.label
+    val second = if (secondScore > Double.NEGATIVE_INFINITY) secondScore else null
+    if (best == null) return RankMedalRead(null, ringFamily, null, null, null)
+    val accepted = bestScore >= RANK_MATCH_MIN_NCC && (second == null || bestScore - second >= RANK_MATCH_MIN_MARGIN)
+    return RankMedalRead(if (accepted) best.label else null, ringFamily, best.label, bestScore, second)
 }
 
 /** Lowest stat value the digit OCR is allowed to believe. Measured over the 1810 stat samples in the

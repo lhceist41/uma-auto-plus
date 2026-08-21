@@ -261,6 +261,8 @@ export interface Settings {
         debugMode_startVeteranRosterScanTest: boolean
         // How many Veterans the roster scan reads before stopping. 0 walks the whole roster; a small value is the bounded validation run.
         veteranRosterScanLimit: number
+        // Saves a PNG crop of every roster field that did NOT resolve, so an unread stat or outfit can be diagnosed without walking the roster again. Failures only, capped per scan.
+        veteranRosterScanEvidence: boolean
         enableScreenRecording: boolean
         recordingBitRate: number
         recordingFrameRate: number
@@ -759,6 +761,7 @@ export const defaultSettings: Settings = {
         debugMode_startVeteranRosterReadTest: false,
         debugMode_startVeteranRosterScanTest: false,
         veteranRosterScanLimit: 5,
+        veteranRosterScanEvidence: false,
         enableScreenRecording: false,
         recordingBitRate: 6,
         recordingFrameRate: 30,

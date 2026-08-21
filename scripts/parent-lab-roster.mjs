@@ -115,6 +115,7 @@ function renderReport(snapshot, reconciliation, library, parsed, allScans) {
     lines.push(`  enumeration complete  ${snapshot.enumerationComplete}  (did the walk cover the whole roster?)`)
     lines.push(`  identity complete     ${snapshot.identityComplete}  (did every entry resolve to a distinct identity?)`)
     lines.push(`  trusted for retention ${snapshot.trustedComplete ? "TRUSTED_COMPLETE" : "INCOMPLETE"}`)
+    lines.push(`  evidence crops        ${snapshot.evidenceCropCount ?? "not recorded by this build"}`)
     if (snapshot.defects.length > 0) lines.push(`  defects               ${snapshot.defects.join(", ")}`)
     if (parsed.malformedRecords > 0) lines.push(`  malformed lines       ${parsed.malformedRecords}`)
 
@@ -138,6 +139,12 @@ function renderReport(snapshot, reconciliation, library, parsed, allScans) {
         lines.push("  No career corpus was supplied (--careers), so every roster entry is ROSTER_ONLY by construction.")
     }
 
+    const evidence = renderUnresolvedEvidence(snapshot)
+    if (evidence.length > 0) {
+        lines.push("")
+        lines.push(...evidence)
+    }
+
     const notable = reconciliation.entries.filter((e) => e.status === "AMBIGUOUS" || e.status === "UNRESOLVED")
     if (notable.length > 0) {
         lines.push("")
@@ -149,6 +156,83 @@ function renderReport(snapshot, reconciliation, library, parsed, allScans) {
     }
 
     return lines.join("\n")
+}
+
+/**
+ * Groups the entries that failed to resolve an immutable field by which field failed, and shows what
+ * the device actually saw for each. This is what turns "26 entries had an unread stat" into a
+ * diagnosable defect without walking the roster again.
+ *
+ * Strictly a view of the evidence: nothing here repairs a value or promotes a raw read.
+ *
+ * @param {{entries: readonly any[]}} snapshot The derived roster snapshot.
+ * @returns {string[]} Report lines, empty when every entry resolved.
+ */
+function renderUnresolvedEvidence(snapshot) {
+    const byField = new Map()
+    for (const entry of snapshot.entries) {
+        for (const field of entry.unresolvedFields) {
+            // Auxiliary fields (stat grades, the Career Info block) do not block identity and are
+            // not what the evidence pass exists for.
+            if (!IMMUTABLE_FIELD.test(field)) continue
+            if (!byField.has(field)) byField.set(field, [])
+            byField.get(field).push(entry)
+        }
+    }
+    if (byField.size === 0) return []
+
+    const lines = ["=== Unresolved immutable fields ==="]
+    for (const field of [...byField.keys()].sort()) {
+        const entries = byField.get(field)
+        lines.push(`  ${field.padEnd(12)} ${entries.length} entr${entries.length === 1 ? "y" : "ies"}`)
+        for (const e of entries.slice(0, 8)) {
+            lines.push(`    [${pad(e.scanIndex, 3)}] ${e.character ?? "?"} - ${describeFieldEvidence(field, e)}`)
+        }
+        if (entries.length > 8) lines.push(`    ... and ${entries.length - 8} more (use --json for the full list)`)
+    }
+    return lines
+}
+
+/** Matches the immutable identity feeders the fingerprint needs, and only those. */
+const IMMUTABLE_FIELD = /^(character|outfit|rank|rating|stat_)/
+
+/**
+ * One line of what the device saw for a specific unresolved field on one entry.
+ *
+ * @param {string} field The unresolved field name from the corpus.
+ * @param {any} entry The roster entry record.
+ * @returns {string} A human-readable description of the evidence, or why there is none.
+ */
+function describeFieldEvidence(field, entry) {
+    const d = entry.diagnostics
+    if (!d) return "no evidence recorded (the scan ran without the evidence diagnostic armed)"
+    if (field.startsWith("stat_")) {
+        const key = field.slice("stat_".length)
+        const raw = d.rawStatOcr[key]
+        return raw === undefined ? "digit OCR returned nothing at all" : `digit OCR read ${JSON.stringify(raw)}, rejected as implausible`
+    }
+    if (field === "outfit") {
+        if (d.outfitCandidate === null) return `no costume scored; raw OCR ${JSON.stringify(d.rawNameOutfitOcr ?? "")}`
+        const second = d.outfitSecondCandidate === null ? "" : `, runner-up ${JSON.stringify(d.outfitSecondCandidate)} at ${fmt(d.outfitSecondScore)}`
+        return `closest ${JSON.stringify(d.outfitCandidate)} at ${fmt(d.outfitScore)}${second}; raw OCR ${JSON.stringify(d.rawNameOutfitOcr ?? "")}`
+    }
+    if (field === "character") return `raw OCR ${JSON.stringify(d.rawNameOutfitOcr ?? "")} matched no trainee confidently`
+    if (field === "rank") {
+        if (d.rankFamily === null) return "the medal colour matched no calibrated tier family"
+        return `family ${d.rankFamily}, closest ${d.rankChosen ?? "none"} at ${fmt(d.rankBestScore)}, sibling at ${fmt(d.rankSecondScore)}`
+    }
+    if (field === "rating") return `raw OCR ${JSON.stringify(d.rawRatingOcr ?? "")} did not parse`
+    return "no evidence for this field"
+}
+
+/**
+ * Formats a score for the report.
+ *
+ * @param {number|null} v The score.
+ * @returns {string} Three decimal places, or "n/a".
+ */
+function fmt(v) {
+    return v === null || v === undefined ? "n/a" : v.toFixed(3)
 }
 
 function main(argv) {

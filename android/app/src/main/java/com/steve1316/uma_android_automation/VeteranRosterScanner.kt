@@ -9,6 +9,7 @@ import com.steve1316.uma_android_automation.bot.RosterListState
 import com.steve1316.uma_android_automation.bot.RosterScanTermination
 import com.steve1316.uma_android_automation.bot.assembleRosterScan
 import com.steve1316.uma_android_automation.bot.entryFingerprint
+import com.steve1316.uma_android_automation.bot.identityUnresolved
 import com.steve1316.uma_android_automation.bot.serializeRosterScanEntry
 import com.steve1316.uma_android_automation.bot.serializeRosterScanHeader
 import com.steve1316.uma_android_automation.utils.CHEVRON_NEXT_BOX
@@ -20,6 +21,7 @@ import com.steve1316.uma_android_automation.utils.DETAIL_NEXT_CHEVRON_Y
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.ROSTER_FIRST_CARD_X
 import com.steve1316.uma_android_automation.utils.ROSTER_FIRST_CARD_Y
+import com.steve1316.uma_android_automation.utils.RosterEvidenceWriter
 import com.steve1316.uma_android_automation.utils.RosterScreenKind
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.VeteranIdentityCatalog
@@ -89,12 +91,26 @@ class VeteranRosterScanner(private val game: Game) {
 
     /**
      * Runs one walk. [entryLimit] caps how many entries are read (the 5-entry and 20-entry bounded
-     * validation runs); 0 means walk until a real termination condition fires.
+     * validation runs); 0 means walk until a real termination condition fires. [captureEvidence]
+     * turns on the failure-crop diagnostic: it changes nothing about what is read or how a field is
+     * decided, only whether the pixels behind an UNRESOLVED field are kept for offline diagnosis.
      */
-    fun runScan(entryLimit: Int) {
+    fun runScan(entryLimit: Int, captureEvidence: Boolean = false) {
         val startedAt = System.currentTimeMillis()
         val scanId = "rs-$startedAt-${java.util.UUID.randomUUID().toString().substring(0, 8)}"
-        MessageLog.i(TAG, "[ROSTER-SCAN] ===== Veteran roster walk scanId=$scanId entryLimit=${if (entryLimit > 0) entryLimit else "none"} =====")
+        MessageLog.i(
+            TAG,
+            "[ROSTER-SCAN] ===== Veteran roster walk scanId=$scanId entryLimit=${if (entryLimit > 0) entryLimit else "none"} " +
+                "evidence=${if (captureEvidence) "on" else "off"} identityDomain=${catalog?.let { "${it.characters.size} trainees/${it.outfitCount} outfits" } ?: "UNAVAILABLE"} =====",
+        )
+        if (catalog == null) {
+            MessageLog.w(
+                TAG,
+                "[ROSTER-SCAN] The generated identity asset did not load, so no outfit can resolve and every entry will stay unfingerprinted. " +
+                    "This is a packaging failure, not a roster problem.",
+            )
+        }
+        val evidence = if (captureEvidence) RosterEvidenceWriter(game.myContext, scanId) else null
 
         val (listBitmap, listScreen) = reader.classifyScreenWithRetries()
         if (listScreen.kind != RosterScreenKind.ROSTER_LIST) {
@@ -103,7 +119,7 @@ class VeteranRosterScanner(private val game: Game) {
                 "[ROSTER-SCAN] Precondition failed: expected the Veteran Roster list, saw ${listScreen.kind} " +
                     "(registered OCR='${listScreen.registeredRaw}' title OCR='${listScreen.titleRaw}'). No gesture was dispatched.",
             )
-            finish(scanId, startedAt, RosterListState(null, null, null, null, null), entryLimit, emptyList(), RosterScanTermination.PRECONDITION_FAILED, listBitmap)
+            finish(scanId, startedAt, RosterListState(null, null, null, null, null), entryLimit, emptyList(), RosterScanTermination.PRECONDITION_FAILED, listBitmap, evidence)
             return
         }
 
@@ -114,7 +130,7 @@ class VeteranRosterScanner(private val game: Game) {
                 "[ROSTER-SCAN] Precondition failed: registeredUsed=${list.registeredUsed ?: "UNREAD"} filtersOff=${list.filtersOff ?: "UNREAD"}. " +
                     "A scan under an unknown filter state would enumerate a subset and still look complete, so it stops here. No gesture was dispatched.",
             )
-            finish(scanId, startedAt, list, entryLimit, emptyList(), RosterScanTermination.PRECONDITION_FAILED, listBitmap)
+            finish(scanId, startedAt, list, entryLimit, emptyList(), RosterScanTermination.PRECONDITION_FAILED, listBitmap, evidence)
             return
         }
 
@@ -131,14 +147,14 @@ class VeteranRosterScanner(private val game: Game) {
         var lastBitmap = listBitmap
         val termination =
             try {
-                walk(list, used, hardBound, entryLimit, observations, fingerprints) { lastBitmap = it }
+                walk(list, used, hardBound, entryLimit, observations, fingerprints, evidence) { lastBitmap = it }
             } catch (e: DeniedTapException) {
                 MessageLog.e(TAG, "[ROSTER-SCAN] ${e.message}")
                 RosterScanTermination.UNEXPECTED_SCREEN
             }
 
         closeDialogAndVerify()
-        finish(scanId, startedAt, list, entryLimit, observations, termination, lastBitmap)
+        finish(scanId, startedAt, list, entryLimit, observations, termination, lastBitmap, evidence)
     }
 
     /**
@@ -153,6 +169,7 @@ class VeteranRosterScanner(private val game: Game) {
         entryLimit: Int,
         observations: MutableList<Pair<Long, RosterEntryObservation>>,
         fingerprints: MutableList<String?>,
+        evidence: RosterEvidenceWriter?,
         publishFrame: (Bitmap) -> Unit,
     ): RosterScanTermination {
         val walkStart = System.currentTimeMillis()
@@ -166,7 +183,7 @@ class VeteranRosterScanner(private val game: Game) {
             MessageLog.w(TAG, "[ROSTER-SCAN] Opening the first card did not produce the Details dialog (saw ${screen.kind}, title OCR='${screen.titleRaw}'). Stopping.")
             return RosterScanTermination.UNEXPECTED_SCREEN
         }
-        recordEntry(bitmap, observations, fingerprints, walkStart)
+        recordEntry(bitmap, observations, fingerprints, walkStart, evidence)
 
         while (true) {
             val count = observations.size
@@ -214,7 +231,7 @@ class VeteranRosterScanner(private val game: Game) {
                 MessageLog.w(TAG, "[ROSTER-SCAN] Entry $count repeats entry 0's fingerprint: the walk wrapped around after $count entries. Stopping without recording it.")
                 return RosterScanTermination.WRAPPED
             }
-            appendEntry(observation, fingerprint, observations, fingerprints, walkStart, chevron)
+            appendEntry(observation, fingerprint, observations, fingerprints, walkStart, chevron, bitmap, evidence)
         }
     }
 
@@ -231,9 +248,10 @@ class VeteranRosterScanner(private val game: Game) {
         observations: MutableList<Pair<Long, RosterEntryObservation>>,
         fingerprints: MutableList<String?>,
         walkStart: Long,
+        evidence: RosterEvidenceWriter?,
     ) {
         val observation = reader.readDetailObservation(bitmap, includeCareerInfo = false, verbose = false)
-        appendEntry(observation, entryFingerprint(observation), observations, fingerprints, walkStart, chevron = null)
+        appendEntry(observation, entryFingerprint(observation), observations, fingerprints, walkStart, chevron = null, frame = bitmap, evidence = evidence)
     }
 
     private fun appendEntry(
@@ -243,6 +261,8 @@ class VeteranRosterScanner(private val game: Game) {
         fingerprints: MutableList<String?>,
         walkStart: Long,
         chevron: ChevronState?,
+        frame: Bitmap,
+        evidence: RosterEvidenceWriter?,
     ) {
         val index = observations.size
         observations.add(System.currentTimeMillis() to observation)
@@ -255,6 +275,23 @@ class VeteranRosterScanner(private val game: Game) {
                 "rating=${observation.rating ?: "?"} stats=$stats headerRead=$headerRead/4 fp=${fingerprint ?: "UNRESOLVED"} " +
                 "chevronBefore=${chevron ?: "n/a"} elapsed=${(System.currentTimeMillis() - walkStart) / 1000}s",
         )
+        saveFailureEvidence(evidence, index, observation, frame)
+    }
+
+    /**
+     * Persists the crop behind every UNRESOLVED immutable field of this entry, and nothing else.
+     *
+     * Deliberately driven off [identityUnresolved], the same list that decides whether the entry can
+     * be fingerprinted, so the evidence on disk and the corpus's own `unresolvedFields` can never
+     * name different fields. A resolved field writes no file, and the whole call is a no-op when the
+     * diagnostic is off.
+     */
+    private fun saveFailureEvidence(evidence: RosterEvidenceWriter?, index: Int, observation: RosterEntryObservation, frame: Bitmap) {
+        if (evidence == null) return
+        for (field in identityUnresolved(observation)) {
+            val box = RosterEvidenceWriter.boxForField(field) ?: continue
+            evidence.saveFieldCrop(frame, index, field, box)
+        }
     }
 
     /** Closes the Details dialog and re-reads the list status bar as the integrity proof that the
@@ -297,6 +334,7 @@ class VeteranRosterScanner(private val game: Game) {
         observations: List<Pair<Long, RosterEntryObservation>>,
         termination: RosterScanTermination,
         frame: Bitmap,
+        evidence: RosterEvidenceWriter?,
     ) {
         val assembled =
             assembleRosterScan(
@@ -310,6 +348,7 @@ class VeteranRosterScanner(private val game: Game) {
                 appVersion = BuildConfig.VERSION_NAME,
                 screenWidth = frame.width,
                 screenHeight = frame.height,
+                evidenceCropCount = evidence?.cropCount ?: 0,
             )
         persist(assembled)
         val h = assembled.header
@@ -319,7 +358,7 @@ class VeteranRosterScanner(private val game: Game) {
                 "unique=${h.uniqueFingerprints} duplicates=${h.duplicateFingerprintCount} unidentified=${h.unidentifiedCount} " +
                 "discrepancy=${h.countDiscrepancy ?: "n/a"} termination=${h.terminationReason} " +
                 "enumerationComplete=${h.enumerationComplete} identityComplete=${h.identityComplete} trustedForRetention=${h.trustedForRetention} " +
-                "runtime=${(h.completedAt - h.startedAt) / 1000}s",
+                "runtime=${(h.completedAt - h.startedAt) / 1000}s evidenceCrops=${h.evidenceCropCount}",
         )
         if (h.entriesEnumerated > 0) {
             MessageLog.i(TAG, "[ROSTER-SCAN] Mean per-entry cost: ${(h.completedAt - h.startedAt) / h.entriesEnumerated}ms")

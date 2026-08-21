@@ -836,6 +836,13 @@ const searchConfig: SearchOption[] = [
         page: "DebugSettings",
     },
     {
+        id: "veteran-roster-scan-evidence",
+        title: "Veteran Roster Scan Evidence",
+        description:
+            "Saves a small PNG crop of every Veteran roster field that could not be read, alongside the scan file, so an unreadable stat or outfit can be diagnosed without scanning the roster again. Fields that read cleanly save nothing.",
+        page: "DebugSettings",
+    },
+    {
         id: "debug-trackblazer-race-selection-test",
         title: "Start Trackblazer Race Selection Test",
         description:

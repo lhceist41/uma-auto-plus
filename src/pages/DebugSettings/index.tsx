@@ -678,6 +678,20 @@ const DebugSettings = () => {
                                 showLabels={true}
                                 description="How many Veterans the roster scan reads before it stops. Set 0 to walk the entire roster. A small value is the safe way to confirm the walk is stepping one entry at a time before committing to the full run."
                             />
+
+                            <CustomCheckbox
+                                searchId="veteran-roster-scan-evidence"
+                                checked={bsc.settings.debug.veteranRosterScanEvidence}
+                                onCheckedChange={(checked) => {
+                                    bsc.setSettings({
+                                        ...bsc.settings,
+                                        debug: { ...bsc.settings.debug, veteranRosterScanEvidence: checked },
+                                    })
+                                }}
+                                label="Veteran Roster Scan Evidence"
+                                description="Saves a small PNG crop of every Veteran roster field the scan could not read, next to the scan file, so an unreadable stat or outfit can be diagnosed without scanning the whole roster again. Fields that read cleanly save nothing, so a clean scan writes no images. Leave off for normal use."
+                                style={{ marginTop: 10 }}
+                            />
                         </View>
                     </View>
                 </ScrollView>

@@ -3,6 +3,7 @@ package com.steve1316.uma_android_automation
 import android.graphics.Bitmap
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.uma_android_automation.bot.RosterCareerInfoObservation
+import com.steve1316.uma_android_automation.bot.RosterEntryDiagnostics
 import com.steve1316.uma_android_automation.bot.RosterEntryObservation
 import com.steve1316.uma_android_automation.bot.RosterListState
 import com.steve1316.uma_android_automation.bot.entryFingerprint
@@ -64,7 +65,7 @@ import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.VeteranIdentityCatalog
 import com.steve1316.uma_android_automation.utils.classifyAptitudeGrade
 import com.steve1316.uma_android_automation.utils.classifyFavoriteMarker
-import com.steve1316.uma_android_automation.utils.classifyRankMedal
+import com.steve1316.uma_android_automation.utils.classifyRankMedalDetailed
 import com.steve1316.uma_android_automation.utils.classifyRosterScreen
 import com.steve1316.uma_android_automation.utils.classifyStatGrade
 import com.steve1316.uma_android_automation.utils.parseCareerRatingValue
@@ -111,7 +112,7 @@ data class RosterScreenRead(
  * same readers quietly, so the walk's per-entry log stays one line instead of twenty.
  *
  * The styled identity fields are read by field-appropriate readers rather than generic OCR: the rank
- * medal and every grade badge by pixel classifiers ([classifyRankMedal], [classifyStatGrade],
+ * medal and every grade badge by pixel classifiers ([classifyRankMedalDetailed], [classifyStatGrade],
  * [classifyAptitudeGrade]), the character by OCR snapped onto the known-name domain and the outfit
  * by OCR snapped onto THAT character's own costumes ([resolveNameOutfit] over [catalog]), and each
  * stat value by digit-only OCR of its own box (keeping the coloured badge out of the number read). The Career Info fields only resolve once that tab is open and
@@ -206,7 +207,8 @@ class VeteranRosterReader(
 
         val nameOutfitRaw = ocr(bitmap, DETAIL_NAME_OUTFIT_X, DETAIL_NAME_OUTFIT_Y, DETAIL_NAME_OUTFIT_W, DETAIL_NAME_OUTFIT_H, "name_outfit")
         val identity = resolveNameOutfit(nameOutfitRaw, catalog)
-        val rank = classifyRankMedal(sampler)
+        val rankRead = classifyRankMedalDetailed(sampler)
+        val rank = rankRead.tier
         val ratingRaw = ocr(bitmap, DETAIL_RATING_X, DETAIL_RATING_Y, DETAIL_RATING_W, DETAIL_RATING_H, "rating")
         val rating = parseRating(ratingRaw)
 
@@ -215,12 +217,18 @@ class VeteranRosterReader(
                 TAG,
                 "[ROSTER-TEST] Name/Outfit OCR='${nameOutfitRaw.replace("\n", " | ")}' -> outfit=${identity.outfit ?: "UNRESOLVED"} name=${identity.name ?: "UNRESOLVED"}",
             )
-            MessageLog.i(TAG, "[ROSTER-TEST] Rank medal classifier -> rank=${rank ?: "UNRESOLVED"}")
+            MessageLog.i(
+                TAG,
+                "[ROSTER-TEST] Rank medal classifier -> rank=${rank ?: "UNRESOLVED"} " +
+                    "(family=${rankRead.family ?: "none"} best=${rankRead.chosen ?: "none"}@${rankRead.bestScore?.let { "%.3f".format(it) } ?: "n/a"} " +
+                    "second=${rankRead.secondScore?.let { "%.3f".format(it) } ?: "n/a"})",
+            )
             MessageLog.i(TAG, "[ROSTER-TEST] Rating OCR='$ratingRaw' -> rating=${rating ?: "UNRESOLVED"}")
         }
 
         val stats = mutableListOf<Int?>()
         val statGrades = mutableListOf<String?>()
+        val rawStatOcr = mutableListOf<String?>()
         for (i in STAT_LABELS.indices) {
             val grade = classifyStatGrade(sampler, STAT_GRADE_GLYPH_BOXES[i])
             val valueBox = STAT_VALUE_BOXES[i]
@@ -228,6 +236,10 @@ class VeteranRosterReader(
             val value = parseStatValue(valueRaw)
             stats.add(value)
             statGrades.add(grade)
+            // The raw string, kept as evidence and never as a value: parseStatValue already rejected
+            // implausible reads (a dropped digit renders 949 as "1"), and promoting one here would
+            // mint a wrong identity rather than merely lose a field.
+            rawStatOcr.add(valueRaw.ifEmpty { null })
             if (verbose) MessageLog.i(TAG, "[ROSTER-TEST] ${STAT_LABELS[i]} grade=${grade ?: "UNRESOLVED"} valueOCR='$valueRaw' -> value=${value ?: "UNRESOLVED"}")
         }
 
@@ -253,6 +265,20 @@ class VeteranRosterReader(
             aptitudes = aptitudes,
             favoriteState = favorite.name.lowercase(),
             careerInfo = careerInfo,
+            diagnostics =
+                RosterEntryDiagnostics(
+                    rawNameOutfitOcr = nameOutfitRaw.ifEmpty { null },
+                    rawRatingOcr = ratingRaw.ifEmpty { null },
+                    rawStatOcr = rawStatOcr,
+                    outfitCandidate = identity.outfitCandidate,
+                    outfitScore = identity.outfitScore,
+                    outfitSecondCandidate = identity.outfitSecondCandidate,
+                    outfitSecondScore = identity.outfitSecondScore,
+                    rankFamily = rankRead.family?.toString(),
+                    rankChosen = rankRead.chosen,
+                    rankBestScore = rankRead.bestScore,
+                    rankSecondScore = rankRead.secondScore,
+                ),
         )
     }
 

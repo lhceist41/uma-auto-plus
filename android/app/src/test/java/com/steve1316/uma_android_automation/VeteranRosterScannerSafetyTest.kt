@@ -64,6 +64,25 @@ class VeteranRosterScannerSafetyTest {
         }
 
         @Test
+        fun `the failure-evidence setting is wired through all five steps and defaults off`() {
+            assertTrue(settingsContext.contains("veteranRosterScanEvidence: boolean"), "declared in the Settings interface")
+            assertTrue(settingsContext.contains("veteranRosterScanEvidence: false,"), "defaults OFF - it writes PNGs to the device")
+            assertTrue(debugUi.contains("veteranRosterScanEvidence: checked"), "has a Debug Settings control")
+            assertTrue(searchConfig.contains("\"veteran-roster-scan-evidence\""), "registered in the settings search index")
+            assertTrue(campaign.contains("\"veteranRosterScanEvidence\""), "read on the Kotlin side")
+        }
+
+        @Test
+        fun `the evidence crop writer only ever runs on unresolved identity fields`() {
+            // The crops are driven off identityUnresolved, the same list the fingerprint gate uses, so
+            // the pixels kept on disk and the corpus's own unresolvedFields can never name different
+            // fields - and a clean walk writes nothing at all.
+            val code = codeOnly(scanner)
+            assertTrue(code.contains("for (field in identityUnresolved(observation))"), "crops are driven off the identity-unresolved list")
+            assertTrue(code.contains("if (evidence == null) return"), "the whole path is a no-op when the diagnostic is off")
+        }
+
+        @Test
         fun `the scan toggle is discoverable in the UI and the search index`() {
             assertTrue(debugUi.contains("\"$key\""), "the key is in the Debug Settings debugTestKeys list")
             assertTrue(debugUi.contains("Start Veteran Roster Scan"), "the toggle has a user-facing label")

@@ -1099,8 +1099,12 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     open fun startVeteranRosterScanTest() {
         val limit = SettingsHelper.getIntSetting("debug", "veteranRosterScanLimit", 5)
-        MessageLog.i(TAG, "\n[TEST] Running read-only Veteran Roster enumeration (entryLimit=${if (limit > 0) limit.toString() else "none"})...")
-        VeteranRosterScanner(game).runScan(limit)
+        val evidence = SettingsHelper.getBooleanSetting("debug", "veteranRosterScanEvidence", false)
+        MessageLog.i(
+            TAG,
+            "\n[TEST] Running read-only Veteran Roster enumeration (entryLimit=${if (limit > 0) limit.toString() else "none"}, evidence=${if (evidence) "on" else "off"})...",
+        )
+        VeteranRosterScanner(game).runScan(limit, evidence)
     }
 
     /**

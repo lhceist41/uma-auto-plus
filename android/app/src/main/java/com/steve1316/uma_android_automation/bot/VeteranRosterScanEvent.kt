@@ -82,10 +82,40 @@ data class RosterCareerInfoObservation(
 )
 
 /**
+ * What the readers saw before the parsers turned it into (or refused to turn it into) a value.
+ *
+ * This is evidence, never identity. Nothing here feeds [entryFingerprint], the unresolved-field
+ * list, or the completeness verdict, and no consumer may promote a raw string or a near-miss
+ * candidate into a field the parser rejected: a raw stat OCR of "1" is a dropped-digit artifact, not
+ * a stat of 1. It exists so an unresolved immutable field can be diagnosed from the corpus instead
+ * of costing another blind walk of the whole roster.
+ *
+ * [rawStatOcr] is positional in [STAT_KEYS] order, like [RosterEntryObservation.stats].
+ */
+data class RosterEntryDiagnostics(
+    val rawNameOutfitOcr: String? = null,
+    val rawRatingOcr: String? = null,
+    val rawStatOcr: List<String?> = emptyList(),
+    /** Which costume the name/outfit read came closest to inside the resolved trainee, and how close. */
+    val outfitCandidate: String? = null,
+    val outfitScore: Double? = null,
+    val outfitSecondCandidate: String? = null,
+    val outfitSecondScore: Double? = null,
+    /** The rank medal's colour family, best-correlating tier, and the two template scores. */
+    val rankFamily: String? = null,
+    val rankChosen: String? = null,
+    val rankBestScore: Double? = null,
+    val rankSecondScore: Double? = null,
+)
+
+/**
  * One entry exactly as the detail dialog showed it. [stats] and [statGrades] are positional in
  * [STAT_KEYS] order; [aptitudes] is positional in [APTITUDE_ROLES] order. [favoriteState] is the
  * saturation classification of the favorite glyph ("not_set" when the glyph is the pure-grayscale
  * outline, "unknown" when it is a saturated icon this stage deliberately does not identify).
+ *
+ * [diagnostics] is deliberately outside every derivation below: identity, completeness, and the
+ * fingerprint are computed from the parsed fields alone, exactly as they were before it existed.
  */
 data class RosterEntryObservation(
     val character: String?,
@@ -97,6 +127,7 @@ data class RosterEntryObservation(
     val aptitudes: List<String?>,
     val favoriteState: String,
     val careerInfo: RosterCareerInfoObservation? = null,
+    val diagnostics: RosterEntryDiagnostics? = null,
 )
 
 /**
@@ -144,6 +175,11 @@ data class VeteranRosterScan(
      * enum for wire and reader back-compat; this boolean names it as the doc's `trustedForRetention`. */
     val trustedForRetention: Boolean,
     val completeness: RosterScanCompleteness,
+    /** How many failure-evidence crops the walk wrote for this scan. Zero when the diagnostic was
+     * not armed, and zero on a clean walk even when it was: crops are written only for an entry's
+     * unresolved immutable fields. Reported so a scan can never look like it preserved evidence it
+     * did not. */
+    val evidenceCropCount: Int,
     val appVersion: String,
     val screenWidth: Int,
     val screenHeight: Int,
@@ -152,8 +188,10 @@ data class VeteranRosterScan(
 /** The assembled scan: one header plus its entries, ready for serialization. */
 data class AssembledRosterScan(val header: VeteranRosterScan, val entries: List<RosterScanEntry>)
 
-/** The identity feeders. An entry missing any of these cannot be fingerprinted at all. */
-private fun identityUnresolved(o: RosterEntryObservation): List<String> =
+/** The identity feeders. An entry missing any of these cannot be fingerprinted at all. Public so the
+ * walk can decide which fields are worth preserving failure evidence for without re-deriving the
+ * list and drifting from it. */
+fun identityUnresolved(o: RosterEntryObservation): List<String> =
     buildList {
         if (o.character == null) add("character")
         if (o.outfit == null) add("outfit")
@@ -218,6 +256,7 @@ fun assembleRosterScan(
     appVersion: String,
     screenWidth: Int,
     screenHeight: Int,
+    evidenceCropCount: Int = 0,
 ): AssembledRosterScan {
     val fingerprints = observations.map { entryFingerprint(it.second) }
     val multiplicity = fingerprints.filterNotNull().groupingBy { it }.eachCount()
@@ -272,6 +311,7 @@ fun assembleRosterScan(
                 identityComplete = identityComplete,
                 trustedForRetention = trustedForRetention,
                 completeness = if (trustedForRetention) RosterScanCompleteness.TRUSTED_COMPLETE else RosterScanCompleteness.INCOMPLETE,
+                evidenceCropCount = evidenceCropCount,
                 appVersion = appVersion,
                 screenWidth = screenWidth,
                 screenHeight = screenHeight,
@@ -304,6 +344,7 @@ fun serializeRosterScanHeader(h: VeteranRosterScan): JSONObject =
         put("identityComplete", h.identityComplete)
         put("trustedForRetention", h.trustedForRetention)
         put("completeness", h.completeness.name.lowercase())
+        put("evidenceCropCount", h.evidenceCropCount)
         put("app", h.appVersion)
         put("screenWidth", h.screenWidth)
         put("screenHeight", h.screenHeight)
@@ -353,8 +394,35 @@ fun serializeRosterScanEntry(scanId: String, e: RosterScanEntry): JSONObject {
             )
         }
         e.rosterFingerprint?.let { put("rosterFingerprint", it) }
+        // Failure evidence only. An entry whose immutable fields all resolved needs none, and
+        // emitting raw OCR for all 257 rows would bury the rows that actually need diagnosing.
+        if (identityUnresolved(o).isNotEmpty()) {
+            o.diagnostics?.let { d -> put("diagnostics", serializeRosterEntryDiagnostics(d)) }
+        }
         put("readCompleteness", e.readCompleteness)
         put("identityMultiplicity", e.identityMultiplicity)
         put("unresolvedFields", JSONArray().apply { e.unresolvedFields.forEach { put(it) } })
     }
 }
+
+/** Serializes the read evidence. Every field is omitted when absent, so the record carries only what
+ * was actually observed and an unread field is never rendered as an empty string. */
+fun serializeRosterEntryDiagnostics(d: RosterEntryDiagnostics): JSONObject =
+    JSONObject().apply {
+        d.rawNameOutfitOcr?.let { put("rawNameOutfitOcr", it) }
+        d.rawRatingOcr?.let { put("rawRatingOcr", it) }
+        if (d.rawStatOcr.any { it != null }) {
+            put(
+                "rawStatOcr",
+                JSONObject().apply { STAT_KEYS.forEachIndexed { i, k -> d.rawStatOcr.getOrNull(i)?.let { put(k, it) } } },
+            )
+        }
+        d.outfitCandidate?.let { put("outfitCandidate", it) }
+        d.outfitScore?.let { put("outfitScore", it) }
+        d.outfitSecondCandidate?.let { put("outfitSecondCandidate", it) }
+        d.outfitSecondScore?.let { put("outfitSecondScore", it) }
+        d.rankFamily?.let { put("rankFamily", it) }
+        d.rankChosen?.let { put("rankChosen", it) }
+        d.rankBestScore?.let { put("rankBestScore", it) }
+        d.rankSecondScore?.let { put("rankSecondScore", it) }
+    }

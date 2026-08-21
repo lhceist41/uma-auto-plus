@@ -44,6 +44,30 @@ export interface RosterCareerInfoRecord {
     readonly dateAcquired: string | null
 }
 
+/**
+ * What the device's readers saw before the parsers accepted or rejected it, written only for entries
+ * that left an immutable field unresolved.
+ *
+ * Evidence, never identity. Nothing here may be promoted into a field: a `rawStatOcr.spd` of "1" is
+ * a dropped-digit artifact the device already refused, and treating it as a stat would mint a wrong
+ * fingerprint rather than merely lose a value. It exists so an unresolved field can be diagnosed
+ * from the corpus instead of costing another walk of the whole roster.
+ */
+export interface RosterEntryDiagnosticsRecord {
+    readonly rawNameOutfitOcr: string | null
+    readonly rawRatingOcr: string | null
+    /** Raw digit OCR per stat key, for the stats that produced any text at all. */
+    readonly rawStatOcr: Readonly<Record<string, string>>
+    readonly outfitCandidate: string | null
+    readonly outfitScore: number | null
+    readonly outfitSecondCandidate: string | null
+    readonly outfitSecondScore: number | null
+    readonly rankFamily: string | null
+    readonly rankChosen: string | null
+    readonly rankBestScore: number | null
+    readonly rankSecondScore: number | null
+}
+
 /** One `roster_entry` record as written by the device walk. */
 export interface RosterEntryRecord {
     readonly type: "roster_entry"
@@ -70,6 +94,9 @@ export interface RosterEntryRecord {
     /** How many entries in the same scan share this fingerprint. > 1 is preserved, never collapsed. */
     readonly identityMultiplicity: number
     readonly unresolvedFields: readonly string[]
+    /** Failure evidence, present only when the device had the diagnostic armed AND this entry left an
+     * immutable field unresolved. Null is the normal case. */
+    readonly diagnostics: RosterEntryDiagnosticsRecord | null
     readonly file?: string
     readonly lineNumber?: number
 }
@@ -99,6 +126,9 @@ export interface RosterScanRecord {
     /** Every enumerated entry resolved to a distinct identity. Null on pre-split records. */
     readonly identityComplete: boolean | null
     readonly completeness: "trusted_complete" | "incomplete"
+    /** How many failure-evidence crops the walk wrote. Null on records that predate the field, which
+     * is a different fact from a scan that wrote none. */
+    readonly evidenceCropCount: number | null
     readonly app: string | null
     readonly screenWidth: number | null
     readonly screenHeight: number | null
@@ -151,6 +181,24 @@ function parseStats(v: unknown): Record<RosterStatKey, number | null> {
     const out = {} as Record<RosterStatKey, number | null>
     for (const key of ROSTER_STAT_KEYS) out[key] = num(raw[key])
     return out
+}
+
+function parseDiagnostics(v: unknown): RosterEntryDiagnosticsRecord | null {
+    if (typeof v !== "object" || v === null) return null
+    const r = v as Record<string, unknown>
+    return {
+        rawNameOutfitOcr: str(r.rawNameOutfitOcr),
+        rawRatingOcr: str(r.rawRatingOcr),
+        rawStatOcr: stringMap(r.rawStatOcr),
+        outfitCandidate: str(r.outfitCandidate),
+        outfitScore: num(r.outfitScore),
+        outfitSecondCandidate: str(r.outfitSecondCandidate),
+        outfitSecondScore: num(r.outfitSecondScore),
+        rankFamily: str(r.rankFamily),
+        rankChosen: str(r.rankChosen),
+        rankBestScore: num(r.rankBestScore),
+        rankSecondScore: num(r.rankSecondScore),
+    }
 }
 
 function parseCareerInfo(v: unknown): RosterCareerInfoRecord | null {
@@ -219,6 +267,7 @@ export function parseRosterScanRecords(text: string, file?: string): ParsedRoste
                 enumerationComplete: typeof obj.enumerationComplete === "boolean" ? obj.enumerationComplete : null,
                 identityComplete: typeof obj.identityComplete === "boolean" ? obj.identityComplete : null,
                 completeness: obj.completeness === "trusted_complete" ? "trusted_complete" : "incomplete",
+                evidenceCropCount: num(obj.evidenceCropCount),
                 app: str(obj.app),
                 screenWidth: num(obj.screenWidth),
                 screenHeight: num(obj.screenHeight),
@@ -253,6 +302,7 @@ export function parseRosterScanRecords(text: string, file?: string): ParsedRoste
                 readCompleteness: num(obj.readCompleteness) ?? 0,
                 identityMultiplicity: num(obj.identityMultiplicity) ?? 1,
                 unresolvedFields: Array.isArray(obj.unresolvedFields) ? obj.unresolvedFields.filter((f: unknown) => typeof f === "string") : [],
+                diagnostics: parseDiagnostics(obj.diagnostics),
                 file,
                 lineNumber: i,
             })
@@ -312,6 +362,9 @@ export interface RosterSnapshot {
     readonly trustedComplete: boolean
     readonly defects: readonly RosterSnapshotDefect[]
     readonly headerPresent: boolean
+    /** Failure-evidence crops the device wrote for this scan. Null when the header predates the
+     * field, so "no crops" and "this build could not write crops" stay distinguishable. */
+    readonly evidenceCropCount: number | null
     readonly app: string | null
     /** Entries in traversal order. Duplicates are preserved as distinct positions, never merged. */
     readonly entries: readonly RosterEntryRecord[]
@@ -387,6 +440,7 @@ function snapshotFor(scanId: string, header: RosterScanRecord | undefined, rows:
         trustedComplete: defects.length === 0,
         defects,
         headerPresent: header !== undefined,
+        evidenceCropCount: header?.evidenceCropCount ?? null,
         app: header?.app ?? null,
         entries,
     }

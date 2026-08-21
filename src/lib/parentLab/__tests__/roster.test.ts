@@ -259,3 +259,71 @@ describe("buildRosterSnapshots selection", () => {
         expect(latestTrustedSnapshot(buildRosterSnapshots(parseRosterScanRecords(cleanScan("scan-a", { completeness: "incomplete" }))))).toBeNull()
     })
 })
+
+describe("read evidence", () => {
+    it("parses the failure diagnostics an unresolved entry carries", () => {
+        const text = [
+            headerLine("scan-e", { entriesEnumerated: 1, displayedRegisteredUsed: 1, uniqueFingerprints: 0, unidentifiedCount: 1, evidenceCropCount: 2 }),
+            entryLine("scan-e", 0, {
+                rosterFingerprint: null,
+                stats: { spd: 949, sta: 699, pwr: 648, wit: 420 },
+                unresolvedFields: ["stat_grt"],
+                diagnostics: {
+                    rawNameOutfitOcr: "[Wild Fronttai]\nTaikishuttle",
+                    rawRatingOcr: "10192",
+                    rawStatOcr: { spd: "949", grt: "1" },
+                    outfitCandidate: "Wild Frontier",
+                    outfitScore: 0.93,
+                    rankFamily: "A",
+                    rankChosen: "A",
+                    rankBestScore: 0.94,
+                    rankSecondScore: 0.81,
+                },
+            }),
+        ].join("\n")
+        const parsed = parseRosterScanRecords(text)
+        expect(parsed.malformedRecords).toBe(0)
+        const d = parsed.entries[0].diagnostics
+        // The rejected digit read survives as evidence while the stat itself stays unread. Promoting
+        // it would mint a wrong fingerprint rather than merely lose a value.
+        expect(d?.rawStatOcr.grt).toBe("1")
+        expect(parsed.entries[0].stats.grt).toBeNull()
+        expect(d?.outfitCandidate).toBe("Wild Frontier")
+        expect(d?.outfitScore).toBe(0.93)
+        expect(d?.rankFamily).toBe("A")
+        // Absent evidence fields stay null rather than becoming empty strings.
+        expect(d?.outfitSecondCandidate).toBeNull()
+        expect(d?.outfitSecondScore).toBeNull()
+    })
+
+    it("leaves diagnostics null on an entry that carries none", () => {
+        const parsed = parseRosterScanRecords(entryLine("scan-e", 0))
+        expect(parsed.entries[0].diagnostics).toBeNull()
+    })
+
+    it("carries the crop count onto the snapshot, and distinguishes zero from not-recorded", () => {
+        const withCount = buildRosterSnapshots(parseRosterScanRecords(cleanScan("scan-a", { evidenceCropCount: 0 })))
+        expect(withCount[0].evidenceCropCount).toBe(0)
+        const older = buildRosterSnapshots(parseRosterScanRecords(cleanScan("scan-b")))
+        expect(older[0].evidenceCropCount).toBeNull()
+    })
+
+    it("keeps diagnostics out of every derived verdict", () => {
+        // Same records twice, one with evidence attached: nothing derived may move.
+        const plain = cleanScan("scan-a")
+        const parsedPlain = parseRosterScanRecords(plain)
+        const withEvidence = plain
+            .split("\n")
+            .map((line) => {
+                const obj = JSON.parse(line)
+                if (obj.type === "roster_entry") obj.diagnostics = { rawStatOcr: { spd: "949" }, outfitCandidate: "Wild Frontier", outfitScore: 0.93 }
+                return JSON.stringify(obj)
+            })
+            .join("\n")
+        const a = buildRosterSnapshots(parsedPlain)[0]
+        const b = buildRosterSnapshots(parseRosterScanRecords(withEvidence))[0]
+        expect({ ...b, entries: [] }).toEqual({ ...a, entries: [] })
+        expect(b.trustedComplete).toBe(a.trustedComplete)
+        expect(b.uniqueFingerprints).toBe(a.uniqueFingerprints)
+    })
+})
