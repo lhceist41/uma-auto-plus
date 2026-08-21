@@ -63,7 +63,14 @@ class VeteranRosterProbesTest {
         fun `sort direction reads Asc and Desc`() {
             assertEquals("Asc", parseSortDirection("Asc"))
             assertEquals("Desc", parseSortDirection("Desc"))
-            assertNull(parseSortDirection("Asx"))
+            // The exact live read: the adjacent list icon bleeds into the crop and mangles the third
+            // glyph. A short A-or-D token still decodes this closed two-value toggle unambiguously.
+            assertEquals("Asc", parseSortDirection("AsE"))
+            assertEquals("Desc", parseSortDirection("DesE"))
+            assertNull(parseSortDirection(""))
+            assertNull(parseSortDirection("Rating"))
+            assertNull(parseSortDirection("Filters: OFF"))
+            assertNull(parseSortDirection("Registered 257/260"))
         }
     }
 

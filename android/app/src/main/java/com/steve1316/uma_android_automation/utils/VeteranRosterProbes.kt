@@ -164,12 +164,20 @@ fun parseSortKey(raw: String): String? {
     return ROSTER_KNOWN_SORT_KEYS.firstOrNull { cleaned.contains(it, ignoreCase = true) }
 }
 
-/** "Asc" / "Desc" toggle text -> "Asc" / "Desc", else null. */
+/** "Asc" / "Desc" toggle text -> "Asc" / "Desc", else null.
+ *
+ * The short-token fallback is not a guess. Live OCR of this control returns "AsE": the sort-order
+ * list icon sits immediately right of the text and bleeds into the crop, mangling the third glyph.
+ * The control is a closed two-value toggle whose members differ in their FIRST letter, so a short
+ * A-or-D token decodes unambiguously. The length bound is what keeps it honest - a wrong-region crop
+ * ("Rating", "Filters: OFF", the Registered line) is longer and stays unresolved. */
 fun parseSortDirection(raw: String): String? {
-    val upper = raw.uppercase()
+    val letters = raw.uppercase().filter { it.isLetter() }
     return when {
-        upper.contains("ASC") -> "Asc"
-        upper.contains("DESC") -> "Desc"
+        letters.startsWith("DESC") -> "Desc"
+        letters.startsWith("ASC") -> "Asc"
+        letters.length in 2..5 && letters.startsWith("D") -> "Desc"
+        letters.length in 2..5 && letters.startsWith("A") -> "Asc"
         else -> null
     }
 }
