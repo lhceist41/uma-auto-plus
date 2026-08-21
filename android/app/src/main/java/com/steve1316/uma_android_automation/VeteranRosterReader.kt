@@ -363,10 +363,12 @@ class VeteranRosterReader(
                     outfitScore = identity.outfitScore,
                     outfitSecondCandidate = identity.outfitSecondCandidate,
                     outfitSecondScore = identity.outfitSecondScore,
+                    outfitAcceptancePath = identity.outfitAcceptancePath.name.lowercase(),
                     rankFamily = rankRead.family?.toString(),
                     rankChosen = rankRead.chosen,
                     rankBestScore = rankRead.bestScore,
                     rankSecondScore = rankRead.secondScore,
+                    rankAcceptancePath = rankRead.acceptancePath.name.lowercase(),
                 ),
         )
     }

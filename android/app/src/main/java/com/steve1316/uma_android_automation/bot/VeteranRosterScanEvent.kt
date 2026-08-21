@@ -101,11 +101,16 @@ data class RosterEntryDiagnostics(
     val outfitScore: Double? = null,
     val outfitSecondCandidate: String? = null,
     val outfitSecondScore: Double? = null,
+    /** How the outfit was accepted: "strong", "margin", or "reject" (PL-R1b). Lets a margin accept be
+     * counted and audited offline without re-deriving it from the scores. */
+    val outfitAcceptancePath: String? = null,
     /** The rank medal's colour family, best-correlating tier, and the two template scores. */
     val rankFamily: String? = null,
     val rankChosen: String? = null,
     val rankBestScore: Double? = null,
     val rankSecondScore: Double? = null,
+    /** How the rank tier was accepted: "strong", "margin", or "reject" (PL-R1b). */
+    val rankAcceptancePath: String? = null,
 )
 
 /**
@@ -394,9 +399,12 @@ fun serializeRosterScanEntry(scanId: String, e: RosterScanEntry): JSONObject {
             )
         }
         e.rosterFingerprint?.let { put("rosterFingerprint", it) }
-        // Failure evidence only. An entry whose immutable fields all resolved needs none, and
-        // emitting raw OCR for all 257 rows would bury the rows that actually need diagnosing.
-        if (identityUnresolved(o).isNotEmpty()) {
+        // Failure evidence, plus the margin-accepted rows (PL-R1b). A strong, fully-resolved entry
+        // needs none - emitting raw OCR for all 257 rows would bury the rows that matter. But a margin
+        // accept resolved BELOW the absolute floor, so its scores are the audit trail that lets a
+        // strong-vs-margin count and a wrong-margin-decision review happen offline without another walk.
+        val marginAccepted = o.diagnostics?.let { it.outfitAcceptancePath == "margin" || it.rankAcceptancePath == "margin" } == true
+        if (identityUnresolved(o).isNotEmpty() || marginAccepted) {
             o.diagnostics?.let { d -> put("diagnostics", serializeRosterEntryDiagnostics(d)) }
         }
         put("readCompleteness", e.readCompleteness)
@@ -421,8 +429,10 @@ fun serializeRosterEntryDiagnostics(d: RosterEntryDiagnostics): JSONObject =
         d.outfitScore?.let { put("outfitScore", it) }
         d.outfitSecondCandidate?.let { put("outfitSecondCandidate", it) }
         d.outfitSecondScore?.let { put("outfitSecondScore", it) }
+        d.outfitAcceptancePath?.let { put("outfitAcceptancePath", it) }
         d.rankFamily?.let { put("rankFamily", it) }
         d.rankChosen?.let { put("rankChosen", it) }
         d.rankBestScore?.let { put("rankBestScore", it) }
         d.rankSecondScore?.let { put("rankSecondScore", it) }
+        d.rankAcceptancePath?.let { put("rankAcceptancePath", it) }
     }
