@@ -12,9 +12,11 @@ import com.steve1316.automation_library.utils.SQLiteSettingsManager
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.BuildConfig
 import com.steve1316.uma_android_automation.CareerLaunchNavigator
+import com.steve1316.uma_android_automation.StartModule
+import com.steve1316.uma_android_automation.VeteranInspirationReader
+import com.steve1316.uma_android_automation.VeteranInspirationScanner
 import com.steve1316.uma_android_automation.VeteranRosterReader
 import com.steve1316.uma_android_automation.VeteranRosterScanner
-import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonCareerEndSkills
@@ -80,17 +82,17 @@ import com.steve1316.uma_android_automation.types.GameDate
 import com.steve1316.uma_android_automation.types.Mood
 import com.steve1316.uma_android_automation.types.RunningStyle
 import com.steve1316.uma_android_automation.types.SkillList
+import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.types.TrackDistance
 import com.steve1316.uma_android_automation.types.TrackSurface
-import com.steve1316.uma_scoring.RankAptitudes
-import com.steve1316.uma_scoring.SkillScoreInput
-import com.steve1316.uma_scoring.estimateRank
-import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.types.Trainee
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.ScrollList
 import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
 import com.steve1316.uma_android_automation.utils.VeteranIdentityCatalog
+import com.steve1316.uma_scoring.RankAptitudes
+import com.steve1316.uma_scoring.SkillScoreInput
+import com.steve1316.uma_scoring.estimateRank
 import org.json.JSONObject
 import org.opencv.core.Point
 import java.util.concurrent.CountDownLatch
@@ -1016,6 +1018,8 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startRainbowDetectionTest" to ::startRainbowDetectionTest,
                 "debugMode_startVeteranRosterReadTest" to ::startVeteranRosterReadTest,
                 "debugMode_startVeteranRosterScanTest" to ::startVeteranRosterScanTest,
+                "debugMode_startVeteranInspirationReadTest" to ::startVeteranInspirationReadTest,
+                "debugMode_startVeteranInspirationScanTest" to ::startVeteranInspirationScanTest,
             )
 
         var bDidAnyTestsRun = false
@@ -1105,6 +1109,33 @@ abstract class Campaign(game: Game) : Task(game) {
             "\n[TEST] Running read-only Veteran Roster enumeration (entryLimit=${if (limit > 0) limit.toString() else "none"}, evidence=${if (evidence) "on" else "off"})...",
         )
         VeteranRosterScanner(game).runScan(limit, evidence)
+    }
+
+    /**
+     * Read-only Veteran Inspiration calibration diagnostic (PL-R1c). Park the game on an open
+     * `Umamusume Details` dialog for the Veteran you want read; it selects the Inspiration tab if
+     * another tab is showing, walks the Sparks + Legacy Origin panel with bounded swipes inside the
+     * panel, and logs every factor name, kind, and star count it read tagged `[INSPIRATION-TEST]`.
+     * It persists nothing and taps no control other than the Inspiration tab.
+     */
+    open fun startVeteranInspirationReadTest() {
+        MessageLog.i(TAG, "\n[TEST] Running read-only Veteran Inspiration diagnostic...")
+        VeteranInspirationReader(game).debugRead()
+    }
+
+    /**
+     * Read-only Veteran Inspiration capture (PL-R1c). Park the game on the Veteran Roster list with
+     * Filters: OFF, then start the bot: it walks the roster with the detail dialog's next chevron and
+     * reads each Veteran's Inspiration panel, writing one `veteran_inspiration` record per Veteran
+     * plus a `veteran_inspiration_scan` header to outcomes/veteran_inspiration.jsonl.
+     *
+     * `veteranInspirationScanLimit` caps how many Veterans are captured - the staged 1 / 3 / 20
+     * validation runs - and 0 walks the whole roster.
+     */
+    open fun startVeteranInspirationScanTest() {
+        val limit = SettingsHelper.getIntSetting("debug", "veteranInspirationScanLimit", 1)
+        MessageLog.i(TAG, "\n[TEST] Running read-only Veteran Inspiration capture (entryLimit=${if (limit > 0) limit.toString() else "none"})...")
+        VeteranInspirationScanner(game).runScan(limit)
     }
 
     /**

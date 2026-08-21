@@ -263,6 +263,12 @@ export interface Settings {
         veteranRosterScanLimit: number
         // Saves a PNG crop of every roster field that did NOT resolve, so an unread stat or outfit can be diagnosed without walking the roster again. Failures only, capped per scan.
         veteranRosterScanEvidence: boolean
+        // Read-only Veteran Inspiration calibration (PL-R1c). Park the game on an open Umamusume Details dialog; selects the Inspiration tab and swipes inside its panel only.
+        debugMode_startVeteranInspirationReadTest: boolean
+        // Read-only Veteran Inspiration capture (PL-R1c). Park the game on the Veteran Roster list; walks the roster and reads each Veteran's Sparks + Legacy Origin panel into veteran_inspiration.jsonl.
+        debugMode_startVeteranInspirationScanTest: boolean
+        // How many Veterans the Inspiration capture reads before stopping. 0 walks the whole roster; a small value is the bounded validation run.
+        veteranInspirationScanLimit: number
         enableScreenRecording: boolean
         recordingBitRate: number
         recordingFrameRate: number
@@ -762,6 +768,9 @@ export const defaultSettings: Settings = {
         debugMode_startVeteranRosterScanTest: false,
         veteranRosterScanLimit: 5,
         veteranRosterScanEvidence: false,
+        debugMode_startVeteranInspirationReadTest: false,
+        debugMode_startVeteranInspirationScanTest: false,
+        veteranInspirationScanLimit: 1,
         enableScreenRecording: false,
         recordingBitRate: 6,
         recordingFrameRate: 30,

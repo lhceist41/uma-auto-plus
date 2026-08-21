@@ -47,6 +47,8 @@ const DebugSettings = () => {
         "debugMode_startRainbowDetectionTest",
         "debugMode_startVeteranRosterReadTest",
         "debugMode_startVeteranRosterScanTest",
+        "debugMode_startVeteranInspirationReadTest",
+        "debugMode_startVeteranInspirationScanTest",
     ] as const
 
     /**
@@ -691,6 +693,50 @@ const DebugSettings = () => {
                                 label="Veteran Roster Scan Evidence"
                                 description="Saves a small PNG crop of every Veteran roster field the scan could not read, next to the scan file, so an unreadable stat or outfit can be diagnosed without scanning the whole roster again. Fields that read cleanly save nothing, so a clean scan writes no images. Leave off for normal use."
                                 style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-veteran-inspiration-read-test"
+                                checked={bsc.settings.debug.debugMode_startVeteranInspirationReadTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startVeteranInspirationReadTest", checked)}
+                                label="Start Veteran Inspiration Read Test"
+                                description="Read-only calibration of one Veteran's Inspiration panel. Park the game on an open Umamusume Details dialog, then start the bot: it selects the Inspiration tab if another tab is showing, scrolls the Sparks and Legacy Origin list with swipes inside the panel, and logs every factor name, colour and star count it read. It taps no card and saves nothing. Tagged [INSPIRATION-TEST] in the log."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-veteran-inspiration-scan-test"
+                                checked={bsc.settings.debug.debugMode_startVeteranInspirationScanTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startVeteranInspirationScanTest", checked)}
+                                label="Start Veteran Inspiration Capture"
+                                description="Read-only capture of each Veteran's inherited factors. Park the game on the Veteran Roster list with Filters: OFF, then start the bot: it walks the roster with the detail dialog's next chevron and records every Veteran's own Sparks plus both Legacy Origin ancestors to a capture file. It presses only the first card, the Inspiration tab, the next chevron and Close, and stops before the first tap if the Registered count or the filter state cannot be read. Nothing is transferred, favorited or edited. Tagged [INSPIRATION-SCAN] in the log."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomSlider
+                                searchId="veteran-inspiration-scan-limit"
+                                value={bsc.settings.debug.veteranInspirationScanLimit}
+                                placeholder={bsc.defaultSettings.debug.veteranInspirationScanLimit}
+                                onValueChange={(value) => {
+                                    bsc.setSettings({
+                                        ...bsc.settings,
+                                        debug: { ...bsc.settings.debug, veteranInspirationScanLimit: value },
+                                    })
+                                }}
+                                onSlidingComplete={(value) => {
+                                    bsc.setSettings({
+                                        ...bsc.settings,
+                                        debug: { ...bsc.settings.debug, veteranInspirationScanLimit: value },
+                                    })
+                                }}
+                                min={0}
+                                max={300}
+                                step={1}
+                                label="Veteran Inspiration Capture Limit"
+                                labelUnit=" Veterans"
+                                showValue={true}
+                                showLabels={true}
+                                description="How many Veterans the Inspiration capture reads before it stops. Set 0 to walk the entire roster. Each Veteran costs several swipes and a lot of text reading, so start small and raise it once the capture is proven."
                             />
                         </View>
                     </View>

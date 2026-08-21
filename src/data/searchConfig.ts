@@ -843,6 +843,26 @@ const searchConfig: SearchOption[] = [
         page: "DebugSettings",
     },
     {
+        id: "debug-veteran-inspiration-read-test",
+        title: "Start Veteran Inspiration Read Test",
+        description:
+            "Disables normal bot operations and reads one Veteran's Inspiration panel read-only. Park the game on an open Umamusume Details dialog: it selects the Inspiration tab, scrolls the Sparks and Legacy Origin list, and logs every factor name, colour and star count. Nothing is tapped or saved.",
+        page: "DebugSettings",
+    },
+    {
+        id: "debug-veteran-inspiration-scan-test",
+        title: "Start Veteran Inspiration Capture",
+        description:
+            "Disables normal bot operations and records each Veteran's inherited factors read-only. Park the game on the Veteran Roster list with Filters: OFF: it walks the roster with the detail dialog's next chevron and captures every Veteran's own Sparks plus both Legacy Origin ancestors. Nothing is transferred, favorited, or edited.",
+        page: "DebugSettings",
+    },
+    {
+        id: "veteran-inspiration-scan-limit",
+        title: "Veteran Inspiration Capture Limit",
+        description: "How many Veterans the read-only Inspiration capture reads before it stops. Set 0 to walk the entire roster.",
+        page: "DebugSettings",
+    },
+    {
         id: "debug-trackblazer-race-selection-test",
         title: "Start Trackblazer Race Selection Test",
         description:
