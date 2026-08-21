@@ -1,12 +1,17 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.utils.VeteranFactorDomain
 import org.json.JSONObject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
+import java.io.File
 
 @DisplayName("Legacy lineage event assembly and serialization")
 class LegacyLineageEventTest {
@@ -179,5 +184,83 @@ class LegacyLineageEventTest {
             val json = serializeLineageEvent(assembleLineageEvent(null, 1L, "URA Finale", "SW", null, false, sixComplete()))
             assertFalse(json.has("launchTransactionId"))
         }
+    }
+
+    @Nested
+    @DisplayName("canonical reconciliation (PL-4 <-> Inspiration)")
+    inner class CanonicalReconciliation {
+        private val domain =
+            VeteranFactorDomain.parse(assetFile(VeteranFactorDomain.ASSET_NAME).readText())
+                ?: error("the shipped veteran_factor_domain.json should parse")
+
+        /** One ancestor's four factors, real in-domain names, with the white row's OCR supplied by the
+         * caller so a jittered read can be compared against a clean one. */
+        private fun taikiLikeAncestor(whiteOcr: String) =
+            listOf(
+                LineageAncestorObservation(
+                    portraitObserved = true,
+                    factors =
+                        listOf(
+                            factor(SparkRowKind.STAT, "Speed", 2),
+                            factor(SparkRowKind.APTITUDE, "Mile", 2),
+                            factor(SparkRowKind.UNIQUE, "Shooting for Victory!", 1),
+                            factor(SparkRowKind.WHITE, whiteOcr, 1),
+                        ),
+                ),
+            )
+
+        @Test
+        fun `raw jitter breaks the raw fingerprint but the canonical fingerprint holds`() {
+            val clean = assembleLineageEvent("tx", 1L, "URA Finale", "Taiki Shuttle", null, false, taikiLikeAncestor("Firm Conditions"), domain).ancestors[0]
+            val jittered = assembleLineageEvent("tx", 1L, "URA Finale", "Taiki Shuttle", null, false, taikiLikeAncestor("FIRM CONDITIONSO"), domain).ancestors[0]
+            // The whole PL-R1c problem: the raw fingerprints diverge on the glued glyph...
+            assertNotEquals(clean.factorFingerprint, jittered.factorFingerprint)
+            // ...but both snap onto the same canonical name, so the canonical fingerprints agree.
+            assertNotNull(clean.canonicalFactorFingerprint)
+            assertEquals(clean.canonicalFactorFingerprint, jittered.canonicalFactorFingerprint)
+            assertTrue(clean.factorSetTrusted && jittered.factorSetTrusted)
+        }
+
+        @Test
+        fun `a lineage ancestor and an owned Veteran's self block cross-link on the canonical fingerprint`() {
+            // The PL-4b Taiki cross-link: a career launched off an owned Taiki should join back to that
+            // Veteran's Inspiration self block. The two screens read the same factors, but the OCR
+            // differs; canonicalization is what makes the join hold.
+            val lineage = assembleLineageEvent("tx", 1L, "URA Finale", "Taiki Shuttle", null, false, taikiLikeAncestor("FIRM CONDITIONSO"), domain).ancestors[0]
+            val selfFactors =
+                listOf(
+                    Triple(SparkRowKind.STAT, "Speed", 2),
+                    Triple(SparkRowKind.APTITUDE, "Mile", 2),
+                    Triple(SparkRowKind.UNIQUE, "Shooting for Victory!", 1),
+                    Triple(SparkRowKind.WHITE, "Firm Conditions", 1),
+                ).mapIndexed { i, (kind, name, stars) ->
+                    val res = domain.resolve(name, kind)
+                    InspirationFactor(i, InspirationColumn.LEFT, kind, name, stars, ambiguous = false, canonicalName = res.canonicalName, canonicalPath = res.path)
+                }
+            val self = InspirationAncestor(0, true, null, selfFactors)
+            assertNotNull(self.factorFingerprint)
+            assertEquals(self.factorFingerprint, lineage.canonicalFactorFingerprint, "the two sources produce byte-identical canonical set fingerprints")
+        }
+
+        @Test
+        fun `an unresolved factor leaves the canonical fingerprint null but keeps the structural one`() {
+            val garbage = assembleLineageEvent("tx", 1L, "URA Finale", "SW", null, false, taikiLikeAncestor("Xqzzptdf"), domain).ancestors[0]
+            assertNull(garbage.canonicalFactorFingerprint, "one off-domain name blocks the trusted set fingerprint")
+            assertFalse(garbage.factorSetTrusted)
+            assertTrue(garbage.structuralFactorFingerprint.isNotEmpty(), "the name-free fallback identity still stands")
+            assertTrue(garbage.factorFingerprint.isNotEmpty(), "raw evidence is preserved unchanged")
+        }
+    }
+
+    private fun assetFile(relative: String): File {
+        var dir: File? = File(System.getProperty("user.dir") ?: ".")
+        repeat(5) {
+            val a = File(dir, "src/main/assets")
+            if (a.isDirectory) return File(a, relative)
+            val b = File(dir, "android/app/src/main/assets")
+            if (b.isDirectory) return File(b, relative)
+            dir = dir?.parentFile
+        }
+        error("could not locate the assets root")
     }
 }

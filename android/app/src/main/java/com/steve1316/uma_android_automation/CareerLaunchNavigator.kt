@@ -6275,6 +6275,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 overallAffinity = null,
                 guestsIncluded = guestsIncluded,
                 observedAncestors = observed,
+                factorDomain = com.steve1316.uma_android_automation.utils.VeteranFactorDomain.loadFromAssets(context),
             )
         MessageLog.i(
             TAG,

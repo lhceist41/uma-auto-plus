@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.utils.VeteranFactorDomain
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -14,7 +15,7 @@ import org.json.JSONObject
  * ids. The spark-set fingerprint is the load-bearing identity evidence; a portrait/rank is retained
  * as a crop reference and left unresolved rather than fabricated from a stylized badge.
  */
-const val LINEAGE_SCHEMA_VERSION: Int = 1
+const val LINEAGE_SCHEMA_VERSION: Int = 2
 
 /** How complete the whole capture was. CAPTURED = all six ancestors read with their lead triple and
  * no truncated/ambiguous rows; PARTIAL = something is missing or low-confidence; FAILED = nothing. */
@@ -66,7 +67,16 @@ data class LineageAncestor(
     val portraitObserved: Boolean,
     val rank: String?,
     val factors: List<LineageFactorObservation>,
+    /** Raw-OCR set fingerprint, preserved unchanged as historical evidence. Unstable across re-reads. */
     val factorFingerprint: String,
+    /** Trusted canonical set fingerprint derived by snapping each factor onto the canonical domain, or
+     * null when the domain did not load or any factor is unresolved. This is what cross-links to a
+     * Veteran's Inspiration self-fingerprint without the raw OCR jitter. */
+    val canonicalFactorFingerprint: String?,
+    /** Name-free `kind:stars` set fingerprint, always available; the OCR-free fallback identity. */
+    val structuralFactorFingerprint: String,
+    /** Whether every factor resolved to a canonical name, so [canonicalFactorFingerprint] is trusted. */
+    val factorSetTrusted: Boolean,
     val ownership: LineageOwnership,
     val matchStatus: LineageMatch,
     val probableVeteranId: String?,
@@ -146,11 +156,20 @@ fun assembleLineageEvent(
     overallAffinity: String?,
     guestsIncluded: Boolean,
     observedAncestors: List<LineageAncestorObservation>,
+    /** The canonical factor domain, so the raw OCR names are also snapped onto canonical identities as
+     * a DERIVED interpretation. Null (asset missing) leaves the canonical fingerprint unresolved; the
+     * raw fingerprint is always preserved either way. */
+    factorDomain: VeteranFactorDomain? = null,
 ): LegacyLineageEvent {
     val ownership = if (guestsIncluded) LineageOwnership.UNKNOWN else LineageOwnership.OWNED
     val match = if (ownership == LineageOwnership.OWNED) LineageMatch.PROBABLE_OWNED_MATCH else LineageMatch.UNRESOLVED
     val ancestors =
         observedAncestors.take(LINEAGE_ROLE_ORDER.size).mapIndexed { i, obs ->
+            // Canonical tokens are derived from the raw OCR, never replacing it. A factor whose name
+            // does not resolve leaves the canonical set-fingerprint null (fail closed); the structural
+            // kind:stars fingerprint stands regardless.
+            val canonicalTokens = obs.factors.map { f -> canonicalFactorToken(f.kind, factorDomain?.resolve(f.displayText, f.kind)?.canonicalName, f.stars) }
+            val structuralTokens = obs.factors.map { f -> structuralFactorToken(f.kind, f.stars) }
             LineageAncestor(
                 role = LINEAGE_ROLE_ORDER[i],
                 slotIndex = i,
@@ -158,6 +177,9 @@ fun assembleLineageEvent(
                 rank = null,
                 factors = obs.factors,
                 factorFingerprint = ancestorFactorFingerprint(obs.factors),
+                canonicalFactorFingerprint = canonicalFactorSetFingerprint(canonicalTokens),
+                structuralFactorFingerprint = structuralFactorSetFingerprint(structuralTokens),
+                factorSetTrusted = obs.factors.isNotEmpty() && canonicalTokens.all { it != null },
                 ownership = ownership,
                 matchStatus = match,
                 probableVeteranId = null,
@@ -210,6 +232,9 @@ fun serializeLineageEvent(event: LegacyLineageEvent): JSONObject =
                             put("hasLeadTriple", a.hasLeadTriple)
                             put("completeness", a.completeness)
                             put("factorFingerprint", a.factorFingerprint)
+                            a.canonicalFactorFingerprint?.let { put("canonicalFactorFingerprint", it) }
+                            put("structuralFactorFingerprint", a.structuralFactorFingerprint)
+                            put("factorSetTrusted", a.factorSetTrusted)
                             put(
                                 "factors",
                                 JSONArray().apply {
