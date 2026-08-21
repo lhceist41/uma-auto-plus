@@ -30,16 +30,50 @@ class VeteranBadgeClassifierTest {
     private val taiki get() = sampler("veteran_taiki_details_top.png")
     private val copano get() = sampler("veteran_copano_details_top.png")
 
+    // Rank-tier fixtures, two distinct Veterans per tier. The "_a" frame is the one each template was
+    // baked from; the "_b" frame is a different Veteran of the same tier, so a passing "_b" assertion
+    // proves the template generalizes rather than echoing its own source. Identities are in PROVENANCE.
+    private val aplusA get() = sampler("veteran_aplus_a_details_top.png")
+    private val aplusB get() = sampler("veteran_aplus_b_details_top.png")
+    private val sA get() = sampler("veteran_s_a_details_top.png")
+    private val sB get() = sampler("veteran_s_b_details_top.png")
+    private val splusA get() = sampler("veteran_splus_a_details_top.png")
+    private val splusB get() = sampler("veteran_splus_b_details_top.png")
+
     /** All white: stands in for a blank/wrong region so every classifier's fail-closed path is pinned. */
     private val blank = SparkPixelSampler { _, _ -> 0xFFFFFFFF.toInt() }
 
     @Nested
-    @DisplayName("Rank medal - whole-medal template correlation")
+    @DisplayName("Rank medal - colour family then whole-medal template correlation")
     inner class RankMedal {
         @Test
-        fun `both fixtures classify the A medal as A`() {
+        fun `both A fixtures classify the A medal as A`() {
             assertEquals("A", classifyRankMedal(taiki))
             assertEquals("A", classifyRankMedal(copano))
+        }
+
+        @Test
+        fun `each calibrated tier classifies on a Veteran the template was not baked from`() {
+            // _b is a different Veteran than the template source, so these prove generalization, not
+            // self-recognition: A+ vs A share the orange family and S+ vs S share the gold family, and
+            // only the "+" separates each pair.
+            assertEquals("A+", classifyRankMedal(aplusA))
+            assertEquals("A+", classifyRankMedal(aplusB))
+            assertEquals("S", classifyRankMedal(sA))
+            assertEquals("S", classifyRankMedal(sB))
+            assertEquals("S+", classifyRankMedal(splusA))
+            assertEquals("S+", classifyRankMedal(splusB))
+        }
+
+        @Test
+        fun `the plus is never confused with its sibling in either colour family`() {
+            // The failure this guards: an A read as A+ (or S as S+) would mint a wrong immutable
+            // identity. Every fixture must land on exactly its own tier, never the sibling.
+            assertEquals("A", classifyRankMedal(taiki))
+            assertEquals("A", classifyRankMedal(copano))
+            assertEquals("A+", classifyRankMedal(aplusB))
+            assertEquals("S", classifyRankMedal(sB))
+            assertEquals("S+", classifyRankMedal(splusB))
         }
 
         @Test

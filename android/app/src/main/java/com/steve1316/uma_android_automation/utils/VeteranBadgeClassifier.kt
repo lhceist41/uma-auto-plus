@@ -317,19 +317,32 @@ fun classifyStatGrade(sampler: SparkPixelSampler, box: GlyphBox): String? {
 
 private const val RANK_TEMPLATE_N = 20
 
-/** Minimum normalized cross-correlation to accept a rank-medal template. The same A medal on two
- * independent captures correlates 0.95; unrelated regions score near 0, so 0.85 both accepts a real
- * match and rejects a different medal (whose letter and colour change the grayscale pattern). */
+/** Minimum normalized cross-correlation to accept a rank-medal template. The same tier's medal on two
+ * independent captures correlates >=0.92 (measured over Veterans of every calibrated tier); unrelated
+ * regions score near 0, so 0.85 accepts a real match and rejects an off-tier medal. */
 private const val RANK_MATCH_MIN_NCC = 0.85
+
+/** Minimum lead the winning template must hold over the next best of the SAME colour family. Within a
+ * family the only difference is the "+" (A vs A+, S vs S+), so the loser is the sibling tier: measured
+ * cross-sibling correlation tops out at 0.826 while same-tier stays >=0.92, a >=0.10 gap, so 0.04 both
+ * separates the two and rejects a genuinely ambiguous medal rather than guessing which side of the "+"
+ * it is. Cross-family medals (orange A vs gold S) never compete: the colour gate removes them first. */
+private const val RANK_MATCH_MIN_MARGIN = 0.04
 
 private class RankMedalTemplate(val label: String, val family: Char, val data: IntArray)
 
 /**
- * Rank-medal references, each a 20x20 integer box-average luma downsample of [RANK_MEDAL_BOX]. Only
- * the "A" medal is calibrated (both PL-R1 fixtures are A rank); other tiers stay unresolved until a
- * fixture supplies them, which fail-closed blocks the fingerprint rather than guessing a rank. The A
- * template was generated from 02-details-skills-tab.png with the exact integer math [downsampleLuma]
- * uses, so runtime and the offline fixture test compute bit-identical downsamples.
+ * Rank-medal references, each a 20x20 integer box-average luma downsample of [RANK_MEDAL_BOX]. The
+ * four tiers the live PL-R1b roster actually carries are calibrated: A and A+ (orange, hue ~18) and S
+ * and S+ (gold, hue ~40). The colour gate in [classifyRankMedal] splits the two families, and the
+ * whole-medal correlation splits the "+" within a family. Any tier outside these four stays
+ * unresolved, which fail-closed blocks the fingerprint rather than guessing a rank.
+ *
+ * Each template was generated from a live 1080x1920 detail capture (identities in the fixtures'
+ * PROVENANCE) with the exact integer math [downsampleLuma] uses, so runtime and the offline fixture
+ * test compute bit-identical downsamples. Every template is validated in [VeteranBadgeClassifierTest]
+ * against a DIFFERENT Veteran of the same tier (the "_b" fixtures), so a template can never merely
+ * echo its own source frame.
  */
 private val RANK_MEDAL_TEMPLATES: List<RankMedalTemplate> =
     listOf(
@@ -357,6 +370,84 @@ private val RANK_MEDAL_TEMPLATES: List<RankMedalTemplate> =
                 204, 205, 206, 226, 233, 229, 211, 208, 224, 223, 227, 228, 241, 225, 233, 238, 236, 235, 243, 231,
                 218, 218, 221, 183, 134, 203, 249, 239, 222, 207, 196, 149, 246, 236, 246, 248, 188, 244, 244, 234,
                 229, 230, 229, 183, 132, 219, 120, 142, 198, 150, 111, 140, 135, 193, 138, 163, 103, 217, 243, 232,
+            ),
+        ),
+        RankMedalTemplate(
+            "A+",
+            'A',
+            intArrayOf(
+                205, 205, 205, 205, 222, 233, 195, 210, 212, 196, 175, 183, 211, 189, 182, 224, 193, 207, 207, 207,
+                205, 205, 205, 216, 230, 203, 228, 214, 241, 251, 250, 173, 218, 221, 211, 179, 218, 201, 206, 207,
+                204, 204, 206, 236, 205, 230, 230, 203, 251, 250, 251, 188, 188, 212, 225, 233, 153, 205, 205, 206,
+                202, 202, 219, 208, 219, 226, 193, 225, 252, 228, 252, 205, 171, 182, 201, 252, 135, 148, 187, 204,
+                200, 200, 221, 206, 219, 211, 169, 254, 238, 179, 254, 227, 158, 241, 246, 251, 240, 203, 150, 203,
+                197, 194, 216, 212, 212, 172, 216, 254, 173, 162, 255, 249, 126, 187, 208, 232, 189, 159, 153, 200,
+                194, 188, 212, 207, 206, 157, 230, 225, 157, 169, 228, 229, 137, 147, 169, 249, 124, 153, 170, 191,
+                191, 187, 208, 205, 175, 207, 235, 235, 235, 235, 235, 235, 147, 171, 133, 160, 136, 185, 175, 183,
+                189, 182, 209, 203, 162, 247, 241, 189, 188, 187, 239, 245, 157, 160, 150, 140, 183, 179, 173, 187,
+                195, 187, 202, 169, 202, 250, 187, 135, 139, 123, 213, 250, 174, 152, 156, 163, 179, 160, 177, 193,
+                186, 187, 203, 137, 237, 236, 129, 168, 166, 148, 183, 240, 185, 139, 155, 175, 176, 150, 188, 191,
+                187, 188, 197, 148, 125, 124, 157, 164, 161, 157, 110, 103, 105, 146, 162, 168, 165, 174, 179, 189,
+                190, 188, 117, 122, 126, 160, 165, 160, 148, 146, 144, 142, 143, 138, 141, 147, 114, 120, 126, 188,
+                190, 192, 149, 91, 95, 218, 204, 156, 198, 195, 174, 214, 193, 168, 202, 168, 98, 89, 161, 193,
+                184, 184, 135, 93, 115, 221, 213, 135, 212, 198, 187, 208, 191, 183, 219, 112, 108, 88, 145, 185,
+                197, 193, 138, 103, 126, 159, 203, 179, 142, 194, 197, 153, 182, 196, 153, 152, 105, 106, 136, 188,
+                201, 202, 203, 176, 147, 133, 119, 107, 127, 106, 104, 111, 102, 106, 128, 148, 167, 199, 211, 205,
+                213, 212, 211, 234, 240, 232, 200, 199, 223, 222, 209, 219, 212, 193, 190, 190, 207, 203, 208, 217,
+                203, 202, 205, 183, 134, 203, 235, 230, 221, 207, 196, 149, 239, 219, 232, 233, 188, 225, 195, 192,
+                204, 204, 207, 183, 132, 219, 120, 142, 198, 150, 111, 140, 135, 193, 138, 163, 103, 212, 200, 199,
+            ),
+        ),
+        RankMedalTemplate(
+            "S",
+            'S',
+            intArrayOf(
+                243, 243, 243, 243, 244, 232, 193, 210, 220, 225, 230, 227, 211, 175, 189, 202, 234, 242, 242, 241,
+                238, 238, 239, 239, 228, 200, 224, 226, 235, 248, 248, 248, 248, 244, 180, 198, 184, 230, 239, 239,
+                231, 231, 232, 236, 204, 233, 236, 225, 248, 239, 193, 187, 235, 243, 172, 212, 193, 185, 234, 234,
+                221, 221, 228, 212, 225, 231, 223, 229, 250, 216, 177, 202, 172, 159, 194, 221, 219, 161, 208, 225,
+                208, 209, 222, 214, 225, 209, 193, 219, 254, 252, 216, 181, 156, 216, 223, 217, 202, 156, 175, 214,
+                187, 188, 216, 231, 232, 199, 220, 181, 244, 252, 252, 252, 231, 157, 189, 178, 199, 173, 155, 199,
+                179, 183, 213, 235, 233, 228, 230, 212, 157, 175, 209, 218, 218, 203, 152, 163, 195, 185, 153, 179,
+                168, 175, 199, 204, 208, 216, 207, 178, 169, 198, 149, 190, 227, 223, 135, 159, 197, 182, 157, 164,
+                173, 175, 209, 225, 216, 194, 195, 240, 190, 177, 164, 186, 240, 209, 147, 206, 222, 183, 160, 165,
+                172, 171, 193, 229, 230, 195, 198, 247, 248, 218, 216, 248, 246, 138, 147, 184, 208, 160, 167, 171,
+                163, 163, 174, 218, 226, 213, 141, 216, 247, 248, 248, 242, 157, 128, 150, 175, 184, 147, 174, 168,
+                163, 162, 164, 192, 217, 199, 165, 125, 134, 144, 132, 107, 131, 148, 165, 179, 165, 167, 157, 159,
+                183, 182, 105, 98, 115, 173, 179, 157, 146, 145, 145, 152, 150, 148, 162, 158, 107, 108, 106, 174,
+                182, 183, 135, 73, 87, 220, 206, 161, 202, 198, 177, 217, 197, 177, 206, 166, 85, 75, 150, 183,
+                173, 173, 123, 75, 102, 218, 211, 135, 208, 195, 185, 207, 190, 182, 217, 96, 85, 74, 135, 175,
+                170, 174, 114, 83, 117, 157, 200, 177, 129, 191, 195, 152, 178, 194, 149, 146, 82, 89, 119, 170,
+                170, 168, 174, 143, 128, 105, 92, 87, 97, 85, 84, 92, 89, 91, 101, 117, 121, 159, 169, 172,
+                175, 173, 171, 213, 227, 222, 178, 170, 212, 214, 196, 217, 196, 174, 182, 169, 189, 171, 172, 185,
+                180, 172, 179, 183, 134, 203, 230, 226, 220, 207, 196, 149, 238, 210, 221, 222, 188, 214, 177, 192,
+                171, 184, 178, 183, 132, 219, 120, 142, 198, 150, 111, 140, 135, 193, 138, 163, 103, 209, 179, 190,
+            ),
+        ),
+        RankMedalTemplate(
+            "S+",
+            'S',
+            intArrayOf(
+                243, 243, 243, 243, 244, 232, 193, 209, 230, 232, 226, 200, 176, 198, 196, 202, 234, 242, 242, 241,
+                238, 238, 239, 239, 228, 197, 222, 246, 248, 247, 248, 248, 209, 183, 214, 195, 185, 230, 239, 239,
+                231, 231, 232, 236, 204, 225, 242, 248, 211, 180, 206, 248, 211, 174, 222, 235, 169, 185, 234, 234,
+                221, 221, 228, 212, 225, 210, 251, 251, 172, 194, 171, 172, 169, 202, 210, 250, 161, 148, 207, 225,
+                208, 209, 222, 214, 232, 198, 254, 254, 245, 199, 165, 174, 210, 243, 247, 251, 242, 204, 157, 214,
+                187, 188, 216, 235, 234, 191, 202, 249, 249, 249, 248, 195, 150, 189, 205, 224, 184, 153, 139, 199,
+                179, 183, 206, 197, 213, 202, 171, 160, 186, 215, 218, 219, 155, 176, 177, 246, 125, 150, 152, 179,
+                168, 175, 212, 236, 193, 175, 173, 205, 182, 152, 228, 228, 160, 206, 137, 153, 134, 182, 158, 164,
+                173, 175, 209, 237, 174, 236, 236, 161, 187, 157, 241, 240, 146, 193, 154, 152, 190, 175, 160, 165,
+                172, 171, 193, 229, 172, 246, 247, 241, 216, 241, 247, 213, 143, 181, 156, 198, 173, 160, 167, 171,
+                163, 163, 174, 218, 192, 170, 239, 248, 248, 245, 197, 113, 190, 195, 147, 175, 181, 147, 174, 168,
+                163, 162, 164, 192, 217, 170, 125, 134, 133, 114, 123, 162, 177, 199, 168, 179, 167, 167, 157, 159,
+                183, 182, 105, 98, 115, 173, 176, 153, 146, 152, 150, 152, 150, 152, 161, 158, 107, 108, 106, 174,
+                182, 183, 135, 73, 87, 220, 206, 161, 202, 198, 177, 217, 197, 177, 206, 166, 85, 75, 150, 183,
+                173, 173, 123, 75, 102, 218, 211, 135, 208, 195, 185, 207, 190, 182, 217, 96, 86, 74, 135, 175,
+                170, 174, 114, 83, 117, 157, 200, 177, 129, 191, 195, 152, 178, 193, 149, 146, 82, 89, 119, 170,
+                170, 168, 174, 143, 128, 105, 92, 87, 97, 85, 84, 92, 89, 91, 101, 117, 121, 159, 169, 172,
+                175, 173, 171, 213, 227, 222, 178, 170, 212, 214, 196, 217, 196, 174, 182, 169, 189, 171, 172, 185,
+                180, 172, 179, 183, 134, 203, 230, 226, 220, 207, 196, 149, 238, 210, 221, 222, 188, 214, 177, 192,
+                171, 184, 178, 183, 132, 219, 120, 142, 198, 150, 111, 140, 135, 193, 138, 163, 103, 209, 179, 190,
             ),
         ),
     )
@@ -414,23 +505,35 @@ private fun normalizedCrossCorrelation(a: IntArray, b: IntArray): Double {
 }
 
 /**
- * The rank tier from the medal in [RANK_MEDAL_BOX], or null when no calibrated medal matches. A
- * template must clear [RANK_MATCH_MIN_NCC] and the medal's dominant colour must match the template's
- * grade family (grayscale correlation alone would not tell an orange A medal from a pink B one).
+ * The rank tier from the medal in [RANK_MEDAL_BOX], or null when no calibrated medal matches
+ * confidently. Two stages, because grayscale correlation alone cannot tell an orange A medal from a
+ * gold S one (their letters downsample too alike) and colour alone cannot tell A from A+:
+ *  1. The medal's dominant colour picks the family (orange -> A/A+, gold -> S/S+); an off-palette or
+ *     unreadable medal has no family and returns null.
+ *  2. Within that family, the medal correlates against each tier's template; the winner is accepted
+ *     only when it clears [RANK_MATCH_MIN_NCC] and leads its same-family sibling (the "+"/no-"+"
+ *     counterpart) by [RANK_MATCH_MIN_MARGIN]. A medal that sits between the two stays unresolved.
  */
 fun classifyRankMedal(sampler: SparkPixelSampler): String? {
+    val ringFamily = familyOf(glyphStats(sampler, RANK_MEDAL_BOX)) ?: return null
     val sample = downsampleLuma(sampler, RANK_MEDAL_BOX, RANK_TEMPLATE_N)
-    val ringFamily = familyOf(glyphStats(sampler, RANK_MEDAL_BOX))
     var best: RankMedalTemplate? = null
-    var bestScore = RANK_MATCH_MIN_NCC
+    var bestScore = Double.NEGATIVE_INFINITY
+    var secondScore = Double.NEGATIVE_INFINITY
     for (template in RANK_MEDAL_TEMPLATES) {
+        if (template.family != ringFamily) continue
         val score = normalizedCrossCorrelation(sample, template.data)
-        if (score >= bestScore && template.family == ringFamily) {
+        if (score > bestScore) {
+            secondScore = bestScore
             bestScore = score
             best = template
+        } else if (score > secondScore) {
+            secondScore = score
         }
     }
-    return best?.label
+    if (best == null || bestScore < RANK_MATCH_MIN_NCC) return null
+    if (secondScore > Double.NEGATIVE_INFINITY && bestScore - secondScore < RANK_MATCH_MIN_MARGIN) return null
+    return best.label
 }
 
 /** Lowest stat value the digit OCR is allowed to believe. Measured over the 1810 stat samples in the
