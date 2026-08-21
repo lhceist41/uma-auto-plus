@@ -46,6 +46,13 @@ jobs:
           node --test scripts/generate-veteran-identity-data.test.mjs
           node scripts/generate-veteran-identity-data.mjs --check
 
+      # Same contract for the Veteran factor-name domain: the canonical skill/race/scenario names the
+      # Inspiration reader snaps its factor OCR onto must never drift from src/data skills/races/scenarios.
+      - name: Veteran factor domain asset freshness
+        run: |
+          node --test scripts/generate-veteran-factor-domain.test.mjs
+          node scripts/generate-veteran-factor-domain.mjs --check
+
   android:
     name: Kotlin unit tests
     runs-on: ubuntu-latest
