@@ -156,10 +156,10 @@ class VeteranFactorDomain private constructor(
      * kind), and only when the raw OCR ended in the abbreviation period.
      *
      * The read is tokenized: every complete token must match the corresponding canonical token, and the
-     * final abbreviated token must be a (bounded-error) prefix of the canonical's final token. It
-     * accepts only when EXACTLY ONE race in the domain is compatible, so an abbreviation that could name
-     * two races ("Queen S." -> Queen Sho / Queen Stakes) or is too short to carry a full complete token
-     * ("S.") fails closed. This lowers no threshold and runs only after the fuzzy scan already rejected.
+     * final abbreviated token must be an exact prefix of the canonical's (strictly longer) final token.
+     * It accepts only when EXACTLY ONE race in the domain is compatible, so an abbreviation that could
+     * name two races ("Kyoto K." -> Kyoto Kimpai / Kyoto Kinen) or is too short to carry a full complete
+     * token ("S.") fails closed. This lowers no threshold and runs only after the fuzzy scan rejected.
      */
     private fun resolveAbbreviatedRace(rawOcr: String, kind: SparkRowKind, needle: String): FactorResolution? {
         if (kind != SparkRowKind.WHITE) return null
@@ -190,8 +190,10 @@ class VeteranFactorDomain private constructor(
     }
 
     /** Whether the abbreviated OCR tokens are compatible with one race candidate: same token count,
-     * every complete token matching, and the final token a bounded-error prefix of the canonical's
-     * final (strictly longer) token. */
+     * every complete token matching, and the final token an exact prefix of the canonical's final
+     * (strictly longer) token. The exact prefix is deliberate: an edit tolerance on the truncated tail
+     * would make near-neighbor races ("Kyoto Kim." against Kimpai and Kinen) ambiguous and fail closed
+     * for no gain, since the fuzzy path already recovers a longer, noisier read. */
     private fun abbreviationCompatibleRace(ocrTokens: List<String>, entry: CanonEntry): Boolean {
         val canonTokens = tokenizeIdentity(entry.canonical)
         if (canonTokens.size != ocrTokens.size) return false
@@ -203,8 +205,7 @@ class VeteranFactorDomain private constructor(
         // A genuine truncation: the abbreviation is strictly shorter than the full final word. An
         // equal-length final token is not truncated and would already have resolved on the fuzzy path.
         if (last.isEmpty() || canonLast.length <= last.length) return false
-        val prefix = canonLast.take(last.length)
-        return editDistance(last, prefix) <= abbreviationErrorTolerance(last.length)
+        return canonLast.startsWith(last)
     }
 
     /** A complete (non-abbreviated) OCR token matches its canonical token when identical, or one OCR
@@ -214,11 +215,6 @@ class VeteranFactorDomain private constructor(
         if (a == b) return true
         return minOf(a.length, b.length) >= 4 && editDistance(a, b) <= 1
     }
-
-    /** Allowed OCR edits on the final abbreviated token, matched against the canonical's same-length
-     * prefix. A one-character abbreviation must be exact (a single-letter edit would match almost any
-     * word); two or more characters tolerate a single misread ("Ss." for "St[akes]"). */
-    private fun abbreviationErrorTolerance(len: Int): Int = if (len <= 1) 0 else 1
 
     /** Splits a raw string on whitespace and reduces each token to its identity skeleton, dropping any
      * that skeletonize to nothing (stray punctuation). Shared by the OCR read and the canonical race

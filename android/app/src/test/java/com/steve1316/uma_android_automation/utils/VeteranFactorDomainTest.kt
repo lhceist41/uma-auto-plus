@@ -176,10 +176,17 @@ class VeteranFactorDomainTest {
 
         @Test
         fun `an ambiguous truncated race fails closed`() {
-            // These abbreviations each fit two races, so the uniqueness guard refuses them rather than
+            // A single-letter tail fits two races, so the uniqueness guard refuses it rather than
             // guessing: "Kyoto K." -> Kimpai/Kinen, "Nakayama K." -> Kimpai/Kinen.
             assertNull(canon("Kyoto K."))
             assertNull(canon("Nakayama K."))
+        }
+
+        @Test
+        fun `a longer exact prefix that separates the pair resolves`() {
+            // Extending the tail to an exact prefix that only one race carries makes it unique: "Kim" is
+            // an exact prefix of Kimpai but not Kinen, so it resolves where the single letter could not.
+            assertEquals("Kyoto Kimpai", canon("Kyoto Kim."))
         }
 
         @Test
@@ -291,10 +298,12 @@ class VeteranFactorDomainTest {
         }
 
         @Test
-        fun `a single misread in the final abbreviation still resolves when unique`() {
-            // "Bravo Ix." mis-reads the "n" of "Invitational" as an "x"; the one-edit tolerance on the
-            // final token (against the same-length prefix "In") keeps it compatible with the one race.
-            assertEquals("Bravo Invitational", canon("Bravo Ix."))
+        fun `a misread in the final abbreviation fails closed under exact-prefix matching`() {
+            // "Bravo Ix." mis-reads the "n" of "Invitational" as an "x". The final token must be an EXACT
+            // prefix of the canonical word, and "ix" is not a prefix of "invitational", so it fails
+            // closed rather than being snapped by a fuzzy tail - the longer, noisier reads that carry
+            // real identity are the fuzzy path's job, not this one's.
+            assertNull(canon("Bravo Ix."))
         }
 
         @Test
