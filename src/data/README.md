@@ -13,6 +13,14 @@ live here.
 - `scenarios.json`: scenario-specific event data (URA Finale, Unity Cup, Trackblazer, Grand Concert). Maintained by hand, since it carries the special event overrides and per-scenario logic.
 - `character_objectives.json`: goal turns per character. Read by `scripts/generate-racing-plan.mjs` and never bundled into the app.
 - `succession_relations.json`: the game's own inheritance relation tables (relation types, their point values, their character membership, and the three rank bands). Read by `scripts/parent-lab-affinity.mjs` and never bundled into the app. Regenerated from an installed `master.mdb` with `node scripts/generate-succession-relation-data.mjs --db <path>`; `--check` verifies the committed file is current. Two characters sharing a relation type share its points, so summing the shared types gives their base relation. That is not the affinity total the game displays over a lineage, and nothing in this repository computes one.
+- `support_cards.json`: the game's own support-card catalogue (every shipped card with its character, rarity,
+  support type, per-level effect curves, unique perk and unlock level, hint-skill pool, group members and scenario
+  restrictions), plus the effect-type names, the level cap at each limit-break step, and the characters each scenario
+  treats as its own. Read by `scripts/deck-lab.mjs` and never bundled into the app. Regenerated from an installed
+  `master.mdb` with `node scripts/generate-support-card-data.mjs --db <path>`; `--check` verifies the committed file is
+  current. Written as pure ASCII: several shipped card titles contain characters this repository does not write by
+  hand, so they are stored as escapes and parse back to the exact game string. Note `supports.json` is a different
+  file with a different job: it holds support-card training *events*, keyed by character display name.
 
 `characterPresets.ts` and `presetMeta.ts` are the preset sources. They are the authority for the
 preset inventory; `PRESETS_GUIDE.md` is their documented view and must be updated in the same change.
