@@ -6396,6 +6396,290 @@ class CareerLaunchNavigator(private val context: Context) {
         OutcomeCorpus.append(context, serializeBorrowScanHeader(header), OutcomeCorpus.BORROW_POOL_PATH)
     }
 
+    /** Reads the operator-pushed Smart Borrow intent JSON, or null when the file is absent/unreadable
+     * (fail closed: the locate rehearsal cannot run without an intent). Never throws except on interrupt. */
+    private fun readSmartBorrowIntentFile(): SmartBorrowIntent? {
+        return try {
+            val file = java.io.File(context.getExternalFilesDir(null), OutcomeCorpus.SMART_BORROW_INTENT_PATH)
+            if (!file.isFile) {
+                MessageLog.e(TAG, "[BORROW-LOCATE] No intent at ${OutcomeCorpus.SMART_BORROW_INTENT_PATH}; push one with deck-lab.mjs --emit-borrow-intent first.")
+                return null
+            }
+            parseSmartBorrowIntent(file.readText())
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: Exception) {
+            MessageLog.e(TAG, "[BORROW-LOCATE] Failed to read the intent file: $e")
+            null
+        }
+    }
+
+    /**
+     * Read-only Smart Borrow LOCATE rehearsal (DeckLab Smart Borrow 2.0, Stage A). Reads the pushed
+     * [SmartBorrowIntent], opens the Borrow Card picker on the career-start Support Formation screen,
+     * reads every visible row with the census reader, and resolves which live row is the recommended
+     * card via [SmartBorrowLocator] (canonical character + outfit + limit break). It reports the pre-tap
+     * proof and STOPS: it taps no row, selects no borrow, never presses Start Career, and spends
+     * nothing. Fails closed on a missing/invalid intent, the wrong screen, a non-empty Friends slot, or a
+     * picker that will not open. Because the device has no catalogue, "resolved == intended" is asserted
+     * as "the intent's canonical identity matched exactly one borrowable row"; that identity is what the
+     * offline recommendation tied to the intent's supportCardId. Tagged [BORROW-LOCATE].
+     */
+    internal fun locateSmartBorrowIntentReadOnly(injectedUtils: CustomImageUtils? = null): SmartBorrowLocateResult {
+        if (injectedUtils != null) {
+            imageUtils = injectedUtils
+        } else if (!ensureInitialised()) {
+            MessageLog.e(TAG, "[BORROW-LOCATE] Failed to initialise image utils. Stopping.")
+            return SmartBorrowLocateResult(SmartBorrowLocateResult.Status.INTENT_MISSING, failureReason = "image utils unavailable")
+        }
+        val startedAt = System.currentTimeMillis()
+        MessageLog.i(TAG, "[BORROW-LOCATE] ===== Read-only Smart Borrow locate rehearsal (taps no card, never presses Start Career) =====")
+
+        val intent = readSmartBorrowIntentFile()
+        if (intent == null) {
+            MessageLog.e(TAG, "[BORROW-LOCATE] No usable intent. Stopping. ===== end =====")
+            persistSmartBorrowLocate(startedAt, null, null, 0, 0, onFormation = false, slotEmpty = false)
+            return SmartBorrowLocateResult(SmartBorrowLocateResult.Status.INTENT_MISSING, failureReason = "no usable intent file")
+        }
+        MessageLog.i(
+            TAG,
+            "[BORROW-LOCATE] intent target=${intent.targetProfile} card=${intent.displayName} (#${intent.supportCardId}) " +
+                "expectedLB=${intent.expectedLimitBreak ?: "unknown"} scanId=${intent.sourceBorrowScanId ?: "-"} digest=${intent.recommendationEvidenceDigest ?: "-"}",
+        )
+
+        val startBitmap = iu.getSourceBitmap()
+        if (!LabelSupportFormation.check(iu, sourceBitmap = startBitmap)) {
+            MessageLog.e(TAG, "[BORROW-LOCATE] Not on the career-start Support Formation screen. Park the game there first. No gesture dispatched. Stopping. ===== end =====")
+            persistSmartBorrowLocate(startedAt, intent, null, 0, 0, onFormation = false, slotEmpty = false)
+            return SmartBorrowLocateResult(SmartBorrowLocateResult.Status.NOT_ON_SUPPORT_FORMATION, intent = intent, failureReason = "not on Support Formation")
+        }
+        if (!IconFriendSlotEmpty.check(iu, sourceBitmap = startBitmap)) {
+            MessageLog.e(TAG, "[BORROW-LOCATE] Friend slot is not empty; start the locate with an empty Friends slot so opening the picker is reversible. No gesture dispatched. Stopping. ===== end =====")
+            persistSmartBorrowLocate(startedAt, intent, null, 0, 0, onFormation = true, slotEmpty = false)
+            return SmartBorrowLocateResult(SmartBorrowLocateResult.Status.FRIEND_SLOT_NOT_EMPTY, intent = intent, failureReason = "friend slot not empty at start")
+        }
+
+        // Seed the active-trainee identity exactly as the census/launch do, so a trainee-conflict row is
+        // tagged blocked here too and never counts as the located card.
+        borrowExcludedCharacters.clear()
+        borrowLaunchTraineeTarget =
+            if (SettingsHelper.getBooleanSetting("runQueue", "enableTraineeRotation", false)) {
+                SettingsHelper.getStringSetting("queueState", "currentTrainee")
+            } else {
+                SettingsHelper.getStringSetting("general", "appliedPresetTrainee")
+            }
+
+        if (!reopenBorrowPicker(replaceMode = false)) {
+            MessageLog.e(TAG, "[BORROW-LOCATE] Could not open the Borrow Card picker from the empty friend slot. Stopping. ===== end =====")
+            persistSmartBorrowLocate(startedAt, intent, null, 0, 0, onFormation = true, slotEmpty = true)
+            return SmartBorrowLocateResult(SmartBorrowLocateResult.Status.PICKER_OPEN_FAILED, intent = intent, failureReason = "picker did not open")
+        }
+        waitSafe(2.0)
+
+        // Read the whole bounded pool read-only, exactly like the census: same reader, same walker, no
+        // tap on any row.
+        val observations = LinkedHashMap<String, BorrowRowObservation>()
+        var latestRows: List<BorrowRowObservation> = emptyList()
+        val walker =
+            BorrowListWalker(
+                maxPageGestures = MAX_BORROW_SCAN_PAGES,
+                maxSwallowedRetries = MAX_BORROW_SWALLOWED_SWIPE_RETRIES,
+                readScreen = {
+                    val bmp = iu.getSourceBitmap()
+                    lastBorrowListBitmap = bmp
+                    latestRows = readBorrowPoolRowsRich(bmp, observations.size, false)
+                    val readable = latestRows.filter { it.blockedTag == null }.map { 0.0 to nameKeyOf(it) }
+                    val blocked = latestRows.filter { it.blockedTag != null }.map { nameKeyOf(it) }
+                    BorrowScan(readable, duplicateTexts = blocked)
+                },
+                advancePage = { lastBorrowListBitmap?.let { swipeBorrowList(it) } },
+                abort = { !BotService.isRunning || StartModule.queueStopRequested },
+                log = { MessageLog.i(TAG, "[BORROW-LOCATE] $it") },
+            )
+        walker.walk { _, _ ->
+            for (obs in latestRows) observations.putIfAbsent(obs.rowFingerprint, obs)
+            false
+        }
+
+        // Always leave the picker the way it was found: closed, friend slot still empty. Never a tap.
+        ButtonClose.click(iu)
+        waitSafe(1.5)
+
+        val rows = observations.values.toList()
+        val match = SmartBorrowLocator.locate(intent, rows.map { it.toLocatable() })
+        val located = match.row
+        MessageLog.i(
+            TAG,
+            "[BORROW-LOCATE] verdict=${match.verdict} reason=\"${match.reason}\" rowsObserved=${rows.size} identityCandidates=${match.identityCandidates.size}" +
+                (if (match.disambiguatedByAlias) " (via source alias)" else ""),
+        )
+        if (located != null) {
+            // Pre-tap proof: the exact live row the intent resolves to, and the assertion that it is the
+            // one card the offline recommendation stands for. NO tap follows in this stage.
+            MessageLog.i(
+                TAG,
+                "[BORROW-LOCATE] LOCATED page=${located.pageIndex} character=\"${located.character ?: "-"}\" outfit=\"${located.outfit ?: "-"}\" " +
+                    "level=${located.level ?: "-"} lb=${located.limitBreakIndex ?: "-"} owner=${located.ownerAlias ?: "-"} confidence=${located.confidence ?: "-"}",
+            )
+            MessageLog.i(TAG, "[BORROW-LOCATE] ASSERT resolved identity == intended card #${intent.supportCardId} (${intent.displayName}): OK. No tap dispatched (Stage A locate-only).")
+        }
+
+        val doneBitmap = iu.getSourceBitmap()
+        val onFormation = LabelSupportFormation.check(iu, sourceBitmap = doneBitmap)
+        val slotEmpty = IconFriendSlotEmpty.check(iu, sourceBitmap = doneBitmap)
+        MessageLog.i(TAG, "[BORROW-LOCATE] returnedToSupportFormation=$onFormation friendSlotStillEmpty=$slotEmpty (nothing was selected)")
+        if (!onFormation || !slotEmpty) {
+            MessageLog.w(TAG, "[BORROW-LOCATE] Did not return cleanly to an empty Support Formation. Close any open dialog by hand and confirm the friend slot is still empty.")
+        }
+        persistSmartBorrowLocate(startedAt, intent, match, rows.size, match.identityCandidates.size, onFormation, slotEmpty)
+
+        val status =
+            when (match.verdict) {
+                SmartBorrowLocateVerdict.LOCATED -> SmartBorrowLocateResult.Status.LOCATED
+                SmartBorrowLocateVerdict.NOT_FOUND -> SmartBorrowLocateResult.Status.CARD_NOT_FOUND
+                SmartBorrowLocateVerdict.LB_MISMATCH -> SmartBorrowLocateResult.Status.LB_MISMATCH
+                SmartBorrowLocateVerdict.AMBIGUOUS -> SmartBorrowLocateResult.Status.AMBIGUOUS
+            }
+        MessageLog.i(TAG, "[BORROW-LOCATE] status=$status runtime=${(System.currentTimeMillis() - startedAt) / 1000}s ===== end =====")
+        return SmartBorrowLocateResult(status, intent = intent, rowsObserved = rows.size, match = match, returnedToSupportFormation = onFormation, friendSlotStillEmpty = slotEmpty)
+    }
+
+    /** Appends one read-only locate record to the local corpus. Best-effort; a persist failure never
+     * disturbs the diagnostic. Carries no raw owner name (the observation's owner alias only). */
+    private fun persistSmartBorrowLocate(
+        startedAt: Long,
+        intent: SmartBorrowIntent?,
+        match: SmartBorrowLocateMatch?,
+        rowsObserved: Int,
+        identityCandidates: Int,
+        onFormation: Boolean,
+        slotEmpty: Boolean,
+    ) {
+        val located = match?.row
+        val record =
+            JSONObject().apply {
+                put("record", "smart_borrow_locate")
+                put("started_at", startedAt)
+                put("completed_at", System.currentTimeMillis())
+                put("app_version", BuildConfig.VERSION_NAME)
+                put("intent_digest", intent?.recommendationEvidenceDigest ?: JSONObject.NULL)
+                put("target_profile", intent?.targetProfile ?: JSONObject.NULL)
+                put("support_card_id", intent?.supportCardId ?: JSONObject.NULL)
+                put("canonical_character", intent?.canonicalCharacter ?: JSONObject.NULL)
+                put("canonical_title", intent?.canonicalTitle ?: JSONObject.NULL)
+                put("expected_level", intent?.expectedLevel ?: JSONObject.NULL)
+                put("expected_limit_break", intent?.expectedLimitBreak ?: JSONObject.NULL)
+                put("source_scan_id", intent?.sourceBorrowScanId ?: JSONObject.NULL)
+                put("verdict", match?.verdict?.name ?: "NO_INTENT")
+                put("reason", match?.reason ?: JSONObject.NULL)
+                put("rows_observed", rowsObserved)
+                put("identity_candidate_count", identityCandidates)
+                put("located", located != null)
+                put("disambiguated_by_alias", match?.disambiguatedByAlias ?: false)
+                put("located_page", located?.pageIndex ?: JSONObject.NULL)
+                put("located_character", located?.character ?: JSONObject.NULL)
+                put("located_outfit", located?.outfit ?: JSONObject.NULL)
+                put("located_level", located?.level ?: JSONObject.NULL)
+                put("located_limit_break", located?.limitBreakIndex ?: JSONObject.NULL)
+                put("located_owner_alias", located?.ownerAlias ?: JSONObject.NULL)
+                put("tapped", false)
+                put("returned_to_support_formation", onFormation)
+                put("friend_slot_still_empty", slotEmpty)
+            }
+        OutcomeCorpus.append(context, record, OutcomeCorpus.SMART_BORROW_LOCATE_PATH)
+    }
+
+    /**
+     * Borrow "Remove" behaviour probe (DeckLab Smart Borrow 2.0 enabler). With a card ALREADY borrowed
+     * (the operator places a throwaway one by hand), it opens the picker via the friend-slot banner,
+     * taps the Remove control, and records whether the Friends slot returned to empty. This is the one
+     * deliberate mutation among these diagnostics; it exists to prove the reversible rollback path the
+     * future select+rollback stage needs. It spends nothing and never presses Start Career. Fails closed
+     * on the wrong screen or an already-empty slot. Tagged [BORROW-REMOVE-PROBE].
+     */
+    internal fun probeBorrowRemoveBehavior(injectedUtils: CustomImageUtils? = null): BorrowRemoveProbeResult {
+        if (injectedUtils != null) {
+            imageUtils = injectedUtils
+        } else if (!ensureInitialised()) {
+            MessageLog.e(TAG, "[BORROW-REMOVE-PROBE] Failed to initialise image utils. Stopping.")
+            return BorrowRemoveProbeResult(BorrowRemoveProbeResult.Status.NOT_ON_SUPPORT_FORMATION, failureReason = "image utils unavailable")
+        }
+        val startedAt = System.currentTimeMillis()
+        MessageLog.i(TAG, "[BORROW-REMOVE-PROBE] ===== Borrow Remove behaviour probe (removes a throwaway borrow; never presses Start Career) =====")
+
+        val startBitmap = iu.getSourceBitmap()
+        if (!LabelSupportFormation.check(iu, sourceBitmap = startBitmap)) {
+            MessageLog.e(TAG, "[BORROW-REMOVE-PROBE] Not on the career-start Support Formation screen. Park the game there first. No gesture dispatched. Stopping. ===== end =====")
+            persistBorrowRemoveProbe(startedAt, BorrowRemoveProbeResult.Status.NOT_ON_SUPPORT_FORMATION, removeControlFound = false, slotEmptyAfter = false)
+            return BorrowRemoveProbeResult(BorrowRemoveProbeResult.Status.NOT_ON_SUPPORT_FORMATION, failureReason = "not on Support Formation")
+        }
+        if (IconFriendSlotEmpty.check(iu, sourceBitmap = startBitmap)) {
+            MessageLog.e(TAG, "[BORROW-REMOVE-PROBE] Friend slot is already empty; borrow ANY throwaway card by hand first so there is something to remove. No gesture dispatched. Stopping. ===== end =====")
+            persistBorrowRemoveProbe(startedAt, BorrowRemoveProbeResult.Status.FRIEND_SLOT_ALREADY_EMPTY, removeControlFound = false, slotEmptyAfter = true)
+            return BorrowRemoveProbeResult(BorrowRemoveProbeResult.Status.FRIEND_SLOT_ALREADY_EMPTY, failureReason = "friend slot already empty")
+        }
+
+        // Reopen the picker over the filled slot via its Friends banner (the same reopen the launch's
+        // duplicate-replacement uses).
+        if (!reopenBorrowPicker(replaceMode = true)) {
+            MessageLog.e(TAG, "[BORROW-REMOVE-PROBE] Could not open the Borrow Card picker from the filled friend slot's banner. Stopping. ===== end =====")
+            persistBorrowRemoveProbe(startedAt, BorrowRemoveProbeResult.Status.PICKER_OPEN_FAILED, removeControlFound = false, slotEmptyAfter = false)
+            return BorrowRemoveProbeResult(BorrowRemoveProbeResult.Status.PICKER_OPEN_FAILED, failureReason = "picker did not open")
+        }
+        waitSafe(2.0)
+
+        val (removeLocation, _) = ButtonBorrowCardRemove.find(iu)
+        if (removeLocation == null) {
+            MessageLog.w(TAG, "[BORROW-REMOVE-PROBE] No Remove control on the opened picker. Closing without a tap. ===== end =====")
+            ButtonClose.click(iu)
+            waitSafe(1.5)
+            val after = iu.getSourceBitmap()
+            val slotEmpty = IconFriendSlotEmpty.check(iu, sourceBitmap = after)
+            persistBorrowRemoveProbe(startedAt, BorrowRemoveProbeResult.Status.REMOVE_CONTROL_ABSENT, removeControlFound = false, slotEmptyAfter = slotEmpty)
+            return BorrowRemoveProbeResult(BorrowRemoveProbeResult.Status.REMOVE_CONTROL_ABSENT, removeControlFound = false, slotEmptyAfter = slotEmpty)
+        }
+
+        MessageLog.i(TAG, "[BORROW-REMOVE-PROBE] Remove control found at (${removeLocation.x.toInt()}, ${removeLocation.y.toInt()}). Tapping it to clear the throwaway borrow...")
+        ButtonBorrowCardRemove.click(iu)
+        waitSafe(2.0)
+
+        // The Remove may close the picker or leave it open; make sure we end on the formation, then read
+        // the slot. If a picker is still open, closing it is safe (no card was picked).
+        val afterTapBitmap = iu.getSourceBitmap()
+        if (!LabelSupportFormation.check(iu, sourceBitmap = afterTapBitmap)) {
+            ButtonClose.click(iu)
+            waitSafe(1.5)
+        }
+        val doneBitmap = iu.getSourceBitmap()
+        val onFormation = LabelSupportFormation.check(iu, sourceBitmap = doneBitmap)
+        val slotEmpty = IconFriendSlotEmpty.check(iu, sourceBitmap = doneBitmap)
+        val status =
+            if (onFormation && slotEmpty) BorrowRemoveProbeResult.Status.REMOVE_CLEARS_TO_EMPTY else BorrowRemoveProbeResult.Status.REMOVE_DID_NOT_CLEAR
+        MessageLog.i(
+            TAG,
+            "[BORROW-REMOVE-PROBE] afterRemove onFormation=$onFormation friendSlotEmpty=$slotEmpty -> $status. " +
+                (if (status == BorrowRemoveProbeResult.Status.REMOVE_CLEARS_TO_EMPTY) "Remove IS a reversible rollback path." else "Remove did NOT restore an empty slot; the rollback path is NOT proven.") +
+                " ===== end =====",
+        )
+        persistBorrowRemoveProbe(startedAt, status, removeControlFound = true, slotEmptyAfter = slotEmpty)
+        return BorrowRemoveProbeResult(status, removeControlFound = true, slotEmptyAfter = slotEmpty, returnedToSupportFormation = onFormation)
+    }
+
+    /** Appends one Remove-probe record to the local corpus. Best-effort. */
+    private fun persistBorrowRemoveProbe(startedAt: Long, status: BorrowRemoveProbeResult.Status, removeControlFound: Boolean, slotEmptyAfter: Boolean) {
+        val record =
+            JSONObject().apply {
+                put("record", "borrow_remove_probe")
+                put("started_at", startedAt)
+                put("completed_at", System.currentTimeMillis())
+                put("app_version", BuildConfig.VERSION_NAME)
+                put("status", status.name)
+                put("remove_control_found", removeControlFound)
+                put("friend_slot_empty_after", slotEmptyAfter)
+            }
+        OutcomeCorpus.append(context, record, OutcomeCorpus.BORROW_REMOVE_PROBE_PATH)
+    }
+
     private fun handleLegacySelectScreen(): TransitionResult {
         // Rotation backstop: a trainee switch was required this launch but we reached Legacy Select
         // without handling Trainee Select (a missed detection tapped through it keeping the wrong

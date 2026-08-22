@@ -44,6 +44,8 @@ const DebugSettings = () => {
         "debugMode_startDeckNumberReadTest",
         "debugMode_startSupportDeckRehearsalTest",
         "debugMode_startSmartBorrowRehearsalTest",
+        "debugMode_startSmartBorrowLocateTest",
+        "debugMode_startBorrowRemoveProbeTest",
         "debugMode_startBorrowPoolScanTest",
         "debugMode_startRainbowDetectionTest",
         "debugMode_startVeteranRosterReadTest",
@@ -627,6 +629,24 @@ const DebugSettings = () => {
                                 onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startSmartBorrowRehearsalTest", checked)}
                                 label="Start Smart Borrow Rehearsal Test"
                                 description="Park the game on the career-start Support Formation with Required Support Deck already matching the visible deck and the Friends slot empty. Exercises the production Smart Borrow flow (open the friend slot, pick a card, replace a duplicate or trainee-conflict borrow) and the exact post-borrow deck verification. Never presses Start Career and spends no TP. Tagged [BORROW-REHEARSAL] in the log."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-smart-borrow-locate-test"
+                                checked={bsc.settings.debug.debugMode_startSmartBorrowLocateTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startSmartBorrowLocateTest", checked)}
+                                label="Start Smart Borrow Locate Rehearsal"
+                                description="Read-only: reads the pushed borrow intent (outcomes/smart_borrow_intent.json) and finds which live Borrow Card row it resolves to, then reports it. Park the game on the career-start Support Formation with the Friends slot empty; it opens the picker, reads the rows, matches the recommended card by canonical character, outfit, and limit break, closes the picker, and taps NO card. Selects nothing, never presses Start Career, spends nothing. Tagged [BORROW-LOCATE] in the log."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-borrow-remove-probe-test"
+                                checked={bsc.settings.debug.debugMode_startBorrowRemoveProbeTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startBorrowRemoveProbeTest", checked)}
+                                label="Start Borrow Remove Probe"
+                                description="Probes whether the picker's Remove control clears a borrowed card back to an empty Friends slot. Manually borrow ANY throwaway card first, then start the bot: it opens the picker via the friend-slot banner, taps Remove, and records whether the slot went empty. This is the only one of these diagnostics that changes anything (it removes the throwaway card you placed); it spends nothing and never presses Start Career. Tagged [BORROW-REMOVE-PROBE] in the log."
                                 style={{ marginTop: 10 }}
                             />
 

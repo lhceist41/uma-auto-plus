@@ -98,6 +98,31 @@ object OutcomeCorpus {
     const val BORROW_POOL_PATH = "$OUTCOMES_DIR/borrow_pool.jsonl"
 
     /**
+     * Relative path of the operator-pushed Smart Borrow selection intent (DeckLab Smart Borrow 2.0).
+     * INPUT, not output: the offline `scripts/deck-lab.mjs --emit-borrow-intent` writes this JSON and
+     * the operator adb-pushes it here; the read-only locate rehearsal reads it to know which card the
+     * offline recommendation chose. The device never writes it.
+     */
+    const val SMART_BORROW_INTENT_PATH = "$OUTCOMES_DIR/smart_borrow_intent.json"
+
+    /**
+     * Relative path of the read-only Smart Borrow LOCATE rehearsal stream (Stage A): one
+     * `smart_borrow_locate` record per run, stating which live picker row the pushed intent resolved to
+     * (or why none did) with zero taps. Bound offline to the intent by its evidence digest, never to a
+     * career. A separate record type from every stream above.
+     */
+    const val SMART_BORROW_LOCATE_PATH = "$OUTCOMES_DIR/smart_borrow_locate.jsonl"
+
+    /**
+     * Relative path of the Borrow "Remove" behaviour probe stream: one `borrow_remove_probe` record per
+     * run, recording whether tapping the picker's Remove control cleared a manually-borrowed card back
+     * to an empty Friends slot. The one deliberate mutation among these diagnostics (it removes a
+     * throwaway borrow the operator placed), it exists to prove the reversible rollback path the future
+     * select+rollback stage needs; it spends nothing and never presses Start Career.
+     */
+    const val BORROW_REMOVE_PROBE_PATH = "$OUTCOMES_DIR/borrow_remove_probe.jsonl"
+
+    /**
      * Appends one [record] as a JSON line to [path]. Writing must never disturb the calling
      * path: any failure is swallowed after a MessageLog warning. MessageLog is safe here -
      * the career path that logs the ledger line via MessageLog immediately after, and the

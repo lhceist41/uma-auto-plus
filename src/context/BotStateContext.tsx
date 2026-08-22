@@ -254,6 +254,10 @@ export interface Settings {
         debugMode_startSupportDeckRehearsalTest: boolean
         // Rehearses the production Smart Borrow flow + exact post-borrow deck verification on the Support Formation screen and stops before Start Career; requires Required Support Deck 1..10 already showing and an empty Friends slot.
         debugMode_startSmartBorrowRehearsalTest: boolean
+        // Read-only Smart Borrow LOCATE rehearsal (DeckLab). Reads the pushed borrow intent (outcomes/smart_borrow_intent.json) and finds which live picker row it resolves to, WITHOUT tapping a card. Park on the Support Formation with an empty Friends slot. Selects nothing, never presses Start Career.
+        debugMode_startSmartBorrowLocateTest: boolean
+        // Borrow "Remove" behaviour probe. Manually borrow any throwaway card first, then run: it opens the picker via the friend-slot banner, taps Remove, and records whether the slot returned to empty. The one deliberate mutation (removes the throwaway borrow); spends nothing, never presses Start Career.
+        debugMode_startBorrowRemoveProbeTest: boolean
         // Read-only Borrow Card pool census (DeckLab). Park the game on the career-start Support Formation screen with an empty Friends slot; opens the borrow picker, reads every visible row, pages, and closes. Taps no card, selects nothing, never presses Start Career.
         debugMode_startBorrowPoolScanTest: boolean
         // How many distinct borrow cards the pool census reads before stopping. 0 reads the whole visible pool; a small value reads only the first screen (the bounded validation run).
@@ -773,6 +777,8 @@ export const defaultSettings: Settings = {
         debugMode_startDeckNumberReadTest: false,
         debugMode_startSupportDeckRehearsalTest: false,
         debugMode_startSmartBorrowRehearsalTest: false,
+        debugMode_startSmartBorrowLocateTest: false,
+        debugMode_startBorrowRemoveProbeTest: false,
         debugMode_startBorrowPoolScanTest: false,
         borrowPoolScanLimit: 0,
         borrowPoolScanEvidence: false,

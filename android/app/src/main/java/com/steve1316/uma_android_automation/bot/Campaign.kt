@@ -1016,6 +1016,8 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startDeckNumberReadTest" to ::startDeckNumberReadTest,
                 "debugMode_startSupportDeckRehearsalTest" to ::startSupportDeckRehearsalTest,
                 "debugMode_startSmartBorrowRehearsalTest" to ::startSmartBorrowRehearsalTest,
+                "debugMode_startSmartBorrowLocateTest" to ::startSmartBorrowLocateTest,
+                "debugMode_startBorrowRemoveProbeTest" to ::startBorrowRemoveProbeTest,
                 "debugMode_startBorrowPoolScanTest" to ::startBorrowPoolScanTest,
                 "debugMode_startRainbowDetectionTest" to ::startRainbowDetectionTest,
                 "debugMode_startVeteranRosterReadTest" to ::startVeteranRosterReadTest,
@@ -1182,6 +1184,32 @@ abstract class Campaign(game: Game) : Task(game) {
     open fun startSmartBorrowRehearsalTest() {
         MessageLog.i(TAG, "\n[TEST] Running Smart Borrow rehearsal diagnostic...")
         CareerLaunchNavigator(game.myContext).rehearseSmartBorrowForRequiredDeck(game.imageUtils)
+    }
+
+    /**
+     * Read-only Smart Borrow LOCATE rehearsal (DeckLab Smart Borrow 2.0, Stage A). Push the offline
+     * borrow intent to outcomes/smart_borrow_intent.json, park the game on the career-start Support
+     * Formation screen with the Friends slot EMPTY, then start the bot: it reads the intent, opens the
+     * Borrow Card picker, reads every visible row, resolves which live row is the recommended card by
+     * canonical character + outfit + limit break, and reports it. It taps NO card, selects nothing,
+     * never presses Start Career, and spends nothing. Tagged [BORROW-LOCATE].
+     */
+    open fun startSmartBorrowLocateTest() {
+        MessageLog.i(TAG, "\n[TEST] Running read-only Smart Borrow locate rehearsal...")
+        CareerLaunchNavigator(game.myContext).locateSmartBorrowIntentReadOnly(game.imageUtils)
+    }
+
+    /**
+     * Borrow "Remove" behaviour probe (DeckLab Smart Borrow 2.0 enabler). Manually borrow ANY
+     * throwaway card first, park the game on the career-start Support Formation screen, then start the
+     * bot: it opens the picker via the friend-slot banner, taps the Remove control, and records whether
+     * the Friends slot returned to empty. This is the only DeckLab borrow diagnostic that mutates
+     * anything (it removes the throwaway card the operator placed); it spends nothing and never presses
+     * Start Career. Tagged [BORROW-REMOVE-PROBE].
+     */
+    open fun startBorrowRemoveProbeTest() {
+        MessageLog.i(TAG, "\n[TEST] Running Borrow Remove behaviour probe...")
+        CareerLaunchNavigator(game.myContext).probeBorrowRemoveBehavior(game.imageUtils)
     }
 
     /**
