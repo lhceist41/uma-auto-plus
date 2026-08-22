@@ -330,6 +330,279 @@ class VeteranFactorDomainTest {
         }
     }
 
+    @Nested
+    @DisplayName("PL-R2b final-14 canonical remediation")
+    inner class FinalFourteen {
+        private fun res(raw: String, kind: SparkRowKind = SparkRowKind.WHITE) = domain.resolve(raw, kind)
+        private fun canon(raw: String, kind: SparkRowKind = SparkRowKind.WHITE) = res(raw, kind).canonicalName
+
+        @Test
+        fun `the four confirmed live-unresolved reads now canonicalize on their own paths`() {
+            // The exact raw strings the PL-R2b crawl left off-domain (one per unresolved Veteran), each
+            // recovered by the path the class needs. Star counts and fingerprint identity are unaffected;
+            // only canonicalName goes from null to the domain name.
+            val ignited = res("lgnited Spirit: Stamina +") // real live read: OCR misread the leading I as l
+            assertEquals("Ignited Spirit STA", ignited.canonicalName)
+            assertEquals(FactorAcceptancePath.DISPLAY_ALIAS, ignited.path)
+
+            val asahi = res("Asahi Hai F.S.")
+            assertEquals("Asahi Hai Futurity Stakes", asahi.canonicalName)
+            assertEquals(FactorAcceptancePath.ABBREVIATION, asahi.path)
+
+            val sprinters = res("SprintersS.")
+            assertEquals("Sprinters Stakes", sprinters.canonicalName)
+            assertEquals(FactorAcceptancePath.ABBREVIATION, sprinters.path)
+
+            val climax = res("TS Climax Scenario")
+            assertEquals("TS Climax Scenario", climax.canonicalName)
+            assertEquals(FactorAcceptancePath.STRONG, climax.path) // now in the scenario family: exact skeleton
+        }
+
+        @Test
+        fun `every Ignited and Burning Spirit stat display resolves to its skill`() {
+            // The whole systematic family, clean, maps onto the abbreviated data name - whether via the
+            // ordinary fuzzy scan (SPD/GUTS/WIT/PWR) or the display alias when the "stamina/sta" pair sits
+            // too close to its neighbours to separate. Either path lands the same canonical name.
+            for (family in listOf("Ignited Spirit", "Burning Spirit")) {
+                assertEquals("$family SPD", canon("$family: Speed +"))
+                assertEquals("$family STA", canon("$family: Stamina +"))
+                assertEquals("$family PWR", canon("$family: Power +"))
+                assertEquals("$family GUTS", canon("$family: Guts +"))
+                assertEquals("$family WIT", canon("$family: Wit +"))
+            }
+        }
+
+        @Test
+        fun `the display alias fails closed on an unknown stat, a missing plus, and the wrong kind`() {
+            assertNull(canon("lgnited Spirit: Brain +")) // "brain" is not one of the five stats
+            assertNull(canon("lgnited Spirit: Stamina")) // the trailing "+" gates the alias; without it, fuzzy still rejects
+            assertNull(canon("lgnited Spirit: Stamina +", SparkRowKind.STAT)) // stat-hint display only ever appears on a WHITE row
+            assertNull(canon("lgnited Spirit: Stamina +", SparkRowKind.UNIQUE))
+        }
+
+        @Test
+        fun `the race paths fail closed off the white kind`() {
+            assertNull(canon("Asahi Hai F.S.", SparkRowKind.STAT))
+            assertNull(canon("SprintersS.", SparkRowKind.APTITUDE))
+        }
+
+        @Test
+        fun `a scenario outside the domain still fails closed after TS Climax was added`() {
+            // Adding one legacy scenario name did not open the scenario family to arbitrary reads: a real
+            // but unmodelled scenario stays unresolved.
+            assertNull(canon("Aoharu Cup"))
+        }
+
+        @Test
+        fun `existing strong and single-word abbreviation reads are unchanged`() {
+            // The new paths run only after a fuzzy reject, so nothing that resolved before moves.
+            assertEquals("Yasuda Kinen", canon("Yasuda Kinen"))
+            assertEquals(FactorAcceptancePath.STRONG, res("Yasuda Kinen").path)
+            assertEquals("Hopeful Stakes", canon("Hopeful S."))
+            assertEquals(FactorAcceptancePath.ABBREVIATION, res("Hopeful S.").path)
+        }
+    }
+
+    @Nested
+    @DisplayName("synthetic domain: multi-initial race abbreviations")
+    inner class MultiInitialSynthetic {
+        // Race final words long enough that "Alpha Beta X.Y." falls well under the fuzzy floor, so every
+        // accept comes from the multi-initial path, not a coincidental fuzzy hit.
+        private val json =
+            """
+            {
+              "schemaVersion": 1,
+              "source": "test",
+              "counts": {},
+              "families": {
+                "stat": ["Speed"],
+                "aptitude": ["Mile"],
+                "unique": ["Alpha One"],
+                "skill": ["Zulu Skillcraft"],
+                "race": ["Alpha Beta Championship Trophy", "Alpha Beta Xavier Yonder", "Alpha Beta Championship Tussle", "Zeta Eta Omicron Sigma"],
+                "scenario": ["Trackblazer"]
+              }
+            }
+            """.trimIndent()
+        private val d = VeteranFactorDomain.parse(json) ?: error("synthetic domain should parse")
+        private fun canon(raw: String, kind: SparkRowKind = SparkRowKind.WHITE) = d.resolve(raw, kind).canonicalName
+
+        @Test
+        fun `a unique multi-initial run expands to the one compatible race`() {
+            val r = d.resolve("Alpha Beta X.Y.", SparkRowKind.WHITE)
+            assertEquals("Alpha Beta Xavier Yonder", r.canonicalName)
+            assertEquals(FactorAcceptancePath.ABBREVIATION, r.path)
+            assertEquals("race", r.sourceFamily)
+        }
+
+        @Test
+        fun `ambiguous initials fail closed`() {
+            // "C.T." fits both Championship Trophy and Championship Tussle, so the uniqueness guard refuses it.
+            assertNull(canon("Alpha Beta C.T."))
+        }
+
+        @Test
+        fun `a wrong leading token fails closed`() {
+            assertNull(canon("Zzz Beta X.Y."))
+        }
+
+        @Test
+        fun `a bare initial run with no leading token fails closed`() {
+            assertNull(canon("X.Y."))
+        }
+
+        @Test
+        fun `a truncated skill is not rescued as a race`() {
+            assertNull(canon("Zulu S."))
+        }
+
+        @Test
+        fun `the multi-initial path never fires off the white kind`() {
+            assertNull(canon("Alpha Beta X.Y.", SparkRowKind.STAT))
+            assertNull(canon("Alpha Beta X.Y.", SparkRowKind.UNIQUE))
+        }
+    }
+
+    @Nested
+    @DisplayName("synthetic domain: lost-space race abbreviations")
+    inner class LostSpaceSynthetic {
+        private val json =
+            """
+            {
+              "schemaVersion": 1,
+              "source": "test",
+              "counts": {},
+              "families": {
+                "stat": ["Speed"],
+                "aptitude": ["Mile"],
+                "unique": ["Alpha One"],
+                "skill": ["Zulu Skillcraft"],
+                "race": ["Alpha Championship", "Bravo Invitational"],
+                "scenario": ["Trackblazer"]
+              }
+            }
+            """.trimIndent()
+        private val d = VeteranFactorDomain.parse(json) ?: error("synthetic domain should parse")
+        private fun canon(raw: String, kind: SparkRowKind = SparkRowKind.WHITE) = d.resolve(raw, kind).canonicalName
+
+        @Test
+        fun `a glued lost-space read expands to the one compatible race`() {
+            val r = d.resolve("AlphaC.", SparkRowKind.WHITE)
+            assertEquals("Alpha Championship", r.canonicalName)
+            assertEquals(FactorAcceptancePath.ABBREVIATION, r.path)
+            assertEquals("race", r.sourceFamily)
+        }
+
+        @Test
+        fun `garbage ending in a period fails closed`() {
+            assertNull(canon("Xqzzptdf."))
+        }
+
+        @Test
+        fun `the lost-space path never fires off the white kind`() {
+            assertNull(canon("AlphaC.", SparkRowKind.STAT))
+        }
+
+        @Test
+        fun `an ambiguous concatenation fails closed`() {
+            // With both Alpha Championship and Alpha Charity present, "AlphaC." fits both, so it refuses.
+            val json2 =
+                """
+                {
+                  "schemaVersion": 1,
+                  "source": "test",
+                  "counts": {},
+                  "families": {
+                    "stat": ["Speed"], "aptitude": ["Mile"], "unique": ["Alpha One"], "skill": ["Zulu Skillcraft"],
+                    "race": ["Alpha Championship", "Alpha Charity"], "scenario": ["Trackblazer"]
+                  }
+                }
+                """.trimIndent()
+            val d2 = VeteranFactorDomain.parse(json2) ?: error("synthetic domain should parse")
+            assertNull(d2.resolve("AlphaC.", SparkRowKind.WHITE).canonicalName)
+        }
+    }
+
+    @Nested
+    @DisplayName("synthetic domain: stat-hint display alias")
+    inner class DisplayAliasSynthetic {
+        // A "<name> STA" family plus a neighbour that literally ends in "Stamina" (mirroring the live
+        // "Racing Spirit: Stamina" skill), so the clean "<name>: Stamina +" read sits too close to
+        // separate on the fuzzy scan and only the deterministic alias recovers it - the exact shape of
+        // the live "Ignited/Burning Spirit" gap.
+        private val json =
+            """
+            {
+              "schemaVersion": 1,
+              "source": "test",
+              "counts": {},
+              "families": {
+                "stat": ["Speed"],
+                "aptitude": ["Mile"],
+                "unique": ["Alpha One"],
+                "skill": ["Gleam Spirit STA", "Gleam Spirit SPD", "Gleam Spirit WIT", "Waxen Spirit Stamina"],
+                "race": ["Yasuda Kinen"],
+                "scenario": ["Trackblazer"]
+              }
+            }
+            """.trimIndent()
+        private val d = VeteranFactorDomain.parse(json) ?: error("synthetic domain should parse")
+        private fun canon(raw: String, kind: SparkRowKind = SparkRowKind.WHITE) = d.resolve(raw, kind).canonicalName
+
+        @Test
+        fun `a clean stat-hint display resolves through the alias when fuzzy cannot separate it`() {
+            val r = d.resolve("Gleam Spirit: Stamina +", SparkRowKind.WHITE)
+            assertEquals("Gleam Spirit STA", r.canonicalName)
+            assertEquals(FactorAcceptancePath.DISPLAY_ALIAS, r.path)
+            assertEquals("skill", r.sourceFamily)
+        }
+
+        @Test
+        fun `a leading OCR error in the name is tolerated by the alias`() {
+            // "Glean" for "Gleam": the stat transform collapses the ambiguous "stamina" suffix, leaving a
+            // one-edit prefix the skill-family scan recovers with a wide lead.
+            val r = d.resolve("Glean Spirit: Stamina +", SparkRowKind.WHITE)
+            assertEquals("Gleam Spirit STA", r.canonicalName)
+            assertEquals(FactorAcceptancePath.DISPLAY_ALIAS, r.path)
+        }
+
+        @Test
+        fun `an unknown stat word fails closed`() {
+            assertNull(canon("Glean Spirit: Mood +"))
+        }
+
+        @Test
+        fun `a missing trailing plus fails closed`() {
+            assertNull(canon("Gleam Spirit: Stamina"))
+        }
+
+        @Test
+        fun `the alias never fires off the white kind`() {
+            assertNull(canon("Gleam Spirit: Stamina +", SparkRowKind.UNIQUE))
+        }
+
+        @Test
+        fun `an ambiguous reconstruction fails closed`() {
+            // Two skills a single edit from the reconstruction ("Gleam"/"Gleom" Spirit STA) leave the
+            // scan without a clear winner, so it refuses rather than guessing.
+            val json2 =
+                """
+                {
+                  "schemaVersion": 1,
+                  "source": "test",
+                  "counts": {},
+                  "families": {
+                    "stat": ["Speed"], "aptitude": ["Mile"], "unique": ["Alpha One"],
+                    "skill": ["Gleam Spirit STA", "Gleom Spirit STA", "Waxen Spirit Stamina"],
+                    "race": ["Yasuda Kinen"], "scenario": ["Trackblazer"]
+                  }
+                }
+                """.trimIndent()
+            val d2 = VeteranFactorDomain.parse(json2) ?: error("synthetic domain should parse")
+            assertNull(d2.resolve("Gleum Spirit: Stamina +", SparkRowKind.WHITE).canonicalName)
+        }
+    }
+
     private fun assetFile(relative: String): File {
         var dir: File? = File(System.getProperty("user.dir") ?: ".")
         repeat(5) {

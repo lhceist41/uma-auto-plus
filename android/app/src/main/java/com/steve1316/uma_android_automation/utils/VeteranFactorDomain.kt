@@ -8,9 +8,14 @@ import org.json.JSONObject
 
 /** How a factor OCR read was resolved onto a canonical name (or not), kept as evidence so a margin
  * accept is auditable offline and distinguishable from a strong one. Mirrors [OutfitAcceptancePath].
- * ABBREVIATION marks a race name the factor card truncated ("Hopeful S." -> "Hopeful Stakes") that the
- * deterministic race-abbreviation path recovered after the fuzzy scan rejected it. */
-enum class FactorAcceptancePath { STRONG, MARGIN, ABBREVIATION, REJECT }
+ * ABBREVIATION marks a race name the factor card truncated ("Hopeful S." -> "Hopeful Stakes", the
+ * multi-initial "Asahi Hai F.S." -> "Asahi Hai Futurity Stakes", or the lost-space "SprintersS." ->
+ * "Sprinters Stakes") that a deterministic race path recovered after the fuzzy scan rejected it.
+ * DISPLAY_ALIAS marks a skill whose factor card shows the game's stat-hint vocabulary ("Ignited
+ * Spirit: Stamina +") mapped onto the abbreviated data name ("Ignited Spirit STA"). Both extra paths
+ * run only after a fuzzy reject, so neither can override a STRONG/MARGIN read. Diagnostic only: the
+ * fingerprint is built from the canonical name, never from the path. */
+enum class FactorAcceptancePath { STRONG, MARGIN, ABBREVIATION, DISPLAY_ALIAS, REJECT }
 
 /**
  * The outcome of snapping one factor-card OCR read onto the canonical factor domain.
@@ -70,15 +75,19 @@ fun factorAcceptancePath(best: Double, second: Double?): FactorAcceptancePath {
  * skills, and a WHITE card against the union of normal skills, races, and scenarios. That conditioning
  * is what keeps a white skill read from ever snapping onto a unique's long distinctive name and back.
  *
- * Resolution has three paths, the PL-R1b safety model plus the PL-R1c race-abbreviation fallback:
+ * Resolution has the PL-R1b safety model plus deterministic recovery fallbacks that fire ONLY after a
+ * fuzzy REJECT, so none can override a strong/margin read:
  *  - an exact-skeleton hit (the read normalizes to a canonical name's skeleton) is STRONG at once - the
  *    common case for a clean read, and the reason `Firm Conditions ○` and its glyph-less OCR agree;
  *  - otherwise a fuzzy scan picks the best candidate and STRONG/MARGIN/REJECT decides, so `FIRM
  *    CONDITIONSO` and `LONG COMERS` still recover their canonical names, and a garbage/off-domain read
  *    fails closed;
- *  - finally, only after a fuzzy REJECT, a race name the card truncated to an abbreviation
- *    ("Hopeful S.") is recovered by [resolveAbbreviatedRace] when it uniquely identifies one race,
- *    which is otherwise too short to clear the fuzzy floor against its long canonical.
+ *  - after a fuzzy REJECT, a race the card abbreviated is recovered when it uniquely identifies one
+ *    race: a single truncated word ("Hopeful S.", [resolveAbbreviatedRace]), a multi-initial run
+ *    ("Asahi Hai F.S.", [resolveMultiInitialRace]), or a lost-space concatenation ("SprintersS.",
+ *    [resolveLostSpaceRace]) - each too short/mangled to clear the fuzzy floor against its canonical;
+ *  - and a skill shown in the game's stat-hint vocabulary ("Ignited Spirit: Stamina +") is mapped onto
+ *    its abbreviated data name ("Ignited Spirit STA") by [resolveDisplayAlias].
  *
  * There is deliberately no hard-coded fallback domain. If the asset is missing or malformed the
  * domain is null, every factor reads unresolved, and the semantic fingerprint stays blocked - a loud
@@ -92,6 +101,12 @@ class VeteranFactorDomain private constructor(
     /** The race family on its own, so the truncated-abbreviation path scores a race read only against
      * races and never against skills or scenarios (which share the WHITE kind). */
     private val raceCandidates: List<CanonEntry>,
+    /** The skill family on its own, so the stat-hint display-alias path scores a reconstructed name
+     * ("Ignited Spirit STA") only against skills and never against races or scenarios. */
+    private val skillCandidates: List<CanonEntry>,
+    /** Exact-skeleton map for the skill family (ambiguous skeleton -> null), so a reconstructed alias
+     * that lands on a unique skill skeleton resolves at once. */
+    private val skillExact: Map<String, String?>,
 ) {
     /** One canonical name and its precomputed normalized skeleton, so a scan never re-normalizes the
      * domain per read. */
@@ -135,11 +150,18 @@ class VeteranFactorDomain private constructor(
         val second = if (secondScore >= 0.0) secondScore else null
         val path = factorAcceptancePath(bestScore, second)
         if (path == FactorAcceptancePath.REJECT) {
-            // The fuzzy scan could not place the read. A race name the factor card truncates to an
-            // abbreviation ("Hopeful S.") is simply too short to clear the similarity floor against its
-            // long canonical ("Hopeful Stakes"), so try the deterministic race-abbreviation path before
-            // failing closed. It only fires here, after a reject, so no strong/margin read is affected.
+            // The fuzzy scan could not place the read. Try the deterministic recovery paths in turn
+            // before failing closed. Each fires ONLY here, after a reject, so none can override a
+            // strong/margin read, and each is structurally gated (trailing "." for the race paths, the
+            // stat-hint grammar for the alias) so they never contend for the same read.
+            //  - a race the card truncated to a single-word abbreviation ("Hopeful S." -> Hopeful Stakes);
+            //  - a race the card abbreviated to multiple trailing initials ("Asahi Hai F.S.");
+            //  - a race the card glued after losing a space ("SprintersS." -> Sprinters Stakes);
+            //  - a skill the card shows in the game's stat-hint vocabulary ("Ignited Spirit: Stamina +").
             resolveAbbreviatedRace(rawOcr, kind, needle)?.let { return it }
+            resolveMultiInitialRace(rawOcr, kind, needle)?.let { return it }
+            resolveLostSpaceRace(rawOcr, kind, needle)?.let { return it }
+            resolveDisplayAlias(rawOcr, kind)?.let { return it }
         }
         return FactorResolution(
             canonicalName = if (path == FactorAcceptancePath.REJECT) null else best.canonical,
@@ -208,6 +230,158 @@ class VeteranFactorDomain private constructor(
         return canonLast.startsWith(last)
     }
 
+    /**
+     * Recovers a race whose factor card abbreviated MULTIPLE trailing words to their initials inside a
+     * single period-separated token, e.g. "Asahi Hai F.S." -> "Asahi Hai Futurity Stakes". The leading
+     * whitespace tokens are complete and must match; the final token is a run of at least two initials,
+     * each of which must be the first letter of the corresponding remaining canonical token. Race
+     * domain only (WHITE), and only when EXACTLY ONE race is compatible, so an ambiguous or too-short
+     * initial run fails closed. Runs only after a fuzzy reject and lowers no threshold.
+     */
+    private fun resolveMultiInitialRace(rawOcr: String, kind: SparkRowKind, needle: String): FactorResolution? {
+        if (kind != SparkRowKind.WHITE) return null
+        val trimmed = rawOcr.trim()
+        if (!trimmed.endsWith('.')) return null
+        val rawTokens = trimmed.split(WHITESPACE).filter { it.isNotEmpty() }
+        // At least one complete leading token before the initial run: a bare "F.S." carries no race
+        // identity and must never resolve.
+        if (rawTokens.size < 2) return null
+        val initials = parseInitials(rawTokens.last()) ?: return null
+        val leadNorm = rawTokens.dropLast(1).map { normalizeIdentityText(it) }
+        if (leadNorm.any { it.isEmpty() }) return null
+
+        var match: CanonEntry? = null
+        for (entry in raceCandidates) {
+            if (multiInitialCompatibleRace(leadNorm, initials, entry)) {
+                if (match != null) return null // 2+ compatible races: ambiguous, fail closed
+                match = entry
+            }
+        }
+        val resolved = match ?: return null
+        return FactorResolution(resolved.canonical, similarity(needle, resolved.skeleton), null, FactorAcceptancePath.ABBREVIATION, "race")
+    }
+
+    /** Whether the leading complete tokens plus the trailing initial run identify one race: the token
+     * counts line up, every leading token matches its canonical counterpart, and each initial heads the
+     * matching (longer) canonical token. */
+    private fun multiInitialCompatibleRace(leadNorm: List<String>, initials: List<Char>, entry: CanonEntry): Boolean {
+        val canonTokens = tokenizeIdentity(entry.canonical)
+        if (canonTokens.size != leadNorm.size + initials.size) return false
+        for (i in leadNorm.indices) {
+            if (!completeTokenMatches(leadNorm[i], canonTokens[i])) return false
+        }
+        for (j in initials.indices) {
+            val canonTok = canonTokens[leadNorm.size + j]
+            // An initial abbreviates an actual (longer) word, and must be its first letter.
+            if (canonTok.length <= 1 || canonTok[0] != initials[j]) return false
+        }
+        return true
+    }
+
+    /** Parses a trailing multi-initial abbreviation token ("F.S.", "N.H.K.") into its lowercase single
+     * letters, or null when the token is not a run of at least two period-separated single letters (so a
+     * single-word abbreviation like "Ch." is left to [resolveAbbreviatedRace]). */
+    private fun parseInitials(token: String): List<Char>? {
+        if (!token.contains('.')) return null
+        val parts = token.split('.').map { it.trim() }.filter { it.isNotEmpty() }
+        if (parts.size < 2) return null
+        val letters = ArrayList<Char>(parts.size)
+        for (p in parts) {
+            if (p.length != 1 || !p[0].isLetter()) return null
+            letters.add(p[0].lowercaseChar())
+        }
+        return letters
+    }
+
+    /**
+     * Recovers a race whose factor card lost the space before an abbreviated final word, gluing it onto
+     * the previous word in one token, e.g. "SprintersS." -> "Sprinters Stakes". The single glued OCR
+     * token must be the full leading canonical tokens concatenated, followed by a non-empty strict
+     * prefix of the final canonical token. Race domain only (WHITE), the canonical must have at least
+     * two tokens, and only when EXACTLY ONE race matches, so an ambiguous concatenation fails closed.
+     * Runs only after a fuzzy reject; it deletes no whitespace globally and lowers no threshold.
+     */
+    private fun resolveLostSpaceRace(rawOcr: String, kind: SparkRowKind, needle: String): FactorResolution? {
+        if (kind != SparkRowKind.WHITE) return null
+        val trimmed = rawOcr.trim()
+        if (!trimmed.endsWith('.')) return null
+        val core = trimmed.trimEnd('.').trim()
+        // A single glued token only: any internal whitespace means a differently-shaped read the fuzzy
+        // scan or the other abbreviation paths own, not a lost-space concatenation.
+        if (core.isEmpty() || core.split(WHITESPACE).size != 1) return null
+        val glued = normalizeIdentityText(core)
+        if (glued.isEmpty()) return null
+
+        var match: CanonEntry? = null
+        for (entry in raceCandidates) {
+            if (lostSpaceCompatibleRace(glued, entry)) {
+                if (match != null) return null // 2+ compatible races: ambiguous, fail closed
+                match = entry
+            }
+        }
+        val resolved = match ?: return null
+        return FactorResolution(resolved.canonical, similarity(needle, resolved.skeleton), null, FactorAcceptancePath.ABBREVIATION, "race")
+    }
+
+    /** Whether a glued single-token read is the leading canonical tokens concatenated followed by a
+     * strict prefix of the (truncated) final token, i.e. the race with exactly one lost space. */
+    private fun lostSpaceCompatibleRace(glued: String, entry: CanonEntry): Boolean {
+        val canonTokens = tokenizeIdentity(entry.canonical)
+        if (canonTokens.size < 2) return false
+        // Skeletons drop whitespace, so the leading tokens concatenate with no separator.
+        val lead = canonTokens.dropLast(1).joinToString("")
+        val last = canonTokens.last()
+        if (lead.isEmpty() || !glued.startsWith(lead)) return false
+        val remainder = glued.substring(lead.length)
+        // A genuine truncation of the final word: non-empty and strictly shorter than it.
+        if (remainder.isEmpty() || remainder.length >= last.length) return false
+        return last.startsWith(remainder)
+    }
+
+    /**
+     * Recovers a stat-hint skill whose factor card shows the game's display vocabulary
+     * ("Ignited Spirit: Stamina +", "Burning Spirit: Speed +") when the domain stores the abbreviated
+     * data name ("Ignited Spirit STA"). The display stat word is mapped to its data abbreviation through
+     * the fixed [STAT_DISPLAY_TO_ABBREV] vocabulary, the name is reconstructed, and it is resolved
+     * against the SKILL family with the ordinary exact + fuzzy machinery - so a leading OCR error
+     * ("lgnited Spirit: Stamina +", the actual live read) is tolerated, yet only a real skill is ever
+     * accepted. Runs only after a fuzzy reject; it lowers no threshold and matches no arbitrary
+     * "<x>: <y> +" string, because the stat word must be one of the five and the reconstruction must
+     * resolve to an actual skill.
+     */
+    private fun resolveDisplayAlias(rawOcr: String, kind: SparkRowKind): FactorResolution? {
+        if (kind != SparkRowKind.WHITE) return null
+        val m = STAT_HINT_DISPLAY.matchEntire(rawOcr.trim()) ?: return null
+        val prefix = m.groupValues[1].trim()
+        if (prefix.isEmpty()) return null
+        val abbrev = STAT_DISPLAY_TO_ABBREV[normalizeIdentityText(m.groupValues[2])] ?: return null
+        val needle = normalizeIdentityText("$prefix $abbrev")
+        if (needle.isEmpty()) return null
+
+        // Exact skeleton first (a clean prefix), then a fuzzy scan of the skill family (an OCR-noisy
+        // prefix). A null exact value marks an ambiguous skeleton and fails closed.
+        if (skillExact.containsKey(needle)) {
+            return skillExact[needle]?.let { FactorResolution(it, 1.0, null, FactorAcceptancePath.DISPLAY_ALIAS, "skill") }
+        }
+        var best: CanonEntry? = null
+        var bestScore = -1.0
+        var secondScore = -1.0
+        for (entry in skillCandidates) {
+            val score = similarity(needle, entry.skeleton)
+            if (score > bestScore) {
+                secondScore = bestScore
+                bestScore = score
+                best = entry
+            } else if (score > secondScore) {
+                secondScore = score
+            }
+        }
+        if (best == null) return null
+        val second = if (secondScore >= 0.0) secondScore else null
+        if (factorAcceptancePath(bestScore, second) == FactorAcceptancePath.REJECT) return null
+        return FactorResolution(best.canonical, bestScore, second, FactorAcceptancePath.DISPLAY_ALIAS, "skill")
+    }
+
     /** A complete (non-abbreviated) OCR token matches its canonical token when identical, or one OCR
      * error apart in a token long enough (>= 4 chars on both sides) that a single edit cannot flip it
      * onto a different word. Short tokens must match exactly. */
@@ -233,6 +407,20 @@ class VeteranFactorDomain private constructor(
 
         /** Whitespace splitter for the abbreviation tokenizer, compiled once. */
         private val WHITESPACE = Regex("\\s+")
+
+        /** The game's stat-hint skill display grammar: a name, a colon, one of the five stat words, and
+         * a trailing "+". Matched on the raw read so the colon and "+" (which the identity skeleton
+         * drops) still gate the alias to this specific display form and never a name that merely
+         * contains a colon. Group 1 is the name prefix, group 2 the stat word. */
+        private val STAT_HINT_DISPLAY = Regex("^(.+?)\\s*:\\s*(speed|stamina|power|guts|wit)\\s*\\+\\s*$", RegexOption.IGNORE_CASE)
+
+        /** The fixed game vocabulary mapping a display stat word (identity-normalized) to the stat
+         * abbreviation the skill data uses. Both sides are present in the committed data: the words are
+         * the five training stats, the abbreviations are the "<name> SPD/STA/PWR/GUTS/WIT" skill
+         * suffixes (Ignited Spirit, Burning Spirit). Deliberately exact and closed - an unknown stat
+         * word fails the alias closed rather than guessing. */
+        private val STAT_DISPLAY_TO_ABBREV: Map<String, String> =
+            mapOf("speed" to "SPD", "stamina" to "STA", "power" to "PWR", "guts" to "GUTS", "wit" to "WIT")
 
         private val REJECT = FactorResolution(null, bestScore = 0.0, secondScore = null, path = FactorAcceptancePath.REJECT, sourceFamily = null)
 
@@ -295,7 +483,20 @@ class VeteranFactorDomain private constructor(
                     return null
                 }
                 if (collisions > 0) Log.w(TAG, "veteran_factor_domain has $collisions ambiguous skeleton(s); those factors fail closed")
-                VeteranFactorDomain(schema, root.optString("source", "unknown"), candidatesByKind, exactByKind, byFamily["race"].orEmpty())
+
+                // The skill family on its own, plus its exact-skeleton map, so the stat-hint display
+                // alias reconstructs and resolves against skills alone (never a race/scenario).
+                val skillCandidates = byFamily["skill"].orEmpty()
+                val skillExact = HashMap<String, String?>()
+                for (entry in skillCandidates) {
+                    if (!skillExact.containsKey(entry.skeleton)) {
+                        skillExact[entry.skeleton] = entry.canonical
+                    } else if (skillExact[entry.skeleton] != entry.canonical) {
+                        skillExact[entry.skeleton] = null
+                    }
+                }
+
+                VeteranFactorDomain(schema, root.optString("source", "unknown"), candidatesByKind, exactByKind, byFamily["race"].orEmpty(), skillCandidates, skillExact)
             } catch (e: Exception) {
                 Log.w(TAG, "failed to parse veteran_factor_domain: ${e.message}")
                 null
