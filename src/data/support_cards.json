@@ -1,7 +1,7 @@
 {
   "schema": "deck_lab_support_cards",
-  "schemaVersion": 1,
-  "source": "master.mdb: support_card_data, support_card_effect_table, support_card_unique_effect, support_card_limit, support_card_group, single_mode_hint_gain, single_mode_restrict_support, single_mode_special_chara, single_mode_training_effect, text_data(categories 6, 150, 151, 155)",
+  "schemaVersion": 2,
+  "source": "master.mdb: support_card_data, support_card_effect_table, support_card_unique_effect, support_card_limit, support_card_group, single_mode_hint_gain, single_mode_restrict_support, single_mode_special_chara, single_mode_training_effect, single_mode_scenario, text_data(categories 6, 119, 150, 151, 155)",
   "effectTypes": {
     "1": "Friendship Bonus",
     "2": "Mood Effect",
@@ -72,32 +72,76 @@
       50
     ]
   },
-  "scenarioSpecialCharacters": [
+  "scenarios": [
     {
-      "scenarioId": 1,
+      "id": 1,
+      "name": "The Beginning: URA Finale",
+      "statCapBonus": {
+        "Speed": 200,
+        "Stamina": 200,
+        "Power": 200,
+        "Guts": 200,
+        "Wit": 200
+      },
       "specialCharaIds": [
         9004
-      ]
+      ],
+      "restrictedCardIds": []
     },
     {
-      "scenarioId": 2,
+      "id": 2,
+      "name": "Unity Cup: Shine On, Team Spirit!",
+      "statCapBonus": {
+        "Speed": 100,
+        "Stamina": 100,
+        "Power": 100,
+        "Guts": 100,
+        "Wit": 600
+      },
       "specialCharaIds": [
         1010,
         1030,
         1052,
         1056,
         9006
+      ],
+      "restrictedCardIds": [
+        30081
       ]
     },
     {
-      "scenarioId": 3,
+      "id": 3,
+      "name": "Brighter Together Our Grand Concert",
+      "statCapBonus": {
+        "Speed": 400,
+        "Stamina": 100,
+        "Power": 100,
+        "Guts": 300,
+        "Wit": 100
+      },
       "specialCharaIds": [
         1002,
         1026,
         1032,
         1046,
         9008
+      ],
+      "restrictedCardIds": [
+        30081
       ]
+    },
+    {
+      "id": 4,
+      "name": "Trackblazer: Start of the Climax",
+      "statCapBonus": {
+        "Speed": 0,
+        "Stamina": 700,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 300
+      },
+      "specialCharaIds": [],
+      "restrictedCardIds": []
     }
   ],
   "characters": {

@@ -11,10 +11,12 @@
 //   single_mode_hint_gain        the skills a card can hint
 //   single_mode_restrict_support cards a scenario forbids
 //   single_mode_special_chara    the characters a scenario treats as its own
+//   single_mode_scenario         the stat cap bonus each scenario grants over the shared base
 //   text_data category 6         chara_id -> English character name
 //   text_data category 150       support_card_id -> English card title
 //   text_data category 151       effect type -> English effect name
 //   text_data category 155       support_card_id -> the English unique-effect line, condition included
+//   text_data category 119       scenario_id -> the scenario title
 //
 // Two enum mappings in here were derived rather than assumed, because the obvious guess is wrong:
 //
@@ -45,17 +47,18 @@ const REPO = join(HERE, "..")
 const OUT_PATH = join(REPO, "src", "data", "support_cards.json")
 
 export const SUPPORT_CARD_SCHEMA = "deck_lab_support_cards"
-export const SUPPORT_CARD_SCHEMA_VERSION = 1
+export const SUPPORT_CARD_SCHEMA_VERSION = 2
 
 const TEXT_CATEGORY_CHARA_NAME = 6
 const TEXT_CATEGORY_CARD_TITLE = 150
 const TEXT_CATEGORY_EFFECT_NAME = 151
 const TEXT_CATEGORY_UNIQUE_EFFECT = 155
+const TEXT_CATEGORY_SCENARIO_NAME = 119
 
 const SOURCE =
     "master.mdb: support_card_data, support_card_effect_table, support_card_unique_effect, support_card_limit, " +
     "support_card_group, single_mode_hint_gain, single_mode_restrict_support, single_mode_special_chara, " +
-    "single_mode_training_effect, text_data(categories 6, 150, 151, 155)"
+    "single_mode_training_effect, single_mode_scenario, text_data(categories 6, 119, 150, 151, 155)"
 
 /** Rarity code -> the name the game prints on the card. */
 export const RARITY_NAMES = { 1: "R", 2: "SR", 3: "SSR" }
@@ -107,6 +110,7 @@ function requireTables(db) {
         "single_mode_hint_gain",
         "single_mode_restrict_support",
         "single_mode_special_chara",
+        "single_mode_scenario",
         "single_mode_training_effect",
         "text_data",
     ]
@@ -169,6 +173,7 @@ export function buildPayload(db) {
     const cardTitles = readText(db, TEXT_CATEGORY_CARD_TITLE)
     const effectNames = readText(db, TEXT_CATEGORY_EFFECT_NAME)
     const uniqueDescriptions = readText(db, TEXT_CATEGORY_UNIQUE_EFFECT)
+    const scenarioNames = readText(db, TEXT_CATEGORY_SCENARIO_NAME)
 
     const effectTypes = {}
     for (const [index, text] of [...effectNames.entries()].sort((a, b) => a[0] - b[0])) effectTypes[String(index)] = text
@@ -282,9 +287,32 @@ export function buildPayload(db) {
     const characters = {}
     for (const id of [...usedCharaIds].sort((a, b) => a - b)) characters[String(id)] = charaNames.get(id) ?? null
 
-    const scenarioSpecialCharacters = [...specialByScenario.keys()]
-        .sort((a, b) => a - b)
-        .map((id) => ({ scenarioId: id, specialCharaIds: [...specialByScenario.get(id)].sort((a, b) => a - b) }))
+    // Scenarios come from single_mode_scenario, which is the list of scenarios the client can actually
+    // play. text_data 119 holds titles for scenarios beyond that list; carrying only the playable ones
+    // keeps a name that has no scenario behind it from looking like a target DeckLab can advise on.
+    const restrictedByScenario = new Map()
+    for (const [cardId, scenarioIds] of restrictedByCard) {
+        for (const scenarioId of scenarioIds) {
+            if (!restrictedByScenario.has(scenarioId)) restrictedByScenario.set(scenarioId, new Set())
+            restrictedByScenario.get(scenarioId).add(cardId)
+        }
+    }
+    const scenarios = db
+        .prepare("SELECT id, max_speed, max_stamina, max_pow, max_guts, max_wiz FROM single_mode_scenario ORDER BY id")
+        .all()
+        .map((row) => ({
+            id: row.id,
+            // The title is the first line: two of the four are shipped as a two-line display string.
+            // Two of the four titles are shipped as a two-line display string, and the break is stored
+            // as the two characters backslash-n rather than as a real newline. The break becomes a
+            // space rather than a cut: for Grand Concert the scenario name is on the second line, so
+            // keeping only the first would throw away the half a reader recognises.
+            name: cleanTitle(String(scenarioNames.get(row.id) ?? "").replace(/\\n|[\r\n]/g, " ")) || null,
+            statCapBonus: { Speed: row.max_speed, Stamina: row.max_stamina, Power: row.max_pow, Guts: row.max_guts, Wit: row.max_wiz },
+            specialCharaIds: [...(specialByScenario.get(row.id) ?? [])].sort((a, b) => a - b),
+            restrictedCardIds: [...(restrictedByScenario.get(row.id) ?? [])].sort((a, b) => a - b),
+        }))
+    if (!scenarios.length) throw new GenerateError("single_mode_scenario is empty; refusing to write a file with no scenarios")
 
     return {
         schema: SUPPORT_CARD_SCHEMA,
@@ -294,7 +322,7 @@ export function buildPayload(db) {
         undecodedUniqueEffectTypeFloor: UNDECODED_UNIQUE_EFFECT_TYPE_FLOOR,
         effectLevelThresholds: EFFECT_LEVEL_THRESHOLDS,
         levelCapsByRarity: levelCaps,
-        scenarioSpecialCharacters,
+        scenarios,
         characters,
         cards,
     }

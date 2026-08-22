@@ -24,6 +24,7 @@ const TABLES = {
     single_mode_restrict_support: "CREATE TABLE single_mode_restrict_support (id INTEGER, scenario_id INTEGER, support_card_id INTEGER);",
     single_mode_special_chara: "CREATE TABLE single_mode_special_chara (id INTEGER, scenario_id INTEGER, chara_id INTEGER);",
     single_mode_training_effect: "CREATE TABLE single_mode_training_effect (id INTEGER, command_id INTEGER, sub_id INTEGER, result_state INTEGER, target_type INTEGER, effect_value INTEGER, scenario_id INTEGER);",
+    single_mode_scenario: "CREATE TABLE single_mode_scenario (id INTEGER, max_speed INTEGER, max_stamina INTEGER, max_pow INTEGER, max_guts INTEGER, max_wiz INTEGER);",
     text_data: "CREATE TABLE text_data (category INTEGER, [index] INTEGER, text TEXT);",
 }
 
@@ -41,7 +42,7 @@ const TRAINING_PROFILE = [
     [106, 1, 2],
 ]
 
-function makeDb({ cards, effects, uniques, training = TRAINING_PROFILE, text, omitTable = null, limits } = {}) {
+function makeDb({ cards, effects, uniques, training = TRAINING_PROFILE, text, omitTable = null, limits, scenarios } = {}) {
     const db = new DatabaseSync(":memory:")
     for (const [name, ddl] of Object.entries(TABLES)) {
         if (name === omitTable) continue
@@ -70,11 +71,15 @@ function makeDb({ cards, effects, uniques, training = TRAINING_PROFILE, text, om
         insertLimit.run(...l)
     }
 
+    const insertScenario = db.prepare("INSERT INTO single_mode_scenario VALUES (?,?,?,?,?,?)")
+    for (const sc of scenarios ?? [[3, 400, 100, 100, 300, 100]]) insertScenario.run(...sc)
+
     const insertText = db.prepare("INSERT INTO text_data VALUES (?,?,?)")
     for (const t of text ?? [
         [6, 1001, "Special Week"],
         [150, 30001, "Take Hold of Our <I>Dreams</I>!"],
         [151, 1, "Friendship Bonus"],
+        [119, 3, "Brighter Together\nOur Grand Concert"],
     ]) {
         insertText.run(...t)
     }
@@ -187,17 +192,42 @@ test("fails closed when a card names a unique effect the table does not have", (
 })
 
 test("carries scenario restrictions, group members and hint skills, each sorted", () => {
-    const db = makeDb({ cards: [[30081, 1001, 3, 30001, 0, 0, 0, 3, 0]], text: [[6, 1001, "Special Week"], [150, 30081, "Passing the Dream On"]] })
+    const db = makeDb({
+        cards: [[30081, 1001, 3, 30001, 0, 0, 0, 3, 0]],
+        text: [
+            [6, 1001, "Special Week"],
+            [150, 30081, "Passing the Dream On"],
+            [119, 3, "Brighter Together\\nOur Grand Concert"],
+        ],
+    })
     db.exec("INSERT INTO single_mode_restrict_support VALUES (1,3,30081),(2,2,30081);")
     db.exec("INSERT INTO support_card_group VALUES (1,30081,1030,1),(2,30081,1013,1);")
     db.exec("INSERT INTO single_mode_hint_gain VALUES (1,9,30081,200512),(2,9,30081,200162);")
     db.exec("INSERT INTO single_mode_special_chara VALUES (1,3,1002),(2,3,9008);")
-    const card = buildPayload(db).cards[0]
+    const payload = buildPayload(db)
+    const card = payload.cards[0]
     assert.equal(card.supportType, "Group")
     assert.deepEqual(card.restrictedScenarioIds, [2, 3])
     assert.deepEqual(card.groupMemberCharaIds, [1013, 1030])
     assert.deepEqual(card.hintSkillIds, [200162, 200512])
-    assert.deepEqual(buildPayload(db).scenarioSpecialCharacters, [{ scenarioId: 3, specialCharaIds: [1002, 9008] }])
+    assert.deepEqual(payload.scenarios, [
+        {
+            id: 3,
+            name: "Brighter Together Our Grand Concert",
+            statCapBonus: { Speed: 400, Stamina: 100, Power: 100, Guts: 300, Wit: 100 },
+            specialCharaIds: [1002, 9008],
+            restrictedCardIds: [30081],
+        },
+    ])
+})
+
+test("a scenario title shipped as two display lines keeps both halves", () => {
+    const payload = buildPayload(makeDb())
+    assert.equal(payload.scenarios[0].name, "Brighter Together Our Grand Concert")
+})
+
+test("fails closed when the scenario table is empty", () => {
+    assert.throws(() => buildPayload(makeDb({ scenarios: [] })), /single_mode_scenario is empty/)
 })
 
 test("serialization is byte-stable across two builds of the same database", () => {
