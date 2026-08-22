@@ -316,7 +316,7 @@ function main(argv) {
     const inventory = buildProtectionInventory(protectionRecord, snapshot)
     const evidence = buildRetentionEvidence(snapshot, inspirationIndex, reconciliation, inventory.byFingerprint)
     const manualProtect = new Set(opts.protect)
-    const reports = profiles.map((profile) => buildRetentionShadowReport({ evidence, library, reconciliation, profile, manualProtect }))
+    const reports = profiles.map((profile) => buildRetentionShadowReport({ evidence, library, reconciliation, profile, manualProtect, protectionScanId: inventory.protectionScanId }))
     const document = reports.length === 1 ? reports[0] : { schema: reports[0].schema, schemaVersion: reports[0].schemaVersion, reports }
 
     if (opts.json) console.log(JSON.stringify(document, null, 2))

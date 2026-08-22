@@ -20,7 +20,7 @@
 
 import type { InspirationFactorRecord } from "./inspiration.ts"
 import type { RosterReconciliation } from "./reconcile.ts"
-import type { RosterSnapshot } from "./roster.ts"
+import { ROSTER_STAT_KEYS, type RosterSnapshot } from "./roster.ts"
 import {
     buildFactorScarcityIndex,
     carriersAtOrAbove,
@@ -53,6 +53,7 @@ import {
     type RetentionShadowReport,
     type RetentionState,
     type RetentionStateCounts,
+    type SelfFactorRef,
     type VeteranRetentionRecommendation,
 } from "./retentionTypes.ts"
 import type { VeteranLibrary } from "./types.ts"
@@ -148,6 +149,18 @@ export function evaluateDominance(candidate: RetentionCandidate, subject: Retent
             ? `${who} matches or beats every ${profile.id} dimension, is strictly better on ${better}, and carries every one of this Veteran's factors at equal or better stars`
             : `${who} wins on ${better} under ${profile.id} but does not replace this Veteran: ${blockedBy.join(", ")}`
     return { rosterFingerprint: candidate.evidence.rosterFingerprint as string, character: candidate.evidence.entry.character, outfit: candidate.evidence.entry.outfit, strictlyBetterOn, blockedBy, explanation }
+}
+
+/** The Veteran's resolved self factors as `{factorKey, stars}`, sorted. Null when unmeasured; an
+ * unresolved factor name carries no key and is dropped, exactly as the scarcity index drops it. */
+function selfFactorRefs(factors: readonly InspirationFactorRecord[] | null): readonly SelfFactorRef[] | null {
+    if (!factors) return null
+    const refs: SelfFactorRef[] = []
+    for (const f of factors) {
+        const key = factorKey(f)
+        if (key) refs.push({ factorKey: key, stars: f.stars })
+    }
+    return refs.sort((a, b) => (a.factorKey < b.factorKey ? -1 : a.factorKey > b.factorKey ? 1 : a.stars - b.stars))
 }
 
 function maxStars(factors: readonly InspirationFactorRecord[] | null, kind: string): number {
@@ -305,6 +318,9 @@ export interface RetentionAdvisorInput {
     readonly profile: TargetProfile
     /** Roster fingerprints the operator has explicitly protected. */
     readonly manualProtect?: ReadonlySet<string>
+    /** The PL-R2a probe whose derivation the evidence already carries, recorded as provenance so a
+     * consumer can tell "a probe ran and cleared these Veterans" from "no probe was supplied". */
+    readonly protectionScanId?: string | null
 }
 
 /**
@@ -391,6 +407,10 @@ export function buildRetentionShadowReport(input: RetentionAdvisorInput): Retent
             character: v.entry.character,
             outfit: v.entry.outfit,
             rank: v.entry.rank,
+            identityMultiplicity: v.entry.identityMultiplicity,
+            stats: Object.fromEntries(ROSTER_STAT_KEYS.map((k) => [k, v.entry.stats[k]])),
+            favoriteState: v.entry.favoriteState,
+            protectionState: v.entry.protectionState,
             state,
             confidence,
             hardProtectReasons: candidate.hardProtectReasons,
@@ -405,6 +425,7 @@ export function buildRetentionShadowReport(input: RetentionAdvisorInput): Retent
                 totalFactorStars: v.selfFactors ? v.selfFactors.reduce((sum, f) => sum + f.stars, 0) : null,
                 scarcestClaim: scarcestClaim(v, scarcity),
                 observedUniqueFactorKeys: candidate.observedUnique,
+                selfFactors: selfFactorRefs(v.selfFactors),
                 lineageAncestorsObserved: v.lineageAncestorsObserved,
                 rating: v.entry.rating,
             },
@@ -429,6 +450,7 @@ export function buildRetentionShadowReport(input: RetentionAdvisorInput): Retent
         schema: PARENTLAB_RETENTION_SCHEMA,
         schemaVersion: PARENTLAB_RETENTION_SCHEMA_VERSION,
         rosterScanId: snapshot.scanId,
+        protectionScanId: input.protectionScanId ?? null,
         rosterFingerprint: `${snapshot.scanId}:${scarcity.identifiedRosterEntries}/${snapshot.scanCount}`,
         generatedAt: evidence.observedAt,
         targetProfile: profile.id,

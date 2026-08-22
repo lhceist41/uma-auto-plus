@@ -19,7 +19,15 @@
 /** Schema discriminator + version for the retention document. Separate from the roster, inspiration
  * and Veteran schemas: none of those is touched by this stage. */
 export const PARENTLAB_RETENTION_SCHEMA = "parent_lab_retention_shadow" as const
-export const PARENTLAB_RETENTION_SCHEMA_VERSION = 1 as const
+/**
+ * Version 2 adds the fields a transfer-approval stage needs to identify a Veteran and to recompute
+ * account coverage without re-reading the device: `identityMultiplicity`, the five final stats, the
+ * effective favorite/protection strings, the full self factor key list, and the protection scan the
+ * document was built against. Nothing that existed at version 1 changed meaning, but a version-1
+ * document is missing safety-critical identity evidence, so a consumer that needs it must reject
+ * rather than infer.
+ */
+export const PARENTLAB_RETENTION_SCHEMA_VERSION = 2 as const
 
 /**
  * The recommendation states, in the fixed precedence order the engine resolves them.
@@ -226,6 +234,13 @@ export interface RetentionDataCompleteness {
     readonly score: number
 }
 
+/** One resolved self factor, reduced to the two things a coverage recompute needs. */
+export interface SelfFactorRef {
+    /** `kind:CANONICAL_NAME`, the same semantic key the scarcity index is built on. */
+    readonly factorKey: string
+    readonly stars: number
+}
+
 /** The retention value dimensions, kept separate rather than collapsed into one number. */
 export interface RetentionValueSummary {
     /** Max stars over the Veteran's own stat (blue) factors, or null when unmeasured. */
@@ -242,6 +257,15 @@ export interface RetentionValueSummary {
     readonly scarcestClaim: ScarcityClaim
     /** Factor keys where this Veteran is the only observed carrier at its own star count. */
     readonly observedUniqueFactorKeys: readonly string[]
+    /**
+     * Every resolved self factor, sorted by key then stars. Null when no trusted capture backs it.
+     *
+     * Present so a consumer can recompute what the account would still carry after a hypothetical
+     * removal. `observedUniqueFactorKeys` answers that only for THIS Veteran in isolation; a set of
+     * individually non-unique carriers can still hold the last copy of a factor between them, and
+     * that is only visible with the full carrier lists in hand.
+     */
+    readonly selfFactors: readonly SelfFactorRef[] | null
     /** Legacy Origin ancestors observed on its Inspiration panel (0..2), or null when uncaptured. */
     readonly lineageAncestorsObserved: number | null
     /** In-game rating. A WEAK dimension: reported and used for ordering only, never a gate and never
@@ -284,6 +308,15 @@ export interface VeteranRetentionRecommendation {
     readonly character: string | null
     readonly outfit: string | null
     readonly rank: string | null
+    /** How many entries in the same snapshot share this fingerprint. > 1 means the fingerprint does
+     * not name one Veteran, which no downstream stage may paper over. */
+    readonly identityMultiplicity: number
+    /** The five final stats as read, in ROSTER_STAT_KEYS order. An unread stat stays null. */
+    readonly stats: Readonly<Record<string, number | null>>
+    /** The effective favorite state after any protection probe was applied. */
+    readonly favoriteState: string
+    /** The effective protection state after any protection probe was applied. */
+    readonly protectionState: string
     readonly state: RetentionState
     readonly confidence: RetentionConfidence
     readonly hardProtectReasons: readonly HardProtectReason[]
@@ -319,6 +352,10 @@ export interface RetentionShadowReport {
     readonly schemaVersion: typeof PARENTLAB_RETENTION_SCHEMA_VERSION
     /** Roster scan this document describes. */
     readonly rosterScanId: string
+    /** The PL-R2a protection probe whose derivation was applied, or null when none was supplied.
+     * Null means every protection gate stayed closed, which is a different fact from a probe that
+     * ran and found nothing. */
+    readonly protectionScanId: string | null
     /** Fingerprint of the roster state: `<scanId>:<identified>/<entries>`. Stable per snapshot. */
     readonly rosterFingerprint: string
     /**
