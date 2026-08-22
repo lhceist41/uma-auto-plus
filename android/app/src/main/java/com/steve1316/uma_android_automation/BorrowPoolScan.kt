@@ -168,6 +168,18 @@ fun splitBorrowName(raw: String): Pair<String?, String?> {
     return character to outfit
 }
 
+/**
+ * Cleans a single outfit line read on its own (the top line of the name band). Strips the wrapping
+ * brackets, tolerating a corrupted closing bracket: on live captures the ']' reads as 'D1' or 'l', so
+ * only the opening '[' is reliable. Returns null when nothing readable is left.
+ */
+fun cleanBorrowOutfit(raw: String): String? {
+    var t = raw.replace("\n", " ").trim()
+    t = t.removePrefix("[").removePrefix("(").trim()
+    t = t.removeSuffix("]").removeSuffix(")").trim()
+    return t.ifEmpty { null }
+}
+
 /** Parses the "Lvl NN" level text into a level, or null when no plausible level is present. */
 fun parseBorrowLevel(raw: String): Int? {
     val digits = Regex("(\\d{1,2})").find(raw.replace(" ", ""))?.groupValues?.get(1) ?: return null

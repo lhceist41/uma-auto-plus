@@ -6120,6 +6120,9 @@ class CareerLaunchNavigator(private val context: Context) {
         val trustedAsCompletePool: Boolean,
     )
 
+    /** Short constructor for an absolute-pixel box, so the row reader can build sub-field regions inline. */
+    private fun gb(x0: Int, y0: Int, x1: Int, y1: Int) = com.steve1316.uma_android_automation.utils.GlyphBox(x0, y0, x1, y1)
+
     /** OCR one field box, failing to an empty string rather than throwing, so one unreadable field
      * never aborts a whole row read. Interrupts still propagate (the bot is stopping). */
     private fun ocrBorrowBox(bitmap: Bitmap, box: com.steve1316.uma_android_automation.utils.GlyphBox, threshold: Boolean, name: String): String {
@@ -6162,25 +6165,30 @@ class CareerLaunchNavigator(private val context: Context) {
                         else -> null
                     }
 
-                val nameRaw =
-                    try {
-                        iu.performOCROnRegion(
-                            bitmap,
-                            (bitmap.width * 0.21).toInt(),
-                            (centerY - BORROW_NAME_BAND_HALF_HEIGHT).toInt(),
-                            (bitmap.width * 0.52).toInt(),
-                            BORROW_NAME_BAND_HALF_HEIGHT * 2,
-                            useThreshold = false,
-                            useGrayscale = true,
-                            scale = 2.0,
-                            debugName = "borrow_pool_name",
-                        )
-                    } catch (e: InterruptedException) {
-                        throw e
-                    } catch (_: Exception) {
-                        ""
-                    }
-                val (character, outfit) = splitBorrowName(nameRaw)
+                // Read the outfit (top) and character (bottom) lines of the name band as SEPARATE
+                // regions. The launch's Smart Borrow reader OCRs the whole band at once, which is fine
+                // for its fuzzy contains-match; here the two lines must stay apart, because a corrupted
+                // closing bracket (the ']' reads as 'D1'/'l' on live captures) merges them into one
+                // unsplittable string and loses the character name. Splitting the band keeps the
+                // character clean regardless of the bracket glyph.
+                // Line centers measured off the live picker relative to the Last Login pill (pillY):
+                // owner ~pillY-148, outfit ~pillY-90, character ~pillY-49. The outfit and character
+                // bands are cut just above and below the pillY-70 gap between them, and both sit BELOW
+                // the owner line so the owner name can never leak into the outfit read.
+                val nameX0 = (bitmap.width * 0.21).toInt()
+                val nameX1 = (bitmap.width * 0.72).toInt()
+                val outfitRaw = ocrBorrowBox(bitmap, gb(nameX0, pillY - 113, nameX1, pillY - 71), threshold = false, name = "borrow_pool_outfit")
+                val charRaw = ocrBorrowBox(bitmap, gb(nameX0, pillY - 70, nameX1, pillY - 26), threshold = false, name = "borrow_pool_char")
+                val nameRaw = "$outfitRaw | $charRaw"
+                var character = charRaw.replace("\n", " ").trim().ifEmpty { null }
+                var outfit = cleanBorrowOutfit(outfitRaw)
+                // Fallback for a mis-placed split (a line that landed empty): re-parse the combined text
+                // with the single-line parser so a readable row is not lost to the split geometry.
+                if (character == null) {
+                    val (c, o) = splitBorrowName("$outfitRaw\n$charRaw")
+                    character = c
+                    if (outfit == null) outfit = o
+                }
 
                 val rarityRaw = ocrBorrowBox(bitmap, BorrowRowGeometry.rarityBadge(pillY), threshold = true, name = "borrow_pool_rarity")
                 val levelRaw = ocrBorrowBox(bitmap, BorrowRowGeometry.level(pillY), threshold = true, name = "borrow_pool_level")

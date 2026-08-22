@@ -39,6 +39,16 @@ class BorrowPoolScanTest {
     }
 
     @Test
+    @DisplayName("An outfit line read on its own is unwrapped, tolerating a corrupted closing bracket")
+    fun testCleanBorrowOutfit() {
+        assertEquals("Fire at My Heels", cleanBorrowOutfit("[Fire at My Heels]"))
+        // Live capture: the ']' reads as 'D1'; the opening '[' is still stripped and the text survives.
+        assertEquals("Touching Sleeves Is Good Luck! D1", cleanBorrowOutfit("[Touching Sleeves Is Good Luck! D1"))
+        assertEquals("Cold Snap", cleanBorrowOutfit("(Cold Snap)"))
+        assertNull(cleanBorrowOutfit("  "))
+    }
+
+    @Test
     @DisplayName("Level parses only a plausible 1..50 and rejects noise")
     fun testParseBorrowLevel() {
         assertEquals(45, parseBorrowLevel("Lvl 45"))
