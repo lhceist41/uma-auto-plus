@@ -20,7 +20,11 @@
 //               matches the glyph-less OCR read; deduplicated.
 //   race      - race names (races.json). A card that truncates a long race name ("Mile Ch.") simply
 //               fails to resolve fail-closed; the full names still resolve.
-//   scenario  - scenario names (scenarios.json keys).
+//   scenario  - playable scenario names (scenarios.json keys) PLUS legacy non-playable scenario
+//               spark names a Veteran can still carry (LEGACY_SCENARIO_FACTORS). scenarios.json is the
+//               bot's playable-scenario table (it also feeds the master-data compiler and the UI), so
+//               a historical scenario that only ever shows up as an ancestry spark is added here, not
+//               there.
 //
 // The native resolver conditions on the pixel-classified row kind: STAT->stat, APTITUDE->aptitude,
 // UNIQUE->unique, WHITE->{skill,race,scenario}. It computes each candidate's normalized skeleton
@@ -48,7 +52,15 @@ const ASSET_PATH = join(REPO, "android", "app", "src", "main", "assets", "vetera
 /** Bumped only when the native reader's expected shape changes. */
 const SCHEMA_VERSION = 1
 
-const SOURCE = "src/data skills.json (base names, tier glyphs stripped) + races.json + scenarios.json"
+const SOURCE = "src/data skills.json (base names, tier glyphs stripped) + races.json + scenarios.json + legacy scenario spark names"
+
+/** Legacy / non-playable scenario spark names a Veteran can still carry from a past career, which are
+ * NOT in the playable scenarios.json table. "TS Climax Scenario" is the Twinkle Series Climax scenario:
+ * the bot never plays it, but veterans trained under it show it as a scenario factor, and the domain
+ * must canonicalize that read instead of failing it closed. Kept here (provenance in the generator,
+ * generated into the asset, guarded by --check) rather than in scenarios.json, which would leak a
+ * non-playable scenario into the master-data compiler and the training-event UI. */
+const LEGACY_SCENARIO_FACTORS = ["TS Climax Scenario"]
 
 /** The five training stat factor names, as scenarios.json spends them. */
 const STATS = ["Speed", "Stamina", "Power", "Guts", "Wit"]
@@ -134,7 +146,7 @@ export function buildPayload(skills, races, scenarios) {
         unique: dedupeSorted(uniqueNames),
         skill: dedupeSorted(skillNames),
         race: dedupeSorted(raceNames),
-        scenario: dedupeSorted(scenarioNames),
+        scenario: dedupeSorted([...scenarioNames, ...LEGACY_SCENARIO_FACTORS]),
     }
 
     for (const [family, list] of Object.entries(families)) {
@@ -191,4 +203,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
 }
 
-export { GenerateError, ASSET_PATH, SCHEMA_VERSION, SOURCE, STATS, APTITUDES, TIER_MARKER }
+export { GenerateError, ASSET_PATH, SCHEMA_VERSION, SOURCE, STATS, APTITUDES, TIER_MARKER, LEGACY_SCENARIO_FACTORS }

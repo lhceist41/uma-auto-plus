@@ -9,7 +9,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { dirname, join } from "node:path"
-import { buildPayload, generate, factorBaseName, GenerateError, ASSET_PATH, SCHEMA_VERSION, STATS, APTITUDES } from "./generate-veteran-factor-domain.mjs"
+import { buildPayload, generate, factorBaseName, GenerateError, ASSET_PATH, SCHEMA_VERSION, STATS, APTITUDES, LEGACY_SCENARIO_FACTORS } from "./generate-veteran-factor-domain.mjs"
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REPO = join(HERE, "..")
@@ -52,9 +52,10 @@ test("buildPayload splits uniques by id, collapses tier variants, and keeps fixe
     // Three tier variants collapse to one base name; the id-3 special stays a white skill.
     assert.deepEqual(payload.families.skill, ["Blatant Fear", "Firm Conditions"])
     assert.deepEqual(payload.families.race, ["Yasuda Kinen"])
-    assert.deepEqual(payload.families.scenario, ["Trackblazer", "URA Finale"])
+    // Playable scenarios.json keys plus the legacy non-playable spark names, deduped and sorted.
+    assert.deepEqual(payload.families.scenario, ["TS Climax Scenario", "Trackblazer", "URA Finale"])
     assert.equal(payload.schemaVersion, SCHEMA_VERSION)
-    assert.deepEqual(payload.counts, { stat: 5, aptitude: 10, unique: 2, skill: 2, race: 1, scenario: 2 })
+    assert.deepEqual(payload.counts, { stat: 5, aptitude: 10, unique: 2, skill: 2, race: 1, scenario: 3 })
 })
 
 test("buildPayload rejects an empty skill list, an empty race list, and a nameless skill", () => {
@@ -83,6 +84,21 @@ test("the committed domain covers every family and the live-observed fixture fac
     assert.ok(inFamily("skill", "Pace Chaser Savvy"))
     assert.ok(inFamily("race", "Yasuda Kinen"))
     assert.ok(inFamily("scenario", "URA Finale"))
+    // The multi-initial "Asahi Hai F.S." and lost-space "SprintersS." reads canonicalize onto these
+    // full race names; both must be in the race domain or the native resolver has nothing to recover.
+    assert.ok(inFamily("race", "Asahi Hai Futurity Stakes"))
+    assert.ok(inFamily("race", "Sprinters Stakes"))
+})
+
+test("the legacy scenario spark names are added to the scenario family without touching scenarios.json", () => {
+    const payload = buildPayload(skills, races, scenarios)
+    for (const name of LEGACY_SCENARIO_FACTORS) {
+        assert.ok(payload.families.scenario.includes(name), `scenario family is missing legacy spark "${name}"`)
+        // The legacy name is a factor-domain-only addition: it must NOT be a playable scenarios.json key,
+        // which also feeds the master-data compiler and the training-event UI.
+        assert.ok(!(name in scenarios), `legacy spark "${name}" leaked into playable scenarios.json`)
+    }
+    assert.ok(LEGACY_SCENARIO_FACTORS.includes("TS Climax Scenario"))
 })
 
 test("no two distinct canonical names in a resolvable domain share a skeleton", () => {

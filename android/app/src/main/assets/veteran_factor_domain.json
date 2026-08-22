@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "source": "src/data skills.json (base names, tier glyphs stripped) + races.json + scenarios.json",
+  "source": "src/data skills.json (base names, tier glyphs stripped) + races.json + scenarios.json + legacy scenario spark names",
   "counts": {
     "stat": 5,
     "aptitude": 10,
     "unique": 159,
     "skill": 445,
     "race": 296,
-    "scenario": 4
+    "scenario": 5
   },
   "families": {
     "stat": [
@@ -937,6 +937,7 @@
     ],
     "scenario": [
       "Grand Concert",
+      "TS Climax Scenario",
       "Trackblazer",
       "URA Finale",
       "Unity Cup"
