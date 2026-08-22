@@ -30,6 +30,7 @@ import { buildCommunityPriorIndex, parseCommunityPrior } from "../src/lib/deckLa
 import { hypotheticalBorrowPool, searchDecks } from "../src/lib/deckLab/deckSearch.ts"
 import { borrowCandidateCards, parseBorrowPoolSnapshot, resolveBorrowPool } from "../src/lib/deckLab/borrowPool.ts"
 import { parseBorrowScanJsonl } from "../src/lib/deckLab/borrowScanImport.ts"
+import { buildSmartBorrowIntent, serializeSmartBorrowIntent } from "../src/lib/deckLab/smartBorrowIntent.ts"
 import { buildDeckTarget, parseTargetDistance, parseTargetRunningStyle, parseTargetSurface, TARGET_DISTANCES, TARGET_RUNNING_STYLES, TARGET_SURFACES } from "../src/lib/deckLab/deckTarget.ts"
 import { assessInventory, buildFixtureInventory, buildOwnedInventory } from "../src/lib/deckLab/inventory.ts"
 import { buildDeckLabReport } from "../src/lib/deckLab/report.ts"
@@ -85,6 +86,11 @@ Options:
   --summary-out <path>     Write a short JSON summary here.
   --domain-out <path>      Write a summary of the support-card catalogue itself here: counts by
                            rarity and role, effect-type coverage, and what is decoded and what is not.
+  --emit-borrow-intent <path>
+                           Write the Smart Borrow selection intent for one target's top real borrow
+                           here (the JSON the device's read-only locate rehearsal reads). Needs a real
+                           pool (--borrow-scan or --borrow-pool).
+  --intent-target <label>  Which target's top borrow to emit an intent for (default: the first target).
   --help                   This text.
 `
 
@@ -107,6 +113,8 @@ function parseArgs(argv) {
         out: null,
         summaryOut: null,
         domainOut: null,
+        emitBorrowIntent: null,
+        intentTarget: null,
         help: false,
     }
     let current = null
@@ -217,6 +225,12 @@ function parseArgs(argv) {
                 break
             case "--domain-out":
                 opts.domainOut = next()
+                break
+            case "--emit-borrow-intent":
+                opts.emitBorrowIntent = next()
+                break
+            case "--intent-target":
+                opts.intentTarget = next()
                 break
             case "--help":
             case "-h":
@@ -470,12 +484,16 @@ function main(argv) {
 
         let borrowCandidates = []
         let borrowSource
+        // Kept in outer scope so the Smart Borrow intent emitter below can bind a recommended
+        // supportCardId back to its resolved candidate. Only a REAL borrow source populates it.
+        let borrowResolution = null
         if (!opts.noBorrow) {
             if (opts.borrowPool || opts.borrowScan) {
                 const snapshot = opts.borrowScan
                     ? parseBorrowScanJsonl(readText(opts.borrowScan, "borrow scan jsonl"))
                     : parseBorrowPoolSnapshot(readJson(opts.borrowPool, "borrow pool snapshot"))
                 const resolution = resolveBorrowPool(snapshot, index)
+                borrowResolution = resolution
                 borrowCandidates = borrowCandidateCards(resolution)
                 const sourceTypeCounts = {}
                 for (const candidate of resolution.candidates) for (const source of candidate.sources) sourceTypeCounts[source.sourceType] = (sourceTypeCounts[source.sourceType] ?? 0) + 1
@@ -541,6 +559,29 @@ function main(argv) {
         })
 
         report = buildDeckLabReport({ index, inventory, completeness, isFixture: useFixture, results, prior, topBorrow: opts.topBorrow, borrowSource })
+
+        // Smart Borrow selection intent: distil the top real borrow for one target into the JSON the
+        // device's read-only locate rehearsal consumes. Only a REAL scanned/snapshot pool can produce
+        // one (a hypothetical or owned-format source has no resolution to bind the supportCardId to).
+        if (opts.emitBorrowIntent) {
+            if (!borrowResolution) {
+                console.error("--emit-borrow-intent needs a real borrow pool (--borrow-scan or --borrow-pool); nothing emitted.")
+            } else {
+                const targetIndex = opts.intentTarget ? report.targets.findIndex((t) => t.label.toLowerCase() === opts.intentTarget.toLowerCase()) : 0
+                if (targetIndex < 0) {
+                    console.error(`--intent-target "${opts.intentTarget}" matched none of: ${report.targets.map((t) => t.label).join(", ")}; nothing emitted.`)
+                } else {
+                    const top = results[targetIndex].borrowOptions[0]
+                    if (!top || top.improvement <= 0) {
+                        console.error(`No positive borrow upgrade for target "${report.targets[targetIndex].label}"; nothing emitted.`)
+                    } else {
+                        const intent = buildSmartBorrowIntent(borrowResolution, top.borrowed.card.supportCardId, report.targets[targetIndex].label)
+                        writeFileSync(opts.emitBorrowIntent, serializeSmartBorrowIntent(intent))
+                        if (!opts.json) console.log(`Wrote ${opts.emitBorrowIntent} (${intent.displayName}, LB ${intent.expectedLimitBreak ?? "unknown"}, digest ${intent.recommendationEvidenceDigest})`)
+                    }
+                }
+            }
+        }
     } catch (err) {
         console.error(err instanceof Error ? err.message : String(err))
         return 2
