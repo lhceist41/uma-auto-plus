@@ -449,7 +449,7 @@ export interface ApprovalValidation {
  * explicit; deliberately not implemented, and nothing in this repository produces or consumes one.
  *
  * Holding this object is still NOT sufficient to transfer anything. Every unresolved risk below is a
- * real gap between "this batch was approved" and "this exact Veteran is the one under the cursor":
+ * real gap between "this batch was approved" and "this exact Veteran is the row being acted on":
  *
  *   on-device re-identification - the game exposes no Veteran id. Immediately before acting, the
  *     executor would have to re-read the row it is about to act on and prove it matches the

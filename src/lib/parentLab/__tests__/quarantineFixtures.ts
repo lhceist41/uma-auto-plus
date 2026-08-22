@@ -174,4 +174,3 @@ export function eligible(overrides: Partial<VetSpec> = {}): VetSpec {
 export function statusOf(ledger: QuarantineLedger, key: string): string {
     return ledgerEntry(ledger, key)?.status ?? "MISSING"
 }
-
