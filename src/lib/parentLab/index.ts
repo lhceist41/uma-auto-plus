@@ -16,6 +16,12 @@ export * from "./quarantineSnapshot.ts"
 export * from "./quarantineLedger.ts"
 export * from "./quarantineBatch.ts"
 export * from "./approvalManifest.ts"
+export * from "./affinityData.ts"
+export * from "./affinityEvidence.ts"
+export * from "./targetBuild.ts"
+export * from "./parentCandidate.ts"
+export * from "./parentPairing.ts"
+export * from "./affinityAdvisor.ts"
 export { buildVeteranLibrary } from "./buildVeteranLibrary.ts"
 export {
     canonicalCareerEvidence,
