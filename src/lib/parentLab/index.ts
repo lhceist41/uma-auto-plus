@@ -15,7 +15,6 @@ export * from "./quarantineTypes.ts"
 export * from "./quarantineSnapshot.ts"
 export * from "./quarantineLedger.ts"
 export * from "./quarantineBatch.ts"
-export * from "./quarantineBatch.ts"
 export * from "./approvalManifest.ts"
 export { buildVeteranLibrary } from "./buildVeteranLibrary.ts"
 export {
