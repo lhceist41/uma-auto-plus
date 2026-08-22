@@ -47,6 +47,7 @@ internal object DebugTestGate {
             "debugMode_startDeckNumberReadTest",
             "debugMode_startSupportDeckRehearsalTest",
             "debugMode_startSmartBorrowRehearsalTest",
+            "debugMode_startBorrowPoolScanTest",
             "debugMode_startRainbowDetectionTest",
             "debugMode_startVeteranRosterReadTest",
             "debugMode_startVeteranRosterScanTest",

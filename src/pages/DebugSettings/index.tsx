@@ -44,6 +44,7 @@ const DebugSettings = () => {
         "debugMode_startDeckNumberReadTest",
         "debugMode_startSupportDeckRehearsalTest",
         "debugMode_startSmartBorrowRehearsalTest",
+        "debugMode_startBorrowPoolScanTest",
         "debugMode_startRainbowDetectionTest",
         "debugMode_startVeteranRosterReadTest",
         "debugMode_startVeteranRosterScanTest",
@@ -626,6 +627,55 @@ const DebugSettings = () => {
                                 onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startSmartBorrowRehearsalTest", checked)}
                                 label="Start Smart Borrow Rehearsal Test"
                                 description="Park the game on the career-start Support Formation with Required Support Deck already matching the visible deck and the Friends slot empty. Exercises the production Smart Borrow flow (open the friend slot, pick a card, replace a duplicate or trainee-conflict borrow) and the exact post-borrow deck verification. Never presses Start Career and spends no TP. Tagged [BORROW-REHEARSAL] in the log."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-borrow-pool-scan-test"
+                                checked={bsc.settings.debug.debugMode_startBorrowPoolScanTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startBorrowPoolScanTest", checked)}
+                                label="Start Borrow Pool Scan"
+                                description="Read-only census of the cards you can borrow right now. Park the game on the career-start Support Formation screen with the Friends slot empty, then start the bot: it opens the Borrow Card picker, reads every visible row (name, rarity, level, limit-break, provenance, redacted owner), pages the list, and closes the picker. It taps no card, selects no borrow, never presses Start Career, changes no formation, and spends nothing. Results go to a local scan file for DeckLab. Tagged [BORROW-POOL] in the log."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomSlider
+                                searchId="borrow-pool-scan-limit"
+                                value={bsc.settings.debug.borrowPoolScanLimit}
+                                placeholder={bsc.defaultSettings.debug.borrowPoolScanLimit}
+                                onValueChange={(value) => {
+                                    bsc.setSettings({
+                                        ...bsc.settings,
+                                        debug: { ...bsc.settings.debug, borrowPoolScanLimit: value },
+                                    })
+                                }}
+                                onSlidingComplete={(value) => {
+                                    bsc.setSettings({
+                                        ...bsc.settings,
+                                        debug: { ...bsc.settings.debug, borrowPoolScanLimit: value },
+                                    })
+                                }}
+                                min={0}
+                                max={40}
+                                step={1}
+                                label="Borrow Pool Scan Limit"
+                                labelUnit=" cards"
+                                showValue={true}
+                                showLabels={true}
+                                description="How many distinct borrow cards the census reads before it stops. Set 0 to read the whole visible pool. A small value reads only the first screen, which is the safe way to confirm the reader before committing to the full list."
+                            />
+
+                            <CustomCheckbox
+                                searchId="borrow-pool-scan-evidence"
+                                checked={bsc.settings.debug.borrowPoolScanEvidence}
+                                onCheckedChange={(checked) => {
+                                    bsc.setSettings({
+                                        ...bsc.settings,
+                                        debug: { ...bsc.settings.debug, borrowPoolScanEvidence: checked },
+                                    })
+                                }}
+                                label="Borrow Pool Scan Evidence"
+                                description="Logs each borrow row's raw per-field reads (name, rarity, level, limit-break pip count, provenance) so the row geometry can be calibrated without rescanning. Leave off for normal use."
                                 style={{ marginTop: 10 }}
                             />
 

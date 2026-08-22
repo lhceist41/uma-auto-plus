@@ -254,6 +254,12 @@ export interface Settings {
         debugMode_startSupportDeckRehearsalTest: boolean
         // Rehearses the production Smart Borrow flow + exact post-borrow deck verification on the Support Formation screen and stops before Start Career; requires Required Support Deck 1..10 already showing and an empty Friends slot.
         debugMode_startSmartBorrowRehearsalTest: boolean
+        // Read-only Borrow Card pool census (DeckLab). Park the game on the career-start Support Formation screen with an empty Friends slot; opens the borrow picker, reads every visible row, pages, and closes. Taps no card, selects nothing, never presses Start Career.
+        debugMode_startBorrowPoolScanTest: boolean
+        // How many distinct borrow cards the pool census reads before stopping. 0 reads the whole visible pool; a small value reads only the first screen (the bounded validation run).
+        borrowPoolScanLimit: number
+        // Logs each borrow row's raw per-field reads (name, rarity, level, limit-break pips, provenance) so the row geometry can be calibrated without rescanning.
+        borrowPoolScanEvidence: boolean
         debugMode_startRainbowDetectionTest: boolean
         // Read-only Veteran Roster / Umamusume Details calibration (PL-R1a). Park the game on the Veteran Roster list or an open Umamusume Details dialog; taps nothing.
         debugMode_startVeteranRosterReadTest: boolean
@@ -767,6 +773,9 @@ export const defaultSettings: Settings = {
         debugMode_startDeckNumberReadTest: false,
         debugMode_startSupportDeckRehearsalTest: false,
         debugMode_startSmartBorrowRehearsalTest: false,
+        debugMode_startBorrowPoolScanTest: false,
+        borrowPoolScanLimit: 0,
+        borrowPoolScanEvidence: false,
         debugMode_startRainbowDetectionTest: false,
         debugMode_startVeteranRosterReadTest: false,
         debugMode_startVeteranRosterScanTest: false,
