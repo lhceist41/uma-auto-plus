@@ -6111,6 +6111,283 @@ class CareerLaunchNavigator(private val context: Context) {
         waitSafe(1.2)
     }
 
+    /** Outcome of a read-only borrow-pool census, for the diagnostic entry point. */
+    internal data class BorrowPoolScanResult(
+        val scanId: String,
+        val termination: BorrowPoolTermination,
+        val rowsObserved: Int,
+        val distinctRows: Int,
+        val trustedAsCompletePool: Boolean,
+    )
+
+    /** OCR one field box, failing to an empty string rather than throwing, so one unreadable field
+     * never aborts a whole row read. Interrupts still propagate (the bot is stopping). */
+    private fun ocrBorrowBox(bitmap: Bitmap, box: com.steve1316.uma_android_automation.utils.GlyphBox, threshold: Boolean, name: String): String {
+        val w = box.x1 - box.x0
+        val h = box.y1 - box.y0
+        if (w <= 0 || h <= 0 || box.x0 < 0 || box.y0 < 0 || box.x1 > bitmap.width || box.y1 > bitmap.height) return ""
+        return try {
+            iu.performOCROnRegion(bitmap, box.x0, box.y0, w, h, useThreshold = threshold, useGrayscale = true, scale = 2.0, debugName = name)
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    /**
+     * Reads every visible Borrow Card row richly off one captured frame, for the read-only pool
+     * census. The card-name band reuses the launch's proven geometry (the same read Smart Borrow
+     * matches on); the rarity, level, limit-break pip, support-type, provenance, and owner fields use
+     * [BorrowRowGeometry] estimates that Stage A recalibrates. Every field fails CLOSED to null and is
+     * named in `unresolvedFields`; the owner's raw name is kept only for the local record and is never
+     * placed in the evidence string. This method reads only: it dispatches no tap.
+     */
+    private fun readBorrowPoolRowsRich(bitmap: Bitmap, pageIndex: Int, captureEvidence: Boolean): List<BorrowRowObservation> {
+        val duplicatePills = LabelDuplicateSupport.findAll(iu, sourceBitmap = bitmap)
+        val traineePills = LabelTraineeConflict.findAll(iu, sourceBitmap = bitmap)
+        val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
+        return LabelBorrowLastLogin.findAll(iu, sourceBitmap = bitmap)
+            .sortedBy { it.y }
+            .mapNotNull { pill ->
+                val pillY = pill.y.toInt()
+                val centerY = pillY - BORROW_PILL_TO_ROW_CENTER_PX
+                if (centerY - BORROW_NAME_BAND_HALF_HEIGHT < 150 || centerY + BORROW_NAME_BAND_HALF_HEIGHT > bitmap.height - 300) return@mapNotNull null
+
+                val inPillWindow = { p: org.opencv.core.Point -> p.y >= centerY - BORROW_DUPLICATE_PILL_MAX_OFFSET && p.y <= centerY - BORROW_DUPLICATE_PILL_MIN_OFFSET }
+                val blockedTag =
+                    when {
+                        duplicatePills.any(inPillWindow) -> BorrowBlockedTag.DUPLICATE
+                        traineePills.any(inPillWindow) -> BorrowBlockedTag.TRAINEE
+                        else -> null
+                    }
+
+                val nameRaw =
+                    try {
+                        iu.performOCROnRegion(
+                            bitmap,
+                            (bitmap.width * 0.21).toInt(),
+                            (centerY - BORROW_NAME_BAND_HALF_HEIGHT).toInt(),
+                            (bitmap.width * 0.52).toInt(),
+                            BORROW_NAME_BAND_HALF_HEIGHT * 2,
+                            useThreshold = false,
+                            useGrayscale = true,
+                            scale = 2.0,
+                            debugName = "borrow_pool_name",
+                        )
+                    } catch (e: InterruptedException) {
+                        throw e
+                    } catch (_: Exception) {
+                        ""
+                    }
+                val (character, outfit) = splitBorrowName(nameRaw)
+
+                val rarityRaw = ocrBorrowBox(bitmap, BorrowRowGeometry.rarityBadge(pillY), threshold = true, name = "borrow_pool_rarity")
+                val levelRaw = ocrBorrowBox(bitmap, BorrowRowGeometry.level(pillY), threshold = true, name = "borrow_pool_level")
+                val provRaw = ocrBorrowBox(bitmap, BorrowRowGeometry.provenancePill(pillY), threshold = true, name = "borrow_pool_prov")
+                val ownerNameRaw = ocrBorrowBox(bitmap, BorrowRowGeometry.ownerName(pillY), threshold = false, name = "borrow_pool_owner").replace("\n", " ").trim().ifEmpty { null }
+
+                val rarity = parseBorrowRarity(rarityRaw)
+                val level = parseBorrowLevel(levelRaw)
+                val sourceType = parseBorrowSourceType(provRaw)
+                val ownerAlias = redactOwnerAlias(ownerNameRaw)
+                val pipBox = BorrowRowGeometry.limitBreakPips(pillY)
+                val cyan = countLimitBreakCyan(sampler, pipBox)
+                val limitBreakIndex = readLimitBreakPips(sampler, pipBox)
+                val supportType = classifyBorrowSupportType(sampler, BorrowRowGeometry.typeIcon(pillY))
+
+                val unresolved = mutableListOf<String>()
+                if (character == null) unresolved.add("character")
+                if (outfit == null) unresolved.add("outfit")
+                if (rarity == null) unresolved.add("rarity")
+                if (level == null) unresolved.add("level")
+                if (limitBreakIndex == null) unresolved.add("limitBreakIndex")
+                if (supportType == null) unresolved.add("supportType")
+                if (sourceType == BorrowSourceType.UNKNOWN) unresolved.add("sourceType")
+                if (ownerAlias == null) unresolved.add("ownerAlias")
+
+                val confidence = if (character != null && limitBreakIndex != null) "high" else "low"
+                val fingerprint = borrowPoolRowFingerprint(character, outfit, rarity, limitBreakIndex, ownerAlias)
+                // Evidence for the local log/audit only: card fields and raw reads, never the owner name.
+                val evidence =
+                    "name='${nameRaw.replace("\n", " ").trim().take(48)}' rarity='${rarityRaw.trim().take(8)}' " +
+                        "level='${levelRaw.trim().take(8)}' lbCyan=$cyan prov='${provRaw.trim().take(16)}' page=$pageIndex tag=${blockedTag ?: "none"}"
+
+                if (captureEvidence) {
+                    MessageLog.i(
+                        TAG,
+                        "[BORROW-POOL] page=$pageIndex pillY=$pillY char='${character ?: "?"}' outfit='${outfit ?: "?"}' " +
+                            "rarity=${rarity ?: "?"} lvl=${level ?: "?"} lb=${limitBreakIndex ?: "?"}(cyan=$cyan) type=${supportType ?: "?"} " +
+                            "src=$sourceType owner=${ownerAlias ?: "none"} tag=${blockedTag ?: "none"} unresolved=$unresolved",
+                    )
+                }
+
+                BorrowRowObservation(
+                    pageIndex = pageIndex,
+                    character = character,
+                    outfit = outfit,
+                    rarity = rarity,
+                    supportType = supportType,
+                    level = level,
+                    limitBreakIndex = limitBreakIndex,
+                    sourceType = sourceType,
+                    ownerAlias = ownerAlias,
+                    ownerNameRaw = ownerNameRaw,
+                    blockedTag = blockedTag,
+                    rowFingerprint = fingerprint,
+                    confidence = confidence,
+                    unresolvedFields = unresolved,
+                    evidence = evidence,
+                )
+            }
+    }
+
+    /**
+     * Read-only Borrow Card pool census (DeckLab Phase 2B). Park the game on the career-start Support
+     * Formation screen with the Friends slot EMPTY, then start the bot: it opens the borrow picker,
+     * reads every visible row richly, pages with the SAME bounded walker the launch uses, and closes
+     * the picker. It NEVER taps a row, selects a borrow, presses Start Career, changes a formation, or
+     * spends anything; the only gestures are open (empty-slot icon), page swipes, and Close.
+     *
+     * [entryLimit] caps distinct rows for the staged Stage A/B/C validation (0 = the whole visible
+     * pool). [captureEvidence] turns on per-field raw-read logging for offline calibration. Rows are
+     * de-duplicated across overlapping pages by their scroll-stable fingerprint, so the same card seen
+     * on two pages is counted once.
+     */
+    internal fun scanBorrowPoolReadOnly(injectedUtils: CustomImageUtils? = null, entryLimit: Int = 0, captureEvidence: Boolean = false): BorrowPoolScanResult {
+        if (injectedUtils != null) {
+            imageUtils = injectedUtils
+        } else if (!ensureInitialised()) {
+            MessageLog.e(TAG, "[BORROW-POOL] Failed to initialise image utils. Stopping.")
+            return BorrowPoolScanResult("uninitialised", BorrowPoolTermination.PRECONDITION_FAILED, 0, 0, false)
+        }
+        val startedAt = System.currentTimeMillis()
+        val scanId = "bp-$startedAt-${java.util.UUID.randomUUID().toString().substring(0, 8)}"
+        MessageLog.i(TAG, "[BORROW-POOL] ===== Read-only borrow pool census scanId=$scanId entryLimit=${if (entryLimit > 0) entryLimit else "none"} evidence=${if (captureEvidence) "on" else "off"} =====")
+
+        val startBitmap = iu.getSourceBitmap()
+        if (!LabelSupportFormation.check(iu, sourceBitmap = startBitmap)) {
+            MessageLog.e(TAG, "[BORROW-POOL] Not on the career-start Support Formation screen. Park the game there first. No gesture dispatched. Stopping. ===== end =====")
+            persistBorrowPoolScan(scanId, startedAt, startBitmap, 0, 0, emptyList(), BorrowPoolTermination.PRECONDITION_FAILED)
+            return BorrowPoolScanResult(scanId, BorrowPoolTermination.PRECONDITION_FAILED, 0, 0, false)
+        }
+        if (!IconFriendSlotEmpty.check(iu, sourceBitmap = startBitmap)) {
+            MessageLog.e(TAG, "[BORROW-POOL] Friend slot is not empty; start the census with an empty Friends slot so opening the picker is reversible. No gesture dispatched. Stopping. ===== end =====")
+            persistBorrowPoolScan(scanId, startedAt, startBitmap, 0, 0, emptyList(), BorrowPoolTermination.PRECONDITION_FAILED)
+            return BorrowPoolScanResult(scanId, BorrowPoolTermination.PRECONDITION_FAILED, 0, 0, false)
+        }
+
+        if (!reopenBorrowPicker(replaceMode = false)) {
+            MessageLog.e(TAG, "[BORROW-POOL] Could not open the Borrow Card picker from the empty friend slot. Stopping. ===== end =====")
+            persistBorrowPoolScan(scanId, startedAt, startBitmap, 0, 0, emptyList(), BorrowPoolTermination.PRECONDITION_FAILED)
+            return BorrowPoolScanResult(scanId, BorrowPoolTermination.PRECONDITION_FAILED, 0, 0, false)
+        }
+        waitSafe(2.0)
+
+        val observations = LinkedHashMap<String, BorrowRowObservation>()
+        var latestRows: List<BorrowRowObservation> = emptyList()
+        var entryLimitHit = false
+
+        // A dedicated walker so the census does its rich read in the SAME pass the paging walks, with
+        // no second OCR sweep and no "Smart Borrow rejected" launch logging. Bounds and end-of-list
+        // rules are the launch's, so the census cannot page further or loop where a launch would not.
+        val walker =
+            BorrowListWalker(
+                maxPageGestures = MAX_BORROW_SCAN_PAGES,
+                maxSwallowedRetries = MAX_BORROW_SWALLOWED_SWIPE_RETRIES,
+                readScreen = {
+                    val bmp = iu.getSourceBitmap()
+                    lastBorrowListBitmap = bmp
+                    latestRows = readBorrowPoolRowsRich(bmp, observations.size, captureEvidence)
+                    // Route names by tag exactly as the launch reader does, so a screen of nothing but
+                    // blocked rows still counts as a real screen and is not mistaken for the list end.
+                    val readable = latestRows.filter { it.blockedTag == null }.map { 0.0 to nameKeyOf(it) }
+                    val blocked = latestRows.filter { it.blockedTag != null }.map { nameKeyOf(it) }
+                    BorrowScan(readable, duplicateTexts = blocked)
+                },
+                advancePage = { lastBorrowListBitmap?.let { swipeBorrowList(it) } },
+                abort = { !BotService.isRunning || StartModule.queueStopRequested },
+                log = { MessageLog.i(TAG, "[BORROW-POOL] $it") },
+            )
+
+        val walk =
+            walker.walk { _, _ ->
+                for (obs in latestRows) {
+                    observations.putIfAbsent(obs.rowFingerprint, obs)
+                    if (entryLimit > 0 && observations.size >= entryLimit) {
+                        entryLimitHit = true
+                        return@walk true
+                    }
+                }
+                false
+            }
+
+        // Always leave the picker the way it was found: closed, friend slot still empty.
+        ButtonClose.click(iu)
+        waitSafe(1.5)
+
+        val termination = borrowWalkEndToTermination(walk.end, entryLimitHit)
+        val rows = observations.values.toList()
+        persistBorrowPoolScan(scanId, startedAt, lastBorrowListBitmap ?: startBitmap, walk.screensInspected, walk.pageGestures, rows, termination)
+
+        val doneBitmap = iu.getSourceBitmap()
+        val onFormation = LabelSupportFormation.check(iu, sourceBitmap = doneBitmap)
+        val slotEmpty = IconFriendSlotEmpty.check(iu, sourceBitmap = doneBitmap)
+        MessageLog.i(TAG, "[BORROW-POOL] returnedToSupportFormation=$onFormation friendSlotStillEmpty=$slotEmpty (nothing was selected)")
+        if (!onFormation || !slotEmpty) {
+            MessageLog.w(TAG, "[BORROW-POOL] Did not return cleanly to an empty Support Formation. Close any open dialog by hand and confirm the friend slot is still empty.")
+        }
+
+        val unreadable = rows.count { it.character == null }
+        val complete = (termination == BorrowPoolTermination.UI_END_REACHED || termination == BorrowPoolTermination.VISIBLE_WINDOW_COMPLETE)
+        val trusted = complete && unreadable == 0 && rows.isNotEmpty()
+        MessageLog.i(
+            TAG,
+            "[BORROW-POOL] scanId=$scanId rowsObserved=${rows.size} distinct=${observations.size} unreadable=$unreadable " +
+                "screens=${walk.screensInspected} pageGestures=${walk.pageGestures} termination=$termination trustedAsCompletePool=$trusted " +
+                "runtime=${(System.currentTimeMillis() - startedAt) / 1000}s ===== end =====",
+        )
+        return BorrowPoolScanResult(scanId, termination, rows.size, observations.size, trusted)
+    }
+
+    /** Name identity of a row for the walker's paging dedup: outfit + character, empty when neither read. */
+    private fun nameKeyOf(obs: BorrowRowObservation): String = listOfNotNull(obs.outfit, obs.character).joinToString(" ").trim()
+
+    /** Writes the observed rows then the scan header to the gitignored borrow-pool corpus. Rows first
+     * so a truncated write leaves headerless rows (a partial) rather than a header promising rows that
+     * are absent. The raw owner name rides only in these local records, never in the repo. */
+    private fun persistBorrowPoolScan(
+        scanId: String,
+        startedAt: Long,
+        frame: Bitmap,
+        screensInspected: Int,
+        pageGestures: Int,
+        rows: List<BorrowRowObservation>,
+        termination: BorrowPoolTermination,
+    ) {
+        for (obs in rows) OutcomeCorpus.append(context, serializeBorrowRow(scanId, obs), OutcomeCorpus.BORROW_POOL_PATH)
+        val unreadable = rows.count { it.character == null }
+        val complete = (termination == BorrowPoolTermination.UI_END_REACHED || termination == BorrowPoolTermination.VISIBLE_WINDOW_COMPLETE)
+        val header =
+            BorrowPoolScanHeader(
+                scanId = scanId,
+                startedAt = startedAt,
+                completedAt = System.currentTimeMillis(),
+                appVersion = BuildConfig.VERSION_NAME,
+                screenWidth = frame.width,
+                screenHeight = frame.height,
+                screensInspected = screensInspected,
+                pageGestures = pageGestures,
+                rowsObserved = rows.size,
+                distinctRows = rows.size,
+                entryLimit = 0,
+                termination = termination,
+                trustedAsCompletePool = complete && unreadable == 0 && rows.isNotEmpty(),
+                evidenceCropCount = 0,
+            )
+        OutcomeCorpus.append(context, serializeBorrowScanHeader(header), OutcomeCorpus.BORROW_POOL_PATH)
+    }
+
     private fun handleLegacySelectScreen(): TransitionResult {
         // Rotation backstop: a trainee switch was required this launch but we reached Legacy Select
         // without handling Trainee Select (a missed detection tapped through it keeping the wrong

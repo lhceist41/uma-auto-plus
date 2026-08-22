@@ -90,6 +90,14 @@ object OutcomeCorpus {
     const val VETERAN_PROTECTION_PATH = "$OUTCOMES_DIR/veteran_protection.jsonl"
 
     /**
+     * Relative path of the read-only Borrow Card pool census (DeckLab Phase 2B): `borrow_pool_row`
+     * records for each observed borrow row plus one `borrow_pool_scan` header. The rows carry the raw
+     * owner name as LOCAL diagnostic evidence only; the offline bridge drops it and keeps the redacted
+     * alias, so nothing pulled into the repo carries an owner's real name.
+     */
+    const val BORROW_POOL_PATH = "$OUTCOMES_DIR/borrow_pool.jsonl"
+
+    /**
      * Appends one [record] as a JSON line to [path]. Writing must never disturb the calling
      * path: any failure is swallowed after a MessageLog warning. MessageLog is safe here -
      * the career path that logs the ledger line via MessageLog immediately after, and the

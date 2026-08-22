@@ -1016,6 +1016,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startDeckNumberReadTest" to ::startDeckNumberReadTest,
                 "debugMode_startSupportDeckRehearsalTest" to ::startSupportDeckRehearsalTest,
                 "debugMode_startSmartBorrowRehearsalTest" to ::startSmartBorrowRehearsalTest,
+                "debugMode_startBorrowPoolScanTest" to ::startBorrowPoolScanTest,
                 "debugMode_startRainbowDetectionTest" to ::startRainbowDetectionTest,
                 "debugMode_startVeteranRosterReadTest" to ::startVeteranRosterReadTest,
                 "debugMode_startVeteranRosterScanTest" to ::startVeteranRosterScanTest,
@@ -1181,6 +1182,24 @@ abstract class Campaign(game: Game) : Task(game) {
     open fun startSmartBorrowRehearsalTest() {
         MessageLog.i(TAG, "\n[TEST] Running Smart Borrow rehearsal diagnostic...")
         CareerLaunchNavigator(game.myContext).rehearseSmartBorrowForRequiredDeck(game.imageUtils)
+    }
+
+    /**
+     * Read-only Borrow Card pool census (DeckLab Phase 2B). Park the game on the career-start Support
+     * Formation screen with the Friends slot EMPTY, then start the bot: it opens the borrow picker,
+     * reads every visible row (name, rarity, level, limit-break pips, provenance, redacted owner),
+     * pages with the launch's bounded walker, and closes the picker. It NEVER taps a row, selects a
+     * borrow, presses Start Career, changes a formation, or spends anything. Records go to the local
+     * outcomes/borrow_pool.jsonl. Tagged [BORROW-POOL].
+     *
+     * `borrowPoolScanLimit` caps distinct rows for the staged Stage A/B/C runs (0 = whole visible
+     * pool); `borrowPoolScanEvidence` turns on per-field raw-read logging for calibration.
+     */
+    open fun startBorrowPoolScanTest() {
+        val limit = SettingsHelper.getIntSetting("debug", "borrowPoolScanLimit", 0)
+        val evidence = SettingsHelper.getBooleanSetting("debug", "borrowPoolScanEvidence", false)
+        MessageLog.i(TAG, "\n[TEST] Running read-only Borrow pool census (entryLimit=${if (limit > 0) limit.toString() else "none"}, evidence=${if (evidence) "on" else "off"})...")
+        CareerLaunchNavigator(game.myContext).scanBorrowPoolReadOnly(game.imageUtils, entryLimit = limit, captureEvidence = evidence)
     }
 
     /**
