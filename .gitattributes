@@ -1,3 +1,7 @@
 # Generated LF asset: keep it LF in the working tree so its --check freshness
 # gate is byte-stable across platforms (the generator always writes LF).
 android/app/src/main/assets/veteran_factor_domain.json text eol=lf
+
+# Generated LF asset: keep it LF in the working tree so its --check freshness
+# gate is byte-stable across platforms (the generator always writes LF).
+src/data/succession_relations.json text eol=lf
