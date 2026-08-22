@@ -52,6 +52,7 @@ internal object DebugTestGate {
             "debugMode_startVeteranRosterScanTest",
             "debugMode_startVeteranInspirationReadTest",
             "debugMode_startVeteranInspirationScanTest",
+            "debugMode_startVeteranProtectionScanTest",
         )
 
     /** The armed debug-test keys, in [ALL_KEYS] order. Reader injected so this stays unit-testable. */

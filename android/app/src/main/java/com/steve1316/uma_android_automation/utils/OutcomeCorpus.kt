@@ -82,6 +82,14 @@ object OutcomeCorpus {
     const val VETERAN_INSPIRATION_PATH = "$OUTCOMES_DIR/veteran_inspiration.jsonl"
 
     /**
+     * Relative path of the read-only Veteran protection stream: one `type:"veteran_protection"`
+     * record per filter-partition probe of the roster. It answers whether any Veteran is favorited
+     * and whether any has a memo (the two markers that block a release), never mutating either.
+     * Bound to a roster snapshot offline by `registeredUsed`, not by career token.
+     */
+    const val VETERAN_PROTECTION_PATH = "$OUTCOMES_DIR/veteran_protection.jsonl"
+
+    /**
      * Appends one [record] as a JSON line to [path]. Writing must never disturb the calling
      * path: any failure is swallowed after a MessageLog warning. MessageLog is safe here -
      * the career path that logs the ledger line via MessageLog immediately after, and the

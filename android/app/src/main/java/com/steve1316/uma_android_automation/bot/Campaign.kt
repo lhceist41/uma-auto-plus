@@ -15,6 +15,7 @@ import com.steve1316.uma_android_automation.CareerLaunchNavigator
 import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.VeteranInspirationReader
 import com.steve1316.uma_android_automation.VeteranInspirationScanner
+import com.steve1316.uma_android_automation.VeteranProtectionScanner
 import com.steve1316.uma_android_automation.VeteranRosterReader
 import com.steve1316.uma_android_automation.VeteranRosterScanner
 import com.steve1316.uma_android_automation.components.ButtonBack
@@ -1020,6 +1021,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startVeteranRosterScanTest" to ::startVeteranRosterScanTest,
                 "debugMode_startVeteranInspirationReadTest" to ::startVeteranInspirationReadTest,
                 "debugMode_startVeteranInspirationScanTest" to ::startVeteranInspirationScanTest,
+                "debugMode_startVeteranProtectionScanTest" to ::startVeteranProtectionScanTest,
             )
 
         var bDidAnyTestsRun = false
@@ -1136,6 +1138,19 @@ abstract class Campaign(game: Game) : Task(game) {
         val limit = SettingsHelper.getIntSetting("debug", "veteranInspirationScanLimit", 1)
         MessageLog.i(TAG, "\n[TEST] Running read-only Veteran Inspiration capture (entryLimit=${if (limit > 0) limit.toString() else "none"})...")
         VeteranInspirationScanner(game).runScan(limit)
+    }
+
+    /**
+     * Read-only Veteran protection probe (PL-R2a). Park the game on the Veteran Roster list with
+     * Filters: OFF, then start the bot: it opens Display Settings > Filter and probes whether any
+     * Veteran is favorited and whether any has a memo (the two markers that block a release), reading
+     * the game's own "OK disabled when the selection is empty" signal WITHOUT applying a filter. It
+     * writes one `veteran_protection` record to outcomes/veteran_protection.jsonl and leaves through
+     * Cancel, so the roster stays Filters: OFF. It never favorites, memos, releases, or transfers.
+     */
+    open fun startVeteranProtectionScanTest() {
+        MessageLog.i(TAG, "\n[TEST] Running read-only Veteran protection probe...")
+        VeteranProtectionScanner(game).runScan()
     }
 
     /**

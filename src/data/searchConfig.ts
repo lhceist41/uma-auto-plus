@@ -863,6 +863,13 @@ const searchConfig: SearchOption[] = [
         page: "DebugSettings",
     },
     {
+        id: "debug-veteran-protection-scan-test",
+        title: "Start Veteran Protection Probe",
+        description:
+            "Disables normal bot operations and checks which Veterans are protected from release read-only. Park the game on the Veteran Roster list with Filters: OFF: it opens Display Settings > Filter and reads whether any Veteran is favorited or has a memo using the game's greyed-out Apply button, without applying a filter, then leaves through Cancel. Nothing is transferred, favorited, memoed, or edited.",
+        page: "DebugSettings",
+    },
+    {
         id: "debug-trackblazer-race-selection-test",
         title: "Start Trackblazer Race Selection Test",
         description:

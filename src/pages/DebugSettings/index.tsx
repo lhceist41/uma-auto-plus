@@ -49,6 +49,7 @@ const DebugSettings = () => {
         "debugMode_startVeteranRosterScanTest",
         "debugMode_startVeteranInspirationReadTest",
         "debugMode_startVeteranInspirationScanTest",
+        "debugMode_startVeteranProtectionScanTest",
     ] as const
 
     /**
@@ -737,6 +738,15 @@ const DebugSettings = () => {
                                 showValue={true}
                                 showLabels={true}
                                 description="How many Veterans the Inspiration capture reads before it stops. Set 0 to walk the entire roster. Each Veteran costs several swipes and a lot of text reading, so start small and raise it once the capture is proven."
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-veteran-protection-scan-test"
+                                checked={bsc.settings.debug.debugMode_startVeteranProtectionScanTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startVeteranProtectionScanTest", checked)}
+                                label="Start Veteran Protection Probe"
+                                description="Read-only check of which Veterans are protected from release. Park the game on the Veteran Roster list with Filters: OFF, then start the bot: it opens Display Settings > Filter and reads whether any Veteran is favorited or has a memo (the two markers that block a release), using the game's own greyed-out Apply button instead of applying anything. It leaves through Cancel, so the roster stays Filters: OFF, and never favorites, memos, transfers or edits. Tagged [PROTECTION-SCAN] in the log."
+                                style={{ marginTop: 10 }}
                             />
                         </View>
                     </View>
