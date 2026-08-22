@@ -12,6 +12,7 @@ live here.
 - `races.json`: race calendar data, with turn numbers for the in-game calendar.
 - `scenarios.json`: scenario-specific event data (URA Finale, Unity Cup, Trackblazer, Grand Concert). Maintained by hand, since it carries the special event overrides and per-scenario logic.
 - `character_objectives.json`: goal turns per character. Read by `scripts/generate-racing-plan.mjs` and never bundled into the app.
+- `succession_relations.json`: the game's own inheritance relation tables (relation types, their point values, their character membership, and the three rank bands). Read by `scripts/parent-lab-affinity.mjs` and never bundled into the app. Regenerated from an installed `master.mdb` with `node scripts/generate-succession-relation-data.mjs --db <path>`; `--check` verifies the committed file is current. Two characters sharing a relation type share its points, so summing the shared types gives their base relation. That is not the affinity total the game displays over a lineage, and nothing in this repository computes one.
 
 `characterPresets.ts` and `presetMeta.ts` are the preset sources. They are the authority for the
 preset inventory; `PRESETS_GUIDE.md` is their documented view and must be updated in the same change.
