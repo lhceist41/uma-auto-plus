@@ -235,6 +235,44 @@ export interface TargetReport {
     readonly noBorrowAvailable: boolean
 }
 
+/**
+ * Where the borrow candidates in this report came from. A report is either built against no borrow
+ * pool, against the hypothetical universe (every SSR at MLB, answering "what would be worth
+ * borrowing"), or against a real read-only scan of the account's actual borrow list (answering "what
+ * can you borrow right now"). The mode is stated so the two can never be read as the same thing.
+ */
+export interface BorrowSourceReport {
+    readonly mode: "NONE" | "HYPOTHETICAL" | "REAL"
+    readonly description: string
+    /** For a REAL pool: the scan and how far it got. */
+    readonly scanId: string | null
+    readonly observedAt: string | null
+    readonly refreshGeneration: number | null
+    readonly termination: string | null
+    readonly distinctCards: number | null
+    readonly resolvedRows: number | null
+    readonly unresolvedRows: number | null
+    /** True only when the scan saw the whole visible pool and every row resolved. Never inferred. */
+    readonly trustedAsCompletePool: boolean
+    readonly sourceTypeCounts: Readonly<Record<string, number>>
+    readonly notes: readonly string[]
+}
+
+const NO_BORROW_SOURCE: BorrowSourceReport = {
+    mode: "NONE",
+    description: "borrow analysis was skipped",
+    scanId: null,
+    observedAt: null,
+    refreshGeneration: null,
+    termination: null,
+    distinctCards: null,
+    resolvedRows: null,
+    unresolvedRows: null,
+    trustedAsCompletePool: false,
+    sourceTypeCounts: {},
+    notes: [],
+}
+
 export interface DeckLabReport {
     readonly schema: string
     readonly schemaVersion: number
@@ -250,6 +288,7 @@ export interface DeckLabReport {
     }
     readonly communityPrior: { readonly present: boolean; readonly sourceName: string | null; readonly capturedOn: string | null; readonly provenance: string | null; readonly resolved: number; readonly unresolved: number }
     readonly editorialWeights: Readonly<Record<string, number>>
+    readonly borrowSource: BorrowSourceReport
     readonly targets: readonly TargetReport[]
     readonly caveats: readonly string[]
 }
@@ -321,6 +360,7 @@ export interface BuildReportInput {
     readonly results: readonly DeckSearchResult[]
     readonly prior: CommunityPriorIndex | null
     readonly topBorrow?: number
+    readonly borrowSource?: BorrowSourceReport
 }
 
 export function buildDeckLabReport(input: BuildReportInput): DeckLabReport {
@@ -334,6 +374,13 @@ export function buildDeckLabReport(input: BuildReportInput): DeckLabReport {
     if (!input.prior) caveats.push("No community ranking prior was supplied, so no external opinion is reflected anywhere in this report.")
     if (input.results.some((r) => !r.completeness.exhaustiveOverOwnedPool)) {
         caveats.push("The deck search is approximate: it enumerates every legal deck over a bounded working pool, not over every card owned. Widening the pool with --pool-limit does find better decks.")
+    }
+
+    const borrowSource = input.borrowSource ?? NO_BORROW_SOURCE
+    if (borrowSource.mode === "HYPOTHETICAL") {
+        caveats.push("Borrow options are HYPOTHETICAL: they consider every SSR in the catalogue at full limit break, which answers 'what would be worth borrowing', not 'what you can borrow right now'.")
+    } else if (borrowSource.mode === "REAL" && !borrowSource.trustedAsCompletePool) {
+        caveats.push("Borrow options come from a real scan that is not a complete pool, so a card not offered here may still be borrowable; a card that is offered really was seen.")
     }
 
     return {
@@ -360,6 +407,7 @@ export function buildDeckLabReport(input: BuildReportInput): DeckLabReport {
               }
             : { present: false, sourceName: null, capturedOn: null, provenance: null, resolved: 0, unresolved: 0 },
         editorialWeights: EDITORIAL_DIMENSION_WEIGHTS,
+        borrowSource,
         targets: input.results.map((result) => buildTargetReport(input.index, result, input.prior, input.topBorrow ?? 5)),
         caveats,
     }

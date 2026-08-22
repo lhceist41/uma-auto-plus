@@ -7,6 +7,7 @@
 
 export * from "./supportCardData.ts"
 export * from "./inventory.ts"
+export * from "./borrowPool.ts"
 export * from "./deckTarget.ts"
 export * from "./cardValue.ts"
 export * from "./deck.ts"

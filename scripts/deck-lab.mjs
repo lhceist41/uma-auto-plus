@@ -28,6 +28,7 @@ import { fileURLToPath } from "node:url"
 import { valueCard, ownedCardInput } from "../src/lib/deckLab/cardValue.ts"
 import { buildCommunityPriorIndex, parseCommunityPrior } from "../src/lib/deckLab/communityPrior.ts"
 import { hypotheticalBorrowPool, searchDecks } from "../src/lib/deckLab/deckSearch.ts"
+import { borrowCandidateCards, parseBorrowPoolSnapshot, resolveBorrowPool } from "../src/lib/deckLab/borrowPool.ts"
 import { buildDeckTarget, parseTargetDistance, parseTargetRunningStyle, parseTargetSurface, TARGET_DISTANCES, TARGET_RUNNING_STYLES, TARGET_SURFACES } from "../src/lib/deckLab/deckTarget.ts"
 import { assessInventory, buildFixtureInventory, buildOwnedInventory } from "../src/lib/deckLab/inventory.ts"
 import { buildDeckLabReport } from "../src/lib/deckLab/report.ts"
@@ -56,10 +57,14 @@ Options:
   --skill <list>           Comma-separated skill ids the build wants, matched against hint pools.
   --label <text>           Display label for the current target.
 
-  --borrow <path>          A second snapshot of cards available to borrow.
+  --borrow <path>          A second owned-format snapshot of cards available to borrow.
+  --borrow-pool <path>     A read-only borrow-pool scan of the account's actual friend/guest list.
+                           Resolves each observed row against the catalogue and answers "what can you
+                           borrow right now". Only trusted, resolved rows are used.
   --borrow-hypothetical    Consider every SSR in the catalogue at MLB. Answers "what would be worth
                            borrowing", not "what can you borrow".
   --no-borrow              Skip borrow analysis entirely.
+                           (--borrow, --borrow-pool and --borrow-hypothetical are mutually exclusive.)
 
   --community-prior <path> A committed community ranking snapshot. Reported beside the decoded values,
                            never mixed into them.
@@ -84,6 +89,7 @@ function parseArgs(argv) {
         cards: DEFAULT_CARDS,
         targets: [],
         borrow: null,
+        borrowPool: null,
         borrowHypothetical: false,
         noBorrow: false,
         prior: null,
@@ -171,6 +177,9 @@ function parseArgs(argv) {
             case "--borrow":
                 opts.borrow = next()
                 break
+            case "--borrow-pool":
+                opts.borrowPool = next()
+                break
             case "--borrow-hypothetical":
                 opts.borrowHypothetical = true
                 break
@@ -206,6 +215,8 @@ function parseArgs(argv) {
                 throw new Error(`unknown option ${arg}`)
         }
     }
+    const borrowModes = [opts.borrow && "--borrow", opts.borrowPool && "--borrow-pool", opts.borrowHypothetical && "--borrow-hypothetical"].filter(Boolean)
+    if (borrowModes.length > 1) throw new Error(`only one borrow source may be given at a time; saw ${borrowModes.join(" and ")}`)
     if (!opts.targets.length) opts.targets.push({ trainee: null })
     return opts
 }
@@ -244,6 +255,17 @@ function printReport(report) {
     for (const gap of completeness.gaps) console.log(`           gap: ${gap}`)
     for (const row of report.inventory.unresolved) console.log(`           UNRESOLVED: ${row.rawCharacter} | ${row.rawTitle} | ${row.reason}: ${row.detail}`)
     console.log(`Community prior: ${report.communityPrior.present ? `${report.communityPrior.sourceName} (${report.communityPrior.provenance}, ${report.communityPrior.resolved} cards matched)` : "none supplied"}`)
+    const bs = report.borrowSource
+    console.log(`Borrow source:  ${bs.mode} - ${bs.description}`)
+    if (bs.mode === "REAL") {
+        console.log(`           ${bs.distinctCards} distinct cards, ${bs.resolvedRows} rows resolved, ${bs.unresolvedRows} unresolved; complete pool: ${bs.trustedAsCompletePool ? "yes" : "NO"}`)
+        const provenance = Object.entries(bs.sourceTypeCounts)
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([type, count]) => `${count} ${type}`)
+            .join(", ")
+        if (provenance) console.log(`           provenance: ${provenance}`)
+        for (const note of bs.notes) console.log(`           note: ${note}`)
+    }
 
     for (const target of report.targets) {
         console.log(bar(`Target: ${target.label}`))
@@ -381,6 +403,11 @@ function summaryOf(report) {
             trustedForAccountClaims: report.inventory.completeness.trustedForAccountClaims,
         },
         communityPriorPresent: report.communityPrior.present,
+        borrowSource: {
+            mode: report.borrowSource.mode,
+            distinctCards: report.borrowSource.distinctCards,
+            trustedAsCompletePool: report.borrowSource.trustedAsCompletePool,
+        },
         targets: report.targets.map((target) => ({
             label: target.label,
             scenario: target.scenario,
@@ -426,9 +453,61 @@ function main(argv) {
         completeness = assessInventory(inventory, index)
 
         let borrowCandidates = []
+        let borrowSource
         if (!opts.noBorrow) {
-            if (opts.borrow) borrowCandidates = buildOwnedInventory(readJson(opts.borrow, "borrow inventory"), index, { evidenceSource: opts.borrow, claimsCompleteAccount: false }).cards
-            else if (opts.borrowHypothetical) borrowCandidates = hypotheticalBorrowPool(index)
+            if (opts.borrowPool) {
+                const resolution = resolveBorrowPool(parseBorrowPoolSnapshot(readJson(opts.borrowPool, "borrow pool snapshot")), index)
+                borrowCandidates = borrowCandidateCards(resolution)
+                const sourceTypeCounts = {}
+                for (const candidate of resolution.candidates) for (const source of candidate.sources) sourceTypeCounts[source.sourceType] = (sourceTypeCounts[source.sourceType] ?? 0) + 1
+                borrowSource = {
+                    mode: "REAL",
+                    description: `read-only borrow scan ${resolution.snapshot.scanId} of ${resolution.snapshot.sourceScreen}`,
+                    scanId: resolution.snapshot.scanId,
+                    observedAt: resolution.snapshot.observedAt,
+                    refreshGeneration: resolution.snapshot.refreshGeneration,
+                    termination: resolution.snapshot.termination,
+                    distinctCards: resolution.distinctCards,
+                    resolvedRows: resolution.resolvedRows,
+                    unresolvedRows: resolution.unresolved.length,
+                    trustedAsCompletePool: resolution.trustedAsCompletePool,
+                    sourceTypeCounts,
+                    notes: resolution.notes,
+                }
+            } else if (opts.borrow) {
+                const snapshot = buildOwnedInventory(readJson(opts.borrow, "borrow inventory"), index, { evidenceSource: opts.borrow, claimsCompleteAccount: false })
+                borrowCandidates = snapshot.cards
+                borrowSource = {
+                    mode: "REAL",
+                    description: `owned-format borrow snapshot from ${opts.borrow}`,
+                    scanId: null,
+                    observedAt: snapshot.snapshotDate,
+                    refreshGeneration: null,
+                    termination: null,
+                    distinctCards: new Set(snapshot.cards.map((c) => c.card.supportCardId)).size,
+                    resolvedRows: snapshot.cards.length,
+                    unresolvedRows: snapshot.unresolved.length,
+                    trustedAsCompletePool: false,
+                    sourceTypeCounts: {},
+                    notes: snapshot.unresolved.length ? [`${snapshot.unresolved.length} borrow rows did not resolve onto a catalogue card`] : [],
+                }
+            } else if (opts.borrowHypothetical) {
+                borrowCandidates = hypotheticalBorrowPool(index)
+                borrowSource = {
+                    mode: "HYPOTHETICAL",
+                    description: "every SSR in the catalogue at full limit break",
+                    scanId: null,
+                    observedAt: null,
+                    refreshGeneration: null,
+                    termination: null,
+                    distinctCards: borrowCandidates.length,
+                    resolvedRows: borrowCandidates.length,
+                    unresolvedRows: 0,
+                    trustedAsCompletePool: false,
+                    sourceTypeCounts: {},
+                    notes: [],
+                }
+            }
         }
 
         const prior = opts.prior ? buildCommunityPriorIndex(parseCommunityPrior(readJson(opts.prior, "community prior"), index)) : null
@@ -442,7 +521,7 @@ function main(argv) {
             })
         })
 
-        report = buildDeckLabReport({ index, inventory, completeness, isFixture: useFixture, results, prior, topBorrow: opts.topBorrow })
+        report = buildDeckLabReport({ index, inventory, completeness, isFixture: useFixture, results, prior, topBorrow: opts.topBorrow, borrowSource })
     } catch (err) {
         console.error(err instanceof Error ? err.message : String(err))
         return 2
