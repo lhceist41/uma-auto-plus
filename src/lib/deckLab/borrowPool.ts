@@ -22,6 +22,7 @@
 //   could not be observed still resolves, but it is marked and its confidence is lowered, because a
 //   card's value is read at a limit break and guessing one silently would be a lie.
 
+import { resolveCardIdentity, type CardResolutionPath, type CardResolutionReject } from "./cardIdentity.ts"
 import { buildOwnedInventory, type OwnedCardWarning, type OwnedSupportCard, type UnresolvedReason } from "./inventory.ts"
 import { normalizeName, type SupportCardIndex } from "./supportCardData.ts"
 
@@ -195,6 +196,12 @@ export interface BorrowCandidate {
     readonly sources: readonly BorrowProvenance[]
     /** Resolution and observation warnings, de-duplicated. */
     readonly warnings: readonly BorrowCandidateWarning[]
+    /**
+     * How the noisy name band was joined onto this card, kept beside the card so a fuzzy recovery is
+     * auditable and never mistaken for an exact match. When several owners offered the card, the
+     * strongest path seen wins (an exact read from one owner is not weakened by a fuzzy read from another).
+     */
+    readonly resolutionPath: CardResolutionPath
 }
 
 export const BORROW_CANDIDATE_WARNINGS = ["LIMIT_BREAK_UNKNOWN", "LEVEL_UNKNOWN", "MULTIPLE_SOURCES", "LOW_CONFIDENCE_SCAN"] as const
@@ -234,21 +241,41 @@ function isReadable(entry: BorrowPoolEntry): boolean {
     return (normalizeName(entry.character) + normalizeName(entry.title)).length >= MIN_READABLE_CHARS
 }
 
+/** Maps a card-identity rejection onto the borrow-pool unresolved vocabulary. */
+const IDENTITY_REJECT_REASON: Readonly<Record<CardResolutionReject, UnresolvedReason>> = {
+    NO_CHARACTER_OR_TITLE: "MALFORMED_ROW",
+    NO_CANDIDATE: "NO_CATALOGUE_MATCH",
+    AMBIGUOUS_TITLE: "AMBIGUOUS_MATCH",
+    AMBIGUOUS_FUZZY: "AMBIGUOUS_MATCH",
+    LOW_SIMILARITY: "NO_CATALOGUE_MATCH",
+    RARITY_CONFLICT: "RARITY_CONFLICT",
+}
+
 /**
- * Resolves one entry through the owned-inventory resolver by shaping it as a single owned row. Running
- * the resolver one entry at a time (rather than in a batch) is what lets each resolved card keep its
- * own provenance and fingerprint; the per-call cost is negligible because the catalogue index is built
- * once by the caller. Returns the single resolved card, or the reason it did not resolve.
+ * Resolves one entry onto a single catalogue card.
+ *
+ * Identity is decided by the character-local resolver, which can recover an OCR-noisy title that exact
+ * keying would drop, and which deliberately ignores the borrow picker's unreliable support-type read.
+ * The card's limit break, level and headroom are then computed by the shared owned-inventory resolver
+ * exactly as an owned copy would be, by handing it the CANONICAL character, title and rarity of the
+ * resolved card. Because those fields are the catalogue's own, that second pass matches by character
+ * and title and can never re-reject on the very type/rarity noise identity resolution just saw past.
+ * The observed level and limit break carry through unchanged, so the card is still valued at what was
+ * seen. Returns the resolved card, its resolution path, or the reason it did not resolve.
  */
-function resolveOne(index: SupportCardIndex, entry: BorrowPoolEntry): { card: OwnedSupportCard } | { reason: UnresolvedReason; detail: string } {
+function resolveOne(index: SupportCardIndex, entry: BorrowPoolEntry): { card: OwnedSupportCard; path: CardResolutionPath } | { reason: UnresolvedReason; detail: string } {
+    const identity = resolveCardIdentity(index, { character: entry.character, title: entry.title, rarity: entry.rarity, supportType: entry.supportType })
+    if ("reason" in identity) return { reason: IDENTITY_REJECT_REASON[identity.reason], detail: identity.detail }
+
+    const canon = identity.card
     const snapshot = buildOwnedInventory(
         {
             cards: [
                 {
-                    character: entry.character,
-                    card_title: entry.title,
-                    rarity: entry.rarity,
-                    support_type: entry.supportType,
+                    character: index.characterName(canon.charaId),
+                    card_title: canon.title,
+                    rarity: canon.rarity,
+                    support_type: canon.supportType,
                     current_level: entry.level,
                     level_cap: entry.levelCap,
                     limit_break_index: entry.limitBreakIndex,
@@ -260,9 +287,17 @@ function resolveOne(index: SupportCardIndex, entry: BorrowPoolEntry): { card: Ow
         index,
         { evidenceSource: "borrow scan", claimsCompleteAccount: false },
     )
-    if (snapshot.cards.length === 1) return { card: snapshot.cards[0] }
+    if (snapshot.cards.length === 1) return { card: snapshot.cards[0], path: identity.path }
+    // The canonical card came straight from the catalogue, so the owned resolver should always re-match
+    // it; a failure here means the two resolvers disagree and the row is set aside rather than guessed.
     const first = snapshot.unresolved[0]
-    return { reason: first?.reason ?? "NO_CATALOGUE_MATCH", detail: first?.detail ?? "row did not resolve onto a catalogue card" }
+    return { reason: first?.reason ?? "NO_CATALOGUE_MATCH", detail: first?.detail ?? "resolved card did not re-match the catalogue" }
+}
+
+/** The more trustworthy of two resolution paths for the same card seen from two owners; exact beats fuzzy. */
+const PATH_STRENGTH: Readonly<Record<CardResolutionPath, number>> = { EXACT_TITLE: 0, TITLE_ONLY: 1, CHARACTER_AND_RARITY: 2, CHARACTER_LOCAL_FUZZY: 3 }
+function strongerPath(a: CardResolutionPath, b: CardResolutionPath): CardResolutionPath {
+    return PATH_STRENGTH[a] <= PATH_STRENGTH[b] ? a : b
 }
 
 /** Best observed copy of a card: highest level cap, then highest level, then a known limit break over an assumed one. */
@@ -306,7 +341,7 @@ export function resolveBorrowPool(snapshot: BorrowPoolSnapshot, index: SupportCa
         if (entry.confidence && entry.confidence.toLowerCase() !== "high") warnings.push("LOW_CONFIDENCE_SCAN")
 
         const provenance: BorrowProvenance = { sourceType: entry.sourceType, ownerAlias: entry.ownerAlias, level: entry.level, limitBreakKnown, confidence: entry.confidence }
-        const candidate: BorrowCandidate = { card: result.card, limitBreakKnown, sources: [provenance], warnings: [...new Set(warnings)].sort() }
+        const candidate: BorrowCandidate = { card: result.card, limitBreakKnown, sources: [provenance], warnings: [...new Set(warnings)].sort(), resolutionPath: result.path }
 
         const existing = byCardId.get(result.card.card.supportCardId)
         if (!existing) {
@@ -318,6 +353,7 @@ export function resolveBorrowPool(snapshot: BorrowPoolSnapshot, index: SupportCa
                 limitBreakKnown: best.limitBreakKnown,
                 sources: [...existing.sources, provenance],
                 warnings: [...new Set([...existing.warnings, ...candidate.warnings, "MULTIPLE_SOURCES"] as BorrowCandidateWarning[])].sort(),
+                resolutionPath: strongerPath(existing.resolutionPath, candidate.resolutionPath),
             }
             byCardId.set(result.card.card.supportCardId, merged)
         }

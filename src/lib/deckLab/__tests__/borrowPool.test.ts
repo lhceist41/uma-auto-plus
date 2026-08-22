@@ -119,6 +119,26 @@ describe("borrow-pool identity resolution", () => {
         expect(res.candidates).toHaveLength(1)
         expect(res.candidates[0].card.card.supportCardId).toBe(30001)
         expect(res.candidates[0].limitBreakKnown).toBe(true)
+        expect(res.candidates[0].resolutionPath).toBe("EXACT_TITLE")
+        expect(res.unresolved).toHaveLength(0)
+    })
+
+    test("a wrong support-type read from the picker no longer vetoes a strong exact match", () => {
+        // The borrow picker's type icon is unreliable; the character and title uniquely name a Stamina
+        // card, and a stray "Speed" read must not throw the row away as a support-type conflict.
+        const res = resolveBorrowPool(snapshot([entry({ character: "Bravo", title: "Stamina Star", support_type: "Speed", limit_break_index: 4 })]), index)
+        expect(res.candidates).toHaveLength(1)
+        expect(res.candidates[0].card.card.supportCardId).toBe(30002)
+        expect(res.candidates[0].card.card.supportType).toBe("Stamina")
+        expect(res.candidates[0].resolutionPath).toBe("EXACT_TITLE")
+        expect(res.unresolved).toHaveLength(0)
+    })
+
+    test("a title with an OCR i->l confusion fuzzy-recovers within the character's cards", () => {
+        const res = resolveBorrowPool(snapshot([entry({ character: "Bravo", title: "Stamlna Star", limit_break_index: 4 })]), index)
+        expect(res.candidates).toHaveLength(1)
+        expect(res.candidates[0].card.card.supportCardId).toBe(30002)
+        expect(res.candidates[0].resolutionPath).toBe("CHARACTER_LOCAL_FUZZY")
         expect(res.unresolved).toHaveLength(0)
     })
 
