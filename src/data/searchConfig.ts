@@ -863,6 +863,12 @@ const searchConfig: SearchOption[] = [
         page: "DebugSettings",
     },
     {
+        id: "veteran-inspiration-scan-start-index",
+        title: "Veteran Inspiration Capture Start Index",
+        description: "Resumes a stopped Inspiration capture: the walk advances past this many Veterans before it starts capturing, so a long crawl can continue after an interruption. Set 0 to start from the first Veteran.",
+        page: "DebugSettings",
+    },
+    {
         id: "debug-veteran-protection-scan-test",
         title: "Start Veteran Protection Probe",
         description:

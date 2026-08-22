@@ -1132,12 +1132,17 @@ abstract class Campaign(game: Game) : Task(game) {
      * plus a `veteran_inspiration_scan` header to outcomes/veteran_inspiration.jsonl.
      *
      * `veteranInspirationScanLimit` caps how many Veterans are captured - the staged 1 / 3 / 20
-     * validation runs - and 0 walks the whole roster.
+     * validation runs - and 0 walks the whole roster. `veteranInspirationScanStartIndex` resumes a
+     * stopped crawl: the walk chevron-advances past that many entries before it starts capturing.
      */
     open fun startVeteranInspirationScanTest() {
         val limit = SettingsHelper.getIntSetting("debug", "veteranInspirationScanLimit", 1)
-        MessageLog.i(TAG, "\n[TEST] Running read-only Veteran Inspiration capture (entryLimit=${if (limit > 0) limit.toString() else "none"})...")
-        VeteranInspirationScanner(game).runScan(limit)
+        val startIndex = SettingsHelper.getIntSetting("debug", "veteranInspirationScanStartIndex", 0)
+        MessageLog.i(
+            TAG,
+            "\n[TEST] Running read-only Veteran Inspiration capture (entryLimit=${if (limit > 0) limit.toString() else "none"}, startIndex=$startIndex)...",
+        )
+        VeteranInspirationScanner(game).runScan(limit, startIndex)
     }
 
     /**

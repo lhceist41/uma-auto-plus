@@ -269,6 +269,8 @@ export interface Settings {
         debugMode_startVeteranInspirationScanTest: boolean
         // How many Veterans the Inspiration capture reads before stopping. 0 walks the whole roster; a small value is the bounded validation run.
         veteranInspirationScanLimit: number
+        // Resumes a stopped Inspiration crawl: the walk chevron-advances past this many entries before it starts capturing, so a long crawl can continue after an interruption without redoing persisted entries. 0 starts from the first Veteran.
+        veteranInspirationScanStartIndex: number
         // Read-only Veteran protection probe (PL-R2a). Park the game on the Veteran Roster list with Filters: OFF; probes whether any Veteran is favorited or has a memo via the filter dialog, applying nothing, and writes veteran_protection.jsonl.
         debugMode_startVeteranProtectionScanTest: boolean
         enableScreenRecording: boolean
@@ -773,6 +775,7 @@ export const defaultSettings: Settings = {
         debugMode_startVeteranInspirationReadTest: false,
         debugMode_startVeteranInspirationScanTest: false,
         veteranInspirationScanLimit: 1,
+        veteranInspirationScanStartIndex: 0,
         debugMode_startVeteranProtectionScanTest: false,
         enableScreenRecording: false,
         recordingBitRate: 6,

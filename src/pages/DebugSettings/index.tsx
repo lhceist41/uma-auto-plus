@@ -740,6 +740,32 @@ const DebugSettings = () => {
                                 description="How many Veterans the Inspiration capture reads before it stops. Set 0 to walk the entire roster. Each Veteran costs several swipes and a lot of text reading, so start small and raise it once the capture is proven."
                             />
 
+                            <CustomSlider
+                                searchId="veteran-inspiration-scan-start-index"
+                                value={bsc.settings.debug.veteranInspirationScanStartIndex}
+                                placeholder={bsc.defaultSettings.debug.veteranInspirationScanStartIndex}
+                                onValueChange={(value) => {
+                                    bsc.setSettings({
+                                        ...bsc.settings,
+                                        debug: { ...bsc.settings.debug, veteranInspirationScanStartIndex: value },
+                                    })
+                                }}
+                                onSlidingComplete={(value) => {
+                                    bsc.setSettings({
+                                        ...bsc.settings,
+                                        debug: { ...bsc.settings.debug, veteranInspirationScanStartIndex: value },
+                                    })
+                                }}
+                                min={0}
+                                max={300}
+                                step={1}
+                                label="Veteran Inspiration Capture Start Index"
+                                labelUnit=" Veterans"
+                                showValue={true}
+                                showLabels={true}
+                                description="Resumes a stopped capture. The walk chevron-advances past this many Veterans before it starts capturing, so a long crawl can continue after an interruption without re-reading the ones it already saved. Leave at 0 to start from the first Veteran."
+                            />
+
                             <CustomCheckbox
                                 searchId="debug-veteran-protection-scan-test"
                                 checked={bsc.settings.debug.debugMode_startVeteranProtectionScanTest}

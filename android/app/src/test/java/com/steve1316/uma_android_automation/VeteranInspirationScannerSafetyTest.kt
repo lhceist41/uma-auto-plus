@@ -79,6 +79,16 @@ class VeteranInspirationScannerSafetyTest {
         }
 
         @Test
+        fun `the resume start index is wired through all five steps`() {
+            assertTrue(settingsContext.contains("veteranInspirationScanStartIndex: number"), "declared in the Settings interface")
+            assertTrue(settingsContext.contains("veteranInspirationScanStartIndex: 0,"), "defaults to starting from the first Veteran")
+            assertTrue(debugUi.contains("veteranInspirationScanStartIndex: value"), "has a Debug Settings control")
+            assertTrue(searchConfig.contains("\"veteran-inspiration-scan-start-index\""), "registered in the settings search index")
+            assertTrue(campaign.contains("\"veteranInspirationScanStartIndex\""), "read on the Kotlin side")
+            assertTrue(campaign.contains(".runScan(limit, startIndex)"), "the start index is passed to the scanner")
+        }
+
+        @Test
         fun `both toggles are discoverable in the UI and the search index`() {
             assertTrue(debugUi.contains("\"$readKey\""), "the read key is in the debugTestKeys list")
             assertTrue(debugUi.contains("\"$scanKey\""), "the scan key is in the debugTestKeys list")
@@ -257,6 +267,48 @@ class VeteranInspirationScannerSafetyTest {
             val code = codeOnly(scanner)
             assertFalse(code.contains("VeteranRosterScanner"), "the Inspiration capture is a separate walk")
             assertTrue(code.contains("VeteranRosterReader("), "identity is read by the same proven reader")
+        }
+    }
+
+    @Nested
+    @DisplayName("bounded per-Veteran retry and resumption")
+    inner class RetryAndResume {
+        @Test
+        fun `the per-Veteran capture retry is bounded by a constant`() {
+            assertTrue(scanner.contains("private const val MAX_CAPTURE_ATTEMPTS = 3"), "the retry budget is a fixed constant, not unbounded")
+            val retry = scanner.substring(scanner.indexOf("private fun captureWithRetries("))
+            assertTrue(retry.contains("for (attempt in 1..MAX_CAPTURE_ATTEMPTS)"), "the retry loop is bounded by MAX_CAPTURE_ATTEMPTS")
+            assertTrue(retry.contains("if (observation.sparkCaptureComplete) break"), "a complete read stops the retry immediately")
+        }
+
+        @Test
+        fun `every attempt is appended, only the best represents the Veteran in the header`() {
+            // Append-only evidence: nothing overwrites a prior read; the offline resolver re-derives the
+            // best by rosterFingerprint. The in-memory list keeps one best attempt per Veteran so the
+            // header's captured/complete counts stay one-per-Veteran.
+            val retry = scanner.substring(scanner.indexOf("private fun captureWithRetries("), scanner.indexOf("private fun betterObservation("))
+            assertTrue(retry.contains("OutcomeCorpus.append(") && retry.contains("serializeVeteranInspiration(observation)"), "each attempt is appended as it is read")
+            assertTrue(retry.contains("betterObservation(best, observation)"), "the best attempt is tracked across the loop")
+            assertTrue(retry.contains("observations.add(chosen)"), "only the chosen best is added to the per-Veteran list")
+        }
+
+        @Test
+        fun `a canonical-only failure does not drive a retry`() {
+            // The retry exists for transient read incompleteness (a merge gap on a long panel). A read
+            // that is complete but did not canonicalize a name is the best obtainable read; re-OCRing it
+            // does not help, and widening the domain is a separate offline fix.
+            val retry = scanner.substring(scanner.indexOf("private fun captureWithRetries("))
+            val breakIdx = retry.indexOf("if (observation.sparkCaptureComplete) break")
+            assertTrue(breakIdx >= 0, "the retry breaks on sparkCaptureComplete, not on trust")
+            assertFalse(retry.substring(0, breakIdx).contains("selfFactorSetTrusted) break"), "trust is not a retry-break condition")
+        }
+
+        @Test
+        fun `resumption chevron-advances without adding a tap coordinate`() {
+            // The start index reuses the same next-chevron tap the capture walk already uses, so it adds
+            // no new gesture surface: the tap-set guard above still sees exactly three coordinates.
+            assertTrue(scanner.contains("startIndex: Int"), "the walk carries a resume start index")
+            assertTrue(scanner.contains("val skipping = visited < startIndex"), "entries before the start index are skipped")
         }
     }
 
