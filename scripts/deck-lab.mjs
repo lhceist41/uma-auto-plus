@@ -29,6 +29,7 @@ import { valueCard, ownedCardInput } from "../src/lib/deckLab/cardValue.ts"
 import { buildCommunityPriorIndex, parseCommunityPrior } from "../src/lib/deckLab/communityPrior.ts"
 import { hypotheticalBorrowPool, searchDecks } from "../src/lib/deckLab/deckSearch.ts"
 import { borrowCandidateCards, parseBorrowPoolSnapshot, resolveBorrowPool } from "../src/lib/deckLab/borrowPool.ts"
+import { parseBorrowScanJsonl } from "../src/lib/deckLab/borrowScanImport.ts"
 import { buildDeckTarget, parseTargetDistance, parseTargetRunningStyle, parseTargetSurface, TARGET_DISTANCES, TARGET_RUNNING_STYLES, TARGET_SURFACES } from "../src/lib/deckLab/deckTarget.ts"
 import { assessInventory, buildFixtureInventory, buildOwnedInventory } from "../src/lib/deckLab/inventory.ts"
 import { buildDeckLabReport } from "../src/lib/deckLab/report.ts"
@@ -58,13 +59,19 @@ Options:
   --label <text>           Display label for the current target.
 
   --borrow <path>          A second owned-format snapshot of cards available to borrow.
-  --borrow-pool <path>     A read-only borrow-pool scan of the account's actual friend/guest list.
-                           Resolves each observed row against the catalogue and answers "what can you
-                           borrow right now". Only trusted, resolved rows are used.
+  --borrow-pool <path>     A read-only borrow-pool snapshot (the resolver's own JSON shape) of the
+                           account's actual friend/guest list. Resolves each observed row against the
+                           catalogue and answers "what can you borrow right now". Only trusted,
+                           resolved rows are used.
+  --borrow-scan <path>     The on-device read-only borrow-pool census JSONL
+                           (outcomes/borrow_pool.jsonl from the borrow-pool scan diagnostic). Bridged
+                           into a snapshot and resolved exactly as --borrow-pool; the raw owner name
+                           is dropped and only the redacted alias is used.
   --borrow-hypothetical    Consider every SSR in the catalogue at MLB. Answers "what would be worth
                            borrowing", not "what can you borrow".
   --no-borrow              Skip borrow analysis entirely.
-                           (--borrow, --borrow-pool and --borrow-hypothetical are mutually exclusive.)
+                           (--borrow, --borrow-pool, --borrow-scan and --borrow-hypothetical are
+                           mutually exclusive.)
 
   --community-prior <path> A committed community ranking snapshot. Reported beside the decoded values,
                            never mixed into them.
@@ -90,6 +97,7 @@ function parseArgs(argv) {
         targets: [],
         borrow: null,
         borrowPool: null,
+        borrowScan: null,
         borrowHypothetical: false,
         noBorrow: false,
         prior: null,
@@ -180,6 +188,9 @@ function parseArgs(argv) {
             case "--borrow-pool":
                 opts.borrowPool = next()
                 break
+            case "--borrow-scan":
+                opts.borrowScan = next()
+                break
             case "--borrow-hypothetical":
                 opts.borrowHypothetical = true
                 break
@@ -215,7 +226,7 @@ function parseArgs(argv) {
                 throw new Error(`unknown option ${arg}`)
         }
     }
-    const borrowModes = [opts.borrow && "--borrow", opts.borrowPool && "--borrow-pool", opts.borrowHypothetical && "--borrow-hypothetical"].filter(Boolean)
+    const borrowModes = [opts.borrow && "--borrow", opts.borrowPool && "--borrow-pool", opts.borrowScan && "--borrow-scan", opts.borrowHypothetical && "--borrow-hypothetical"].filter(Boolean)
     if (borrowModes.length > 1) throw new Error(`only one borrow source may be given at a time; saw ${borrowModes.join(" and ")}`)
     if (!opts.targets.length) opts.targets.push({ trainee: null })
     return opts
@@ -228,6 +239,11 @@ function readJson(path, what) {
     } catch (err) {
         throw new Error(`${what} at ${path} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`)
     }
+}
+
+function readText(path, what) {
+    if (!existsSync(path)) throw new Error(`no such ${what}: ${path}`)
+    return readFileSync(path, "utf8")
 }
 
 const bar = (title) => `\n${title}\n${"=".repeat(title.length)}`
@@ -455,14 +471,17 @@ function main(argv) {
         let borrowCandidates = []
         let borrowSource
         if (!opts.noBorrow) {
-            if (opts.borrowPool) {
-                const resolution = resolveBorrowPool(parseBorrowPoolSnapshot(readJson(opts.borrowPool, "borrow pool snapshot")), index)
+            if (opts.borrowPool || opts.borrowScan) {
+                const snapshot = opts.borrowScan
+                    ? parseBorrowScanJsonl(readText(opts.borrowScan, "borrow scan jsonl"))
+                    : parseBorrowPoolSnapshot(readJson(opts.borrowPool, "borrow pool snapshot"))
+                const resolution = resolveBorrowPool(snapshot, index)
                 borrowCandidates = borrowCandidateCards(resolution)
                 const sourceTypeCounts = {}
                 for (const candidate of resolution.candidates) for (const source of candidate.sources) sourceTypeCounts[source.sourceType] = (sourceTypeCounts[source.sourceType] ?? 0) + 1
                 borrowSource = {
                     mode: "REAL",
-                    description: `read-only borrow scan ${resolution.snapshot.scanId} of ${resolution.snapshot.sourceScreen}`,
+                    description: `${opts.borrowScan ? "on-device borrow scan" : "read-only borrow snapshot"} ${resolution.snapshot.scanId} of ${resolution.snapshot.sourceScreen}`,
                     scanId: resolution.snapshot.scanId,
                     observedAt: resolution.snapshot.observedAt,
                     refreshGeneration: resolution.snapshot.refreshGeneration,
