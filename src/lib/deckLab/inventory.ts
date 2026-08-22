@@ -19,7 +19,6 @@
 //   the current level is what every value is read at, and the headroom to the cap is reported.
 
 import {
-    buildSupportCardIndex,
     levelCapFor,
     limitBreakForLevelCap,
     MAX_LIMIT_BREAK,
@@ -381,5 +380,3 @@ export function buildFixtureInventory(index: SupportCardIndex, options: { readon
         claimsCompleteAccount: false,
     })
 }
-
-export { buildSupportCardIndex }

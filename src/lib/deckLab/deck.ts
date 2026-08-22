@@ -22,9 +22,9 @@
 // repository has recorded rather than decoded, and they are marked KNOWN_GAME_RULE so a reader knows
 // which is which.
 
-import { targetWeightedComposite, VALUE_DIMENSIONS, type CardValueProfile, type ValueDimension } from "./cardValue.ts"
+import { VALUE_DIMENSIONS, type CardValueProfile, type ValueDimension } from "./cardValue.ts"
 import type { DeckTargetBuild } from "./deckTarget.ts"
-import { TRAINING_SUPPORT_TYPES, type SupportCardIndex, type SupportType, type TrainingSupportType } from "./supportCardData.ts"
+import { TRAINING_SUPPORT_TYPES, type SupportCardIndex, type SupportType } from "./supportCardData.ts"
 
 /** Slots in a support deck. A known game rule, not decoded from master.mdb. */
 export const DECK_SIZE = 6
@@ -118,6 +118,30 @@ export function concaveSum(values: readonly number[]): number {
         total += value / (i + 1)
     })
     return Number(total.toFixed(4))
+}
+
+/**
+ * How much of the deck composite balance is allowed to move.
+ *
+ * The composite is target stat coverage scaled by how well the deck spreads across the stats the
+ * target actually wants. The floor keeps a lopsided deck from being zeroed out, since a stacked deck
+ * is a worse deck rather than no deck.
+ */
+export const BALANCE_FLOOR = 0.75
+
+/**
+ * The deck-level composite.
+ *
+ * This is deliberately NOT the sum of the six card composites. That sum was the first version and it
+ * is wrong for the same reason a naive per-type total is wrong: it counts a sixth Speed card as
+ * though it were the first, so the highest-scoring deck under it was six cards of one type. Building
+ * the composite out of the deck dimensions means the crowding curve, the target weights and the type
+ * spread all reach the number a reader is ranking on.
+ *
+ * Editorial, like everything it is built from.
+ */
+export function deckComposite(dimensions: Readonly<Record<DeckDimension, number>>): number {
+    return Number((dimensions.targetStatCoverage * (BALANCE_FLOOR + (1 - BALANCE_FLOOR) * dimensions.trainingTypeBalance)).toFixed(4))
 }
 
 export const DECK_DIMENSIONS = [
@@ -246,7 +270,7 @@ export function scoreDeck(index: SupportCardIndex, deck: readonly CardValueProfi
         legality,
         dimensions,
         cardDimensionTotals: cardTotals,
-        composite: Number(deck.reduce((sum, p) => sum + targetWeightedComposite(p, build), 0).toFixed(4)),
+        composite: deckComposite(dimensions),
         compositeOrigin: "EDITORIAL_WEIGHTS",
         confidence,
         unknownMechanics: [...unknowns].sort(),

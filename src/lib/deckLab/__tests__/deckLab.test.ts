@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { compositeOf, EDITORIAL_DIMENSION_WEIGHTS, ownedCardInput, targetWeightedComposite, valueCard, type CardValueProfile } from "../cardValue.ts"
+import { compositeOf, EDITORIAL_DIMENSION_WEIGHTS, targetWeightedComposite, valueCard } from "../cardValue.ts"
 import { buildCommunityPriorIndex, COMMUNITY_PRIOR_SCHEMA, COMMUNITY_PRIOR_SCHEMA_VERSION, CommunityPriorError, parseCommunityPrior } from "../communityPrior.ts"
 import { checkDeckLegality, concaveSum, DECK_SIZE, scoreDeck } from "../deck.ts"
 import { hypotheticalBorrowPool, searchDecks } from "../deckSearch.ts"
@@ -419,6 +419,17 @@ describe("a deck is more than the sum of six cards", () => {
         expect(balanced.legality.legal).toBe(true)
         expect(balanced.dimensions.targetStatCoverage).toBeGreaterThan(stacked.dimensions.targetStatCoverage)
         expect(balanced.dimensions.trainingTypeBalance).toBeGreaterThan(stacked.dimensions.trainingTypeBalance)
+    })
+
+    test("the deck composite is a deck-level figure, so stacking one type cannot win it", () => {
+        const stacked = scoreDeck(index, allSpeed, build)
+        const balanced = scoreDeck(index, spread, build)
+        // The first version summed the six card composites, which made the all-Speed deck the highest
+        // scoring deck on the account. The composite has to see the crowding for BEST_BALANCED to mean
+        // anything, so it is built from the deck dimensions instead.
+        expect(balanced.composite).toBeGreaterThan(stacked.composite)
+        const naiveSum = allSpeed.reduce((sum, c) => sum + c.composite, 0)
+        expect(stacked.composite).toBeLessThan(naiveSum)
     })
 
     test("same-type value aggregates concavely, so the fifth card of a type adds less than the first", () => {
