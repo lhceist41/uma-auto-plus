@@ -6215,7 +6215,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 if (ownerAlias == null) unresolved.add("ownerAlias")
 
                 val confidence = if (character != null && limitBreakIndex != null) "high" else "low"
-                val fingerprint = borrowPoolRowFingerprint(character, outfit, rarity, limitBreakIndex, ownerAlias)
+                val fingerprint = borrowPoolRowFingerprint(character, ownerAlias)
                 // Evidence for the local log/audit only: card fields and raw reads, never the owner name.
                 val evidence =
                     "name='${nameRaw.replace("\n", " ").trim().take(48)}' rarity='${rarityRaw.trim().take(8)}' " +

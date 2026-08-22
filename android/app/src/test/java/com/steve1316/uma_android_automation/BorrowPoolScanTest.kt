@@ -134,12 +134,12 @@ class BorrowPoolScanTest {
     }
 
     @Test
-    @DisplayName("The row fingerprint ignores level but separates the same card by owner")
+    @DisplayName("The row fingerprint is stable to field OCR noise and separates the same card by owner")
     fun testRowFingerprint() {
-        val a = borrowPoolRowFingerprint("Delta Dawn", "Fire Trail", "SSR", 4, "owner-1")
-        val b = borrowPoolRowFingerprint("delta  dawn", "fire trail", "SSR", 4, "owner-1")
+        val a = borrowPoolRowFingerprint("Delta Dawn", "owner-1")
+        val b = borrowPoolRowFingerprint("delta  dawn", "owner-1")
         assertEquals(a, b, "case and spacing noise do not change identity")
-        val differentOwner = borrowPoolRowFingerprint("Delta Dawn", "Fire Trail", "SSR", 4, "owner-2")
+        val differentOwner = borrowPoolRowFingerprint("Delta Dawn", "owner-2")
         assertNotEquals(a, differentOwner, "the same card from two owners is two rows")
     }
 

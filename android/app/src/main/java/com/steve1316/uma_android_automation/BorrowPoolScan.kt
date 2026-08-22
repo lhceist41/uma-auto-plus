@@ -345,25 +345,18 @@ fun classifyBorrowSupportType(sampler: SparkPixelSampler, box: GlyphBox): String
 }
 
 /**
- * Stable identity of a row across scrolls and reopens. Built only from the card's readable identity
- * and the owner alias, so two genuinely identical observations collapse while the same card offered
- * by two different owners stays two rows (the offline side turns those into one candidate with two
- * sources). Level is excluded deliberately: a friend training a card drifts its level between reads.
+ * Stable identity of a borrow offering across scrolls and reopens: the character plus the owner
+ * alias. A friend has exactly one support card in their borrow slot, so (character, owner) is unique
+ * per offering, and the same card offered by two different owners stays two rows (the offline side
+ * turns those into one candidate with two sources).
+ *
+ * Only these two fields go into the identity because they are the stable reads. Outfit, rarity, limit
+ * break, and level all drift between two captures of the same row on overlapping pages -- rarity read
+ * "SSR" on one page and blank on the next, an outfit gained a trailing OCR glyph -- and folding any of
+ * them in split one real row into two phantom rows that inflated the pool count (live, 2026-08-22).
  */
-fun borrowPoolRowFingerprint(
-    character: String?,
-    outfit: String?,
-    rarity: String?,
-    limitBreakIndex: Int?,
-    ownerAlias: String?,
-): String =
-    listOf(
-        borrowPoolNormalize(character ?: ""),
-        borrowPoolNormalize(outfit ?: ""),
-        rarity ?: "",
-        limitBreakIndex?.toString() ?: "",
-        ownerAlias ?: "",
-    ).joinToString("|")
+fun borrowPoolRowFingerprint(character: String?, ownerAlias: String?): String =
+    listOf(borrowPoolNormalize(character ?: ""), ownerAlias ?: "").joinToString("|")
 
 // -- Geometry (recon estimates, recalibrated in Stage A) ------------------------------------------
 
