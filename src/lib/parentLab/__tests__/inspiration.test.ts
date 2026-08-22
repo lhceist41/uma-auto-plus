@@ -1,6 +1,7 @@
 import {
     ancestorStarSignature,
     buildInspirationIndex,
+    detectInspirationConflicts,
     joinInspirationToRoster,
     parseInspirationRecords,
 } from "../inspiration.ts"
@@ -248,6 +249,57 @@ describe("buildInspirationIndex", () => {
     it("ignores a capture whose own identity did not resolve", () => {
         const index = buildInspirationIndex(parseInspirationRecords(entryLine("s1", 0, { rosterFingerprint: undefined })))
         expect(index.size).toBe(0)
+    })
+
+    it("never lets a newer complete-but-untrusted read displace an older complete trusted one", () => {
+        // Trust ranks above recency: a self set that canonicalized is an identity, a newer one that did
+        // not is a noisier read of the same immutable factors, so it must not win on the clock alone.
+        const trusted = entryLine("s1", 0, { observedAt: 1000, selfFactorSetTrusted: true, selfFactorFingerprint: "good" })
+        const untrusted = entryLine("s2", 0, { observedAt: 9999, selfFactorSetTrusted: false, selfFactorFingerprint: "noisy" })
+        const index = buildInspirationIndex(parseInspirationRecords([trusted, untrusted].join("\n")))
+        expect(index.get("fp-0")!.selfFactorSetTrusted).toBe(true)
+        expect(index.get("fp-0")!.selfFactorFingerprint).toBe("good")
+    })
+
+    it("prefers a snapshot-compatible capture over an incompatible newer one", () => {
+        // An incompatible batch may have read an identity that a mid-batch registration had shifted, so
+        // a clean batch's older read is the more trustworthy attribution.
+        const good = [headerLine("ok", { snapshotCompatibility: true }), entryLine("ok", 0, { observedAt: 1000 })]
+        const bad = [headerLine("shifted", { snapshotCompatibility: false }), entryLine("shifted", 0, { observedAt: 9999 })]
+        const index = buildInspirationIndex(parseInspirationRecords([...good, ...bad].join("\n")))
+        expect(index.get("fp-0")!.observedAt).toBe(1000)
+    })
+
+    it("still uses an incompatible capture when it is the only evidence for a Veteran", () => {
+        const only = [headerLine("shifted", { snapshotCompatibility: false }), entryLine("shifted", 0)]
+        const index = buildInspirationIndex(parseInspirationRecords(only.join("\n")))
+        expect(index.get("fp-0")).toBeDefined()
+    })
+})
+
+describe("detectInspirationConflicts", () => {
+    it("flags a Veteran with two contradicting trusted captures", () => {
+        const a = [headerLine("s1", { snapshotCompatibility: true }), entryLine("s1", 0, { selfFactorSetTrusted: true, selfFactorFingerprint: "A" })]
+        const b = [headerLine("s2", { snapshotCompatibility: true }), entryLine("s2", 0, { selfFactorSetTrusted: true, selfFactorFingerprint: "B" })]
+        const conflicts = detectInspirationConflicts(parseInspirationRecords([...a, ...b].join("\n")))
+        expect(conflicts.get("fp-0")).toEqual(["A", "B"])
+    })
+
+    it("does not flag agreeing trusted captures", () => {
+        const a = [headerLine("s1", { snapshotCompatibility: true }), entryLine("s1", 0, { selfFactorSetTrusted: true, selfFactorFingerprint: "A" })]
+        const b = [headerLine("s2", { snapshotCompatibility: true }), entryLine("s2", 0, { selfFactorSetTrusted: true, selfFactorFingerprint: "A" })]
+        const conflicts = detectInspirationConflicts(parseInspirationRecords([...a, ...b].join("\n")))
+        expect(conflicts.size).toBe(0)
+    })
+
+    it("ignores an untrusted or incompatible capture when judging conflict", () => {
+        // Only compatible, complete, self-trusted reads carry an identity strong enough to contradict
+        // another - a noisy or incompatible read is not evidence of a real disagreement.
+        const trusted = [headerLine("s1", { snapshotCompatibility: true }), entryLine("s1", 0, { selfFactorSetTrusted: true, selfFactorFingerprint: "A" })]
+        const untrusted = [headerLine("s2", { snapshotCompatibility: true }), entryLine("s2", 0, { selfFactorSetTrusted: false, selfFactorFingerprint: "B" })]
+        const incompatible = [headerLine("s3", { snapshotCompatibility: false }), entryLine("s3", 0, { selfFactorSetTrusted: true, selfFactorFingerprint: "C" })]
+        const conflicts = detectInspirationConflicts(parseInspirationRecords([...trusted, ...untrusted, ...incompatible].join("\n")))
+        expect(conflicts.size).toBe(0)
     })
 })
 

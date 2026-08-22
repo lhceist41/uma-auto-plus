@@ -408,27 +408,54 @@ export interface VeteranInspirationView {
 }
 
 /**
- * The best capture per Veteran, keyed by `rosterFingerprint`.
+ * Ranks one capture against another for the same Veteran, strongest first. The tuple is compared
+ * lexicographically, so a higher-priority field is never traded for a lower one:
  *
- * "Best" is a complete capture over an incomplete one, and the newest among equals. A newer partial
- * read must never displace an older complete one: the partial is not more current information about
- * the same Veteran, it is less information about it, and the factor set is immutable anyway.
+ *  1. snapshot-compatible - the batch's Registered count held for its whole walk, so the entry's
+ *     on-screen identity could not have been shifted by a mid-batch registration;
+ *  2. complete - the whole factor list was read (a partial read is LESS information, never more);
+ *  3. self-trusted - every self factor snapped onto the canonical domain, so the self fingerprint is
+ *     an identity rather than a noisy raw read;
+ *  4. newest - only as a tie-break among otherwise-equal captures.
+ *
+ * Deliberately NOT "latest wins": a newer partial or untrusted read must never displace an older
+ * complete trusted one. The factor set is immutable, so the better-quality read is the truer one
+ * whenever it was taken.
+ */
+function captureRank(entry: VeteranInspirationRecord, compatibleScans: ReadonlySet<string>): readonly number[] {
+    return [
+        compatibleScans.has(entry.scanId) ? 1 : 0,
+        entry.sparkCaptureComplete ? 1 : 0,
+        entry.selfFactorSetTrusted ? 1 : 0,
+        entry.observedAt ?? 0,
+    ]
+}
+
+function rankBeats(a: readonly number[], b: readonly number[]): boolean {
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] > b[i]) return true
+        if (a[i] < b[i]) return false
+    }
+    return false
+}
+
+/**
+ * The best capture per Veteran, keyed by `rosterFingerprint`, chosen by [captureRank].
+ *
+ * A capture from a batch whose header is missing (an interrupted write) or whose snapshot was
+ * incompatible ranks below a clean one but is still used when it is the only evidence for a Veteran,
+ * so no Veteran is silently dropped to MISSING by a single bad batch.
  */
 export function buildInspirationIndex(parsed: ParsedInspiration): ReadonlyMap<string, VeteranInspirationView> {
+    const compatibleScans = new Set<string>(parsed.scans.filter((s) => s.snapshotCompatibility).map((s) => s.scanId))
     const best = new Map<string, VeteranInspirationRecord>()
     for (const entry of parsed.entries) {
         const fingerprint = entry.rosterFingerprint
         if (!fingerprint) continue
         const held = best.get(fingerprint)
-        if (!held) {
+        if (!held || rankBeats(captureRank(entry, compatibleScans), captureRank(held, compatibleScans))) {
             best.set(fingerprint, entry)
-            continue
         }
-        if (entry.sparkCaptureComplete !== held.sparkCaptureComplete) {
-            if (entry.sparkCaptureComplete) best.set(fingerprint, entry)
-            continue
-        }
-        if ((entry.observedAt ?? 0) > (held.observedAt ?? 0)) best.set(fingerprint, entry)
     }
     const out = new Map<string, VeteranInspirationView>()
     for (const [fingerprint, entry] of best) {
@@ -453,6 +480,39 @@ export function buildInspirationIndex(parsed: ParsedInspiration): ReadonlyMap<st
         })
     }
     return out
+}
+
+/**
+ * Fingerprints carrying two or more mutually-contradicting trusted captures: distinct
+ * `selfFactorFingerprint` values, each from a snapshot-compatible, complete, self-trusted read.
+ *
+ * A Veteran's factor set is immutable, so two trusted reads of the same Veteran that disagree on it
+ * cannot both be right - one is a mis-attribution or a canonical instability. The canonical layer was
+ * built precisely so this does not happen (PL-R1c proved zero trusted-fingerprint mismatches across
+ * paired re-reads), so a non-empty result here is a signal to inspect, not a routine occurrence. It is
+ * surfaced rather than silently resolved: the map value is the sorted distinct trusted fingerprints
+ * seen, so the caller can fail closed on that Veteran.
+ */
+export function detectInspirationConflicts(parsed: ParsedInspiration): ReadonlyMap<string, readonly string[]> {
+    const compatibleScans = new Set<string>(parsed.scans.filter((s) => s.snapshotCompatibility).map((s) => s.scanId))
+    const byFingerprint = new Map<string, Set<string>>()
+    for (const entry of parsed.entries) {
+        const fingerprint = entry.rosterFingerprint
+        if (!fingerprint) continue
+        if (!compatibleScans.has(entry.scanId)) continue
+        if (!entry.sparkCaptureComplete || !entry.selfFactorSetTrusted || !entry.selfFactorFingerprint) continue
+        let set = byFingerprint.get(fingerprint)
+        if (!set) {
+            set = new Set<string>()
+            byFingerprint.set(fingerprint, set)
+        }
+        set.add(entry.selfFactorFingerprint)
+    }
+    const conflicts = new Map<string, readonly string[]>()
+    for (const [fingerprint, set] of byFingerprint) {
+        if (set.size > 1) conflicts.set(fingerprint, [...set].sort())
+    }
+    return conflicts
 }
 
 /** Coverage of one roster snapshot by the inspiration captures available. */
