@@ -27,6 +27,7 @@ import { parseCorpus } from "../src/lib/outcomeAnalysis.ts"
 import { buildVeteranLibrary } from "../src/lib/parentLab/buildVeteranLibrary.ts"
 import { buildInspirationIndex, parseInspirationRecords } from "../src/lib/parentLab/inspiration.ts"
 import { parseLineageRecords } from "../src/lib/parentLab/lineage.ts"
+import { buildProtectionInventory, latestTrustedProtectionRecord, parseProtectionRecords } from "../src/lib/parentLab/protection.ts"
 import { reconcileRoster } from "../src/lib/parentLab/reconcile.ts"
 import { buildRosterSnapshots, parseRosterScanRecords } from "../src/lib/parentLab/roster.ts"
 import { buildRetentionShadowReport } from "../src/lib/parentLab/retentionAdvisor.ts"
@@ -40,6 +41,8 @@ Options:
   --careers <path>      Path to careers.jsonl, for the historical library and replacement difficulty.
   --lineage <path>      Path to lineage.jsonl, joined into the library by launchTransactionId.
   --inspiration <path>  Path to veteran_inspiration.jsonl, the Spark/factor evidence.
+  --protection <path>   Path to veteran_protection.jsonl (PL-R2a). Clears the protection/favorite gates
+                        for Veterans the probe proves unprotected, and hard-protects favorited/memoed ones.
   --target <PROFILE>    Target profile: ${TARGET_PROFILE_IDS.join(" | ")}. Default GENERAL_INHERITANCE.
   --all-targets         Build one document per target profile instead of just one.
   --protect <id>        Roster fingerprint to hard-protect by operator instruction. Repeatable.
@@ -58,6 +61,7 @@ function parseArgs(argv) {
         careers: null,
         lineage: null,
         inspiration: null,
+        protection: null,
         target: "GENERAL_INHERITANCE",
         allTargets: false,
         protect: [],
@@ -87,6 +91,9 @@ function parseArgs(argv) {
                 break
             case "--inspiration":
                 opts.inspiration = next()
+                break
+            case "--protection":
+                opts.protection = next()
                 break
             case "--target":
                 opts.target = next()
@@ -208,8 +215,30 @@ function renderReport(report, examples) {
     return lines.join("\n")
 }
 
+/** The PL-R2a protection inventory block. Rendered once, not per target. */
+function renderProtection(inventory) {
+    const lines = []
+    const c = inventory.counts
+    lines.push("=== Protection inventory (PL-R2a) ===")
+    if (!inventory.protectionScanId) {
+        lines.push("  no protection probe supplied (--protection). Every Veteran's protection stays UNKNOWN,")
+        lines.push("  which blocks the transfer side exactly as before.")
+        return lines.join("\n")
+    }
+    lines.push(`  protection scan       ${inventory.protectionScanId}`)
+    lines.push(`  bound to roster scan  ${inventory.rosterScanId}`)
+    lines.push(`  compatible            ${inventory.compatible ? "YES" : `NO (${inventory.defects.join(", ")})`}`)
+    lines.push(`  favorite    favorite=${c.favorite}  not_favorite=${c.notFavorite}  unknown=${c.favoriteUnknown}`)
+    lines.push(`  memo        has_memo=${c.hasMemo}  no_memo=${c.noMemo}  unknown=${c.memoUnknown}`)
+    lines.push(`  protection  protected=${c.protected}  not_protected=${c.notProtected}  unknown=${c.protectionUnknown}`)
+    if (!inventory.compatible) {
+        lines.push("  Incompatible or untrusted, so the probe was NOT applied and every state above is UNKNOWN.")
+    }
+    return lines.join("\n")
+}
+
 /** The counts/coverage-only view, for --summary-out. */
-function summaryOf(reports) {
+function summaryOf(reports, inventory) {
     return {
         schema: reports[0].schema,
         schemaVersion: reports[0].schemaVersion,
@@ -225,6 +254,9 @@ function summaryOf(reports) {
             distinctFactors: reports[0].scarcity.entries.length,
         },
         targets: reports.map((r) => ({ targetProfile: r.targetProfile, counts: r.counts })),
+        protection: inventory
+            ? { protectionScanId: inventory.protectionScanId, compatible: inventory.compatible, defects: inventory.defects, counts: inventory.counts }
+            : null,
         inactiveRules: reports[0].inactiveRules,
     }
 }
@@ -256,9 +288,11 @@ function main(argv) {
     let parsed
     let library
     let inspirationIndex = new Map()
+    let protectionRecord = null
     try {
         parsed = parseRosterScanRecords(readable("--roster", opts.roster), opts.roster)
         if (opts.inspiration) inspirationIndex = buildInspirationIndex(parseInspirationRecords(readable("--inspiration", opts.inspiration), opts.inspiration))
+        if (opts.protection) protectionRecord = latestTrustedProtectionRecord(parseProtectionRecords(readable("--protection", opts.protection), opts.protection))
         const corpus = opts.careers ? parseCorpus(readable("--careers", opts.careers), opts.careers) : { outcomes: [], sparks: [] }
         const lineageEvents = opts.lineage ? parseLineageRecords(readable("--lineage", opts.lineage), opts.lineage) : []
         library = buildVeteranLibrary({ outcomes: corpus.outcomes, sparks: corpus.sparks, lineageEvents })
@@ -279,13 +313,14 @@ function main(argv) {
     }
 
     const reconciliation = reconcileRoster(library, snapshot)
-    const evidence = buildRetentionEvidence(snapshot, inspirationIndex, reconciliation)
+    const inventory = buildProtectionInventory(protectionRecord, snapshot)
+    const evidence = buildRetentionEvidence(snapshot, inspirationIndex, reconciliation, inventory.byFingerprint)
     const manualProtect = new Set(opts.protect)
     const reports = profiles.map((profile) => buildRetentionShadowReport({ evidence, library, reconciliation, profile, manualProtect }))
     const document = reports.length === 1 ? reports[0] : { schema: reports[0].schema, schemaVersion: reports[0].schemaVersion, reports }
 
     if (opts.json) console.log(JSON.stringify(document, null, 2))
-    else console.log(reports.map((r) => renderReport(r, opts.examples)).join("\n\n"))
+    else console.log(`${renderProtection(inventory)}\n\n${reports.map((r) => renderReport(r, opts.examples)).join("\n\n")}`)
 
     if (!snapshot.trustedComplete) {
         console.error("")
@@ -298,7 +333,7 @@ function main(argv) {
         if (!opts.json) console.log(`\nWrote ${opts.out}`)
     }
     if (opts.summaryOut) {
-        writeFileSync(opts.summaryOut, `${JSON.stringify(summaryOf(reports), null, 2)}\n`, "utf8")
+        writeFileSync(opts.summaryOut, `${JSON.stringify(summaryOf(reports, inventory), null, 2)}\n`, "utf8")
         if (!opts.json) console.log(`Wrote ${opts.summaryOut}`)
     }
 

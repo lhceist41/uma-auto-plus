@@ -168,6 +168,10 @@ export function hardProtectReasonsFor(
 ): readonly HardProtectReason[] {
     const reasons: HardProtectReason[] = []
     if (evidence.rosterFingerprint && manualProtect.has(evidence.rosterFingerprint)) reasons.push("MANUAL_PROTECT")
+    // The account itself marks this Veteran protected - a favorite icon or a memo, either of which
+    // blocks a release in-game (PL-R2a). A positive protection state is established only by the
+    // filter-partition probe; an UNKNOWN one never reaches "protected", so this never fires on a guess.
+    if (evidence.entry.protectionState === "protected") reasons.push("PROTECTED_ON_ACCOUNT")
     if (evidence.characterCarriers === 1) reasons.push("SOLE_CHARACTER_SOURCE")
     // Only reported when the character itself is not already sole: otherwise the two rules would say
     // the same thing twice about the same Veteran.

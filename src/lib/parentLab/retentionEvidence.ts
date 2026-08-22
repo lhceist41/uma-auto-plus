@@ -12,6 +12,7 @@
 // confident and completely wrong claim that some factor exists exactly once on the account.
 
 import type { InspirationFactorRecord, VeteranInspirationView } from "./inspiration.ts"
+import type { DerivedProtection } from "./protection.ts"
 import { normalizeJoinName, type RosterMatchStatus, type RosterReconciliation } from "./reconcile.ts"
 import { ROSTER_STAT_KEYS, type RosterEntryRecord, type RosterSnapshot } from "./roster.ts"
 import { PARENTLAB_RETENTION_SCHEMA, PARENTLAB_RETENTION_SCHEMA_VERSION, type FactorScarcityEntry, type FactorScarcityIndex, type ReplacementDifficulty, type ReplacementSummary, type ScarcityClaim } from "./retentionTypes.ts"
@@ -81,6 +82,22 @@ export interface RetentionEvidenceSet {
     readonly observedAt: number | null
 }
 
+/**
+ * Applies a derived protection state onto a roster entry, translating the PL-R2a vocabulary into the
+ * strings the advisor's gates already read: a proven not-favorite becomes `"not_set"` (the value that
+ * clears FAVORITE_STATE_UNKNOWN) and a proven not-protected becomes `"not_protected"` (which clears
+ * PROTECTION_STATE_UNKNOWN). An UNKNOWN derivation leaves the entry's own field untouched, so nothing
+ * the probe could not establish is ever asserted. Returns the entry unchanged when there is no
+ * derivation for it.
+ */
+function withDerivedProtection(entry: RosterEntryRecord, derived: DerivedProtection | undefined): RosterEntryRecord {
+    if (!derived) return entry
+    const favoriteState = derived.favoriteState === "not_favorite" ? "not_set" : derived.favoriteState === "favorite" ? "favorite" : entry.favoriteState
+    const protectionState = derived.protectionState === "unknown" ? entry.protectionState : derived.protectionState
+    if (favoriteState === entry.favoriteState && protectionState === entry.protectionState) return entry
+    return { ...entry, favoriteState, protectionState }
+}
+
 function statTotalOf(entry: RosterEntryRecord): number | null {
     let sum = 0
     for (const key of ROSTER_STAT_KEYS) {
@@ -102,6 +119,10 @@ export function buildRetentionEvidence(
     snapshot: RosterSnapshot,
     inspirationIndex: ReadonlyMap<string, VeteranInspirationView>,
     reconciliation: RosterReconciliation | null,
+    /** Per-fingerprint protection derived by PL-R2a. When supplied, it overrides the roster entry's
+     * favorite/protection fields (which the device roster walk cannot read reliably); when absent,
+     * the entry's own values stand and the transfer-side gates stay closed as before. */
+    protectionByFingerprint?: ReadonlyMap<string, DerivedProtection>,
 ): RetentionEvidenceSet {
     const characterCounts = new Map<string, number>()
     const characterOutfitCounts = new Map<string, number>()
@@ -126,8 +147,9 @@ export function buildRetentionEvidence(
         const captureTrusted = capture !== null && capture.sparkCaptureComplete && capture.selfFactorSetTrusted
         const match = byScanIndex.get(entry.scanIndex)
         const character = entry.character ? normalizeJoinName(entry.character) : null
+        const effectiveEntry = withDerivedProtection(entry, fingerprint ? protectionByFingerprint?.get(fingerprint) : undefined)
         veterans.push({
-            entry,
+            entry: effectiveEntry,
             rosterFingerprint: fingerprint,
             capture,
             captureTrusted,

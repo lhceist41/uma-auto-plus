@@ -85,6 +85,9 @@ export const HARD_PROTECT_REASONS = [
     "OBSERVED_UNIQUE_FACTOR",
     /** Historical evidence says the result is at the top of what this bot has ever produced for the trainee. */
     "IRREPLACEABLE_HISTORICAL_OUTCOME",
+    /** The account itself marks this Veteran protected: it is favorited or has a memo, either of which
+     * blocks a release in-game. Established by the PL-R2a filter-partition probe, never guessed. */
+    "PROTECTED_ON_ACCOUNT",
 ] as const
 export type HardProtectReason = (typeof HARD_PROTECT_REASONS)[number]
 
