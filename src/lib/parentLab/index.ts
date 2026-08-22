@@ -7,6 +7,10 @@ export * from "./inspiration.ts"
 export * from "./lineage.ts"
 export * from "./roster.ts"
 export * from "./reconcile.ts"
+export * from "./retentionTypes.ts"
+export * from "./retentionTargets.ts"
+export * from "./retentionEvidence.ts"
+export * from "./retentionAdvisor.ts"
 export { buildVeteranLibrary } from "./buildVeteranLibrary.ts"
 export {
     canonicalCareerEvidence,
