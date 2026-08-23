@@ -730,3 +730,15 @@ describe("the marginal tier", () => {
         expect(formatJointBuildRecommendation(result)).toContain("HOW TO READ THESE NUMBERS")
     })
 })
+
+describe("an unsatisfiable survival requirement", () => {
+    // STAM-1 returns a null minimum when the debuff budget removes at least as much HP as the build
+    // can hold, which is a real answer and not a missing one. It must not be reported as a shortfall
+    // against an unknown number.
+    it("is reported as unsatisfiable rather than as an unmet floor", () => {
+        const result = planJointBuild(evidence, catalogue, inputFor({ survivalConstraint: constraintOf(null, null) }))
+        expect(result.recommended).toBeNull()
+        expect(result.rejected[0].rejection).toBe("STAMINA_FLOOR_NOT_MET")
+        expect(result.rejected[0].rejectionDetail).toMatch(/unsatisfiable rather than merely unmet/)
+    })
+})

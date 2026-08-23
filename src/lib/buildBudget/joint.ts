@@ -390,6 +390,12 @@ export function evaluateCandidate(
     if (recoveryPlan.status === "NOT_SATISFIED") {
         rejection = "RECOVERY_NOT_REACHABLE"
         rejectionDetail = `recovery ${recoveryPlan.unreachable.join(", ")} is not reachable and no no-recovery constraint was supplied`
+    } else if (recoveryPlan.effectiveConstraint.minimumStamina === null) {
+        // STAM-1 returns a null minimum when no amount of Stamina survives the selected risk budget.
+        // Reporting that as "short of the required unknown" would read as a missing number rather than
+        // as the model's actual answer, which is that the race is unsurvivable under this policy.
+        rejection = "STAMINA_FLOOR_NOT_MET"
+        rejectionDetail = `the survival model reports no Stamina at all survives ${recoveryPlan.effectiveConstraint.targetRace ?? "this race"} under the ${recoveryPlan.effectiveConstraint.debuffRiskPolicy} risk policy; the requirement is unsatisfiable rather than merely unmet`
     } else if (!verdict.survivesSelectedRisk) {
         rejection = "STAMINA_FLOOR_NOT_MET"
         const stamina = statBudgets.find((b) => b.stat === SURVIVAL_STAT)
