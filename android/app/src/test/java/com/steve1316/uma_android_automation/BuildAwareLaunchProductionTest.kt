@@ -120,7 +120,7 @@ class BuildAwareLaunchProductionTest {
         @Test
         fun `production accepts a LOCATED equivalence class, not only a single identity candidate`() {
             val body = moduleBody()
-            assertTrue(body.contains("freshLocateUnique = locate.status == SmartBorrowLocateResult.Status.LOCATED"), "production accepts any LOCATED (exact or equivalent source)")
+            assertTrue(body.contains("canSelectLocatedBorrow(locate.status, locate.traversalComplete)"), "production accepts any LOCATED (exact or equivalent source) that also completed traversal")
             assertFalse(body.contains("identityCandidates?.size == 1"), "the strict single-candidate rule is gone from production")
         }
 
@@ -136,6 +136,39 @@ class BuildAwareLaunchProductionTest {
         fun `a non-READY build-aware state never authorises a tap`() {
             // The new BORROW_LOCATOR_STALLED state, like every non-READY state, must fail canStartCareer.
             assertFalse(BuildAwareLaunchGate.canStartCareer(LaunchTransactionState.BORROW_LOCATOR_STALLED))
+        }
+    }
+
+    @Nested
+    @DisplayName("A3-R2 stall-before-tap + pre-tap revalidation")
+    inner class StallBeforeTap {
+        private fun moduleBody() = slice("internal fun prepareBuildAwareLaunchToReady(", "internal fun dryRunBuildAwareLaunchGate(")
+
+        private fun revalidateBody() = slice("private fun revalidateAndTapBorrow(", "Production build-aware launch transaction")
+
+        @Test
+        fun `the production gate authorises a tap only through canSelectLocatedBorrow, not bare LOCATED`() {
+            val body = moduleBody()
+            assertTrue(body.contains("canSelectLocatedBorrow(locate.status, locate.traversalComplete)"), "the tap authority requires a completed, non-stalled traversal")
+            assertTrue(body.contains("BORROW_LOCATOR_STALLED"), "a stalled LOCATED blocks as a locator stall before any tap")
+        }
+
+        @Test
+        fun `production selects by identity and limit break with revalidation, never a text-only match`() {
+            val body = moduleBody()
+            assertTrue(body.contains("selectBorrowByIdentityRevalidated("), "production uses the identity+LB revalidating selection")
+            assertFalse(body.contains("intentTextMatch("), "production no longer taps by a character+title-only text match")
+        }
+
+        @Test
+        fun `the tap is downstream of a fresh re-read and an identity+LB check`() {
+            val body = revalidateBody()
+            assertTrue(body.contains("readBorrowPoolRichRows("), "revalidation re-reads the current picker before tapping")
+            assertTrue(body.contains("rowMatchesIntentIdentity("), "revalidation re-checks character, title, and limit break")
+            assertTrue(body.contains("ROW_REVALIDATION_FAILED"), "a vanished or LB-changed row fails closed with no tap")
+            val readIdx = body.indexOf("readBorrowPoolRichRows(")
+            val tapIdx = body.indexOf("CoordinateTap.tap(")
+            assertTrue(readIdx in 0 until tapIdx, "the fresh re-read must precede the tap")
         }
     }
 

@@ -7167,6 +7167,89 @@ class CareerLaunchNavigator(private val context: Context) {
      * armed this run" apart from any OTHER diagnostic, which would contend with a real launch. */
     private val a2LaunchGateDebugKey = "debugMode_startBuildAwareLaunchGateTest"
 
+    /** Outcome of the A3-R2 identity-and-limit-break-aware borrow selection with immediate pre-tap
+     * revalidation. [rebound] is true when the confirming read had to re-bind to a different (equivalent)
+     * owner because the walk's chosen owner was no longer at that position. */
+    private data class RevalidatedBorrowSelection(
+        val tapped: Boolean,
+        val status: Status,
+        val tappedRow: BorrowRowObservation? = null,
+        val rebound: Boolean = false,
+    ) {
+        enum class Status { TAPPED, CARD_NOT_FOUND, ROW_REVALIDATION_FAILED }
+    }
+
+    /**
+     * Selects the intent's borrow by FULL identity (character + title + LIMIT BREAK) with an immediate
+     * pre-tap revalidation (A3-R2), instead of the old character+title-only text match that could tap a
+     * wrong-limit-break copy of the same card. It walks the picker with the rich reader (which reads the
+     * limit-break pip), and on the first row whose identity AND limit break match the intent it hands off
+     * to [revalidateAndTapBorrow], which re-reads the current screen and taps a FRESH coordinate. Never
+     * taps a stale coordinate or a wrong-limit-break row.
+     */
+    private fun selectBorrowByIdentityRevalidated(intent: SmartBorrowIntent): RevalidatedBorrowSelection {
+        var latestRich: List<RichBorrowReadRow> = emptyList()
+        var outcome: RevalidatedBorrowSelection? = null
+        val walker =
+            BorrowListWalker(
+                maxPageGestures = MAX_BORROW_SCAN_PAGES,
+                maxSwallowedRetries = MAX_BORROW_SWALLOWED_SWIPE_RETRIES,
+                readScreen = {
+                    val bmp = iu.getSourceBitmap()
+                    lastBorrowListBitmap = bmp
+                    latestRich = readBorrowPoolRichRows(bmp, 0, false)
+                    val readable = latestRich.filter { it.observation.blockedTag == null }.map { it.centerY to nameKeyOf(it.observation) }
+                    BorrowScan(readable, duplicateTexts = latestRich.filter { it.observation.blockedTag != null }.map { nameKeyOf(it.observation) })
+                },
+                advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
+                abort = { !BotService.isRunning || StartModule.queueStopRequested },
+                log = { MessageLog.i(TAG, "[LAUNCH-GATE] $it") },
+            )
+        walker.walk { _, _ ->
+            val candidate =
+                latestRich.firstOrNull { r ->
+                    r.observation.blockedTag == null &&
+                        rowMatchesIntentIdentity(intent, r.observation.character, r.observation.outfit, r.observation.limitBreakIndex)
+                }
+            if (candidate == null) return@walk false
+            outcome = revalidateAndTapBorrow(intent, candidate.observation)
+            true
+        }
+        return outcome ?: RevalidatedBorrowSelection(false, RevalidatedBorrowSelection.Status.CARD_NOT_FOUND)
+    }
+
+    /**
+     * Immediate pre-tap revalidation (A3-R2, Part 4): re-reads the CURRENT picker screen, re-locates the
+     * intended row by identity + limit break (preferring the same owner, else a deterministic current
+     * equivalent -- owner has no gameplay effect, so an equivalent is a safe re-bind), recomputes a fresh
+     * tap coordinate, and taps THAT. Fails ROW_REVALIDATION_FAILED without tapping if the row is no longer
+     * present at its expected identity/limit break, so a coordinate captured before a scroll or a layout
+     * shift is never tapped and a wrong-limit-break row never selected.
+     */
+    private fun revalidateAndTapBorrow(intent: SmartBorrowIntent, target: BorrowRowObservation): RevalidatedBorrowSelection {
+        waitSafe(0.6) // let any inertial scroll settle before the confirming read
+        val fresh = readBorrowPoolRichRows(iu.getSourceBitmap(), 0, false)
+        val stillHere =
+            fresh.filter { r ->
+                r.observation.blockedTag == null &&
+                    rowMatchesIntentIdentity(intent, r.observation.character, r.observation.outfit, r.observation.limitBreakIndex)
+            }
+        val chosen = stillHere.firstOrNull { it.observation.ownerAlias == target.ownerAlias } ?: stillHere.minByOrNull { it.centerY }
+        if (chosen == null) {
+            MessageLog.e(TAG, "[LAUNCH-GATE] pre-tap revalidation FAILED: the intended row is no longer present at its identity/limit break on the current screen. NOT tapping (ROW_REVALIDATION_FAILED).")
+            return RevalidatedBorrowSelection(false, RevalidatedBorrowSelection.Status.ROW_REVALIDATION_FAILED, target)
+        }
+        val rebound = chosen.observation.ownerAlias != target.ownerAlias
+        MessageLog.i(
+            TAG,
+            "[LAUNCH-GATE] pre-tap revalidation OK (${if (rebound) "EQUIVALENT_SOURCE_REBOUND" else "EXACT_SOURCE_REVALIDATED"}): " +
+                "\"${chosen.observation.character ?: "-"} [${chosen.observation.outfit ?: "-"}]\" lb=${chosen.observation.limitBreakIndex ?: "-"} owner=${chosen.observation.ownerAlias ?: "-"}. " +
+                "Tapping fresh coordinate (540, ${chosen.centerY.toInt()}).",
+        )
+        CoordinateTap.tap(gestureUtils, 540.0, chosen.centerY, "a3r2_launch_borrow_select")
+        return RevalidatedBorrowSelection(true, RevalidatedBorrowSelection.Status.TAPPED, chosen.observation, rebound)
+    }
+
     /**
      * Production build-aware launch transaction (A2), driven to the final pre-Start-Career gate.
      *
@@ -7204,12 +7287,14 @@ class CareerLaunchNavigator(private val context: Context) {
 
         val intentPresent = intent != null && locate.status != SmartBorrowLocateResult.Status.INTENT_MISSING
         val intentBuildAware = intent?.recommendationSource == IntentRecommendationSource.BUILD_AWARE
-        // The locator resolves an equivalence class -- the same canonical card at the same limit break,
-        // offered by one or more interchangeable owners -- to a single LOCATED pick. Production accepts
-        // LOCATED (exact OR equivalent source) because owner has no gameplay effect, and verifies the
-        // committed identity after selection. Only a non-equivalent match (different limit breaks), a true
-        // miss, or an incomplete traversal fails the freshness gate.
-        val freshLocateUnique = locate.status == SmartBorrowLocateResult.Status.LOCATED
+        // Selection authority (A3-R2): the locator resolves an equivalence class -- the same canonical
+        // card at the same limit break, offered by one or more interchangeable owners -- to a single
+        // LOCATED pick. But LOCATED alone does NOT authorise a tap: the picker traversal must ALSO have
+        // fully completed. A stalled traversal's row coordinates and limit-break reads are not
+        // trustworthy (the A3-R1 live proof tapped a wrong-LB row off a stall), so a stalled LOCATED
+        // blocks as BORROW_LOCATOR_STALLED before any tap. A non-equivalent match, a true miss, or an
+        // incomplete traversal all fail this gate.
+        val tapAuthorised = canSelectLocatedBorrow(locate.status, locate.traversalComplete)
 
         // Fail closed before touching a row: no intent / not build-aware, or the card is not uniquely on
         // offer in the fresh pool. No selection, no rollback owed.
@@ -7219,18 +7304,23 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.e(TAG, "[LAUNCH-GATE] $why -> BORROW_NOT_AVAILABLE (blocked).")
             return BuildAwareLaunchResult(BuildAwareLaunchGate.evaluate(pre), pre, BuildAwareLaunchGate.furthestStageReached(pre), intent, match, rows, reason = why)
         }
-        if (!freshLocateUnique) {
-            // Truthful block reason (Part 4): a genuinely-absent card in a FULLY-traversed pool is stale; a
-            // card not found because the scroll stalled before a full traversal is a LOCATOR stall (not
-            // proof of absence); conflicting limit breaks are a non-equivalent ambiguity. All block; none
-            // ever falls back or launches.
+        if (!tapAuthorised) {
+            // Truthful block reason (Part 4/6). A stalled traversal is a LOCATOR stall whether or not the
+            // card was seen -- the picker state is untrustworthy, so no positional tap is authorised, even
+            // for a LOCATED card. A genuinely-absent card in a FULLY-traversed pool is stale; conflicting
+            // limit breaks are a non-equivalent ambiguity. All block; none ever falls back or launches.
             val pre = LaunchPreconditions(intentPresent = true, intentBuildAware = true, freshLocateUnique = false)
             val (state, why) =
                 when {
+                    !locate.traversalComplete ->
+                        LaunchTransactionState.BORROW_LOCATOR_STALLED to
+                            (if (locate.status == SmartBorrowLocateResult.Status.LOCATED) {
+                                "intent card was located but the borrow list stalled before a full traversal; a positional tap on an unstable picker is NOT authorised"
+                            } else {
+                                "intent card not found and the borrow list stalled before a full traversal; cannot prove it absent (locate ${locate.status})"
+                            })
                     locate.status == SmartBorrowLocateResult.Status.AMBIGUOUS ->
                         LaunchTransactionState.BORROW_POOL_STALE to "intent card offered at conflicting limit breaks in the fresh pool (not one equivalence class): ${match?.reason ?: "ambiguous"}"
-                    !locate.traversalComplete ->
-                        LaunchTransactionState.BORROW_LOCATOR_STALLED to "intent card not found but the borrow list was not fully traversed (scroll stalled); cannot prove it absent (locate ${locate.status})"
                     else ->
                         LaunchTransactionState.BORROW_POOL_STALE to "intent card absent from the fully-traversed fresh pool (locate ${locate.status})"
                 }
@@ -7254,23 +7344,30 @@ class CareerLaunchNavigator(private val context: Context) {
         val deckAtStart = readDeckNumber(startBitmap)
         val tpRawStart = readTpBandRaw(startBitmap)
 
-        // Select EXACTLY the intended row via the proven production selection primitive (re-scans from the
-        // top and taps the row's live centre, so no stale coordinate is ever tapped).
+        // Select the intended row by FULL identity (character + title + LIMIT BREAK) with an immediate
+        // pre-tap revalidation (A3-R2): the selection reads each row's limit-break pip and, on a match,
+        // re-reads the current screen and taps a FRESH coordinate. This never taps a stale coordinate or a
+        // wrong-limit-break copy of the same card (the A3-R1 defect). Reached only when the locator already
+        // proved a completed, non-stalled traversal above.
         if (!reopenBorrowPicker(replaceMode = false)) {
             val pre = LaunchPreconditions(intentPresent = true, intentBuildAware = true, freshLocateUnique = true, borrowSelected = false)
             return BuildAwareLaunchResult(BuildAwareLaunchGate.evaluate(pre), pre, BuildAwareLaunchGate.furthestStageReached(pre), intent, match, rows, deckNumberAtStart = deckAtStart, tpRawAtStart = tpRawStart, reason = "picker did not reopen for selection")
         }
         waitSafe(2.0)
-        val selection = selectFromBorrowList(borrowWalker()) { text -> intentTextMatch(intent, text) }
-        val row = selection.row
-        if (row == null) {
+        val selection = selectBorrowByIdentityRevalidated(intent!!)
+        if (!selection.tapped) {
             ButtonClose.click(iu)
             waitSafe(1.5)
             val pre = LaunchPreconditions(intentPresent = true, intentBuildAware = true, freshLocateUnique = true, borrowSelected = false)
-            return BuildAwareLaunchResult(BuildAwareLaunchGate.evaluate(pre), pre, BuildAwareLaunchGate.furthestStageReached(pre), intent, match, rows, deckNumberAtStart = deckAtStart, tpRawAtStart = tpRawStart, reason = "located card not found in the selection re-scan")
+            val why =
+                if (selection.status == RevalidatedBorrowSelection.Status.ROW_REVALIDATION_FAILED) {
+                    "the intended row failed immediate pre-tap revalidation (gone or its limit break changed on the confirming read); no tap"
+                } else {
+                    "the intended card was not found by the identity-and-limit-break selection re-scan; no tap"
+                }
+            MessageLog.e(TAG, "[LAUNCH-GATE] $why -> BORROW_POOL_STALE (blocked).")
+            return BuildAwareLaunchResult(LaunchTransactionState.BORROW_POOL_STALE, pre, BuildAwareLaunchGate.furthestStageReached(pre), intent, match, rows, deckNumberAtStart = deckAtStart, tpRawAtStart = tpRawStart, reason = why)
         }
-        MessageLog.i(TAG, "[LAUNCH-GATE] tapping the intended row \"${borrowLogText(row.second)}\" at (540, ${row.first.toInt()}).")
-        CoordinateTap.tap(gestureUtils, 540.0, row.first, "a2_launch_borrow_select")
         waitSafe(2.0)
 
         val afterTap = iu.getSourceBitmap()

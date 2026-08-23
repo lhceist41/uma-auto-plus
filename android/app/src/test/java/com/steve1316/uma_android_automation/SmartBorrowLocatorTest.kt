@@ -159,6 +159,38 @@ class SmartBorrowLocatorTest {
     }
 
     @Nested
+    @DisplayName("selection authority + tap-safe identity (A3-R2)")
+    inner class SelectionAuthority {
+        @Test
+        fun `LOCATED with a complete traversal authorises a tap`() {
+            assertTrue(canSelectLocatedBorrow(SmartBorrowLocateResult.Status.LOCATED, traversalComplete = true))
+        }
+
+        @Test
+        fun `LOCATED with a stalled traversal does NOT authorise a tap`() {
+            assertFalse(canSelectLocatedBorrow(SmartBorrowLocateResult.Status.LOCATED, traversalComplete = false))
+        }
+
+        @Test
+        fun `no non-LOCATED status ever authorises a tap, even with a complete traversal`() {
+            for (s in SmartBorrowLocateResult.Status.values().filter { it != SmartBorrowLocateResult.Status.LOCATED }) {
+                assertFalse(canSelectLocatedBorrow(s, traversalComplete = true), "$s must not authorise a tap")
+            }
+        }
+
+        @Test
+        fun `tap-safe identity requires a compatible limit break, not only character and title`() {
+            val i = intent(expectedLimitBreak = 4)
+            assertTrue(rowMatchesIntentIdentity(i, "Kitasan Black", "Fire at My Heels", 4), "same card + same LB matches")
+            assertFalse(rowMatchesIntentIdentity(i, "Kitasan Black", "Fire at My Heels", 3), "a wrong-LB copy of the same card must NOT match the tap-safe identity")
+            assertFalse(rowMatchesIntentIdentity(i, "Silence Suzuka", "Fire at My Heels", 4), "a wrong character never matches")
+            assertFalse(rowMatchesIntentIdentity(i, "Kitasan Black", "Blossoming Bond", 4), "a wrong title never matches")
+            assertTrue(rowMatchesIntentIdentity(i, "Kitasan Black", "Fire at My Heels", null), "an unread row LB is not decisive")
+            assertTrue(rowMatchesIntentIdentity(intent(expectedLimitBreak = null), "Kitasan Black", "Fire at My Heels", 3), "an unknown intent LB is not decisive")
+        }
+    }
+
+    @Nested
     @DisplayName("intent parsing")
     inner class Parsing {
         @Test

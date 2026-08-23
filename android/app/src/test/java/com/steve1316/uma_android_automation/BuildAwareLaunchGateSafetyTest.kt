@@ -79,7 +79,7 @@ class BuildAwareLaunchGateSafetyTest {
         fun `the module reuses the proven locate, selection, and verification primitives`() {
             val body = moduleBody()
             assertTrue(body.contains("locateSmartBorrowIntentReadOnly("), "reuses the fresh read-only locate")
-            assertTrue(body.contains("selectFromBorrowList("), "reuses the exact-row selection primitive")
+            assertTrue(body.contains("selectBorrowByIdentityRevalidated("), "selects via the identity+LB revalidating selection")
             assertTrue(body.contains("readSelectedSlotVerification("), "reuses the committed-slot verification")
             assertTrue(body.contains("BuildAwareLaunchGate.evaluate("), "the READY verdict comes from the pure gate")
         }

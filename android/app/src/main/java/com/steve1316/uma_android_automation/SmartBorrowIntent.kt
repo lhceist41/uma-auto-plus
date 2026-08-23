@@ -308,6 +308,33 @@ data class SmartBorrowLocateResult(
     }
 }
 
+/**
+ * Selection authority (A3-R2): whether a locate result may authorise a positional tap.
+ *
+ * LOCATED alone is NOT sufficient. The picker traversal must ALSO have fully completed -- a stalled or
+ * incomplete traversal must block as BORROW_LOCATOR_STALLED before any tap, because a stalled picker's
+ * row coordinates and limit-break pip reads are not trustworthy. The A3-R1 live proof committed a
+ * wrong-limit-break row after returning LOCATED off a stalled traversal (the verify caught it and rolled
+ * back, but the tap should never have fired). This predicate is the structural gate a production tap must
+ * pass; a source guard keeps `if (verdict == LOCATED) tap()` from ever returning.
+ */
+fun canSelectLocatedBorrow(status: SmartBorrowLocateResult.Status, traversalComplete: Boolean): Boolean =
+    status == SmartBorrowLocateResult.Status.LOCATED && traversalComplete
+
+/**
+ * Whether a picker row matches the intent's FULL tap-safe identity: canonical character AND canonical
+ * title AND a compatible limit break (decisive only when both the intent and the row observed one).
+ *
+ * Unlike a character+title-only text match, this never selects a wrong-limit-break copy of the same card,
+ * which is exactly how the A3-R1 selection tapped an LB3 row for an LB4 intent. The immediate pre-tap
+ * revalidation uses this so the row it taps is proven to be the intended limit break, not merely the same
+ * character and outfit.
+ */
+fun rowMatchesIntentIdentity(intent: SmartBorrowIntent, character: String?, outfit: String?, limitBreakIndex: Int?): Boolean =
+    borrowRowMatchesPreference(character ?: "", intent.canonicalCharacter) &&
+        (intent.canonicalTitle == null || borrowRowMatchesPreference(outfit ?: "", intent.canonicalTitle)) &&
+        (intent.expectedLimitBreak == null || limitBreakIndex == null || limitBreakIndex == intent.expectedLimitBreak)
+
 /** Why the post-selection Friends-slot identity check resolved the way it did. Only [VERIFIED] may
  * ever be read as "the committed borrow is the intent's card". */
 enum class SelectedSlotVerdict {
