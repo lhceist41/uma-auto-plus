@@ -131,6 +131,45 @@ Two, both labelled everywhere they are used and neither a game figure:
   trainings rather than races, rest and events is a run-time outcome, not a table.
 - the **archetype turn profiles**, the weights that spread those turns across the five facilities.
 
+## Build-aware Smart Borrow ranking (STAM-2a)
+
+`src/lib/buildBudget/borrowRanking.ts`, driven by `scripts/build-budget.mjs --build-aware-borrow`.
+Answers "which live borrow most improves the whole build" rather than "which raises the deck composite
+most", and keeps DeckLab's own answer beside it so the two can be compared.
+
+Three rules, all of which exist to stop a score buying its way past a constraint:
+
+- **Survival is a tier** (`UNSATISFIABLE < FAILS < MARGINAL < CLEARS`), compared first and never summed
+  with anything. No survival bonus is added to any score, so a composite gain cannot outbid a tier
+  change however large it is.
+- **Within a tier, Pareto on the deltas.** No scalar. A borrow that buys Power and costs Wit does not
+  dominate one that does the reverse.
+- **Relief is named, not scored**: `SURVIVAL_BLOCKER_REMOVED`, `RECOVERY_REQUIREMENT_UNLOCKED`,
+  `STAMINA_DEFICIT_REDUCED`, `OVER_STAMINA_REDUCED`, `INHERITANCE_FREED`, and the per-stat ones.
+
+Both rankings evaluate a borrow under one shared swap rule (`bestBorrowSwap`, extracted from
+`searchDecks`), so a disagreement between them is a disagreement about value and never about which
+deck the borrow produced.
+
+Two claims are deliberately restricted, because the unrestricted versions mislead:
+
+- **Freed inheritance is refused below the MARGINAL tier.** "This pair supplies less Stamina and still
+  fails" secures nothing; on a failing build every point of Stamina the pair supplies is still doing
+  work. It is derived by re-running the same bounded pair set against the deck that includes the
+  borrow, so it reports the best observed alternative rather than a theoretical optimum.
+- **Over-Stamina clips the Stamina delta to zero** once the build is past its preferred range, rather
+  than subtracting a penalty. That is what lets a Power alternative win without either card being
+  named.
+
+Stat deltas are midpoints; the tier is decided on the low end. Both are reported, because a borrow can
+genuinely raise the floor and lower the midpoint (unconditional training effectiveness lifts the floor,
+gated friendship lifts the midpoint).
+
+The `SmartBorrowIntent` gained `recommendationSource` (`DECKLAB_COMPOSITE` or `BUILD_AWARE`) at schema
+version 2. The digest element is appended only for a build-aware intent, so every digest written before
+the field existed still verifies. The device gates on `schema`, reads `schema_version` with a default
+and ignores unknown keys, so no Kotlin change was needed and none was made.
+
 ## Telemetry boundary
 
 STAM-2 consumes no telemetry. Where a later phase's measurements would enter is named in

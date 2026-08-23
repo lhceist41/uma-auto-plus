@@ -119,7 +119,17 @@ export interface BuildAwareBorrowEvaluation {
 
     readonly inheritanceOpportunity: InheritanceOpportunityGain
 
+    /** Change in each stat's MIDPOINT projection. What a reader compares builds on. */
     readonly statBudgetDelta: Readonly<Record<BudgetStat, number>>
+    /**
+     * Change in the Stamina projection's LOW end, which is the number the survival tier is decided on.
+     *
+     * Carried separately because the two can genuinely move in opposite directions: a card whose value
+     * is all in unconditional training effectiveness lifts the floor while a card whose value is all in
+     * gated friendship lifts the midpoint, so a borrow can close a deficit and still lower the median.
+     * Reporting only the median would make that read as a contradiction rather than as the mechanism.
+     */
+    readonly staminaFloorDelta: number
     readonly skillPointValueDelta: number
     readonly friendshipRampDelta: number
     /** Always true here: every candidate in this ranking is a borrow. Kept so a report can say it. */
@@ -209,6 +219,10 @@ function statMedian(candidate: JointBuildCandidate, stat: BudgetStat): number {
     return candidate.statBudgets.find((b) => b.stat === stat)?.projected.median ?? 0
 }
 
+function statFloor(candidate: JointBuildCandidate, stat: BudgetStat): number {
+    return candidate.statBudgets.find((b) => b.stat === stat)?.projected.low ?? 0
+}
+
 function emptyStats(): Record<BudgetStat, number> {
     const out = {} as Record<BudgetStat, number>
     for (const stat of BUDGET_STATS) out[stat] = 0
@@ -234,6 +248,22 @@ function inheritanceOpportunity(
     const baselinePair = baselineWithBorrow.parentPair
     const baselineStamina = baselineWithBorrow.inheritance.startStats[SURVIVAL_STAT]?.median ?? 0
     const baselineTier = survivalTierOf(baselineWithBorrow.verdict, baselineWithBorrow.recoveryPlan.effectiveConstraint)
+
+    // Freed inheritance only means something when the tier being held is worth holding. "This pair
+    // supplies less Stamina and still FAILS" is true of almost any pair and secures nothing: moving
+    // inheritance away from Stamina on a build that misses the floor makes it worse in the only
+    // dimension that is currently binding. So the claim is refused outright below the MARGINAL tier
+    // rather than reported as a gain that is not one.
+    if (survivalTierRank(baselineTier) < survivalTierRank("MARGINAL")) {
+        return {
+            freedStartingStatsByStat: emptyStats(),
+            freedCapByStat: emptyStats(),
+            parentSwapAvailable: false,
+            alternativePairLabel: null,
+            parentQualityTradeoff: 0,
+            note: `The build does not reach the survival floor even with this borrow (${baselineTier}), so no inheritance is free to move: every point of Stamina the pair supplies is still doing work.`,
+        }
+    }
 
     let best: { candidate: JointBuildCandidate; freedStamina: number } | null = null
     for (const pair of input.parentPairs) {
@@ -395,6 +425,7 @@ export function evaluateBorrow(
         overStaminaAfter: withBorrow.verdict.overStaminaRisk,
         inheritanceOpportunity: opportunity,
         statBudgetDelta,
+        staminaFloorDelta: Number((statFloor(withBorrow, SURVIVAL_STAT) - statFloor(baseline, SURVIVAL_STAT)).toFixed(4)),
         skillPointValueDelta: Number((withBorrow.production.skillPoints.median - baseline.production.skillPoints.median).toFixed(4)),
         friendshipRampDelta: Number((withBorrow.friendshipRampBurden - baseline.friendshipRampBurden).toFixed(4)),
         borrowDependency: true as const,
@@ -468,10 +499,25 @@ export function rankBuildAwareBorrows(evidence: BuildBudgetEvidence, index: Supp
         } else {
             changedFromDeckLab = "CHANGED"
             const displaced = evaluations.find((e) => e.supportCardId === deckLabTop.borrowed.card.supportCardId)
-            const displacedReason = displaced
-                ? `DeckLab's pick ${deckLabTop.borrowed.card.displayName} reaches only the ${displaced.survivalTierAfter} tier (${displaced.survivalDeficitAfter.toFixed(1)} short) against ${recommended.survivalTierAfter} (${recommended.survivalDeficitAfter.toFixed(1)} short)`
-                : `DeckLab's pick ${deckLabTop.borrowed.card.displayName} produced no legal swap into the baseline build's deck`
-            changeReason = `${displacedReason}. Survival is a tier and is settled before any composite is read, so the higher tier wins whatever the composites say.`
+            if (!displaced) {
+                changeReason = `DeckLab's pick ${deckLabTop.borrowed.card.displayName} produced no legal swap into the baseline build's deck, so it could not be evaluated against the build at all. ${recommended.displayName} is the best of the ${evaluations.length} that could.`
+            } else if (displaced.survivalTierAfter !== recommended.survivalTierAfter) {
+                // The tier genuinely moved. This is the case the phase exists for, and it is the only
+                // case in which the tier is what decided the pick.
+                changeReason =
+                    `DeckLab's pick ${deckLabTop.borrowed.card.displayName} reaches only the ${displaced.survivalTierAfter} tier (${displaced.survivalDeficitAfter.toFixed(1)} short) while ${recommended.displayName} reaches ${recommended.survivalTierAfter} (${recommended.survivalDeficitAfter.toFixed(1)} short). ` +
+                    `Survival is settled before any composite is read, so the higher tier wins whatever the composites say: ${deckLabTop.borrowed.card.displayName} gains ${deckLabTop.improvement.toFixed(1)} composite and does not change the tier.`
+            } else {
+                // Same tier. Saying "the higher tier wins" here would be false, and the real reason is
+                // the ordering inside the tier, so that is what gets said.
+                const deficitMoved = Math.abs(displaced.survivalDeficitAfter - recommended.survivalDeficitAfter) > 0.05
+                const within = deficitMoved
+                    ? `${recommended.displayName} leaves ${recommended.survivalDeficitAfter.toFixed(1)} short against ${displaced.survivalDeficitAfter.toFixed(1)}`
+                    : `neither closes more of the deficit than the other, so the Pareto comparison on the remaining deltas decided it`
+                changeReason =
+                    `Both picks stay in the ${recommended.survivalTierAfter} tier, so the tier did NOT decide this. ${within}. ` +
+                    `DeckLab's pick ${deckLabTop.borrowed.card.displayName} leads on composite (${deckLabTop.improvement.toFixed(1)}) and that is not a dimension this ranking reads.`
+            }
         }
     } else if (deckLabTop && !recommended) {
         changedFromDeckLab = "CHANGED"

@@ -330,3 +330,63 @@ describe("the joint planner still runs unchanged beside this", () => {
 /** Kept so an unused-import lint does not hide a real gap in the stat vocabulary. */
 const _statsAreShared: readonly BudgetStat[] = ["Speed", "Stamina", "Power", "Guts", "Wit"]
 void _statsAreShared
+
+describe("the old-vs-new explanation says what actually decided the pick", () => {
+    it("credits the tier only when the tier really moved", () => {
+        const ranking = rankingFor([10, 11], { survivalConstraint: constraintOf(330, [350, 420]) })
+        if (!ranking.deckLabTop || !ranking.recommended || ranking.changedFromDeckLab !== "CHANGED") return
+        const displaced = ranking.evaluations.find((e) => e.supportCardId === ranking.deckLabTop!.borrowed.card.supportCardId)
+        if (displaced && displaced.survivalTierAfter === ranking.recommended.survivalTierAfter) {
+            // Same tier: claiming a tier win here would be false.
+            expect(ranking.changeReason).toMatch(/the tier did NOT decide this/)
+            expect(ranking.changeReason).not.toMatch(/higher tier wins/)
+        } else {
+            expect(ranking.changeReason).toMatch(/higher tier wins/)
+        }
+    })
+
+    it("says so plainly when both rankings agree", () => {
+        const ranking = rankingFor([11])
+        if (ranking.changedFromDeckLab === "SAME") {
+            expect(ranking.changeReason).toMatch(/Both rankings pick/)
+        }
+    })
+})
+
+describe("the floor delta is reported beside the midpoint delta", () => {
+    it("carries the end the tier is actually decided on", () => {
+        const ranking = rankingFor([10, 11, 13, 14])
+        for (const evaluation of ranking.evaluations) {
+            const before = evaluation.baselineBuild.statBudgets.find((b) => b.stat === SURVIVAL_STAT)!.projected.low
+            const after = evaluation.buildWithBorrow.statBudgets.find((b) => b.stat === SURVIVAL_STAT)!.projected.low
+            expect(evaluation.staminaFloorDelta).toBeCloseTo(after - before, 3)
+            // A closed deficit must be explained by the floor moving, never by the midpoint alone.
+            if (evaluation.survivalDeficitAfter < evaluation.survivalDeficitBefore) expect(evaluation.staminaFloorDelta).toBeGreaterThan(0)
+        }
+    })
+})
+
+describe("freed inheritance is only claimed when a tier worth holding is held", () => {
+    it("refuses the claim on a build that still misses the floor", () => {
+        // Two pairs, one supplying much less Stamina. On a failing build the second is not an
+        // opportunity: every point the first supplies is still doing work.
+        const heavy = pairWith([{ family: "stat", canonicalName: "Stamina", stars: 3 }, { family: "stat", canonicalName: "Stamina", stars: 3 }], "heavy stamina pair")
+        const light = pairWith([{ family: "stat", canonicalName: "Power", stars: 3 }], "power pair")
+        const ranking = rankingFor([10], { parentPairs: [heavy, light], survivalConstraint: constraintOf(100000, null) })
+        const evaluation = ranking.evaluations[0]
+        expect(evaluation.survivalTierAfter).toBe("FAILS")
+        expect(evaluation.inheritanceOpportunity.parentSwapAvailable).toBe(false)
+        expect(evaluation.inheritanceOpportunity.note).toMatch(/no inheritance is free to move/)
+        expect(evaluation.relief).not.toContain("INHERITANCE_FREED")
+    })
+
+    it("allows the claim once the build clears", () => {
+        const heavy = pairWith([{ family: "stat", canonicalName: "Stamina", stars: 3 }, { family: "stat", canonicalName: "Stamina", stars: 3 }], "heavy stamina pair")
+        const light = pairWith([{ family: "stat", canonicalName: "Power", stars: 3 }], "power pair")
+        const ranking = rankingFor([14], { parentPairs: [heavy, light], survivalConstraint: constraintOf(1, [2, 100000]) })
+        const evaluation = ranking.evaluations[0]
+        expect(evaluation.survivalTierAfter).toBe("CLEARS")
+        expect(evaluation.inheritanceOpportunity.parentSwapAvailable).toBe(true)
+        expect(evaluation.inheritanceOpportunity.alternativePairLabel).toBe("power pair")
+    })
+})

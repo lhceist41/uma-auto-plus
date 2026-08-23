@@ -33,7 +33,8 @@ function evaluationLine(evaluation: BuildAwareBorrowEvaluation, rank: number): s
     const lines: string[] = []
     lines.push(`  ${String(rank).padStart(2)}. ${evaluation.displayName} (${evaluation.supportType}, card ${evaluation.supportCardId})`)
     lines.push(`      survival ${tierArrow(evaluation)}   deficit ${n1(evaluation.survivalDeficitBefore)} -> ${n1(evaluation.survivalDeficitAfter)}`)
-    lines.push(`      stat deltas ${BUDGET_STATS.map((s) => `${s} ${signed(evaluation.statBudgetDelta[s])}`).join("  ")}`)
+    lines.push(`      stat deltas at the midpoint ${BUDGET_STATS.map((s) => `${s} ${signed(evaluation.statBudgetDelta[s])}`).join("  ")}`)
+    lines.push(`      Stamina at the floor ${signed(evaluation.staminaFloorDelta)}, which is the end the tier is decided on`)
     lines.push(`      skill points ${signed(evaluation.skillPointValueDelta)}   friendship ramp ${signed(evaluation.friendshipRampDelta)}   DeckLab composite ${signed(evaluation.deckLabImprovement)}`)
     lines.push(`      relief ${evaluation.relief.length ? evaluation.relief.join(", ") : "none this planner models"}`)
     if (evaluation.recoveryRequirementBefore !== evaluation.recoveryRequirementAfter) {
