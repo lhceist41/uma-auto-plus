@@ -260,6 +260,8 @@ export interface Settings {
         debugMode_startBorrowRemoveProbeTest: boolean
         // Smart Borrow SELECT-verify-rollback rehearsal (DeckLab). Reads the pushed borrow intent (outcomes/smart_borrow_intent.json), taps the located row, verifies the committed Friends slot via the reopened picker's "Selected" marker, Removes it, confirms empty, and repeats once. Park on the Support Formation with an empty Friends slot. Taps and removes a borrow (both reversible); never presses Start Career, spends nothing.
         debugMode_startSmartBorrowSelectRollbackTest: boolean
+        // A2 build-aware launch-gate dry-run. Runs the production build-aware launch transaction (fresh pool re-scan, exact intent-bound borrow selection, committed-slot identity verification, owned-deck integrity) to the final READY_TO_START_CAREER gate, then deliberately does NOT press Start Career: it rolls the borrow back via Remove. Requires a pushed BUILD_AWARE intent; fails closed with no legacy fallback. Never presses Start Career, spends nothing.
+        debugMode_startBuildAwareLaunchGateTest: boolean
         // Read-only Borrow Card pool census (DeckLab). Park the game on the career-start Support Formation screen with an empty Friends slot; opens the borrow picker, reads every visible row, pages, and closes. Taps no card, selects nothing, never presses Start Career.
         debugMode_startBorrowPoolScanTest: boolean
         // How many distinct borrow cards the pool census reads before stopping. 0 reads the whole visible pool; a small value reads only the first screen (the bounded validation run).
@@ -782,6 +784,7 @@ export const defaultSettings: Settings = {
         debugMode_startSmartBorrowLocateTest: false,
         debugMode_startBorrowRemoveProbeTest: false,
         debugMode_startSmartBorrowSelectRollbackTest: false,
+        debugMode_startBuildAwareLaunchGateTest: false,
         debugMode_startBorrowPoolScanTest: false,
         borrowPoolScanLimit: 0,
         borrowPoolScanEvidence: false,

@@ -47,6 +47,7 @@ const DebugSettings = () => {
         "debugMode_startSmartBorrowLocateTest",
         "debugMode_startBorrowRemoveProbeTest",
         "debugMode_startSmartBorrowSelectRollbackTest",
+        "debugMode_startBuildAwareLaunchGateTest",
         "debugMode_startBorrowPoolScanTest",
         "debugMode_startRainbowDetectionTest",
         "debugMode_startVeteranRosterReadTest",
@@ -657,6 +658,15 @@ const DebugSettings = () => {
                                 onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startSmartBorrowSelectRollbackTest", checked)}
                                 label="Start Smart Borrow Select + Rollback Rehearsal"
                                 description="Reads the pushed borrow intent (outcomes/smart_borrow_intent.json), taps the located Borrow Card row, then verifies the committed Friends slot IS that card by reopening the picker and reading its pink 'Selected' marker; then it taps Remove, confirms the slot went empty, and repeats the whole cycle once. Park the game on the career-start Support Formation with the Friends slot empty. It taps and removes a borrow (both reversible), never presses Start Career, and spends nothing. Tagged [BORROW-SELECT] in the log."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-build-aware-launch-gate-test"
+                                checked={bsc.settings.debug.debugMode_startBuildAwareLaunchGateTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startBuildAwareLaunchGateTest", checked)}
+                                label="Start Build-Aware Launch Gate Dry-Run"
+                                description="Runs the PRODUCTION build-aware launch transaction to the final pre-launch gate, then deliberately does NOT press Start Career. Push a BUILD_AWARE intent (outcomes/smart_borrow_intent.json), park the game on the career-start Support Formation with the required deck showing and the Friends slot empty. It re-scans the live pool for freshness, selects the exact intended borrow, verifies the committed slot's identity, checks owned-deck integrity, and proves it reaches READY_TO_START_CAREER; then it rolls the borrow back via Remove and confirms the empty slot. Fails closed (no legacy fallback) if the intent is missing, not build-aware, stale, or unverified. Never presses Start Career, spends nothing. Tagged [LAUNCH-GATE] in the log."
                                 style={{ marginTop: 10 }}
                             />
 

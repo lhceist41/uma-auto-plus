@@ -1019,6 +1019,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startSmartBorrowLocateTest" to ::startSmartBorrowLocateTest,
                 "debugMode_startBorrowRemoveProbeTest" to ::startBorrowRemoveProbeTest,
                 "debugMode_startSmartBorrowSelectRollbackTest" to ::startSmartBorrowSelectRollbackTest,
+                "debugMode_startBuildAwareLaunchGateTest" to ::startBuildAwareLaunchGateTest,
                 "debugMode_startBorrowPoolScanTest" to ::startBorrowPoolScanTest,
                 "debugMode_startRainbowDetectionTest" to ::startRainbowDetectionTest,
                 "debugMode_startVeteranRosterReadTest" to ::startVeteranRosterReadTest,
@@ -1225,6 +1226,20 @@ abstract class Campaign(game: Game) : Task(game) {
     open fun startSmartBorrowSelectRollbackTest() {
         MessageLog.i(TAG, "\n[TEST] Running Smart Borrow select-verify-rollback rehearsal...")
         CareerLaunchNavigator(game.myContext).rehearseSmartBorrowSelectAndRollback(game.imageUtils)
+    }
+
+    /**
+     * A2 build-aware launch-gate dry-run. Push a BUILD_AWARE intent to outcomes/smart_borrow_intent.json,
+     * park the game on the career-start Support Formation with the required deck showing and the Friends
+     * slot EMPTY, then start the bot: it runs the PRODUCTION build-aware launch transaction (fresh pool
+     * re-scan for staleness, exact intent-bound borrow selection, committed-slot identity verification,
+     * owned-deck integrity) to the final READY_TO_START_CAREER gate and then deliberately DOES NOT press
+     * Start Career -- it rolls the borrow back via Remove and confirms the empty slot. Fails closed with no
+     * legacy fallback. Never presses Start Career and spends nothing. Tagged [LAUNCH-GATE].
+     */
+    open fun startBuildAwareLaunchGateTest() {
+        MessageLog.i(TAG, "\n[TEST] Running A2 build-aware launch-gate dry-run...")
+        CareerLaunchNavigator(game.myContext).dryRunBuildAwareLaunchGate(game.imageUtils)
     }
 
     /**

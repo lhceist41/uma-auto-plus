@@ -7035,6 +7035,283 @@ class CareerLaunchNavigator(private val context: Context) {
         OutcomeCorpus.append(context, record, OutcomeCorpus.SMART_BORROW_SELECT_PATH)
     }
 
+    /** The A2 diagnostic's own debug key, so the launch gate can tell "the diagnostic that legitimately
+     * armed this run" apart from any OTHER diagnostic, which would contend with a real launch. */
+    private val a2LaunchGateDebugKey = "debugMode_startBuildAwareLaunchGateTest"
+
+    /**
+     * Production build-aware launch transaction (A2), driven to the final pre-Start-Career gate.
+     *
+     * This is the ONE path that both the A2 dry-run diagnostic and (later) A3's real launch invoke; it is
+     * not a parallel rehearsal. It composes the already-live-proven Smart Borrow primitives -- the fresh
+     * read-only locate ([locateSmartBorrowIntentReadOnly]), the exact-row selection tap
+     * ([selectFromBorrowList] + [intentTextMatch]), and the reopened-picker Selected-marker verification
+     * ([readSelectedSlotVerification]) -- adds the freshness and build-aware provenance gates, reduces
+     * every observed fact to [LaunchPreconditions], and asks [BuildAwareLaunchGate.evaluate] for the
+     * terminal state. It NEVER presses Start Career: reaching [LaunchTransactionState.READY_TO_START_CAREER]
+     * leaves the borrow committed for the caller to either roll back (A2) or launch (A3, gated on
+     * [BuildAwareLaunchGate.canStartCareer]). Fails closed with no legacy fallback: a missing or
+     * non-BUILD_AWARE intent is [LaunchTransactionState.BORROW_NOT_AVAILABLE], a card gone/ambiguous in the
+     * fresh pool is [LaunchTransactionState.BORROW_POOL_STALE].
+     */
+    internal fun prepareBuildAwareLaunchToReady(): BuildAwareLaunchResult {
+        // Fresh live re-locate (Part 4 freshness): opens/reads/closes the picker on THIS transaction and
+        // resolves the pushed intent against the CURRENT pool, leaving the slot empty. A stale intent whose
+        // card is gone/changed/ambiguous cannot resolve here, so nothing is selected against an old pool.
+        val locate = locateSmartBorrowIntentReadOnly(iu)
+        val intent = locate.intent
+        val rows = locate.rowsObserved
+        val match = locate.match
+
+        // Screen/precondition failures the locate surfaces before any card resolution: cannot even attempt.
+        when (locate.status) {
+            SmartBorrowLocateResult.Status.NOT_ON_SUPPORT_FORMATION ->
+                return BuildAwareLaunchResult(LaunchTransactionState.LAUNCH_BLOCKED, LaunchPreconditions(), LaunchTransactionState.PREPARING, intent, match, rows, reason = "not on Support Formation")
+            SmartBorrowLocateResult.Status.FRIEND_SLOT_NOT_EMPTY ->
+                return BuildAwareLaunchResult(LaunchTransactionState.LAUNCH_BLOCKED, LaunchPreconditions(), LaunchTransactionState.PREPARING, intent, match, rows, reason = "friend slot not empty at start")
+            SmartBorrowLocateResult.Status.PICKER_OPEN_FAILED ->
+                return BuildAwareLaunchResult(LaunchTransactionState.LAUNCH_BLOCKED, LaunchPreconditions(), LaunchTransactionState.PREPARING, intent, match, rows, reason = "borrow picker did not open")
+            else -> {}
+        }
+
+        val intentPresent = intent != null && locate.status != SmartBorrowLocateResult.Status.INTENT_MISSING
+        val intentBuildAware = intent?.recommendationSource == IntentRecommendationSource.BUILD_AWARE
+        // A name-band tap cannot single out one of several distinct copies, so a unique fresh locate means
+        // LOCATED with exactly one identity candidate (the same bar Stage B enforces before it taps).
+        val freshLocateUnique = locate.status == SmartBorrowLocateResult.Status.LOCATED && match?.identityCandidates?.size == 1
+
+        // Fail closed before touching a row: no intent / not build-aware, or the card is not uniquely on
+        // offer in the fresh pool. No selection, no rollback owed.
+        if (!intentPresent || !intentBuildAware) {
+            val why = if (!intentPresent) "no usable intent" else "intent recommendation_source is ${intent?.recommendationSource} (build-aware launch requires BUILD_AWARE; no legacy fallback)"
+            val pre = LaunchPreconditions(intentPresent = intentPresent, intentBuildAware = intentBuildAware)
+            MessageLog.e(TAG, "[LAUNCH-GATE] $why -> BORROW_NOT_AVAILABLE (blocked).")
+            return BuildAwareLaunchResult(BuildAwareLaunchGate.evaluate(pre), pre, BuildAwareLaunchGate.furthestStageReached(pre), intent, match, rows, reason = why)
+        }
+        if (!freshLocateUnique) {
+            val pre = LaunchPreconditions(intentPresent = true, intentBuildAware = true, freshLocateUnique = false)
+            val why = "intent card not uniquely present in the fresh pool (locate ${locate.status}, candidates=${match?.identityCandidates?.size ?: 0})"
+            MessageLog.e(TAG, "[LAUNCH-GATE] $why -> BORROW_POOL_STALE (blocked).")
+            return BuildAwareLaunchResult(BuildAwareLaunchGate.evaluate(pre), pre, BuildAwareLaunchGate.furthestStageReached(pre), intent, match, rows, reason = why)
+        }
+        val located = match!!.row!!
+        MessageLog.i(
+            TAG,
+            "[LAUNCH-GATE] fresh locate UNIQUE: \"${located.character ?: "-"} [${located.outfit ?: "-"}]\" lb=${located.limitBreakIndex ?: "-"} (intent #${intent!!.supportCardId}, ${intent.recommendationSource}, digest ${intent.recommendationEvidenceDigest ?: "-"}). Selecting it...",
+        )
+
+        // Owned-deck integrity anchor + TP evidence, read before the selection touches anything.
+        val startBitmap = iu.getSourceBitmap()
+        val deckAtStart = readDeckNumber(startBitmap)
+        val tpRawStart = readTpBandRaw(startBitmap)
+
+        // Select EXACTLY the intended row via the proven production selection primitive (re-scans from the
+        // top and taps the row's live centre, so no stale coordinate is ever tapped).
+        if (!reopenBorrowPicker(replaceMode = false)) {
+            val pre = LaunchPreconditions(intentPresent = true, intentBuildAware = true, freshLocateUnique = true, borrowSelected = false)
+            return BuildAwareLaunchResult(BuildAwareLaunchGate.evaluate(pre), pre, BuildAwareLaunchGate.furthestStageReached(pre), intent, match, rows, deckNumberAtStart = deckAtStart, tpRawAtStart = tpRawStart, reason = "picker did not reopen for selection")
+        }
+        waitSafe(2.0)
+        val selection = selectFromBorrowList(borrowWalker()) { text -> intentTextMatch(intent, text) }
+        val row = selection.row
+        if (row == null) {
+            ButtonClose.click(iu)
+            waitSafe(1.5)
+            val pre = LaunchPreconditions(intentPresent = true, intentBuildAware = true, freshLocateUnique = true, borrowSelected = false)
+            return BuildAwareLaunchResult(BuildAwareLaunchGate.evaluate(pre), pre, BuildAwareLaunchGate.furthestStageReached(pre), intent, match, rows, deckNumberAtStart = deckAtStart, tpRawAtStart = tpRawStart, reason = "located card not found in the selection re-scan")
+        }
+        MessageLog.i(TAG, "[LAUNCH-GATE] tapping the intended row \"${borrowLogText(row.second)}\" at (540, ${row.first.toInt()}).")
+        CoordinateTap.tap(gestureUtils, 540.0, row.first, "a2_launch_borrow_select")
+        waitSafe(2.0)
+
+        val afterTap = iu.getSourceBitmap()
+        val onFormationAfterTap = LabelSupportFormation.check(iu, sourceBitmap = afterTap)
+        val slotFilled = onFormationAfterTap && !IconFriendSlotEmpty.check(iu, sourceBitmap = afterTap)
+        if (!slotFilled) {
+            if (!onFormationAfterTap) {
+                ButtonClose.click(iu)
+                waitSafe(1.5)
+            }
+            val pre = LaunchPreconditions(intentPresent = true, intentBuildAware = true, freshLocateUnique = true, borrowSelected = false)
+            return BuildAwareLaunchResult(BuildAwareLaunchGate.evaluate(pre), pre, BuildAwareLaunchGate.furthestStageReached(pre), intent, match, rows, slotCommitted = false, deckNumberAtStart = deckAtStart, tpRawAtStart = tpRawStart, reason = "friend slot not filled after the tap")
+        }
+
+        // A card is now committed: from here every return leaves slotCommitted=true so the caller rolls it
+        // back (A2) before returning; the mutation stays reversible until Start Career (Part 14).
+        MessageLog.i(TAG, "[LAUNCH-GATE] slot filled. Reopening the picker to verify the committed slot's identity...")
+        val verification =
+            if (reopenBorrowPicker(replaceMode = true)) {
+                waitSafe(2.0)
+                val v = readSelectedSlotVerification(intent)
+                ButtonClose.click(iu)
+                waitSafe(1.5)
+                v
+            } else {
+                null
+            }
+        MessageLog.i(TAG, "[LAUNCH-GATE] selection verdict=${verification?.verdict ?: "UNREAD"} reason=\"${verification?.reason ?: "picker did not reopen to verify"}\"")
+
+        val doneBitmap = iu.getSourceBitmap()
+        val onFormation = LabelSupportFormation.check(iu, sourceBitmap = doneBitmap)
+        val startPresent = ButtonStartCareer.check(iu, sourceBitmap = doneBitmap) ||
+            ButtonStartCareerOffset.check(iu, sourceBitmap = doneBitmap) ||
+            ButtonStartCareerRight.check(iu, sourceBitmap = doneBitmap)
+        val deckAtEnd = readDeckNumber(doneBitmap)
+        val tpRawEnd = readTpBandRaw(doneBitmap)
+        val ownedDeckIntact = deckAtStart != null && deckAtEnd != null && deckAtStart == deckAtEnd
+        // No OTHER diagnostic armed: the only debug key allowed to be set is this A2 dry-run's own.
+        val otherArmed = DebugTestGate.requested { SettingsHelper.getBooleanSetting("debug", it) }.filter { it != a2LaunchGateDebugKey }
+        val noDebugConflict = otherArmed.isEmpty()
+
+        val pre =
+            LaunchPreconditions(
+                intentPresent = true,
+                intentBuildAware = true,
+                freshLocateUnique = true,
+                borrowSelected = true,
+                borrowIdentityVerified = verification?.verdict == SelectedSlotVerdict.VERIFIED,
+                ownedDeckIntact = ownedDeckIntact,
+                // A2 runs from a parked career-start the operator established (trainee/scenario/lineage
+                // were chosen upstream); A2 cannot re-read those from Support Formation. A3 wires the
+                // production navigate() gates. Held here as the operator-established precondition.
+                upstreamLaunchGatesHeld = true,
+                onSupportFormation = onFormation,
+                startCareerPresent = startPresent,
+                noDebugConflict = noDebugConflict,
+            )
+        val state = BuildAwareLaunchGate.evaluate(pre)
+        MessageLog.i(
+            TAG,
+            "[LAUNCH-GATE] preconditions: verified=${pre.borrowIdentityVerified} deckIntact=$ownedDeckIntact (deck $deckAtStart->$deckAtEnd) onFormation=$onFormation startPresent=$startPresent noDebugConflict=$noDebugConflict -> state=$state",
+        )
+        return BuildAwareLaunchResult(
+            state = state,
+            preconditions = pre,
+            furthestStage = BuildAwareLaunchGate.furthestStageReached(pre),
+            intent = intent,
+            locateMatch = match,
+            rowsObserved = rows,
+            verification = verification,
+            slotCommitted = true,
+            deckNumberAtStart = deckAtStart,
+            deckNumberAtEnd = deckAtEnd,
+            tpRawAtStart = tpRawStart,
+            tpRawAtEnd = tpRawEnd,
+            reason = if (state == LaunchTransactionState.READY_TO_START_CAREER) null else "precondition unmet (furthest ${BuildAwareLaunchGate.furthestStageReached(pre)})",
+        )
+    }
+
+    /**
+     * A2 build-aware launch-gate DRY-RUN diagnostic. Push a BUILD_AWARE intent to
+     * outcomes/smart_borrow_intent.json, park the game on the career-start Support Formation with the
+     * Friends slot EMPTY and the required deck showing, then start the bot: it runs the PRODUCTION launch
+     * transaction ([prepareBuildAwareLaunchToReady]) through the final gate, proves it reaches
+     * READY_TO_START_CAREER, and then DELIBERATELY DOES NOT press Start Career -- it rolls the borrow back
+     * via Remove and confirms the empty slot. This is the same production function A3 will call; A2 only
+     * suppresses the tap. Fails closed (no legacy fallback) and never spends. Tagged [LAUNCH-GATE].
+     */
+    internal fun dryRunBuildAwareLaunchGate(injectedUtils: CustomImageUtils? = null): BuildAwareLaunchResult {
+        if (injectedUtils != null) {
+            imageUtils = injectedUtils
+        } else if (!ensureInitialised()) {
+            MessageLog.e(TAG, "[LAUNCH-GATE] Failed to initialise image utils. Stopping.")
+            return BuildAwareLaunchResult(LaunchTransactionState.LAUNCH_BLOCKED, LaunchPreconditions(), LaunchTransactionState.PREPARING, reason = "image utils unavailable")
+        }
+        val startedAt = System.currentTimeMillis()
+        MessageLog.i(TAG, "[LAUNCH-GATE] ===== A2 build-aware launch-gate dry-run (reaches READY, NEVER presses Start Career) =====")
+
+        val prepared = prepareBuildAwareLaunchToReady()
+        if (prepared.ready) {
+            MessageLog.i(TAG, "[LAUNCH-GATE] READY_TO_START_CAREER reached. This is A2: the Start Career tap is deliberately SUPPRESSED. Rolling the borrow back...")
+        } else {
+            MessageLog.w(TAG, "[LAUNCH-GATE] state=${prepared.state} (${prepared.reason ?: "-"}); not ready. ${if (prepared.slotCommitted) "Rolling back the committed borrow..." else "Nothing committed."}")
+        }
+
+        // Rollback (Part 14): any committed borrow is reversed before returning, so the terminal state is
+        // an empty Support Formation with no career started, whatever the gate verdict.
+        var rolledBackToEmpty = onEmptySupportFormation()
+        if (prepared.slotCommitted) {
+            rolledBackToEmpty = rollbackCommittedBorrow()
+        }
+
+        val result = prepared.copy(rolledBackToEmpty = rolledBackToEmpty, startCareerTapped = false)
+        persistBuildAwareLaunchGate(startedAt, result)
+        MessageLog.i(
+            TAG,
+            "[LAUNCH-GATE] result: state=${result.state} furthest=${result.furthestStage} verified=${result.verification?.verdict ?: "-"} " +
+                "slotCommitted=${result.slotCommitted} rolledBackToEmpty=$rolledBackToEmpty startCareerTapped=false " +
+                "runtime=${(System.currentTimeMillis() - startedAt) / 1000}s ===== end =====",
+        )
+        return result
+    }
+
+    /** Reopens the picker over a filled slot and taps the active Remove header to reverse a committed
+     * borrow, returning whether the Friends slot is empty again. Shared rollback for the launch gate. */
+    private fun rollbackCommittedBorrow(): Boolean {
+        if (!reopenBorrowPicker(replaceMode = true)) {
+            MessageLog.e(TAG, "[LAUNCH-GATE] picker did not reopen to roll back; the slot stays FILLED. Clear it by hand.")
+            return false
+        }
+        waitSafe(2.0)
+        val (removeLoc, _) = ButtonBorrowCardRemove.find(iu)
+        if (removeLoc == null) {
+            MessageLog.e(TAG, "[LAUNCH-GATE] no active Remove control; the slot stays FILLED. Clear it by hand.")
+            ButtonClose.click(iu)
+            waitSafe(1.5)
+            return false
+        }
+        ButtonBorrowCardRemove.click(iu)
+        waitSafe(2.0)
+        if (!LabelSupportFormation.check(iu, sourceBitmap = iu.getSourceBitmap())) {
+            ButtonClose.click(iu)
+            waitSafe(1.5)
+        }
+        return onEmptySupportFormation()
+    }
+
+    /** Appends one A2 launch-gate dry-run record to the local corpus. Best-effort; carries no owner name.
+     * `started_career` is always false: this diagnostic never taps Start Career. */
+    private fun persistBuildAwareLaunchGate(startedAt: Long, r: BuildAwareLaunchResult) {
+        val located = r.locateMatch?.row
+        val sel = r.verification?.selectedRow
+        val record =
+            JSONObject().apply {
+                put("record", "build_aware_launch_gate")
+                put("started_at", startedAt)
+                put("completed_at", System.currentTimeMillis())
+                put("app_version", BuildConfig.VERSION_NAME)
+                put("state", r.state.name)
+                put("furthest_stage", r.furthestStage.name)
+                put("intent_digest", r.intent?.recommendationEvidenceDigest ?: JSONObject.NULL)
+                put("recommendation_source", r.intent?.recommendationSource?.name ?: JSONObject.NULL)
+                put("support_card_id", r.intent?.supportCardId ?: JSONObject.NULL)
+                put("canonical_character", r.intent?.canonicalCharacter ?: JSONObject.NULL)
+                put("canonical_title", r.intent?.canonicalTitle ?: JSONObject.NULL)
+                put("expected_limit_break", r.intent?.expectedLimitBreak ?: JSONObject.NULL)
+                put("source_scan_id", r.intent?.sourceBorrowScanId ?: JSONObject.NULL)
+                put("rows_observed", r.rowsObserved)
+                put("located_character", located?.character ?: JSONObject.NULL)
+                put("located_outfit", located?.outfit ?: JSONObject.NULL)
+                put("located_limit_break", located?.limitBreakIndex ?: JSONObject.NULL)
+                put("verify_verdict", r.verification?.verdict?.name ?: JSONObject.NULL)
+                put("selected_character", sel?.character ?: JSONObject.NULL)
+                put("selected_outfit", sel?.outfit ?: JSONObject.NULL)
+                put("borrow_identity_verified", r.preconditions.borrowIdentityVerified)
+                put("owned_deck_intact", r.preconditions.ownedDeckIntact)
+                put("deck_number_at_start", r.deckNumberAtStart ?: JSONObject.NULL)
+                put("deck_number_at_end", r.deckNumberAtEnd ?: JSONObject.NULL)
+                put("tp_raw_at_start", r.tpRawAtStart ?: JSONObject.NULL)
+                put("tp_raw_at_end", r.tpRawAtEnd ?: JSONObject.NULL)
+                put("no_debug_conflict", r.preconditions.noDebugConflict)
+                put("ready_to_start_career", r.ready)
+                put("slot_committed", r.slotCommitted)
+                put("rolled_back_to_empty", r.rolledBackToEmpty)
+                put("started_career", false)
+                r.reason?.let { put("reason", it) }
+            }
+        OutcomeCorpus.append(context, record, OutcomeCorpus.BUILD_AWARE_LAUNCH_GATE_PATH)
+    }
+
     private fun handleLegacySelectScreen(): TransitionResult {
         // Rotation backstop: a trainee switch was required this launch but we reached Legacy Select
         // without handling Trainee Select (a missed detection tapped through it keeping the wrong
