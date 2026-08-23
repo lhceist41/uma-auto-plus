@@ -4,3 +4,4 @@ android/app/src/main/assets/veteran_factor_domain.json text eol=lf
 src/data/succession_relations.json text eol=lf
 src/data/support_cards.json text eol=lf
 src/data/race_survival_data.json text eol=lf
+src/data/build_budget_data.json text eol=lf
