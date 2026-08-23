@@ -6146,7 +6146,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * named in `unresolvedFields`; the owner's raw name is kept only for the local record and is never
      * placed in the evidence string. This method reads only: it dispatches no tap.
      */
-    private fun readBorrowPoolRowsRich(bitmap: Bitmap, pageIndex: Int, captureEvidence: Boolean): List<BorrowRowObservation> {
+    private fun readBorrowPoolRichRows(bitmap: Bitmap, pageIndex: Int, captureEvidence: Boolean): List<RichBorrowReadRow> {
         val duplicatePills = LabelDuplicateSupport.findAll(iu, sourceBitmap = bitmap)
         val traineePills = LabelTraineeConflict.findAll(iu, sourceBitmap = bitmap)
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
@@ -6246,9 +6246,19 @@ class CareerLaunchNavigator(private val context: Context) {
                     confidence = confidence,
                     unresolvedFields = unresolved,
                     evidence = evidence,
-                )
+                ).let { RichBorrowReadRow(centerY.toDouble(), it) }
             }
     }
+
+    /** One reopened rich row paired with its live tap Y-center on the frame it was read from. The
+     * center is per-frame, so a caller tapping it MUST use the value from the SAME capture (never a
+     * remembered one); that is how the select stage revalidates a row's coordinate before tapping it. */
+    private data class RichBorrowReadRow(val centerY: Double, val observation: BorrowRowObservation)
+
+    /** Back-compat projection for callers that only need the observations (the pool census and the
+     * read-only locate rehearsal): the rich rows without their per-frame tap centers. */
+    private fun readBorrowPoolRowsRich(bitmap: Bitmap, pageIndex: Int, captureEvidence: Boolean): List<BorrowRowObservation> =
+        readBorrowPoolRichRows(bitmap, pageIndex, captureEvidence).map { it.observation }
 
     /**
      * Read-only Borrow Card pool census (DeckLab Phase 2B). Park the game on the career-start Support
@@ -6678,6 +6688,351 @@ class CareerLaunchNavigator(private val context: Context) {
                 put("friend_slot_empty_after", slotEmptyAfter)
             }
         OutcomeCorpus.append(context, record, OutcomeCorpus.BORROW_REMOVE_PROBE_PATH)
+    }
+
+    /** Whether one borrow row's name-band OCR text carries the intent's canonical character AND title.
+     * The combined band ("[outfit]\ncharacter") contains both, so the same OCR-noise-tolerant contains
+     * test the locator uses on the split fields resolves the row here too. */
+    private fun intentTextMatch(intent: SmartBorrowIntent, text: String): Boolean =
+        borrowRowMatchesPreference(text, intent.canonicalCharacter) &&
+            (intent.canonicalTitle == null || borrowRowMatchesPreference(text, intent.canonicalTitle!!))
+
+    /** Fresh check that the screen is the Support Formation with an empty Friends slot. */
+    private fun onEmptySupportFormation(): Boolean {
+        val bmp = iu.getSourceBitmap()
+        return LabelSupportFormation.check(iu, sourceBitmap = bmp) && IconFriendSlotEmpty.check(iu, sourceBitmap = bmp)
+    }
+
+    /** Best-effort OCR of the TP counter band ("<current>/<max>") at the top of the career-start
+     * screen. The borrow/remove flow spends no TP by construction, so this corroborates the record and
+     * is never a gate: an unreadable stylized counter must not fail the rehearsal. Returns raw OCR. */
+    private fun readTpBandRaw(bitmap: Bitmap): String {
+        return try {
+            iu.performOCROnRegion(
+                bitmap,
+                (bitmap.width * 0.35).toInt(),
+                (bitmap.height * 0.028).toInt(),
+                (bitmap.width * 0.17).toInt(),
+                (bitmap.height * 0.026).toInt(),
+                useThreshold = true,
+                useGrayscale = true,
+                scale = 3.0,
+                debugName = "borrow_select_tp",
+            )
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    /** Current TP as read from a [readTpBandRaw] string ("100/100" -> 100), or null when unreadable. */
+    private fun parseTpCurrent(raw: String): Int? {
+        val m = Regex("(\\d{1,3})\\s*/\\s*(\\d{1,3})").find(raw.replace(" ", "")) ?: return null
+        return m.groupValues[1].toIntOrNull()
+    }
+
+    /**
+     * Reads the reopened picker (already open over the FILLED slot) to decide whether the committed
+     * borrow is the intent's card. Walks the bounded pool, and for each page finds the "Selected" pill
+     * ([LabelBorrowSelected]) and the rich rows, associating a pill with a row by the SAME top-of-row
+     * window the duplicate/trainee pills use. Collects every row the game marks selected, stops as soon
+     * as one is found (the game marks exactly one), and defers the verdict to [SmartBorrowSelectionVerifier].
+     * Never taps a row.
+     */
+    private fun readSelectedSlotVerification(intent: SmartBorrowIntent): SelectedSlotVerification {
+        val selectedRows = mutableListOf<LocatableBorrowRow>()
+        val walker =
+            BorrowListWalker(
+                maxPageGestures = MAX_BORROW_SCAN_PAGES,
+                maxSwallowedRetries = MAX_BORROW_SWALLOWED_SWIPE_RETRIES,
+                readScreen = {
+                    val bmp = iu.getSourceBitmap()
+                    lastBorrowListBitmap = bmp
+                    val selectedPills = LabelBorrowSelected.findAll(iu, sourceBitmap = bmp)
+                    val rich = readBorrowPoolRichRows(bmp, 0, false)
+                    for (r in rich) {
+                        val marked = selectedPills.any { p -> p.y >= r.centerY - BORROW_DUPLICATE_PILL_MAX_OFFSET && p.y <= r.centerY - BORROW_DUPLICATE_PILL_MIN_OFFSET }
+                        if (marked) {
+                            val obs = r.observation
+                            if (selectedRows.none { it.character == obs.character && it.outfit == obs.outfit }) {
+                                selectedRows.add(obs.toLocatable())
+                                MessageLog.i(TAG, "[BORROW-SELECT] Selected marker on row \"${obs.character ?: "-"} [${obs.outfit ?: "-"}]\" lb=${obs.limitBreakIndex ?: "-"} owner=${obs.ownerAlias ?: "-"}.")
+                            }
+                        }
+                    }
+                    val readable = rich.filter { it.observation.blockedTag == null }.map { 0.0 to nameKeyOf(it.observation) }
+                    BorrowScan(readable, duplicateTexts = rich.filter { it.observation.blockedTag != null }.map { nameKeyOf(it.observation) })
+                },
+                advancePage = { lastBorrowListBitmap?.let { swipeBorrowList(it) } },
+                abort = { !BotService.isRunning || StartModule.queueStopRequested },
+                log = { MessageLog.i(TAG, "[BORROW-SELECT] $it") },
+            )
+        walker.walk { _, _ -> selectedRows.isNotEmpty() }
+        return SmartBorrowSelectionVerifier.verify(intent, selectedRows)
+    }
+
+    /**
+     * Runs the full Smart Borrow SELECT-verify-rollback rehearsal (DeckLab Smart Borrow 2.0, Stage B
+     * then Stage C). Push the offline borrow intent to outcomes/smart_borrow_intent.json, park the game
+     * on the career-start Support Formation with the Friends slot EMPTY, then start the bot: it locates
+     * the intent's row, taps exactly it, verifies the committed friend slot is that card via the
+     * reopened picker's "Selected" marker, Removes it, and confirms the slot is empty again. Stage C
+     * repeats the whole cycle once from the restored empty state. It NEVER presses Start Career and
+     * spends nothing. Tagged [BORROW-SELECT].
+     */
+    internal fun rehearseSmartBorrowSelectAndRollback(injectedUtils: CustomImageUtils? = null): SmartBorrowSelectRehearsalResult {
+        if (injectedUtils != null) {
+            imageUtils = injectedUtils
+        } else if (!ensureInitialised()) {
+            MessageLog.e(TAG, "[BORROW-SELECT] Failed to initialise image utils. Stopping.")
+            return SmartBorrowSelectRehearsalResult(SmartBorrowSelectResult(SmartBorrowSelectResult.Status.INTENT_MISSING, failureReason = "image utils unavailable"))
+        }
+        MessageLog.i(TAG, "[BORROW-SELECT] ===== Smart Borrow select-verify-rollback rehearsal (taps one row, removes it, never presses Start Career) =====")
+
+        val stageB = runSmartBorrowSelectCycle(1)
+        if (!stageB.passed) {
+            MessageLog.e(TAG, "[BORROW-SELECT] Stage B did not pass (status=${stageB.status}); Stage C is skipped. ===== end =====")
+            return SmartBorrowSelectRehearsalResult(stageB, finalSlotEmpty = onEmptySupportFormation())
+        }
+        MessageLog.i(TAG, "[BORROW-SELECT] Stage B PASSED. Repeating once from the restored empty state (Stage C)...")
+        val stageC = runSmartBorrowSelectCycle(2)
+
+        val bRow = stageB.locateMatch?.row
+        val cRow = stageC.locateMatch?.row
+        val sameIdentity = bRow != null && cRow != null && bRow.character == cRow.character && bRow.outfit == cRow.outfit && bRow.limitBreakIndex == cRow.limitBreakIndex
+        val repeatable =
+            stageC.passed &&
+                sameIdentity &&
+                stageB.verification?.verdict == SelectedSlotVerdict.VERIFIED &&
+                stageC.verification?.verdict == SelectedSlotVerdict.VERIFIED
+        val finalSlotEmpty = onEmptySupportFormation()
+        MessageLog.i(
+            TAG,
+            "[BORROW-SELECT] Stage C status=${stageC.status} sameLocatedIdentity=$sameIdentity repeatable=$repeatable finalSlotEmpty=$finalSlotEmpty ===== end =====",
+        )
+        return SmartBorrowSelectRehearsalResult(stageB, stageC, repeatable = repeatable, finalSlotEmpty = finalSlotEmpty)
+    }
+
+    /**
+     * One Smart Borrow select-verify-rollback cycle: locate (read-only, reused from Stage A) -> assert a
+     * single unambiguous identity -> tap exactly that row -> confirm the slot filled -> verify the
+     * committed slot's identity via the reopened picker's Selected marker -> Remove -> confirm empty.
+     * Every non-pass status fails closed; the cycle never presses Start Career and spends nothing.
+     */
+    private fun runSmartBorrowSelectCycle(iteration: Int): SmartBorrowSelectResult {
+        val startedAt = System.currentTimeMillis()
+        MessageLog.i(TAG, "[BORROW-SELECT] --- cycle $iteration: locate -> assert -> tap -> verify -> remove -> verify empty ---")
+
+        // Stage A locate (read-only): opens/reads/closes the picker, proves the intent resolves to
+        // exactly one borrowable row, and leaves the slot empty. Reused verbatim so the pre-tap proof is
+        // the one Stage A already live-passed; it also seeds the active-trainee exclusion this cycle uses.
+        val locate = locateSmartBorrowIntentReadOnly(iu)
+        val intent = locate.intent
+        fun finish(result: SmartBorrowSelectResult): SmartBorrowSelectResult {
+            persistSmartBorrowSelect(startedAt, result)
+            MessageLog.i(TAG, "[BORROW-SELECT] cycle $iteration status=${result.status}${result.failureReason?.let { " reason=$it" } ?: ""} runtime=${(System.currentTimeMillis() - startedAt) / 1000}s")
+            return result
+        }
+
+        val locateStatus =
+            when (locate.status) {
+                SmartBorrowLocateResult.Status.LOCATED -> null
+                SmartBorrowLocateResult.Status.INTENT_MISSING -> SmartBorrowSelectResult.Status.INTENT_MISSING
+                SmartBorrowLocateResult.Status.NOT_ON_SUPPORT_FORMATION -> SmartBorrowSelectResult.Status.NOT_ON_SUPPORT_FORMATION
+                SmartBorrowLocateResult.Status.FRIEND_SLOT_NOT_EMPTY -> SmartBorrowSelectResult.Status.FRIEND_SLOT_NOT_EMPTY
+                SmartBorrowLocateResult.Status.PICKER_OPEN_FAILED -> SmartBorrowSelectResult.Status.PICKER_OPEN_FAILED
+                SmartBorrowLocateResult.Status.CARD_NOT_FOUND -> SmartBorrowSelectResult.Status.CARD_NOT_FOUND
+                SmartBorrowLocateResult.Status.LB_MISMATCH -> SmartBorrowSelectResult.Status.LB_MISMATCH
+                SmartBorrowLocateResult.Status.AMBIGUOUS -> SmartBorrowSelectResult.Status.AMBIGUOUS
+            }
+        if (locateStatus != null) {
+            return finish(SmartBorrowSelectResult(locateStatus, iteration = iteration, intent = intent, rowsObserved = locate.rowsObserved, locateMatch = locate.match, failureReason = "locate did not resolve: ${locate.status}"))
+        }
+        val match = locate.match!!
+        // A name-band tap cannot single out one of several distinct copies of the same card, so more
+        // than one identity candidate is fail-closed (no tap) even though the locate resolved one.
+        if (match.identityCandidates.size != 1) {
+            return finish(
+                SmartBorrowSelectResult(
+                    SmartBorrowSelectResult.Status.SELECT_AMBIGUOUS_IDENTITY,
+                    iteration = iteration,
+                    intent = intent,
+                    rowsObserved = locate.rowsObserved,
+                    locateMatch = match,
+                    failureReason = "${match.identityCandidates.size} distinct identity candidates; a name-band tap cannot single out the exact copy",
+                ),
+            )
+        }
+        val located = match.row!!
+        MessageLog.i(
+            TAG,
+            "[BORROW-SELECT] cycle $iteration LOCATED \"${located.character ?: "-"} [${located.outfit ?: "-"}]\" lb=${located.limitBreakIndex ?: "-"} - single identity candidate, safe to tap.",
+        )
+
+        // Pre-borrow integrity anchors: the deck showing (owned-slot proxy) and TP.
+        val startBitmap = iu.getSourceBitmap()
+        val deckAtStart = readDeckNumber(startBitmap)
+        val tpRawStart = readTpBandRaw(startBitmap)
+        val tpStart = parseTpCurrent(tpRawStart)
+
+        // Reopen the picker over the empty slot and tap EXACTLY the located row via the proven production
+        // selection primitive: it re-scans from the top and returns the row's LIVE center on the frame it
+        // read, so a stale coordinate is never tapped (Part 4 revalidation).
+        if (!reopenBorrowPicker(replaceMode = false)) {
+            return finish(SmartBorrowSelectResult(SmartBorrowSelectResult.Status.PICKER_OPEN_FAILED, iteration = iteration, intent = intent, rowsObserved = locate.rowsObserved, locateMatch = match, failureReason = "picker did not reopen for selection"))
+        }
+        waitSafe(2.0)
+        val selection = selectFromBorrowList(borrowWalker()) { text -> intentTextMatch(intent!!, text) }
+        val row = selection.row
+        if (row == null) {
+            ButtonClose.click(iu)
+            waitSafe(1.5)
+            return finish(SmartBorrowSelectResult(SmartBorrowSelectResult.Status.SELECT_TAP_FAILED, iteration = iteration, intent = intent, rowsObserved = locate.rowsObserved, locateMatch = match, deckNumberAtStart = deckAtStart, tpRawAtStart = tpRawStart, failureReason = "located card not found in the selection re-scan"))
+        }
+        MessageLog.i(TAG, "[BORROW-SELECT] cycle $iteration tapping the located row \"${borrowLogText(row.second)}\" at (540, ${row.first.toInt()}).")
+        CoordinateTap.tap(gestureUtils, 540.0, row.first, "borrow_select_row")
+        waitSafe(2.0)
+
+        // Confirm the tap committed: back on the Support Formation with a FILLED slot.
+        val afterTap = iu.getSourceBitmap()
+        val onFormationAfterTap = LabelSupportFormation.check(iu, sourceBitmap = afterTap)
+        val slotFilled = onFormationAfterTap && !IconFriendSlotEmpty.check(iu, sourceBitmap = afterTap)
+        if (!slotFilled) {
+            if (!onFormationAfterTap) {
+                ButtonClose.click(iu)
+                waitSafe(1.5)
+            }
+            return finish(SmartBorrowSelectResult(SmartBorrowSelectResult.Status.SLOT_NOT_FILLED, iteration = iteration, intent = intent, rowsObserved = locate.rowsObserved, locateMatch = match, tapped = true, deckNumberAtStart = deckAtStart, tpRawAtStart = tpRawStart, returnedToSupportFormation = onFormationAfterTap, failureReason = "friend slot not filled after the tap"))
+        }
+        MessageLog.i(TAG, "[BORROW-SELECT] cycle $iteration slot filled after the tap. Reopening the picker to verify the committed slot's identity...")
+
+        // Part 5 verify: reopen over the filled slot and read the "Selected" marker. Close it afterwards
+        // (Close keeps the borrow committed), so the rollback reopens to a fresh top with the Remove
+        // header in view regardless of how far the verify walk scrolled.
+        if (!reopenBorrowPicker(replaceMode = true)) {
+            return finish(SmartBorrowSelectResult(SmartBorrowSelectResult.Status.REMOVE_CONTROL_ABSENT, iteration = iteration, intent = intent, rowsObserved = locate.rowsObserved, locateMatch = match, tapped = true, slotFilledAfterTap = true, deckNumberAtStart = deckAtStart, tpRawAtStart = tpRawStart, returnedToSupportFormation = true, failureReason = "picker did not reopen to verify; slot left FILLED (rollback blocked)"))
+        }
+        waitSafe(2.0)
+        val verification = readSelectedSlotVerification(intent!!)
+        MessageLog.i(TAG, "[BORROW-SELECT] cycle $iteration selection verdict=${verification.verdict} reason=\"${verification.reason}\"")
+        ButtonClose.click(iu)
+        waitSafe(1.5)
+
+        // Part 6 rollback: reopen over the filled slot and tap the active Remove header.
+        if (!reopenBorrowPicker(replaceMode = true)) {
+            return finish(SmartBorrowSelectResult(SmartBorrowSelectResult.Status.REMOVE_CONTROL_ABSENT, iteration = iteration, intent = intent, rowsObserved = locate.rowsObserved, locateMatch = match, tapped = true, slotFilledAfterTap = true, verification = verification, deckNumberAtStart = deckAtStart, tpRawAtStart = tpRawStart, returnedToSupportFormation = true, failureReason = "picker did not reopen to remove; slot left FILLED (rollback blocked)"))
+        }
+        waitSafe(2.0)
+        val (removeLoc, _) = ButtonBorrowCardRemove.find(iu)
+        if (removeLoc == null) {
+            MessageLog.e(TAG, "[BORROW-SELECT] cycle $iteration no active Remove control on the reopened picker; the slot stays FILLED. Close and clear it by hand. BLOCKED.")
+            ButtonClose.click(iu)
+            waitSafe(1.5)
+            return finish(SmartBorrowSelectResult(SmartBorrowSelectResult.Status.REMOVE_CONTROL_ABSENT, iteration = iteration, intent = intent, rowsObserved = locate.rowsObserved, locateMatch = match, tapped = true, slotFilledAfterTap = true, verification = verification, removeControlFound = false, deckNumberAtStart = deckAtStart, tpRawAtStart = tpRawStart, returnedToSupportFormation = true, failureReason = "no active Remove control; slot left FILLED (rollback blocked)"))
+        }
+        MessageLog.i(TAG, "[BORROW-SELECT] cycle $iteration tapping Remove at (${removeLoc.x.toInt()}, ${removeLoc.y.toInt()}) to roll back the selection...")
+        ButtonBorrowCardRemove.click(iu)
+        waitSafe(2.0)
+        val afterRemove = iu.getSourceBitmap()
+        if (!LabelSupportFormation.check(iu, sourceBitmap = afterRemove)) {
+            ButtonClose.click(iu)
+            waitSafe(1.5)
+        }
+
+        val doneBitmap = iu.getSourceBitmap()
+        val onFormation = LabelSupportFormation.check(iu, sourceBitmap = doneBitmap)
+        val slotEmpty = onFormation && IconFriendSlotEmpty.check(iu, sourceBitmap = doneBitmap)
+        val deckAtEnd = readDeckNumber(doneBitmap)
+        val tpRawEnd = readTpBandRaw(doneBitmap)
+        val tpEnd = parseTpCurrent(tpRawEnd)
+        val tpUnchanged = tpStart != null && tpEnd != null && tpStart == tpEnd
+        val deckUnchanged = deckAtStart != null && deckAtEnd != null && deckAtStart == deckAtEnd
+        if (!deckUnchanged) {
+            MessageLog.w(TAG, "[BORROW-SELECT] cycle $iteration owned-deck proxy changed or unreadable (deck $deckAtStart -> $deckAtEnd); the borrow flow never edits the owned five, so this is a read artefact, not a mutation.")
+        }
+        if (!tpUnchanged) {
+            MessageLog.w(TAG, "[BORROW-SELECT] cycle $iteration TP counter read unavailable or differed (tp '$tpRawStart' -> '$tpRawEnd'); borrow/remove spends no TP by construction (no spend control is ever invoked).")
+        }
+
+        // Rollback correctness comes first (a filled slot left behind is the worst outcome), then the
+        // selection verdict; both must hold for a pass.
+        val status =
+            when {
+                !slotEmpty -> SmartBorrowSelectResult.Status.ROLLBACK_FAILED
+                verification.verdict != SelectedSlotVerdict.VERIFIED -> SmartBorrowSelectResult.Status.SELECTION_VERIFY_FAILED
+                else -> SmartBorrowSelectResult.Status.REHEARSAL_PASSED
+            }
+        val failureReason =
+            when (status) {
+                SmartBorrowSelectResult.Status.ROLLBACK_FAILED -> "friend slot not empty after Remove"
+                SmartBorrowSelectResult.Status.SELECTION_VERIFY_FAILED -> "selection identity did not verify: ${verification.reason}"
+                else -> null
+            }
+        return finish(
+            SmartBorrowSelectResult(
+                status,
+                iteration = iteration,
+                intent = intent,
+                rowsObserved = locate.rowsObserved,
+                locateMatch = match,
+                tapped = true,
+                slotFilledAfterTap = true,
+                verification = verification,
+                removeControlFound = true,
+                slotEmptyAfterRollback = slotEmpty,
+                deckNumberAtStart = deckAtStart,
+                deckNumberAtEnd = deckAtEnd,
+                tpRawAtStart = tpRawStart,
+                tpRawAtEnd = tpRawEnd,
+                tpUnchanged = tpUnchanged,
+                returnedToSupportFormation = onFormation,
+                failureReason = failureReason,
+            ),
+        )
+    }
+
+    /** Appends one Stage B/C select-verify-rollback cycle record to the local corpus. Best-effort; a
+     * persist failure never disturbs the diagnostic. Carries no raw owner name. */
+    private fun persistSmartBorrowSelect(startedAt: Long, r: SmartBorrowSelectResult) {
+        val located = r.locateMatch?.row
+        val sel = r.verification?.selectedRow
+        val record =
+            JSONObject().apply {
+                put("record", "smart_borrow_select")
+                put("started_at", startedAt)
+                put("completed_at", System.currentTimeMillis())
+                put("app_version", BuildConfig.VERSION_NAME)
+                put("iteration", r.iteration)
+                put("status", r.status.name)
+                put("intent_digest", r.intent?.recommendationEvidenceDigest ?: JSONObject.NULL)
+                put("support_card_id", r.intent?.supportCardId ?: JSONObject.NULL)
+                put("canonical_character", r.intent?.canonicalCharacter ?: JSONObject.NULL)
+                put("canonical_title", r.intent?.canonicalTitle ?: JSONObject.NULL)
+                put("expected_limit_break", r.intent?.expectedLimitBreak ?: JSONObject.NULL)
+                put("rows_observed", r.rowsObserved)
+                put("located_character", located?.character ?: JSONObject.NULL)
+                put("located_outfit", located?.outfit ?: JSONObject.NULL)
+                put("located_limit_break", located?.limitBreakIndex ?: JSONObject.NULL)
+                put("tapped", r.tapped)
+                put("slot_filled_after_tap", r.slotFilledAfterTap)
+                put("verify_verdict", r.verification?.verdict?.name ?: JSONObject.NULL)
+                put("verify_reason", r.verification?.reason ?: JSONObject.NULL)
+                put("selected_character", sel?.character ?: JSONObject.NULL)
+                put("selected_outfit", sel?.outfit ?: JSONObject.NULL)
+                put("selected_limit_break", sel?.limitBreakIndex ?: JSONObject.NULL)
+                put("remove_control_found", r.removeControlFound)
+                put("slot_empty_after_rollback", r.slotEmptyAfterRollback)
+                put("deck_number_at_start", r.deckNumberAtStart ?: JSONObject.NULL)
+                put("deck_number_at_end", r.deckNumberAtEnd ?: JSONObject.NULL)
+                put("tp_raw_at_start", r.tpRawAtStart ?: JSONObject.NULL)
+                put("tp_raw_at_end", r.tpRawAtEnd ?: JSONObject.NULL)
+                put("tp_unchanged", r.tpUnchanged)
+                put("returned_to_support_formation", r.returnedToSupportFormation)
+                put("started_career", false)
+                r.failureReason?.let { put("failure_reason", it) }
+            }
+        OutcomeCorpus.append(context, record, OutcomeCorpus.SMART_BORROW_SELECT_PATH)
     }
 
     private fun handleLegacySelectScreen(): TransitionResult {

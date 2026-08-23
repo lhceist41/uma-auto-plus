@@ -1018,6 +1018,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startSmartBorrowRehearsalTest" to ::startSmartBorrowRehearsalTest,
                 "debugMode_startSmartBorrowLocateTest" to ::startSmartBorrowLocateTest,
                 "debugMode_startBorrowRemoveProbeTest" to ::startBorrowRemoveProbeTest,
+                "debugMode_startSmartBorrowSelectRollbackTest" to ::startSmartBorrowSelectRollbackTest,
                 "debugMode_startBorrowPoolScanTest" to ::startBorrowPoolScanTest,
                 "debugMode_startRainbowDetectionTest" to ::startRainbowDetectionTest,
                 "debugMode_startVeteranRosterReadTest" to ::startVeteranRosterReadTest,
@@ -1210,6 +1211,20 @@ abstract class Campaign(game: Game) : Task(game) {
     open fun startBorrowRemoveProbeTest() {
         MessageLog.i(TAG, "\n[TEST] Running Borrow Remove behaviour probe...")
         CareerLaunchNavigator(game.myContext).probeBorrowRemoveBehavior(game.imageUtils)
+    }
+
+    /**
+     * Smart Borrow SELECT-verify-rollback rehearsal (DeckLab Smart Borrow 2.0, Stage B/C). Push the
+     * offline borrow intent to outcomes/smart_borrow_intent.json, park the game on the career-start
+     * Support Formation with the Friends slot EMPTY, then start the bot: it locates the intent's row,
+     * taps exactly it, verifies the committed friend slot is that card via the reopened picker's
+     * "Selected" marker, Removes it, confirms the slot is empty, then repeats the cycle once. It taps a
+     * borrow row and Removes it (both reversible); it never presses Start Career and spends nothing.
+     * Tagged [BORROW-SELECT].
+     */
+    open fun startSmartBorrowSelectRollbackTest() {
+        MessageLog.i(TAG, "\n[TEST] Running Smart Borrow select-verify-rollback rehearsal...")
+        CareerLaunchNavigator(game.myContext).rehearseSmartBorrowSelectAndRollback(game.imageUtils)
     }
 
     /**

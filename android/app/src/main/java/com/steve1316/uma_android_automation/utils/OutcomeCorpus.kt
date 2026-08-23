@@ -123,6 +123,15 @@ object OutcomeCorpus {
     const val BORROW_REMOVE_PROBE_PATH = "$OUTCOMES_DIR/borrow_remove_probe.jsonl"
 
     /**
+     * Relative path of the Smart Borrow SELECT-verify-rollback rehearsal stream (Stage B/C): one
+     * `smart_borrow_select` record per cycle, stating the located identity, whether the tapped row's
+     * committed friend slot verified as the intent's card (via the reopened picker's Selected marker),
+     * and whether Remove rolled the slot back to empty. The one mutating DeckLab borrow diagnostic that
+     * both selects and removes; it spends nothing and never presses Start Career.
+     */
+    const val SMART_BORROW_SELECT_PATH = "$OUTCOMES_DIR/smart_borrow_select.jsonl"
+
+    /**
      * Appends one [record] as a JSON line to [path]. Writing must never disturb the calling
      * path: any failure is swallowed after a MessageLog warning. MessageLog is safe here -
      * the career path that logs the ledger line via MessageLog immediately after, and the

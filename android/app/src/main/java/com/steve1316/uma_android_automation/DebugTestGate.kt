@@ -49,6 +49,7 @@ internal object DebugTestGate {
             "debugMode_startSmartBorrowRehearsalTest",
             "debugMode_startSmartBorrowLocateTest",
             "debugMode_startBorrowRemoveProbeTest",
+            "debugMode_startSmartBorrowSelectRollbackTest",
             "debugMode_startBorrowPoolScanTest",
             "debugMode_startRainbowDetectionTest",
             "debugMode_startVeteranRosterReadTest",

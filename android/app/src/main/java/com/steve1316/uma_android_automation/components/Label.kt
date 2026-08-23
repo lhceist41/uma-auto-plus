@@ -89,6 +89,15 @@ object LabelFriendSlotBanner : ComponentInterface {
     override val template = Template("components/label/friend_slot_banner")
 }
 
+object LabelBorrowSelected : ComponentInterface {
+    // Pink "Selected" pill straddling the top-left edge of the Borrow Card row currently borrowed
+    // into the friend slot. Only present when the picker is reopened over a FILLED slot; findAll
+    // locates it per row at the SAME top-of-row offset as the Duplicate/Trainee pills. Used to
+    // verify which live row the committed borrow is, since the Support Formation grid shows only the
+    // card portrait, level and limit-break pips and no textual card name.
+    override val template = Template("components/label/borrow_selected")
+}
+
 object LabelScenarioSelectUra : ComponentInterface {
     override val template = Template("components/label/scenario_select_ura", region = Region.middle)
 }

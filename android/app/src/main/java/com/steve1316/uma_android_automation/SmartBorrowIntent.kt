@@ -223,6 +223,78 @@ data class SmartBorrowLocateResult(
     }
 }
 
+/** Why the post-selection Friends-slot identity check resolved the way it did. Only [VERIFIED] may
+ * ever be read as "the committed borrow is the intent's card". */
+enum class SelectedSlotVerdict {
+    /** Exactly one row carried the "Selected" marker and its identity (and limit break, when known)
+     * matches the intent: the committed borrow is the intended card. */
+    VERIFIED,
+
+    /** No row carried the "Selected" marker in the bounded reopened-picker walk: nothing is committed
+     * where one was expected, or the marker was unreadable. Fails closed. */
+    NO_SELECTION,
+
+    /** More than one row carried the "Selected" marker: the reopened picker's state is ambiguous.
+     * Fails closed (the game only ever marks one, so this is a read fault). */
+    MULTIPLE_SELECTION,
+
+    /** Exactly one row is marked selected but its identity or observed limit break contradicts the
+     * intent: the wrong card sits in the slot. Fails closed. */
+    IDENTITY_MISMATCH,
+}
+
+/** The selected-slot verification outcome plus the evidence behind it. */
+data class SelectedSlotVerification(
+    val verdict: SelectedSlotVerdict,
+    /** The single marked-selected row, set only when exactly one was found (whatever the identity check). */
+    val selectedRow: LocatableBorrowRow?,
+    /** Every row that carried the "Selected" marker, for the log and the persisted record. */
+    val selectedRows: List<LocatableBorrowRow>,
+    val reason: String,
+)
+
+/**
+ * Decides, purely, whether the row the reopened picker marks "Selected" is the intent's card.
+ *
+ * Identity is canonical character AND canonical title (matched through [borrowRowMatchesPreference],
+ * the same OCR-noise-tolerant test the locator uses), and the observed limit break must not contradict
+ * a KNOWN expected one (either side unknown is not decisive, exactly as in [SmartBorrowLocator]). It
+ * fails CLOSED on zero or several selected rows, so a misread reopened picker can never be read as a
+ * verified selection. A pure function of already-observed rows, so it runs unchanged in a JVM test.
+ */
+object SmartBorrowSelectionVerifier {
+    fun verify(intent: SmartBorrowIntent, selectedRows: List<LocatableBorrowRow>): SelectedSlotVerification {
+        if (selectedRows.isEmpty()) {
+            return SelectedSlotVerification(SelectedSlotVerdict.NO_SELECTION, null, selectedRows, "no reopened-picker row carried the Selected marker")
+        }
+        if (selectedRows.size > 1) {
+            return SelectedSlotVerification(SelectedSlotVerdict.MULTIPLE_SELECTION, null, selectedRows, "${selectedRows.size} rows carried the Selected marker (expected exactly one)")
+        }
+        val row = selectedRows[0]
+        val identityOk =
+            borrowRowMatchesPreference(row.character ?: "", intent.canonicalCharacter) &&
+                (intent.canonicalTitle == null || borrowRowMatchesPreference(row.outfit ?: "", intent.canonicalTitle))
+        if (!identityOk) {
+            return SelectedSlotVerification(
+                SelectedSlotVerdict.IDENTITY_MISMATCH,
+                row,
+                selectedRows,
+                "selected row \"${row.character ?: "-"} [${row.outfit ?: "-"}]\" != intent ${intent.canonicalCharacter} [${intent.canonicalTitle ?: "-"}]",
+            )
+        }
+        // Limit-break gate: decisive only when BOTH the intent and the selected row observed one.
+        if (intent.expectedLimitBreak != null && row.limitBreakIndex != null && row.limitBreakIndex != intent.expectedLimitBreak) {
+            return SelectedSlotVerification(
+                SelectedSlotVerdict.IDENTITY_MISMATCH,
+                row,
+                selectedRows,
+                "selected row limit break ${row.limitBreakIndex} != expected ${intent.expectedLimitBreak}",
+            )
+        }
+        return SelectedSlotVerification(SelectedSlotVerdict.VERIFIED, row, selectedRows, "the marked-selected row matches the intent identity")
+    }
+}
+
 /** Outcome of one Borrow "Remove" behaviour probe, for the diagnostic entry point. */
 data class BorrowRemoveProbeResult(
     val status: Status,
@@ -248,3 +320,84 @@ data class BorrowRemoveProbeResult(
         REMOVE_DID_NOT_CLEAR,
     }
 }
+
+/**
+ * Outcome of ONE Smart Borrow select-verify-rollback cycle (DeckLab Smart Borrow 2.0, Stage B/C):
+ * locate the intent's row, tap exactly it, verify the committed friend slot is that card via the
+ * reopened picker's "Selected" marker, then Remove it and confirm the slot is empty again. Every
+ * terminal status other than [REHEARSAL_PASSED] fails closed; the flow never presses Start Career and
+ * spends nothing.
+ */
+data class SmartBorrowSelectResult(
+    val status: Status,
+    val iteration: Int = 1,
+    val intent: SmartBorrowIntent? = null,
+    val rowsObserved: Int = 0,
+    val locateMatch: SmartBorrowLocateMatch? = null,
+    val tapped: Boolean = false,
+    val slotFilledAfterTap: Boolean = false,
+    val verification: SelectedSlotVerification? = null,
+    val removeControlFound: Boolean = false,
+    val slotEmptyAfterRollback: Boolean = false,
+    val deckNumberAtStart: Int? = null,
+    val deckNumberAtEnd: Int? = null,
+    val tpRawAtStart: String? = null,
+    val tpRawAtEnd: String? = null,
+    val tpUnchanged: Boolean = false,
+    val returnedToSupportFormation: Boolean = false,
+    val failureReason: String? = null,
+) {
+    /** True only for the fully clean pass: located, tapped, verified, rolled back to an empty slot. */
+    val passed: Boolean get() = status == Status.REHEARSAL_PASSED
+
+    enum class Status {
+        /** No usable intent file, or image utils unavailable: nothing was read or tapped. */
+        INTENT_MISSING,
+        NOT_ON_SUPPORT_FORMATION,
+        FRIEND_SLOT_NOT_EMPTY,
+        PICKER_OPEN_FAILED,
+
+        /** The intent's card was not among the borrowable rows: no tap. */
+        CARD_NOT_FOUND,
+
+        /** Identity matched but the observed limit break contradicts the known expected one: no tap. */
+        LB_MISMATCH,
+
+        /** Several equivalent offerings matched and none could be singled out: no tap. */
+        AMBIGUOUS,
+
+        /** The locate resolved, but more than one distinct borrowable row shares the intent's identity,
+         * so a name-band tap cannot guarantee the exact copy: no tap (fail closed). */
+        SELECT_AMBIGUOUS_IDENTITY,
+
+        /** The row could not be tapped (it was gone from the re-scan, or the picker misbehaved). */
+        SELECT_TAP_FAILED,
+
+        /** The tap did not fill the friend slot (no card committed). */
+        SLOT_NOT_FILLED,
+
+        /** The committed slot's identity did not verify against the intent. Rolled back. */
+        SELECTION_VERIFY_FAILED,
+
+        /** The reopened picker over the filled slot carried no active Remove control: rollback BLOCKED
+         * with a card still committed. The operator must clear the friend slot by hand. */
+        REMOVE_CONTROL_ABSENT,
+
+        /** Remove was tapped but the friend slot did not return to empty: rollback BLOCKED. */
+        ROLLBACK_FAILED,
+
+        /** Located, tapped, selection identity verified, and rolled back to an empty slot. */
+        REHEARSAL_PASSED,
+    }
+}
+
+/** Outcome of the two-iteration Smart Borrow select-verify-rollback rehearsal (Stage B then Stage C).
+ * Stage C runs only after Stage B passes; [repeatable] is true when both cycles passed with the same
+ * located identity, match path, and clean rollback. */
+data class SmartBorrowSelectRehearsalResult(
+    val stageB: SmartBorrowSelectResult,
+    val stageC: SmartBorrowSelectResult? = null,
+    val repeatable: Boolean = false,
+    val finalSlotEmpty: Boolean = false,
+    val noCareerStarted: Boolean = true,
+)
