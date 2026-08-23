@@ -1,0 +1,3907 @@
+{
+  "schema": "race_survival_evidence",
+  "schemaVersion": 1,
+  "source": "master.mdb: race_course_set, race_track, race_proper_distance_rate, race_proper_ground_rate, race_proper_runningstyle_rate, skill_data, text_data(categories 35, 47, 48)",
+  "fixedPointDivisor": 10000,
+  "hpAbilityType": 9,
+  "enums": {
+    "distanceType": {
+      "1": "sprint",
+      "2": "mile",
+      "3": "medium",
+      "4": "long"
+    },
+    "runningStyle": {
+      "1": "front",
+      "2": "pace",
+      "3": "late",
+      "4": "end"
+    },
+    "groundType": {
+      "1": "turf",
+      "2": "dirt"
+    }
+  },
+  "groundEnum": {
+    "1": "turf",
+    "2": "dirt"
+  },
+  "aptitudeGradeEnum": {
+    "1": "G",
+    "2": "F",
+    "3": "E",
+    "4": "D",
+    "5": "C",
+    "6": "B",
+    "7": "A",
+    "8": "S"
+  },
+  "proof": {
+    "witnessedCodes": {
+      "distanceType": [
+        3,
+        4
+      ],
+      "runningStyle": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "groundType": [
+        2
+      ]
+    },
+    "hpRecoveryWitnessCount": 70,
+    "hpSelfDrainWitnessCount": 16,
+    "hpOpponentEffectWitnessCount": 21
+  },
+  "tracks": {
+    "10001": "Sapporo",
+    "10002": "Hakodate",
+    "10003": "Niigata",
+    "10004": "Fukushima",
+    "10005": "Nakayama",
+    "10006": "Tokyo",
+    "10007": "Chukyo",
+    "10008": "Kyoto",
+    "10009": "Hanshin",
+    "10010": "Kokura",
+    "10101": "Oi",
+    "10103": "Kawasaki",
+    "10104": "Funabashi",
+    "10105": "Morioka",
+    "10201": "Longchamp"
+  },
+  "courses": [
+    {
+      "id": 10101,
+      "trackId": 10001,
+      "track": "Sapporo",
+      "distanceMeters": 1200,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 675000,
+      "finishTimeMaxRaw": 710000
+    },
+    {
+      "id": 10102,
+      "trackId": 10001,
+      "track": "Sapporo",
+      "distanceMeters": 1500,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 879000,
+      "finishTimeMaxRaw": 950000
+    },
+    {
+      "id": 10103,
+      "trackId": 10001,
+      "track": "Sapporo",
+      "distanceMeters": 1800,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1044000,
+      "finishTimeMaxRaw": 1100000
+    },
+    {
+      "id": 10104,
+      "trackId": 10001,
+      "track": "Sapporo",
+      "distanceMeters": 2000,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1171000,
+      "finishTimeMaxRaw": 1230000
+    },
+    {
+      "id": 10105,
+      "trackId": 10001,
+      "track": "Sapporo",
+      "distanceMeters": 2600,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1576000,
+      "finishTimeMaxRaw": 1650000
+    },
+    {
+      "id": 10106,
+      "trackId": 10001,
+      "track": "Sapporo",
+      "distanceMeters": 1000,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 574000,
+      "finishTimeMaxRaw": 630000
+    },
+    {
+      "id": 10107,
+      "trackId": 10001,
+      "track": "Sapporo",
+      "distanceMeters": 1700,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1014000,
+      "finishTimeMaxRaw": 1130000
+    },
+    {
+      "id": 10108,
+      "trackId": 10001,
+      "track": "Sapporo",
+      "distanceMeters": 2400,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1491000,
+      "finishTimeMaxRaw": 1560000
+    },
+    {
+      "id": 10201,
+      "trackId": 10002,
+      "track": "Hakodate",
+      "distanceMeters": 1000,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 547000,
+      "finishTimeMaxRaw": 570000
+    },
+    {
+      "id": 10202,
+      "trackId": 10002,
+      "track": "Hakodate",
+      "distanceMeters": 1200,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 675000,
+      "finishTimeMaxRaw": 710000
+    },
+    {
+      "id": 10203,
+      "trackId": 10002,
+      "track": "Hakodate",
+      "distanceMeters": 1800,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1044000,
+      "finishTimeMaxRaw": 1100000
+    },
+    {
+      "id": 10204,
+      "trackId": 10002,
+      "track": "Hakodate",
+      "distanceMeters": 2000,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1171000,
+      "finishTimeMaxRaw": 1230000
+    },
+    {
+      "id": 10205,
+      "trackId": 10002,
+      "track": "Hakodate",
+      "distanceMeters": 2600,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1576000,
+      "finishTimeMaxRaw": 1650000
+    },
+    {
+      "id": 10206,
+      "trackId": 10002,
+      "track": "Hakodate",
+      "distanceMeters": 1000,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 574000,
+      "finishTimeMaxRaw": 630000
+    },
+    {
+      "id": 10207,
+      "trackId": 10002,
+      "track": "Hakodate",
+      "distanceMeters": 1700,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1014000,
+      "finishTimeMaxRaw": 1130000
+    },
+    {
+      "id": 10208,
+      "trackId": 10002,
+      "track": "Hakodate",
+      "distanceMeters": 2400,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1491000,
+      "finishTimeMaxRaw": 1560000
+    },
+    {
+      "id": 10301,
+      "trackId": 10003,
+      "track": "Niigata",
+      "distanceMeters": 1000,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 4,
+      "finishTimeMinRaw": 547000,
+      "finishTimeMaxRaw": 570000
+    },
+    {
+      "id": 10302,
+      "trackId": 10003,
+      "track": "Niigata",
+      "distanceMeters": 1200,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 2,
+      "finishTimeMinRaw": 675000,
+      "finishTimeMaxRaw": 710000
+    },
+    {
+      "id": 10303,
+      "trackId": 10003,
+      "track": "Niigata",
+      "distanceMeters": 1400,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 2,
+      "finishTimeMinRaw": 800000,
+      "finishTimeMaxRaw": 840000
+    },
+    {
+      "id": 10304,
+      "trackId": 10003,
+      "track": "Niigata",
+      "distanceMeters": 1600,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 2,
+      "finishTimeMinRaw": 908000,
+      "finishTimeMaxRaw": 950000
+    },
+    {
+      "id": 10305,
+      "trackId": 10003,
+      "track": "Niigata",
+      "distanceMeters": 1800,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 2,
+      "finishTimeMinRaw": 1044000,
+      "finishTimeMaxRaw": 1100000
+    },
+    {
+      "id": 10306,
+      "trackId": 10003,
+      "track": "Niigata",
+      "distanceMeters": 2000,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 2,
+      "finishTimeMinRaw": 1171000,
+      "finishTimeMaxRaw": 1230000
+    },
+    {
+      "id": 10307,
+      "trackId": 10003,
+      "track": "Niigata",
+      "distanceMeters": 2000,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 2,
+      "finishTimeMinRaw": 1171000,
+      "finishTimeMaxRaw": 1230000
+    },
+    {
+      "id": 10308,
+      "trackId": 10003,
+      "track": "Niigata",
+      "distanceMeters": 2200,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 2,
+      "finishTimeMinRaw": 1302000,
+      "finishTimeMaxRaw": 1350000
+    },
+    {
+      "id": 10309,
+      "trackId": 10003,
+      "track": "Niigata",
+      "distanceMeters": 2400,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 2,
+      "finishTimeMinRaw": 1416000,
+      "finishTimeMaxRaw": 1490000
+    },
+    {
+      "id": 10310,
+      "trackId": 10003,
+      "track": "Niigata",
+      "distanceMeters": 1200,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 690000,
+      "finishTimeMaxRaw": 770000
+    },
+    {
+      "id": 10311,
+      "trackId": 10003,
+      "track": "Niigata",
+      "distanceMeters": 1800,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1081000,
+      "finishTimeMaxRaw": 1180000
+    },
+    {
+      "id": 10312,
+      "trackId": 10003,
+      "track": "Niigata",
+      "distanceMeters": 2500,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1591000,
+      "finishTimeMaxRaw": 1640000
+    },
+    {
+      "id": 10401,
+      "trackId": 10004,
+      "track": "Fukushima",
+      "distanceMeters": 1200,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 675000,
+      "finishTimeMaxRaw": 710000
+    },
+    {
+      "id": 10402,
+      "trackId": 10004,
+      "track": "Fukushima",
+      "distanceMeters": 1800,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1044000,
+      "finishTimeMaxRaw": 1100000
+    },
+    {
+      "id": 10403,
+      "trackId": 10004,
+      "track": "Fukushima",
+      "distanceMeters": 2000,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1171000,
+      "finishTimeMaxRaw": 1230000
+    },
+    {
+      "id": 10404,
+      "trackId": 10004,
+      "track": "Fukushima",
+      "distanceMeters": 2600,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1576000,
+      "finishTimeMaxRaw": 1650000
+    },
+    {
+      "id": 10405,
+      "trackId": 10004,
+      "track": "Fukushima",
+      "distanceMeters": 1150,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 666000,
+      "finishTimeMaxRaw": 720000
+    },
+    {
+      "id": 10406,
+      "trackId": 10004,
+      "track": "Fukushima",
+      "distanceMeters": 1700,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1014000,
+      "finishTimeMaxRaw": 1130000
+    },
+    {
+      "id": 10407,
+      "trackId": 10004,
+      "track": "Fukushima",
+      "distanceMeters": 2400,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1491000,
+      "finishTimeMaxRaw": 1560000
+    },
+    {
+      "id": 10501,
+      "trackId": 10005,
+      "track": "Nakayama",
+      "distanceMeters": 1200,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 1,
+      "finishTimeMinRaw": 675000,
+      "finishTimeMaxRaw": 710000
+    },
+    {
+      "id": 10502,
+      "trackId": 10005,
+      "track": "Nakayama",
+      "distanceMeters": 1600,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 1,
+      "finishTimeMinRaw": 908000,
+      "finishTimeMaxRaw": 950000
+    },
+    {
+      "id": 10503,
+      "trackId": 10005,
+      "track": "Nakayama",
+      "distanceMeters": 1800,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 1,
+      "finishTimeMinRaw": 1044000,
+      "finishTimeMaxRaw": 1100000
+    },
+    {
+      "id": 10504,
+      "trackId": 10005,
+      "track": "Nakayama",
+      "distanceMeters": 2000,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 1,
+      "finishTimeMinRaw": 1171000,
+      "finishTimeMaxRaw": 1230000
+    },
+    {
+      "id": 10505,
+      "trackId": 10005,
+      "track": "Nakayama",
+      "distanceMeters": 2200,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 1,
+      "finishTimeMinRaw": 1302000,
+      "finishTimeMaxRaw": 1350000
+    },
+    {
+      "id": 10506,
+      "trackId": 10005,
+      "track": "Nakayama",
+      "distanceMeters": 2500,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 1,
+      "finishTimeMinRaw": 1487000,
+      "finishTimeMaxRaw": 1570000
+    },
+    {
+      "id": 10507,
+      "trackId": 10005,
+      "track": "Nakayama",
+      "distanceMeters": 3600,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 1,
+      "finishTimeMinRaw": 2231000,
+      "finishTimeMaxRaw": 2270000
+    },
+    {
+      "id": 10508,
+      "trackId": 10005,
+      "track": "Nakayama",
+      "distanceMeters": 1200,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 690000,
+      "finishTimeMaxRaw": 770000
+    },
+    {
+      "id": 10509,
+      "trackId": 10005,
+      "track": "Nakayama",
+      "distanceMeters": 1800,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1081000,
+      "finishTimeMaxRaw": 1180000
+    },
+    {
+      "id": 10510,
+      "trackId": 10005,
+      "track": "Nakayama",
+      "distanceMeters": 2400,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1491000,
+      "finishTimeMaxRaw": 1560000
+    },
+    {
+      "id": 10511,
+      "trackId": 10005,
+      "track": "Nakayama",
+      "distanceMeters": 2500,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1591000,
+      "finishTimeMaxRaw": 1640000
+    },
+    {
+      "id": 10601,
+      "trackId": 10006,
+      "track": "Tokyo",
+      "distanceMeters": 1400,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 800000,
+      "finishTimeMaxRaw": 840000
+    },
+    {
+      "id": 10602,
+      "trackId": 10006,
+      "track": "Tokyo",
+      "distanceMeters": 1600,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 908000,
+      "finishTimeMaxRaw": 950000
+    },
+    {
+      "id": 10603,
+      "trackId": 10006,
+      "track": "Tokyo",
+      "distanceMeters": 1800,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1044000,
+      "finishTimeMaxRaw": 1100000
+    },
+    {
+      "id": 10604,
+      "trackId": 10006,
+      "track": "Tokyo",
+      "distanceMeters": 2000,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1171000,
+      "finishTimeMaxRaw": 1230000
+    },
+    {
+      "id": 10605,
+      "trackId": 10006,
+      "track": "Tokyo",
+      "distanceMeters": 2300,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1393000,
+      "finishTimeMaxRaw": 1430000
+    },
+    {
+      "id": 10606,
+      "trackId": 10006,
+      "track": "Tokyo",
+      "distanceMeters": 2400,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1416000,
+      "finishTimeMaxRaw": 1490000
+    },
+    {
+      "id": 10607,
+      "trackId": 10006,
+      "track": "Tokyo",
+      "distanceMeters": 2500,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1487000,
+      "finishTimeMaxRaw": 1570000
+    },
+    {
+      "id": 10608,
+      "trackId": 10006,
+      "track": "Tokyo",
+      "distanceMeters": 3400,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 2099000,
+      "finishTimeMaxRaw": 2140000
+    },
+    {
+      "id": 10609,
+      "trackId": 10006,
+      "track": "Tokyo",
+      "distanceMeters": 1300,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 766000,
+      "finishTimeMaxRaw": 820000
+    },
+    {
+      "id": 10610,
+      "trackId": 10006,
+      "track": "Tokyo",
+      "distanceMeters": 1400,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 808000,
+      "finishTimeMaxRaw": 940000
+    },
+    {
+      "id": 10611,
+      "trackId": 10006,
+      "track": "Tokyo",
+      "distanceMeters": 1600,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 941000,
+      "finishTimeMaxRaw": 1080000
+    },
+    {
+      "id": 10612,
+      "trackId": 10006,
+      "track": "Tokyo",
+      "distanceMeters": 2100,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1274000,
+      "finishTimeMaxRaw": 1330000
+    },
+    {
+      "id": 10613,
+      "trackId": 10006,
+      "track": "Tokyo",
+      "distanceMeters": 2400,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1491000,
+      "finishTimeMaxRaw": 1560000
+    },
+    {
+      "id": 10701,
+      "trackId": 10007,
+      "track": "Chukyo",
+      "distanceMeters": 1200,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 675000,
+      "finishTimeMaxRaw": 710000
+    },
+    {
+      "id": 10702,
+      "trackId": 10007,
+      "track": "Chukyo",
+      "distanceMeters": 1400,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 800000,
+      "finishTimeMaxRaw": 840000
+    },
+    {
+      "id": 10703,
+      "trackId": 10007,
+      "track": "Chukyo",
+      "distanceMeters": 1600,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 908000,
+      "finishTimeMaxRaw": 950000
+    },
+    {
+      "id": 10704,
+      "trackId": 10007,
+      "track": "Chukyo",
+      "distanceMeters": 2000,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1171000,
+      "finishTimeMaxRaw": 1230000
+    },
+    {
+      "id": 10705,
+      "trackId": 10007,
+      "track": "Chukyo",
+      "distanceMeters": 2200,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1302000,
+      "finishTimeMaxRaw": 1350000
+    },
+    {
+      "id": 10706,
+      "trackId": 10007,
+      "track": "Chukyo",
+      "distanceMeters": 1200,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 690000,
+      "finishTimeMaxRaw": 770000
+    },
+    {
+      "id": 10707,
+      "trackId": 10007,
+      "track": "Chukyo",
+      "distanceMeters": 1400,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 808000,
+      "finishTimeMaxRaw": 940000
+    },
+    {
+      "id": 10708,
+      "trackId": 10007,
+      "track": "Chukyo",
+      "distanceMeters": 1800,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1081000,
+      "finishTimeMaxRaw": 1180000
+    },
+    {
+      "id": 10709,
+      "trackId": 10007,
+      "track": "Chukyo",
+      "distanceMeters": 1900,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1142000,
+      "finishTimeMaxRaw": 1230000
+    },
+    {
+      "id": 10801,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 1200,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 1,
+      "finishTimeMinRaw": 675000,
+      "finishTimeMaxRaw": 710000
+    },
+    {
+      "id": 10802,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 1400,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 1,
+      "finishTimeMinRaw": 800000,
+      "finishTimeMaxRaw": 840000
+    },
+    {
+      "id": 10803,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 1400,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 1,
+      "finishTimeMinRaw": 800000,
+      "finishTimeMaxRaw": 840000
+    },
+    {
+      "id": 10804,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 1600,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 1,
+      "finishTimeMinRaw": 908000,
+      "finishTimeMaxRaw": 950000
+    },
+    {
+      "id": 10805,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 1600,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 1,
+      "finishTimeMinRaw": 908000,
+      "finishTimeMaxRaw": 950000
+    },
+    {
+      "id": 10806,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 1800,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 1,
+      "finishTimeMinRaw": 1044000,
+      "finishTimeMaxRaw": 1100000
+    },
+    {
+      "id": 10807,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 2000,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 1,
+      "finishTimeMinRaw": 1171000,
+      "finishTimeMaxRaw": 1230000
+    },
+    {
+      "id": 10808,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 2200,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 1,
+      "finishTimeMinRaw": 1302000,
+      "finishTimeMaxRaw": 1350000
+    },
+    {
+      "id": 10809,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 2400,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 1,
+      "finishTimeMinRaw": 1416000,
+      "finishTimeMaxRaw": 1490000
+    },
+    {
+      "id": 10810,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 3000,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 1,
+      "finishTimeMinRaw": 1815000,
+      "finishTimeMaxRaw": 1900000
+    },
+    {
+      "id": 10811,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 3200,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 1,
+      "finishTimeMinRaw": 1930000,
+      "finishTimeMaxRaw": 2040000
+    },
+    {
+      "id": 10812,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 1200,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 690000,
+      "finishTimeMaxRaw": 770000
+    },
+    {
+      "id": 10813,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 1400,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 808000,
+      "finishTimeMaxRaw": 940000
+    },
+    {
+      "id": 10814,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 1800,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1081000,
+      "finishTimeMaxRaw": 1180000
+    },
+    {
+      "id": 10815,
+      "trackId": 10008,
+      "track": "Kyoto",
+      "distanceMeters": 1900,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1142000,
+      "finishTimeMaxRaw": 1230000
+    },
+    {
+      "id": 10901,
+      "trackId": 10009,
+      "track": "Hanshin",
+      "distanceMeters": 1200,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 1,
+      "finishTimeMinRaw": 675000,
+      "finishTimeMaxRaw": 710000
+    },
+    {
+      "id": 10902,
+      "trackId": 10009,
+      "track": "Hanshin",
+      "distanceMeters": 1400,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 1,
+      "finishTimeMinRaw": 800000,
+      "finishTimeMaxRaw": 840000
+    },
+    {
+      "id": 10903,
+      "trackId": 10009,
+      "track": "Hanshin",
+      "distanceMeters": 1600,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 1,
+      "finishTimeMinRaw": 908000,
+      "finishTimeMaxRaw": 950000
+    },
+    {
+      "id": 10904,
+      "trackId": 10009,
+      "track": "Hanshin",
+      "distanceMeters": 1800,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 1,
+      "finishTimeMinRaw": 1044000,
+      "finishTimeMaxRaw": 1100000
+    },
+    {
+      "id": 10905,
+      "trackId": 10009,
+      "track": "Hanshin",
+      "distanceMeters": 2000,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 1,
+      "finishTimeMinRaw": 1171000,
+      "finishTimeMaxRaw": 1230000
+    },
+    {
+      "id": 10906,
+      "trackId": 10009,
+      "track": "Hanshin",
+      "distanceMeters": 2200,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 1,
+      "finishTimeMinRaw": 1302000,
+      "finishTimeMaxRaw": 1350000
+    },
+    {
+      "id": 10907,
+      "trackId": 10009,
+      "track": "Hanshin",
+      "distanceMeters": 2400,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 1,
+      "finishTimeMinRaw": 1416000,
+      "finishTimeMaxRaw": 1490000
+    },
+    {
+      "id": 10908,
+      "trackId": 10009,
+      "track": "Hanshin",
+      "distanceMeters": 2600,
+      "ground": "turf",
+      "inout": 3,
+      "turn": 1,
+      "finishTimeMinRaw": 1576000,
+      "finishTimeMaxRaw": 1650000
+    },
+    {
+      "id": 10909,
+      "trackId": 10009,
+      "track": "Hanshin",
+      "distanceMeters": 3000,
+      "ground": "turf",
+      "inout": 2,
+      "turn": 1,
+      "finishTimeMinRaw": 1815000,
+      "finishTimeMaxRaw": 1900000
+    },
+    {
+      "id": 10910,
+      "trackId": 10009,
+      "track": "Hanshin",
+      "distanceMeters": 1200,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 690000,
+      "finishTimeMaxRaw": 770000
+    },
+    {
+      "id": 10911,
+      "trackId": 10009,
+      "track": "Hanshin",
+      "distanceMeters": 1400,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 808000,
+      "finishTimeMaxRaw": 940000
+    },
+    {
+      "id": 10912,
+      "trackId": 10009,
+      "track": "Hanshin",
+      "distanceMeters": 1800,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1081000,
+      "finishTimeMaxRaw": 1180000
+    },
+    {
+      "id": 10913,
+      "trackId": 10009,
+      "track": "Hanshin",
+      "distanceMeters": 2000,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1219000,
+      "finishTimeMaxRaw": 1290000
+    },
+    {
+      "id": 10914,
+      "trackId": 10009,
+      "track": "Hanshin",
+      "distanceMeters": 3200,
+      "ground": "turf",
+      "inout": 4,
+      "turn": 1,
+      "finishTimeMinRaw": 1930000,
+      "finishTimeMaxRaw": 2040000
+    },
+    {
+      "id": 11001,
+      "trackId": 10010,
+      "track": "Kokura",
+      "distanceMeters": 1200,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 675000,
+      "finishTimeMaxRaw": 710000
+    },
+    {
+      "id": 11002,
+      "trackId": 10010,
+      "track": "Kokura",
+      "distanceMeters": 1800,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1044000,
+      "finishTimeMaxRaw": 1100000
+    },
+    {
+      "id": 11003,
+      "trackId": 10010,
+      "track": "Kokura",
+      "distanceMeters": 2000,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1171000,
+      "finishTimeMaxRaw": 1230000
+    },
+    {
+      "id": 11004,
+      "trackId": 10010,
+      "track": "Kokura",
+      "distanceMeters": 2600,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1576000,
+      "finishTimeMaxRaw": 1650000
+    },
+    {
+      "id": 11005,
+      "trackId": 10010,
+      "track": "Kokura",
+      "distanceMeters": 1000,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 574000,
+      "finishTimeMaxRaw": 630000
+    },
+    {
+      "id": 11006,
+      "trackId": 10010,
+      "track": "Kokura",
+      "distanceMeters": 1700,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1014000,
+      "finishTimeMaxRaw": 1130000
+    },
+    {
+      "id": 11007,
+      "trackId": 10010,
+      "track": "Kokura",
+      "distanceMeters": 2400,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1491000,
+      "finishTimeMaxRaw": 1560000
+    },
+    {
+      "id": 11101,
+      "trackId": 10101,
+      "track": "Oi",
+      "distanceMeters": 1200,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 690000,
+      "finishTimeMaxRaw": 770000
+    },
+    {
+      "id": 11102,
+      "trackId": 10101,
+      "track": "Oi",
+      "distanceMeters": 1800,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1081000,
+      "finishTimeMaxRaw": 1180000
+    },
+    {
+      "id": 11103,
+      "trackId": 10101,
+      "track": "Oi",
+      "distanceMeters": 2000,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1219000,
+      "finishTimeMaxRaw": 1290000
+    },
+    {
+      "id": 11201,
+      "trackId": 10201,
+      "track": "Longchamp",
+      "distanceMeters": 1000,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 4,
+      "finishTimeMinRaw": 547000,
+      "finishTimeMaxRaw": 570000
+    },
+    {
+      "id": 11202,
+      "trackId": 10201,
+      "track": "Longchamp",
+      "distanceMeters": 1400,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 800000,
+      "finishTimeMaxRaw": 840000
+    },
+    {
+      "id": 11203,
+      "trackId": 10201,
+      "track": "Longchamp",
+      "distanceMeters": 2400,
+      "ground": "turf",
+      "inout": 1,
+      "turn": 1,
+      "finishTimeMinRaw": 1416000,
+      "finishTimeMaxRaw": 1490000
+    },
+    {
+      "id": 11301,
+      "trackId": 10103,
+      "track": "Kawasaki",
+      "distanceMeters": 1400,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 870000,
+      "finishTimeMaxRaw": 940000
+    },
+    {
+      "id": 11302,
+      "trackId": 10103,
+      "track": "Kawasaki",
+      "distanceMeters": 1600,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 980000,
+      "finishTimeMaxRaw": 1080000
+    },
+    {
+      "id": 11303,
+      "trackId": 10103,
+      "track": "Kawasaki",
+      "distanceMeters": 2100,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1310000,
+      "finishTimeMaxRaw": 1400000
+    },
+    {
+      "id": 11401,
+      "trackId": 10104,
+      "track": "Funabashi",
+      "distanceMeters": 1000,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 580000,
+      "finishTimeMaxRaw": 630000
+    },
+    {
+      "id": 11402,
+      "trackId": 10104,
+      "track": "Funabashi",
+      "distanceMeters": 1600,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 960000,
+      "finishTimeMaxRaw": 1080000
+    },
+    {
+      "id": 11403,
+      "trackId": 10104,
+      "track": "Funabashi",
+      "distanceMeters": 1800,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1080000,
+      "finishTimeMaxRaw": 1180000
+    },
+    {
+      "id": 11404,
+      "trackId": 10104,
+      "track": "Funabashi",
+      "distanceMeters": 2400,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1500000,
+      "finishTimeMaxRaw": 1560000
+    },
+    {
+      "id": 11501,
+      "trackId": 10105,
+      "track": "Morioka",
+      "distanceMeters": 1200,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 690000,
+      "finishTimeMaxRaw": 770000
+    },
+    {
+      "id": 11502,
+      "trackId": 10105,
+      "track": "Morioka",
+      "distanceMeters": 1600,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 930000,
+      "finishTimeMaxRaw": 1080000
+    },
+    {
+      "id": 11503,
+      "trackId": 10105,
+      "track": "Morioka",
+      "distanceMeters": 1800,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1100000,
+      "finishTimeMaxRaw": 1180000
+    },
+    {
+      "id": 11504,
+      "trackId": 10105,
+      "track": "Morioka",
+      "distanceMeters": 2000,
+      "ground": "dirt",
+      "inout": 1,
+      "turn": 2,
+      "finishTimeMinRaw": 1210000,
+      "finishTimeMaxRaw": 1290000
+    }
+  ],
+  "aptitudeRates": {
+    "distance": [
+      {
+        "grade": "G",
+        "speedRateRaw": 1000,
+        "powerRateRaw": 4000
+      },
+      {
+        "grade": "F",
+        "speedRateRaw": 2000,
+        "powerRateRaw": 5000
+      },
+      {
+        "grade": "E",
+        "speedRateRaw": 4000,
+        "powerRateRaw": 6000
+      },
+      {
+        "grade": "D",
+        "speedRateRaw": 6000,
+        "powerRateRaw": 10000
+      },
+      {
+        "grade": "C",
+        "speedRateRaw": 8000,
+        "powerRateRaw": 10000
+      },
+      {
+        "grade": "B",
+        "speedRateRaw": 9000,
+        "powerRateRaw": 10000
+      },
+      {
+        "grade": "A",
+        "speedRateRaw": 10000,
+        "powerRateRaw": 10000
+      },
+      {
+        "grade": "S",
+        "speedRateRaw": 10500,
+        "powerRateRaw": 10000
+      }
+    ],
+    "ground": [
+      {
+        "grade": "G",
+        "rateRaw": 1000
+      },
+      {
+        "grade": "F",
+        "rateRaw": 3000
+      },
+      {
+        "grade": "E",
+        "rateRaw": 5000
+      },
+      {
+        "grade": "D",
+        "rateRaw": 7000
+      },
+      {
+        "grade": "C",
+        "rateRaw": 8000
+      },
+      {
+        "grade": "B",
+        "rateRaw": 9000
+      },
+      {
+        "grade": "A",
+        "rateRaw": 10000
+      },
+      {
+        "grade": "S",
+        "rateRaw": 10500
+      }
+    ],
+    "runningStyle": [
+      {
+        "grade": "G",
+        "rateRaw": 1000
+      },
+      {
+        "grade": "F",
+        "rateRaw": 2000
+      },
+      {
+        "grade": "E",
+        "rateRaw": 4000
+      },
+      {
+        "grade": "D",
+        "rateRaw": 6000
+      },
+      {
+        "grade": "C",
+        "rateRaw": 7500
+      },
+      {
+        "grade": "B",
+        "rateRaw": 8500
+      },
+      {
+        "grade": "A",
+        "rateRaw": 10000
+      },
+      {
+        "grade": "S",
+        "rateRaw": 11000
+      }
+    ]
+  },
+  "hpSkillEffects": [
+    {
+      "id": 10321,
+      "name": "Introduction to Physiology",
+      "desc": "Moderately recover endurance and slightly increase velocity for a moderate duration when sitting off the pace on a corner in the second half of the race.",
+      "rarity": 3,
+      "condition1": "distance_rate>=50&corner!=0&order>=3&order_rate<=40",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 350,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 10451,
+      "name": "Clear Heart",
+      "desc": "Recover endurance when well-positioned mid-race.",
+      "rarity": 3,
+      "condition1": "phase_random==1&order>=2&order_rate<=40",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 10521,
+      "name": "Super-Duper Stoked",
+      "desc": "Moderately recover endurance with a glance at nearby runners when positioned toward the back on the final corner.",
+      "rarity": 3,
+      "condition1": "is_finalcorner==1&corner!=0&order_rate>50&near_count>=1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 350,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 10621,
+      "name": "Ready, Go!",
+      "desc": "Moderately recover endurance and slightly increase velocity with newfound resolve when in midpack around halfway through the race.",
+      "rarity": 3,
+      "condition1": "distance_rate>=50&phase==1&order>=3&order_rate<=70",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 350,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 100321,
+      "name": "U=ma2",
+      "desc": "Recover endurance and moderately increase velocity for a moderate duration when sitting off the pace on a corner in the second half of the race.",
+      "rarity": 4,
+      "condition1": "distance_rate>=50&corner!=0&order>=3&order_rate<=40",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 100451,
+      "name": "Pure Heart",
+      "desc": "Greatly recover endurance when well-positioned mid-race.",
+      "rarity": 4,
+      "condition1": "phase_random==1&order>=2&order_rate<=40",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 750,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 100521,
+      "name": "Super-Duper Climax",
+      "desc": "Recover endurance with a glance at nearby runners when positioned toward the back on the final corner.",
+      "rarity": 4,
+      "condition1": "is_finalcorner==1&corner!=0&order_rate>50&near_count>=1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 100621,
+      "name": "Go, Go, Mun!",
+      "desc": "Recover endurance and moderately increase velocity with newfound resolve when in midpack around halfway through the race.",
+      "rarity": 4,
+      "condition1": "distance_rate>=50&phase==1&order>=3&order_rate<=70",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 100641,
+      "name": "Keep Pushing Ahead",
+      "desc": "If positioned toward the front from the start of the race until the second half of the race, good vibes recover endurance and moderately increase velocity steadily.",
+      "rarity": 5,
+      "condition1": "distance_rate>=50&order_rate_in20_continue==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 100711,
+      "name": "A Lifelong Dream, A Moment's Flight",
+      "desc": "Seize the moment when close to the runner behind on the final straight, slightly consuming endurance to greatly increase velocity for a moderate duration.",
+      "rarity": 5,
+      "condition1": "is_finalcorner==1&corner==0&bashin_diff_behind<=1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": -100,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 110011,
+      "name": "Dazzl'n \u266a Diver",
+      "desc": "Recover endurance by relaxing after activating 2 skills when positioned midpack mid-race.",
+      "rarity": 5,
+      "condition1": "phase==1&order>=2&order_rate<=70&activate_count_middle>=2",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 110061,
+      "name": "Festive Miracle",
+      "desc": "Control breathing and kick forward hard toward victory in the second half of the race after recovering endurance with skills at least 3 times.",
+      "rarity": 5,
+      "condition1": "activate_count_heal>=3&distance_rate>=50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_3",
+          "hpValueRaw": 350,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 110111,
+      "name": "Superior Heal",
+      "desc": "Greatly recover endurance with a gentle light when overtaken toward the back mid-race.",
+      "rarity": 5,
+      "condition1": "phase==1&change_order_onetime>0&order_rate>=40",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 750,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 110261,
+      "name": "Operation Cacao",
+      "desc": "Take a slight breather and increase velocity when in the front part of the pack and detecting another runner coming from behind on a corner mid-race.",
+      "rarity": 5,
+      "condition1": "order<=4&phase==1&corner!=0&bashin_diff_behind<=3",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 110301,
+      "name": "Every Rose Has Its Fangs",
+      "desc": "Drain endurance from runners in front and moderately increase velocity when well-positioned mid-race.",
+      "rarity": 5,
+      "condition1": "phase==1&order>=2&order_rate<=50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        },
+        {
+          "slot": "1_2",
+          "hpValueRaw": -50,
+          "targetType": 9,
+          "targetValue": 18
+        }
+      ]
+    },
+    {
+      "id": 110461,
+      "name": "\u03b1-star*",
+      "desc": "Moderately increase velocity steadily when positioned toward the lead around halfway through the race. Also moderately recover endurance if it's a dirt race.",
+      "rarity": 5,
+      "condition1": "distance_rate>=40&distance_rate<=50&distance_diff_rate<=10&ground_type==2",
+      "precondition1": "",
+      "condition2": "distance_rate>=40&distance_rate<=50&distance_diff_rate<=10",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 5000000,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": 350,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200351,
+      "name": "Swinging Maestro",
+      "desc": "Recover endurance on a corner with efficient turning.",
+      "rarity": 2,
+      "condition1": "corner_random==1@corner_random==2@corner_random==3@corner_random==4",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200352,
+      "name": "Corner Recovery \u25cb",
+      "desc": "Slightly recover endurance on a corner with efficient turning.",
+      "rarity": 1,
+      "condition1": "corner_random==1@corner_random==2@corner_random==3@corner_random==4",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200353,
+      "name": "Corner Recovery \u00d7",
+      "desc": "Moderately lose endurance on a corner with inefficient turning.",
+      "rarity": 1,
+      "condition1": "corner_random==1@corner_random==2@corner_random==3@corner_random==4",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -200,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200381,
+      "name": "Breath of Fresh Air",
+      "desc": "Recover endurance on a mid-race straight.",
+      "rarity": 2,
+      "condition1": "phase==1&corner==0",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200382,
+      "name": "Straightaway Recovery",
+      "desc": "Slightly recover endurance on a mid-race straight.",
+      "rarity": 1,
+      "condition1": "phase==1&corner==0",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200391,
+      "name": "Ramp Revulsion",
+      "desc": "Moderately increase fatigue on an uphill.",
+      "rarity": 1,
+      "condition1": "up_slope_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -200,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200401,
+      "name": "Packphobia",
+      "desc": "Moderately lose endurance when surrounded.",
+      "rarity": 1,
+      "condition1": "accumulatetime>=2&is_surrounded==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -200,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200441,
+      "name": "Iron Will",
+      "desc": "When the way ahead is jammed early or mid-race, draw on firm willpower to recover endurance and increase navigation.",
+      "rarity": 2,
+      "condition1": "phase<=1&accumulatetime>=5&blocked_front_continuetime>=1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200442,
+      "name": "Lay Low",
+      "desc": "When the way ahead is jammed early or mid-race, lay low to slightly recover endurance and slightly increase navigation.",
+      "rarity": 1,
+      "condition1": "phase<=1&accumulatetime>=5&blocked_front_continuetime>=1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200471,
+      "name": "Indomitable",
+      "desc": "Recover endurance when passed by another runner mid-race.",
+      "rarity": 2,
+      "condition1": "phase==1&change_order_onetime>0",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200472,
+      "name": "Pace Strategy",
+      "desc": "Slightly recover endurance when passed by another runner mid-race.",
+      "rarity": 1,
+      "condition1": "phase==1&change_order_onetime>0",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200481,
+      "name": "Unruffled",
+      "desc": "Recover endurance when surrounded mid-race.",
+      "rarity": 2,
+      "condition1": "phase==1&is_surrounded==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200482,
+      "name": "Calm in a Crowd",
+      "desc": "Slightly recover endurance when surrounded mid-race.",
+      "rarity": 1,
+      "condition1": "phase==1&is_surrounded==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200521,
+      "name": "Running Idle",
+      "desc": "Moderately increase fatigue when in the lead by too large of a margin.",
+      "rarity": 1,
+      "condition1": "accumulatetime>=2&order==1&bashin_diff_behind>=1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -200,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200561,
+      "name": "Calm and Collected",
+      "desc": "Decrease fatigue upon approaching mid-race. (Pace Chaser)",
+      "rarity": 2,
+      "condition1": "running_style==2&phase_laterhalf_random==0&order_rate<=50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200562,
+      "name": "Stamina to Spare",
+      "desc": "Slightly decrease fatigue upon approaching mid-race. (Pace Chaser)",
+      "rarity": 1,
+      "condition1": "running_style==2&phase_laterhalf_random==0&order_rate<=50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200571,
+      "name": "Race Planner",
+      "desc": "Decrease fatigue mid-race. (Pace Chaser)",
+      "rarity": 2,
+      "condition1": "running_style==2&phase_random==1&order_rate<=50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200572,
+      "name": "Preferred Position",
+      "desc": "Slightly decrease fatigue mid-race. (Pace Chaser)",
+      "rarity": 1,
+      "condition1": "running_style==2&phase_random==1&order_rate<=50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200621,
+      "name": "Sleeping Lion",
+      "desc": "Decrease fatigue mid-race. (End Closer)",
+      "rarity": 2,
+      "condition1": "running_style==4&phase_random==1&distance_diff_rate>=75",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200622,
+      "name": "Standing By",
+      "desc": "Slightly decrease fatigue mid-race. (End Closer)",
+      "rarity": 1,
+      "condition1": "running_style==4&phase_random==1&distance_diff_rate>=75",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200662,
+      "name": "Wait-and-See",
+      "desc": "Slightly decrease fatigue and very slightly increase acceleration when positioned toward the back mid-race. (Sprint)",
+      "rarity": 1,
+      "condition1": "distance_type==1&phase_random==1&order_rate>50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200691,
+      "name": "Keen Eye",
+      "desc": "Decrease fatigue, then moderately decrease velocity of runners ahead when positioned toward the back upon approaching mid-race. (Mile)",
+      "rarity": 2,
+      "condition1": "distance_type==2&phase_laterhalf_random==0&order_rate>50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200692,
+      "name": "Watchful Eye",
+      "desc": "Slightly decrease fatigue, then very slightly decrease velocity of runners ahead when positioned toward the back upon approaching mid-race. (Mile)",
+      "rarity": 1,
+      "condition1": "distance_type==2&phase_laterhalf_random==0&order_rate>50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200711,
+      "name": "Trackblazer",
+      "desc": "Decrease fatigue when positioned toward the front mid-race. (Medium)",
+      "rarity": 2,
+      "condition1": "distance_type==3&phase_random==1&order<=3",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200712,
+      "name": "Rosy Outlook",
+      "desc": "Slightly decrease fatigue when positioned toward the front mid-race. (Medium)",
+      "rarity": 1,
+      "condition1": "distance_type==3&phase_random==1&order<=3",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200741,
+      "name": "Cooldown",
+      "desc": "Take a breather and decrease fatigue mid-race. (Long)",
+      "rarity": 2,
+      "condition1": "distance_type==4&phase_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200742,
+      "name": "Deep Breaths",
+      "desc": "Take a breather and slightly decrease fatigue mid-race. (Long)",
+      "rarity": 1,
+      "condition1": "distance_type==4&phase_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200761,
+      "name": "Adrenaline Rush",
+      "desc": "When endurance is running low, rekindle determination and increase velocity. (Long)",
+      "rarity": 2,
+      "condition1": "distance_type==4&hp_per<=30",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200762,
+      "name": "Extra Tank",
+      "desc": "Slightly regain the energy to run when close to exhausting strength. (Long)",
+      "rarity": 1,
+      "condition1": "distance_type==4&hp_per<=30",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 200771,
+      "name": "Trick (Front)",
+      "desc": "Slightly increase fatigue for rushed runners behind when positioned toward the front mid-race.",
+      "rarity": 1,
+      "condition1": "phase==1&order_rate<=50&temptation_opponent_count_behind>=1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -100,
+          "targetType": 20,
+          "targetValue": 10
+        }
+      ]
+    },
+    {
+      "id": 200772,
+      "name": "Tantalizing Trick",
+      "desc": "Increase fatigue for rushed runners behind when positioned toward the front mid-race.",
+      "rarity": 2,
+      "condition1": "phase==1&order_rate<=50&temptation_opponent_count_behind>=1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -300,
+          "targetType": 20,
+          "targetValue": 10
+        }
+      ]
+    },
+    {
+      "id": 200781,
+      "name": "Trick (Rear)",
+      "desc": "Slightly increase fatigue for rushed runners ahead when positioned toward the back mid-race.",
+      "rarity": 1,
+      "condition1": "phase==1&order_rate>50&temptation_opponent_count_infront>=1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -100,
+          "targetType": 19,
+          "targetValue": 10
+        }
+      ]
+    },
+    {
+      "id": 200831,
+      "name": "Subdued Front Runners",
+      "desc": "Slightly increase fatigue for front runners early-race.",
+      "rarity": 1,
+      "condition1": "running_style_count_nige_otherself>=1&phase_random==0&accumulatetime>=5",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -100,
+          "targetType": 18,
+          "targetValue": 1
+        }
+      ]
+    },
+    {
+      "id": 200841,
+      "name": "Flustered Front Runners",
+      "desc": "Slightly increase fatigue for front runners mid-race.",
+      "rarity": 1,
+      "condition1": "running_style_count_nige_otherself>=1&phase_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -100,
+          "targetType": 18,
+          "targetValue": 1
+        }
+      ]
+    },
+    {
+      "id": 200861,
+      "name": "Subdued Pace Chasers",
+      "desc": "Slightly increase fatigue for pace chasers early-race.",
+      "rarity": 1,
+      "condition1": "running_style_count_senko_otherself>=1&phase_random==0&accumulatetime>=5",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -100,
+          "targetType": 18,
+          "targetValue": 2
+        }
+      ]
+    },
+    {
+      "id": 200871,
+      "name": "Flustered Pace Chasers",
+      "desc": "Slightly increase fatigue for pace chasers mid-race.",
+      "rarity": 1,
+      "condition1": "running_style_count_senko_otherself>=1&phase_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -100,
+          "targetType": 18,
+          "targetValue": 2
+        }
+      ]
+    },
+    {
+      "id": 200891,
+      "name": "Subdued Late Surgers",
+      "desc": "Slightly increase fatigue for late surgers early-race.",
+      "rarity": 1,
+      "condition1": "running_style_count_sashi_otherself>=1&phase_random==0&accumulatetime>=5",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -100,
+          "targetType": 18,
+          "targetValue": 3
+        }
+      ]
+    },
+    {
+      "id": 200901,
+      "name": "Flustered Late Surgers",
+      "desc": "Slightly increase fatigue for late surgers mid-race.",
+      "rarity": 1,
+      "condition1": "running_style_count_sashi_otherself>=1&phase_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -100,
+          "targetType": 18,
+          "targetValue": 3
+        }
+      ]
+    },
+    {
+      "id": 200921,
+      "name": "Subdued End Closers",
+      "desc": "Slightly increase fatigue for end closers early-race.",
+      "rarity": 1,
+      "condition1": "running_style_count_oikomi_otherself>=1&phase_random==0&accumulatetime>=5",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -100,
+          "targetType": 18,
+          "targetValue": 4
+        }
+      ]
+    },
+    {
+      "id": 200931,
+      "name": "Flustered End Closers",
+      "desc": "Slightly increase fatigue for end closers mid-race.",
+      "rarity": 1,
+      "condition1": "running_style_count_oikomi_otherself>=1&phase_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -100,
+          "targetType": 18,
+          "targetValue": 4
+        }
+      ]
+    },
+    {
+      "id": 201021,
+      "name": "You've Got No Shot",
+      "desc": "Cause panic in and moderately dull movement for runners ahead when positioned toward the back early-race. (Sprint)",
+      "rarity": 2,
+      "condition1": "distance_type==1&phase_random==0&order_rate>50&accumulatetime>=5",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -300,
+          "targetType": 9,
+          "targetValue": 18
+        }
+      ]
+    },
+    {
+      "id": 201022,
+      "name": "Stop Right There!",
+      "desc": "Slightly cause panic in and very slightly dull movement for runners ahead when positioned toward the back early-race. (Sprint)",
+      "rarity": 1,
+      "condition1": "distance_type==1&phase_random==0&order_rate>50&accumulatetime>=5",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -100,
+          "targetType": 9,
+          "targetValue": 18
+        }
+      ]
+    },
+    {
+      "id": 201141,
+      "name": "Miraculous Step",
+      "desc": "Decrease fatigue when moving sideways. (Medium)",
+      "rarity": 2,
+      "condition1": "distance_type==3&is_move_lane==1&accumulatetime>=10@distance_type==3&is_move_lane==2&accumulatetime>=10",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201142,
+      "name": "Soft Step",
+      "desc": "Slightly decrease fatigue when moving sideways. (Medium)",
+      "rarity": 1,
+      "condition1": "distance_type==3&is_move_lane==1&accumulatetime>=10@distance_type==3&is_move_lane==2&accumulatetime>=10",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201161,
+      "name": "Mystifying Murmur",
+      "desc": "Disturb runners directly ahead mid-race. (Medium)",
+      "rarity": 2,
+      "condition1": "distance_type==3&phase==1&blocked_front_continuetime>=1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -300,
+          "targetType": 9,
+          "targetValue": 18
+        }
+      ]
+    },
+    {
+      "id": 201162,
+      "name": "Murmur",
+      "desc": "Slightly disturb runners directly ahead mid-race. (Medium)",
+      "rarity": 1,
+      "condition1": "distance_type==3&phase==1&blocked_front_continuetime>=1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -100,
+          "targetType": 9,
+          "targetValue": 18
+        }
+      ]
+    },
+    {
+      "id": 201201,
+      "name": "VIP Pass",
+      "desc": "Decrease fatigue when determined to pass another runner. (Long)",
+      "rarity": 2,
+      "condition1": "distance_type==4&is_overtake==1&accumulatetime>=5",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201202,
+      "name": "Passing Pro",
+      "desc": "Slightly decrease fatigue when determined to pass another runner. (Long)",
+      "rarity": 1,
+      "condition1": "distance_type==4&is_overtake==1&accumulatetime>=5",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201221,
+      "name": "Stamina Siphon",
+      "desc": "Slightly steal endurance from runners ahead when positioned toward the back mid-race. (Long)",
+      "rarity": 2,
+      "condition1": "distance_type==4&phase_random==1&order>=5",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -100,
+          "targetType": 9,
+          "targetValue": 5
+        },
+        {
+          "slot": "1_2",
+          "hpValueRaw": 350,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201222,
+      "name": "Stamina Eater",
+      "desc": "Very slightly steal endurance from runners ahead when positioned toward the back mid-race. (Long)",
+      "rarity": 1,
+      "condition1": "distance_type==4&phase_random==1&order>=5",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -50,
+          "targetType": 9,
+          "targetValue": 5
+        },
+        {
+          "slot": "1_2",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201281,
+      "name": "Restless",
+      "desc": "Reduce fatigue on an uphill. (Front Runner)",
+      "rarity": 2,
+      "condition1": "running_style==1&slope==1&accumulatetime>=10",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201282,
+      "name": "Moxie",
+      "desc": "Slightly reduce fatigue on an uphill. (Front Runner)",
+      "rarity": 1,
+      "condition1": "running_style==1&slope==1&accumulatetime>=10",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201291,
+      "name": "Reignition",
+      "desc": "Moderately expend endurance to increase acceleration late-race. (Front Runner)",
+      "rarity": 2,
+      "condition1": "running_style==1&phase_random==2",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": -200,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201292,
+      "name": "Second Wind",
+      "desc": "Moderately expend endurance to slightly increase acceleration late-race. (Front Runner)",
+      "rarity": 1,
+      "condition1": "running_style==1&phase_random==2",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": -200,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201351,
+      "name": "Gourmand",
+      "desc": "Recover endurance mid-race. (Pace Chaser)",
+      "rarity": 2,
+      "condition1": "running_style==2&phase_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201352,
+      "name": "Hydrate",
+      "desc": "Slightly recover endurance mid-race. (Pace Chaser)",
+      "rarity": 1,
+      "condition1": "running_style==2&phase_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201421,
+      "name": "Relax",
+      "desc": "Recover endurance when positioned midpack or further back mid-race. (Late Surger)",
+      "rarity": 2,
+      "condition1": "running_style==3&phase_random==1&order_rate>=40",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201422,
+      "name": "A Small Breather",
+      "desc": "Slightly recover endurance when positioned midpack or further back mid-race. (Late Surger)",
+      "rarity": 1,
+      "condition1": "running_style==3&phase_random==1&order_rate>=40",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201441,
+      "name": "All-Seeing Eyes",
+      "desc": "Startle other runners late-race. (Late Surger)",
+      "rarity": 2,
+      "condition1": "running_style==3&phase_random==2&order_rate>50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -300,
+          "targetType": 4,
+          "targetValue": 18
+        }
+      ]
+    },
+    {
+      "id": 201442,
+      "name": "Sharp Gaze",
+      "desc": "Slightly startle other runners late-race. (Late Surger)",
+      "rarity": 1,
+      "condition1": "running_style==3&phase_random==2&order_rate>50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": -100,
+          "targetType": 4,
+          "targetValue": 18
+        }
+      ]
+    },
+    {
+      "id": 201481,
+      "name": "Go-Home Specialist",
+      "desc": "Reduce fatigue on a downhill. (End Closer)",
+      "rarity": 2,
+      "condition1": "running_style==4&slope==2&accumulatetime>=10",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201482,
+      "name": "After-School Stroll",
+      "desc": "Slightly reduce fatigue on a downhill. (End Closer)",
+      "rarity": 1,
+      "condition1": "running_style==4&slope==2&accumulatetime>=10",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201491,
+      "name": "Serenity",
+      "desc": "Relax and recover endurance when following directly behind a runner. (End Closer)",
+      "rarity": 2,
+      "condition1": "running_style==4&infront_near_lane_time>=1&accumulatetime>=10",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201492,
+      "name": "Levelheaded",
+      "desc": "Relax and slightly recover endurance when following directly behind a runner. (End Closer)",
+      "rarity": 1,
+      "condition1": "running_style==4&infront_near_lane_time>=1&accumulatetime>=10",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201571,
+      "name": "Triple 7s",
+      "desc": "Slightly gain energy with 777m remaining.",
+      "rarity": 1,
+      "condition1": "remain_distance<=778&remain_distance>=776",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201621,
+      "name": "Shake It Out",
+      "desc": "Slightly recover endurance after activating many skills late-race.",
+      "rarity": 1,
+      "condition1": "activate_count_end_after>=3",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201691,
+      "name": "Lie in Wait",
+      "desc": "Recover endurance when positioned midpack or further back upon approaching mid-race. (Late Surger)",
+      "rarity": 2,
+      "condition1": "running_style==3&phase_laterhalf_random==0&order_rate>=40",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 201692,
+      "name": "Be Still",
+      "desc": "Slightly recover endurance when positioned midpack or further back upon approaching mid-race. (Late Surger)",
+      "rarity": 1,
+      "condition1": "running_style==3&phase_laterhalf_random==0&order_rate>=40",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202001,
+      "name": "Master of the Sands",
+      "desc": "Recover endurance and increase velocity when positioned toward the back mid-race. (Dirt)",
+      "rarity": 2,
+      "condition1": "ground_type==2&phase_random==1&order_rate>=50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202002,
+      "name": "Familiar Ground",
+      "desc": "Slightly recover endurance when positioned toward the back mid-race. (Dirt)",
+      "rarity": 1,
+      "condition1": "ground_type==2&phase_random==1&order_rate>=50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202031,
+      "name": "Nothing Ventured",
+      "desc": "Greatly increase velocity in the second half of the race, but also greatly increase fatigue sometimes.",
+      "rarity": 2,
+      "condition1": "distance_rate_after_random==50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": -10000,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202032,
+      "name": "Risky Business",
+      "desc": "Moderately increase velocity in the second half of the race, but also greatly increase fatigue sometimes.",
+      "rarity": 1,
+      "condition1": "distance_rate_after_random==50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": -10000,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202071,
+      "name": "Of Calm Mind",
+      "desc": "Slightly decrease velocity and greatly recover endurance when positioned midpack in the early part of mid-race. (Long)",
+      "rarity": 2,
+      "condition1": "distance_type==4&phase_firsthalf_random==1&order_rate>=40&order_rate<=80",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 750,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202072,
+      "name": "Free-Spirited",
+      "desc": "Slightly decrease velocity and moderately recover endurance when positioned midpack in the early part of mid-race. (Long)",
+      "rarity": 1,
+      "condition1": "distance_type==4&phase_firsthalf_random==1&order_rate>=40&order_rate<=80",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 350,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202091,
+      "name": "Burning Soul",
+      "desc": "Moderately recover endurance and increase velocity when engaging in a challenge midpack mid-race. (Medium)",
+      "rarity": 2,
+      "condition1": "distance_type==3&phase==1&order_rate<=80&order_rate>=30&blocked_side_continuetime>=2",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": 350,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202092,
+      "name": "Fighting Spirit",
+      "desc": "When engaged in a challenge midpack mid-race, very slightly recover endurance and slightly increase velocity. (Medium)",
+      "rarity": 1,
+      "condition1": "distance_type==3&phase==1&order_rate<=80&order_rate>=30&blocked_side_continuetime>=2",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": 50,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202151,
+      "name": "Keep Going!",
+      "desc": "Moderately expend endurance to greatly increase velocity mid-race. (Late Surger)",
+      "rarity": 2,
+      "condition1": "running_style==3&phase_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": -200,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202152,
+      "name": "Full Throttle",
+      "desc": "Moderately expend endurance to moderately increase velocity mid-race. (Late Surger)",
+      "rarity": 1,
+      "condition1": "running_style==3&phase_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": -200,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202191,
+      "name": "Heart All Set",
+      "desc": "If the skill user began the race without a late start, greatly recover endurance in the early part of mid-race. (Pace, Long)",
+      "rarity": 2,
+      "condition1": "is_badstart==0&running_style==2&distance_type==4&phase_firsthalf_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 750,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202192,
+      "name": "All Set",
+      "desc": "If the skill user began the race without a late start, moderately recover endurance in the early part of mid-race. (Pace, Long)",
+      "rarity": 1,
+      "condition1": "is_badstart==0&running_style==2&distance_type==4&phase_firsthalf_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 350,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202391,
+      "name": "Givin' It 1000%",
+      "desc": "Greatly expend endurance and greatly increase velocity in the early part of mid-race. (Front Runner)",
+      "rarity": 2,
+      "condition1": "phase_firsthalf_random==1&running_style==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": -400,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202392,
+      "name": "Mad Dash",
+      "desc": "Greatly expend endurance and moderately increase velocity in the early part of mid-race. (Front Runner)",
+      "rarity": 1,
+      "condition1": "phase_firsthalf_random==1&running_style==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": -400,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202421,
+      "name": "Claw Forward",
+      "desc": "Moderately expend endurance to increase acceleration when positioned midpack or further back in the last spurt. (Late, Long)",
+      "rarity": 2,
+      "condition1": "distance_type==4&running_style==3&is_lastspurt==1&order_rate>=40",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": -200,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 202422,
+      "name": "Scramble",
+      "desc": "Moderately expend endurance to slightly increase acceleration when positioned midpack or further back in the last spurt. (Late, Long)",
+      "rarity": 1,
+      "condition1": "distance_type==4&running_style==3&is_lastspurt==1&order_rate>=40",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": -200,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 210021,
+      "name": "Burning Spirit STA",
+      "desc": "Burn bright with team spirit, recovering endurance in proportion to the total Stamina of racing team members mid-race.",
+      "rarity": 2,
+      "condition1": "phase_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 210022,
+      "name": "Ignited Spirit STA",
+      "desc": "Burn bright with team spirit, slightly recovering endurance in proportion to the total Stamina of racing team members mid-race.",
+      "rarity": 1,
+      "condition1": "phase_random==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 210061,
+      "name": "Radiant Star",
+      "desc": "Control breathing and kick forward in the second half of the race. Effect is increased in proportion to number of career wins.",
+      "rarity": 2,
+      "condition1": "distance_rate_after_random==50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_3",
+          "hpValueRaw": 350,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 210062,
+      "name": "Glittering Star",
+      "desc": "Very slightly control breathing and kick forward in the second half of the race. Effect is increased in proportion to number of career wins.",
+      "rarity": 1,
+      "condition1": "distance_rate_after_random==50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_3",
+          "hpValueRaw": 50,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 210101,
+      "name": "Racing Spirit: Stamina",
+      "desc": "Moderately expend endurance to moderately increase velocity in the last spurt.",
+      "rarity": 1,
+      "condition1": "phase_random==3&hp_per>=2&is_lastspurt==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": -200,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 300101,
+      "name": "Cheers of a Fellow Dreamer",
+      "desc": "Recover Silence Suzuka's endurance on a corner in the second half of the race through a friend's cheers of support.",
+      "rarity": 2,
+      "condition1": "is_exist_chara_id==1002&remain_distance_viewer_id>=800&remain_distance_viewer_id<=850",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 550,
+          "targetType": 22,
+          "targetValue": 1002
+        }
+      ]
+    },
+    {
+      "id": 900321,
+      "name": "U=ma2",
+      "desc": "Slightly recover endurance and very slightly increase velocity for a moderate duration when sitting off the pace on a corner in the second half of the race.",
+      "rarity": 1,
+      "condition1": "distance_rate>=50&corner!=0&order>=3&order_rate<=40",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 900451,
+      "name": "Pure Heart",
+      "desc": "Moderately recover endurance when well-positioned mid-race.",
+      "rarity": 1,
+      "condition1": "phase_random==1&order>=2&order_rate<=40",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 350,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 900521,
+      "name": "Super-Duper Climax",
+      "desc": "Slightly recover endurance with a glance at nearby runners when positioned toward the back on the final corner.",
+      "rarity": 1,
+      "condition1": "is_finalcorner==1&corner!=0&order_rate>50&near_count>=1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 900621,
+      "name": "Go, Go, Mun!",
+      "desc": "Slightly recover endurance and very slightly increase velocity when in midpack around halfway through the race.",
+      "rarity": 1,
+      "condition1": "distance_rate>=50&phase==1&order>=3&order_rate<=70",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 900641,
+      "name": "Keep Pushing Ahead",
+      "desc": "If positioned toward the front from the start of the race until the second half of the race, slightly recover endurance and very slightly increase velocity steadily.",
+      "rarity": 1,
+      "condition1": "distance_rate>=50&order_rate_in20_continue==1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 900711,
+      "name": "A Lifelong Dream, A Moment's Flight",
+      "desc": "Slightly consume endurance to moderately increase velocity for a moderate duration when close to the runner behind on the final straight.",
+      "rarity": 1,
+      "condition1": "is_finalcorner==1&corner==0&bashin_diff_behind<=1",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": -100,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 910011,
+      "name": "Dazzl'n \u266a Diver",
+      "desc": "Slightly recover endurance after activating 2 skills mid-race.",
+      "rarity": 1,
+      "condition1": "phase==1&order>=2&order_rate<=70&activate_count_middle>=2",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 910061,
+      "name": "Festive Miracle",
+      "desc": "Very slightly control breathing and kick forward toward victory in the second half of the race after recovering endurance with skills at least 3 times.",
+      "rarity": 1,
+      "condition1": "activate_count_heal>=3&distance_rate>=50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_3",
+          "hpValueRaw": 50,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 910111,
+      "name": "Superior Heal",
+      "desc": "Moderately recover endurance when overtaken toward the back mid-race.",
+      "rarity": 1,
+      "condition1": "phase==1&change_order_onetime>0&order_rate>=40",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 350,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 910261,
+      "name": "Operation Cacao",
+      "desc": "Take a minimal breather and slightly increase velocity when in the front part of the pack and there's another runner coming from behind on a corner mid-race.",
+      "rarity": 1,
+      "condition1": "order<=4&phase==1&corner!=0&bashin_diff_behind<=3",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": 35,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    },
+    {
+      "id": 910301,
+      "name": "Every Rose Has Its Fangs",
+      "desc": "Slightly drain endurance from runners in front and very slightly increase velocity when well-positioned mid-race.",
+      "rarity": 1,
+      "condition1": "phase==1&order>=2&order_rate<=50",
+      "precondition1": "",
+      "condition2": "",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 0,
+      "effects": [
+        {
+          "slot": "1_1",
+          "hpValueRaw": 150,
+          "targetType": 1,
+          "targetValue": 0
+        },
+        {
+          "slot": "1_2",
+          "hpValueRaw": -25,
+          "targetType": 9,
+          "targetValue": 18
+        }
+      ]
+    },
+    {
+      "id": 910461,
+      "name": "\u03b1-star*",
+      "desc": "Very slightly increase velocity steadily when positioned toward the lead around halfway through the race. Also very slightly recover endurance if it's a dirt race.",
+      "rarity": 1,
+      "condition1": "distance_rate>=40&distance_rate<=50&distance_diff_rate<=10&ground_type==2",
+      "precondition1": "",
+      "condition2": "distance_rate>=40&distance_rate<=50&distance_diff_rate<=10",
+      "precondition2": "",
+      "cooldown1Raw": 5000000,
+      "cooldown2Raw": 5000000,
+      "effects": [
+        {
+          "slot": "1_2",
+          "hpValueRaw": 50,
+          "targetType": 1,
+          "targetValue": 0
+        }
+      ]
+    }
+  ]
+}
