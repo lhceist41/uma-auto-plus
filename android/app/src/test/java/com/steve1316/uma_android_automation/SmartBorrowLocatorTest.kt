@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -109,19 +110,51 @@ class SmartBorrowLocatorTest {
     @DisplayName("equivalent offerings")
     inner class Equivalents {
         @Test
-        fun `two equivalent offerings without an alias are ambiguous`() {
+        fun `two equivalent offerings without an alias resolve to a deterministic equivalent, not a block`() {
+            // Same card + same limit break from two owners is one equivalence class: owner has no gameplay
+            // effect, so a deterministic equivalent is chosen (LOCATED), not blocked.
             val match = SmartBorrowLocator.locate(intent(sourceAlias = null), listOf(row(ownerAlias = "owner-a"), row(ownerAlias = "owner-b")))
-            assertEquals(SmartBorrowLocateVerdict.AMBIGUOUS, match.verdict)
-            assertNull(match.row)
+            assertEquals(SmartBorrowLocateVerdict.LOCATED, match.verdict)
+            assertTrue(match.equivalentSource)
+            assertEquals(2, match.equivalenceClassSize)
         }
 
         @Test
-        fun `a source alias singles out one of several equivalents`() {
+        fun `the deterministic equivalent pick is stable regardless of row order`() {
+            val a = row(ownerAlias = "owner-a")
+            val b = row(ownerAlias = "owner-b")
+            val first = SmartBorrowLocator.locate(intent(sourceAlias = null), listOf(a, b)).row
+            val second = SmartBorrowLocator.locate(intent(sourceAlias = null), listOf(b, a)).row
+            assertEquals(first?.ownerAlias, second?.ownerAlias, "the same equivalence class always yields the same pick")
+        }
+
+        @Test
+        fun `a source alias picks the intent's own source among several equivalents`() {
             val target = row(ownerAlias = "owner-b")
             val match = SmartBorrowLocator.locate(intent(sourceAlias = "owner-b"), listOf(row(ownerAlias = "owner-a"), target))
             assertEquals(SmartBorrowLocateVerdict.LOCATED, match.verdict)
             assertTrue(match.disambiguatedByAlias)
+            assertFalse(match.equivalentSource)
             assertSame(target, match.row)
+        }
+
+        @Test
+        fun `an alias that is no longer present still allows a deterministic equivalent`() {
+            // The intent's own owner rotated out, but the same card is still offered by others: allowed.
+            val match = SmartBorrowLocator.locate(intent(sourceAlias = "owner-gone"), listOf(row(ownerAlias = "owner-a"), row(ownerAlias = "owner-b")))
+            assertEquals(SmartBorrowLocateVerdict.LOCATED, match.verdict)
+            assertTrue(match.equivalentSource)
+        }
+
+        @Test
+        fun `the same character and title at different known limit breaks is non-equivalent and blocks`() {
+            // Only possible when the intent's own limit break is unknown: two different copies, not one class.
+            val match = SmartBorrowLocator.locate(
+                intent(expectedLimitBreak = null),
+                listOf(row(limitBreakIndex = 2, ownerAlias = "owner-a"), row(limitBreakIndex = 4, ownerAlias = "owner-b")),
+            )
+            assertEquals(SmartBorrowLocateVerdict.AMBIGUOUS, match.verdict)
+            assertNull(match.row)
         }
     }
 

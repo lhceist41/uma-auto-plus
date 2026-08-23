@@ -139,32 +139,50 @@ fun BorrowRowObservation.toLocatable(): LocatableBorrowRow =
         confidence = confidence,
     )
 
-/** Why the locate resolved the way it did. Only [LOCATED] may ever authorise a (future) tap. */
+/**
+ * Why the locate resolved the way it did. Only [LOCATED] may ever authorise a (future) tap.
+ *
+ * Owner/source is NOT part of a support card's gameplay identity. The offline resolver merges owners by
+ * supportCardId precisely because "card value never depends on how many friends happen to hold it", so
+ * two live rows of the same canonical card at the same limit break are functionally interchangeable. The
+ * locator treats them as ONE equivalence class instead of an ambiguity: it returns [LOCATED] (preferring
+ * the intent's own source when still present, else a deterministic equivalent) and blocks ([AMBIGUOUS])
+ * only when the matched rows are NOT equivalent -- the same character+title observed at genuinely
+ * different limit breaks, which can happen only when the intent's own limit break is unknown.
+ */
 enum class SmartBorrowLocateVerdict {
-    /** Exactly one borrowable row matched the intent's identity (and its limit break, when known). */
+    /** The intent's card is uniquely resolvable as one equivalence class; one row was picked from it. */
     LOCATED,
 
     /** No borrowable row matched the intent's canonical character + title. */
     NOT_FOUND,
 
-    /** A row matched the identity but every identity match's observed limit break contradicts the
-     * intent's KNOWN expected limit break: same card family, wrong copy. Fails closed. */
+    /** A row matched the identity but every match's observed limit break contradicts the intent's KNOWN
+     * expected limit break: same card family, wrong copy. Fails closed. */
     LB_MISMATCH,
 
-    /** More than one borrowable row matched the identity and the source alias did not single one out. */
+    /** The matched rows are NOT one equivalence class: the same character+title observed at different
+     * limit breaks (only when the intent's own limit break is unknown), so they are materially different
+     * copies and no deterministic pick is safe. Fails closed. */
     AMBIGUOUS,
 }
 
 /** The locate outcome plus the evidence behind it, for the log and the persisted record. */
 data class SmartBorrowLocateMatch(
     val verdict: SmartBorrowLocateVerdict,
-    /** The single located row, set only for [SmartBorrowLocateVerdict.LOCATED]. */
+    /** The row picked from the located equivalence class, set only for [SmartBorrowLocateVerdict.LOCATED]. */
     val row: LocatableBorrowRow?,
     /** Every borrowable row that matched the canonical character + title, before the limit-break gate. */
     val identityCandidates: List<LocatableBorrowRow>,
     val reason: String,
-    /** True when the located row was singled out only after filtering the identity matches by source alias. */
+    /** True when the located row was the intent's own source, singled out among several equivalent offerings. */
     val disambiguatedByAlias: Boolean = false,
+    /** True when the located row was a deterministic pick among several interchangeable equivalent rows
+     * (same card + limit break, different owners) rather than the intent's own or the only source. The
+     * launch verifies the committed identity after selection regardless; this only records the fact. */
+    val equivalentSource: Boolean = false,
+    /** How many borrowable rows formed the located card's equivalence class (0 when not located). */
+    val equivalenceClassSize: Int = if (row != null) 1 else 0,
 )
 
 /**
@@ -173,9 +191,11 @@ data class SmartBorrowLocateMatch(
  * Identity is canonical character AND canonical title (both matched through [borrowRowMatchesPreference]
  * so OCR bracket/spacing noise cannot break the match); a blocked row (duplicate / active-trainee) can
  * never be borrowed and is excluded. Among identity matches, a row is kept only if its observed limit
- * break does not contradict a KNOWN expected one (either side unknown is not decisive). One survivor is
- * a locate; several are resolved by source alias when the intent carries one, else it is ambiguous and
- * fails closed.
+ * break does not contradict a KNOWN expected one (either side unknown is not decisive). The survivors
+ * form an EQUIVALENCE CLASS -- the same canonical card at the same limit break, offered by one or more
+ * owners, all interchangeable because owner has no gameplay effect. One is picked (the intent's own
+ * source when still present, else a deterministic equivalent). Only a class that disagrees on a known
+ * limit break is [SmartBorrowLocateVerdict.AMBIGUOUS] and fails closed.
  */
 object SmartBorrowLocator {
     fun locate(intent: SmartBorrowIntent, rows: List<LocatableBorrowRow>): SmartBorrowLocateMatch {
@@ -202,20 +222,56 @@ object SmartBorrowLocator {
                 "identity matched but every candidate's observed limit break != expected ${intent.expectedLimitBreak}",
             )
         }
-        if (lbAccepted.size == 1) {
-            return SmartBorrowLocateMatch(SmartBorrowLocateVerdict.LOCATED, lbAccepted[0], identity, "exactly one borrowable row matched the intent")
+
+        // Equivalence guard: the accepted rows already share the intent's character+title. They are one
+        // equivalence class only if they do not disagree on a KNOWN limit break. Two distinct known limit
+        // breaks (possible only when the intent's own limit break is unknown) are materially different
+        // copies, so no deterministic pick is safe.
+        val distinctKnownLbs = lbAccepted.mapNotNull { it.limitBreakIndex }.distinct()
+        if (distinctKnownLbs.size > 1) {
+            return SmartBorrowLocateMatch(
+                SmartBorrowLocateVerdict.AMBIGUOUS,
+                null,
+                identity,
+                "the intent's limit break is unknown and the pool holds ${intent.canonicalCharacter} [${intent.canonicalTitle ?: "-"}] at limit breaks ${distinctKnownLbs.sorted()}: not one equivalence class",
+            )
         }
 
-        // More than one identical-identity offering. Disambiguate by the intent's source alias if it has
-        // one; otherwise fail closed rather than pick an arbitrary equivalent.
-        if (!intent.sourceAlias.isNullOrBlank()) {
-            val byAlias = lbAccepted.filter { it.ownerAlias == intent.sourceAlias }
-            if (byAlias.size == 1) {
-                return SmartBorrowLocateMatch(SmartBorrowLocateVerdict.LOCATED, byAlias[0], identity, "singled out by source alias among ${lbAccepted.size} equivalent offerings", disambiguatedByAlias = true)
-            }
+        // One equivalence class. Prefer the intent's own source when it is still present; otherwise take a
+        // deterministic equivalent. Owner is not part of card identity, so any member is the same card;
+        // the launch verifies the committed identity after the tap regardless.
+        val byAlias = intent.sourceAlias?.takeIf { it.isNotBlank() }?.let { alias -> lbAccepted.filter { it.ownerAlias == alias } } ?: emptyList()
+        if (byAlias.size == 1) {
+            return SmartBorrowLocateMatch(
+                SmartBorrowLocateVerdict.LOCATED,
+                byAlias[0],
+                identity,
+                if (lbAccepted.size == 1) "exactly one borrowable row matched the intent" else "the intent's own source among ${lbAccepted.size} equivalent offerings",
+                disambiguatedByAlias = lbAccepted.size > 1,
+                equivalenceClassSize = lbAccepted.size,
+            )
         }
-        return SmartBorrowLocateMatch(SmartBorrowLocateVerdict.AMBIGUOUS, null, identity, "${lbAccepted.size} borrowable rows matched the intent and the source alias did not single one out")
+        val chosen = pickDeterministicEquivalent(lbAccepted)
+        return SmartBorrowLocateMatch(
+            SmartBorrowLocateVerdict.LOCATED,
+            chosen,
+            identity,
+            if (lbAccepted.size == 1) "exactly one borrowable row matched the intent" else "a deterministic equivalent among ${lbAccepted.size} interchangeable offerings of the same card",
+            equivalentSource = lbAccepted.size > 1,
+            equivalenceClassSize = lbAccepted.size,
+        )
     }
+
+    /** Deterministic choice among interchangeable equivalent rows: highest known limit break, then
+     * highest level, then lowest page index, then owner alias -- so the same pool always yields the same
+     * pick and a re-scan cannot oscillate between equivalents. */
+    private fun pickDeterministicEquivalent(rows: List<LocatableBorrowRow>): LocatableBorrowRow =
+        rows.sortedWith(
+            compareByDescending<LocatableBorrowRow> { it.limitBreakIndex ?: -1 }
+                .thenByDescending { it.level ?: -1 }
+                .thenBy { it.pageIndex }
+                .thenBy { it.ownerAlias ?: "" },
+        ).first()
 }
 
 /** Outcome of one read-only Smart Borrow locate rehearsal, for the diagnostic entry point. */
@@ -226,6 +282,9 @@ data class SmartBorrowLocateResult(
     val match: SmartBorrowLocateMatch? = null,
     val returnedToSupportFormation: Boolean = false,
     val friendSlotStillEmpty: Boolean = false,
+    /** True only when the picker walk saw the whole list without stalling, so a CARD_NOT_FOUND here is a
+     * genuine absence rather than a traversal the scroll gesture cut short. Defaults false (conservative). */
+    val traversalComplete: Boolean = false,
     val failureReason: String? = null,
 ) {
     enum class Status {
