@@ -11,14 +11,41 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { DatabaseSync } from "node:sqlite"
-import { buildPayload, buildTraineeGrowth, serializePayload, verifyNamedGroups, GenerateError } from "./generate-build-budget-data.mjs"
+import { buildPayload, buildStatCaps, buildTraineeBase, buildTraineeGrowth, buildTrainingEffects, deriveCommandTrainingTypes, serializePayload, verifyNamedGroups, GenerateError } from "./generate-build-budget-data.mjs"
 
 const TABLES = {
     succession_factor: "CREATE TABLE succession_factor (factor_id INTEGER, factor_group_id INTEGER, rarity INTEGER, grade INTEGER, factor_type INTEGER, effect_group_id INTEGER);",
     succession_factor_effect: "CREATE TABLE succession_factor_effect (id INTEGER, factor_group_id INTEGER, effect_id INTEGER, target_type INTEGER, value_1 INTEGER, value_2 INTEGER);",
     card_data: "CREATE TABLE card_data (id INTEGER, chara_id INTEGER, default_rarity INTEGER, talent_speed INTEGER, talent_stamina INTEGER, talent_pow INTEGER, talent_guts INTEGER, talent_wiz INTEGER, running_style INTEGER);",
+    card_rarity_data:
+        "CREATE TABLE card_rarity_data (card_id INTEGER, rarity INTEGER, speed INTEGER, stamina INTEGER, pow INTEGER, guts INTEGER, wiz INTEGER, max_speed INTEGER, max_stamina INTEGER, max_pow INTEGER, max_guts INTEGER, max_wiz INTEGER, " +
+        "proper_distance_short INTEGER, proper_distance_mile INTEGER, proper_distance_middle INTEGER, proper_distance_long INTEGER, proper_ground_turf INTEGER, proper_ground_dirt INTEGER, " +
+        "proper_running_style_nige INTEGER, proper_running_style_senko INTEGER, proper_running_style_sashi INTEGER, proper_running_style_oikomi INTEGER);",
+    single_mode_scenario: "CREATE TABLE single_mode_scenario (id INTEGER, max_speed INTEGER, max_stamina INTEGER, max_pow INTEGER, max_guts INTEGER, max_wiz INTEGER);",
+    single_mode_training: "CREATE TABLE single_mode_training (command_id INTEGER, command_level INTEGER, command_type INTEGER, failure_rate INTEGER);",
+    single_mode_training_effect: "CREATE TABLE single_mode_training_effect (command_id INTEGER, sub_id INTEGER, result_state INTEGER, target_type INTEGER, effect_value INTEGER, scenario_id INTEGER);",
     text_data: 'CREATE TABLE text_data (category INTEGER, "index" INTEGER, text TEXT);',
 }
+
+/**
+ * The base and camp training boards, as the shipped database orders them.
+ *
+ * Deliberately kept in the shipped, counter-intuitive order: 102 is Power and 105 is Stamina on the
+ * base board, while the camp board runs straight down Speed/Stamina/Power/Guts/Wit. A fixture that
+ * "tidied" that would stop testing the thing that is easy to get wrong.
+ */
+const TRAINING_ROWS = [
+    [101, { 1: 11, 3: 6, 10: -21, 30: 4 }],
+    [102, { 2: 6, 3: 9, 10: -20, 30: 4 }],
+    [103, { 1: 5, 3: 5, 4: 8, 10: -22, 30: 4 }],
+    [105, { 2: 10, 4: 6, 10: -19, 30: 4 }],
+    [106, { 1: 2, 5: 10, 10: 5, 30: 5 }],
+    [601, { 1: 15, 3: 8, 10: -27, 30: 4 }],
+    [602, { 2: 14, 4: 8, 10: -25, 30: 4 }],
+    [603, { 2: 8, 3: 13, 10: -26, 30: 4 }],
+    [604, { 1: 6, 3: 5, 4: 13, 10: -28, 30: 4 }],
+    [605, { 1: 4, 5: 14, 10: 5, 30: 5 }],
+]
 
 const BLUE_NAMES = ["Speed", "Stamina", "Power", "Guts", "Wit"]
 const PINK_GROUPS = [
@@ -77,6 +104,31 @@ function makeDb(mutate = () => {}) {
     text.run(5, 100101, "[Special Dreamer]")
     text.run(5, 100102, "[Hopp'n Happy Heart]")
     text.run(6, 1001, "Special Week")
+
+    const rarity = db.prepare(`INSERT INTO card_rarity_data VALUES (${new Array(22).fill("?").join(", ")})`)
+    for (const cardId of [100101, 100102]) {
+        for (const star of [3, 4, 5]) {
+            const step = (star - 3) * 10
+            rarity.run(cardId, star, 83 + step, 88 + step, 98 + step, 90 + step, 91 + step, 1200, 1200, 1200, 1200, 1200, 2, 5, 7, 7, 7, 1, 1, 7, 7, 5)
+        }
+    }
+
+    const scenario = db.prepare("INSERT INTO single_mode_scenario VALUES (?, ?, ?, ?, ?, ?)")
+    scenario.run(1, 200, 200, 200, 200, 200)
+    scenario.run(3, 400, 100, 100, 300, 100)
+
+    const training = db.prepare("INSERT INTO single_mode_training VALUES (?, ?, ?, ?)")
+    const trainingEffect = db.prepare("INSERT INTO single_mode_training_effect VALUES (?, ?, ?, ?, ?, ?)")
+    for (const [commandId, targets] of TRAINING_ROWS) {
+        for (let level = 1; level <= 5; level++) training.run(commandId, level, 1, 500 + level)
+        for (const scenarioId of [1, 3]) {
+            for (const [targetType, value] of Object.entries(targets)) {
+                // Grand Concert pays two less secondary Stamina out of Power training than URA does.
+                const shipped = scenarioId === 3 && commandId === 102 && targetType === "2" ? value - 2 : value
+                trainingEffect.run(commandId, 1, 2, Number(targetType), shipped, scenarioId)
+            }
+        }
+    }
 
     mutate(db)
     return db
@@ -173,4 +225,75 @@ test("serializes to pure ASCII with a trailing newline, byte-identically twice",
     assert.equal(a, b)
     assert.ok(a.endsWith("\n"))
     assert.ok(!/[^\x00-\x7f]/.test(a), "payload must be pure ASCII")
+})
+
+test("splits the stat ceiling into the shared baseline and the per-scenario bonus", () => {
+    const db = makeDb()
+    const caps = buildStatCaps(db)
+    assert.equal(caps.baseline, 1200)
+    const gc = caps.scenarioBonus.find((s) => s.scenarioId === 3)
+    assert.equal(gc.bonus.Speed, 400)
+    assert.equal(gc.bonus.Stamina, 100)
+    db.close()
+})
+
+test("rejects a per-card stat ceiling that is no longer shared", () => {
+    const db = makeDb((d) => d.exec("UPDATE card_rarity_data SET max_stamina = 1400 WHERE card_id = 100101 AND rarity = 5"))
+    assert.throws(() => buildStatCaps(db), GenerateError)
+    db.close()
+})
+
+test("carries per-star starting stats and aptitude letters", () => {
+    const db = makeDb()
+    const base = buildTraineeBase(db)
+    const five = base.find((b) => b.cardId === 100101 && b.starLevel === 5)
+    assert.deepEqual(five.startStats, { Speed: 103, Stamina: 108, Power: 118, Guts: 110, Wit: 111 })
+    assert.equal(five.aptitudes.medium, "A")
+    assert.equal(five.aptitudes.dirt, "G")
+    db.close()
+})
+
+test("rejects an aptitude index outside the decoded grade range", () => {
+    const db = makeDb((d) => d.exec("UPDATE card_rarity_data SET proper_distance_long = 9 WHERE card_id = 100101"))
+    assert.throws(() => buildTraineeBase(db), GenerateError)
+    db.close()
+})
+
+test("derives the counter-intuitive command mapping rather than assuming id order", () => {
+    const db = makeDb()
+    const types = deriveCommandTrainingTypes(db)
+    assert.equal(types[102], "Power")
+    assert.equal(types[105], "Stamina")
+    assert.equal(types[602], "Stamina")
+    assert.equal(types[603], "Power")
+    db.close()
+})
+
+test("rejects a board whose five trainings no longer raise five distinct stats", () => {
+    const db = makeDb((d) => d.exec("UPDATE single_mode_training_effect SET effect_value = 1 WHERE command_id = 105 AND target_type = 2"))
+    assert.throws(() => deriveCommandTrainingTypes(db), GenerateError)
+    db.close()
+})
+
+test("carries Power training's secondary Stamina, and its per-scenario difference", () => {
+    const db = makeDb()
+    const effects = buildTrainingEffects(db)
+    const ura = effects.find((e) => e.scenarioId === 1 && e.commandId === 102)
+    const gc = effects.find((e) => e.scenarioId === 3 && e.commandId === 102)
+    assert.equal(ura.trainingType, "Power")
+    assert.equal(ura.stats.Stamina, 6)
+    assert.equal(gc.stats.Stamina, 4)
+    assert.equal(ura.stats.Power, gc.stats.Power)
+    assert.equal(ura.skillPoints, 4)
+    assert.equal(ura.energy, -20)
+    assert.deepEqual(ura.failureRateByLevel, [501, 502, 503, 504, 505])
+    db.close()
+})
+
+test("flags the camp board without assuming it shares the base board's id ordering", () => {
+    const db = makeDb()
+    const effects = buildTrainingEffects(db)
+    assert.equal(effects.find((e) => e.commandId === 602 && e.scenarioId === 1).isCamp, true)
+    assert.equal(effects.find((e) => e.commandId === 102 && e.scenarioId === 1).isCamp, false)
+    db.close()
 })

@@ -15,6 +15,17 @@
 //   card_data                 per trainee-outfit growth rates (talent_speed/stamina/pow/guts/wiz).
 //                             The percentages the career screen shows, exactly.
 //   text_data categories 5, 6 card id -> outfit title, chara id -> character name.
+//   card_rarity_data          per trainee-outfit starting stats and aptitude letters at each star
+//                             level, plus the stat ceiling every card shares before any scenario
+//                             bonus. An inheritance figure means nothing without the base it lands on.
+//   single_mode_scenario      the stat cap bonus each scenario adds to that shared ceiling.
+//   single_mode_training      the failure rate of each training facility, per level.
+//   single_mode_training_effect
+//                             the base outcome of one training, per scenario: the primary stat, the
+//                             SECONDARY stats it also pays, the energy it costs and the skill points
+//                             it hands over. This is the table that decides whether a Power-flex build
+//                             is a real option or a story: Power training's own row carries a Stamina
+//                             gain, and Grand Concert pays less of it than URA Finale does.
 //
 // What the ladder means, and the one thing about it that is NOT decoded:
 //
@@ -37,6 +48,13 @@
 //   The ten pink factor groups carry the group id as their own target_type, and their names are the
 //   ten aptitude names. Proven the same way.
 //   Every ladder is contiguous from effect_id 1, with no gaps, for every (group, target_type) pair.
+//   command_id -> training type is derived from the effect rows, never declared, because the mapping
+//   is not the obvious one: 102 is Power and 105 is Stamina on the base board, while the camp board
+//   runs in a different order again.
+//
+// One more thing that is NOT decoded and is not shipped as though it were: how a training facility's
+// level scales the base gains above. single_mode_training_effect is keyed by command, not by the 1..5
+// level the same command carries in single_mode_training, so the scaling is not in this database.
 //
 // Usage:
 //   node scripts/generate-build-budget-data.mjs --db <path-to-master.mdb>
@@ -57,7 +75,7 @@ const OUT_PATH = join(REPO, "src", "data", "build_budget_data.json")
 export const BUILD_BUDGET_DATA_SCHEMA = "build_budget_evidence"
 export const BUILD_BUDGET_DATA_SCHEMA_VERSION = 1
 
-const SOURCE = "master.mdb: succession_factor, succession_factor_effect, card_data, text_data(categories 5, 6, 147)"
+const SOURCE = "master.mdb: succession_factor, succession_factor_effect, card_data, card_rarity_data, single_mode_scenario, single_mode_training, single_mode_training_effect, text_data(categories 5, 6, 147)"
 
 /** text_data category holding the English Spark name, keyed by factor_id. */
 const TEXT_CATEGORY_FACTOR_NAME = 147
@@ -149,6 +167,71 @@ const GROWTH_COLUMNS = [
     ["talent_wiz", "wit"],
 ]
 
+/** card_rarity_data stat columns: what a career starts at, and the ceiling before any scenario bonus. */
+const BASE_STAT_COLUMNS = [
+    ["speed", "max_speed", "Speed"],
+    ["stamina", "max_stamina", "Stamina"],
+    ["pow", "max_pow", "Power"],
+    ["guts", "max_guts", "Guts"],
+    ["wiz", "max_wiz", "Wit"],
+]
+
+/** card_rarity_data aptitude columns -> the roster aptitude keys the rest of the repository uses. */
+const APTITUDE_COLUMNS = [
+    ["proper_distance_short", "sprint"],
+    ["proper_distance_mile", "mile"],
+    ["proper_distance_middle", "medium"],
+    ["proper_distance_long", "long"],
+    ["proper_ground_turf", "turf"],
+    ["proper_ground_dirt", "dirt"],
+    ["proper_running_style_nige", "front"],
+    ["proper_running_style_senko", "pace"],
+    ["proper_running_style_sashi", "late"],
+    ["proper_running_style_oikomi", "end"],
+]
+
+/**
+ * single_mode_training_effect.target_type -> what the effect moves.
+ *
+ * The stat half (1..5) is the same vocabulary succession_factor_effect uses, which is why the two
+ * decodes join without a translation table. The rest is the training economy: energy, mood and the
+ * skill points a training hands over alongside the stats.
+ */
+const TRAINING_TARGETS = {
+    1: { kind: "STAT", stat: "Speed" },
+    2: { kind: "STAT", stat: "Stamina" },
+    3: { kind: "STAT", stat: "Power" },
+    4: { kind: "STAT", stat: "Guts" },
+    5: { kind: "STAT", stat: "Wit" },
+    10: { kind: "ENERGY", stat: null },
+    20: { kind: "MOOD", stat: null },
+    30: { kind: "SKILL_POINTS", stat: null },
+    101: { kind: "UNDECODED", stat: null },
+}
+
+/**
+ * The two sets of stat training commands.
+ *
+ * BASE is the ordinary training board. CAMP is the higher-gain, higher-energy variant. They do NOT
+ * share an id ordering, which is worth stating because it looks as though they should: the base set
+ * runs Speed, Power, Guts, (gap), Stamina, Wit while the camp set runs Speed, Stamina, Power, Guts,
+ * Wit. Neither ordering is assumed below; both are derived from the effect rows and then asserted to
+ * cover five distinct stats.
+ */
+const BASE_TRAINING_COMMANDS = [101, 102, 103, 105, 106]
+const CAMP_TRAINING_COMMANDS = [601, 602, 603, 604, 605]
+
+/** single_mode_training.command_type 1 is a stat training; everything else is rest, outing or an event. */
+const TRAINING_COMMAND_TYPE = 1
+
+/**
+ * Aptitude letters in the order the game's own rate tables ascend over ids 1..8.
+ *
+ * The same eight letters and the same ordering the race-survival extractor asserts against
+ * race_proper_*_rate. card_rarity_data stores an aptitude as an index into this list.
+ */
+const APTITUDE_GRADES = ["G", "F", "E", "D", "C", "B", "A", "S"]
+
 export class GenerateError extends Error {
     constructor(message) {
         super(message)
@@ -163,7 +246,7 @@ function requireTables(db) {
             .all()
             .map((r) => r.name),
     )
-    for (const table of ["succession_factor", "succession_factor_effect", "card_data", "text_data"]) {
+    for (const table of ["succession_factor", "succession_factor_effect", "card_data", "card_rarity_data", "single_mode_scenario", "single_mode_training", "single_mode_training_effect", "text_data"]) {
         if (!have.has(table)) throw new GenerateError(`master.mdb has no ${table} table; this is not a database this extractor can read`)
     }
 }
@@ -352,10 +435,172 @@ export function buildTraineeGrowth(db) {
     return out
 }
 
+/**
+ * The stat ceiling, split into the part every career shares and the part a scenario adds.
+ *
+ * card_rarity_data ships a per-card ceiling and every single row of it is 1200, which is asserted
+ * rather than assumed: a card that ever shipped a different one would mean the baseline is per-card
+ * and the split below is wrong. single_mode_scenario then carries the bonus each scenario adds on
+ * top, which is the number that makes Trackblazer a Stamina scenario and Grand Concert a Speed one.
+ */
+export function buildStatCaps(db) {
+    const rows = db.prepare("SELECT DISTINCT max_speed, max_stamina, max_pow, max_guts, max_wiz FROM card_rarity_data").all()
+    if (rows.length !== 1) throw new GenerateError(`card_rarity_data ships ${rows.length} distinct stat ceilings; the baseline is no longer shared across cards`)
+    const distinct = new Set(BASE_STAT_COLUMNS.map(([, capColumn]) => rows[0][capColumn]))
+    if (distinct.size !== 1) throw new GenerateError(`the shared stat ceiling differs per stat (${[...distinct].join(", ")}); this extractor assumes one baseline`)
+    const baseline = [...distinct][0]
+    if (!Number.isInteger(baseline) || baseline <= 0) throw new GenerateError(`the shared stat ceiling is ${baseline}, which is not a usable cap`)
+
+    const scenarioBonus = []
+    for (const row of db.prepare("SELECT id, max_speed, max_stamina, max_pow, max_guts, max_wiz FROM single_mode_scenario ORDER BY id").all()) {
+        const bonus = {}
+        for (const [statColumn, capColumn, stat] of BASE_STAT_COLUMNS) {
+            void statColumn
+            const value = row[capColumn]
+            if (!Number.isInteger(value) || value < 0) throw new GenerateError(`scenario ${row.id} has a ${stat} cap bonus of ${value}`)
+            bonus[stat] = value
+        }
+        scenarioBonus.push({ scenarioId: row.id, bonus })
+    }
+    if (!scenarioBonus.length) throw new GenerateError("single_mode_scenario is empty; no scenario cap bonus could be read")
+    return { baseline, scenarioBonus }
+}
+
+/**
+ * Per trainee-outfit starting stats and aptitude grades, at each star level the card ships.
+ *
+ * These are the numbers a career actually begins at before a single Spark is applied, which is what
+ * makes an inheritance figure mean anything: +28 Stamina onto a base of 88 is a different build from
+ * +28 onto a base of 108. The star level matters and is kept, because unlocking stars moves them.
+ */
+export function buildTraineeBase(db) {
+    const rows = db
+        .prepare(
+            "SELECT card_id, rarity, speed, stamina, pow, guts, wiz, proper_distance_short, proper_distance_mile, proper_distance_middle, proper_distance_long, " +
+                "proper_ground_turf, proper_ground_dirt, proper_running_style_nige, proper_running_style_senko, proper_running_style_sashi, proper_running_style_oikomi " +
+                "FROM card_rarity_data ORDER BY card_id, rarity",
+        )
+        .all()
+    const out = []
+    for (const row of rows) {
+        const startStats = {}
+        for (const [statColumn, , stat] of BASE_STAT_COLUMNS) {
+            const value = row[statColumn]
+            if (!Number.isInteger(value) || value < 0) throw new GenerateError(`card ${row.card_id} rarity ${row.rarity} has a ${stat} start of ${value}`)
+            startStats[stat] = value
+        }
+        const aptitudes = {}
+        for (const [column, key] of APTITUDE_COLUMNS) {
+            const raw = row[column]
+            const grade = APTITUDE_GRADES[raw - 1]
+            if (grade === undefined) throw new GenerateError(`card ${row.card_id} rarity ${row.rarity} has aptitude ${column} = ${raw}, outside the decoded 1..${APTITUDE_GRADES.length} grade range`)
+            aptitudes[key] = grade
+        }
+        out.push({ cardId: row.card_id, starLevel: row.rarity, startStats, aptitudes })
+    }
+    if (!out.length) throw new GenerateError("card_rarity_data is empty; no trainee base stats could be read")
+    return out
+}
+
+/**
+ * Re-derives command_id -> training type from the effect table, exactly as the support-card extractor
+ * does, and asserts the five stat trainings are all present and all distinct.
+ *
+ * Deriving it rather than declaring it is the point: the mapping is not the obvious one (102 is Power,
+ * not Stamina), and a hard-coded copy in a second file is how two assets quietly disagree.
+ */
+export function deriveCommandTrainingTypes(db) {
+    const rows = db.prepare("SELECT command_id, target_type, effect_value FROM single_mode_training_effect WHERE sub_id = 1 AND result_state = 2 AND scenario_id = 1").all()
+    const best = new Map()
+    for (const row of rows) {
+        const target = TRAINING_TARGETS[row.target_type]
+        if (!target) throw new GenerateError(`single_mode_training_effect carries target_type ${row.target_type}, which this extractor does not know how to describe`)
+        if (target.kind !== "STAT" || row.effect_value <= 0) continue
+        const held = best.get(row.command_id)
+        if (!held || row.effect_value > held.value) best.set(row.command_id, { stat: target.stat, value: row.effect_value })
+    }
+    const types = {}
+    for (const [commandId, top] of best) types[commandId] = top.stat
+    for (const [label, commands] of [
+        ["base", BASE_TRAINING_COMMANDS],
+        ["camp", CAMP_TRAINING_COMMANDS],
+    ]) {
+        for (const commandId of commands) {
+            if (!types[commandId]) throw new GenerateError(`${label} training command ${commandId} raises no stat in scenario 1; the five stat trainings are not all present`)
+        }
+        const stats = commands.map((id) => types[id])
+        if (new Set(stats).size !== stats.length) throw new GenerateError(`the five ${label} trainings do not raise five distinct stats: ${stats.join(", ")}`)
+    }
+    return types
+}
+
+/**
+ * The base outcome of one training, per scenario, straight out of the game's own table.
+ *
+ * This is the piece that makes a Power-flex build arguable instead of folklore: Power training's own
+ * row carries a Stamina gain, and the size of it differs by scenario. Nothing here is scaled,
+ * multiplied or averaged; a support deck's contribution is a separate layer and stays separate.
+ *
+ * What is NOT in this table, and is therefore not shipped as though it were: the facility level. The
+ * table is keyed by command, not by the 1..5 level the same command has in single_mode_training, so
+ * how a level-5 facility scales these numbers is not decoded here.
+ */
+export function buildTrainingEffects(db) {
+    const commandTypes = deriveCommandTrainingTypes(db)
+    const failureRates = new Map()
+    for (const row of db.prepare("SELECT command_id, command_level, command_type, failure_rate FROM single_mode_training ORDER BY command_id, command_level").all()) {
+        if (row.command_type !== TRAINING_COMMAND_TYPE) continue
+        const held = failureRates.get(row.command_id) ?? []
+        held[row.command_level - 1] = row.failure_rate
+        failureRates.set(row.command_id, held)
+    }
+
+    const grouped = new Map()
+    for (const row of db.prepare("SELECT scenario_id, command_id, sub_id, result_state, target_type, effect_value FROM single_mode_training_effect ORDER BY scenario_id, command_id, sub_id, result_state, target_type").all()) {
+        const target = TRAINING_TARGETS[row.target_type]
+        if (!target) throw new GenerateError(`single_mode_training_effect carries target_type ${row.target_type}, which this extractor does not know how to describe`)
+        const key = `${row.scenario_id}|${row.command_id}|${row.sub_id}|${row.result_state}`
+        let entry = grouped.get(key)
+        if (!entry) {
+            entry = {
+                scenarioId: row.scenario_id,
+                commandId: row.command_id,
+                subId: row.sub_id,
+                resultState: row.result_state,
+                trainingType: commandTypes[row.command_id] ?? null,
+                isCamp: CAMP_TRAINING_COMMANDS.includes(row.command_id),
+                stats: {},
+                energy: 0,
+                mood: 0,
+                skillPoints: 0,
+                undecodedTargets: [],
+            }
+            grouped.set(key, entry)
+        }
+        if (target.kind === "STAT") entry.stats[target.stat] = (entry.stats[target.stat] ?? 0) + row.effect_value
+        else if (target.kind === "ENERGY") entry.energy += row.effect_value
+        else if (target.kind === "MOOD") entry.mood += row.effect_value
+        else if (target.kind === "SKILL_POINTS") entry.skillPoints += row.effect_value
+        else entry.undecodedTargets.push(row.target_type)
+    }
+
+    const out = [...grouped.values()].map((entry) => ({
+        ...entry,
+        stats: Object.fromEntries(BASE_STAT_COLUMNS.map(([, , stat]) => [stat, entry.stats[stat] ?? 0])),
+        undecodedTargets: [...new Set(entry.undecodedTargets)].sort((a, b) => a - b),
+        failureRateByLevel: failureRates.get(entry.commandId) ?? [],
+    }))
+    if (!out.length) throw new GenerateError("single_mode_training_effect is empty; no training outcome could be read")
+    return out
+}
+
 export function buildPayload(db) {
     requireTables(db)
     const factorGroups = buildFactorGroups(db)
     const traineeGrowth = buildTraineeGrowth(db)
+    const traineeBase = buildTraineeBase(db)
+    const statCaps = buildStatCaps(db)
+    const trainingEffects = buildTrainingEffects(db)
     return {
         schema: BUILD_BUDGET_DATA_SCHEMA,
         schemaVersion: BUILD_BUDGET_DATA_SCHEMA_VERSION,
@@ -365,6 +610,12 @@ export function buildPayload(db) {
                 .sort((a, b) => Number(a[0]) - Number(b[0]))
                 .map(([id, meta]) => [id, { kind: meta.kind, stat: meta.stat ?? null, aptitude: meta.aptitude ?? null }]),
         ),
+        trainingTargets: Object.fromEntries(
+            Object.entries(TRAINING_TARGETS)
+                .sort((a, b) => Number(a[0]) - Number(b[0]))
+                .map(([id, meta]) => [id, { kind: meta.kind, stat: meta.stat ?? null }]),
+        ),
+        aptitudeGrades: APTITUDE_GRADES,
         counts: {
             factorGroups: factorGroups.length,
             factorsByFamily: factorGroups.reduce((acc, g) => {
@@ -372,9 +623,14 @@ export function buildPayload(db) {
                 return acc
             }, {}),
             traineeCards: traineeGrowth.length,
+            traineeBaseRows: traineeBase.length,
+            trainingEffectRows: trainingEffects.length,
         },
+        statCaps,
         factorGroups,
         traineeGrowth,
+        traineeBase,
+        trainingEffects,
     }
 }
 

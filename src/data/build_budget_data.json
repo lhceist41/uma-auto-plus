@@ -1,7 +1,7 @@
 {
   "schema": "build_budget_evidence",
   "schemaVersion": 1,
-  "source": "master.mdb: succession_factor, succession_factor_effect, card_data, text_data(categories 5, 6, 147)",
+  "source": "master.mdb: succession_factor, succession_factor_effect, card_data, card_rarity_data, single_mode_scenario, single_mode_training, single_mode_training_effect, text_data(categories 5, 6, 147)",
   "targetTypes": {
     "1": {
       "kind": "START_STAT",
@@ -119,6 +119,54 @@
       "aptitude": null
     }
   },
+  "trainingTargets": {
+    "1": {
+      "kind": "STAT",
+      "stat": "Speed"
+    },
+    "2": {
+      "kind": "STAT",
+      "stat": "Stamina"
+    },
+    "3": {
+      "kind": "STAT",
+      "stat": "Power"
+    },
+    "4": {
+      "kind": "STAT",
+      "stat": "Guts"
+    },
+    "5": {
+      "kind": "STAT",
+      "stat": "Wit"
+    },
+    "10": {
+      "kind": "ENERGY",
+      "stat": null
+    },
+    "20": {
+      "kind": "MOOD",
+      "stat": null
+    },
+    "30": {
+      "kind": "SKILL_POINTS",
+      "stat": null
+    },
+    "101": {
+      "kind": "UNDECODED",
+      "stat": null
+    }
+  },
+  "aptitudeGrades": [
+    "G",
+    "F",
+    "E",
+    "D",
+    "C",
+    "B",
+    "A",
+    "S"
+  ],
   "counts": {
     "factorGroups": 381,
     "factorsByFamily": {
@@ -130,7 +178,54 @@
       "bonus": 2,
       "unique": 93
     },
-    "traineeCards": 95
+    "traineeCards": 95,
+    "traineeBaseRows": 304,
+    "trainingEffectRows": 72
+  },
+  "statCaps": {
+    "baseline": 1200,
+    "scenarioBonus": [
+      {
+        "scenarioId": 1,
+        "bonus": {
+          "Speed": 200,
+          "Stamina": 200,
+          "Power": 200,
+          "Guts": 200,
+          "Wit": 200
+        }
+      },
+      {
+        "scenarioId": 2,
+        "bonus": {
+          "Speed": 100,
+          "Stamina": 100,
+          "Power": 100,
+          "Guts": 100,
+          "Wit": 600
+        }
+      },
+      {
+        "scenarioId": 3,
+        "bonus": {
+          "Speed": 400,
+          "Stamina": 100,
+          "Power": 100,
+          "Guts": 300,
+          "Wit": 100
+        }
+      },
+      {
+        "scenarioId": 4,
+        "bonus": {
+          "Speed": 0,
+          "Stamina": 700,
+          "Power": 0,
+          "Guts": 0,
+          "Wit": 300
+        }
+      }
+    ]
   },
   "factorGroups": [
     {
@@ -21811,6 +21906,8738 @@
         "wit": 0
       },
       "runningStyle": 3
+    }
+  ],
+  "traineeBase": [
+    {
+      "cardId": 100101,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 83,
+        "Stamina": 88,
+        "Power": 98,
+        "Guts": 90,
+        "Wit": 91
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 100101,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 92,
+        "Stamina": 98,
+        "Power": 109,
+        "Guts": 100,
+        "Wit": 101
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 100101,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 102,
+        "Stamina": 108,
+        "Power": 120,
+        "Guts": 110,
+        "Wit": 110
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 100102,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 77,
+        "Stamina": 90,
+        "Power": 103,
+        "Guts": 98,
+        "Wit": 82
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 100102,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 86,
+        "Stamina": 100,
+        "Power": 114,
+        "Guts": 109,
+        "Wit": 91
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 100102,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 94,
+        "Stamina": 110,
+        "Power": 125,
+        "Guts": 119,
+        "Wit": 102
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 100103,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 82,
+        "Power": 94,
+        "Guts": 82,
+        "Wit": 96
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 100103,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 107,
+        "Stamina": 91,
+        "Power": 105,
+        "Guts": 91,
+        "Wit": 106
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 100103,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 117,
+        "Stamina": 100,
+        "Power": 115,
+        "Guts": 100,
+        "Wit": 118
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 100201,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 101,
+        "Stamina": 84,
+        "Power": 77,
+        "Guts": 100,
+        "Wit": 88
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "C",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100201,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 112,
+        "Stamina": 93,
+        "Power": 85,
+        "Guts": 111,
+        "Wit": 99
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "C",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100201,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 124,
+        "Stamina": 102,
+        "Power": 94,
+        "Guts": 122,
+        "Wit": 108
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "C",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100301,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 90,
+        "Stamina": 89,
+        "Power": 83,
+        "Guts": 92,
+        "Wit": 96
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "E",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "C",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 100301,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 99,
+        "Stamina": 99,
+        "Power": 92,
+        "Guts": 102,
+        "Wit": 108
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "E",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "C",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 100301,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 109,
+        "Power": 102,
+        "Guts": 112,
+        "Wit": 118
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "E",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "C",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 100302,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 89,
+        "Stamina": 102,
+        "Power": 80,
+        "Guts": 86,
+        "Wit": 93
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "E",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "C",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 100302,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 99,
+        "Stamina": 113,
+        "Power": 89,
+        "Guts": 96,
+        "Wit": 103
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "E",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "C",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 100302,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 125,
+        "Power": 98,
+        "Guts": 106,
+        "Wit": 112
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "E",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "C",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 100401,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 68,
+        "Power": 86,
+        "Guts": 100,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "B",
+        "long": "C",
+        "turf": "A",
+        "dirt": "D",
+        "front": "A",
+        "pace": "E",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100401,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 107,
+        "Stamina": 76,
+        "Power": 96,
+        "Guts": 111,
+        "Wit": 110
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "B",
+        "long": "C",
+        "turf": "A",
+        "dirt": "D",
+        "front": "A",
+        "pace": "E",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100401,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 118,
+        "Stamina": 84,
+        "Power": 105,
+        "Guts": 122,
+        "Wit": 121
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "B",
+        "long": "C",
+        "turf": "A",
+        "dirt": "D",
+        "front": "A",
+        "pace": "E",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100402,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 100,
+        "Stamina": 69,
+        "Power": 93,
+        "Guts": 87,
+        "Wit": 101
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "B",
+        "long": "C",
+        "turf": "A",
+        "dirt": "D",
+        "front": "A",
+        "pace": "E",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100402,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 111,
+        "Stamina": 77,
+        "Power": 104,
+        "Guts": 97,
+        "Wit": 111
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "B",
+        "long": "C",
+        "turf": "A",
+        "dirt": "D",
+        "front": "A",
+        "pace": "E",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100402,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 122,
+        "Stamina": 85,
+        "Power": 114,
+        "Guts": 107,
+        "Wit": 122
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "B",
+        "long": "C",
+        "turf": "A",
+        "dirt": "D",
+        "front": "A",
+        "pace": "E",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100501,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 88,
+        "Power": 97,
+        "Guts": 82,
+        "Wit": 87
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "B",
+        "long": "E",
+        "turf": "A",
+        "dirt": "F",
+        "front": "C",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100501,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 106,
+        "Stamina": 98,
+        "Power": 108,
+        "Guts": 91,
+        "Wit": 97
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "B",
+        "long": "E",
+        "turf": "A",
+        "dirt": "F",
+        "front": "C",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100501,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 117,
+        "Stamina": 107,
+        "Power": 118,
+        "Guts": 100,
+        "Wit": 108
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "B",
+        "long": "E",
+        "turf": "A",
+        "dirt": "F",
+        "front": "C",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100502,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 98,
+        "Stamina": 77,
+        "Power": 102,
+        "Guts": 78,
+        "Wit": 95
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "B",
+        "long": "E",
+        "turf": "A",
+        "dirt": "F",
+        "front": "C",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100502,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 86,
+        "Power": 113,
+        "Guts": 87,
+        "Wit": 105
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "B",
+        "long": "E",
+        "turf": "A",
+        "dirt": "F",
+        "front": "C",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100502,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 120,
+        "Stamina": 94,
+        "Power": 124,
+        "Guts": 96,
+        "Wit": 116
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "B",
+        "long": "E",
+        "turf": "A",
+        "dirt": "F",
+        "front": "C",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100601,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 101,
+        "Stamina": 66,
+        "Power": 106,
+        "Guts": 84,
+        "Wit": 93
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "B",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 100601,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 112,
+        "Stamina": 74,
+        "Power": 118,
+        "Guts": 94,
+        "Wit": 102
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "B",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 100601,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 124,
+        "Stamina": 81,
+        "Power": 130,
+        "Guts": 103,
+        "Wit": 112
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "B",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 100602,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 94,
+        "Stamina": 91,
+        "Power": 111,
+        "Guts": 76,
+        "Wit": 78
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "B",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 100602,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 105,
+        "Stamina": 101,
+        "Power": 124,
+        "Guts": 85,
+        "Wit": 85
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "B",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 100602,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 115,
+        "Stamina": 111,
+        "Power": 136,
+        "Guts": 93,
+        "Wit": 95
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "B",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 100701,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 82,
+        "Stamina": 96,
+        "Power": 100,
+        "Guts": 77,
+        "Wit": 70
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 100701,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 87,
+        "Stamina": 101,
+        "Power": 105,
+        "Guts": 81,
+        "Wit": 76
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 100701,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 97,
+        "Stamina": 113,
+        "Power": 117,
+        "Guts": 90,
+        "Wit": 83
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 100701,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 106,
+        "Stamina": 124,
+        "Power": 129,
+        "Guts": 99,
+        "Wit": 92
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 100702,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 79,
+        "Stamina": 93,
+        "Power": 112,
+        "Guts": 73,
+        "Wit": 93
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 100702,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 88,
+        "Stamina": 103,
+        "Power": 125,
+        "Guts": 81,
+        "Wit": 103
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 100702,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 113,
+        "Power": 137,
+        "Guts": 89,
+        "Wit": 115
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 100801,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 61,
+        "Power": 105,
+        "Guts": 75,
+        "Wit": 88
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "F",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 100801,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 102,
+        "Stamina": 64,
+        "Power": 111,
+        "Guts": 79,
+        "Wit": 94
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "F",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 100801,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 113,
+        "Stamina": 72,
+        "Power": 124,
+        "Guts": 88,
+        "Wit": 103
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "F",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 100801,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 124,
+        "Stamina": 79,
+        "Power": 136,
+        "Guts": 97,
+        "Wit": 114
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "F",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 100901,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 84,
+        "Stamina": 77,
+        "Power": 79,
+        "Guts": 95,
+        "Wit": 90
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100901,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 89,
+        "Stamina": 81,
+        "Power": 84,
+        "Guts": 100,
+        "Wit": 96
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100901,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 99,
+        "Stamina": 90,
+        "Power": 93,
+        "Guts": 111,
+        "Wit": 107
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100901,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 99,
+        "Power": 103,
+        "Guts": 122,
+        "Wit": 117
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101001,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 71,
+        "Power": 98,
+        "Guts": 93,
+        "Wit": 92
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "E",
+        "long": "G",
+        "turf": "A",
+        "dirt": "B",
+        "front": "C",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101001,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 107,
+        "Stamina": 79,
+        "Power": 108,
+        "Guts": 103,
+        "Wit": 103
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "E",
+        "long": "G",
+        "turf": "A",
+        "dirt": "B",
+        "front": "C",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101001,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 118,
+        "Stamina": 87,
+        "Power": 119,
+        "Guts": 113,
+        "Wit": 113
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "E",
+        "long": "G",
+        "turf": "A",
+        "dirt": "B",
+        "front": "C",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101002,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 102,
+        "Stamina": 71,
+        "Power": 107,
+        "Guts": 92,
+        "Wit": 78
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "E",
+        "long": "G",
+        "turf": "A",
+        "dirt": "B",
+        "front": "C",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101002,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 113,
+        "Stamina": 79,
+        "Power": 119,
+        "Guts": 102,
+        "Wit": 87
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "E",
+        "long": "G",
+        "turf": "A",
+        "dirt": "B",
+        "front": "C",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101002,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 124,
+        "Stamina": 87,
+        "Power": 130,
+        "Guts": 112,
+        "Wit": 97
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "E",
+        "long": "G",
+        "turf": "A",
+        "dirt": "B",
+        "front": "C",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101101,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 91,
+        "Stamina": 70,
+        "Power": 99,
+        "Guts": 74,
+        "Wit": 91
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "A",
+        "medium": "B",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101101,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 74,
+        "Power": 105,
+        "Guts": 79,
+        "Wit": 96
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "A",
+        "medium": "B",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101101,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 107,
+        "Stamina": 83,
+        "Power": 117,
+        "Guts": 87,
+        "Wit": 106
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "A",
+        "medium": "B",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101101,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 118,
+        "Stamina": 91,
+        "Power": 129,
+        "Guts": 96,
+        "Wit": 116
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "A",
+        "medium": "B",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101102,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 91,
+        "Stamina": 83,
+        "Power": 97,
+        "Guts": 79,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "A",
+        "medium": "B",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101102,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 101,
+        "Stamina": 92,
+        "Power": 108,
+        "Guts": 88,
+        "Wit": 111
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "A",
+        "medium": "B",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101102,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 111,
+        "Stamina": 101,
+        "Power": 119,
+        "Guts": 96,
+        "Wit": 123
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "A",
+        "medium": "B",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101201,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 93,
+        "Stamina": 84,
+        "Power": 105,
+        "Guts": 82,
+        "Wit": 86
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "E",
+        "front": "G",
+        "pace": "B",
+        "late": "C",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 101201,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 103,
+        "Stamina": 94,
+        "Power": 117,
+        "Guts": 91,
+        "Wit": 95
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "E",
+        "front": "G",
+        "pace": "B",
+        "late": "C",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 101201,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 113,
+        "Stamina": 103,
+        "Power": 129,
+        "Guts": 100,
+        "Wit": 105
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "E",
+        "front": "G",
+        "pace": "B",
+        "late": "C",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 101301,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 71,
+        "Stamina": 111,
+        "Power": 71,
+        "Guts": 103,
+        "Wit": 94
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "B",
+        "pace": "A",
+        "late": "D",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101301,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 79,
+        "Stamina": 123,
+        "Power": 79,
+        "Guts": 114,
+        "Wit": 105
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "B",
+        "pace": "A",
+        "late": "D",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101301,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 87,
+        "Stamina": 136,
+        "Power": 87,
+        "Guts": 125,
+        "Wit": 115
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "B",
+        "pace": "A",
+        "late": "D",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101302,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 74,
+        "Stamina": 110,
+        "Power": 72,
+        "Guts": 108,
+        "Wit": 86
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "B",
+        "pace": "A",
+        "late": "D",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101302,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 82,
+        "Stamina": 122,
+        "Power": 80,
+        "Guts": 120,
+        "Wit": 96
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "B",
+        "pace": "A",
+        "late": "D",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101302,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 90,
+        "Stamina": 134,
+        "Power": 89,
+        "Guts": 132,
+        "Wit": 105
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "B",
+        "pace": "A",
+        "late": "D",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101303,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 82,
+        "Stamina": 85,
+        "Power": 82,
+        "Guts": 113,
+        "Wit": 88
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "B",
+        "pace": "A",
+        "late": "D",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101303,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 91,
+        "Stamina": 95,
+        "Power": 91,
+        "Guts": 125,
+        "Wit": 98
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "B",
+        "pace": "A",
+        "late": "D",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101303,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 100,
+        "Stamina": 104,
+        "Power": 100,
+        "Guts": 138,
+        "Wit": 108
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "B",
+        "pace": "A",
+        "late": "D",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 101401,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 85,
+        "Stamina": 76,
+        "Power": 80,
+        "Guts": 93,
+        "Wit": 91
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "B",
+        "front": "E",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 101401,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 90,
+        "Stamina": 80,
+        "Power": 85,
+        "Guts": 99,
+        "Wit": 96
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "B",
+        "front": "E",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 101401,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 100,
+        "Stamina": 89,
+        "Power": 94,
+        "Guts": 110,
+        "Wit": 107
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "B",
+        "front": "E",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 101401,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 110,
+        "Stamina": 98,
+        "Power": 103,
+        "Guts": 121,
+        "Wit": 118
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "B",
+        "front": "E",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 101402,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 100,
+        "Stamina": 75,
+        "Power": 91,
+        "Guts": 97,
+        "Wit": 87
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "B",
+        "front": "E",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 101402,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 111,
+        "Stamina": 83,
+        "Power": 102,
+        "Guts": 108,
+        "Wit": 96
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "B",
+        "front": "E",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 101402,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 122,
+        "Stamina": 91,
+        "Power": 112,
+        "Guts": 119,
+        "Wit": 106
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "B",
+        "front": "E",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 101501,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 75,
+        "Stamina": 108,
+        "Power": 75,
+        "Guts": 102,
+        "Wit": 90
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "C",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101501,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 83,
+        "Stamina": 120,
+        "Power": 83,
+        "Guts": 113,
+        "Wit": 101
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "C",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101501,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 91,
+        "Stamina": 132,
+        "Power": 91,
+        "Guts": 125,
+        "Wit": 111
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "C",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101502,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 87,
+        "Stamina": 102,
+        "Power": 74,
+        "Guts": 88,
+        "Wit": 99
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "C",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101502,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 113,
+        "Power": 83,
+        "Guts": 98,
+        "Wit": 110
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "C",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101502,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 106,
+        "Stamina": 124,
+        "Power": 91,
+        "Guts": 107,
+        "Wit": 122
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "C",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101601,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 93,
+        "Stamina": 89,
+        "Power": 100,
+        "Guts": 89,
+        "Wit": 79
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "B",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 101601,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 103,
+        "Stamina": 99,
+        "Power": 111,
+        "Guts": 98,
+        "Wit": 89
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "B",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 101601,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 113,
+        "Stamina": 109,
+        "Power": 122,
+        "Guts": 108,
+        "Wit": 98
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "B",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 101701,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 86,
+        "Stamina": 91,
+        "Power": 83,
+        "Guts": 96,
+        "Wit": 94
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 101701,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 101,
+        "Power": 92,
+        "Guts": 107,
+        "Wit": 104
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 101701,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 106,
+        "Stamina": 111,
+        "Power": 101,
+        "Guts": 118,
+        "Wit": 114
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 101702,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 83,
+        "Stamina": 87,
+        "Power": 90,
+        "Guts": 90,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 101702,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 92,
+        "Stamina": 97,
+        "Power": 100,
+        "Guts": 100,
+        "Wit": 111
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 101702,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 101,
+        "Stamina": 107,
+        "Power": 110,
+        "Guts": 110,
+        "Wit": 122
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 101801,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 86,
+        "Stamina": 81,
+        "Power": 81,
+        "Guts": 86,
+        "Wit": 91
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "B",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101801,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 91,
+        "Stamina": 86,
+        "Power": 86,
+        "Guts": 92,
+        "Wit": 95
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "B",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101801,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 101,
+        "Stamina": 95,
+        "Power": 95,
+        "Guts": 102,
+        "Wit": 107
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "B",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101801,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 111,
+        "Stamina": 105,
+        "Power": 105,
+        "Guts": 112,
+        "Wit": 117
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "B",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101802,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 94,
+        "Stamina": 82,
+        "Power": 91,
+        "Guts": 88,
+        "Wit": 95
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "B",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101802,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 104,
+        "Stamina": 91,
+        "Power": 101,
+        "Guts": 98,
+        "Wit": 106
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "B",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101802,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 115,
+        "Stamina": 100,
+        "Power": 111,
+        "Guts": 107,
+        "Wit": 117
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "B",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 101901,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 85,
+        "Stamina": 91,
+        "Power": 83,
+        "Guts": 100,
+        "Wit": 91
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "G",
+        "turf": "A",
+        "dirt": "A",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 101901,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 95,
+        "Stamina": 101,
+        "Power": 92,
+        "Guts": 111,
+        "Wit": 101
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "G",
+        "turf": "A",
+        "dirt": "A",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 101901,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 104,
+        "Stamina": 111,
+        "Power": 101,
+        "Guts": 122,
+        "Wit": 112
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "G",
+        "turf": "A",
+        "dirt": "A",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 102001,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 98,
+        "Stamina": 98,
+        "Power": 88,
+        "Guts": 83,
+        "Wit": 83
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "B",
+        "late": "D",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 102001,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 109,
+        "Power": 98,
+        "Guts": 92,
+        "Wit": 92
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "B",
+        "late": "D",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 102001,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 120,
+        "Stamina": 120,
+        "Power": 108,
+        "Guts": 101,
+        "Wit": 101
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "B",
+        "late": "D",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 102002,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 101,
+        "Stamina": 89,
+        "Power": 84,
+        "Guts": 88,
+        "Wit": 88
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "B",
+        "late": "D",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 102002,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 112,
+        "Stamina": 99,
+        "Power": 94,
+        "Guts": 98,
+        "Wit": 97
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "B",
+        "late": "D",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 102002,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 123,
+        "Stamina": 109,
+        "Power": 103,
+        "Guts": 108,
+        "Wit": 107
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "B",
+        "late": "D",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 102101,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 83,
+        "Stamina": 95,
+        "Power": 105,
+        "Guts": 83,
+        "Wit": 84
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 102101,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 92,
+        "Stamina": 105,
+        "Power": 117,
+        "Guts": 93,
+        "Wit": 93
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 102101,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 101,
+        "Stamina": 116,
+        "Power": 129,
+        "Guts": 102,
+        "Wit": 102
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 102201,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 84,
+        "Power": 95,
+        "Guts": 88,
+        "Wit": 87
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "E",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 102201,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 106,
+        "Stamina": 93,
+        "Power": 106,
+        "Guts": 98,
+        "Wit": 97
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "E",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 102201,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 117,
+        "Stamina": 102,
+        "Power": 116,
+        "Guts": 108,
+        "Wit": 107
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "E",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 102202,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 89,
+        "Stamina": 78,
+        "Power": 89,
+        "Guts": 94,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "E",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 102202,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 99,
+        "Stamina": 87,
+        "Power": 99,
+        "Guts": 105,
+        "Wit": 110
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "E",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 102202,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 96,
+        "Power": 109,
+        "Guts": 115,
+        "Wit": 121
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "E",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 102301,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 85,
+        "Stamina": 93,
+        "Power": 82,
+        "Guts": 93,
+        "Wit": 97
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "E",
+        "pace": "A",
+        "late": "B",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 102301,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 95,
+        "Stamina": 104,
+        "Power": 91,
+        "Guts": 104,
+        "Wit": 106
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "E",
+        "pace": "A",
+        "late": "B",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 102301,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 104,
+        "Stamina": 114,
+        "Power": 101,
+        "Guts": 114,
+        "Wit": 117
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "E",
+        "pace": "A",
+        "late": "B",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 102302,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 83,
+        "Stamina": 99,
+        "Power": 76,
+        "Guts": 96,
+        "Wit": 96
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "E",
+        "pace": "A",
+        "late": "B",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 102302,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 93,
+        "Stamina": 110,
+        "Power": 85,
+        "Guts": 107,
+        "Wit": 105
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "E",
+        "pace": "A",
+        "late": "B",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 102302,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 102,
+        "Stamina": 121,
+        "Power": 93,
+        "Guts": 117,
+        "Wit": 117
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "E",
+        "pace": "A",
+        "late": "B",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 102401,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 73,
+        "Stamina": 100,
+        "Power": 67,
+        "Guts": 95,
+        "Wit": 90
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "A",
+        "pace": "A",
+        "late": "B",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 102401,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 77,
+        "Stamina": 106,
+        "Power": 71,
+        "Guts": 101,
+        "Wit": 95
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "A",
+        "pace": "A",
+        "late": "B",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 102401,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 86,
+        "Stamina": 118,
+        "Power": 79,
+        "Guts": 112,
+        "Wit": 105
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "A",
+        "pace": "A",
+        "late": "B",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 102401,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 94,
+        "Stamina": 130,
+        "Power": 86,
+        "Guts": 123,
+        "Wit": 117
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "A",
+        "pace": "A",
+        "late": "B",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 102402,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 83,
+        "Stamina": 100,
+        "Power": 82,
+        "Guts": 90,
+        "Wit": 95
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "A",
+        "pace": "A",
+        "late": "B",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 102402,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 92,
+        "Stamina": 112,
+        "Power": 91,
+        "Guts": 100,
+        "Wit": 105
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "A",
+        "pace": "A",
+        "late": "B",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 102402,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 102,
+        "Stamina": 123,
+        "Power": 100,
+        "Guts": 110,
+        "Wit": 115
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "A",
+        "pace": "A",
+        "late": "B",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 102501,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 83,
+        "Stamina": 98,
+        "Power": 94,
+        "Guts": 86,
+        "Wit": 89
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "B",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "C",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 102501,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 92,
+        "Stamina": 109,
+        "Power": 105,
+        "Guts": 95,
+        "Wit": 99
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "B",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "C",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 102501,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 101,
+        "Stamina": 120,
+        "Power": 115,
+        "Guts": 105,
+        "Wit": 109
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "B",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "C",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 102601,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 72,
+        "Power": 92,
+        "Guts": 102,
+        "Wit": 88
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "B",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "E",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 102601,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 106,
+        "Stamina": 80,
+        "Power": 102,
+        "Guts": 113,
+        "Wit": 99
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "B",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "E",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 102601,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 117,
+        "Stamina": 88,
+        "Power": 112,
+        "Guts": 124,
+        "Wit": 109
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "B",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "E",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 102602,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 100,
+        "Stamina": 68,
+        "Power": 92,
+        "Guts": 96,
+        "Wit": 94
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "B",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "E",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 102602,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 111,
+        "Stamina": 75,
+        "Power": 102,
+        "Guts": 106,
+        "Wit": 106
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "B",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "E",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 102602,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 123,
+        "Stamina": 83,
+        "Power": 112,
+        "Guts": 117,
+        "Wit": 115
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "B",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "E",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 102701,
+      "starLevel": 1,
+      "startStats": {
+        "Speed": 87,
+        "Stamina": 66,
+        "Power": 95,
+        "Guts": 71,
+        "Wit": 81
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 102701,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 93,
+        "Stamina": 70,
+        "Power": 101,
+        "Guts": 76,
+        "Wit": 85
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 102701,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 98,
+        "Stamina": 74,
+        "Power": 106,
+        "Guts": 80,
+        "Wit": 92
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 102701,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 83,
+        "Power": 118,
+        "Guts": 89,
+        "Wit": 101
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 102701,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 120,
+        "Stamina": 91,
+        "Power": 130,
+        "Guts": 98,
+        "Wit": 111
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 102801,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 99,
+        "Stamina": 60,
+        "Power": 108,
+        "Guts": 91,
+        "Wit": 92
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "F",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "B",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 102801,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 110,
+        "Stamina": 67,
+        "Power": 120,
+        "Guts": 101,
+        "Wit": 102
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "F",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "B",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 102801,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 120,
+        "Stamina": 74,
+        "Power": 132,
+        "Guts": 111,
+        "Wit": 113
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "F",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "B",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103001,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 71,
+        "Stamina": 117,
+        "Power": 70,
+        "Guts": 102,
+        "Wit": 90
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103001,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 79,
+        "Stamina": 130,
+        "Power": 78,
+        "Guts": 114,
+        "Wit": 99
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103001,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 87,
+        "Stamina": 143,
+        "Power": 86,
+        "Guts": 125,
+        "Wit": 109
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103002,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 76,
+        "Stamina": 121,
+        "Power": 67,
+        "Guts": 97,
+        "Wit": 89
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103002,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 85,
+        "Stamina": 135,
+        "Power": 75,
+        "Guts": 107,
+        "Wit": 98
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103002,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 93,
+        "Stamina": 148,
+        "Power": 82,
+        "Guts": 118,
+        "Wit": 109
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103101,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 100,
+        "Stamina": 96,
+        "Power": 72,
+        "Guts": 98,
+        "Wit": 84
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "A",
+        "medium": "A",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "C",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103101,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 111,
+        "Stamina": 106,
+        "Power": 80,
+        "Guts": 109,
+        "Wit": 94
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "A",
+        "medium": "A",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "C",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103101,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 122,
+        "Stamina": 117,
+        "Power": 88,
+        "Guts": 120,
+        "Wit": 103
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "A",
+        "medium": "A",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "C",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103201,
+      "starLevel": 1,
+      "startStats": {
+        "Speed": 82,
+        "Stamina": 76,
+        "Power": 76,
+        "Guts": 79,
+        "Wit": 87
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "D",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "E",
+        "pace": "A",
+        "late": "B",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 103201,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 87,
+        "Stamina": 81,
+        "Power": 81,
+        "Guts": 83,
+        "Wit": 93
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "D",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "E",
+        "pace": "A",
+        "late": "B",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 103201,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 92,
+        "Stamina": 85,
+        "Power": 85,
+        "Guts": 88,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "D",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "E",
+        "pace": "A",
+        "late": "B",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 103201,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 102,
+        "Stamina": 95,
+        "Power": 95,
+        "Guts": 98,
+        "Wit": 110
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "D",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "E",
+        "pace": "A",
+        "late": "B",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 103201,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 112,
+        "Stamina": 104,
+        "Power": 104,
+        "Guts": 108,
+        "Wit": 122
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "D",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "E",
+        "pace": "A",
+        "late": "B",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 103301,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 79,
+        "Power": 108,
+        "Guts": 69,
+        "Wit": 98
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "G",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 103301,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 107,
+        "Stamina": 88,
+        "Power": 120,
+        "Guts": 77,
+        "Wit": 108
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "G",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 103301,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 118,
+        "Stamina": 96,
+        "Power": 132,
+        "Guts": 85,
+        "Wit": 119
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "G",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 103401,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 88,
+        "Stamina": 100,
+        "Power": 109,
+        "Guts": 74,
+        "Wit": 79
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "B",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "A",
+        "front": "G",
+        "pace": "B",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 103401,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 98,
+        "Stamina": 111,
+        "Power": 121,
+        "Guts": 82,
+        "Wit": 88
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "B",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "A",
+        "front": "G",
+        "pace": "B",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 103401,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 108,
+        "Stamina": 122,
+        "Power": 133,
+        "Guts": 90,
+        "Wit": 97
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "B",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "A",
+        "front": "G",
+        "pace": "B",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 103501,
+      "starLevel": 1,
+      "startStats": {
+        "Speed": 87,
+        "Stamina": 68,
+        "Power": 91,
+        "Guts": 74,
+        "Wit": 80
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103501,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 93,
+        "Stamina": 72,
+        "Power": 97,
+        "Guts": 78,
+        "Wit": 85
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103501,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 98,
+        "Stamina": 76,
+        "Power": 102,
+        "Guts": 83,
+        "Wit": 91
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103501,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 85,
+        "Power": 114,
+        "Guts": 92,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103501,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 120,
+        "Stamina": 93,
+        "Power": 125,
+        "Guts": 101,
+        "Wit": 111
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103601,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 99,
+        "Stamina": 85,
+        "Power": 95,
+        "Guts": 69,
+        "Wit": 102
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "C",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 103601,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 110,
+        "Stamina": 95,
+        "Power": 106,
+        "Guts": 76,
+        "Wit": 113
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "C",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 103601,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 120,
+        "Stamina": 104,
+        "Power": 116,
+        "Guts": 84,
+        "Wit": 126
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "C",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 103701,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 100,
+        "Stamina": 83,
+        "Power": 93,
+        "Guts": 82,
+        "Wit": 92
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 103701,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 111,
+        "Stamina": 92,
+        "Power": 103,
+        "Guts": 91,
+        "Wit": 103
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 103701,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 122,
+        "Stamina": 101,
+        "Power": 113,
+        "Guts": 100,
+        "Wit": 114
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 103702,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 94,
+        "Stamina": 88,
+        "Power": 84,
+        "Guts": 82,
+        "Wit": 102
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 103702,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 104,
+        "Stamina": 97,
+        "Power": 94,
+        "Guts": 91,
+        "Wit": 114
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 103702,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 115,
+        "Stamina": 107,
+        "Power": 103,
+        "Guts": 100,
+        "Wit": 125
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 103801,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 97,
+        "Stamina": 58,
+        "Power": 107,
+        "Guts": 91,
+        "Wit": 97
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "D",
+        "medium": "G",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "B",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103801,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 108,
+        "Stamina": 65,
+        "Power": 118,
+        "Guts": 101,
+        "Wit": 108
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "D",
+        "medium": "G",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "B",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103801,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 119,
+        "Stamina": 71,
+        "Power": 130,
+        "Guts": 111,
+        "Wit": 119
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "D",
+        "medium": "G",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "B",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103802,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 100,
+        "Stamina": 54,
+        "Power": 109,
+        "Guts": 85,
+        "Wit": 102
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "D",
+        "medium": "G",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "B",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103802,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 111,
+        "Stamina": 59,
+        "Power": 121,
+        "Guts": 95,
+        "Wit": 114
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "D",
+        "medium": "G",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "B",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103802,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 122,
+        "Stamina": 65,
+        "Power": 133,
+        "Guts": 104,
+        "Wit": 126
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "D",
+        "medium": "G",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "B",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103901,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 100,
+        "Stamina": 71,
+        "Power": 107,
+        "Guts": 82,
+        "Wit": 90
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "B",
+        "medium": "A",
+        "long": "F",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "C",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 103901,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 111,
+        "Stamina": 79,
+        "Power": 119,
+        "Guts": 91,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "B",
+        "medium": "A",
+        "long": "F",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "C",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 103901,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 122,
+        "Stamina": 87,
+        "Power": 131,
+        "Guts": 101,
+        "Wit": 109
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "B",
+        "medium": "A",
+        "long": "F",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "C",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 104001,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 89,
+        "Stamina": 92,
+        "Power": 94,
+        "Guts": 92,
+        "Wit": 83
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "B",
+        "long": "B",
+        "turf": "A",
+        "dirt": "D",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 104001,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 99,
+        "Stamina": 103,
+        "Power": 104,
+        "Guts": 102,
+        "Wit": 92
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "B",
+        "long": "B",
+        "turf": "A",
+        "dirt": "D",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 104001,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 113,
+        "Power": 114,
+        "Guts": 112,
+        "Wit": 102
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "B",
+        "long": "B",
+        "turf": "A",
+        "dirt": "D",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 104002,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 86,
+        "Stamina": 98,
+        "Power": 86,
+        "Guts": 98,
+        "Wit": 82
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "B",
+        "long": "B",
+        "turf": "A",
+        "dirt": "D",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 104002,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 95,
+        "Stamina": 109,
+        "Power": 95,
+        "Guts": 108,
+        "Wit": 93
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "B",
+        "long": "B",
+        "turf": "A",
+        "dirt": "D",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 104002,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 105,
+        "Stamina": 120,
+        "Power": 105,
+        "Guts": 119,
+        "Wit": 101
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "B",
+        "long": "B",
+        "turf": "A",
+        "dirt": "D",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 104101,
+      "starLevel": 1,
+      "startStats": {
+        "Speed": 87,
+        "Stamina": 54,
+        "Power": 93,
+        "Guts": 85,
+        "Wit": 81
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "G",
+        "long": "G",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "F",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104101,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 93,
+        "Stamina": 57,
+        "Power": 99,
+        "Guts": 90,
+        "Wit": 86
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "G",
+        "long": "G",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "F",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104101,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 98,
+        "Stamina": 60,
+        "Power": 105,
+        "Guts": 95,
+        "Wit": 92
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "G",
+        "long": "G",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "F",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104101,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 67,
+        "Power": 116,
+        "Guts": 106,
+        "Wit": 102
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "G",
+        "long": "G",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "F",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104101,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 120,
+        "Stamina": 74,
+        "Power": 128,
+        "Guts": 116,
+        "Wit": 112
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "G",
+        "long": "G",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "F",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104401,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 101,
+        "Stamina": 85,
+        "Power": 110,
+        "Guts": 65,
+        "Wit": 89
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "D",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "G",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 104401,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 112,
+        "Stamina": 94,
+        "Power": 122,
+        "Guts": 72,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "D",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "G",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 104401,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 123,
+        "Stamina": 104,
+        "Power": 135,
+        "Guts": 79,
+        "Wit": 109
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "D",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "G",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 104501,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 65,
+        "Stamina": 100,
+        "Power": 71,
+        "Guts": 100,
+        "Wit": 89
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "G",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "B",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104501,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 69,
+        "Stamina": 106,
+        "Power": 75,
+        "Guts": 106,
+        "Wit": 94
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "G",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "B",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104501,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 76,
+        "Stamina": 118,
+        "Power": 84,
+        "Guts": 118,
+        "Wit": 104
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "G",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "B",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104501,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 84,
+        "Stamina": 129,
+        "Power": 92,
+        "Guts": 129,
+        "Wit": 116
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "G",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "B",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104502,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 74,
+        "Stamina": 106,
+        "Power": 75,
+        "Guts": 98,
+        "Wit": 97
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "G",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "B",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104502,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 82,
+        "Stamina": 118,
+        "Power": 84,
+        "Guts": 108,
+        "Wit": 108
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "G",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "B",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104502,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 90,
+        "Stamina": 129,
+        "Power": 92,
+        "Guts": 119,
+        "Wit": 120
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "G",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "D",
+        "pace": "A",
+        "late": "B",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104601,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 94,
+        "Stamina": 85,
+        "Power": 85,
+        "Guts": 100,
+        "Wit": 86
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "E",
+        "dirt": "A",
+        "front": "A",
+        "pace": "D",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104601,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 104,
+        "Stamina": 95,
+        "Power": 95,
+        "Guts": 111,
+        "Wit": 95
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "E",
+        "dirt": "A",
+        "front": "A",
+        "pace": "D",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104601,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 115,
+        "Stamina": 104,
+        "Power": 104,
+        "Guts": 122,
+        "Wit": 105
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "E",
+        "dirt": "A",
+        "front": "A",
+        "pace": "D",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104602,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 99,
+        "Stamina": 82,
+        "Power": 82,
+        "Guts": 104,
+        "Wit": 83
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "E",
+        "dirt": "A",
+        "front": "A",
+        "pace": "D",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104602,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 110,
+        "Stamina": 91,
+        "Power": 91,
+        "Guts": 116,
+        "Wit": 92
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "E",
+        "dirt": "A",
+        "front": "A",
+        "pace": "D",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104602,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 121,
+        "Stamina": 100,
+        "Power": 100,
+        "Guts": 128,
+        "Wit": 101
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "E",
+        "dirt": "A",
+        "front": "A",
+        "pace": "D",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104801,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 89,
+        "Stamina": 98,
+        "Power": 75,
+        "Guts": 101,
+        "Wit": 87
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "A",
+        "late": "B",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104801,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 99,
+        "Stamina": 109,
+        "Power": 83,
+        "Guts": 112,
+        "Wit": 97
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "A",
+        "late": "B",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 104801,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 120,
+        "Power": 92,
+        "Guts": 123,
+        "Wit": 106
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "A",
+        "late": "B",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 105001,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 82,
+        "Power": 99,
+        "Guts": 79,
+        "Wit": 94
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "F",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 105001,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 107,
+        "Stamina": 91,
+        "Power": 110,
+        "Guts": 88,
+        "Wit": 104
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "F",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 105001,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 118,
+        "Stamina": 100,
+        "Power": 121,
+        "Guts": 97,
+        "Wit": 114
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "F",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 105101,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 93,
+        "Stamina": 81,
+        "Power": 95,
+        "Guts": 86,
+        "Wit": 95
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "E",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 105101,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 103,
+        "Stamina": 90,
+        "Power": 105,
+        "Guts": 96,
+        "Wit": 106
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "E",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 105101,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 113,
+        "Stamina": 99,
+        "Power": 116,
+        "Guts": 105,
+        "Wit": 117
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "E",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 105201,
+      "starLevel": 1,
+      "startStats": {
+        "Speed": 83,
+        "Stamina": 58,
+        "Power": 89,
+        "Guts": 86,
+        "Wit": 84
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "G",
+        "long": "G",
+        "turf": "G",
+        "dirt": "A",
+        "front": "G",
+        "pace": "G",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 105201,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 89,
+        "Stamina": 61,
+        "Power": 95,
+        "Guts": 92,
+        "Wit": 88
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "G",
+        "long": "G",
+        "turf": "G",
+        "dirt": "A",
+        "front": "G",
+        "pace": "G",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 105201,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 94,
+        "Stamina": 65,
+        "Power": 100,
+        "Guts": 97,
+        "Wit": 94
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "G",
+        "long": "G",
+        "turf": "G",
+        "dirt": "A",
+        "front": "G",
+        "pace": "G",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 105201,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 104,
+        "Stamina": 72,
+        "Power": 112,
+        "Guts": 108,
+        "Wit": 104
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "G",
+        "long": "G",
+        "turf": "G",
+        "dirt": "A",
+        "front": "G",
+        "pace": "G",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 105201,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 115,
+        "Stamina": 79,
+        "Power": 123,
+        "Guts": 119,
+        "Wit": 114
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "G",
+        "long": "G",
+        "turf": "G",
+        "dirt": "A",
+        "front": "G",
+        "pace": "G",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 105202,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 94,
+        "Stamina": 54,
+        "Power": 106,
+        "Guts": 98,
+        "Wit": 98
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "G",
+        "long": "G",
+        "turf": "G",
+        "dirt": "A",
+        "front": "G",
+        "pace": "G",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 105202,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 105,
+        "Stamina": 60,
+        "Power": 118,
+        "Guts": 109,
+        "Wit": 108
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "G",
+        "long": "G",
+        "turf": "G",
+        "dirt": "A",
+        "front": "G",
+        "pace": "G",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 105202,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 115,
+        "Stamina": 66,
+        "Power": 130,
+        "Guts": 119,
+        "Wit": 120
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "G",
+        "long": "G",
+        "turf": "G",
+        "dirt": "A",
+        "front": "G",
+        "pace": "G",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 105301,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 98,
+        "Stamina": 74,
+        "Power": 104,
+        "Guts": 92,
+        "Wit": 82
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "C",
+        "long": "G",
+        "turf": "A",
+        "dirt": "D",
+        "front": "G",
+        "pace": "E",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 105301,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 82,
+        "Power": 115,
+        "Guts": 102,
+        "Wit": 92
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "C",
+        "long": "G",
+        "turf": "A",
+        "dirt": "D",
+        "front": "G",
+        "pace": "E",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 105301,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 119,
+        "Stamina": 90,
+        "Power": 127,
+        "Guts": 112,
+        "Wit": 102
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "C",
+        "long": "G",
+        "turf": "A",
+        "dirt": "D",
+        "front": "G",
+        "pace": "E",
+        "late": "A",
+        "end": "C"
+      }
+    },
+    {
+      "cardId": 105601,
+      "starLevel": 1,
+      "startStats": {
+        "Speed": 77,
+        "Stamina": 81,
+        "Power": 88,
+        "Guts": 81,
+        "Wit": 73
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 105601,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 82,
+        "Stamina": 86,
+        "Power": 93,
+        "Guts": 86,
+        "Wit": 78
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 105601,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 87,
+        "Stamina": 91,
+        "Power": 99,
+        "Guts": 91,
+        "Wit": 82
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 105601,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 97,
+        "Stamina": 101,
+        "Power": 110,
+        "Guts": 101,
+        "Wit": 91
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 105601,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 106,
+        "Stamina": 111,
+        "Power": 121,
+        "Guts": 111,
+        "Wit": 101
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 105602,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 87,
+        "Stamina": 100,
+        "Power": 94,
+        "Guts": 94,
+        "Wit": 75
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 105602,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 111,
+        "Power": 104,
+        "Guts": 104,
+        "Wit": 85
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 105602,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 106,
+        "Stamina": 122,
+        "Power": 115,
+        "Guts": 115,
+        "Wit": 92
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 105801,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 93,
+        "Stamina": 95,
+        "Power": 85,
+        "Guts": 96,
+        "Wit": 81
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "F",
+        "pace": "A",
+        "late": "B",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 105801,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 103,
+        "Stamina": 105,
+        "Power": 95,
+        "Guts": 107,
+        "Wit": 90
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "F",
+        "pace": "A",
+        "late": "B",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 105801,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 113,
+        "Stamina": 116,
+        "Power": 104,
+        "Guts": 118,
+        "Wit": 99
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "F",
+        "pace": "A",
+        "late": "B",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 105901,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 96,
+        "Stamina": 85,
+        "Power": 97,
+        "Guts": 75,
+        "Wit": 97
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "F",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "B",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 105901,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 107,
+        "Stamina": 95,
+        "Power": 108,
+        "Guts": 83,
+        "Wit": 107
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "F",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "B",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 105901,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 117,
+        "Stamina": 104,
+        "Power": 119,
+        "Guts": 92,
+        "Wit": 118
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "F",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "B",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 105902,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 94,
+        "Stamina": 78,
+        "Power": 92,
+        "Guts": 86,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "F",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "B",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 105902,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 104,
+        "Stamina": 86,
+        "Power": 103,
+        "Guts": 96,
+        "Wit": 111
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "F",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "B",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 105902,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 115,
+        "Stamina": 95,
+        "Power": 113,
+        "Guts": 105,
+        "Wit": 122
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "F",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "B",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 106001,
+      "starLevel": 1,
+      "startStats": {
+        "Speed": 86,
+        "Stamina": 72,
+        "Power": 89,
+        "Guts": 69,
+        "Wit": 84
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106001,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 91,
+        "Stamina": 76,
+        "Power": 95,
+        "Guts": 74,
+        "Wit": 89
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106001,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 97,
+        "Stamina": 81,
+        "Power": 100,
+        "Guts": 78,
+        "Wit": 94
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106001,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 107,
+        "Stamina": 90,
+        "Power": 112,
+        "Guts": 87,
+        "Wit": 104
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106001,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 118,
+        "Stamina": 99,
+        "Power": 123,
+        "Guts": 96,
+        "Wit": 114
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106002,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 86,
+        "Stamina": 86,
+        "Power": 94,
+        "Guts": 86,
+        "Wit": 98
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106002,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 95,
+        "Stamina": 95,
+        "Power": 105,
+        "Guts": 95,
+        "Wit": 110
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106002,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 105,
+        "Stamina": 105,
+        "Power": 115,
+        "Guts": 105,
+        "Wit": 120
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106101,
+      "starLevel": 1,
+      "startStats": {
+        "Speed": 87,
+        "Stamina": 60,
+        "Power": 93,
+        "Guts": 73,
+        "Wit": 87
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "B",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106101,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 93,
+        "Stamina": 63,
+        "Power": 98,
+        "Guts": 77,
+        "Wit": 94
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "B",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106101,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 98,
+        "Stamina": 67,
+        "Power": 104,
+        "Guts": 82,
+        "Wit": 99
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "B",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106101,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 74,
+        "Power": 116,
+        "Guts": 91,
+        "Wit": 110
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "B",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106101,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 120,
+        "Stamina": 82,
+        "Power": 127,
+        "Guts": 100,
+        "Wit": 121
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "B",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106102,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 100,
+        "Stamina": 62,
+        "Power": 110,
+        "Guts": 89,
+        "Wit": 89
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "B",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106102,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 111,
+        "Stamina": 69,
+        "Power": 122,
+        "Guts": 99,
+        "Wit": 99
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "B",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106102,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 122,
+        "Stamina": 76,
+        "Power": 134,
+        "Guts": 108,
+        "Wit": 110
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "B",
+        "long": "C",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106201,
+      "starLevel": 2,
+      "startStats": {
+        "Speed": 79,
+        "Stamina": 91,
+        "Power": 82,
+        "Guts": 88,
+        "Wit": 85
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 106201,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 84,
+        "Stamina": 96,
+        "Power": 87,
+        "Guts": 93,
+        "Wit": 90
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 106201,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 93,
+        "Stamina": 107,
+        "Power": 97,
+        "Guts": 103,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 106201,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 103,
+        "Stamina": 117,
+        "Power": 106,
+        "Guts": 114,
+        "Wit": 110
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 106401,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 92,
+        "Stamina": 103,
+        "Power": 76,
+        "Guts": 91,
+        "Wit": 88
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "E",
+        "late": "F",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 106401,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 102,
+        "Stamina": 115,
+        "Power": 84,
+        "Guts": 101,
+        "Wit": 98
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "E",
+        "late": "F",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 106401,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 112,
+        "Stamina": 126,
+        "Power": 93,
+        "Guts": 111,
+        "Wit": 108
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "E",
+        "late": "F",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 106701,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 91,
+        "Stamina": 88,
+        "Power": 93,
+        "Guts": 83,
+        "Wit": 95
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106701,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 101,
+        "Stamina": 98,
+        "Power": 103,
+        "Guts": 92,
+        "Wit": 106
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106701,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 111,
+        "Stamina": 108,
+        "Power": 113,
+        "Guts": 101,
+        "Wit": 117
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 106801,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 97,
+        "Stamina": 100,
+        "Power": 79,
+        "Guts": 86,
+        "Wit": 88
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "B",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 106801,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 108,
+        "Stamina": 111,
+        "Power": 88,
+        "Guts": 96,
+        "Wit": 97
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "B",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 106801,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 119,
+        "Stamina": 122,
+        "Power": 97,
+        "Guts": 105,
+        "Wit": 107
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "B",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 106901,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 93,
+        "Stamina": 96,
+        "Power": 78,
+        "Guts": 93,
+        "Wit": 90
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "F",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 106901,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 103,
+        "Stamina": 107,
+        "Power": 87,
+        "Guts": 103,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "F",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 106901,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 114,
+        "Stamina": 117,
+        "Power": 95,
+        "Guts": 114,
+        "Wit": 110
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "B",
+        "pace": "A",
+        "late": "F",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 107101,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 92,
+        "Stamina": 89,
+        "Power": 89,
+        "Guts": 80,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "B",
+        "medium": "A",
+        "long": "D",
+        "turf": "A",
+        "dirt": "F",
+        "front": "C",
+        "pace": "A",
+        "late": "D",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 107101,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 102,
+        "Stamina": 99,
+        "Power": 99,
+        "Guts": 89,
+        "Wit": 111
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "B",
+        "medium": "A",
+        "long": "D",
+        "turf": "A",
+        "dirt": "F",
+        "front": "C",
+        "pace": "A",
+        "late": "D",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 107101,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 113,
+        "Stamina": 109,
+        "Power": 109,
+        "Guts": 98,
+        "Wit": 121
+      },
+      "aptitudes": {
+        "sprint": "E",
+        "mile": "B",
+        "medium": "A",
+        "long": "D",
+        "turf": "A",
+        "dirt": "F",
+        "front": "C",
+        "pace": "A",
+        "late": "D",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 107201,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 92,
+        "Stamina": 81,
+        "Power": 97,
+        "Guts": 97,
+        "Wit": 83
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "B",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "E",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 107201,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 103,
+        "Stamina": 90,
+        "Power": 108,
+        "Guts": 108,
+        "Wit": 91
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "B",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "E",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 107201,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 113,
+        "Stamina": 99,
+        "Power": 119,
+        "Guts": 119,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "B",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "E",
+        "front": "F",
+        "pace": "A",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 107401,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 89,
+        "Stamina": 107,
+        "Power": 87,
+        "Guts": 75,
+        "Wit": 92
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "D",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 107401,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 99,
+        "Stamina": 119,
+        "Power": 97,
+        "Guts": 83,
+        "Wit": 102
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "D",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 107401,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 130,
+        "Power": 106,
+        "Guts": 92,
+        "Wit": 113
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "C",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "D",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 109801,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 93,
+        "Stamina": 87,
+        "Power": 93,
+        "Guts": 87,
+        "Wit": 90
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "A",
+        "medium": "A",
+        "long": "G",
+        "turf": "F",
+        "dirt": "A",
+        "front": "A",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 109801,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 104,
+        "Stamina": 97,
+        "Power": 103,
+        "Guts": 96,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "A",
+        "medium": "A",
+        "long": "G",
+        "turf": "F",
+        "dirt": "A",
+        "front": "A",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 109801,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 114,
+        "Stamina": 107,
+        "Power": 113,
+        "Guts": 106,
+        "Wit": 110
+      },
+      "aptitudes": {
+        "sprint": "C",
+        "mile": "A",
+        "medium": "A",
+        "long": "G",
+        "turf": "F",
+        "dirt": "A",
+        "front": "A",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    }
+  ],
+  "trainingEffects": [
+    {
+      "scenarioId": 1,
+      "commandId": 101,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Speed",
+      "isCamp": false,
+      "stats": {
+        "Speed": 11,
+        "Stamina": 0,
+        "Power": 6,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -21,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        520,
+        524,
+        528,
+        532,
+        536
+      ]
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 102,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Power",
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 6,
+        "Power": 9,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -20,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        516,
+        520,
+        524,
+        528,
+        532
+      ]
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 103,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Guts",
+      "isCamp": false,
+      "stats": {
+        "Speed": 5,
+        "Stamina": 0,
+        "Power": 5,
+        "Guts": 8,
+        "Wit": 0
+      },
+      "energy": -22,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        532,
+        536,
+        540,
+        544,
+        548
+      ]
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 105,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Stamina",
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 10,
+        "Power": 0,
+        "Guts": 6,
+        "Wit": 0
+      },
+      "energy": -19,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        507,
+        511,
+        515,
+        519,
+        523
+      ]
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 106,
+      "subId": 1,
+      "resultState": 1,
+      "trainingType": "Wit",
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        320,
+        321,
+        322,
+        323,
+        324
+      ]
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 106,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Wit",
+      "isCamp": false,
+      "stats": {
+        "Speed": 2,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 10
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 5,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        320,
+        321,
+        322,
+        323,
+        324
+      ]
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 301,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 10,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 302,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 0,
+      "mood": 2,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 303,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 30,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 303,
+      "subId": 2,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 20,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 303,
+      "subId": 3,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 10,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 304,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 40,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [
+        101
+      ],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 601,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Speed",
+      "isCamp": true,
+      "stats": {
+        "Speed": 15,
+        "Stamina": 0,
+        "Power": 8,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -27,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        536
+      ]
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 602,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Stamina",
+      "isCamp": true,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 14,
+        "Power": 0,
+        "Guts": 8,
+        "Wit": 0
+      },
+      "energy": -25,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        523
+      ]
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 603,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Power",
+      "isCamp": true,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 8,
+        "Power": 13,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -26,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        532
+      ]
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 604,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Guts",
+      "isCamp": true,
+      "stats": {
+        "Speed": 6,
+        "Stamina": 0,
+        "Power": 5,
+        "Guts": 13,
+        "Wit": 0
+      },
+      "energy": -28,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        548
+      ]
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 605,
+      "subId": 1,
+      "resultState": 1,
+      "trainingType": "Wit",
+      "isCamp": true,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        324
+      ]
+    },
+    {
+      "scenarioId": 1,
+      "commandId": 605,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Wit",
+      "isCamp": true,
+      "stats": {
+        "Speed": 4,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 14
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 5,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        324
+      ]
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 101,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Speed",
+      "isCamp": false,
+      "stats": {
+        "Speed": 8,
+        "Stamina": 0,
+        "Power": 4,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -19,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        520,
+        524,
+        528,
+        532,
+        536
+      ]
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 102,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Power",
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 4,
+        "Power": 9,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -20,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        516,
+        520,
+        524,
+        528,
+        532
+      ]
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 103,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Guts",
+      "isCamp": false,
+      "stats": {
+        "Speed": 3,
+        "Stamina": 0,
+        "Power": 3,
+        "Guts": 6,
+        "Wit": 0
+      },
+      "energy": -20,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        532,
+        536,
+        540,
+        544,
+        548
+      ]
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 105,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Stamina",
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 8,
+        "Power": 0,
+        "Guts": 6,
+        "Wit": 0
+      },
+      "energy": -20,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        507,
+        511,
+        515,
+        519,
+        523
+      ]
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 106,
+      "subId": 1,
+      "resultState": 1,
+      "trainingType": "Wit",
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        320,
+        321,
+        322,
+        323,
+        324
+      ]
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 106,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Wit",
+      "isCamp": false,
+      "stats": {
+        "Speed": 2,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 6
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 5,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        320,
+        321,
+        322,
+        323,
+        324
+      ]
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 301,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 10,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 302,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 0,
+      "mood": 2,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 303,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 30,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 303,
+      "subId": 2,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 20,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 303,
+      "subId": 3,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 10,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 304,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 40,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [
+        101
+      ],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 601,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Speed",
+      "isCamp": true,
+      "stats": {
+        "Speed": 12,
+        "Stamina": 0,
+        "Power": 6,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -25,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        536
+      ]
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 602,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Stamina",
+      "isCamp": true,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 12,
+        "Power": 0,
+        "Guts": 8,
+        "Wit": 0
+      },
+      "energy": -26,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        523
+      ]
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 603,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Power",
+      "isCamp": true,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 6,
+        "Power": 13,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -26,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        532
+      ]
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 604,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Guts",
+      "isCamp": true,
+      "stats": {
+        "Speed": 4,
+        "Stamina": 0,
+        "Power": 4,
+        "Guts": 10,
+        "Wit": 0
+      },
+      "energy": -26,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        548
+      ]
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 605,
+      "subId": 1,
+      "resultState": 1,
+      "trainingType": "Wit",
+      "isCamp": true,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        324
+      ]
+    },
+    {
+      "scenarioId": 2,
+      "commandId": 605,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Wit",
+      "isCamp": true,
+      "stats": {
+        "Speed": 4,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 10
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 5,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        324
+      ]
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 101,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Speed",
+      "isCamp": false,
+      "stats": {
+        "Speed": 8,
+        "Stamina": 0,
+        "Power": 4,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -19,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        520,
+        524,
+        528,
+        532,
+        536
+      ]
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 102,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Power",
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 4,
+        "Power": 9,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -20,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        516,
+        520,
+        524,
+        528,
+        532
+      ]
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 103,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Guts",
+      "isCamp": false,
+      "stats": {
+        "Speed": 2,
+        "Stamina": 0,
+        "Power": 2,
+        "Guts": 7,
+        "Wit": 0
+      },
+      "energy": -20,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        532,
+        536,
+        540,
+        544,
+        548
+      ]
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 105,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Stamina",
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 8,
+        "Power": 0,
+        "Guts": 6,
+        "Wit": 0
+      },
+      "energy": -20,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        507,
+        511,
+        515,
+        519,
+        523
+      ]
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 106,
+      "subId": 1,
+      "resultState": 1,
+      "trainingType": "Wit",
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        320,
+        321,
+        322,
+        323,
+        324
+      ]
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 106,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Wit",
+      "isCamp": false,
+      "stats": {
+        "Speed": 2,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 6
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 5,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        320,
+        321,
+        322,
+        323,
+        324
+      ]
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 301,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 10,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 302,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 0,
+      "mood": 2,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 303,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 30,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 303,
+      "subId": 2,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 20,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 303,
+      "subId": 3,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 10,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 304,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 40,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [
+        101
+      ],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 601,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Speed",
+      "isCamp": true,
+      "stats": {
+        "Speed": 12,
+        "Stamina": 0,
+        "Power": 6,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -25,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        536
+      ]
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 602,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Stamina",
+      "isCamp": true,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 12,
+        "Power": 0,
+        "Guts": 8,
+        "Wit": 0
+      },
+      "energy": -26,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        523
+      ]
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 603,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Power",
+      "isCamp": true,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 6,
+        "Power": 13,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -26,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        532
+      ]
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 604,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Guts",
+      "isCamp": true,
+      "stats": {
+        "Speed": 3,
+        "Stamina": 0,
+        "Power": 3,
+        "Guts": 11,
+        "Wit": 0
+      },
+      "energy": -26,
+      "mood": 0,
+      "skillPoints": 4,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        548
+      ]
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 605,
+      "subId": 1,
+      "resultState": 1,
+      "trainingType": "Wit",
+      "isCamp": true,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        324
+      ]
+    },
+    {
+      "scenarioId": 3,
+      "commandId": 605,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Wit",
+      "isCamp": true,
+      "stats": {
+        "Speed": 4,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 10
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 5,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        324
+      ]
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 101,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Speed",
+      "isCamp": false,
+      "stats": {
+        "Speed": 8,
+        "Stamina": 0,
+        "Power": 4,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -19,
+      "mood": 0,
+      "skillPoints": 2,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        520,
+        524,
+        528,
+        532,
+        536
+      ]
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 102,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Power",
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 4,
+        "Power": 6,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -18,
+      "mood": 0,
+      "skillPoints": 2,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        516,
+        520,
+        524,
+        528,
+        532
+      ]
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 103,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Guts",
+      "isCamp": false,
+      "stats": {
+        "Speed": 3,
+        "Stamina": 0,
+        "Power": 3,
+        "Guts": 6,
+        "Wit": 0
+      },
+      "energy": -20,
+      "mood": 0,
+      "skillPoints": 2,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        532,
+        536,
+        540,
+        544,
+        548
+      ]
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 105,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Stamina",
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 7,
+        "Power": 0,
+        "Guts": 3,
+        "Wit": 0
+      },
+      "energy": -17,
+      "mood": 0,
+      "skillPoints": 2,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        507,
+        511,
+        515,
+        519,
+        523
+      ]
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 106,
+      "subId": 1,
+      "resultState": 1,
+      "trainingType": "Wit",
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        320,
+        321,
+        322,
+        323,
+        324
+      ]
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 106,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Wit",
+      "isCamp": false,
+      "stats": {
+        "Speed": 2,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 6
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 3,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        320,
+        321,
+        322,
+        323,
+        324
+      ]
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 301,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 10,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 302,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 0,
+      "mood": 2,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 303,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 30,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 303,
+      "subId": 2,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 20,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 303,
+      "subId": 3,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 10,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 304,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": null,
+      "isCamp": false,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 40,
+      "mood": 1,
+      "skillPoints": 0,
+      "undecodedTargets": [
+        101
+      ],
+      "failureRateByLevel": []
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 601,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Speed",
+      "isCamp": true,
+      "stats": {
+        "Speed": 12,
+        "Stamina": 0,
+        "Power": 6,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -25,
+      "mood": 0,
+      "skillPoints": 2,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        536
+      ]
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 602,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Stamina",
+      "isCamp": true,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 11,
+        "Power": 0,
+        "Guts": 5,
+        "Wit": 0
+      },
+      "energy": -23,
+      "mood": 0,
+      "skillPoints": 2,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        523
+      ]
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 603,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Power",
+      "isCamp": true,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 6,
+        "Power": 10,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": -24,
+      "mood": 0,
+      "skillPoints": 2,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        532
+      ]
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 604,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Guts",
+      "isCamp": true,
+      "stats": {
+        "Speed": 4,
+        "Stamina": 0,
+        "Power": 4,
+        "Guts": 10,
+        "Wit": 0
+      },
+      "energy": -26,
+      "mood": 0,
+      "skillPoints": 2,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        548
+      ]
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 605,
+      "subId": 1,
+      "resultState": 1,
+      "trainingType": "Wit",
+      "isCamp": true,
+      "stats": {
+        "Speed": 0,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 0
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 0,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        324
+      ]
+    },
+    {
+      "scenarioId": 4,
+      "commandId": 605,
+      "subId": 1,
+      "resultState": 2,
+      "trainingType": "Wit",
+      "isCamp": true,
+      "stats": {
+        "Speed": 4,
+        "Stamina": 0,
+        "Power": 0,
+        "Guts": 0,
+        "Wit": 10
+      },
+      "energy": 5,
+      "mood": 0,
+      "skillPoints": 3,
+      "undecodedTargets": [],
+      "failureRateByLevel": [
+        null,
+        null,
+        null,
+        null,
+        324
+      ]
     }
   ]
 }
