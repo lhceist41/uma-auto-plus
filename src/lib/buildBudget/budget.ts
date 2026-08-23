@@ -121,6 +121,19 @@ export function buildStatBudgets(input: StatBudgetInput): readonly StatBudget[] 
 export interface SurvivalVerdict {
     /** True when even the low end of the Stamina projection clears the constraint minimum. */
     readonly survivesSelectedRisk: boolean
+    /**
+     * True when the midpoint clears the minimum but the low end does not.
+     *
+     * This tier exists because the strict test alone is not informative enough on a real account. A
+     * build whose pessimistic end misses by five points and one whose optimistic end misses by two
+     * hundred are both "does not survive", and telling an operator only that throws away the whole
+     * difference between a build worth tuning and a build worth abandoning.
+     */
+    readonly clearsAtMidpoint: boolean
+    readonly staminaDeficitAtMidpoint: number
+    /** Extra trainings on the Stamina facility that would close the low-end deficit, at this deck's
+     * own floor rate. Null when there is no deficit or no decoded Stamina training to spend them on. */
+    readonly staminaTurnsToCloseDeficit: number | null
     /** True when the median sits above the preferred range, so more Stamina buys little. */
     readonly overStaminaRisk: boolean
     readonly staminaDeficit: number
@@ -139,12 +152,16 @@ export interface SurvivalVerdict {
  * Stamina has no survival value left to buy. What it names as the alternative is whichever other stat
  * has the most unused ceiling, because that is where the displaced investment could actually land.
  */
-export function readSurvivalVerdict(budgets: readonly StatBudget[]): SurvivalVerdict {
+export function readSurvivalVerdict(budgets: readonly StatBudget[], staminaPerTurnAtFloor = 0): SurvivalVerdict {
     const stamina = budgets.find((b) => b.stat === SURVIVAL_STAT)
     const deficit = stamina?.deficitToMinimum ?? 0
     const surplus = stamina?.surplusAbovePreferred ?? 0
     const survives = stamina?.requiredFloor === null || stamina?.requiredFloor === undefined ? false : deficit === 0
     const overStamina = survives && surplus > 0
+    const floor = stamina?.requiredFloor ?? null
+    const midpointDeficit = floor === null ? 0 : Math.max(0, floor - (stamina?.projected.median ?? 0))
+    const clearsAtMidpoint = !survives && floor !== null && midpointDeficit === 0
+    const turnsToClose = deficit > 0 && staminaPerTurnAtFloor > 0 ? Math.ceil(deficit / staminaPerTurnAtFloor) : null
 
     let displacedStat: BudgetStat | null = null
     let displacedHeadroom = 0
@@ -159,7 +176,17 @@ export function readSurvivalVerdict(budgets: readonly StatBudget[]): SurvivalVer
         }
     }
 
-    return { survivesSelectedRisk: survives, overStaminaRisk: overStamina, staminaDeficit: deficit, staminaSurplus: surplus, displacedStat, displacedHeadroom }
+    return {
+        survivesSelectedRisk: survives,
+        clearsAtMidpoint,
+        staminaDeficitAtMidpoint: midpointDeficit,
+        staminaTurnsToCloseDeficit: turnsToClose,
+        overStaminaRisk: overStamina,
+        staminaDeficit: deficit,
+        staminaSurplus: surplus,
+        displacedStat,
+        displacedHeadroom,
+    }
 }
 
 /**

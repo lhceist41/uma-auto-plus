@@ -112,10 +112,17 @@ export function veteranFactors(veteran: VeteranEvidence): readonly BudgetFactor[
  * silently understate every Spark the target build did not happen to ask for.
  */
 export function toBudgetParentPair(pair: ParentPair, parentAEvidence: VeteranEvidence, parentBEvidence: VeteranEvidence): BudgetParentPair {
-    const label = [pair.parentA, pair.parentB].map((p) => `${p.character ?? "unread"}${p.outfit ? ` ${p.outfit}` : ""}`).join(" + ")
+    // Character plus outfit is NOT unique on a real account: the same Veteran in the same outfit can be
+    // held several times over with entirely different Sparks. A label without a discriminator makes two
+    // genuinely different pairs read as one line repeated, so the identity fingerprint's head rides
+    // along. It is short because it exists to distinguish, not to be read.
+    const parentIds = [pair.parentA.rosterFingerprint ?? `scanIndex:${pair.parentA.scanIndex}`, pair.parentB.rosterFingerprint ?? `scanIndex:${pair.parentB.scanIndex}`]
+    const label = [pair.parentA, pair.parentB]
+        .map((p, i) => `${p.character ?? "unread"}${p.outfit ? ` ${p.outfit}` : ""} #${parentIds[i].slice(0, 6)}`)
+        .join(" + ")
     return {
         label,
-        parentIds: [pair.parentA.rosterFingerprint ?? `scanIndex:${pair.parentA.scanIndex}`, pair.parentB.rosterFingerprint ?? `scanIndex:${pair.parentB.scanIndex}`],
+        parentIds,
         factors: [...veteranFactors(parentAEvidence), ...veteranFactors(parentBEvidence)],
         affinityPoints: [pair.parentA.affinity.points, pair.parentB.affinity.points],
         evidenceComplete: pair.parentA.selfFactorsTrusted && pair.parentB.selfFactorsTrusted,

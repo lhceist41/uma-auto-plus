@@ -146,6 +146,15 @@ export function formatJointBuildRecommendation(result: JointBuildRecommendation)
     lines.push(`  survival confidence ${constraint.confidence}`)
     lines.push("")
 
+    lines.push("HOW TO READ THESE NUMBERS")
+    lines.push("  Every income source this model declines to price is non-negative: facility levels raise the")
+    lines.push("  base gain, support and trainee events hand over stats, scenario systems add more, and the")
+    lines.push("  gated multipliers compound further than one pass over them. Nothing unpriced takes stats")
+    lines.push("  away. So every projection below is a FLOOR, and it will read low against a finished career's")
+    lines.push("  stat screen. Compare candidates through these figures; do not compare the figures to the game.")
+    lines.push("  A survival verdict off a floor is conservative in the same direction.")
+    lines.push("")
+
     lines.push("SEARCH")
     lines.push(`  ${result.bounds.parentPairsConsidered} parent pairs x ${result.bounds.decksConsidered} decks x ${result.bounds.archetypesConsidered} archetypes`)
     lines.push(`  ${result.bounds.combinationsEnumerated} combinations enumerated, ${result.bounds.combinationsRejected} set aside`)
@@ -172,10 +181,32 @@ export function formatJointBuildRecommendation(result: JointBuildRecommendation)
         lines.push("")
     }
 
+    if (result.marginal.length) {
+        lines.push("MARGINAL (the midpoint clears the floor, the pessimistic end does not)")
+        for (const candidate of result.marginal.slice(0, 3)) {
+            const stamina = candidate.statBudgets.find((b) => b.stat === SURVIVAL_STAT)
+            lines.push(`  ${candidateHeading(candidate)}`)
+            lines.push(`    Stamina ${band(stamina?.projected ?? { low: 0, median: 0, high: 0 })} against a floor of ${stamina?.requiredFloor ?? "unknown"}`)
+            lines.push(`    short by ${n1(candidate.verdict.staminaDeficit)} at the floor end${candidate.verdict.staminaTurnsToCloseDeficit === null ? "" : `, which ${candidate.verdict.staminaTurnsToCloseDeficit} more Stamina trainings would close`}`)
+        }
+        if (result.marginal.length > 3) lines.push(`  ...and ${result.marginal.length - 3} more`)
+        lines.push("")
+        if (!result.recommended) {
+            lines.push("  Read this tier as it is meant: the floor is the pessimistic end of a bracket whose width")
+            lines.push("  comes from an undecoded combination rule, so a build here is not a build that dies, it is")
+            lines.push("  a build the model cannot promise. The frontier above stays empty on purpose.")
+            lines.push("")
+        }
+    }
+
     lines.push("BY ARCHETYPE")
     for (const candidate of result.byArchetype) {
         const stamina = candidate.statBudgets.find((b) => b.stat === SURVIVAL_STAT)
-        const status = candidate.verdict.survivesSelectedRisk ? `clears the floor with ${n1(candidate.pareto.staminaMargin)} credited margin` : `${n1(candidate.verdict.staminaDeficit)} short`
+        const status = candidate.verdict.survivesSelectedRisk
+            ? `clears the floor with ${n1(candidate.pareto.staminaMargin)} credited margin`
+            : candidate.verdict.clearsAtMidpoint
+              ? `${n1(candidate.verdict.staminaDeficit)} short at the floor, clears at the midpoint`
+              : `${n1(candidate.verdict.staminaDeficit)} short at the floor, ${n1(candidate.verdict.staminaDeficitAtMidpoint)} short at the midpoint`
         lines.push(`  ${candidate.archetype.padEnd(16)} ${status}`)
         lines.push(`    ${candidate.deck.label}`)
         lines.push(`    Stamina ${band(stamina?.projected ?? { low: 0, median: 0, high: 0 })}   Power ${n1(candidate.pareto.powerBudget)}   Speed ${n1(candidate.pareto.speedBudget)}   Wit ${n1(candidate.pareto.witBudget)}`)

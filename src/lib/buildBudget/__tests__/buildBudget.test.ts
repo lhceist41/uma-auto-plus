@@ -185,7 +185,9 @@ describe("training production", () => {
         const production = projectTrainingProduction(evidence, catalogue, powerDeck.cards, 1, traineeFrom(LOW_STAMINA_GROWTH).growth, allocation)
         expect(production.primary.Power.low).toBeGreaterThan(0)
         expect(production.primary.Stamina.low).toBe(0)
-        expect(production.secondary.Stamina.low).toBe(60)
+        // Base 6 Stamina per Power training, times the two Power cards' unconditional 10% training
+        // effectiveness each, times ten turns: 6 * 1.2 * 10. Growth on Stamina is zero for this trainee.
+        expect(production.secondary.Stamina.low).toBeCloseTo(72, 5)
     })
 
     it("pays less secondary Stamina in the scenario whose decoded row pays less", () => {
@@ -687,5 +689,44 @@ describe("borrow valuation", () => {
     it("returns nothing for a deck that borrows nothing", () => {
         const candidate = evaluateCandidate(evidence, catalogue, inputFor(), inputFor().parentPairs[0], { label: "stamina deck", score: staminaDeck }, archetypeProfile("STAMINA_FLEX"))
         expect(valueBorrow(candidate, candidate)).toBeNull()
+    })
+})
+
+describe("the marginal tier", () => {
+    // A build whose midpoint clears the floor and whose pessimistic end does not is a different object
+    // from one that misses at both ends, and the planner must not report them under one label.
+    function planAgainst(minimum: number) {
+        return planJointBuild(evidence, catalogue, inputFor({ survivalConstraint: constraintOf(minimum, [minimum + 20, minimum + 80]) }))
+    }
+
+    it("separates a build that clears at the midpoint from one that misses at both ends", () => {
+        const clears = planAgainst(250)
+        expect(clears.recommended).not.toBeNull()
+        expect(clears.marginal).toHaveLength(0)
+
+        // The fixture build projects Stamina 323.8 at the floor and 341.8 at the midpoint, so a floor
+        // of 340 falls between the two ends and is exactly the case this tier exists for.
+        const marginal = planAgainst(340)
+        expect(marginal.recommended).toBeNull()
+        expect(marginal.marginal.length).toBeGreaterThan(0)
+        expect(marginal.marginal[0].recommendationClass).toBe("STAMINA_MARGINAL")
+        expect(marginal.marginal[0].verdict.clearsAtMidpoint).toBe(true)
+
+        const hopeless = planAgainst(100000)
+        expect(hopeless.marginal).toHaveLength(0)
+        expect(hopeless.rejected[0].recommendationClass).toBe("STAMINA_DEFICIT")
+    })
+
+    it("says how many more Stamina trainings would close the gap", () => {
+        const marginal = planAgainst(340)
+        const turns = marginal.marginal[0].verdict.staminaTurnsToCloseDeficit
+        expect(turns).not.toBeNull()
+        expect(turns).toBeGreaterThan(0)
+    })
+
+    it("declares the projection a floor rather than leaving the bias unstated", () => {
+        const result = planAgainst(250)
+        expect(result.projectionBias).toBe("FLOOR")
+        expect(formatJointBuildRecommendation(result)).toContain("HOW TO READ THESE NUMBERS")
     })
 })

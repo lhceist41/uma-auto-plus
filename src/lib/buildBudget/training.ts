@@ -20,10 +20,15 @@
 // and with terms this repository has not read out of anything. Rather than invent that rule and let
 // it look measured, the model brackets it:
 //
-//   low   the deck's multipliers do nothing. Base gain times growth, plus the deck's decoded flat
-//         stat bonuses. A genuine floor: every omitted term is non-negative.
-//   high  every decoded multiplier applies at once to every same-type card. A genuine ceiling: no
-//         real career has every card present on every training at full friendship in perfect mood.
+//   low   only the UNCONDITIONAL card terms apply: the flat stat bonus a card adds to a training and
+//         its training effectiveness. Both are paid whenever the card is on the training at all.
+//   high  the CONDITIONAL terms apply on top: friendship, which is gated behind a bond gauge that
+//         has to be filled first, and mood, which has to be kept high. A genuine ceiling: no real
+//         career runs every training at full friendship in perfect mood.
+//
+// Splitting the bracket on "is this term gated" rather than on "is this term a card term" is what
+// makes the low end a floor a modeller would actually defend. A floor that assumes the deck does
+// nothing at all is not a floor, it is a build with no deck.
 //
 // A single build's absolute band is therefore wide. What the band does NOT do is favour one candidate
 // over another, because it is computed identically for every candidate, which is why comparing two
@@ -185,18 +190,30 @@ export function deckStartingContribution(index: SupportCardIndex, deck: readonly
 }
 
 /**
- * The multiplier the high end of the bracket applies to a facility's base gain.
+ * The multiplier the LOW end of the bracket applies.
  *
- * EXTERNAL_MECHANICS_REFERENCE, and an overstatement by construction. The three decoded percentage
- * families are applied together as though every card of the facility's type were present, at full
- * friendship, in perfect mood, on every single training. No real career does that, which is exactly
- * what makes this a ceiling rather than a prediction.
+ * Training effectiveness only. It is a decoded per-card percentage and it is unconditional: a card
+ * present on a training pays it whether or not the bond gauge is full and whatever the mood is. That
+ * makes it the one multiplier a floor can carry without assuming anything went well.
+ *
+ * EXTERNAL_MECHANICS_REFERENCE for the multiplication itself; the values are decoded.
+ */
+export function facilityFloorMultiplier(profile: FacilityDeckProfile): number {
+    return 1 + profile.trainingEffectivenessPercent / 100
+}
+
+/**
+ * The multiplier the HIGH end applies, an overstatement by construction.
+ *
+ * The floor multiplier plus the two GATED families: friendship, which pays nothing until the bond
+ * gauge is full, and mood, which pays nothing unless the mood is kept up. Applying both to every
+ * training of the career is what no real career manages, which is exactly what makes this a ceiling
+ * rather than a prediction.
  */
 export function facilityCeilingMultiplier(profile: FacilityDeckProfile): number {
     const friendship = 1 + profile.friendshipBonusPercent / 100
-    const effectiveness = 1 + profile.trainingEffectivenessPercent / 100
     const mood = 1 + profile.moodEffectPercent / 100
-    return friendship * effectiveness * mood
+    return facilityFloorMultiplier(profile) * friendship * mood
 }
 
 /**
@@ -231,6 +248,7 @@ export function projectTrainingProduction(
             continue
         }
         const deckProfile = facilityProfile(index, deck, facility)
+        const floor = facilityFloorMultiplier(deckProfile)
         const ceiling = facilityCeilingMultiplier(deckProfile)
         energySpent += base.energy * turns
 
@@ -238,8 +256,9 @@ export function projectTrainingProduction(
             const baseGain = base.stats[stat]
             if (baseGain === 0) continue
             const growthMultiplier = 1 + (growth[stat] ?? 0) / GROWTH_PERCENT_DIVISOR
-            const low = baseGain * growthMultiplier * turns
-            const high = (baseGain + deckProfile.flatStatBonus[stat]) * ceiling * growthMultiplier * turns
+            const gainBeforeMultipliers = baseGain + deckProfile.flatStatBonus[stat]
+            const low = gainBeforeMultipliers * floor * growthMultiplier * turns
+            const high = gainBeforeMultipliers * ceiling * growthMultiplier * turns
             const contribution = bracketOf(low, high)
             const target = stat === facility ? primary : secondary
             target[stat] = { low: target[stat].low + contribution.low, median: target[stat].median + contribution.median, high: target[stat].high + contribution.high }
@@ -251,7 +270,7 @@ export function projectTrainingProduction(
 
     const assumptions: string[] = [
         `Base training outcomes are the decoded per-scenario rows for scenario ${scenarioId}, at the ordinary board: no camp gains, no facility-level scaling, success only.`,
-        "Every projection is a bracket. The low end applies no support-card multiplier at all; the high end applies every decoded multiplier at once, as though every card of a facility's type were present at full friendship in perfect mood on every training. The real figure is between them.",
+        "Every projection is a bracket. The low end applies only the unconditional card terms (flat stat bonus and training effectiveness); the high end adds the gated ones (friendship and mood) as though they were active on every training. The real figure is between them.",
         `Growth percentages multiply the gain: ${BUDGET_STATS.map((s) => `${s} ${growth[s] ?? 0}%`).join(", ")}.`,
         `Turn budget: ${allocation.trainingTurns} trainings, spread ${BUDGET_STATS.map((s) => `${s} ${allocation.byStat[s] ?? 0}`).join(", ")} (${allocation.origin === "OPERATOR" ? "operator-supplied" : `archetype profile ${allocation.profileLabel ?? "unnamed"}`}).`,
         "Support-card and trainee events pay stats that are not modelled here, so the projection is a floor by that much.",

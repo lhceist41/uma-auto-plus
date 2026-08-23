@@ -119,9 +119,26 @@ export interface SearchBounds {
     readonly note: string
 }
 
+/**
+ * Which way the model's blind spots point.
+ *
+ * Every income source this planner declines to price is non-negative: facility levels raise the base
+ * gain, support and trainee events hand over stats, scenario systems add more on top, and the gated
+ * multipliers compound further than a single pass over them. There is no unpriced term that takes
+ * stats away. So the projection is a systematic FLOOR, and every survival verdict off it is
+ * conservative: a build reported short may well clear in a real career, while a build reported
+ * clearing is not going to fall below it for a reason this model failed to see.
+ *
+ * The practical reading, which the report states in as many words: compare candidates through these
+ * numbers, do not compare the numbers to a finished career's stat screen.
+ */
+export const PROJECTION_BIAS = "FLOOR"
+
 export interface JointBuildRecommendation {
     readonly schema: typeof BUILD_BUDGET_SCHEMA
     readonly schemaVersion: number
+    /** Always FLOOR. See PROJECTION_BIAS: every unpriced income source pushes the real figure up. */
+    readonly projectionBias: typeof PROJECTION_BIAS
     readonly evidenceVersion: number
     readonly target: string
     readonly scenarioId: number
@@ -134,6 +151,15 @@ export interface JointBuildRecommendation {
     readonly recommended: JointBuildCandidate | null
     /** Best candidate per archetype, whether or not it made the frontier. */
     readonly byArchetype: readonly JointBuildCandidate[]
+    /**
+     * Candidates whose midpoint clears the floor but whose pessimistic end does not, Pareto-filtered.
+     *
+     * Reported separately and never merged into the frontier. On a real account this is usually where
+     * the interesting builds are: the strict floor is a pessimistic reading of an undecoded
+     * combination rule, and a build that misses it by ten points is a different object from one that
+     * misses it by two hundred.
+     */
+    readonly marginal: readonly JointBuildCandidate[]
     /** Candidates set aside, with the reason. At least one is always reported when any exists. */
     readonly rejected: readonly JointBuildCandidate[]
     readonly confidence: BudgetConfidence
@@ -221,7 +247,7 @@ export function paretoFrontier(candidates: readonly JointBuildCandidate[]): Join
  */
 export function classifyCandidate(archetype: BuildArchetype, verdict: SurvivalVerdict, plan: RecoveryPlan, budgets: readonly StatBudget[], borrowed: boolean): RecommendationClass {
     if (plan.status === "NOT_SATISFIED") return "RECOVERY_DEPENDENT"
-    if (!verdict.survivesSelectedRisk) return "STAMINA_DEFICIT"
+    if (!verdict.survivesSelectedRisk) return verdict.clearsAtMidpoint ? "STAMINA_MARGINAL" : "STAMINA_DEFICIT"
     if (verdict.overStaminaRisk) return "OVER_STAMINA"
     if (plan.status === "FELL_BACK_TO_NO_RECOVERY") return "RECOVERY_DEPENDENT"
     if (budgets.some((b) => b.cappedOut)) return "CAP_LIMITED"
@@ -332,7 +358,11 @@ export function evaluateCandidate(
         constraint: recoveryPlan.status === "NOT_SATISFIED" ? null : recoveryPlan.effectiveConstraint,
         confidence,
     })
-    const verdict = readSurvivalVerdict(statBudgets)
+    // The rate one more Stamina training would pay at the floor end, so the verdict can say how many
+    // more of them would close a deficit instead of only that one exists.
+    const staminaTurns = allocation.byStat[SURVIVAL_STAT] ?? 0
+    const staminaPerTurnAtFloor = staminaTurns > 0 ? (statBudgets.find((b) => b.stat === SURVIVAL_STAT)?.deckTrainingContributionEstimate.low ?? 0) / staminaTurns : 0
+    const verdict = readSurvivalVerdict(statBudgets, staminaPerTurnAtFloor)
     const rampBurden = friendshipRampBurden(index, deck.score.cards)
 
     const partial = {
@@ -363,7 +393,11 @@ export function evaluateCandidate(
     } else if (!verdict.survivesSelectedRisk) {
         rejection = "STAMINA_FLOOR_NOT_MET"
         const stamina = statBudgets.find((b) => b.stat === SURVIVAL_STAT)
-        rejectionDetail = `projected Stamina floor ${Math.round(stamina?.projected.low ?? 0)} is ${Math.round(verdict.staminaDeficit)} short of the required ${stamina?.requiredFloor ?? "unknown"}`
+        const midpoint = verdict.clearsAtMidpoint
+            ? `; the midpoint ${Math.round(stamina?.projected.median ?? 0)} does clear it`
+            : `; the midpoint ${Math.round(stamina?.projected.median ?? 0)} misses it too, by ${Math.round(verdict.staminaDeficitAtMidpoint)}`
+        const turns = verdict.staminaTurnsToCloseDeficit === null ? "" : `; ${verdict.staminaTurnsToCloseDeficit} more Stamina trainings would close it at the floor rate`
+        rejectionDetail = `projected Stamina floor ${Math.round(stamina?.projected.low ?? 0)} is ${Math.round(verdict.staminaDeficit)} short of the required ${stamina?.requiredFloor ?? "unknown"}${midpoint}${turns}`
     } else if (!deck.score.legality.legal) {
         rejection = "DECK_ILLEGAL"
         rejectionDetail = deck.score.legality.violations.map((v) => v.violation).join(", ")
@@ -403,6 +437,12 @@ export function planJointBuild(evidence: BuildBudgetEvidence, index: SupportCard
 
     const frontier = paretoFrontier(evaluated).sort((a, b) => b.pareto.staminaMargin - a.pareto.staminaMargin || b.pareto.speedBudget - a.pareto.speedBudget)
 
+    // The marginal tier is Pareto-filtered on its own terms rather than against the frontier: these
+    // candidates all fail the strict test, so ranking them beside ones that pass would blur exactly
+    // the line the strict test exists to draw.
+    const marginalPool = rejected.filter((c) => c.rejection === "STAMINA_FLOOR_NOT_MET" && c.verdict.clearsAtMidpoint)
+    const marginal = paretoFrontier(marginalPool).sort((a, b) => a.verdict.staminaDeficit - b.verdict.staminaDeficit || b.pareto.speedBudget - a.pareto.speedBudget)
+
     const byArchetype: JointBuildCandidate[] = []
     for (const profile of profiles) {
         const pool = [...evaluated, ...rejected].filter((c) => c.archetype === profile.archetype)
@@ -433,6 +473,7 @@ export function planJointBuild(evidence: BuildBudgetEvidence, index: SupportCard
     return {
         schema: BUILD_BUDGET_SCHEMA,
         schemaVersion: BUILD_BUDGET_SCHEMA_VERSION,
+        projectionBias: PROJECTION_BIAS,
         evidenceVersion: input.evidenceVersion,
         target: input.targetLabel,
         scenarioId: input.scenarioId,
@@ -448,6 +489,7 @@ export function planJointBuild(evidence: BuildBudgetEvidence, index: SupportCard
             note: "Bounded search over a caller-supplied shortlist. No claim of global optimality: combinations outside the shortlist were never evaluated.",
         },
         frontier,
+        marginal,
         recommended,
         byArchetype,
         rejected: rejected.sort((a, b) => a.verdict.staminaDeficit - b.verdict.staminaDeficit),

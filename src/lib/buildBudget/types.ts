@@ -239,6 +239,8 @@ export interface StatBudget {
 export const RECOMMENDATION_CLASSES = [
     "BALANCED",
     "STAMINA_DEFICIT",
+    /** The midpoint of the projection clears the floor but the pessimistic end does not. */
+    "STAMINA_MARGINAL",
     "OVER_STAMINA",
     "RECOVERY_DEPENDENT",
     "POWER_FLEX",
