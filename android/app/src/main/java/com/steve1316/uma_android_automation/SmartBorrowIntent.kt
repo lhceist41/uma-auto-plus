@@ -22,6 +22,27 @@ import org.json.JSONObject
 
 const val SMART_BORROW_INTENT_SCHEMA = "deck_lab_smart_borrow_intent"
 
+/**
+ * Which offline ranking chose the intent's card, mirroring the TypeScript `IntentSource`. The device
+ * cannot recompute a recommendation, so this is provenance it reads only to decide whether a build-aware
+ * launch may proceed (A2): the production launch gate requires [BUILD_AWARE]. [UNKNOWN] covers a v1
+ * intent that predates the field and any unrecognised value, and always fails the build-aware gate closed.
+ */
+enum class IntentRecommendationSource {
+    DECKLAB_COMPOSITE,
+    BUILD_AWARE,
+    UNKNOWN,
+}
+
+/** Maps the raw `recommendation_source` string to an [IntentRecommendationSource], defaulting to
+ * [IntentRecommendationSource.UNKNOWN] for an absent field (a v1 intent) or any unrecognised value. */
+fun parseIntentRecommendationSource(raw: String?): IntentRecommendationSource =
+    when (raw?.trim()?.uppercase()) {
+        "BUILD_AWARE" -> IntentRecommendationSource.BUILD_AWARE
+        "DECKLAB_COMPOSITE" -> IntentRecommendationSource.DECKLAB_COMPOSITE
+        else -> IntentRecommendationSource.UNKNOWN
+    }
+
 /** The recommended borrow, as the device needs it to find and verify the card. Mirrors the offline
  * `SmartBorrowIntent`. Nullable observed fields stay null when the scan never saw them, so the locator
  * never rejects a row for disagreeing with a value that was never observed. */
@@ -40,6 +61,10 @@ data class SmartBorrowIntent(
     val sourceAlias: String?,
     val resolutionPath: String?,
     val recommendationEvidenceDigest: String?,
+    /** Which offline ranking chose this card (schema v2). Provenance only for locate/select; the A2
+     * launch gate requires [IntentRecommendationSource.BUILD_AWARE]. Defaults to UNKNOWN so a v1 intent
+     * and every existing constructor stay valid. */
+    val recommendationSource: IntentRecommendationSource = IntentRecommendationSource.UNKNOWN,
 )
 
 /**
@@ -71,6 +96,7 @@ fun parseSmartBorrowIntent(json: String): SmartBorrowIntent? {
             sourceAlias = o.optStringOrNull("source_alias"),
             resolutionPath = o.optStringOrNull("resolution_path"),
             recommendationEvidenceDigest = o.optStringOrNull("recommendation_evidence_digest"),
+            recommendationSource = parseIntentRecommendationSource(o.optStringOrNull("recommendation_source")),
         )
     } catch (_: Exception) {
         null
