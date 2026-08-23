@@ -556,6 +556,16 @@ class CareerLaunchNavigator(private val context: Context) {
     private var supportDeckPostBorrowVerified: Boolean = false
     private var supportDeckAutoFillSuppressedLogged: Boolean = false
 
+    // A3 build-aware launch state (reset per navigate()). lastBuildAwareLaunchResult holds the transaction
+    // outcome for THIS launch; its state, through [BuildAwareLaunchGate.canStartCareer], is the single
+    // structural authority both Start Career taps consult -- so the final confirmation gate
+    // ([handlePreRunConfirmation]) cannot confirm a borrow the build-aware transaction never brought to
+    // READY this session (e.g. a resume that lands on the confirmation screen after a process restart).
+    // buildAwareLaunchBlocked latches a blocked attempt so a re-entered pass stays failed rather than
+    // re-running the whole transaction. Both are inert unless runQueue.enableBuildAwareLaunch is on.
+    private var lastBuildAwareLaunchResult: BuildAwareLaunchResult? = null
+    private var buildAwareLaunchBlocked: Boolean = false
+
     // The finalization-verdict token captured when this navigation began (null when none was
     // armed). Only a verdict matching it may govern this navigation's Complete Career / Finish
     // clicks - see CareerFinalizeGate for the lifecycle.
@@ -691,6 +701,8 @@ class CareerLaunchNavigator(private val context: Context) {
         supportDeckPreBorrowVerified = false
         supportDeckPostBorrowVerified = false
         supportDeckAutoFillSuppressedLogged = false
+        lastBuildAwareLaunchResult = null
+        buildAwareLaunchBlocked = false
         // Finalization-guard context for THIS navigation: the verdict present when the
         // navigation begins is the one career this navigation may finalize - a verdict armed
         // later (a different career) can never match the captured token. Guard activity follows
@@ -4162,6 +4174,13 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.i(TAG, "[NAV] Auto-Fill already done this session, skipping to Start Career.")
         }
 
+        // A3: when Build-Aware Launch mode is on, the borrow AND the Start Career gate are owned by the
+        // build-aware launch transaction; the legacy priority-list borrow and inline Start Career block
+        // below run ONLY when the mode is off, so the default hands-off launch is byte-for-byte unchanged.
+        if (SettingsHelper.getBooleanSetting("runQueue", "enableBuildAwareLaunch", false)) {
+            return handleBuildAwareLaunch(requiredDeck)
+        }
+
         val bitmap = iu.getSourceBitmap()
 
         // Fill the empty friend slot, or replace a borrow the game flagged as a duplicate /
@@ -4276,6 +4295,88 @@ class CareerLaunchNavigator(private val context: Context) {
 
         MessageLog.i(TAG, "[NAV] Deck screen detected but 'Start Career!' not visible yet. Waiting...")
         waitSafe(2.0)
+        return TransitionResult.Continue
+    }
+
+    /**
+     * A3 build-aware production launch (runQueue.enableBuildAwareLaunch on). Drives the SAME
+     * [prepareBuildAwareLaunchToReady] transaction the A2 dry-run proves -- fresh pool re-locate for
+     * staleness, exact intent-bound borrow selection, committed-slot identity verification, owned-deck
+     * integrity -- and presses Start Career ONLY when it reached READY_TO_START_CAREER, guarded
+     * structurally by [BuildAwareLaunchGate.canStartCareer]. There is no legacy fallback (locked A2/A3
+     * policy): a blocked transaction rolls any committed borrow back via the proven Remove path and fails
+     * closed, so no career ever starts on an unverified or substituted borrow. The stored
+     * [lastBuildAwareLaunchResult] is what authorises the downstream final confirmation tap
+     * ([handlePreRunConfirmation]); a launch that never reached READY here cannot confirm.
+     */
+    private fun handleBuildAwareLaunch(requiredDeck: Int?): TransitionResult {
+        if (buildAwareLaunchBlocked) {
+            return TransitionResult.Failed(
+                reason = "Build-aware launch was blocked earlier this launch and there is no legacy fallback.",
+                transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                recommendedAction = "Push a fresh BUILD_AWARE intent (outcomes/smart_borrow_intent.json) for this target, or disable Build-Aware Launch to use the legacy borrow.",
+            )
+        }
+
+        // Run the transaction once per launch. A re-entered pass whose stored result is already READY
+        // skips straight to the gated tap rather than re-borrowing.
+        val existing = lastBuildAwareLaunchResult
+        if (existing == null || !BuildAwareLaunchGate.canStartCareer(existing.state)) {
+            val launch = prepareBuildAwareLaunchToReady(upstreamGatesHeld = true)
+            lastBuildAwareLaunchResult = launch
+            if (!BuildAwareLaunchGate.canStartCareer(launch.state)) {
+                // Part 5 failure cleanup: reverse any committed borrow, drop the pending launch id, fail closed.
+                if (launch.slotCommitted) {
+                    val rolled = rollbackCommittedBorrow()
+                    MessageLog.w(TAG, "[NAV] [LAUNCH] Build-aware launch blocked (${launch.state}); committed borrow rolled back (empty=$rolled). No career started.")
+                }
+                // Launch-transaction telemetry (Part 4) needs no explicit cancel here: this launch never
+                // adopted its pending id, and the next navigate()'s beginLaunch discards any un-adopted
+                // pending before minting a fresh one, so a blocked attempt cannot poison the next career's
+                // lineage correlation. The active id belongs to a career and is untouched by a pre-tap block.
+                buildAwareLaunchBlocked = true
+                return TransitionResult.Failed(
+                    reason = "Build-aware launch blocked: ${launch.state}${launch.reason?.let { " ($it)" } ?: ""}. Start Career refused; no legacy fallback.",
+                    transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                    recommendedAction = "Push a fresh BUILD_AWARE intent (outcomes/smart_borrow_intent.json) for this target, or disable Build-Aware Launch to use the legacy borrow.",
+                )
+            }
+            // READY. Required-deck belt-and-suspenders on top of the module's deck-unchanged check: the
+            // active deck must be exactly the required one before the tap (the 2026-08-13 wrong-deck rule).
+            if (requiredDeck != null && launch.deckNumberAtEnd != null && launch.deckNumberAtEnd != requiredDeck) {
+                if (launch.slotCommitted) rollbackCommittedBorrow()
+                buildAwareLaunchBlocked = true
+                return TransitionResult.Failed(
+                    reason = "Build-aware launch reached READY but the active deck is ${launch.deckNumberAtEnd}, not required $requiredDeck; Start Career refused so no TP is spent on the wrong deck.",
+                    transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                    recommendedAction = "Re-select Deck $requiredDeck on the Support Formation screen and restart the queue.",
+                )
+            }
+            // The module verified deck integrity + the committed borrow identity, satisfying the same
+            // pre/post deck latches the legacy path uses at the final confirmation gate.
+            supportDeckPreBorrowVerified = true
+            supportDeckPostBorrowVerified = true
+            MessageLog.i(TAG, "[NAV] [LAUNCH] Build-aware launch READY_TO_START_CAREER: verified borrow ${launch.intent?.displayName} (deck ${launch.deckNumberAtEnd}). Pressing Start Career...")
+        }
+
+        // Structural Start Career gate (A3): the tap is unreachable unless the stored transaction state is
+        // READY_TO_START_CAREER. A future refactor that reaches this tap without a READY transaction trips
+        // this check loudly instead of launching a career silently.
+        val gateState = lastBuildAwareLaunchResult?.state ?: LaunchTransactionState.LAUNCH_BLOCKED
+        check(BuildAwareLaunchGate.canStartCareer(gateState)) { "Start Career refused: build-aware launch state=$gateState is not READY_TO_START_CAREER." }
+
+        if (startCareerClickAttempts >= 5) {
+            return TransitionResult.Failed(
+                reason = "Start Career was clicked $startCareerClickAttempts times with no screen transition after a READY build-aware launch.",
+                transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+                recommendedAction = "Complete the launch manually, then restart the queue.",
+            )
+        }
+        startCareerClickAttempts++
+        if (!ButtonStartCareer.click(iu) && !ButtonStartCareerOffset.click(iu)) {
+            ButtonStartCareerRight.click(iu)
+        }
+        waitSafe(3.0)
         return TransitionResult.Continue
     }
 
@@ -7054,7 +7155,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * non-BUILD_AWARE intent is [LaunchTransactionState.BORROW_NOT_AVAILABLE], a card gone/ambiguous in the
      * fresh pool is [LaunchTransactionState.BORROW_POOL_STALE].
      */
-    internal fun prepareBuildAwareLaunchToReady(): BuildAwareLaunchResult {
+    internal fun prepareBuildAwareLaunchToReady(upstreamGatesHeld: Boolean = true): BuildAwareLaunchResult {
         // Fresh live re-locate (Part 4 freshness): opens/reads/closes the picker on THIS transaction and
         // resolves the pushed intent against the CURRENT pool, leaving the slot empty. A stale intent whose
         // card is gone/changed/ambiguous cannot resolve here, so nothing is selected against an old pool.
@@ -7171,10 +7272,11 @@ class CareerLaunchNavigator(private val context: Context) {
                 borrowSelected = true,
                 borrowIdentityVerified = verification?.verdict == SelectedSlotVerdict.VERIFIED,
                 ownedDeckIntact = ownedDeckIntact,
-                // A2 runs from a parked career-start the operator established (trainee/scenario/lineage
-                // were chosen upstream); A2 cannot re-read those from Support Formation. A3 wires the
-                // production navigate() gates. Held here as the operator-established precondition.
-                upstreamLaunchGatesHeld = true,
+                // Whether the upstream launch identity gates (scenario / trainee / lineage) hold. The A2
+                // dry-run defaults this true (the operator established a valid career-start). A3's
+                // production caller passes the real status: handleSupportDeckScreen only reaches the
+                // build-aware transaction after SingleRunTraineeGate and the required-deck gate pass.
+                upstreamLaunchGatesHeld = upstreamGatesHeld,
                 onSupportFormation = onFormation,
                 startCareerPresent = startPresent,
                 noDebugConflict = noDebugConflict,
@@ -7547,6 +7649,26 @@ class CareerLaunchNavigator(private val context: Context) {
                 transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
                 recommendedAction = "Restart the queue from Home so the Support Formation screen selects and verifies Deck $requiredDeck; or set the required deck to 0 (off) in Run Queue settings.",
             )
+        }
+
+        // A3 structural gate on the FINAL Start Career tap (the actual career start / point of no return).
+        // When Build-Aware Launch mode is on, this confirmation may only fire when the build-aware
+        // transaction reached READY_TO_START_CAREER on the Support Formation this launch -- the same
+        // canStartCareer predicate the first tap passed. A resume that lands here after a process restart
+        // (lastBuildAwareLaunchResult null) or after a blocked transaction fails closed rather than
+        // confirming a borrow the build-aware transaction never verified. Legacy launches (mode off) are
+        // unaffected: the whole check is skipped.
+        if (SettingsHelper.getBooleanSetting("runQueue", "enableBuildAwareLaunch", false)) {
+            val gateState = lastBuildAwareLaunchResult?.state ?: LaunchTransactionState.LAUNCH_BLOCKED
+            if (!BuildAwareLaunchGate.canStartCareer(gateState)) {
+                return TransitionResult.Failed(
+                    reason =
+                        "Reached the final Start Career confirmation with Build-Aware Launch on but no authorized build-aware " +
+                            "launch this session (state=$gateState); refusing to confirm a borrow the build-aware transaction did not verify.",
+                    transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
+                    recommendedAction = "Restart the queue from the Support Formation so the build-aware transaction runs and verifies the borrow; or disable Build-Aware Launch.",
+                )
+            }
         }
 
         // Opt-in: tick "Event Boost (TP Usage x2)" before starting so careers earn double event

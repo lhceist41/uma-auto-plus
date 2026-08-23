@@ -408,6 +408,15 @@ const RunQueueSettings = () => {
                             description="Whenever the bot fills the empty friend slot before starting a career - queued runs and single-run launches alike - it scrolls down through the Borrow Card list and borrows the best card it finds from a curated list of great picks (Kitasan Black first). Cards marked '! Duplicate Support' are skipped, and if a duplicate lands in the slot anyway it is swapped for the next-best pick instead of blocking the career start. Follow trainers with strong cards to give it good options. Off = the default pick: your strong friend card when spotted, otherwise the top row."
                             className="mt-4"
                         />
+
+                        <CustomCheckbox
+                            searchId="run-queue-build-aware-launch"
+                            checked={runQueueSettings.enableBuildAwareLaunch}
+                            onCheckedChange={(checked) => updateSetting("enableBuildAwareLaunch", checked)}
+                            label="Build-Aware Launch (advanced)"
+                            description="Advanced. When on, a career launch borrows and starts through the build-aware launch transaction: it re-scans the live borrow pool for freshness, selects and verifies the exact card named by a pushed BUILD_AWARE intent (outcomes/smart_borrow_intent.json), checks the owned deck is unchanged, and presses Start Career only when everything verifies. If no fresh valid build-aware intent is available, the launch is blocked and no career starts - there is no fallback to the normal borrow. Leave OFF for the normal hands-off launch; turn on only when you are pushing build-aware intents per launch."
+                            className="mt-4"
+                        />
                     </View>
                 </ScrollView>
             </SearchPageProvider>

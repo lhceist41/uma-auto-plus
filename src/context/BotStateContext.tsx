@@ -325,6 +325,14 @@ export interface Settings {
         // duplicate of a card already in the deck) falls back to the default pick on the retry.
         // Off = the default pick only (the strong friend card when spotted, otherwise the top row).
         enableSmartBorrow: boolean
+        // Build-Aware Launch (A3, default off). When on, a career launch routes its Friends borrow and
+        // its Start Career gate through the build-aware launch transaction: it re-scans the live borrow
+        // pool for freshness, selects and verifies the exact card named by a pushed BUILD_AWARE intent
+        // (outcomes/smart_borrow_intent.json), checks owned-deck integrity, and presses Start Career only
+        // when the transaction reaches READY. There is NO legacy fallback: if no fresh valid build-aware
+        // intent is available the launch is blocked and no career starts. Off = today's legacy priority-list
+        // Smart Borrow and unchanged hands-off launch.
+        enableBuildAwareLaunch: boolean
         // Advanced/no UI yet: a card or character name treated as priority zero ahead of the
         // curated Smart Borrow list. Empty = list order only.
         preferredBorrowName: string
@@ -820,6 +828,7 @@ export const defaultSettings: Settings = {
         autoFillSupports: true,
         supportDeckIndex: 0,
         enableSmartBorrow: true,
+        enableBuildAwareLaunch: false,
         preferredBorrowName: "",
         enableTpRestoreWithItems: false,
         enableEventBoost: false,
