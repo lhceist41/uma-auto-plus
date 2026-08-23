@@ -117,6 +117,24 @@ export function buildStatBudgets(input: StatBudgetInput): readonly StatBudget[] 
     })
 }
 
+/**
+ * Where a build sits against its survival requirement, as one ordered tier.
+ *
+ * The tier exists so a change in survival can be recognised as categorically different from a change
+ * in score. A borrow that moves a build from FAILS to MARGINAL has done something no amount of deck
+ * composite can substitute for, and a ranking that expressed that as "a large bonus" would let a big
+ * enough composite gain buy its way past it. Tiers are compared before anything else and never summed
+ * with anything.
+ *
+ * Ordered worst to best, so the index is the comparison.
+ */
+export const SURVIVAL_TIERS = ["UNSATISFIABLE", "FAILS", "MARGINAL", "CLEARS"] as const
+export type SurvivalTier = (typeof SURVIVAL_TIERS)[number]
+
+export function survivalTierRank(tier: SurvivalTier): number {
+    return SURVIVAL_TIERS.indexOf(tier)
+}
+
 /** The survival verdict for a set of budgets. */
 export interface SurvivalVerdict {
     /** True when even the low end of the Stamina projection clears the constraint minimum. */
@@ -187,6 +205,20 @@ export function readSurvivalVerdict(budgets: readonly StatBudget[], staminaPerTu
         displacedStat,
         displacedHeadroom,
     }
+}
+
+/**
+ * Reads the tier off a verdict and the constraint it was measured against.
+ *
+ * UNSATISFIABLE is a real answer, not a missing one: STAM-1 returns a null minimum when the debuff
+ * budget removes at least as much HP as the build can hold, and no build can be ranked against a bar
+ * that nothing clears.
+ */
+export function survivalTierOf(verdict: SurvivalVerdict, constraint: SurvivalConstraint | null): SurvivalTier {
+    if (!constraint || constraint.minimumStamina === null) return "UNSATISFIABLE"
+    if (verdict.survivesSelectedRisk) return "CLEARS"
+    if (verdict.clearsAtMidpoint) return "MARGINAL"
+    return "FAILS"
 }
 
 /**

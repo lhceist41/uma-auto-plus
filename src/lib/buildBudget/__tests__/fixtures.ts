@@ -14,6 +14,7 @@ import { buildDeckTarget, type DeckTargetBuild } from "../../deckLab/deckTarget.
 import { scoreDeck, type DeckScore } from "../../deckLab/deck.ts"
 import { buildSupportCardIndex, parseSupportCardData, SUPPORT_CARD_SCHEMA, SUPPORT_CARD_SCHEMA_VERSION, type SupportCardData, type SupportCardIndex } from "../../deckLab/supportCardData.ts"
 import type { SurvivalConstraint } from "../../raceSurvival/types.ts"
+import { parseBorrowPoolSnapshot, resolveBorrowPool, type BorrowPoolResolution } from "../../deckLab/borrowPool.ts"
 import { createBuildBudgetEvidence, type BuildBudgetEvidence } from "../evidence.ts"
 import type { BudgetParentPair, BudgetStat, BudgetTrainee } from "../types.ts"
 
@@ -223,4 +224,56 @@ export function constraintOf(minimum: number | null, preferred: readonly [number
         confidence,
         unknownMechanics: ["SKILL_ACTIVATION_PROBABILITY"],
     }
+}
+
+/**
+ * A resolved live borrow pool built from named catalogue cards.
+ *
+ * `unresolvedCharacters` are rows the resolver will fail to join, which is the point: the ranking must
+ * be able to prove it never touched them, and a fixture with only resolvable rows could not show that.
+ */
+export function makeBorrowResolution(
+    index: SupportCardIndex,
+    cardIds: readonly number[],
+    options: { readonly scanId?: string; readonly unresolvedCharacters?: readonly string[]; readonly termination?: string; readonly levelById?: Readonly<Record<number, number>> } = {},
+): BorrowPoolResolution {
+    const entries = cardIds.map((id, i) => {
+        const card = index.byId.get(id)
+        if (!card) throw new Error(`fixture borrow pool names card ${id}, which is not in the fixture catalogue`)
+        return {
+            character: index.data.characters[String(card.charaId)] ?? `Fixture ${card.charaId}`,
+            title: card.title ?? "",
+            rarity: card.rarity,
+            support_type: card.supportType,
+            level: options.levelById?.[id] ?? 50,
+            limit_break_index: 4,
+            source_type: "FOLLOW",
+            owner_alias: `owner-${i}`,
+            entry_fingerprint: `fixture-${id}`,
+            confidence: "High",
+        }
+    })
+    for (const [i, character] of (options.unresolvedCharacters ?? []).entries()) {
+        entries.push({
+            character,
+            title: "[Nothing In The Catalogue]",
+            rarity: "R",
+            support_type: "Speed",
+            level: 20,
+            limit_break_index: 0,
+            source_type: "FOLLOW",
+            owner_alias: `owner-x${i}`,
+            entry_fingerprint: `fixture-unresolved-${i}`,
+            confidence: "Low",
+        })
+    }
+    const snapshot = parseBorrowPoolSnapshot({
+        schema: "deck_lab_borrow_pool",
+        schema_version: 1,
+        scan_id: options.scanId ?? "fixture-scan",
+        source_screen: "borrow_picker",
+        termination: options.termination ?? "UI_END_REACHED",
+        entries,
+    })
+    return resolveBorrowPool(snapshot, index)
 }

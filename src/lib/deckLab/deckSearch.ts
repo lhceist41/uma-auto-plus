@@ -289,6 +289,47 @@ export interface DeckSearchOptions {
     readonly noBorrow?: boolean
 }
 
+/**
+ * The best way to fit one borrowed card into an existing deck.
+ *
+ * A borrowed card takes a slot rather than adding one, so it is tried against each card already in
+ * the deck and the swap that raises target stat coverage most is kept. Swaps that would leave two
+ * cards of the same character, or that break any other legality rule, are skipped rather than scored.
+ *
+ * Extracted so the build-aware borrow ranking in src/lib/buildBudget/ evaluates borrows under exactly
+ * the same swap rule this search uses. Two different swap rules would make the two rankings
+ * incomparable while looking as though they disagreed about the cards.
+ *
+ * Returns null when the card is illegal for the target or when no legal swap exists. An improvement
+ * of zero or below is still returned: whether a non-improving borrow is worth reporting is the
+ * caller's decision, not this function's.
+ */
+export function bestBorrowSwap(index: SupportCardIndex, baseDeck: DeckScore, borrowedProfile: CardValueProfile, build: DeckTargetBuild): BorrowOption | null {
+    if (!borrowedProfile.scenarioFit.legal) return null
+    if (build.traineeCharaId !== null && borrowedProfile.card.characterId === build.traineeCharaId) return null
+
+    let best: BorrowOption | null = null
+    for (const displaced of baseDeck.cards) {
+        const rest = baseDeck.cards.filter((p) => p.card.supportCardId !== displaced.card.supportCardId)
+        if (rest.some((p) => p.card.characterId === borrowedProfile.card.characterId)) continue
+        const deck = [...rest, borrowedProfile]
+        const legality = checkDeckLegality(deck, build)
+        if (!legality.legal) continue
+        const scored = withBorrowValue(scoreDeck(index, deck, build), baseDeck, displaced)
+        const improvement = Number((scored.dimensions.targetStatCoverage - baseDeck.dimensions.targetStatCoverage).toFixed(4))
+        const improvedDimensions: Partial<Record<DeckDimension, number>> = {}
+        for (const key of DECK_DIMENSIONS) {
+            const delta = Number((scored.dimensions[key] - baseDeck.dimensions[key]).toFixed(4))
+            if (delta > 0) improvedDimensions[key] = delta
+        }
+        const option: BorrowOption = { borrowed: borrowedProfile, displaced, deck: scored, improvement, improvedDimensions }
+        // Ties break on the displaced card's own id so the same deck and the same borrow always
+        // produce the same swap, whatever order the deck's cards happen to be in.
+        if (!best || option.improvement > best.improvement || (option.improvement === best.improvement && displaced.card.supportCardId < best.displaced!.card.supportCardId)) best = option
+    }
+    return best
+}
+
 export function searchDecks(
     index: SupportCardIndex,
     inventory: OwnedSupportInventorySnapshot,
@@ -353,28 +394,7 @@ export function searchDecks(
     if (borrowCandidates.length && bestNoBorrow) {
         for (const candidate of borrowCandidates) {
             const borrowedProfile = valueCard(index, { ...ownedCardInput(candidate, true), owned: false }, build)
-            if (!borrowedProfile.scenarioFit.legal) continue
-            if (build.traineeCharaId !== null && borrowedProfile.card.characterId === build.traineeCharaId) continue
-
-            // A borrowed card takes a slot rather than adding one, so it is tried against each owned
-            // card in the best no-borrow deck and keeps the swap that scores highest.
-            let best: BorrowOption | null = null
-            for (const displaced of bestNoBorrow.cards) {
-                const rest = bestNoBorrow.cards.filter((p) => p.card.supportCardId !== displaced.card.supportCardId)
-                if (rest.some((p) => p.card.characterId === borrowedProfile.card.characterId)) continue
-                const deck = [...rest, borrowedProfile]
-                const legality = checkDeckLegality(deck, build)
-                if (!legality.legal) continue
-                const scored = withBorrowValue(scoreDeck(index, deck, build), bestNoBorrow, displaced)
-                const improvement = Number((scored.dimensions.targetStatCoverage - bestNoBorrow.dimensions.targetStatCoverage).toFixed(4))
-                const improvedDimensions: Partial<Record<DeckDimension, number>> = {}
-                for (const key of DECK_DIMENSIONS) {
-                    const delta = Number((scored.dimensions[key] - bestNoBorrow.dimensions[key]).toFixed(4))
-                    if (delta > 0) improvedDimensions[key] = delta
-                }
-                const option: BorrowOption = { borrowed: borrowedProfile, displaced, deck: scored, improvement, improvedDimensions }
-                if (!best || option.improvement > best.improvement) best = option
-            }
+            const best = bestBorrowSwap(index, bestNoBorrow, borrowedProfile, build)
             if (best) borrowOptions.push(best)
         }
         borrowOptions.sort((a, b) => b.improvement - a.improvement || a.borrowed.card.supportCardId - b.borrowed.card.supportCardId)

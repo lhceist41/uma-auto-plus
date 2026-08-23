@@ -51,6 +51,7 @@ import { buildDeckTarget, parseStatPriority } from "../src/lib/deckLab/deckTarge
 import { buildOwnedInventory } from "../src/lib/deckLab/inventory.ts"
 import { searchDecks } from "../src/lib/deckLab/deckSearch.ts"
 import { borrowCandidateCards, parseBorrowPoolSnapshot, resolveBorrowPool } from "../src/lib/deckLab/borrowPool.ts"
+import { parseBorrowScanJsonl } from "../src/lib/deckLab/borrowScanImport.ts"
 
 import { loadBuildBudgetEvidence } from "../src/lib/buildBudget/evidence.ts"
 import { resolveBudgetTrainee, toBudgetParentPair } from "../src/lib/buildBudget/adapter.ts"
@@ -58,6 +59,9 @@ import { planJointBuild } from "../src/lib/buildBudget/joint.ts"
 import { valueBorrow } from "../src/lib/buildBudget/borrow.ts"
 import { formatBorrowBudgetEffect } from "../src/lib/buildBudget/borrow.ts"
 import { formatJointBuildRecommendation } from "../src/lib/buildBudget/report.ts"
+import { rankBuildAwareBorrows } from "../src/lib/buildBudget/borrowRanking.ts"
+import { formatBuildAwareBorrowRanking } from "../src/lib/buildBudget/borrowReport.ts"
+import { buildSmartBorrowIntent, serializeSmartBorrowIntent } from "../src/lib/deckLab/smartBorrowIntent.ts"
 import { BUILD_ARCHETYPES } from "../src/lib/buildBudget/types.ts"
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..")
@@ -110,6 +114,14 @@ Data (all default to the committed assets):
   --survival-data <path>   src/data/race_survival_data.json
   --master-data <dir>      src/data/compiled
 
+Build-aware borrow ranking (STAM-2a):
+  --build-aware-borrow     Rank the live borrow pool by what it does to the whole build, not just to
+                           the deck composite. Needs --borrow-pool or --borrow-scan.
+  --emit-intent <path>     Write the recommended borrow as a SmartBorrowIntent JSON. Offline only:
+                           nothing in this tool selects a borrow on a device.
+  --intent-source <s>      DECKLAB_COMPOSITE or BUILD_AWARE (default: whichever ranking produced the
+                           pick, so this only ever forces the provenance label).
+
 Output:
   --json                   Print the recommendation document as JSON
   --out <path>             Write the JSON document here
@@ -123,6 +135,9 @@ function parseArgs(argv) {
         inventory: null,
         borrow: null,
         borrowPool: null,
+        borrowScan: null,
+        buildAwareBorrow: false,
+        emitIntent: null,
         trainee: null,
         outfit: null,
         scenario: null,
@@ -172,6 +187,15 @@ function parseArgs(argv) {
                 break
             case "--borrow-pool":
                 opts.borrowPool = next()
+                break
+            case "--borrow-scan":
+                opts.borrowScan = next()
+                break
+            case "--build-aware-borrow":
+                opts.buildAwareBorrow = true
+                break
+            case "--emit-intent":
+                opts.emitIntent = next()
                 break
             case "--trainee":
                 opts.trainee = next()
@@ -368,13 +392,22 @@ function loadParentPairs(opts, targetBuild, relations, topCount) {
  * both sets go into the pool. Nothing is fabricated: the second pass is the same search over a
  * subset of the same account.
  */
-function loadDecks(opts, cardIndex, deckTarget, topCount) {
+/**
+ * Resolves the live borrow pool once, so the deck search and the build-aware ranking read the same
+ * object. Two resolutions of the same scan would be two chances to disagree about which cards exist.
+ */
+function resolveLivePool(opts, cardIndex) {
+    if (opts.borrowScan) return resolveBorrowPool(parseBorrowScanJsonl(readFileSync(opts.borrowScan, "utf8")), cardIndex)
+    if (opts.borrowPool) return resolveBorrowPool(parseBorrowPoolSnapshot(readJson(opts.borrowPool, "borrow pool snapshot")), cardIndex)
+    return null
+}
+
+function loadDecks(opts, cardIndex, deckTarget, topCount, livePool) {
     const inventory = buildOwnedInventory(readJson(opts.inventory, "owned inventory"), cardIndex, { evidenceSource: opts.inventory, claimsCompleteAccount: false })
 
     let borrowCandidates = []
-    if (opts.borrowPool) {
-        const resolution = resolveBorrowPool(parseBorrowPoolSnapshot(readJson(opts.borrowPool, "borrow pool snapshot")), cardIndex)
-        borrowCandidates = borrowCandidateCards(resolution)
+    if (livePool) {
+        borrowCandidates = borrowCandidateCards(livePool)
     } else if (opts.borrow) {
         borrowCandidates = buildOwnedInventory(readJson(opts.borrow, "borrow inventory"), cardIndex, { evidenceSource: opts.borrow, claimsCompleteAccount: false }).cards
     }
@@ -446,6 +479,11 @@ function main(argv) {
 
     let result
     let borrowEffects = []
+    let borrowRanking = null
+    let intent = null
+    let livePool = null
+    let deckSearch = null
+    let budgetInput = null
     try {
         const budgetEvidence = loadBuildBudgetEvidence(opts.budgetData)
         const survivalEvidence = loadRaceSurvivalEvidence(opts.survivalData)
@@ -469,9 +507,12 @@ function main(argv) {
 
         const trainee = resolveBudgetTrainee(budgetEvidence, { traineeName: opts.trainee, outfit: opts.outfit })
         const { pairs } = loadParentPairs(opts, parentBuild, relations, opts.topParents)
-        const { decks } = loadDecks(opts, cardIndex, deckTarget, opts.topDecks)
+        livePool = resolveLivePool(opts, cardIndex)
+        const loaded = loadDecks(opts, cardIndex, deckTarget, opts.topDecks, livePool)
+        const decks = loaded.decks
+        deckSearch = loaded.search
 
-        result = planJointBuild(budgetEvidence, cardIndex, {
+        budgetInput = {
             evidenceVersion: budgetEvidence.schemaVersion,
             targetLabel: `${opts.trainee} / ${deckTarget.scenarioName} / ${race.name}`,
             scenarioId: deckTarget.scenario.id,
@@ -483,7 +524,30 @@ function main(argv) {
             trainingTurns: opts.turns ?? undefined,
             skillPointCosts: skillPointCosts(opts.masterData),
             archetypes: opts.archetypes.length ? opts.archetypes : undefined,
-        })
+        }
+        result = planJointBuild(budgetEvidence, cardIndex, budgetInput)
+
+        if (opts.buildAwareBorrow) {
+            if (!livePool) throw new Error("--build-aware-borrow needs a live pool: pass --borrow-scan or --borrow-pool")
+            // The baseline must borrow nothing, or the comparison would measure one borrow against
+            // another. The preference order below is fixed so the same inputs always pick the same
+            // baseline: the recommendation if there is one, then the frontier, then the marginal tier,
+            // then the per-archetype bests.
+            const baseline = [result.recommended, ...result.frontier, ...result.marginal, ...result.byArchetype].filter((c) => c && !c.deck.score.borrowedCard)[0]
+            if (!baseline) throw new Error("no no-borrow build was produced, so a borrow has nothing to be measured against")
+            borrowRanking = rankBuildAwareBorrows(budgetEvidence, cardIndex, {
+                budgetInput,
+                baseline,
+                resolution: livePool,
+                deckTarget,
+                deckLabBorrowOptions: deckSearch?.borrowOptions ?? [],
+            })
+            if (opts.emitIntent) {
+                if (!borrowRanking.recommended) throw new Error("no build-aware borrow was recommended, so no intent can be emitted")
+                intent = buildSmartBorrowIntent(livePool, borrowRanking.recommended.supportCardId, deckTarget.label, "BUILD_AWARE")
+                writeFileSync(opts.emitIntent, serializeSmartBorrowIntent(intent), "utf8")
+            }
+        }
 
         // A borrow is valued against the same pair and archetype without it, which is the only
         // comparison that attributes the difference to the borrow rather than to the pair.
@@ -501,9 +565,14 @@ function main(argv) {
         return 2
     }
 
-    if (opts.out) writeFileSync(opts.out, `${JSON.stringify({ recommendation: result, borrowEffects }, null, 2)}\n`, "utf8")
+    const document = { recommendation: result, borrowEffects, borrowRanking, intent }
+    if (opts.out) writeFileSync(opts.out, `${JSON.stringify(document, null, 2)}\n`, "utf8")
     if (opts.json) {
-        console.log(JSON.stringify({ recommendation: result, borrowEffects }, null, 2))
+        console.log(JSON.stringify(document, null, 2))
+    } else if (opts.buildAwareBorrow) {
+        // The build-aware run is its own report. Printing the whole joint-build report in front of it
+        // would bury the comparison the run exists to produce.
+        console.log(formatBuildAwareBorrowRanking(borrowRanking, intent))
     } else {
         console.log(formatJointBuildRecommendation(result))
         if (borrowEffects.length) {
@@ -513,6 +582,7 @@ function main(argv) {
         }
     }
 
+    if (opts.buildAwareBorrow) return borrowRanking && borrowRanking.recommended ? 0 : 1
     return result.recommended ? 0 : 1
 }
 

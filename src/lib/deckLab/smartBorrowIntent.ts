@@ -15,7 +15,18 @@
 import type { BorrowPoolResolution } from "./borrowPool.ts"
 
 export const SMART_BORROW_INTENT_SCHEMA = "deck_lab_smart_borrow_intent"
-export const SMART_BORROW_INTENT_SCHEMA_VERSION = 1
+export const SMART_BORROW_INTENT_SCHEMA_VERSION = 2
+
+/**
+ * Which offline ranking chose this card.
+ *
+ * DECKLAB_COMPOSITE is the original answer: the borrow that raises the deck composite most.
+ * BUILD_AWARE is STAM-2a's: the borrow that best relieves the whole build's constraints, survival
+ * first. The device does nothing with this either way, and must not: it is provenance for the offline
+ * audit trail, so a saved intent says which question it answered.
+ */
+export const INTENT_SOURCES = ["DECKLAB_COMPOSITE", "BUILD_AWARE"] as const
+export type IntentSource = (typeof INTENT_SOURCES)[number]
 
 /**
  * One recommended borrow, expressed as what a live picker locator needs to find and verify it.
@@ -51,6 +62,8 @@ export interface SmartBorrowIntent {
     readonly resolutionPath: string
     /** Resolution/observation warnings carried through, so the device log states what the pick assumed. */
     readonly warnings: readonly string[]
+    /** Which offline ranking chose this card. Provenance only; the device ignores it. */
+    readonly recommendationSource: IntentSource
     /** Stable digest over the load-bearing fields, so an edited or mismatched intent is detectable offline. */
     readonly recommendationEvidenceDigest: string
 }
@@ -68,6 +81,14 @@ export function intentEvidenceDigest(fields: {
     readonly canonicalTitle: string | null
     readonly expectedLevel: number | null
     readonly expectedLimitBreak: number | null
+    /**
+     * Which ranking chose the card. Optional, and absent means the original one.
+     *
+     * The element is APPENDED ONLY for a build-aware intent. Appending it unconditionally would
+     * add a trailing separator to every digest and quietly invalidate every intent written before
+     * this field existed, which is exactly what an audit-trail marker must not do.
+     */
+    readonly recommendationSource?: IntentSource
 }): string {
     const canonical = [
         fields.targetProfile,
@@ -77,10 +98,14 @@ export function intentEvidenceDigest(fields: {
         fields.canonicalTitle ?? "",
         fields.expectedLevel === null ? "" : String(fields.expectedLevel),
         fields.expectedLimitBreak === null ? "" : String(fields.expectedLimitBreak),
-    ].join("")
+    ]
+    // Two intents naming the same card for the same target but chosen by different rankings are
+    // different recommendations, so the digest has to tell them apart.
+    if (fields.recommendationSource !== undefined && fields.recommendationSource !== "DECKLAB_COMPOSITE") canonical.push(fields.recommendationSource)
+    const joined = canonical.join("")
     let hash = 5381
-    for (let i = 0; i < canonical.length; i++) {
-        hash = (hash * 33) ^ canonical.charCodeAt(i)
+    for (let i = 0; i < joined.length; i++) {
+        hash = (hash * 33) ^ joined.charCodeAt(i)
         hash = hash >>> 0
     }
     return `djb2-${hash.toString(16).padStart(8, "0")}`
@@ -100,7 +125,7 @@ export class SmartBorrowIntentError extends Error {
  * resolve is a contradiction, so it throws rather than emitting an intent nothing can locate. The
  * observed level/limit break carry through only when the scan actually saw them.
  */
-export function buildSmartBorrowIntent(resolution: BorrowPoolResolution, supportCardId: number, targetProfile: string): SmartBorrowIntent {
+export function buildSmartBorrowIntent(resolution: BorrowPoolResolution, supportCardId: number, targetProfile: string, recommendationSource: IntentSource = "DECKLAB_COMPOSITE"): SmartBorrowIntent {
     const candidate = resolution.candidates.find((c) => c.card.card.supportCardId === supportCardId)
     if (!candidate) {
         throw new SmartBorrowIntentError(`support card ${supportCardId} is not among the ${resolution.candidates.length} resolved borrow candidates`)
@@ -123,6 +148,7 @@ export function buildSmartBorrowIntent(resolution: BorrowPoolResolution, support
         canonicalTitle: ref.title,
         expectedLevel,
         expectedLimitBreak,
+        recommendationSource,
     })
 
     return {
@@ -140,6 +166,7 @@ export function buildSmartBorrowIntent(resolution: BorrowPoolResolution, support
         sourceAlias,
         resolutionPath: candidate.resolutionPath,
         warnings: candidate.warnings,
+        recommendationSource,
         recommendationEvidenceDigest: digest,
     }
 }
@@ -162,6 +189,7 @@ export function serializeSmartBorrowIntent(intent: SmartBorrowIntent): string {
         source_alias: intent.sourceAlias,
         resolution_path: intent.resolutionPath,
         warnings: intent.warnings,
+        recommendation_source: intent.recommendationSource,
         recommendation_evidence_digest: intent.recommendationEvidenceDigest,
     }
     return `${JSON.stringify(doc, null, 2)}\n`
