@@ -1,7 +1,7 @@
 {
   "schema": "build_budget_evidence",
   "schemaVersion": 1,
-  "source": "master.mdb: succession_factor, succession_factor_effect, card_data, card_rarity_data, single_mode_scenario, single_mode_training, single_mode_training_effect, text_data(categories 5, 6, 147)",
+  "source": "master.mdb: succession_factor, succession_factor_effect, card_data, card_rarity_data, single_mode_scenario, single_mode_training, single_mode_training_effect, single_mode_turn, text_data(categories 5, 6, 147)",
   "targetTypes": {
     "1": {
       "kind": "START_STAT",
@@ -182,6 +182,28 @@
     "traineeBaseRows": 304,
     "trainingEffectRows": 72
   },
+  "careerTurns": [
+    {
+      "scenarioId": 1,
+      "turnSetId": 1,
+      "totalTurns": 78
+    },
+    {
+      "scenarioId": 2,
+      "turnSetId": 2,
+      "totalTurns": 78
+    },
+    {
+      "scenarioId": 3,
+      "turnSetId": 3,
+      "totalTurns": 78
+    },
+    {
+      "scenarioId": 4,
+      "turnSetId": 4,
+      "totalTurns": 78
+    }
+  ],
   "statCaps": {
     "baseline": 1200,
     "scenarioBonus": [

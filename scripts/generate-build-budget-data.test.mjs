@@ -11,7 +11,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { DatabaseSync } from "node:sqlite"
-import { buildPayload, buildStatCaps, buildTraineeBase, buildTraineeGrowth, buildTrainingEffects, deriveCommandTrainingTypes, serializePayload, verifyNamedGroups, GenerateError } from "./generate-build-budget-data.mjs"
+import { buildPayload, buildStatCaps, buildTraineeBase, buildTraineeGrowth, buildCareerTurns, buildTrainingEffects, deriveCommandTrainingTypes, serializePayload, verifyNamedGroups, GenerateError } from "./generate-build-budget-data.mjs"
 
 const TABLES = {
     succession_factor: "CREATE TABLE succession_factor (factor_id INTEGER, factor_group_id INTEGER, rarity INTEGER, grade INTEGER, factor_type INTEGER, effect_group_id INTEGER);",
@@ -21,8 +21,9 @@ const TABLES = {
         "CREATE TABLE card_rarity_data (card_id INTEGER, rarity INTEGER, speed INTEGER, stamina INTEGER, pow INTEGER, guts INTEGER, wiz INTEGER, max_speed INTEGER, max_stamina INTEGER, max_pow INTEGER, max_guts INTEGER, max_wiz INTEGER, " +
         "proper_distance_short INTEGER, proper_distance_mile INTEGER, proper_distance_middle INTEGER, proper_distance_long INTEGER, proper_ground_turf INTEGER, proper_ground_dirt INTEGER, " +
         "proper_running_style_nige INTEGER, proper_running_style_senko INTEGER, proper_running_style_sashi INTEGER, proper_running_style_oikomi INTEGER);",
-    single_mode_scenario: "CREATE TABLE single_mode_scenario (id INTEGER, max_speed INTEGER, max_stamina INTEGER, max_pow INTEGER, max_guts INTEGER, max_wiz INTEGER);",
+    single_mode_scenario: "CREATE TABLE single_mode_scenario (id INTEGER, turn_set_id INTEGER, max_speed INTEGER, max_stamina INTEGER, max_pow INTEGER, max_guts INTEGER, max_wiz INTEGER);",
     single_mode_training: "CREATE TABLE single_mode_training (command_id INTEGER, command_level INTEGER, command_type INTEGER, failure_rate INTEGER);",
+    single_mode_turn: "CREATE TABLE single_mode_turn (turn_set_id INTEGER, turn INTEGER);",
     single_mode_training_effect: "CREATE TABLE single_mode_training_effect (command_id INTEGER, sub_id INTEGER, result_state INTEGER, target_type INTEGER, effect_value INTEGER, scenario_id INTEGER);",
     text_data: 'CREATE TABLE text_data (category INTEGER, "index" INTEGER, text TEXT);',
 }
@@ -113,9 +114,12 @@ function makeDb(mutate = () => {}) {
         }
     }
 
-    const scenario = db.prepare("INSERT INTO single_mode_scenario VALUES (?, ?, ?, ?, ?, ?)")
-    scenario.run(1, 200, 200, 200, 200, 200)
-    scenario.run(3, 400, 100, 100, 300, 100)
+    const scenario = db.prepare("INSERT INTO single_mode_scenario VALUES (?, ?, ?, ?, ?, ?, ?)")
+    scenario.run(1, 1, 200, 200, 200, 200, 200)
+    scenario.run(3, 3, 400, 100, 100, 300, 100)
+
+    const turn = db.prepare("INSERT INTO single_mode_turn VALUES (?, ?)")
+    for (const turnSetId of [1, 3]) for (let t = 1; t <= 78; t++) turn.run(turnSetId, t)
 
     const training = db.prepare("INSERT INTO single_mode_training VALUES (?, ?, ?, ?)")
     const trainingEffect = db.prepare("INSERT INTO single_mode_training_effect VALUES (?, ?, ?, ?, ?, ?)")
@@ -295,5 +299,24 @@ test("flags the camp board without assuming it shares the base board's id orderi
     const effects = buildTrainingEffects(db)
     assert.equal(effects.find((e) => e.commandId === 602 && e.scenarioId === 1).isCamp, true)
     assert.equal(effects.find((e) => e.commandId === 102 && e.scenarioId === 1).isCamp, false)
+    db.close()
+})
+
+test("reads the career turn count per scenario rather than assuming one", () => {
+    const db = makeDb()
+    const turns = buildCareerTurns(db)
+    assert.deepEqual(
+        turns.map((t) => [t.scenarioId, t.totalTurns]),
+        [
+            [1, 78],
+            [3, 78],
+        ],
+    )
+    db.close()
+})
+
+test("rejects a turn set whose turns are not a contiguous run from one", () => {
+    const db = makeDb((d) => d.exec("DELETE FROM single_mode_turn WHERE turn_set_id = 1 AND turn = 40"))
+    assert.throws(() => buildCareerTurns(db), GenerateError)
     db.close()
 })

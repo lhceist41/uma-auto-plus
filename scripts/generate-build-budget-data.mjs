@@ -20,6 +20,9 @@
 //                             bonus. An inheritance figure means nothing without the base it lands on.
 //   single_mode_scenario      the stat cap bonus each scenario adds to that shared ceiling.
 //   single_mode_training      the failure rate of each training facility, per level.
+//   single_mode_turn          how many turns a career runs, per scenario. Every projection here is
+//                             turns times something, so guessing it would put every number in the
+//                             wrong order of magnitude.
 //   single_mode_training_effect
 //                             the base outcome of one training, per scenario: the primary stat, the
 //                             SECONDARY stats it also pays, the energy it costs and the skill points
@@ -75,7 +78,7 @@ const OUT_PATH = join(REPO, "src", "data", "build_budget_data.json")
 export const BUILD_BUDGET_DATA_SCHEMA = "build_budget_evidence"
 export const BUILD_BUDGET_DATA_SCHEMA_VERSION = 1
 
-const SOURCE = "master.mdb: succession_factor, succession_factor_effect, card_data, card_rarity_data, single_mode_scenario, single_mode_training, single_mode_training_effect, text_data(categories 5, 6, 147)"
+const SOURCE = "master.mdb: succession_factor, succession_factor_effect, card_data, card_rarity_data, single_mode_scenario, single_mode_training, single_mode_training_effect, single_mode_turn, text_data(categories 5, 6, 147)"
 
 /** text_data category holding the English Spark name, keyed by factor_id. */
 const TEXT_CATEGORY_FACTOR_NAME = 147
@@ -246,7 +249,7 @@ function requireTables(db) {
             .all()
             .map((r) => r.name),
     )
-    for (const table of ["succession_factor", "succession_factor_effect", "card_data", "card_rarity_data", "single_mode_scenario", "single_mode_training", "single_mode_training_effect", "text_data"]) {
+    for (const table of ["succession_factor", "succession_factor_effect", "card_data", "card_rarity_data", "single_mode_scenario", "single_mode_training", "single_mode_training_effect", "single_mode_turn", "text_data"]) {
         if (!have.has(table)) throw new GenerateError(`master.mdb has no ${table} table; this is not a database this extractor can read`)
     }
 }
@@ -594,6 +597,33 @@ export function buildTrainingEffects(db) {
     return out
 }
 
+/**
+ * How long a career actually is, per scenario.
+ *
+ * Every projection in the planner is turns multiplied by something, so the turn count is the term
+ * that decides whether an estimate is in the right order of magnitude at all. single_mode_scenario
+ * points at a turn set and the turn set enumerates its turns, so this is decoded rather than
+ * remembered. How many of those turns end up spent on training is a policy, not a fact, and is not
+ * decided here.
+ */
+export function buildCareerTurns(db) {
+    const turnSets = new Map()
+    for (const row of db.prepare("SELECT turn_set_id, COUNT(*) AS turns, MIN(turn) AS lo, MAX(turn) AS hi FROM single_mode_turn GROUP BY turn_set_id").all()) {
+        if (row.lo !== 1 || row.hi !== row.turns) {
+            throw new GenerateError(`turn set ${row.turn_set_id} runs ${row.lo}..${row.hi} over ${row.turns} rows; the turns are not a contiguous run from 1`)
+        }
+        turnSets.set(row.turn_set_id, row.turns)
+    }
+    const out = []
+    for (const row of db.prepare("SELECT id, turn_set_id FROM single_mode_scenario ORDER BY id").all()) {
+        const turns = turnSets.get(row.turn_set_id)
+        if (turns === undefined) throw new GenerateError(`scenario ${row.id} points at turn set ${row.turn_set_id}, which has no turns`)
+        out.push({ scenarioId: row.id, turnSetId: row.turn_set_id, totalTurns: turns })
+    }
+    if (!out.length) throw new GenerateError("no scenario turn count could be read")
+    return out
+}
+
 export function buildPayload(db) {
     requireTables(db)
     const factorGroups = buildFactorGroups(db)
@@ -601,6 +631,7 @@ export function buildPayload(db) {
     const traineeBase = buildTraineeBase(db)
     const statCaps = buildStatCaps(db)
     const trainingEffects = buildTrainingEffects(db)
+    const careerTurns = buildCareerTurns(db)
     return {
         schema: BUILD_BUDGET_DATA_SCHEMA,
         schemaVersion: BUILD_BUDGET_DATA_SCHEMA_VERSION,
@@ -626,6 +657,7 @@ export function buildPayload(db) {
             traineeBaseRows: traineeBase.length,
             trainingEffectRows: trainingEffects.length,
         },
+        careerTurns,
         statCaps,
         factorGroups,
         traineeGrowth,
