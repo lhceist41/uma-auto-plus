@@ -51,9 +51,11 @@ class SmartBorrowScanTest {
 
         fun read(): BorrowScan = screens[index]
 
-        fun advance() {
+        fun advance(attempt: Int) {
             gestures++
-            if (swallowed < swallowGestures) {
+            // The calibrated gesture (attempt 0) is what gets swallowed; the walker's escalated recovery
+            // gesture (attempt >= 1) always lands, modelling the real stronger-drag recovery ladder.
+            if (attempt == 0 && swallowed < swallowGestures) {
                 swallowed++
                 return
             }
@@ -317,6 +319,46 @@ class SmartBorrowScanTest {
         val picker = FakePicker(listOf(screen("[Made Up]\n${invented[1]}"), screen("[Made Up]\n${invented[0]}")))
         val selection = selectFromBorrowList(picker.walker()) { borrowTapApproved(it, invented[0], emptySet(), "") }
         assertNotNull(selection.row, "nothing in the scan depends on which cards exist")
+    }
+
+    @Test
+    @DisplayName("16. A walk that ends on a repeated screen is fully traversed and not stalled")
+    fun testNaturalEndIsFullyTraversed() {
+        // The last screen repeats the first screen's rows (the overlap a real list shows near its end), so
+        // the walk ends because nothing new appeared -- a credible complete traversal. No row is the target.
+        val a = screen("[Outfit One]\nDelta Dawn")
+        val b = screen("[Outfit Two]\nEcho Edge")
+        val picker = FakePicker(listOf(a, b, a))
+        val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
+        assertNull(selection.row, "the intended card is nowhere in the list")
+        assertEquals(BorrowWalkEnd.END_OF_LIST, selection.walk.end)
+        assertFalse(selection.walk.stalled, "a repeated-rows end did not stall")
+        assertTrue(selection.walk.fullyTraversed, "so the whole list was seen: a card's absence is genuine")
+    }
+
+    @Test
+    @DisplayName("17. A list that never moves is marked stalled and NOT fully traversed")
+    fun testFrozenWalkIsStalledNotComplete() {
+        val picker = FakePicker(listOf(screen("[Outfit Two]\nDelta Dawn")), frozen = true)
+        val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
+        assertNull(selection.row)
+        assertTrue(selection.walk.stalled, "the scroll never moved after the recovery ladder: stalled")
+        assertFalse(selection.walk.fullyTraversed, "so the list was NOT fully traversed: absence is unproven")
+    }
+
+    @Test
+    @DisplayName("18. A swallowed drag recovered by the escalated retry still reaches a full traversal")
+    fun testSwallowRecoveredThenFullyTraversed() {
+        // Attempt 0 (the calibrated gesture) is swallowed once; the walker's escalated retry (attempt >= 1)
+        // lands and the walk reaches its natural repeated-rows end.
+        val a = screen("[Outfit One]\nDelta Dawn")
+        val b = screen("[Outfit Two]\nEcho Edge")
+        val picker = FakePicker(listOf(a, b, a), swallowGestures = 1)
+        val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
+        assertNull(selection.row)
+        assertEquals(1, selection.walk.swallowedRetries, "one drag was swallowed and recovered")
+        assertFalse(selection.walk.stalled, "the escalated retry cleared the swallow, so the walk did not stall")
+        assertTrue(selection.walk.fullyTraversed, "and the whole list was still seen")
     }
 
     /** Walks up from the test working directory to find a repository file, so the check does not

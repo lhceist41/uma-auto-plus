@@ -113,6 +113,33 @@ class BuildAwareLaunchProductionTest {
     }
 
     @Nested
+    @DisplayName("A3-R1 borrow reliability (equivalence + truthful traversal)")
+    inner class BorrowReliability {
+        private fun moduleBody() = slice("internal fun prepareBuildAwareLaunchToReady(", "internal fun dryRunBuildAwareLaunchGate(")
+
+        @Test
+        fun `production accepts a LOCATED equivalence class, not only a single identity candidate`() {
+            val body = moduleBody()
+            assertTrue(body.contains("freshLocateUnique = locate.status == SmartBorrowLocateResult.Status.LOCATED"), "production accepts any LOCATED (exact or equivalent source)")
+            assertFalse(body.contains("identityCandidates?.size == 1"), "the strict single-candidate rule is gone from production")
+        }
+
+        @Test
+        fun `a stalled traversal is blocked distinctly from a stale pool`() {
+            val body = moduleBody()
+            assertTrue(body.contains("BORROW_LOCATOR_STALLED"), "an incomplete traversal has its own blocking state")
+            assertTrue(body.contains("locate.traversalComplete"), "the stale-vs-stalled split keys on a full traversal")
+            assertTrue(body.contains("BORROW_POOL_STALE"), "a genuinely absent card in a full traversal is still stale")
+        }
+
+        @Test
+        fun `a non-READY build-aware state never authorises a tap`() {
+            // The new BORROW_LOCATOR_STALLED state, like every non-READY state, must fail canStartCareer.
+            assertFalse(BuildAwareLaunchGate.canStartCareer(LaunchTransactionState.BORROW_LOCATOR_STALLED))
+        }
+    }
+
+    @Nested
     @DisplayName("A2 dry-run regression")
     inner class A2Regression {
         @Test

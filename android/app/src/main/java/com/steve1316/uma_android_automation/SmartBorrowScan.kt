@@ -95,8 +95,17 @@ internal data class BorrowWalkResult(
     val screensInspected: Int,
     val pageGestures: Int,
     val swallowedRetries: Int,
+    /** True when the walk ended because the page gesture could not move the list even after the recovery
+     * ladder -- a swallowed drag the escalated gestures never cleared, not the natural end. The list may
+     * hold rows below the last one seen, so a card absent from a stalled walk is NOT proof of absence. */
+    val stalled: Boolean = false,
 ) {
     val picked: Boolean get() = end == BorrowWalkEnd.PICKED
+
+    /** True only when the walk saw the whole list: it reached the natural end (a screen with no new rows)
+     * without stalling. A card absent from a fully-traversed walk is genuinely not in the current pool; a
+     * card absent from a non-fully-traversed walk may simply not have been reached. */
+    val fullyTraversed: Boolean get() = end == BorrowWalkEnd.END_OF_LIST && !stalled
 }
 
 /**
@@ -117,7 +126,9 @@ internal class BorrowListWalker(
     private val maxPageGestures: Int,
     private val maxSwallowedRetries: Int,
     private val readScreen: () -> BorrowScan,
-    private val advancePage: () -> Unit,
+    /** Advances the list by one page. [attempt] is 0 for the normal gesture and rises with each
+     * swallowed-drag retry, so the implementation can escalate to a stronger recovery gesture. */
+    private val advancePage: (attempt: Int) -> Unit,
     private val abort: () -> Boolean = { false },
     private val log: (String) -> Unit = {},
 ) {
@@ -141,17 +152,21 @@ internal class BorrowListWalker(
             val signature = keys.joinToString("|")
 
             if (lastSignature != null && signature == lastSignature) {
-                // The list did not move. Either the drag was swallowed (the picker eats short
-                // drags the same way the trainee roster does) or this is the bottom.
+                // The list did not move. Either the drag was swallowed (the picker eats short drags the
+                // same way the trainee roster does) or this is the bottom. Retry with an ESCALATING
+                // gesture -- the retry index becomes the advance attempt, so a swallowed short drag gets a
+                // stronger recovery gesture instead of the identical one that just failed.
                 if (retriesThisGap < maxSwallowedRetries && gestures < maxPageGestures) {
                     retriesThisGap++
                     retriesTotal++
-                    log("page gesture did not move the list; retrying it ($retriesThisGap/$maxSwallowedRetries).")
-                    advancePage()
+                    log("page gesture did not move the list; retrying with a stronger gesture ($retriesThisGap/$maxSwallowedRetries).")
+                    advancePage(retriesThisGap)
                     gestures++
                     continue
                 }
-                return BorrowWalkResult(BorrowWalkEnd.END_OF_LIST, screens, gestures, retriesTotal)
+                // The recovery ladder is exhausted: mark the walk stalled so a caller can tell "the list
+                // stopped moving" apart from "a screen produced no new rows" (the natural end below).
+                return BorrowWalkResult(BorrowWalkEnd.END_OF_LIST, screens, gestures, retriesTotal, stalled = true)
             }
             retriesThisGap = 0
             lastSignature = signature
@@ -172,7 +187,7 @@ internal class BorrowListWalker(
             if (gestures >= maxPageGestures) {
                 return BorrowWalkResult(BorrowWalkEnd.MAX_PAGES, screens, gestures, retriesTotal)
             }
-            advancePage()
+            advancePage(0)
             gestures++
         }
     }

@@ -29,9 +29,16 @@ enum class LaunchTransactionState {
      * not applicable and there is NO legacy fallback in this mode. Blocked. */
     BORROW_NOT_AVAILABLE,
 
-    /** The build-aware intent's card is no longer uniquely present in a borrow pool re-scanned THIS
-     * transaction (gone, changed, or ambiguous): the intent is stale against the live pool. Blocked. */
+    /** The build-aware intent's card is genuinely not present in a FULLY-traversed borrow pool re-scanned
+     * THIS transaction (gone, changed, or a non-equivalent limit-break ambiguity): the intent is stale
+     * against the live pool. Blocked. */
     BORROW_POOL_STALE,
+
+    /** The borrow-list scroll stalled before the pool was fully traversed, so the intent's card could not
+     * be confirmed present OR absent this transaction. Distinct from [BORROW_POOL_STALE]: the card is not
+     * proven gone, the locator just could not see the whole list. Blocked (never launches on an unproven
+     * borrow), but the reason is a traversal failure, not a stale pool. */
+    BORROW_LOCATOR_STALLED,
 
     /** The exact intended row was tapped and the friend slot is filled. */
     BORROW_SELECTED,

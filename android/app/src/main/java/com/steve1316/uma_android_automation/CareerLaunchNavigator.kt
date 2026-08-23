@@ -6122,7 +6122,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 lastBorrowListBitmap = bitmap
                 borrowRowsOnScreen(bitmap)
             },
-            advancePage = { lastBorrowListBitmap?.let { swipeBorrowList(it) } },
+            advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
             abort = { !BotService.isRunning || StartModule.queueStopRequested },
             log = { MessageLog.i(TAG, "[NAV] [BORROW] $it") },
         )
@@ -6204,12 +6204,35 @@ class CareerLaunchNavigator(private val context: Context) {
         return BorrowScan(rows, duplicateTexts, traineeConflictTexts)
     }
 
-    /** One page-advance swipe on the Borrow Card list: slow so the drag lands without inertia. */
-    private fun swipeBorrowList(bitmap: Bitmap) {
+    /**
+     * One page-advance swipe on the Borrow Card list: slow so the drag lands without inertia. [attempt]
+     * is the walker's recovery index for a swallowed drag: 0 is the calibrated gesture; higher attempts
+     * escalate (start lower on the list body so the drag does not clip the dialog chrome, then drag
+     * further over longer time) so a picker that ate a short drag gets a stronger one on retry rather than
+     * the identical gesture that just failed. All variants stay within the frame.
+     */
+    private fun swipeBorrowList(bitmap: Bitmap, attempt: Int = 0) {
         val x = bitmap.width * 0.5f
-        val from = bitmap.height * 0.72f
-        gestureUtils.swipe(x, from, x, from - BORROW_PAGE_SWIPE_PX, duration = 900L)
-        waitSafe(1.2)
+        when (attempt) {
+            0 -> {
+                val from = bitmap.height * 0.72f
+                gestureUtils.swipe(x, from, x, from - BORROW_PAGE_SWIPE_PX, duration = 900L)
+            }
+            1 -> {
+                // Start lower with the same delta: a higher start point can clip the dialog header and
+                // swallow the drag; beginning near the bottom gives the whole gesture room on the list body.
+                val from = bitmap.height * 0.82f
+                gestureUtils.swipe(x, from, x, from - BORROW_PAGE_SWIPE_PX, duration = 900L)
+            }
+            else -> {
+                // Longer, larger, slower: a bigger delta over more time clears an inertial swallow the
+                // short drags cannot. Bounded by the frame so it never drags off-screen.
+                val from = bitmap.height * 0.85f
+                val delta = (BORROW_PAGE_SWIPE_PX * 1.4f).coerceAtMost(bitmap.height * 0.55f)
+                gestureUtils.swipe(x, from, x, from - delta, duration = 1300L)
+            }
+        }
+        waitSafe(1.3)
     }
 
     /** Outcome of a read-only borrow-pool census, for the diagnostic entry point. */
@@ -6424,7 +6447,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     val blocked = latestRows.filter { it.blockedTag != null }.map { nameKeyOf(it) }
                     BorrowScan(readable, duplicateTexts = blocked)
                 },
-                advancePage = { lastBorrowListBitmap?.let { swipeBorrowList(it) } },
+                advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
                 abort = { !BotService.isRunning || StartModule.queueStopRequested },
                 log = { MessageLog.i(TAG, "[BORROW-POOL] $it") },
             )
@@ -6603,13 +6626,17 @@ class CareerLaunchNavigator(private val context: Context) {
                     val blocked = latestRows.filter { it.blockedTag != null }.map { nameKeyOf(it) }
                     BorrowScan(readable, duplicateTexts = blocked)
                 },
-                advancePage = { lastBorrowListBitmap?.let { swipeBorrowList(it) } },
+                advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
                 abort = { !BotService.isRunning || StartModule.queueStopRequested },
                 log = { MessageLog.i(TAG, "[BORROW-LOCATE] $it") },
             )
-        walker.walk { _, _ ->
-            for (obs in latestRows) observations.putIfAbsent(obs.rowFingerprint, obs)
-            false
+        val walk =
+            walker.walk { _, _ ->
+                for (obs in latestRows) observations.putIfAbsent(obs.rowFingerprint, obs)
+                false
+            }
+        if (walk.stalled) {
+            MessageLog.w(TAG, "[BORROW-LOCATE] the borrow list stopped moving before a natural end (scroll stalled after the recovery ladder); the pool was not fully traversed.")
         }
 
         // Always leave the picker the way it was found: closed, friend slot still empty. Never a tap.
@@ -6651,8 +6678,8 @@ class CareerLaunchNavigator(private val context: Context) {
                 SmartBorrowLocateVerdict.LB_MISMATCH -> SmartBorrowLocateResult.Status.LB_MISMATCH
                 SmartBorrowLocateVerdict.AMBIGUOUS -> SmartBorrowLocateResult.Status.AMBIGUOUS
             }
-        MessageLog.i(TAG, "[BORROW-LOCATE] status=$status runtime=${(System.currentTimeMillis() - startedAt) / 1000}s ===== end =====")
-        return SmartBorrowLocateResult(status, intent = intent, rowsObserved = rows.size, match = match, returnedToSupportFormation = onFormation, friendSlotStillEmpty = slotEmpty)
+        MessageLog.i(TAG, "[BORROW-LOCATE] status=$status traversalComplete=${walk.fullyTraversed} runtime=${(System.currentTimeMillis() - startedAt) / 1000}s ===== end =====")
+        return SmartBorrowLocateResult(status, intent = intent, rowsObserved = rows.size, match = match, returnedToSupportFormation = onFormation, friendSlotStillEmpty = slotEmpty, traversalComplete = walk.fullyTraversed)
     }
 
     /** Appends one read-only locate record to the local corpus. Best-effort; a persist failure never
@@ -6865,7 +6892,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     val readable = rich.filter { it.observation.blockedTag == null }.map { 0.0 to nameKeyOf(it.observation) }
                     BorrowScan(readable, duplicateTexts = rich.filter { it.observation.blockedTag != null }.map { nameKeyOf(it.observation) })
                 },
-                advancePage = { lastBorrowListBitmap?.let { swipeBorrowList(it) } },
+                advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
                 abort = { !BotService.isRunning || StartModule.queueStopRequested },
                 log = { MessageLog.i(TAG, "[BORROW-SELECT] $it") },
             )
@@ -7177,9 +7204,12 @@ class CareerLaunchNavigator(private val context: Context) {
 
         val intentPresent = intent != null && locate.status != SmartBorrowLocateResult.Status.INTENT_MISSING
         val intentBuildAware = intent?.recommendationSource == IntentRecommendationSource.BUILD_AWARE
-        // A name-band tap cannot single out one of several distinct copies, so a unique fresh locate means
-        // LOCATED with exactly one identity candidate (the same bar Stage B enforces before it taps).
-        val freshLocateUnique = locate.status == SmartBorrowLocateResult.Status.LOCATED && match?.identityCandidates?.size == 1
+        // The locator resolves an equivalence class -- the same canonical card at the same limit break,
+        // offered by one or more interchangeable owners -- to a single LOCATED pick. Production accepts
+        // LOCATED (exact OR equivalent source) because owner has no gameplay effect, and verifies the
+        // committed identity after selection. Only a non-equivalent match (different limit breaks), a true
+        // miss, or an incomplete traversal fails the freshness gate.
+        val freshLocateUnique = locate.status == SmartBorrowLocateResult.Status.LOCATED
 
         // Fail closed before touching a row: no intent / not build-aware, or the card is not uniquely on
         // offer in the fresh pool. No selection, no rollback owed.
@@ -7190,15 +7220,33 @@ class CareerLaunchNavigator(private val context: Context) {
             return BuildAwareLaunchResult(BuildAwareLaunchGate.evaluate(pre), pre, BuildAwareLaunchGate.furthestStageReached(pre), intent, match, rows, reason = why)
         }
         if (!freshLocateUnique) {
+            // Truthful block reason (Part 4): a genuinely-absent card in a FULLY-traversed pool is stale; a
+            // card not found because the scroll stalled before a full traversal is a LOCATOR stall (not
+            // proof of absence); conflicting limit breaks are a non-equivalent ambiguity. All block; none
+            // ever falls back or launches.
             val pre = LaunchPreconditions(intentPresent = true, intentBuildAware = true, freshLocateUnique = false)
-            val why = "intent card not uniquely present in the fresh pool (locate ${locate.status}, candidates=${match?.identityCandidates?.size ?: 0})"
-            MessageLog.e(TAG, "[LAUNCH-GATE] $why -> BORROW_POOL_STALE (blocked).")
-            return BuildAwareLaunchResult(BuildAwareLaunchGate.evaluate(pre), pre, BuildAwareLaunchGate.furthestStageReached(pre), intent, match, rows, reason = why)
+            val (state, why) =
+                when {
+                    locate.status == SmartBorrowLocateResult.Status.AMBIGUOUS ->
+                        LaunchTransactionState.BORROW_POOL_STALE to "intent card offered at conflicting limit breaks in the fresh pool (not one equivalence class): ${match?.reason ?: "ambiguous"}"
+                    !locate.traversalComplete ->
+                        LaunchTransactionState.BORROW_LOCATOR_STALLED to "intent card not found but the borrow list was not fully traversed (scroll stalled); cannot prove it absent (locate ${locate.status})"
+                    else ->
+                        LaunchTransactionState.BORROW_POOL_STALE to "intent card absent from the fully-traversed fresh pool (locate ${locate.status})"
+                }
+            MessageLog.e(TAG, "[LAUNCH-GATE] $why -> $state (blocked).")
+            return BuildAwareLaunchResult(state, pre, BuildAwareLaunchGate.furthestStageReached(pre), intent, match, rows, reason = why)
         }
         val located = match!!.row!!
+        val sourceKind =
+            when {
+                match.disambiguatedByAlias -> "intent's own source among ${match.equivalenceClassSize} equivalents"
+                match.equivalentSource -> "an equivalent source (${match.equivalenceClassSize} interchangeable offerings)"
+                else -> "the single available source"
+            }
         MessageLog.i(
             TAG,
-            "[LAUNCH-GATE] fresh locate UNIQUE: \"${located.character ?: "-"} [${located.outfit ?: "-"}]\" lb=${located.limitBreakIndex ?: "-"} (intent #${intent!!.supportCardId}, ${intent.recommendationSource}, digest ${intent.recommendationEvidenceDigest ?: "-"}). Selecting it...",
+            "[LAUNCH-GATE] fresh locate RESOLVED ($sourceKind): \"${located.character ?: "-"} [${located.outfit ?: "-"}]\" lb=${located.limitBreakIndex ?: "-"} (intent #${intent!!.supportCardId}, ${intent.recommendationSource}, digest ${intent.recommendationEvidenceDigest ?: "-"}). Selecting it...",
         )
 
         // Owned-deck integrity anchor + TP evidence, read before the selection touches anything.
