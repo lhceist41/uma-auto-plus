@@ -274,7 +274,6 @@ func supportedDisplay(width, height, density int) bool {
 
 func parseFocusedPackage(output string) (string, bool, error) {
 	focusedPackage := ""
-	foundAuthority := false
 	for _, rawLine := range strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n") {
 		line := strings.TrimSpace(rawLine)
 		for _, authority := range focusAuthorityNames {
@@ -285,12 +284,15 @@ func parseFocusedPackage(output string) (string, bool, error) {
 			if remainder != "" && remainder[0] != '=' && remainder[0] != ' ' && remainder[0] != '\t' {
 				continue
 			}
-			foundAuthority = true
 			remainder = strings.TrimSpace(remainder)
 			if !strings.HasPrefix(remainder, "=") {
 				return "", true, errors.New("foreground authority line was malformed")
 			}
 			value := strings.TrimSpace(strings.TrimPrefix(remainder, "="))
+			// MuMu can list an unfocused display before the display that owns the game.
+			if authority == "mCurrentFocus" && value == "null" {
+				break
+			}
 			fields := strings.Fields(strings.NewReplacer("{", " ", "}", " ").Replace(value))
 			componentPackage := ""
 			componentCount := 0
@@ -315,7 +317,7 @@ func parseFocusedPackage(output string) (string, bool, error) {
 			break
 		}
 	}
-	if !foundAuthority {
+	if focusedPackage == "" {
 		return "", false, nil
 	}
 	return focusedPackage, true, nil

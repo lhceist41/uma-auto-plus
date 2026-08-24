@@ -45,12 +45,31 @@ func TestDisplayValidationAcceptsOnlySupportedProfiles(t *testing.T) {
 }
 
 func TestParseFocusedPackageAcceptsObservedAuthorityFormats(t *testing.T) {
-	output := "  mCurrentFocus=Window{96768a7 u0 " + gamePackage + "/jp.co.cygames.umamusume_activity.UmamusumeActivity}\n" +
+	output := "  mCurrentFocus=null\n" +
+		"  mCurrentFocus=Window{96768a7 u0 " + gamePackage + "/jp.co.cygames.umamusume_activity.UmamusumeActivity}\n" +
 		"  mFocusedApp=ActivityRecord{d8c6470 u0 " + gamePackage + "/jp.co.cygames.umamusume_activity.UmamusumeActivity t694}\n" +
 		"  mFocusedWindow=Window{96768a7 u0 " + gamePackage + "/jp.co.cygames.umamusume_activity.UmamusumeActivity}\n"
 	got, found, err := parseFocusedPackage(output)
 	if err != nil || !found || got != gamePackage {
 		t.Fatalf("observed focus authorities were not accepted: package=%q found=%v err=%v", got, found, err)
+	}
+}
+
+func TestParseFocusedPackageSkipsMultipleNullDisplays(t *testing.T) {
+	output := "mCurrentFocus=null\n" +
+		"mCurrentFocus=null\n" +
+		"mCurrentFocus=null\n" +
+		"mCurrentFocus=Window{1 u0 " + gamePackage + "/.MainActivity}\n"
+	got, found, err := parseFocusedPackage(output)
+	if err != nil || !found || got != gamePackage {
+		t.Fatalf("focus after null displays was not accepted: package=%q found=%v err=%v", got, found, err)
+	}
+}
+
+func TestParseFocusedPackageReturnsNoProofForNullOnlyDisplays(t *testing.T) {
+	got, found, err := parseFocusedPackage("mCurrentFocus=null\nmCurrentFocus=null\n")
+	if err != nil || found || got != "" {
+		t.Fatalf("null-only focus returned proof: package=%q found=%v err=%v", got, found, err)
 	}
 }
 
@@ -84,6 +103,42 @@ func TestForegroundRejectsUnsafeOutput(t *testing.T) {
 			wantError: true,
 		},
 		{
+			name:      "empty authority value",
+			output:    "mCurrentFocus=\n",
+			wantError: true,
+		},
+		{
+			name:      "garbage authority value",
+			output:    "mCurrentFocus=garbage\n",
+			wantError: true,
+		},
+		{
+			name:      "broken window value",
+			output:    "mCurrentFocus=Window{broken\n",
+			wantError: true,
+		},
+		{
+			name:      "package without activity",
+			output:    "mCurrentFocus=" + gamePackage + "\n",
+			wantError: true,
+		},
+		{
+			name:      "unproven focused app null",
+			output:    "mFocusedApp=null\n",
+			wantError: true,
+		},
+		{
+			name:      "unproven focused window null",
+			output:    "mFocusedWindow=null\n",
+			wantError: true,
+		},
+		{
+			name: "multiple components",
+			output: "mCurrentFocus=Window{1 u0 " + gamePackage + "/.MainActivity " +
+				"other.package/.MainActivity}\n",
+			wantError: true,
+		},
+		{
 			name: "conflicting authorities",
 			output: "mCurrentFocus=Window{1 u0 " + gamePackage + "/.MainActivity}\n" +
 				"mFocusedApp=ActivityRecord{2 u0 other.package/.MainActivity t9}\n",
@@ -104,6 +159,20 @@ func TestForegroundRejectsUnsafeOutput(t *testing.T) {
 				t.Fatalf("foreground=%v err=%v", foreground, err)
 			}
 		})
+	}
+}
+
+func TestForegroundNullOnlyOutputFailsClosed(t *testing.T) {
+	runner := &fakeRunner{fn: func(args []string) CommandResult {
+		if strings.Contains(strings.Join(args, " "), "dumpsys window") {
+			return CommandResult{Output: "mCurrentFocus=null\nmCurrentFocus=null\n"}
+		}
+		return CommandResult{ExitCode: 1}
+	}}
+	service := newADBService(runner, "127.0.0.1:16384")
+	foreground, err := service.foregroundLocked(context.Background())
+	if foreground || err == nil {
+		t.Fatalf("null-only focus unexpectedly proved foreground: foreground=%v err=%v", foreground, err)
 	}
 }
 
@@ -134,7 +203,7 @@ func TestForegroundFallsBackToLegacyWindowDump(t *testing.T) {
 			return CommandResult{Output: "mCurrentFocus=Window{1 u0 " + gamePackage + "/.MainActivity}\n"}
 		}
 		if strings.HasSuffix(joined, "dumpsys window") {
-			return CommandResult{Output: "WINDOW MANAGER WINDOWS\n"}
+			return CommandResult{Output: "mCurrentFocus=null\nmCurrentFocus=null\n"}
 		}
 		return CommandResult{ExitCode: 1}
 	}}
@@ -151,6 +220,48 @@ func TestForegroundFallsBackToLegacyWindowDump(t *testing.T) {
 	}
 	if !reflect.DeepEqual(runner.calls, want) {
 		t.Fatalf("unexpected foreground argv: %#v", runner.calls)
+	}
+}
+
+func TestForegroundBroadErrorNeverFallsBack(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+	}{
+		{
+			name:   "malformed",
+			output: "mCurrentFocus=garbage\n",
+		},
+		{
+			name: "conflicting",
+			output: "mCurrentFocus=Window{1 u0 " + gamePackage + "/.MainActivity}\n" +
+				"mFocusedApp=ActivityRecord{2 u0 other.package/.MainActivity t9}\n",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runner := &fakeRunner{fn: func(args []string) CommandResult {
+				joined := strings.Join(args, " ")
+				if strings.HasSuffix(joined, "dumpsys window windows") {
+					return CommandResult{Output: "mCurrentFocus=Window{1 u0 " + gamePackage + "/.MainActivity}\n"}
+				}
+				if strings.HasSuffix(joined, "dumpsys window") {
+					return CommandResult{Output: test.output}
+				}
+				return CommandResult{ExitCode: 1}
+			}}
+			service := newADBService(runner, "127.0.0.1:16384")
+			foreground, err := service.foregroundLocked(context.Background())
+			if foreground || err == nil {
+				t.Fatalf("broad error was not preserved: foreground=%v err=%v", foreground, err)
+			}
+			runner.mu.Lock()
+			defer runner.mu.Unlock()
+			want := [][]string{{"-s", "127.0.0.1:16384", "shell", "dumpsys", "window"}}
+			if !reflect.DeepEqual(runner.calls, want) {
+				t.Fatalf("legacy fallback ran after broad error: %#v", runner.calls)
+			}
+		})
 	}
 }
 
