@@ -1198,7 +1198,7 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     open fun startSmartBorrowLocateTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only Smart Borrow locate rehearsal...")
-        CareerLaunchNavigator(game.myContext).locateSmartBorrowIntentReadOnly(game.imageUtils)
+        CareerLaunchNavigator(game.myContext).apply { attachLiveGame(game) }.locateSmartBorrowIntentReadOnly(game.imageUtils)
     }
 
     /**
@@ -1225,7 +1225,7 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     open fun startSmartBorrowSelectRollbackTest() {
         MessageLog.i(TAG, "\n[TEST] Running Smart Borrow select-verify-rollback rehearsal...")
-        CareerLaunchNavigator(game.myContext).rehearseSmartBorrowSelectAndRollback(game.imageUtils)
+        CareerLaunchNavigator(game.myContext).apply { attachLiveGame(game) }.rehearseSmartBorrowSelectAndRollback(game.imageUtils)
     }
 
     /**
@@ -1239,7 +1239,7 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     open fun startBuildAwareLaunchGateTest() {
         MessageLog.i(TAG, "\n[TEST] Running A2 build-aware launch-gate dry-run...")
-        CareerLaunchNavigator(game.myContext).dryRunBuildAwareLaunchGate(game.imageUtils)
+        CareerLaunchNavigator(game.myContext).apply { attachLiveGame(game) }.dryRunBuildAwareLaunchGate(game.imageUtils)
     }
 
     /**
@@ -1257,7 +1257,7 @@ abstract class Campaign(game: Game) : Task(game) {
         val limit = SettingsHelper.getIntSetting("debug", "borrowPoolScanLimit", 0)
         val evidence = SettingsHelper.getBooleanSetting("debug", "borrowPoolScanEvidence", false)
         MessageLog.i(TAG, "\n[TEST] Running read-only Borrow pool census (entryLimit=${if (limit > 0) limit.toString() else "none"}, evidence=${if (evidence) "on" else "off"})...")
-        CareerLaunchNavigator(game.myContext).scanBorrowPoolReadOnly(game.imageUtils, entryLimit = limit, captureEvidence = evidence)
+        CareerLaunchNavigator(game.myContext).apply { attachLiveGame(game) }.scanBorrowPoolReadOnly(game.imageUtils, entryLimit = limit, captureEvidence = evidence)
     }
 
     /**

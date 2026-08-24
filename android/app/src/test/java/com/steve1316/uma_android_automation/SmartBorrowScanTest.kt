@@ -42,14 +42,23 @@ class SmartBorrowScanTest {
         private val screens: List<BorrowScan>,
         private val swallowGestures: Int = 0,
         private val frozen: Boolean = false,
+        /** Whether the injected service recovery reports it did something (models a live game attached). */
+        private val recoverAvailable: Boolean = false,
+        /** Whether a successful recovery actually revives scrolling (models the rebind fixing dead dispatch). */
+        private val revivesAfterRecover: Boolean = false,
     ) {
         var index = 0
             private set
         var gestures = 0
             private set
+        var recoverCalls = 0
+            private set
         private var swallowed = 0
+        private var recovered = false
 
         fun read(): BorrowScan = screens[index]
+
+        private fun canMove(): Boolean = !frozen || (revivesAfterRecover && recovered)
 
         fun advance(attempt: Int) {
             gestures++
@@ -59,7 +68,13 @@ class SmartBorrowScanTest {
                 swallowed++
                 return
             }
-            if (!frozen && index < screens.lastIndex) index++
+            if (canMove() && index < screens.lastIndex) index++
+        }
+
+        fun recoverService(): Boolean {
+            recoverCalls++
+            if (recoverAvailable) recovered = true
+            return recoverAvailable
         }
 
         fun walker(maxPageGestures: Int = 8, maxSwallowedRetries: Int = 2): BorrowListWalker =
@@ -68,6 +83,7 @@ class SmartBorrowScanTest {
                 maxSwallowedRetries = maxSwallowedRetries,
                 readScreen = ::read,
                 advancePage = ::advance,
+                recoverService = ::recoverService,
             )
     }
 
@@ -359,6 +375,56 @@ class SmartBorrowScanTest {
         assertEquals(1, selection.walk.swallowedRetries, "one drag was swallowed and recovered")
         assertFalse(selection.walk.stalled, "the escalated retry cleared the swallow, so the walk did not stall")
         assertTrue(selection.walk.fullyTraversed, "and the whole list was still seen")
+    }
+
+    @Test
+    @DisplayName("19. A stall the gesture ladder cannot clear is revived by one service recovery and completes")
+    fun testServiceRecoveryRevivesStalledScroll() {
+        // The gesture ladder never moves the list (dead accessibility dispatch), so it exhausts. The single
+        // service recovery reports it rebound the dispatcher, and the list moves from then on -- the walk
+        // reaches its natural repeated-rows end instead of stalling.
+        val a = screen("[Outfit One]\nDelta Dawn")
+        val b = screen("[Outfit Two]\nEcho Edge")
+        val picker =
+            FakePicker(listOf(a, b, a), frozen = true, recoverAvailable = true, revivesAfterRecover = true)
+        val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
+        assertNull(selection.row)
+        assertEquals(1, picker.recoverCalls, "exactly one bounded recovery was performed")
+        assertFalse(selection.walk.stalled, "the recovery revived scrolling, so the walk did not stall")
+        assertTrue(selection.walk.fullyTraversed, "and the whole list was then seen")
+    }
+
+    @Test
+    @DisplayName("20. A recovery that does not revive scrolling stalls, and is attempted at most once")
+    fun testServiceRecoveryBoundedToOneAttempt() {
+        // The recovery reports success (a rebind happened) but the list is still frozen afterward. The walk
+        // must NOT keep rebinding forever: it declares a stall, having recovered exactly once.
+        val picker =
+            FakePicker(
+                listOf(screen("[Outfit Two]\nDelta Dawn")),
+                frozen = true,
+                recoverAvailable = true,
+                revivesAfterRecover = false,
+            )
+        val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
+        assertNull(selection.row)
+        assertEquals(1, picker.recoverCalls, "the recovery is bounded to a single attempt per walk")
+        assertTrue(selection.walk.stalled, "a recovery that did not revive scrolling still stalls")
+        assertFalse(selection.walk.fullyTraversed, "so absence stays unproven")
+    }
+
+    @Test
+    @DisplayName("21. A healthy scroll never triggers the service recovery")
+    fun testServiceRecoveryNotInvokedWhenScrollHealthy() {
+        // A list that pages normally to its end must never reach the recovery rung -- recovery is reserved
+        // for the proven dead-dispatch failure, not fired on every walk.
+        val a = screen("[Outfit One]\nDelta Dawn")
+        val b = screen("[Outfit Two]\nEcho Edge")
+        val picker = FakePicker(listOf(a, b, a), recoverAvailable = true, revivesAfterRecover = true)
+        val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
+        assertNull(selection.row)
+        assertEquals(0, picker.recoverCalls, "a healthy scroll never invokes the recovery")
+        assertTrue(selection.walk.fullyTraversed)
     }
 
     /** Walks up from the test working directory to find a repository file, so the check does not

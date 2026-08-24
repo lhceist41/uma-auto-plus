@@ -6123,6 +6123,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 borrowRowsOnScreen(bitmap)
             },
             advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
+            recoverService = { recoverGestureDispatch() },
             abort = { !BotService.isRunning || StartModule.queueStopRequested },
             log = { MessageLog.i(TAG, "[NAV] [BORROW] $it") },
         )
@@ -6233,6 +6234,23 @@ class CareerLaunchNavigator(private val context: Context) {
             }
         }
         waitSafe(1.3)
+    }
+
+    /**
+     * One bounded accessibility gesture-dispatch recovery for the borrow-list walker (A3-R3). On MuMu the
+     * gesture dispatcher can silently die mid-run, so a page gesture no-ops although the service still
+     * reads "enabled" -- exactly the dispatch-death the FSM's stuck-state path already rebinds. This lets
+     * the borrow walker do the same, ONCE, when its gesture recovery ladder is exhausted: rebind the
+     * service, then the walker retries one fresh gesture. Returns true only when a rebind was actually
+     * issued, so a pure diagnostic with no live game attached (tempGame null) or a missing
+     * WRITE_SECURE_SETTINGS grant simply stalls fail-closed rather than looping.
+     */
+    private fun recoverGestureDispatch(): Boolean {
+        val game = tempGame ?: return false
+        MessageLog.w(TAG, "[NAV] [BORROW] Borrow-list scroll stalled after the gesture ladder; rebinding the accessibility service to recover silently-dead gesture dispatch.")
+        val rebound = game.forceRebindAccessibilityService()
+        if (rebound) waitSafe(1.0)
+        return rebound
     }
 
     /** Outcome of a read-only borrow-pool census, for the diagnostic entry point. */
@@ -6448,6 +6466,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     BorrowScan(readable, duplicateTexts = blocked)
                 },
                 advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
+                recoverService = { recoverGestureDispatch() },
                 abort = { !BotService.isRunning || StartModule.queueStopRequested },
                 log = { MessageLog.i(TAG, "[BORROW-POOL] $it") },
             )
@@ -6627,6 +6646,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     BorrowScan(readable, duplicateTexts = blocked)
                 },
                 advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
+                recoverService = { recoverGestureDispatch() },
                 abort = { !BotService.isRunning || StartModule.queueStopRequested },
                 log = { MessageLog.i(TAG, "[BORROW-LOCATE] $it") },
             )
@@ -6893,6 +6913,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     BorrowScan(readable, duplicateTexts = rich.filter { it.observation.blockedTag != null }.map { nameKeyOf(it.observation) })
                 },
                 advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
+                recoverService = { recoverGestureDispatch() },
                 abort = { !BotService.isRunning || StartModule.queueStopRequested },
                 log = { MessageLog.i(TAG, "[BORROW-SELECT] $it") },
             )
@@ -7202,6 +7223,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     BorrowScan(readable, duplicateTexts = latestRich.filter { it.observation.blockedTag != null }.map { nameKeyOf(it.observation) })
                 },
                 advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
+                recoverService = { recoverGestureDispatch() },
                 abort = { !BotService.isRunning || StartModule.queueStopRequested },
                 log = { MessageLog.i(TAG, "[LAUNCH-GATE] $it") },
             )

@@ -130,6 +130,12 @@ internal class BorrowListWalker(
      * swallowed-drag retry, so the implementation can escalate to a stronger recovery gesture. */
     private val advancePage: (attempt: Int) -> Unit,
     private val abort: () -> Boolean = { false },
+    /** One bounded, last-resort recovery invoked at most ONCE per walk when the gesture recovery ladder
+     * is exhausted: on MuMu the accessibility gesture dispatcher can silently die mid-run (the page
+     * gesture no-ops though the service reads "enabled"), and rebinding it revives scrolling. Returns
+     * true when a recovery was actually performed (so the walk retries one fresh gesture), false when
+     * none was available (so the walk declares a stall). Default: no recovery. */
+    private val recoverService: () -> Boolean = { false },
     private val log: (String) -> Unit = {},
 ) {
     /**
@@ -143,6 +149,7 @@ internal class BorrowListWalker(
         var gestures = 0
         var retriesThisGap = 0
         var retriesTotal = 0
+        var serviceRecovered = false
 
         while (true) {
             if (abort()) return BorrowWalkResult(BorrowWalkEnd.ABORTED, screens, gestures, retriesTotal)
@@ -164,8 +171,22 @@ internal class BorrowListWalker(
                     gestures++
                     continue
                 }
-                // The recovery ladder is exhausted: mark the walk stalled so a caller can tell "the list
-                // stopped moving" apart from "a screen produced no new rows" (the natural end below).
+                // The gesture recovery ladder is exhausted. Before declaring a stall, try ONE bounded
+                // accessibility-service recovery: on MuMu the gesture dispatcher can silently die, and the
+                // stronger gestures above then no-op just the same. Rebinding the service revives dispatch.
+                // Bounded to a single attempt per walk, and only if the recovery was actually performed.
+                if (!serviceRecovered && gestures < maxPageGestures) {
+                    serviceRecovered = true
+                    if (recoverService()) {
+                        log("scroll recovery ladder exhausted; rebound the accessibility gesture dispatcher and retrying the scroll once.")
+                        retriesThisGap = 0
+                        advancePage(0)
+                        gestures++
+                        continue
+                    }
+                }
+                // Recovery unavailable or already spent: mark the walk stalled so a caller can tell "the
+                // list stopped moving" apart from "a screen produced no new rows" (the natural end below).
                 return BorrowWalkResult(BorrowWalkEnd.END_OF_LIST, screens, gestures, retriesTotal, stalled = true)
             }
             retriesThisGap = 0
