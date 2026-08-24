@@ -182,6 +182,7 @@ internal class BorrowListWalker(
         var recovery = BorrowRecovery.NONE
         var postRebindAttemptsLeft = 0
         var postRebindGesturesTotal = 0
+        var postRebindWindowActive = false // true while THIS gap's post-rebind attempts are in flight
 
         while (true) {
             if (abort()) return BorrowWalkResult(BorrowWalkEnd.ABORTED, screens, gestures, retriesTotal, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
@@ -208,12 +209,14 @@ internal class BorrowListWalker(
                 // accessibility-service rebind: on MuMu the gesture dispatcher can silently die, and the
                 // stronger gestures above then no-op just the same. Gated ONLY by serviceRecovered, so it
                 // stays reachable no matter how much forward budget the traversal already spent. recoverService
-                // is expected to have confirmed the rebound service is ready before returning true.
+                // is expected to have confirmed a fresh service instance reconnected before returning true;
+                // movement below, not that reconnect, is what proves gesture dispatch actually works again.
                 if (!serviceRecovered) {
                     serviceRecovered = true
                     if (recoverService()) {
                         recovery = BorrowRecovery.PERFORMED
                         postRebindAttemptsLeft = maxPostRebindGestures
+                        postRebindWindowActive = true
                         log("gesture recovery ladder exhausted; rebound the accessibility dispatcher, retrying the scroll up to $maxPostRebindGestures time(s).")
                         // Fall through to take the first post-rebind gesture attempt below.
                     } else {
@@ -236,14 +239,18 @@ internal class BorrowListWalker(
                     advancePage(0)
                     continue
                 }
-                // The rebind was performed but every post-rebind gesture no-op'd (or the recovery was already
-                // spent at an earlier gap): the list is genuinely stuck. Stall so absence is never mistaken
-                // for the natural end (the movement branch below).
-                log("post-rebind gesture budget spent; marking the scroll stalled.")
+                // The list is genuinely stuck. Two distinct reasons reach here; log the true one. Stall so
+                // absence is never mistaken for the natural end (the movement branch below).
+                if (postRebindWindowActive) {
+                    log("post-rebind gesture budget spent without movement; marking the scroll stalled.")
+                } else {
+                    log("the once-per-walk accessibility recovery was already spent at an earlier gap; marking the scroll stalled.")
+                }
                 return BorrowWalkResult(BorrowWalkEnd.END_OF_LIST, screens, gestures, retriesTotal, stalled = true, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
             }
             retriesThisGap = 0
             postRebindAttemptsLeft = 0 // movement ended the post-rebind window; a later gap gets no fresh attempts
+            postRebindWindowActive = false
             lastSignature = signature
 
             if (screens == 0 && keys.isEmpty()) {
@@ -269,20 +276,37 @@ internal class BorrowListWalker(
 }
 
 /**
- * Bounded readiness poll: calls [ready] up to [maxPolls] times, sleeping via [sleep] between attempts,
- * and returns true as soon as [ready] holds. No busy loop (every miss sleeps), explicit poll cap, and a
- * final check so a readiness that lands exactly on the last interval is not missed. Used after an
- * accessibility rebind to wait for the service instance to reconnect before retrying a gesture: gesturing
- * into a not-yet-connected service no-ops, so an unproven readiness must block the retry (return false),
- * never proceed on hope.
+ * Bounded poll: evaluates [ready] at most [maxPolls] times, sleeping via [sleep] between checks (never
+ * after the last), and returns true as soon as [ready] holds. Exactly [maxPolls] checks and at most
+ * [maxPolls] - 1 sleeps, so the cost is honestly stated; no busy loop. Used after an accessibility rebind
+ * to wait for the service to reconnect before retrying a gesture: an unproven reconnect must block the
+ * retry (return false), never proceed on hope.
  */
 internal fun pollUntil(maxPolls: Int, ready: () -> Boolean, sleep: () -> Unit): Boolean {
-    repeat(maxPolls) {
+    repeat(maxPolls) { i ->
         if (ready()) return true
-        sleep()
+        if (i < maxPolls - 1) sleep()
     }
-    return ready()
+    return false
 }
+
+/**
+ * Truthful reconnect signal for the accessibility service across a rebind. The pinned foundation library
+ * (2.5.9) never clears its static service instance on destroy and its getInstance() never returns null --
+ * it returns the (possibly destroyed) singleton or throws IllegalStateException when uninitialised or when
+ * the bot is stopping. So "instance != null" is vacuous; the only in-process proof the framework bound a
+ * FRESH service (whose onServiceConnected ran) is an identity change from the instance captured before the
+ * toggle. [readCurrent] may throw IllegalStateException; that is surfaced as "not reconnected", never
+ * allowed to unwind the caller. A fresh instance proves reconnect, NOT that the first gesture will move the
+ * list -- movement remains the sole recovery-success authority.
+ */
+internal fun freshInstanceObserved(stale: Any?, readCurrent: () -> Any?): Boolean =
+    try {
+        val current = readCurrent()
+        current != null && current !== stale
+    } catch (e: IllegalStateException) {
+        false
+    }
 
 /** The row a selection walk settled on, with the walk's own statistics. */
 internal data class BorrowSelection(val row: Pair<Double, String>?, val walk: BorrowWalkResult)

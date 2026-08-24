@@ -622,13 +622,62 @@ class SmartBorrowScanTest {
 
         // Never ready: the poll must time out (false), so the caller blocks the gesture fail-closed.
         var polls = 0
+        var sleepsNever = 0
         val neverReady = {
             polls++
             false
         }
-        val timedOut = pollUntil(maxPolls = 4, ready = neverReady, sleep = {})
+        val timedOut = pollUntil(maxPolls = 4, ready = neverReady, sleep = { sleepsNever++ })
         assertFalse(timedOut, "an unproven readiness never reports ready")
-        assertEquals(5, polls, "four in-loop checks plus the final check, all bounded")
+        assertEquals(4, polls, "exactly maxPolls checks, no more")
+        assertEquals(3, sleepsNever, "and at most maxPolls minus one sleeps (none after the last check)")
+    }
+
+    @Test
+    @DisplayName("31. REGRESSION: a stale accessibility instance is not a reconnect; a fresh one is")
+    fun testFreshInstanceReconnectSignal() {
+        val stale = Any()
+        // The A3-R5 predicate was `getInstance() != null`, which the stale (never-nulled) 2.5.9 singleton
+        // satisfies immediately -- vacuous. freshInstanceObserved must reject exactly that case.
+        assertNotNull(stale, "the stale instance is non-null, so the old != null gate would have passed it")
+        assertFalse(freshInstanceObserved(stale) { stale }, "the same stale instance is not a reconnect")
+        val fresh = Any()
+        assertTrue(freshInstanceObserved(stale) { fresh }, "a distinct instance is a genuine reconnect")
+        assertFalse(freshInstanceObserved(stale) { null }, "a null current is never a reconnect")
+    }
+
+    @Test
+    @DisplayName("32. REGRESSION: getInstance throwing during reconnect is treated as not-ready, never unwinds")
+    fun testReconnectExceptionIsNotReady() {
+        val stale = Any()
+        assertFalse(
+            freshInstanceObserved(stale) { throw IllegalStateException("Accessibility Service not initialized.") },
+            "an IllegalStateException during the check is swallowed as not-ready",
+        )
+        // Transient throws then a fresh instance: recovery may continue once the fresh instance appears.
+        val fresh = Any()
+        var attempt = 0
+        val recovered =
+            pollUntil(
+                maxPolls = 6,
+                ready = {
+                    freshInstanceObserved(stale) {
+                        attempt++
+                        if (attempt < 3) throw IllegalStateException("still reconnecting")
+                        fresh
+                    }
+                },
+                sleep = {},
+            )
+        assertTrue(recovered, "a fresh instance after transient exceptions lets recovery continue")
+        // A persistent throw times out with no reconnect, so the caller fires no gesture.
+        val timedOut =
+            pollUntil(
+                maxPolls = 4,
+                ready = { freshInstanceObserved(stale) { throw IllegalStateException("service is stopping") } },
+                sleep = {},
+            )
+        assertFalse(timedOut, "a persistent exception times out, blocking any post-rebind gesture")
     }
 
     /** Walks up from the test working directory to find a repository file, so the check does not

@@ -272,10 +272,12 @@ class CareerLaunchNavigator(private val context: Context) {
          * scan indefinitely. */
         private const val MAX_BORROW_SWALLOWED_SWIPE_RETRIES = 2
 
-        /** After an accessibility rebind the service instance reconnects asynchronously, so gesturing
-         * immediately no-ops. Poll (bounded) for a live instance before the post-rebind retry: up to this
-         * many checks, POST_REBIND_READINESS_INTERVAL apart. forceRebindAccessibilityService already waits
-         * internally, so a short window here is usually enough; a timeout blocks the retry fail-closed. */
+        /** After an accessibility rebind the framework binds a fresh service object asynchronously. Poll
+         * (bounded) for that fresh instance before the post-rebind retry: exactly this many checks, with a
+         * POST_REBIND_READINESS_INTERVAL sleep between them (so this many minus one sleeps). Reconnect is
+         * detected by service-instance identity change, not by non-null (the 2.5.9 singleton is never
+         * nulled). forceRebindAccessibilityService already waits internally, so a short window here is
+         * usually enough; a timeout blocks the retry fail-closed. */
         private const val POST_REBIND_READINESS_POLLS = 6
         private const val POST_REBIND_READINESS_INTERVAL = 0.5
 
@@ -6255,26 +6257,41 @@ class CareerLaunchNavigator(private val context: Context) {
     private fun recoverGestureDispatch(): Boolean {
         val game = tempGame ?: return false
         MessageLog.w(TAG, "[NAV] [BORROW] Borrow-list scroll stalled after the gesture ladder; rebinding the accessibility service to recover silently-dead gesture dispatch.")
-        // Capture the (dead-gesture) instance before the toggle so we can log whether the framework bound a
-        // genuinely fresh one afterward -- a live diagnostic to tell "instance not ready" from "first gesture
-        // after rebind swallowed" without changing behaviour on it.
-        val stale: MyAccessibilityService? = MyAccessibilityService.getInstance()
+        // Capture the pre-toggle service object. The 2.5.9 library never clears its static instance on
+        // destroy and getInstance() never returns null (it throws IllegalStateException when uninitialised or
+        // when the bot is stopping), so this is the (soon to be) STALE reference we detect the reconnect
+        // against. A throw here means no usable baseline; treat it as null so any live instance later reads
+        // as fresh.
+        val stale: MyAccessibilityService? =
+            try {
+                MyAccessibilityService.getInstance()
+            } catch (e: IllegalStateException) {
+                null
+            }
         val rebound = game.forceRebindAccessibilityService()
         if (!rebound) {
             MessageLog.w(TAG, "[NAV] [BORROW] Accessibility rebind could not be issued (WRITE_SECURE_SETTINGS missing); leaving the scroll stalled.")
             return false
         }
-        // The toggle only issues the setting change; the service reconnects asynchronously. Wait (bounded,
-        // no busy loop) for a live service instance before letting the walker retry a gesture -- a gesture
-        // dispatched into a not-yet-connected service no-ops. Non-null is the hard readiness gate; a timeout
-        // blocks the retry so no gesture ever fires on unproven readiness.
-        val ready = pollUntil(POST_REBIND_READINESS_POLLS, { MyAccessibilityService.getInstance() != null }, { waitSafe(POST_REBIND_READINESS_INTERVAL) })
-        if (!ready) {
-            MessageLog.w(TAG, "[NAV] [BORROW] Accessibility service did not reconnect within $POST_REBIND_READINESS_POLLS readiness poll(s); leaving the scroll stalled.")
+        // The toggle only issues the setting change; the framework rebinds a fresh service object
+        // asynchronously. Wait (bounded, no busy loop) until a FRESH instance -- distinct from the stale one
+        // above -- is observed. Identity change is the only in-process proof the new onServiceConnected ran;
+        // "instance != null" is vacuous here because the destroyed singleton is never nulled. getInstance()
+        // may throw mid-reconnect; freshInstanceObserved surfaces that as "not reconnected". A timeout blocks
+        // the retry so no gesture fires without a proven reconnect. A fresh object proves reconnect, not that
+        // MuMu will accept the first gesture -- the walker's movement check remains the dispatch authority.
+        val reconnected =
+            pollUntil(
+                POST_REBIND_READINESS_POLLS,
+                { freshInstanceObserved(stale) { MyAccessibilityService.getInstance() } },
+                { waitSafe(POST_REBIND_READINESS_INTERVAL) },
+            )
+        if (!reconnected) {
+            MessageLog.w(TAG, "[NAV] [BORROW] No fresh accessibility instance within $POST_REBIND_READINESS_POLLS reconnect checks; leaving the scroll stalled.")
             return false
         }
-        val freshInstance = MyAccessibilityService.getInstance() !== stale
-        MessageLog.i(TAG, "[NAV] [BORROW] Accessibility service ready after rebind (${if (freshInstance) "fresh instance" else "reused instance"}); post-rebind gesture may proceed.")
+        // A fresh instance proves reconnect, not that MuMu accepts the first gesture; movement is the authority.
+        MessageLog.i(TAG, "[NAV] [BORROW] Fresh accessibility instance observed after rebind (reconnect confirmed); a post-rebind gesture may be attempted.")
         return true
     }
 
