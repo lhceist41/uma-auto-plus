@@ -46,6 +46,9 @@ class SmartBorrowScanTest {
         private val recoverAvailable: Boolean = false,
         /** Whether a successful recovery actually revives scrolling (models the rebind fixing dead dispatch). */
         private val revivesAfterRecover: Boolean = false,
+        /** Once the list reaches this index, gesture dispatch is dead (advances no-op) until a recovery
+         * revives it -- models MuMu's mid-traversal dispatchGesture death after healthy paging. -1 = never. */
+        private val dispatchDiesAtIndex: Int = -1,
     ) {
         var index = 0
             private set
@@ -58,7 +61,11 @@ class SmartBorrowScanTest {
 
         fun read(): BorrowScan = screens[index]
 
-        private fun canMove(): Boolean = !frozen || (revivesAfterRecover && recovered)
+        private fun dispatchAlive(): Boolean {
+            if (frozen) return recovered && revivesAfterRecover
+            if (dispatchDiesAtIndex >= 0 && index >= dispatchDiesAtIndex) return recovered && revivesAfterRecover
+            return true
+        }
 
         fun advance(attempt: Int) {
             gestures++
@@ -68,7 +75,7 @@ class SmartBorrowScanTest {
                 swallowed++
                 return
             }
-            if (canMove() && index < screens.lastIndex) index++
+            if (dispatchAlive() && index < screens.lastIndex) index++
         }
 
         fun recoverService(): Boolean {
@@ -390,6 +397,7 @@ class SmartBorrowScanTest {
         val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
         assertNull(selection.row)
         assertEquals(1, picker.recoverCalls, "exactly one bounded recovery was performed")
+        assertEquals(BorrowRecovery.PERFORMED, selection.walk.recovery)
         assertFalse(selection.walk.stalled, "the recovery revived scrolling, so the walk did not stall")
         assertTrue(selection.walk.fullyTraversed, "and the whole list was then seen")
     }
@@ -409,6 +417,7 @@ class SmartBorrowScanTest {
         val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
         assertNull(selection.row)
         assertEquals(1, picker.recoverCalls, "the recovery is bounded to a single attempt per walk")
+        assertEquals(BorrowRecovery.PERFORMED, selection.walk.recovery, "a rebind was performed")
         assertTrue(selection.walk.stalled, "a recovery that did not revive scrolling still stalls")
         assertFalse(selection.walk.fullyTraversed, "so absence stays unproven")
     }
@@ -424,7 +433,84 @@ class SmartBorrowScanTest {
         val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
         assertNull(selection.row)
         assertEquals(0, picker.recoverCalls, "a healthy scroll never invokes the recovery")
+        assertEquals(BorrowRecovery.NONE, selection.walk.recovery, "recovery was never needed")
         assertTrue(selection.walk.fullyTraversed)
+    }
+
+    /** Seven filler screens then the target, so the target is only reachable one page past where the
+     * dispatcher dies. Under the A3-R3 shared counter the forward paging plus the swallowed-retry ladder
+     * spend the whole page budget before the rebind gate, so the rebind is skipped and the target is never
+     * reached. This is the exact live failure. */
+    private fun dispatchDeathBeforeTarget(): FakePicker {
+        val fillers = (0..6).map { screen("[Outfit $it]\nFiller number $it") }
+        val targetScreen = screen("[Outfit Seven]\n$target")
+        return FakePicker(
+            fillers + targetScreen,
+            dispatchDiesAtIndex = 6,
+            recoverAvailable = true,
+            revivesAfterRecover = true,
+        )
+    }
+
+    @Test
+    @DisplayName("22. REGRESSION: a mid-list dispatch death that exhausts the page budget is still recovered")
+    fun testRecoveryReachableAfterBudgetExhaustion() {
+        // Fails against 3f6fdcbe: there the rebind gate `gestures < maxPageGestures` is already false when
+        // the ladder exhausts, so recovery is skipped and the post-stall target is never found.
+        val picker = dispatchDeathBeforeTarget()
+        val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
+        assertNotNull(selection.row, "the card past the dispatch death must be reached after the rebind")
+        assertEquals(1, picker.recoverCalls, "the rebind is reachable even with the page budget spent, once")
+        assertEquals(BorrowRecovery.PERFORMED, selection.walk.recovery)
+        assertFalse(selection.walk.stalled, "the revived scroll reached the card, so the walk did not stall")
+    }
+
+    @Test
+    @DisplayName("23. A mid-list dispatch death with no recovery available stalls with an explicit reason")
+    fun testDispatchDeathNoRecoveryStalls() {
+        val fillers = (0..6).map { screen("[Outfit $it]\nFiller number $it") }
+        val targetScreen = screen("[Outfit Seven]\n$target")
+        val picker = FakePicker(fillers + targetScreen, dispatchDiesAtIndex = 6, recoverAvailable = false)
+        val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
+        assertNull(selection.row, "the target below the dead scroll is unreachable without recovery")
+        assertEquals(1, picker.recoverCalls, "recovery was attempted exactly once")
+        assertEquals(BorrowRecovery.UNAVAILABLE, selection.walk.recovery, "and its unavailability is explicit")
+        assertTrue(selection.walk.stalled)
+        assertFalse(selection.walk.fullyTraversed, "absence past a dead scroll is never proven")
+    }
+
+    @Test
+    @DisplayName("24. A rebind that does not revive dispatch stalls, having rebound exactly once")
+    fun testRebindThatDoesNotReviveStalls() {
+        // The rebind is reported performed, but dispatch stays dead (revivesAfterRecover = false). The walk
+        // must take its one post-rebind retry, see no movement, and stall -- never rebinding a second time.
+        val fillers = (0..6).map { screen("[Outfit $it]\nFiller number $it") }
+        val targetScreen = screen("[Outfit Seven]\n$target")
+        val picker =
+            FakePicker(fillers + targetScreen, dispatchDiesAtIndex = 6, recoverAvailable = true, revivesAfterRecover = false)
+        val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
+        assertNull(selection.row)
+        assertEquals(1, picker.recoverCalls, "the rebind is capped at once per walk even as the stall persists")
+        assertEquals(BorrowRecovery.PERFORMED, selection.walk.recovery, "a rebind did happen")
+        assertTrue(selection.walk.stalled, "but it did not revive dispatch, so the walk still stalls")
+    }
+
+    @Test
+    @DisplayName("25. Stall handling does not spend the forward budget: an early death still completes")
+    fun testForwardBudgetPreservedAcrossRecovery() {
+        // Dispatch dies at index 2, is recovered, and the list then pages on to a natural end that needs
+        // most of the forward budget. Under a shared counter the ladder retries would have eaten into that
+        // budget; with the budgets separate the traversal still finishes.
+        val head = (0..5).map { screen("[Outfit $it]\nFiller number $it") }
+        val tail = screen("[Outfit 0]\nFiller number 0") // rows identical to head[0]: all-seen -> natural end
+        val picker =
+            FakePicker(head + tail, dispatchDiesAtIndex = 2, recoverAvailable = true, revivesAfterRecover = true)
+        val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
+        assertNull(selection.row, "no target in this list")
+        assertEquals(1, picker.recoverCalls)
+        assertEquals(BorrowRecovery.PERFORMED, selection.walk.recovery)
+        assertFalse(selection.walk.stalled, "the revived scroll reached the natural end")
+        assertTrue(selection.walk.fullyTraversed, "so the whole list was seen despite the mid-list death")
     }
 
     /** Walks up from the test working directory to find a repository file, so the check does not
