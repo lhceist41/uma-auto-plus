@@ -1014,6 +1014,8 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startTraineeSelectTest" to ::startTraineeSelectTest,
                 "debugMode_startDeckStatReadTest" to ::startDeckStatReadTest,
                 "debugMode_startDeckNumberReadTest" to ::startDeckNumberReadTest,
+                "debugMode_startHostBorrowSwipeTest" to ::startHostBorrowSwipeTest,
+                "debugMode_startHostLegacySwipeTest" to ::startHostLegacySwipeTest,
                 "debugMode_startSupportDeckRehearsalTest" to ::startSupportDeckRehearsalTest,
                 "debugMode_startSmartBorrowRehearsalTest" to ::startSmartBorrowRehearsalTest,
                 "debugMode_startSmartBorrowLocateTest" to ::startSmartBorrowLocateTest,
@@ -1084,6 +1086,20 @@ abstract class Campaign(game: Game) : Task(game) {
     open fun startDeckNumberReadTest() {
         MessageLog.i(TAG, "\n[TEST] Running read-only Deck-number OCR diagnostic...")
         CareerLaunchNavigator(game.myContext).debugDeckNumberRead(game.imageUtils)
+    }
+
+    /** Runs one authenticated host swipe on an already-open Borrow Card list, then stops. */
+    open fun startHostBorrowSwipeTest() {
+        MessageLog.i(TAG, "\n[HOST-INPUT] Borrow list diagnostic starting. Park the game on the open Borrow Card list.")
+        val report = CareerLaunchNavigator(game.myContext).rehearseHostBorrowSwipe(game.imageUtils)
+        MessageLog.i(TAG, "[HOST-INPUT] scope=${report.scope.wire} transport=${report.execution.status.wire} foreground=${report.execution.foreground} movement=${report.movement} result=${report.execution.detailCode}")
+    }
+
+    /** Runs one authenticated host swipe on an already-open Legacy Sparks list, then stops. */
+    open fun startHostLegacySwipeTest() {
+        MessageLog.i(TAG, "\n[HOST-INPUT] Legacy Sparks diagnostic starting. Park the game on the already-open Sparks list.")
+        val report = CareerLaunchNavigator(game.myContext).rehearseHostLegacySwipe(game.imageUtils)
+        MessageLog.i(TAG, "[HOST-INPUT] scope=${report.scope.wire} transport=${report.execution.status.wire} foreground=${report.execution.foreground} movement=${report.movement} result=${report.execution.detailCode}")
     }
 
     /**

@@ -1,5 +1,5 @@
 import { useMemo, useContext, useRef, useState, useEffect } from "react"
-import { View, Text, ScrollView, StyleSheet, NativeModules, Linking, AppState, AppStateStatus } from "react-native"
+import { View, Text, ScrollView, StyleSheet, NativeModules, Linking, AppState, AppStateStatus, TextInput } from "react-native"
 import { useTheme } from "../../context/ThemeContext"
 import { BotStateContext } from "../../context/BotStateContext"
 import { useSettings } from "../../context/SettingsContext"
@@ -14,6 +14,7 @@ import InfoContainer from "../../components/InfoContainer"
 import CustomButton from "../../components/CustomButton"
 import { SearchPageProvider } from "../../context/SearchPageContext"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
+import SearchableItem from "../../components/SearchableItem"
 
 /**
  * The Debug Settings page.
@@ -42,6 +43,8 @@ const DebugSettings = () => {
         "debugMode_startTraineeSelectTest",
         "debugMode_startDeckStatReadTest",
         "debugMode_startDeckNumberReadTest",
+        "debugMode_startHostBorrowSwipeTest",
+        "debugMode_startHostLegacySwipeTest",
         "debugMode_startSupportDeckRehearsalTest",
         "debugMode_startSmartBorrowRehearsalTest",
         "debugMode_startSmartBorrowLocateTest",
@@ -85,6 +88,15 @@ const DebugSettings = () => {
         // deck-number incident: the toggle reverted across a restart, so the bot ran normal
         // navigation and pressed Start Career, spending TP. Persist it immediately (in addition to
         // the debounce) so a restart before Start cannot silently disarm the requested diagnostic.
+        void saveSettingsImmediate(nextSettings)
+    }
+
+    const updateHostInputSetting = (key: "hostInputMode" | "hostInputPairingCode", value: string) => {
+        const nextSettings = {
+            ...bsc.settings,
+            debug: { ...bsc.settings.debug, [key]: value },
+        }
+        bsc.setSettings(nextSettings)
         void saveSettingsImmediate(nextSettings)
     }
 
@@ -168,6 +180,27 @@ const DebugSettings = () => {
                     lineHeight: 22,
                     includeFontPadding: false,
                     marginTop: 2,
+                },
+                inputLabel: {
+                    fontSize: 14,
+                    fontWeight: "600",
+                    color: colors.foreground,
+                    marginBottom: 6,
+                },
+                inputDescription: {
+                    fontSize: 12,
+                    color: colors.foreground + "99",
+                    marginBottom: 8,
+                },
+                textInput: {
+                    borderWidth: 1,
+                    borderColor: colors.foreground + "44",
+                    borderRadius: 8,
+                    padding: 12,
+                    fontSize: 14,
+                    color: colors.foreground,
+                    backgroundColor: colors.background,
+                    marginBottom: 16,
                 },
             }),
         [colors]
@@ -491,6 +524,44 @@ const DebugSettings = () => {
 
                             <Separator style={{ marginVertical: 16 }} />
 
+                            <CustomTitle
+                                title="Host Input Diagnostics"
+                                description="Optional Windows companion transport for the two bounded list-swipe diagnostics below. Normal bot operation remains accessibility-only."
+                            />
+
+                            <CustomSelect
+                                searchId="host-input-mode"
+                                value={bsc.settings.debug.hostInputMode}
+                                options={[
+                                    { value: "accessibility_only", label: "Accessibility Only" },
+                                    { value: "accessibility_with_host", label: "Accessibility + Host Companion" },
+                                ]}
+                                onValueChange={(value) => value && updateHostInputSetting("hostInputMode", value)}
+                                label="Input Mode"
+                                description="Accessibility Only is the safe default. The companion option authorizes only the scoped host swipe diagnostics and never replaces normal accessibility input."
+                            />
+
+                            <SearchableItem
+                                id="host-input-pairing-code"
+                                title="Host Input Pairing Code"
+                                description="Paste the one-time pairing code printed by the validated Windows helper. It is stored only in the app-private settings database."
+                            >
+                                <Text style={styles.inputLabel}>Host Input Pairing Code</Text>
+                                <Text style={styles.inputDescription}>Paste the code printed by the helper after it validates and pairs one ADB target. Treat it as a password.</Text>
+                                <TextInput
+                                    style={styles.textInput}
+                                    value={bsc.settings.debug.hostInputPairingCode}
+                                    onChangeText={(value) => updateHostInputSetting("hostInputPairingCode", value.trim())}
+                                    placeholder="v1.target.secret"
+                                    placeholderTextColor={colors.foreground + "55"}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    secureTextEntry
+                                />
+                            </SearchableItem>
+
+                            <Separator style={{ marginVertical: 16 }} />
+
                             <CustomTitle title="Debug Tests" description="Run diagnostic tests to verify template matching and OCR functionality. Only one test can be enabled at a time." />
 
                             {/* Warning message for debug tests */}
@@ -499,6 +570,24 @@ const DebugSettings = () => {
                             </WarningContainer>
 
                             {/* Checkboxes for enabling Debug Tests */}
+                            <CustomCheckbox
+                                searchId="debug-host-borrow-swipe-test"
+                                checked={bsc.settings.debug.debugMode_startHostBorrowSwipeTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startHostBorrowSwipeTest", checked)}
+                                label="Start Host Borrow List Swipe Test"
+                                description="Park the game on the already-open Borrow Card list. After the Android screen recognizer proves that list and the paired helper reports healthy, this sends exactly one bounded host swipe, captures a fresh screen, reports MOVED, NO_EFFECT, or UNCERTAIN, and stops. It selects nothing and never continues the launch."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-host-legacy-swipe-test"
+                                checked={bsc.settings.debug.debugMode_startHostLegacySwipeTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startHostLegacySwipeTest", checked)}
+                                label="Start Host Legacy Sparks Swipe Test"
+                                description="Park the game on an already-open Legacy Sparks list. After the Android screen recognizer proves the factor rows and the paired helper reports healthy, this sends exactly one bounded host swipe, captures a fresh screen, reports MOVED, NO_EFFECT, or UNCERTAIN, and stops. It chooses nothing and never continues the launch."
+                                style={{ marginTop: 10 }}
+                            />
+
                             <CustomCheckbox
                                 searchId="debug-template-matching-test"
                                 checked={bsc.settings.debug.debugMode_startTemplateMatchingTest}

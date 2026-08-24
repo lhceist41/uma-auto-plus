@@ -4762,6 +4762,156 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
+     * Sends one host diagnostic swipe only after the Borrow Card picker is proven by its repeated
+     * Last Login markers. The before/after identity is a local pixel digest of the list body. It is
+     * never logged or persisted. This path does not select a row, close the picker, or continue the
+     * launch.
+     */
+    internal fun rehearseHostBorrowSwipe(injectedUtils: CustomImageUtils? = null): HostSwipeDiagnosticReport {
+        prepareHostSwipeDiagnostic(injectedUtils)?.let { return unavailableHostSwipeReport(HostInputScope.BORROW_LIST_SCROLL, it) }
+        val beforeBitmap = iu.getSourceBitmap()
+        val before =
+            ScreenFingerprint(
+                recognized = LabelBorrowLastLogin.findAll(iu, sourceBitmap = beforeBitmap).size >= 2,
+                value = hostDiagnosticPixelFingerprint(beforeBitmap, 0.14f, 0.84f),
+            )
+        val startX = beforeBitmap.width * 0.5f
+        val startY = beforeBitmap.height * 0.72f
+        val request =
+            BoundedSwipe.fromPixels(
+                scope = HostInputScope.BORROW_LIST_SCROLL,
+                startX = startX,
+                startY = startY,
+                endX = startX,
+                endY = startY - BORROW_PAGE_SWIPE_PX,
+                frameWidth = beforeBitmap.width,
+                frameHeight = beforeBitmap.height,
+                durationMs = 900,
+            )
+        return runHostSwipeDiagnostic(HostInputScope.BORROW_LIST_SCROLL, before, request) {
+            val bitmap = iu.getSourceBitmap()
+            ScreenFingerprint(
+                recognized = LabelBorrowLastLogin.findAll(iu, sourceBitmap = bitmap).size >= 2,
+                value = hostDiagnosticPixelFingerprint(bitmap, 0.14f, 0.84f),
+            )
+        }
+    }
+
+    /**
+     * Sends one host diagnostic swipe only from an already-open Legacy Sparks list. A complete
+     * stat/aptitude/unique factor pattern proves the screen before transport is contacted. This path
+     * does not open or close the panel, choose a Legacy, or continue the launch.
+     */
+    internal fun rehearseHostLegacySwipe(injectedUtils: CustomImageUtils? = null): HostSwipeDiagnosticReport {
+        prepareHostSwipeDiagnostic(injectedUtils)?.let { return unavailableHostSwipeReport(HostInputScope.LEGACY_LIST_SCROLL, it) }
+        val beforeBitmap = iu.getSourceBitmap()
+        val before = legacyHostSwipeFingerprint(beforeBitmap)
+        val startX = beforeBitmap.width * 0.5f
+        val startY = 1400f
+        val request =
+            BoundedSwipe.fromPixels(
+                scope = HostInputScope.LEGACY_LIST_SCROLL,
+                startX = startX,
+                startY = startY,
+                endX = startX,
+                endY = startY - 124f * 6f,
+                frameWidth = beforeBitmap.width,
+                frameHeight = beforeBitmap.height,
+                durationMs = 900,
+            )
+        return runHostSwipeDiagnostic(HostInputScope.LEGACY_LIST_SCROLL, before, request) {
+            legacyHostSwipeFingerprint(iu.getSourceBitmap())
+        }
+    }
+
+    private fun prepareHostSwipeDiagnostic(injectedUtils: CustomImageUtils?): String? {
+        if (injectedUtils != null) {
+            imageUtils = injectedUtils
+            return null
+        }
+        return if (ensureInitialised()) null else "IMAGE_UTILS_UNAVAILABLE"
+    }
+
+    private fun runHostSwipeDiagnostic(
+        scope: HostInputScope,
+        before: ScreenFingerprint,
+        request: BoundedSwipe?,
+        captureAfter: () -> ScreenFingerprint,
+    ): HostSwipeDiagnosticReport {
+        if (!before.recognized) return unavailableHostSwipeReport(scope, "SCREEN_NOT_RECOGNIZED")
+        if (request == null) return unavailableHostSwipeReport(scope, "INVALID_GEOMETRY")
+        val configuration =
+            HostInputConfiguration.fromSettings(
+                modeRaw = SettingsHelper.getStringSetting("debug", "hostInputMode"),
+                pairingCodeRaw = SettingsHelper.getStringSetting("debug", "hostInputPairingCode"),
+            ) ?: return unavailableHostSwipeReport(scope, "HOST_INPUT_DISABLED_OR_UNPAIRED")
+
+        HostAdbInputTransport(configuration, BuildConfig.VERSION_NAME).use { transport ->
+            val health = transport.health()
+            if (health.status != InputExecutionStatus.EXECUTED || !health.foreground || InputCapability.SWIPE !in health.capabilities) {
+                val execution = InputExecutionResult(health.status, health.foreground, "HEALTH_NOT_READY")
+                return HostSwipeDiagnosticReport(scope, execution, SwipeMovement.UNCERTAIN, before.recognized, afterRecognized = false)
+            }
+            val execution = transport.swipe(request)
+            waitSafe(1.3)
+            val firstAfter = captureAfter()
+            waitSafe(0.35)
+            val secondAfter = captureAfter()
+            // Require a settled post-swipe screen so list animation cannot masquerade as movement.
+            val stableAfter =
+                if (firstAfter.recognized && secondAfter.recognized && firstAfter.value == secondAfter.value) {
+                    secondAfter
+                } else {
+                    ScreenFingerprint(recognized = false, value = "")
+                }
+            val movement = verifySwipeMovement(before, execution, stableAfter)
+            return HostSwipeDiagnosticReport(scope, execution, movement, before.recognized, stableAfter.recognized)
+        }
+    }
+
+    private fun unavailableHostSwipeReport(scope: HostInputScope, detailCode: String): HostSwipeDiagnosticReport =
+        HostSwipeDiagnosticReport(
+            scope = scope,
+            execution = InputExecutionResult(InputExecutionStatus.UNAVAILABLE, foreground = false, detailCode = detailCode),
+            movement = SwipeMovement.UNCERTAIN,
+            beforeRecognized = false,
+            afterRecognized = false,
+        )
+
+    private fun legacyHostSwipeFingerprint(bitmap: Bitmap): ScreenFingerprint {
+        val rows = readLegacySparkRows(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.height)
+        val kinds = rows.map { it.kind }.toSet()
+        val recognized =
+            rows.size >= 3 &&
+                kinds.containsAll(setOf(SparkRowKind.STAT, SparkRowKind.APTITUDE, SparkRowKind.UNIQUE))
+        return ScreenFingerprint(recognized, hostDiagnosticPixelFingerprint(bitmap, 0.12f, 0.91f))
+    }
+
+    private fun hostDiagnosticPixelFingerprint(bitmap: Bitmap, topFraction: Float, bottomFraction: Float): String {
+        if (bitmap.width < 2 || bitmap.height < 2) return ""
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val left = (bitmap.width * 0.16f).toInt().coerceIn(0, bitmap.width - 1)
+        val right = (bitmap.width * 0.84f).toInt().coerceIn(left + 1, bitmap.width)
+        val top = (bitmap.height * topFraction).toInt().coerceIn(0, bitmap.height - 1)
+        val bottom = (bitmap.height * bottomFraction).toInt().coerceIn(top + 1, bitmap.height)
+        val stepX = ((right - left) / 24).coerceAtLeast(1)
+        val stepY = ((bottom - top) / 40).coerceAtLeast(1)
+        var y = top
+        while (y < bottom) {
+            var x = left
+            while (x < right) {
+                val pixel = bitmap.getPixel(x, y)
+                digest.update((pixel shr 16).toByte())
+                digest.update((pixel shr 8).toByte())
+                digest.update(pixel.toByte())
+                x += stepX
+            }
+            y += stepY
+        }
+        return digest.digest().take(12).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
+
+    /**
      * Support-deck selector REHEARSAL diagnostic. Park the game on the career-start Support Formation
      * screen, set Required Support Deck (runQueue.supportDeckIndex) to 1..10, enable
      * `debugMode_startSupportDeckRehearsalTest`, and start the bot. This exercises the EXACT production

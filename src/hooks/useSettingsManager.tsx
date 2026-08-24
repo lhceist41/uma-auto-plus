@@ -319,6 +319,9 @@ export const useSettingsManager = () => {
             if (importedSettings.discord) {
                 importedSettings.discord.discordToken = settingsRef.current.discord?.discordToken ?? ""
             }
+            if (importedSettings.debug) {
+                importedSettings.debug.hostInputPairingCode = settingsRef.current.debug?.hostInputPairingCode ?? ""
+            }
 
             // Save settings to SQLite database.
             await databaseManager.saveSettingsBatch(convertSettingsToBatch(importedSettings))
@@ -336,6 +339,9 @@ export const useSettingsManager = () => {
 
                     // Import all profiles from the JSON file.
                     for (const profile of profiles) {
+                        if (profile.settings?.debug) {
+                            delete profile.settings.debug.hostInputPairingCode
+                        }
                         await databaseManager.saveProfile({
                             name: profile.name,
                             settings: profile.settings,
@@ -386,6 +392,11 @@ export const useSettingsManager = () => {
                         created_at: p.created_at,
                         updated_at: p.updated_at,
                     }))
+                    for (const profile of profiles) {
+                        if (profile.settings?.debug) {
+                            delete profile.settings.debug.hostInputPairingCode
+                        }
+                    }
                     logWithTimestamp(`[SettingsManager] Exported ${profiles.length} profiles.`)
                 }
             } catch (profileError) {
@@ -405,6 +416,9 @@ export const useSettingsManager = () => {
             // Remove sensitive Discord credentials from export.
             if (settingsForExport.discord) {
                 delete settingsForExport.discord.discordToken
+            }
+            if (settingsForExport.debug) {
+                delete settingsForExport.debug.hostInputPairingCode
             }
 
             const exportData = {

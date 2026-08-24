@@ -126,7 +126,11 @@ __pycache__/
 /gc-validation/
 /gc-watch-out/
 /docs-local/
-/tools/
+!/tools/
+/tools/*
+!/tools/host-companion/
+!/tools/host-companion/**
+/tools/host-companion/build/
 
 # One-off local notes at the repository root. Public documentation lives at the
 # root under its own known names (README, CHANGELOG, CONTRIBUTING, HOW_IT_WORKS,

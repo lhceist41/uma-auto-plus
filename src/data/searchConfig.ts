@@ -762,6 +762,30 @@ const searchConfig: SearchOption[] = [
         page: "DebugSettings",
     },
     {
+        id: "host-input-mode",
+        title: "Input Mode",
+        description: "Keeps normal operation accessibility-only or enables the optional paired Windows helper for the bounded host swipe diagnostics.",
+        page: "DebugSettings",
+    },
+    {
+        id: "host-input-pairing-code",
+        title: "Host Input Pairing Code",
+        description: "Stores the secret pairing code printed after the Windows helper validates one ADB target.",
+        page: "DebugSettings",
+    },
+    {
+        id: "debug-host-borrow-swipe-test",
+        title: "Start Host Borrow List Swipe Test",
+        description: "Sends one bounded host swipe only from a recognized Borrow Card list, verifies movement from a fresh Android capture, and stops without selecting anything.",
+        page: "DebugSettings",
+    },
+    {
+        id: "debug-host-legacy-swipe-test",
+        title: "Start Host Legacy Sparks Swipe Test",
+        description: "Sends one bounded host swipe only from a recognized Legacy Sparks list, verifies movement from a fresh Android capture, and stops without continuing the launch.",
+        page: "DebugSettings",
+    },
+    {
         id: "debug-template-matching-test",
         title: "Start Basic Template Matching Test",
         description:

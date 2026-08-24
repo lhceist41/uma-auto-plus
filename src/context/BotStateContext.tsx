@@ -250,6 +250,14 @@ export interface Settings {
         debugMode_startTraineeSelectTest: boolean
         debugMode_startDeckStatReadTest: boolean
         debugMode_startDeckNumberReadTest: boolean
+        // Input authority for the bounded host swipe diagnostics. Unknown or missing values remain accessibility-only.
+        hostInputMode: string
+        // Pairing code emitted by the Windows helper. Stored in the app-private settings database and masked in the UI.
+        hostInputPairingCode: string
+        // Sends one bounded host swipe from a recognized Borrow Card list, verifies movement from a fresh Android capture, and stops without selecting anything.
+        debugMode_startHostBorrowSwipeTest: boolean
+        // Sends one bounded host swipe from a recognized Legacy Sparks list, verifies movement from a fresh Android capture, and stops without continuing the launch.
+        debugMode_startHostLegacySwipeTest: boolean
         // Rehearses the production saved-deck selector on the Support Formation screen (real OCR + arrow taps) and stops before Start Career; requires Required Support Deck 1..10.
         debugMode_startSupportDeckRehearsalTest: boolean
         // Rehearses the production Smart Borrow flow + exact post-borrow deck verification on the Support Formation screen and stops before Start Career; requires Required Support Deck 1..10 already showing and an empty Friends slot.
@@ -787,6 +795,10 @@ export const defaultSettings: Settings = {
         debugMode_startTraineeSelectTest: false,
         debugMode_startDeckStatReadTest: false,
         debugMode_startDeckNumberReadTest: false,
+        hostInputMode: "accessibility_only",
+        hostInputPairingCode: "",
+        debugMode_startHostBorrowSwipeTest: false,
+        debugMode_startHostLegacySwipeTest: false,
         debugMode_startSupportDeckRehearsalTest: false,
         debugMode_startSmartBorrowRehearsalTest: false,
         debugMode_startSmartBorrowLocateTest: false,
