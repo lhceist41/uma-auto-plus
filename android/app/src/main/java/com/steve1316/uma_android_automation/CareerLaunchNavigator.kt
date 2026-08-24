@@ -4852,20 +4852,16 @@ class CareerLaunchNavigator(private val context: Context) {
                 val execution = InputExecutionResult(health.status, health.foreground, "HEALTH_NOT_READY")
                 return HostSwipeDiagnosticReport(scope, execution, SwipeMovement.UNCERTAIN, before.recognized, afterRecognized = false)
             }
-            val execution = transport.swipe(request)
-            waitSafe(1.3)
-            val firstAfter = captureAfter()
-            waitSafe(0.35)
-            val secondAfter = captureAfter()
-            // Require a settled post-swipe screen so list animation cannot masquerade as movement.
-            val stableAfter =
-                if (firstAfter.recognized && secondAfter.recognized && firstAfter.value == secondAfter.value) {
-                    secondAfter
-                } else {
-                    ScreenFingerprint(recognized = false, value = "")
-                }
-            val movement = verifySwipeMovement(before, execution, stableAfter)
-            return HostSwipeDiagnosticReport(scope, execution, movement, before.recognized, stableAfter.recognized)
+            // Require consecutive fresh recognized samples so list momentum cannot masquerade as movement.
+            val settled =
+                executeHostSwipeWithSettleVerification(
+                    before = before,
+                    executeSwipe = { transport.swipe(request) },
+                    shouldStop = { !BotService.isRunning || StartModule.queueStopRequested },
+                    waitBeforeSample = { waitSafe(it) },
+                    captureAfter = captureAfter,
+                )
+            return HostSwipeDiagnosticReport(scope, settled.execution, settled.movement, before.recognized, settled.stableAfter.recognized)
         }
     }
 

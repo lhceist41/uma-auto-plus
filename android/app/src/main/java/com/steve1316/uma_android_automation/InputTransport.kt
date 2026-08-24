@@ -157,6 +157,83 @@ internal data class HostSwipeDiagnosticReport(
     val afterRecognized: Boolean,
 )
 
+internal const val HOST_SWIPE_INITIAL_SETTLE_SECONDS = 1.3
+internal const val HOST_SWIPE_SETTLE_POLL_SECONDS = 0.35
+internal const val HOST_SWIPE_SETTLE_MAX_SAMPLES = 8
+
+internal data class HostSwipeSettleResult(
+    val execution: InputExecutionResult,
+    val stableAfter: ScreenFingerprint,
+    val movement: SwipeMovement,
+    val samplesTaken: Int,
+    val recognizedSamples: Int,
+    val stopped: Boolean,
+)
+
+internal fun executeHostSwipeWithSettleVerification(
+    before: ScreenFingerprint,
+    executeSwipe: () -> InputExecutionResult,
+    shouldStop: () -> Boolean,
+    waitBeforeSample: (Double) -> Unit,
+    captureAfter: () -> ScreenFingerprint,
+    initialDelaySeconds: Double = HOST_SWIPE_INITIAL_SETTLE_SECONDS,
+    pollIntervalSeconds: Double = HOST_SWIPE_SETTLE_POLL_SECONDS,
+    maxSamples: Int = HOST_SWIPE_SETTLE_MAX_SAMPLES,
+): HostSwipeSettleResult {
+    require(initialDelaySeconds >= 0.0)
+    require(pollIntervalSeconds >= 0.0)
+    require(maxSamples >= 2)
+
+    val execution = executeSwipe()
+    var samplesTaken = 0
+    var recognizedSamples = 0
+
+    fun noStableAfter(stopped: Boolean): HostSwipeSettleResult {
+        val stableAfter = ScreenFingerprint(recognized = false, value = "")
+        return HostSwipeSettleResult(
+            execution = execution,
+            stableAfter = stableAfter,
+            movement = verifySwipeMovement(before, execution, stableAfter),
+            samplesTaken = samplesTaken,
+            recognizedSamples = recognizedSamples,
+            stopped = stopped,
+        )
+    }
+
+    if (execution.status != InputExecutionStatus.EXECUTED) return noStableAfter(stopped = false)
+
+    var previousRecognized: ScreenFingerprint? = null
+    for (sampleIndex in 0 until maxSamples) {
+        if (shouldStop()) return noStableAfter(stopped = true)
+        waitBeforeSample(if (sampleIndex == 0) initialDelaySeconds else pollIntervalSeconds)
+        if (shouldStop()) return noStableAfter(stopped = true)
+
+        val current = captureAfter()
+        samplesTaken++
+        if (!current.recognized || current.value.isBlank()) {
+            previousRecognized = null
+            continue
+        }
+        if (previousRecognized === current) {
+            previousRecognized = null
+            continue
+        }
+        recognizedSamples++
+        if (previousRecognized?.value == current.value) {
+            return HostSwipeSettleResult(
+                execution = execution,
+                stableAfter = current,
+                movement = verifySwipeMovement(before, execution, current),
+                samplesTaken = samplesTaken,
+                recognizedSamples = recognizedSamples,
+                stopped = false,
+            )
+        }
+        previousRecognized = current
+    }
+    return noStableAfter(stopped = false)
+}
+
 internal fun verifySwipeMovement(
     before: ScreenFingerprint,
     execution: InputExecutionResult,
