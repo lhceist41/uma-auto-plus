@@ -289,8 +289,8 @@ func parseFocusedPackage(output string) (string, bool, error) {
 				return "", true, errors.New("foreground authority line was malformed")
 			}
 			value := strings.TrimSpace(strings.TrimPrefix(remainder, "="))
-			// MuMu can list an unfocused display before the display that owns the game.
-			if authority == "mCurrentFocus" && value == "null" {
+			// MuMu can list null focus authorities before the display that owns the game.
+			if value == "null" {
 				break
 			}
 			fields := strings.Fields(strings.NewReplacer("{", " ", "}", " ").Replace(value))
