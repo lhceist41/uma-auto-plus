@@ -91,8 +91,9 @@ internal enum class BorrowWalkEnd {
 
 /** What the one bounded accessibility-service recovery did on a walk, for the log and for tests.
  * NONE: the recovery was never needed (no gap outlasted the gesture ladder). PERFORMED: a rebind was
- * issued (the walk then took its single post-rebind retry). UNAVAILABLE: a gap outlasted the ladder but
- * no recovery could be performed (no live game attached, or the callback declined), so the walk stalled. */
+ * issued (the walk then took its bounded post-rebind gesture attempts). UNAVAILABLE: a gap outlasted the
+ * ladder but no recovery could be performed (no live game attached, the callback declined, or readiness
+ * was not proven), so the walk stalled. */
 internal enum class BorrowRecovery { NONE, PERFORMED, UNAVAILABLE }
 
 /** What a walk did, for the log and for the caller's fallback decision. */
@@ -110,6 +111,10 @@ internal data class BorrowWalkResult(
      * (the A3-R3 live defect emitted no reason). Distinguishes "recovery not needed" from "performed" from
      * "needed but unavailable". */
     val recovery: BorrowRecovery = BorrowRecovery.NONE,
+    /** How many post-rebind gesture attempts the walk spent (the first gesture after a MuMu rebind is often
+     * swallowed, so up to a small cap are tried). Bounded by the walker's maxPostRebindGestures; here for
+     * test and log inspectability of the recovery budget. */
+    val postRebindGestures: Int = 0,
 ) {
     val picked: Boolean get() = end == BorrowWalkEnd.PICKED
 
@@ -133,10 +138,12 @@ internal data class BorrowWalkResult(
  *    These retries are recovery, not forward progress: they do NOT spend the forward advance budget, so
  *    a stall can never starve the one accessibility rebind below (the A3-R3 live defect, where the ladder
  *    consumed the whole page budget and the rebind gate `gestures < maxPageGestures` was then unreachable);
- *  - at most ONE accessibility-service rebind per walk, plus its single post-rebind retry;
+ *  - at most ONE accessibility-service rebind per walk, followed by at most [maxPostRebindGestures]
+ *    post-rebind gesture attempts (the first gesture after a MuMu rebind is often swallowed);
  *  - a screen whose rows were all seen before ends the walk.
- * Every no-movement gap is bounded by [maxSwallowedRetries] and by the once-per-walk rebind, and the
- * number of gaps is bounded by the forward advances, so no path repeats without consuming a hard budget.
+ * Every no-movement gap is bounded by [maxSwallowedRetries], by the once-per-walk rebind, and by the
+ * post-rebind gesture cap, and the number of gaps is bounded by the forward advances, so no path repeats
+ * without consuming a hard budget.
  */
 internal class BorrowListWalker(
     private val maxPageGestures: Int,
@@ -149,10 +156,15 @@ internal class BorrowListWalker(
     /** One bounded, last-resort recovery invoked at most ONCE per walk when the gesture recovery ladder
      * is exhausted, reachable regardless of how much forward budget the traversal already spent: on MuMu
      * the accessibility gesture dispatcher can silently die mid-run (the page gesture no-ops though the
-     * service reads "enabled"), and rebinding it revives scrolling. Returns true when a recovery was
-     * actually performed (so the walk takes one post-rebind retry), false when none was available (so the
-     * walk declares a stall). Default: no recovery. */
+     * service reads "enabled"), and rebinding it revives scrolling. The callback is expected to have
+     * already confirmed the rebound service is ready before returning; it returns true when a usable
+     * recovery was performed (so the walk takes its bounded post-rebind gesture attempts), false when none
+     * was available or readiness could not be proven (so the walk declares a stall). Default: no recovery. */
     private val recoverService: () -> Boolean = { false },
+    /** How many post-rebind gesture attempts the walk may make after a single successful rebind. The first
+     * gesture after a MuMu rebind is frequently swallowed, so one retry is not enough; this stays a small
+     * explicit cap so the recovery budget never becomes unbounded. */
+    private val maxPostRebindGestures: Int = 2,
     private val log: (String) -> Unit = {},
 ) {
     /**
@@ -168,9 +180,11 @@ internal class BorrowListWalker(
         var retriesTotal = 0
         var serviceRecovered = false
         var recovery = BorrowRecovery.NONE
+        var postRebindAttemptsLeft = 0
+        var postRebindGesturesTotal = 0
 
         while (true) {
-            if (abort()) return BorrowWalkResult(BorrowWalkEnd.ABORTED, screens, gestures, retriesTotal, recovery = recovery)
+            if (abort()) return BorrowWalkResult(BorrowWalkEnd.ABORTED, screens, gestures, retriesTotal, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
 
             val screen = readScreen()
             val keys = borrowScreenKeys(screen)
@@ -193,52 +207,81 @@ internal class BorrowListWalker(
                 // The gesture recovery ladder is exhausted. Before declaring a stall, try ONE bounded
                 // accessibility-service rebind: on MuMu the gesture dispatcher can silently die, and the
                 // stronger gestures above then no-op just the same. Gated ONLY by serviceRecovered, so it
-                // stays reachable no matter how much forward budget the traversal already spent.
+                // stays reachable no matter how much forward budget the traversal already spent. recoverService
+                // is expected to have confirmed the rebound service is ready before returning true.
                 if (!serviceRecovered) {
                     serviceRecovered = true
                     if (recoverService()) {
                         recovery = BorrowRecovery.PERFORMED
-                        log("gesture recovery ladder exhausted; rebound the accessibility dispatcher and retrying the scroll once.")
-                        // The single post-rebind retry. retriesThisGap is left at the cap on purpose: if
-                        // this one retry still does not move the list, the next pass falls straight through
-                        // to the stall below (recovery already spent) -- exactly one retry, never a loop.
-                        advancePage(0)
-                        continue
+                        postRebindAttemptsLeft = maxPostRebindGestures
+                        log("gesture recovery ladder exhausted; rebound the accessibility dispatcher, retrying the scroll up to $maxPostRebindGestures time(s).")
+                        // Fall through to take the first post-rebind gesture attempt below.
+                    } else {
+                        // A gap outlasted the ladder but no usable rebind could be performed (no live game
+                        // attached, the callback declined, or readiness was not proven). Record the reason.
+                        recovery = BorrowRecovery.UNAVAILABLE
+                        log("gesture recovery ladder exhausted; no accessibility recovery available, marking the scroll stalled.")
+                        return BorrowWalkResult(BorrowWalkEnd.END_OF_LIST, screens, gestures, retriesTotal, stalled = true, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
                     }
-                    // A gap outlasted the ladder but no rebind could be performed (no live game attached, or
-                    // the callback declined). Record it so the stall carries an explicit reason.
-                    recovery = BorrowRecovery.UNAVAILABLE
-                    log("gesture recovery ladder exhausted; no accessibility recovery available, marking the scroll stalled.")
-                } else {
-                    log("gesture recovery already spent this walk; marking the scroll stalled.")
                 }
-                // Recovery unavailable or already spent: mark the walk stalled so a caller can tell "the
-                // list stopped moving" apart from "a screen produced no new rows" (the natural end below).
-                return BorrowWalkResult(BorrowWalkEnd.END_OF_LIST, screens, gestures, retriesTotal, stalled = true, recovery = recovery)
+                // A rebind was performed: spend up to maxPostRebindGestures bounded gesture attempts, judged
+                // by the fingerprint on the next pass. The first gesture after a MuMu rebind is often
+                // swallowed, so one retry is not enough; retriesThisGap stays at the cap so ONLY these
+                // attempts run at this gap. Each attempt is one calibrated swipe; when one moves the list the
+                // walk falls into the normal branch below and postRebindAttemptsLeft is cleared.
+                if (postRebindAttemptsLeft > 0) {
+                    postRebindAttemptsLeft--
+                    postRebindGesturesTotal++
+                    log("post-rebind gesture attempt ${maxPostRebindGestures - postRebindAttemptsLeft}/$maxPostRebindGestures; retrying the scroll.")
+                    advancePage(0)
+                    continue
+                }
+                // The rebind was performed but every post-rebind gesture no-op'd (or the recovery was already
+                // spent at an earlier gap): the list is genuinely stuck. Stall so absence is never mistaken
+                // for the natural end (the movement branch below).
+                log("post-rebind gesture budget spent; marking the scroll stalled.")
+                return BorrowWalkResult(BorrowWalkEnd.END_OF_LIST, screens, gestures, retriesTotal, stalled = true, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
             }
             retriesThisGap = 0
+            postRebindAttemptsLeft = 0 // movement ended the post-rebind window; a later gap gets no fresh attempts
             lastSignature = signature
 
             if (screens == 0 && keys.isEmpty()) {
-                return BorrowWalkResult(BorrowWalkEnd.EMPTY_PICKER, screens, gestures, retriesTotal, recovery = recovery)
+                return BorrowWalkResult(BorrowWalkEnd.EMPTY_PICKER, screens, gestures, retriesTotal, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
             }
 
             screens++
             if (visit(screen, screens - 1)) {
-                return BorrowWalkResult(BorrowWalkEnd.PICKED, screens, gestures, retriesTotal, recovery = recovery)
+                return BorrowWalkResult(BorrowWalkEnd.PICKED, screens, gestures, retriesTotal, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
             }
 
             // Every row on this screen was already read on an earlier one: nothing further to find.
             if (keys.none { seen.add(it) }) {
-                return BorrowWalkResult(BorrowWalkEnd.END_OF_LIST, screens, gestures, retriesTotal, recovery = recovery)
+                return BorrowWalkResult(BorrowWalkEnd.END_OF_LIST, screens, gestures, retriesTotal, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
             }
             if (gestures >= maxPageGestures) {
-                return BorrowWalkResult(BorrowWalkEnd.MAX_PAGES, screens, gestures, retriesTotal, recovery = recovery)
+                return BorrowWalkResult(BorrowWalkEnd.MAX_PAGES, screens, gestures, retriesTotal, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
             }
             advancePage(0)
             gestures++
         }
     }
+}
+
+/**
+ * Bounded readiness poll: calls [ready] up to [maxPolls] times, sleeping via [sleep] between attempts,
+ * and returns true as soon as [ready] holds. No busy loop (every miss sleeps), explicit poll cap, and a
+ * final check so a readiness that lands exactly on the last interval is not missed. Used after an
+ * accessibility rebind to wait for the service instance to reconnect before retrying a gesture: gesturing
+ * into a not-yet-connected service no-ops, so an unproven readiness must block the retry (return false),
+ * never proceed on hope.
+ */
+internal fun pollUntil(maxPolls: Int, ready: () -> Boolean, sleep: () -> Unit): Boolean {
+    repeat(maxPolls) {
+        if (ready()) return true
+        sleep()
+    }
+    return ready()
 }
 
 /** The row a selection walk settled on, with the walk's own statistics. */

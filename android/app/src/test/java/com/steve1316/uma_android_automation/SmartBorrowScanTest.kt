@@ -49,6 +49,12 @@ class SmartBorrowScanTest {
         /** Once the list reaches this index, gesture dispatch is dead (advances no-op) until a recovery
          * revives it -- models MuMu's mid-traversal dispatchGesture death after healthy paging. -1 = never. */
         private val dispatchDiesAtIndex: Int = -1,
+        /** How many gestures AFTER a successful recovery are still swallowed before movement resumes --
+         * models the first-gesture-after-rebind swallow that A3-R4 could not clear with a single retry. */
+        private val postRebindSwallow: Int = 0,
+        /** A SECOND dispatch death, at this index, that only bites after the first recovery -- models a fresh
+         * gesture death at a later gap that the one-per-walk rebind may not touch again. -1 = never. */
+        private val reDeathAtIndex: Int = -1,
     ) {
         var index = 0
             private set
@@ -58,13 +64,18 @@ class SmartBorrowScanTest {
             private set
         private var swallowed = 0
         private var recovered = false
+        private var postRecoverAdvances = 0
 
         fun read(): BorrowScan = screens[index]
 
         private fun dispatchAlive(): Boolean {
-            if (frozen) return recovered && revivesAfterRecover
-            if (dispatchDiesAtIndex >= 0 && index >= dispatchDiesAtIndex) return recovered && revivesAfterRecover
-            return true
+            // A fresh death at a later gap once the first recovery has already been spent.
+            if (reDeathAtIndex >= 0 && recovered && index >= reDeathAtIndex) return false
+            val deadZone = frozen || (dispatchDiesAtIndex >= 0 && index >= dispatchDiesAtIndex)
+            if (!deadZone) return true
+            if (!recovered || !revivesAfterRecover) return false
+            // Recovered, but the first postRebindSwallow gestures after the rebind are still swallowed.
+            return postRecoverAdvances > postRebindSwallow
         }
 
         fun advance(attempt: Int) {
@@ -75,6 +86,7 @@ class SmartBorrowScanTest {
                 swallowed++
                 return
             }
+            if (recovered) postRecoverAdvances++
             if (dispatchAlive() && index < screens.lastIndex) index++
         }
 
@@ -84,13 +96,14 @@ class SmartBorrowScanTest {
             return recoverAvailable
         }
 
-        fun walker(maxPageGestures: Int = 8, maxSwallowedRetries: Int = 2): BorrowListWalker =
+        fun walker(maxPageGestures: Int = 8, maxSwallowedRetries: Int = 2, maxPostRebindGestures: Int = 2): BorrowListWalker =
             BorrowListWalker(
                 maxPageGestures = maxPageGestures,
                 maxSwallowedRetries = maxSwallowedRetries,
                 readScreen = ::read,
                 advancePage = ::advance,
                 recoverService = ::recoverService,
+                maxPostRebindGestures = maxPostRebindGestures,
             )
     }
 
@@ -511,6 +524,111 @@ class SmartBorrowScanTest {
         assertEquals(BorrowRecovery.PERFORMED, selection.walk.recovery)
         assertFalse(selection.walk.stalled, "the revived scroll reached the natural end")
         assertTrue(selection.walk.fullyTraversed, "so the whole list was seen despite the mid-list death")
+    }
+
+    @Test
+    @DisplayName("26. REGRESSION: the first post-rebind gesture is swallowed, the second one moves the list")
+    fun testSecondPostRebindGestureMoves() {
+        // Fails against e12a4c55: there only ONE post-rebind gesture is issued, so a swallowed first gesture
+        // leaves the list stuck and the card past the death is never reached. This is the A3-R4 live failure.
+        val fillers = (0..6).map { screen("[Outfit $it]\nFiller number $it") }
+        val targetScreen = screen("[Outfit Seven]\n$target")
+        val picker =
+            FakePicker(
+                fillers + targetScreen,
+                dispatchDiesAtIndex = 6,
+                recoverAvailable = true,
+                revivesAfterRecover = true,
+                postRebindSwallow = 1, // the first gesture after the rebind no-ops; the second lands
+            )
+        val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
+        assertNotNull(selection.row, "the second post-rebind gesture reaches the card past the death")
+        assertEquals(1, picker.recoverCalls, "still exactly one rebind")
+        assertEquals(2, selection.walk.postRebindGestures, "one swallowed attempt plus the one that landed")
+        assertFalse(selection.walk.stalled)
+    }
+
+    @Test
+    @DisplayName("27. REGRESSION: every post-rebind gesture no-ops, so the walk stalls at the cap and cannot rebind again")
+    fun testAllPostRebindGesturesNoOpStall() {
+        val fillers = (0..6).map { screen("[Outfit $it]\nFiller number $it") }
+        val targetScreen = screen("[Outfit Seven]\n$target")
+        val picker =
+            FakePicker(
+                fillers + targetScreen,
+                dispatchDiesAtIndex = 6,
+                recoverAvailable = true,
+                revivesAfterRecover = true,
+                postRebindSwallow = 5, // more than the cap: neither post-rebind gesture ever moves
+            )
+        val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
+        assertNull(selection.row)
+        assertEquals(1, picker.recoverCalls, "recovery cannot repeat within a walk")
+        assertEquals(2, selection.walk.postRebindGestures, "the post-rebind gesture attempts are capped")
+        assertEquals(BorrowRecovery.PERFORMED, selection.walk.recovery)
+        assertTrue(selection.walk.stalled)
+        assertFalse(selection.walk.fullyTraversed, "absence past an unrecovered death is never proven")
+    }
+
+    @Test
+    @DisplayName("28. A raised post-rebind cap is honoured, and the count never exceeds it")
+    fun testPostRebindGestureCapHonoured() {
+        val fillers = (0..6).map { screen("[Outfit $it]\nFiller number $it") }
+        val targetScreen = screen("[Outfit Seven]\n$target")
+        // Two gestures swallowed after the rebind; the third moves. A cap of 2 stalls, a cap of 3 completes.
+        val runWithCap = { cap: Int ->
+            val picker =
+                FakePicker(fillers + targetScreen, dispatchDiesAtIndex = 6, recoverAvailable = true, revivesAfterRecover = true, postRebindSwallow = 2)
+            selectFromBorrowList(picker.walker(maxPostRebindGestures = cap)) { approved(it, target) }
+        }
+        val capped = runWithCap(2)
+        assertNull(capped.row, "two swallowed gestures exhaust a cap of two")
+        assertEquals(2, capped.walk.postRebindGestures)
+        assertTrue(capped.walk.stalled)
+        val raised = runWithCap(3)
+        assertNotNull(raised.row, "a cap of three clears two swallowed gestures")
+        assertEquals(3, raised.walk.postRebindGestures)
+        assertFalse(raised.walk.stalled)
+    }
+
+    @Test
+    @DisplayName("29. A later distinct stall may use the swallowed-drag ladder but never a second rebind")
+    fun testLaterGapDoesNotRebindTwice() {
+        // Death at index 2 recovers and the list pages on; a SECOND death at index 4 gets the ordinary ladder
+        // (two swallowed-drag retries) but no fresh rebind (one per walk), so it stalls without a second call.
+        val screens = (0..6).map { screen("[Outfit $it]\nFiller number $it") }
+        val picker =
+            FakePicker(screens, dispatchDiesAtIndex = 2, recoverAvailable = true, revivesAfterRecover = true, postRebindSwallow = 0, reDeathAtIndex = 4)
+        val selection = selectFromBorrowList(picker.walker()) { approved(it, target) }
+        assertEquals(1, picker.recoverCalls, "at most one rebind per walk, whatever later gaps occur")
+        assertEquals(4, selection.walk.swallowedRetries, "both gaps ran the ordinary ladder (two retries each)")
+        assertEquals(1, selection.walk.postRebindGestures, "the one post-rebind gesture belonged to the first gap only")
+        assertTrue(selection.walk.stalled, "the second, un-rebindable death leaves the walk stalled")
+    }
+
+    @Test
+    @DisplayName("30. The bounded readiness poll returns when ready and times out truthfully")
+    fun testReadinessPollBounds() {
+        // Ready only on the 3rd check: within a 6-poll budget it succeeds without gesturing early.
+        var checks = 0
+        var sleeps = 0
+        val readyOnThird = {
+            checks++
+            checks >= 3
+        }
+        val ready = pollUntil(maxPolls = 6, ready = readyOnThird, sleep = { sleeps++ })
+        assertTrue(ready, "readiness that lands within the budget is honoured")
+        assertEquals(2, sleeps, "it slept between the two misses, no busy loop")
+
+        // Never ready: the poll must time out (false), so the caller blocks the gesture fail-closed.
+        var polls = 0
+        val neverReady = {
+            polls++
+            false
+        }
+        val timedOut = pollUntil(maxPolls = 4, ready = neverReady, sleep = {})
+        assertFalse(timedOut, "an unproven readiness never reports ready")
+        assertEquals(5, polls, "four in-loop checks plus the final check, all bounded")
     }
 
     /** Walks up from the test working directory to find a repository file, so the check does not

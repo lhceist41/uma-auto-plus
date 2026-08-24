@@ -272,6 +272,13 @@ class CareerLaunchNavigator(private val context: Context) {
          * scan indefinitely. */
         private const val MAX_BORROW_SWALLOWED_SWIPE_RETRIES = 2
 
+        /** After an accessibility rebind the service instance reconnects asynchronously, so gesturing
+         * immediately no-ops. Poll (bounded) for a live instance before the post-rebind retry: up to this
+         * many checks, POST_REBIND_READINESS_INTERVAL apart. forceRebindAccessibilityService already waits
+         * internally, so a short window here is usually enough; a timeout blocks the retry fail-closed. */
+        private const val POST_REBIND_READINESS_POLLS = 6
+        private const val POST_REBIND_READINESS_INTERVAL = 0.5
+
         /** The "! Duplicate Support" pill straddles a borrow row's top edge; its center sits
          * ~113 px above the row center on the measured captures. A pill inside this offset band
          * marks the row's character as already present in the deck. */
@@ -6248,9 +6255,27 @@ class CareerLaunchNavigator(private val context: Context) {
     private fun recoverGestureDispatch(): Boolean {
         val game = tempGame ?: return false
         MessageLog.w(TAG, "[NAV] [BORROW] Borrow-list scroll stalled after the gesture ladder; rebinding the accessibility service to recover silently-dead gesture dispatch.")
+        // Capture the (dead-gesture) instance before the toggle so we can log whether the framework bound a
+        // genuinely fresh one afterward -- a live diagnostic to tell "instance not ready" from "first gesture
+        // after rebind swallowed" without changing behaviour on it.
+        val stale: MyAccessibilityService? = MyAccessibilityService.getInstance()
         val rebound = game.forceRebindAccessibilityService()
-        if (rebound) waitSafe(1.0)
-        return rebound
+        if (!rebound) {
+            MessageLog.w(TAG, "[NAV] [BORROW] Accessibility rebind could not be issued (WRITE_SECURE_SETTINGS missing); leaving the scroll stalled.")
+            return false
+        }
+        // The toggle only issues the setting change; the service reconnects asynchronously. Wait (bounded,
+        // no busy loop) for a live service instance before letting the walker retry a gesture -- a gesture
+        // dispatched into a not-yet-connected service no-ops. Non-null is the hard readiness gate; a timeout
+        // blocks the retry so no gesture ever fires on unproven readiness.
+        val ready = pollUntil(POST_REBIND_READINESS_POLLS, { MyAccessibilityService.getInstance() != null }, { waitSafe(POST_REBIND_READINESS_INTERVAL) })
+        if (!ready) {
+            MessageLog.w(TAG, "[NAV] [BORROW] Accessibility service did not reconnect within $POST_REBIND_READINESS_POLLS readiness poll(s); leaving the scroll stalled.")
+            return false
+        }
+        val freshInstance = MyAccessibilityService.getInstance() !== stale
+        MessageLog.i(TAG, "[NAV] [BORROW] Accessibility service ready after rebind (${if (freshInstance) "fresh instance" else "reused instance"}); post-rebind gesture may proceed.")
+        return true
     }
 
     /** Outcome of a read-only borrow-pool census, for the diagnostic entry point. */
