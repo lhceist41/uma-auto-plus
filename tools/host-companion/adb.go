@@ -16,13 +16,16 @@ import (
 const (
 	adbReadTimeout  = 5 * time.Second
 	adbSwipeTimeout = 4 * time.Second
+	gamePackage     = "com.cygames.umamusume"
 )
 
 var (
-	serialPattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
-	targetIDPattern = regexp.MustCompile(`^[a-f0-9]{32}$`)
-	sizePattern     = regexp.MustCompile(`(?m)^(Physical|Override) size: ([0-9]+)x([0-9]+)$`)
-	densityPattern  = regexp.MustCompile(`(?m)^(Physical|Override) density: ([0-9]+)$`)
+	serialPattern         = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+	targetIDPattern       = regexp.MustCompile(`^[a-f0-9]{32}$`)
+	sizePattern           = regexp.MustCompile(`(?m)^(Physical|Override) size: ([0-9]+)x([0-9]+)$`)
+	densityPattern        = regexp.MustCompile(`(?m)^(Physical|Override) density: ([0-9]+)$`)
+	focusComponentPattern = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+)/(\.?[A-Za-z_][A-Za-z0-9_.$]*)$`)
+	focusAuthorityNames   = []string{"mCurrentFocus", "mFocusedApp", "mFocusedWindow"}
 )
 
 type CommandResult struct {
@@ -269,18 +272,81 @@ func supportedDisplay(width, height, density int) bool {
 	return (width == 1080 && height == 1920 && density == 240) || (width == 1080 && height == 2340 && density == 450)
 }
 
+func parseFocusedPackage(output string) (string, bool, error) {
+	focusedPackage := ""
+	foundAuthority := false
+	for _, rawLine := range strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n") {
+		line := strings.TrimSpace(rawLine)
+		for _, authority := range focusAuthorityNames {
+			if !strings.HasPrefix(line, authority) {
+				continue
+			}
+			remainder := line[len(authority):]
+			if remainder != "" && remainder[0] != '=' && remainder[0] != ' ' && remainder[0] != '\t' {
+				continue
+			}
+			foundAuthority = true
+			remainder = strings.TrimSpace(remainder)
+			if !strings.HasPrefix(remainder, "=") {
+				return "", true, errors.New("foreground authority line was malformed")
+			}
+			value := strings.TrimSpace(strings.TrimPrefix(remainder, "="))
+			fields := strings.Fields(strings.NewReplacer("{", " ", "}", " ").Replace(value))
+			componentPackage := ""
+			componentCount := 0
+			for _, field := range fields {
+				if !strings.Contains(field, "/") {
+					continue
+				}
+				componentCount++
+				match := focusComponentPattern.FindStringSubmatch(field)
+				if match == nil {
+					return "", true, errors.New("foreground component was malformed")
+				}
+				componentPackage = match[1]
+			}
+			if componentCount != 1 {
+				return "", true, errors.New("foreground component was ambiguous")
+			}
+			if focusedPackage != "" && focusedPackage != componentPackage {
+				return "", true, errors.New("foreground authorities conflicted")
+			}
+			focusedPackage = componentPackage
+			break
+		}
+	}
+	if !foundAuthority {
+		return "", false, nil
+	}
+	return focusedPackage, true, nil
+}
+
 func (service *ADBService) foregroundLocked(ctx context.Context) (bool, error) {
-	result := runBounded(ctx, service.runner, adbReadTimeout, "-s", service.serial, "shell", "dumpsys", "window", "windows")
+	// MuMu API 32 omits focus authorities from "window windows", so prefer the broad dump.
+	result := runBounded(ctx, service.runner, adbReadTimeout, "-s", service.serial, "shell", "dumpsys", "window")
 	if result.TimedOut || result.ExitCode != 0 {
 		return false, errors.New("foreground package check failed")
 	}
-	for _, line := range strings.Split(result.Output, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.Contains(trimmed, "mCurrentFocus") || strings.Contains(trimmed, "mFocusedApp") {
-			return strings.Contains(trimmed, appPackage+"/") || strings.Contains(trimmed, appPackage+" "), nil
-		}
+	foregroundPackage, found, err := parseFocusedPackage(result.Output)
+	if err != nil {
+		return false, err
 	}
-	return false, errors.New("foreground package was unreadable")
+	if found {
+		return foregroundPackage == gamePackage, nil
+	}
+
+	result = runBounded(ctx, service.runner, adbReadTimeout, "-s", service.serial, "shell", "dumpsys", "window", "windows")
+	if result.TimedOut || result.ExitCode != 0 {
+		return false, errors.New("foreground package check failed")
+	}
+	foregroundPackage, found, err = parseFocusedPackage(result.Output)
+	if err != nil {
+		return false, err
+	}
+	if !found {
+		return false, errors.New("foreground package was unreadable")
+	}
+	return foregroundPackage == gamePackage, nil
 }
 
 func (service *ADBService) health(ctx context.Context, expectedTargetID string) (Target, bool, error) {
