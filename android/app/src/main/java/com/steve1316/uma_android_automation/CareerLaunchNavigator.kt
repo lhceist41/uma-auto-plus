@@ -541,8 +541,13 @@ class CareerLaunchNavigator(private val context: Context) {
     private var lastBorrowPickEntry: String? = null
     private var borrowPreTapValidationGate = BorrowPreTapValidationGate()
     private var borrowPostSelectionValidationGate = BorrowPostSelectionValidationGate()
+    private var borrowPostSelectionAuthority = BorrowPostSelectionAuthority.PRODUCTION_LAUNCH
     private var borrowPostSelectionTpRawAtStart: String? = null
     private var lastBorrowPostSelectionValidationResult: BorrowPostSelectionResult? = null
+
+    private val productionPostSelectionValidationActive: Boolean
+        get() = borrowPostSelectionAuthority.allowsPostSelectionValidation(borrowPostSelectionValidationGate.armed)
+
     private var borrowAccessibilityScrollFaultInjector = BorrowAccessibilityScrollFaultInjector()
 
     // The capture the borrow list walker read its current screen from. The page-advance swipe
@@ -710,6 +715,7 @@ class CareerLaunchNavigator(private val context: Context) {
             BorrowPostSelectionValidationGate(
                 SettingsHelper.getBooleanSetting("debug", BORROW_POST_SELECTION_VALIDATION_SETTING, false),
             )
+        borrowPostSelectionAuthority = BorrowPostSelectionAuthority.PRODUCTION_LAUNCH
         borrowPostSelectionTpRawAtStart = null
         lastBorrowPostSelectionValidationResult = null
         borrowAccessibilityScrollFaultInjector =
@@ -4223,6 +4229,18 @@ class CareerLaunchNavigator(private val context: Context) {
         // Start Career.
         runBorrowStep(bitmap)?.let { return it }
 
+        if (productionPostSelectionValidationActive) {
+            borrowPostSelectionValidationGate
+                .failClosedWithoutCurrentTap(
+                    slotCommitted = !IconFriendSlotEmpty.check(iu, sourceBitmap = bitmap),
+                    returnedToSupportFormation = true,
+                )
+                ?.let { result ->
+                    lastBorrowPostSelectionValidationResult = result
+                    return borrowPostSelectionValidationStopped(result)
+                }
+        }
+
         // Deck is already complete OR autoFillSupports is off. Click Start Career. The right-crop
         // variant matches when the trainee chibi is idling over the button's left edge, which held
         // the full-button templates below threshold for 15 straight checks on a live run.
@@ -4438,7 +4456,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * safely instead of falling through into a Start Career gate.
      */
     private fun runBorrowStep(bitmap: Bitmap): TransitionResult? {
-        if (borrowPostSelectionValidationGate.armed && !borrowPostSelectionValidationGate.hasTappedRow) {
+        if (productionPostSelectionValidationActive && !borrowPostSelectionValidationGate.hasTappedRow) {
             borrowPostSelectionTpRawAtStart = readTpBandRaw(bitmap)
         }
         // The game renders Start Career as enabled but silently ignores it while the friend
@@ -4477,7 +4495,7 @@ class CareerLaunchNavigator(private val context: Context) {
         actionName: String,
     ): BorrowTapResult {
         val observedIdentity =
-            if (borrowPostSelectionValidationGate.armed) {
+            if (productionPostSelectionValidationActive) {
                 val freshBitmap = iu.getSourceBitmap()
                 readBorrowPoolRichRows(freshBitmap, 0, false)
                     .minByOrNull { kotlin.math.abs(it.centerY - centerY) }
@@ -4491,7 +4509,9 @@ class CareerLaunchNavigator(private val context: Context) {
             borrowPreTapValidationGate.attempt(acceptedRow) { row ->
                 CoordinateTap.tap(gestureUtils, 540.0, row.centerY, actionName)
             }
-        borrowPostSelectionValidationGate.recordTap(result, borrowPostSelectionTpRawAtStart)
+        if (productionPostSelectionValidationActive) {
+            borrowPostSelectionValidationGate.recordTap(result, borrowPostSelectionTpRawAtStart)
+        }
         when (result.status) {
             BorrowTapStatus.TAPPED ->
                 MessageLog.i(TAG, "[NAV] [BORROW] TAPPED accepted row \"${borrowLogText(identity)}\" at (540, ${centerY.toInt()}).")
@@ -4507,7 +4527,7 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     private fun finishBorrowPostSelectionValidation(step: TransitionResult): TransitionResult {
-        if (!borrowPostSelectionValidationGate.armed || !borrowPostSelectionValidationGate.hasTappedRow) return step
+        if (!productionPostSelectionValidationActive || !borrowPostSelectionValidationGate.hasTappedRow) return step
 
         val committedBitmap = iu.getSourceBitmap()
         val onFormation = LabelSupportFormation.check(iu, sourceBitmap = committedBitmap)
@@ -4568,6 +4588,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 "slotCommitted=${result.slotCommitted} freshVerifier=${result.freshVerifier} " +
                 "selected=${result.verification?.selectedRow?.character ?: "-"} " +
                 "startCareerTapped=${result.startCareerTapped} tp=${result.tpRawAtStart ?: "-"}->${result.tpRawAtEnd ?: "-"} " +
+                "tpStatus=${result.tpEvidenceStatus} " +
                 "reason=\"${result.reason}\"",
         )
         return TransitionResult.Failed(
@@ -5208,6 +5229,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * operator establishes the required deck before the rehearsal.
      */
     internal fun rehearseSmartBorrowForRequiredDeck(injectedUtils: CustomImageUtils? = null): SmartBorrowRehearsalResult {
+        borrowPostSelectionAuthority = BorrowPostSelectionAuthority.REHEARSAL
         if (injectedUtils != null) {
             imageUtils = injectedUtils
         } else if (!ensureInitialised()) {
@@ -7355,6 +7377,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * spends nothing. Tagged [BORROW-SELECT].
      */
     internal fun rehearseSmartBorrowSelectAndRollback(injectedUtils: CustomImageUtils? = null): SmartBorrowSelectRehearsalResult {
+        borrowPostSelectionAuthority = BorrowPostSelectionAuthority.REHEARSAL
         if (injectedUtils != null) {
             imageUtils = injectedUtils
         } else if (!ensureInitialised()) {
@@ -7447,7 +7470,7 @@ class CareerLaunchNavigator(private val context: Context) {
         val startBitmap = iu.getSourceBitmap()
         val deckAtStart = readDeckNumber(startBitmap)
         val tpRawStart = readTpBandRaw(startBitmap)
-        if (borrowPostSelectionValidationGate.armed) {
+        if (productionPostSelectionValidationActive) {
             borrowPostSelectionTpRawAtStart = tpRawStart
         }
         val tpStart = parseTpCurrent(tpRawStart)

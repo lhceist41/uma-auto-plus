@@ -2,6 +2,14 @@ package com.steve1316.uma_android_automation
 
 internal const val BORROW_POST_SELECTION_VALIDATION_SETTING = "debugMode_stopAfterBorrowSelectionVerified"
 
+internal enum class BorrowPostSelectionAuthority {
+    PRODUCTION_LAUNCH,
+    REHEARSAL,
+}
+
+internal fun BorrowPostSelectionAuthority.allowsPostSelectionValidation(armed: Boolean): Boolean =
+    armed && this == BorrowPostSelectionAuthority.PRODUCTION_LAUNCH
+
 internal enum class BorrowPostSelectionStatus {
     WAITING_FOR_TAPPED_ROW,
     SELECTION_VERIFICATION_FAILED,
@@ -22,7 +30,16 @@ internal data class BorrowPostSelectionResult(
 ) {
     val suppressed: Boolean get() = status == BorrowPostSelectionStatus.SELECTED_VERIFIED_START_SUPPRESSED
     val tpUnchanged: Boolean? get() = if (tpRawAtStart == null || tpRawAtEnd == null) null else tpRawAtStart == tpRawAtEnd
+    val tpEvidenceStatus: String
+        get() =
+            when (tpUnchanged) {
+                true -> "unchanged"
+                false -> "changed"
+                null -> "unknown"
+            }
 }
+
+private fun String?.normalizedTpEvidence(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
 
 /**
  * One-shot boundary between a real Borrow tap and either Start Career entry point.
@@ -44,7 +61,20 @@ internal class BorrowPostSelectionValidationGate(
     fun recordTap(result: BorrowTapResult, tpRawBeforeTap: String? = null) {
         if (!armed || terminalResult != null || !result.tapped || result.row == null) return
         tappedRow = result.row
-        tpRawAtStart = tpRawBeforeTap
+        tpRawAtStart = tpRawBeforeTap.normalizedTpEvidence()
+    }
+
+    fun failClosedWithoutCurrentTap(
+        slotCommitted: Boolean,
+        returnedToSupportFormation: Boolean,
+    ): BorrowPostSelectionResult? {
+        if (!armed || tappedRow != null) return null
+        return evaluate(
+            slotCommitted = slotCommitted,
+            freshVerifier = false,
+            verification = null,
+            returnedToSupportFormation = returnedToSupportFormation,
+        )
     }
 
     fun evaluate(
@@ -58,7 +88,8 @@ internal class BorrowPostSelectionValidationGate(
         terminalResult?.let { return it }
 
         val row = tappedRow
-        val tpUnchanged = tpRawAtStart == null || tpRawAtEnd == null || tpRawAtStart == tpRawAtEnd
+        val normalizedTpRawAtEnd = tpRawAtEnd.normalizedTpEvidence()
+        val tpUnchanged = tpRawAtStart == null || normalizedTpRawAtEnd == null || tpRawAtStart == normalizedTpRawAtEnd
         val verified =
             row != null &&
                 slotCommitted &&
@@ -68,7 +99,7 @@ internal class BorrowPostSelectionValidationGate(
                 verification?.verdict == SelectedSlotVerdict.VERIFIED
         val reason =
             when {
-                row == null -> "no real Borrow row tap reached the post-selection boundary"
+                row == null -> "post-selection validation was armed but no real Borrow tap occurred in this navigation"
                 !slotCommitted -> "the Borrow slot was not freshly confirmed as committed"
                 !freshVerifier -> "the committed selection was not read by a fresh verifier"
                 verification == null -> "the reopened picker could not be read"
@@ -90,7 +121,7 @@ internal class BorrowPostSelectionValidationGate(
             freshVerifier = freshVerifier,
             returnedToSupportFormation = returnedToSupportFormation,
             tpRawAtStart = tpRawAtStart,
-            tpRawAtEnd = tpRawAtEnd,
+            tpRawAtEnd = normalizedTpRawAtEnd,
             reason = reason,
         ).also { terminalResult = it }
     }

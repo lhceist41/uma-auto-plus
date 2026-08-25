@@ -313,8 +313,8 @@ class BorrowPostSelectionValidationGateTest {
         val tapBoundary = section("private fun tapAcceptedBorrowRow", "private fun finishBorrowPostSelectionValidation")
         val post = section("private fun finishBorrowPostSelectionValidation", "private fun borrowPostSelectionValidationStopped")
 
-        assertTrue(tapBoundary.indexOf("if (borrowPostSelectionValidationGate.armed)") < tapBoundary.indexOf("readBorrowPoolRichRows"))
-        assertTrue(post.contains("if (!borrowPostSelectionValidationGate.armed"))
+        assertTrue(tapBoundary.indexOf("if (productionPostSelectionValidationActive)") < tapBoundary.indexOf("readBorrowPoolRichRows"))
+        assertTrue(post.contains("if (!productionPostSelectionValidationActive"))
     }
 
     @Test
