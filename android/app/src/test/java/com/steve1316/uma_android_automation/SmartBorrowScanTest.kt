@@ -96,7 +96,16 @@ class SmartBorrowScanTest {
             return recoverAvailable
         }
 
-        fun walker(maxPageGestures: Int = 8, maxSwallowedRetries: Int = 2, maxPostRebindGestures: Int = 2): BorrowListWalker =
+        fun hostAdvance() {
+            if (index < screens.lastIndex) index++
+        }
+
+        fun walker(
+            maxPageGestures: Int = 8,
+            maxSwallowedRetries: Int = 2,
+            maxPostRebindGestures: Int = 2,
+            recoverHost: (() -> HostScrollRecoveryReport)? = null,
+        ): BorrowListWalker =
             BorrowListWalker(
                 maxPageGestures = maxPageGestures,
                 maxSwallowedRetries = maxSwallowedRetries,
@@ -104,6 +113,7 @@ class SmartBorrowScanTest {
                 advancePage = ::advance,
                 recoverService = ::recoverService,
                 maxPostRebindGestures = maxPostRebindGestures,
+                recoverHost = recoverHost,
             )
     }
 
@@ -607,7 +617,155 @@ class SmartBorrowScanTest {
     }
 
     @Test
-    @DisplayName("30. The bounded readiness poll returns when ready and times out truthfully")
+    @DisplayName("30. A healthy Accessibility traversal never reaches the host rung")
+    fun testHealthyAccessibilityNeverUsesHost() {
+        val a = screen("[Outfit One]\nDelta Dawn")
+        val b = screen("[Outfit Two]\nEcho Edge")
+        val picker = FakePicker(listOf(a, b, a))
+        var hostCalls = 0
+        val selection =
+            selectFromBorrowList(
+                picker.walker(
+                    recoverHost = {
+                        hostCalls++
+                        hostReport(SwipeMovement.MOVED)
+                    },
+                ),
+            ) { approved(it, target) }
+
+        assertEquals(0, hostCalls, "normal list movement stays Accessibility-only")
+        assertTrue(selection.walk.fullyTraversed)
+        assertNull(selection.walk.hostRecovery)
+    }
+
+    @Test
+    @DisplayName("31. Stable host movement resumes through a fresh locator read")
+    fun testHostMovementRequiresFreshLocatorRead() {
+        val stale = BorrowScan(listOf(111.0 to "[Outfit One]\n$target"))
+        val fresh = BorrowScan(listOf(999.0 to "[Outfit One]\n$target"))
+        val picker = FakePicker(listOf(stale, fresh), frozen = true)
+        var hostCalls = 0
+        val selection =
+            selectFromBorrowList(
+                picker.walker(
+                    recoverHost = {
+                        hostCalls++
+                        picker.hostAdvance()
+                        hostReport(SwipeMovement.MOVED)
+                    },
+                ),
+            ) { text -> hostCalls > 0 && approved(text, target) }
+
+        assertNotNull(selection.row)
+        assertEquals(999.0, selection.row?.first, "the stale pre-swipe row coordinate is discarded")
+        assertEquals(1, hostCalls, "one privileged swipe belongs to this stalled walk")
+        assertEquals(SwipeMovement.MOVED, selection.walk.hostRecovery?.movement)
+        assertFalse(selection.walk.stalled)
+    }
+
+    @Test
+    @DisplayName("32. Host no-effect and uncertain results stall without retry")
+    fun testFailedHostEvidenceNeverRetries() {
+        for (movement in listOf(SwipeMovement.NO_EFFECT, SwipeMovement.UNCERTAIN)) {
+            val picker = FakePicker(listOf(screen("[Outfit Two]\nDelta Dawn")), frozen = true)
+            var hostCalls = 0
+            val selection =
+                selectFromBorrowList(
+                    picker.walker(
+                        recoverHost = {
+                            hostCalls++
+                            hostReport(movement)
+                        },
+                    ),
+                ) { approved(it, target) }
+
+            assertNull(selection.row)
+            assertEquals(1, hostCalls, movement.name)
+            assertTrue(selection.walk.stalled, movement.name)
+            assertFalse(selection.walk.fullyTraversed, movement.name)
+            assertEquals(movement, selection.walk.hostRecovery?.movement)
+        }
+    }
+
+    @Test
+    @DisplayName("33. Disabled host mode preserves the existing stalled result")
+    fun testDisabledHostPreservesStall() {
+        val picker = FakePicker(listOf(screen("[Outfit Two]\nDelta Dawn")), frozen = true)
+        var recoveryChecks = 0
+        val selection =
+            selectFromBorrowList(
+                picker.walker(
+                    recoverHost = {
+                        recoveryChecks++
+                        HostScrollRecoveryReport(
+                            scope = HostInputScope.BORROW_LIST_SCROLL,
+                            execution = InputExecutionResult(InputExecutionStatus.UNAVAILABLE, false, "HOST_INPUT_DISABLED"),
+                            movement = SwipeMovement.UNCERTAIN,
+                            detailCode = "HOST_INPUT_DISABLED",
+                            swipeAttempts = 0,
+                            stopped = false,
+                        )
+                    },
+                ),
+            ) { approved(it, target) }
+
+        assertEquals(1, recoveryChecks, "the final rung checks policy once")
+        assertEquals(0, selection.walk.hostRecovery?.swipeAttempts)
+        assertEquals("HOST_INPUT_DISABLED", selection.walk.hostRecovery?.detailCode)
+        assertTrue(selection.walk.stalled, "Accessibility's existing stalled outcome is preserved")
+    }
+
+    @Test
+    @DisplayName("34. A stop reported during host settle aborts the walk")
+    fun testHostSettleStopAbortsWalk() {
+        val picker = FakePicker(listOf(screen("[Outfit Two]\nDelta Dawn")), frozen = true)
+        var hostCalls = 0
+        val selection =
+            selectFromBorrowList(
+                picker.walker(
+                    recoverHost = {
+                        hostCalls++
+                        hostReport(SwipeMovement.UNCERTAIN, stopped = true)
+                    },
+                ),
+            ) { approved(it, target) }
+
+        assertEquals(1, hostCalls)
+        assertEquals(BorrowWalkEnd.ABORTED, selection.walk.end)
+        assertFalse(selection.walk.picked)
+    }
+
+    @Test
+    @DisplayName("35. A later stall in the same walk cannot spend a second host swipe")
+    fun testOneHostRecoveryPerWalk() {
+        val picker =
+            FakePicker(
+                listOf(
+                    screen("[Outfit One]\nDelta Dawn"),
+                    screen("[Outfit Two]\nEcho Edge"),
+                    screen("[Outfit Three]\nFoxtrot Fall"),
+                ),
+                frozen = true,
+            )
+        var hostCalls = 0
+        val selection =
+            selectFromBorrowList(
+                picker.walker(
+                    recoverHost = {
+                        hostCalls++
+                        picker.hostAdvance()
+                        hostReport(SwipeMovement.MOVED)
+                    },
+                ),
+            ) { approved(it, target) }
+
+        assertEquals(1, hostCalls, "the later gap cannot obtain a fresh host budget")
+        assertEquals(2, selection.walk.screensInspected, "the first host swipe moved to one fresh screen")
+        assertTrue(selection.walk.stalled, "the later unresolved gap still fails closed")
+    }
+
+    @Test
+    @DisplayName("36. The bounded readiness poll returns when ready and times out truthfully")
     fun testReadinessPollBounds() {
         // Ready only on the 3rd check: within a 6-poll budget it succeeds without gesturing early.
         var checks = 0
@@ -634,7 +792,7 @@ class SmartBorrowScanTest {
     }
 
     @Test
-    @DisplayName("31. REGRESSION: a stale accessibility instance is not a reconnect; a fresh one is")
+    @DisplayName("37. REGRESSION: a stale accessibility instance is not a reconnect; a fresh one is")
     fun testFreshInstanceReconnectSignal() {
         val stale = Any()
         // The A3-R5 predicate was `getInstance() != null`, which the stale (never-nulled) 2.5.9 singleton
@@ -647,7 +805,7 @@ class SmartBorrowScanTest {
     }
 
     @Test
-    @DisplayName("32. REGRESSION: getInstance throwing during reconnect is treated as not-ready, never unwinds")
+    @DisplayName("38. REGRESSION: getInstance throwing during reconnect is treated as not-ready, never unwinds")
     fun testReconnectExceptionIsNotReady() {
         val stale = Any()
         assertFalse(
@@ -679,6 +837,16 @@ class SmartBorrowScanTest {
             )
         assertFalse(timedOut, "a persistent exception times out, blocking any post-rebind gesture")
     }
+
+    private fun hostReport(movement: SwipeMovement, stopped: Boolean = false): HostScrollRecoveryReport =
+        HostScrollRecoveryReport(
+            scope = HostInputScope.BORROW_LIST_SCROLL,
+            execution = InputExecutionResult(InputExecutionStatus.EXECUTED, foreground = true, detailCode = "ADB_EXIT_0"),
+            movement = movement,
+            detailCode = if (stopped) "STOP_REQUESTED" else movement.name,
+            swipeAttempts = 1,
+            stopped = stopped,
+        )
 
     /** Walks up from the test working directory to find a repository file, so the check does not
      * depend on which directory Gradle happened to run the tests from. */

@@ -4761,6 +4761,27 @@ class CareerLaunchNavigator(private val context: Context) {
         MessageLog.i(TAG, "[DECK-NUM-TEST] If the parsed number is wrong or null, tune deckNumberColFraction / deckNumberRowYFraction / deckNumberBox*. ===== end =====")
     }
 
+    private fun borrowHostSwipeFingerprint(bitmap: Bitmap): ScreenFingerprint =
+        ScreenFingerprint(
+            recognized = LabelBorrowLastLogin.findAll(iu, sourceBitmap = bitmap).size >= 2,
+            value = hostDiagnosticPixelFingerprint(bitmap, 0.14f, 0.84f),
+        )
+
+    private fun borrowHostSwipeRequest(bitmap: Bitmap): BoundedSwipe? {
+        val startX = bitmap.width * 0.5f
+        val startY = bitmap.height * 0.72f
+        return BoundedSwipe.fromPixels(
+            scope = HostInputScope.BORROW_LIST_SCROLL,
+            startX = startX,
+            startY = startY,
+            endX = startX,
+            endY = startY - BORROW_PAGE_SWIPE_PX,
+            frameWidth = bitmap.width,
+            frameHeight = bitmap.height,
+            durationMs = 900,
+        )
+    }
+
     /**
      * Sends one host diagnostic swipe only after the Borrow Card picker is proven by its repeated
      * Last Login markers. The before/after identity is a local pixel digest of the list body. It is
@@ -4770,30 +4791,10 @@ class CareerLaunchNavigator(private val context: Context) {
     internal fun rehearseHostBorrowSwipe(injectedUtils: CustomImageUtils? = null): HostSwipeDiagnosticReport {
         prepareHostSwipeDiagnostic(injectedUtils)?.let { return unavailableHostSwipeReport(HostInputScope.BORROW_LIST_SCROLL, it) }
         val beforeBitmap = iu.getSourceBitmap()
-        val before =
-            ScreenFingerprint(
-                recognized = LabelBorrowLastLogin.findAll(iu, sourceBitmap = beforeBitmap).size >= 2,
-                value = hostDiagnosticPixelFingerprint(beforeBitmap, 0.14f, 0.84f),
-            )
-        val startX = beforeBitmap.width * 0.5f
-        val startY = beforeBitmap.height * 0.72f
-        val request =
-            BoundedSwipe.fromPixels(
-                scope = HostInputScope.BORROW_LIST_SCROLL,
-                startX = startX,
-                startY = startY,
-                endX = startX,
-                endY = startY - BORROW_PAGE_SWIPE_PX,
-                frameWidth = beforeBitmap.width,
-                frameHeight = beforeBitmap.height,
-                durationMs = 900,
-            )
+        val before = borrowHostSwipeFingerprint(beforeBitmap)
+        val request = borrowHostSwipeRequest(beforeBitmap)
         return runHostSwipeDiagnostic(HostInputScope.BORROW_LIST_SCROLL, before, request) {
-            val bitmap = iu.getSourceBitmap()
-            ScreenFingerprint(
-                recognized = LabelBorrowLastLogin.findAll(iu, sourceBitmap = bitmap).size >= 2,
-                value = hostDiagnosticPixelFingerprint(bitmap, 0.14f, 0.84f),
-            )
+            borrowHostSwipeFingerprint(iu.getSourceBitmap())
         }
     }
 
@@ -6279,8 +6280,32 @@ class CareerLaunchNavigator(private val context: Context) {
             },
             advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
             recoverService = { recoverGestureDispatch() },
+            recoverHost = { recoverBorrowScrollWithHost() },
             abort = { !BotService.isRunning || StartModule.queueStopRequested },
             log = { MessageLog.i(TAG, "[NAV] [BORROW] $it") },
+        )
+
+    /**
+     * Final Borrow-list recovery after the walker's full Accessibility budget is exhausted. The
+     * production gate performs its own fresh screen read after HEALTH and permits one host swipe.
+     * It never selects a row; MOVED only returns control to the walker for a new locator pass.
+     */
+    private fun recoverBorrowScrollWithHost(): HostScrollRecoveryReport =
+        executeProductionHostScrollRecovery(
+            scope = HostInputScope.BORROW_LIST_SCROLL,
+            modeRaw = SettingsHelper.getStringSetting("debug", "hostInputMode"),
+            pairingCodeRaw = SettingsHelper.getStringSetting("debug", "hostInputPairingCode"),
+            openTransport = { configuration -> HostAdbInputTransport(configuration, BuildConfig.VERSION_NAME) },
+            prepareSwipe = {
+                val bitmap = iu.getSourceBitmap()
+                PreparedHostSwipe(
+                    before = borrowHostSwipeFingerprint(bitmap),
+                    request = borrowHostSwipeRequest(bitmap),
+                )
+            },
+            shouldStop = { !BotService.isRunning || StartModule.queueStopRequested },
+            waitBeforeSample = { waitSafe(it) },
+            captureAfter = { borrowHostSwipeFingerprint(iu.getSourceBitmap()) },
         )
 
     /** Sanitized row text for the log: one line, bounded length. */

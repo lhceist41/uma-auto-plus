@@ -115,6 +115,8 @@ internal data class BorrowWalkResult(
      * swallowed, so up to a small cap are tried). Bounded by the walker's maxPostRebindGestures; here for
      * test and log inspectability of the recovery budget. */
     val postRebindGestures: Int = 0,
+    /** Result of the optional host rung when the Accessibility budget could not move the list. */
+    val hostRecovery: HostScrollRecoveryReport? = null,
 ) {
     val picked: Boolean get() = end == BorrowWalkEnd.PICKED
 
@@ -140,6 +142,7 @@ internal data class BorrowWalkResult(
  *    consumed the whole page budget and the rebind gate `gestures < maxPageGestures` was then unreachable);
  *  - at most ONE accessibility-service rebind per walk, followed by at most [maxPostRebindGestures]
  *    post-rebind gesture attempts (the first gesture after a MuMu rebind is often swallowed);
+ *  - at most ONE optional host recovery per walk, only after the Accessibility ladder above is exhausted;
  *  - a screen whose rows were all seen before ends the walk.
  * Every no-movement gap is bounded by [maxSwallowedRetries], by the once-per-walk rebind, and by the
  * post-rebind gesture cap, and the number of gaps is bounded by the forward advances, so no path repeats
@@ -165,6 +168,9 @@ internal class BorrowListWalker(
      * gesture after a MuMu rebind is frequently swallowed, so one retry is not enough; this stays a small
      * explicit cap so the recovery budget never becomes unbounded. */
     private val maxPostRebindGestures: Int = 2,
+    /** Optional final rung after Accessibility has exhausted its gesture, rebind, and post-rebind budgets.
+     * The callback owns all production host gates and returns MOVED only after stable Android evidence. */
+    private val recoverHost: (() -> HostScrollRecoveryReport)? = null,
     private val log: (String) -> Unit = {},
 ) {
     /**
@@ -183,9 +189,29 @@ internal class BorrowListWalker(
         var postRebindAttemptsLeft = 0
         var postRebindGesturesTotal = 0
         var postRebindWindowActive = false // true while THIS gap's post-rebind attempts are in flight
+        var hostRecoveryAttempted = false
+        var hostRecovery: HostScrollRecoveryReport? = null
+
+        fun finish(end: BorrowWalkEnd, stalled: Boolean = false): BorrowWalkResult =
+            BorrowWalkResult(
+                end = end,
+                screensInspected = screens,
+                pageGestures = gestures,
+                swallowedRetries = retriesTotal,
+                stalled = stalled,
+                recovery = recovery,
+                postRebindGestures = postRebindGesturesTotal,
+                hostRecovery = hostRecovery,
+            )
+
+        fun attemptHostRecovery(): HostScrollRecoveryReport? {
+            if (hostRecoveryAttempted || recoverHost == null) return null
+            hostRecoveryAttempted = true
+            return recoverHost.invoke().also { hostRecovery = it }
+        }
 
         while (true) {
-            if (abort()) return BorrowWalkResult(BorrowWalkEnd.ABORTED, screens, gestures, retriesTotal, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
+            if (abort()) return finish(BorrowWalkEnd.ABORTED)
 
             val screen = readScreen()
             val keys = borrowScreenKeys(screen)
@@ -223,8 +249,18 @@ internal class BorrowListWalker(
                         // A gap outlasted the ladder but no usable rebind could be performed (no live game
                         // attached, the callback declined, or readiness was not proven). Record the reason.
                         recovery = BorrowRecovery.UNAVAILABLE
+                        val host = attemptHostRecovery()
+                        if (host?.stopped == true || abort()) return finish(BorrowWalkEnd.ABORTED)
+                        if (host?.moved == true) {
+                            lastSignature = null
+                            log("accessibility recovery unavailable; one host swipe produced stable movement, continuing from a fresh screen.")
+                            continue
+                        }
                         log("gesture recovery ladder exhausted; no accessibility recovery available, marking the scroll stalled.")
-                        return BorrowWalkResult(BorrowWalkEnd.END_OF_LIST, screens, gestures, retriesTotal, stalled = true, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
+                        host?.let {
+                            log("host recovery did not move the list: ${it.execution.status}/${it.movement}/${it.detailCode}; no retry.")
+                        }
+                        return finish(BorrowWalkEnd.END_OF_LIST, stalled = true)
                     }
                 }
                 // A rebind was performed: spend up to maxPostRebindGestures bounded gesture attempts, judged
@@ -239,14 +275,26 @@ internal class BorrowListWalker(
                     advancePage(0)
                     continue
                 }
-                // The list is genuinely stuck. Two distinct reasons reach here; log the true one. Stall so
-                // absence is never mistaken for the natural end (the movement branch below).
+                // The list is still stuck after Accessibility. The optional host rung is attempted once,
+                // then the fresh screen on the next pass remains the only authority for resuming the walk.
+                val host = attemptHostRecovery()
+                if (host?.stopped == true || abort()) return finish(BorrowWalkEnd.ABORTED)
+                if (host?.moved == true) {
+                    lastSignature = null
+                    log("accessibility recovery budget spent; one host swipe produced stable movement, continuing from a fresh screen.")
+                    continue
+                }
+                // Two distinct Accessibility reasons reach here; log the true one. Stall so absence is never
+                // mistaken for the natural end, and never retry a failed or uncertain host result.
                 if (postRebindWindowActive) {
                     log("post-rebind gesture budget spent without movement; marking the scroll stalled.")
                 } else {
                     log("the once-per-walk accessibility recovery was already spent at an earlier gap; marking the scroll stalled.")
                 }
-                return BorrowWalkResult(BorrowWalkEnd.END_OF_LIST, screens, gestures, retriesTotal, stalled = true, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
+                host?.let {
+                    log("host recovery did not move the list: ${it.execution.status}/${it.movement}/${it.detailCode}; no retry.")
+                }
+                return finish(BorrowWalkEnd.END_OF_LIST, stalled = true)
             }
             retriesThisGap = 0
             postRebindAttemptsLeft = 0 // movement ended the post-rebind window; a later gap gets no fresh attempts
@@ -254,20 +302,20 @@ internal class BorrowListWalker(
             lastSignature = signature
 
             if (screens == 0 && keys.isEmpty()) {
-                return BorrowWalkResult(BorrowWalkEnd.EMPTY_PICKER, screens, gestures, retriesTotal, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
+                return finish(BorrowWalkEnd.EMPTY_PICKER)
             }
 
             screens++
             if (visit(screen, screens - 1)) {
-                return BorrowWalkResult(BorrowWalkEnd.PICKED, screens, gestures, retriesTotal, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
+                return finish(BorrowWalkEnd.PICKED)
             }
 
             // Every row on this screen was already read on an earlier one: nothing further to find.
             if (keys.none { seen.add(it) }) {
-                return BorrowWalkResult(BorrowWalkEnd.END_OF_LIST, screens, gestures, retriesTotal, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
+                return finish(BorrowWalkEnd.END_OF_LIST)
             }
             if (gestures >= maxPageGestures) {
-                return BorrowWalkResult(BorrowWalkEnd.MAX_PAGES, screens, gestures, retriesTotal, recovery = recovery, postRebindGestures = postRebindGesturesTotal)
+                return finish(BorrowWalkEnd.MAX_PAGES)
             }
             advancePage(0)
             gestures++
