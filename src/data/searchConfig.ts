@@ -774,6 +774,12 @@ const searchConfig: SearchOption[] = [
         page: "DebugSettings",
     },
     {
+        id: "debug-stop-before-borrow-tap",
+        title: "Stop Before Borrow Tap",
+        description: "Stops a normal launch after a fresh Borrow Card row is accepted and before it is tapped. Off by default.",
+        page: "DebugSettings",
+    },
+    {
         id: "debug-host-borrow-swipe-test",
         title: "Start Host Borrow List Swipe Test",
         description: "Sends one bounded host swipe only from a recognized Borrow Card list, verifies movement from a fresh Android capture, and stops without selecting anything.",

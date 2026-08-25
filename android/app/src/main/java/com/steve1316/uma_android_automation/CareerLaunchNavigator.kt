@@ -539,6 +539,7 @@ class CareerLaunchNavigator(private val context: Context) {
     private var borrowDuplicateReplacements: Int = 0
     private val borrowExcludedCharacters = mutableSetOf<String>()
     private var lastBorrowPickEntry: String? = null
+    private var borrowPreTapValidationGate = BorrowPreTapValidationGate()
 
     // The capture the borrow list walker read its current screen from. The page-advance swipe
     // needs the capture's dimensions for its coordinates, and reusing the screen's own capture
@@ -697,6 +698,10 @@ class CareerLaunchNavigator(private val context: Context) {
         borrowDuplicateReplacements = 0
         borrowExcludedCharacters.clear()
         lastBorrowPickEntry = null
+        borrowPreTapValidationGate =
+            BorrowPreTapValidationGate(
+                SettingsHelper.getBooleanSetting("debug", BORROW_PRETAP_VALIDATION_SETTING, false),
+            )
         forceBorrowReplacement = false
         // Mint the launch-transaction id for THIS launch pass. It correlates a lineage read taken on
         // Legacy Select (which happens here, before the new career attaches) to the career that
@@ -4430,6 +4435,42 @@ class CareerLaunchNavigator(private val context: Context) {
         return null
     }
 
+    /** The single production boundary between accepted Borrow evidence and a row tap. */
+    private fun tapAcceptedBorrowRow(
+        centerY: Double,
+        identity: String,
+        actionName: String,
+    ): BorrowTapResult {
+        val result =
+            borrowPreTapValidationGate.attempt(AcceptedBorrowRow(centerY, identity)) { row ->
+                CoordinateTap.tap(gestureUtils, 540.0, row.centerY, actionName)
+            }
+        when (result.status) {
+            BorrowTapStatus.TAPPED ->
+                MessageLog.i(TAG, "[NAV] [BORROW] TAPPED accepted row \"${borrowLogText(identity)}\" at (540, ${centerY.toInt()}).")
+            BorrowTapStatus.LOCATED_VALIDATED_TAP_SUPPRESSED ->
+                MessageLog.i(
+                    TAG,
+                    "[NAV] [BORROW-VALIDATION] LOCATED_VALIDATED_TAP_SUPPRESSED: accepted \"${borrowLogText(identity)}\" at fresh coordinate (540, ${centerY.toInt()}); no Borrow row tap was sent.",
+                )
+            BorrowTapStatus.WAITING_FOR_ACCEPTED_ROW ->
+                error("accepted Borrow row unexpectedly missing at the pre-tap boundary")
+        }
+        return result
+    }
+
+    private fun borrowTapValidationStopped(result: BorrowTapResult): TransitionResult.Failed {
+        check(result.suppressed)
+        return TransitionResult.Failed(
+            reason =
+                "LOCATED_VALIDATED_TAP_SUPPRESSED: a fresh Borrow row was accepted and its tap was suppressed by the armed validation setting. " +
+                    "No card was selected and Start Career was not pressed.",
+            transition = "BORROW_ROW_ACCEPTED -> BORROW_ROW_TAP",
+            isRecoverable = true,
+            recommendedAction = "Review the validation evidence, then disable Stop Before Borrow Tap before the next production launch.",
+        )
+    }
+
     /**
      * Fills the empty friend slot: opens the Borrow Card picker and selects a card (Smart Borrow on
      * the first attempt, else the validated default pick). Bounded by [friendSlotFillAttempts]. The
@@ -4459,9 +4500,13 @@ class CareerLaunchNavigator(private val context: Context) {
             // pick instead of repeating the same one. (A pick whose character is already in
             // the deck DOES commit - the duplicate check below handles that.)
             if (SettingsHelper.getBooleanSetting("runQueue", "enableSmartBorrow", true) && friendSlotFillAttempts == 1) {
-                if (trySmartBorrowPick()) {
-                    waitSafe(2.0)
-                    return TransitionResult.Continue
+                when (val pick = trySmartBorrowPick()) {
+                    SmartBorrowPickOutcome.Tapped -> {
+                        waitSafe(2.0)
+                        return TransitionResult.Continue
+                    }
+                    SmartBorrowPickOutcome.NoPick -> {}
+                    is SmartBorrowPickOutcome.TapSuppressed -> return borrowTapValidationStopped(pick.result)
                 }
                 // The picker was closed on failure; the next iteration reopens it and
                 // attempt 2 runs the default pick.
@@ -4475,8 +4520,9 @@ class CareerLaunchNavigator(private val context: Context) {
             // card details.
             val (preferredLocation, _) = IconBorrowPreferredCard.find(iu)
             if (preferredLocation != null) {
-                MessageLog.i(TAG, "[NAV] Borrow Card list open. Preferred card found - selecting its row at (540, ${preferredLocation.y.toInt()})...")
-                CoordinateTap.tap(gestureUtils, 540.0, preferredLocation.y, "borrow_preferred_row")
+                MessageLog.i(TAG, "[NAV] Borrow Card list open. Preferred card row accepted at (540, ${preferredLocation.y.toInt()}).")
+                val tap = tapAcceptedBorrowRow(preferredLocation.y, "preferred template row", "borrow_preferred_row")
+                if (tap.suppressed) return borrowTapValidationStopped(tap)
             } else {
                 // Validated default pick: take the first row that is neither pill-tagged nor an
                 // excluded character (the active trainee included). The old blind first-row tap
@@ -4493,7 +4539,8 @@ class CareerLaunchNavigator(private val context: Context) {
                     }
                 MessageLog.i(
                     TAG,
-                    "[NAV] [BORROW] Default pick scan read ${selection.walk.screensInspected} screen(s) over ${selection.walk.pageGestures} page gesture(s); ended ${selection.walk.end}.",
+                    "[NAV] [BORROW] Default pick scan read ${selection.walk.screensInspected} screen(s) over ${selection.walk.pageGestures} page gesture(s); " +
+                        "ended ${if (selection.walk.end == BorrowWalkEnd.PICKED) "ROW_ACCEPTED" else selection.walk.end}.",
                 )
                 val pick = selection.row
                 if (pick == null) {
@@ -4506,10 +4553,11 @@ class CareerLaunchNavigator(private val context: Context) {
                 }
                 MessageLog.i(
                     TAG,
-                    "[NAV] Borrow Card list open. Preferred card not visible - selecting the first valid card \"${borrowLogText(pick.second)}\" at (540, ${pick.first.toInt()})...",
+                    "[NAV] Borrow Card list open. Preferred card not visible; first valid row \"${borrowLogText(pick.second)}\" accepted at (540, ${pick.first.toInt()}).",
                 )
+                val tap = tapAcceptedBorrowRow(pick.first, pick.second, "borrow_card_first_valid_row")
+                if (tap.suppressed) return borrowTapValidationStopped(tap)
                 lastBorrowPickEntry = pick.second
-                CoordinateTap.tap(gestureUtils, 540.0, pick.first, "borrow_card_first_valid_row")
             }
             waitSafe(2.0)
         } else {
@@ -4573,12 +4621,16 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.w(TAG, "[NAV] [BORROW] Tapped the friend slot but the Borrow Card list did not appear. Re-detecting...")
             return TransitionResult.Continue
         }
-        if (trySmartBorrowPick(replaceMode = true)) {
-            MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow selected valid replacement.")
-            waitSafe(2.0)
-        } else {
-            MessageLog.w(TAG, "[NAV] [BORROW] No replacement candidate found - the next pass retries until the replacement budget runs out.")
-            waitSafe(1.5)
+        when (val pick = trySmartBorrowPick(replaceMode = true)) {
+            SmartBorrowPickOutcome.Tapped -> {
+                MessageLog.i(TAG, "[NAV] [BORROW] Smart Borrow selected valid replacement.")
+                waitSafe(2.0)
+            }
+            SmartBorrowPickOutcome.NoPick -> {
+                MessageLog.w(TAG, "[NAV] [BORROW] No replacement candidate found - the next pass retries until the replacement budget runs out.")
+                waitSafe(1.5)
+            }
+            is SmartBorrowPickOutcome.TapSuppressed -> return borrowTapValidationStopped(pick.result)
         }
         return TransitionResult.Continue
     }
@@ -6070,10 +6122,18 @@ class CareerLaunchNavigator(private val context: Context) {
      *   the empty-slot icon, and when no curated card is available any untagged row of a
      *   character not yet refused is taken - an arbitrary legal borrow beats one the game will
      *   not start with.
-     * @return true when a card was tapped; on false the picker has been closed so the caller's
-     *   retry starts clean with the default pick.
+     * @return A typed outcome that distinguishes a tap from an armed validation stop. [NoPick]
+     *   means the picker has been closed so the caller's retry starts clean with the default pick.
      */
-    private fun trySmartBorrowPick(replaceMode: Boolean = false): Boolean {
+    private sealed class SmartBorrowPickOutcome {
+        object Tapped : SmartBorrowPickOutcome()
+
+        object NoPick : SmartBorrowPickOutcome()
+
+        data class TapSuppressed(val result: BorrowTapResult) : SmartBorrowPickOutcome()
+    }
+
+    private fun trySmartBorrowPick(replaceMode: Boolean = false): SmartBorrowPickOutcome {
         val allPriorities = mutableListOf<String>()
         val pinnedName = SettingsHelper.getStringSetting("runQueue", "preferredBorrowName").trim().takeIf { it.isNotEmpty() }
         pinnedName?.let { allPriorities.add(it) }
@@ -6096,7 +6156,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // be borrowed this launch. Treating them as unreachable lets the early tap settle for
         // the best card that is actually legal instead of scanning on for a blocked one.
         val unreachable = mutableSetOf<Int>()
-        var tapped = false
+        var pickOutcome: SmartBorrowPickOutcome? = null
         val discovery =
             borrowWalker().walk { screen, page ->
                 val rows = screen.rows
@@ -6122,17 +6182,17 @@ class CareerLaunchNavigator(private val context: Context) {
                     // The best card that can still legally be borrowed is on screen - take it now.
                     val (centerY, text) = rows[pageBest.second]
                     if (borrowTapApproved(text, priorities[pageBest.first], borrowExcludedCharacters, borrowLaunchTraineeTarget)) {
-                        MessageLog.i(TAG, "[NAV] [BORROW] \"${priorities[pageBest.first]}\" found. Selecting it at (540, ${centerY.toInt()}).")
-                        lastBorrowPickEntry = priorities[pageBest.first]
-                        CoordinateTap.tap(gestureUtils, 540.0, centerY, "borrow_smart_row")
-                        tapped = true
+                        MessageLog.i(TAG, "[NAV] [BORROW] \"${priorities[pageBest.first]}\" found and accepted at (540, ${centerY.toInt()}).")
+                        val tap = tapAcceptedBorrowRow(centerY, text, "borrow_smart_row")
+                        pickOutcome = if (tap.suppressed) SmartBorrowPickOutcome.TapSuppressed(tap) else SmartBorrowPickOutcome.Tapped
+                        if (tap.tapped) lastBorrowPickEntry = priorities[pageBest.first]
                         return@walk true
                     }
                     MessageLog.w(TAG, "[NAV] [BORROW] The row offered as \"${priorities[pageBest.first]}\" failed the pre-tap identity check - leaving it and scanning on.")
                 }
                 false
             }
-        if (tapped) return true
+        pickOutcome?.let { return it }
         if (discovery.end == BorrowWalkEnd.EMPTY_PICKER) {
             MessageLog.w(TAG, "[NAV] [BORROW] No borrow rows detected on the opened picker.")
         }
@@ -6144,14 +6204,15 @@ class CareerLaunchNavigator(private val context: Context) {
             // search the whole list for one instead of settling for whatever the last screen shows.
             if (replaceMode) {
                 val anyValid = reopenAndSelect(replaceMode, "any borrowable card", "no curated card is on offer")
-                if (!anyValid.reopened) return false
+                if (!anyValid.reopened) return SmartBorrowPickOutcome.NoPick
+                anyValid.tapResult?.takeIf { it.suppressed }?.let { return SmartBorrowPickOutcome.TapSuppressed(it) }
                 anyValid.row?.let {
                     lastBorrowPickEntry = it.second
-                    return true
+                    return SmartBorrowPickOutcome.Tapped
                 }
             }
             ButtonClose.click(iu)
-            return false
+            return SmartBorrowPickOutcome.NoPick
         }
 
         // Reopen to reset the list to the top deterministically, then SEARCH for the card again
@@ -6167,7 +6228,7 @@ class CareerLaunchNavigator(private val context: Context) {
         //     Black" on another, and only the first of those normalizes to a match. A re-read of
         //     the same page can therefore miss a card that is sitting right there.
         // Re-scanning from the top costs one extra pass and survives both.
-        MessageLog.i(TAG, "[NAV] [BORROW] Best available card is \"${priorities[bestEntry]}\" (first seen on page $bestPage). Reopening the picker to select it...")
+        MessageLog.i(TAG, "[NAV] [BORROW] Best available card is \"${priorities[bestEntry]}\" (first seen on page $bestPage). Reopening the picker to revalidate it...")
         val target = priorities[bestEntry]
         // The re-scan also records what else the list is offering. If the chosen card has gone,
         // that record is what makes a sane second choice possible without another full pass.
@@ -6183,10 +6244,11 @@ class CareerLaunchNavigator(private val context: Context) {
                 },
                 accept = { text -> borrowTapApproved(text, target, borrowExcludedCharacters, borrowLaunchTraineeTarget) },
             )
-        if (!targeted.reopened) return false
+        if (!targeted.reopened) return SmartBorrowPickOutcome.NoPick
+        targeted.tapResult?.takeIf { it.suppressed }?.let { return SmartBorrowPickOutcome.TapSuppressed(it) }
         if (targeted.row != null) {
             lastBorrowPickEntry = target
-            return true
+            return SmartBorrowPickOutcome.Tapped
         }
 
         // The chosen card is not reachable any more: the pool reorders between two opens seconds
@@ -6197,37 +6259,43 @@ class CareerLaunchNavigator(private val context: Context) {
             val alternative = priorities[bestSeenRank]
             MessageLog.w(
                 TAG,
-                "[NAV] [BORROW] \"$target\" was not found in the re-scan (the list reordered). The best card still on offer is \"$alternative\" - selecting that instead.",
+                "[NAV] [BORROW] \"$target\" was not found in the re-scan (the list reordered). The best card still on offer is \"$alternative\" - revalidating that instead.",
             )
             val retargeted =
                 reopenAndSelect(replaceMode, "\"$alternative\"", "the chosen card disappeared after a reorder") { text ->
                     val rank = smartBorrowBestMatch(listOf(text), priorities)?.first
                     rank != null && rank <= bestSeenRank && borrowTapApproved(text, null, borrowExcludedCharacters, borrowLaunchTraineeTarget)
                 }
-            if (!retargeted.reopened) return false
+            if (!retargeted.reopened) return SmartBorrowPickOutcome.NoPick
+            retargeted.tapResult?.takeIf { it.suppressed }?.let { return SmartBorrowPickOutcome.TapSuppressed(it) }
             retargeted.row?.let {
                 lastBorrowPickEntry = it.second
-                return true
+                return SmartBorrowPickOutcome.Tapped
             }
             MessageLog.w(TAG, "[NAV] [BORROW] \"$alternative\" was gone from the list as well.")
         }
 
         if (replaceMode) {
             val anyValid = reopenAndSelect(replaceMode, "any borrowable card", "no curated card survived the reorder")
-            if (!anyValid.reopened) return false
+            if (!anyValid.reopened) return SmartBorrowPickOutcome.NoPick
+            anyValid.tapResult?.takeIf { it.suppressed }?.let { return SmartBorrowPickOutcome.TapSuppressed(it) }
             anyValid.row?.let {
                 lastBorrowPickEntry = it.second
-                return true
+                return SmartBorrowPickOutcome.Tapped
             }
         }
         MessageLog.w(TAG, "[NAV] [BORROW] No curated card could be selected after re-scanning the whole list. Falling back to the default pick.")
         ButtonClose.click(iu)
-        return false
+        return SmartBorrowPickOutcome.NoPick
     }
 
-    /** Outcome of one reopen-and-select pass: [row] is the row that was tapped, and [reopened] is
-     * false when the picker could not be reopened at all (nothing was scanned or tapped). */
-    private data class BorrowReselect(val row: Pair<Double, String>?, val reopened: Boolean)
+    /** Outcome of one reopen-and-select pass: [row] is the freshly accepted row and [tapResult]
+     * says whether it was tapped or suppressed. [reopened] is false when no scan occurred. */
+    private data class BorrowReselect(
+        val row: Pair<Double, String>?,
+        val reopened: Boolean,
+        val tapResult: BorrowTapResult? = null,
+    )
 
     /**
      * Closes the picker, reopens it (which resets the list to the top), then walks the WHOLE
@@ -6259,12 +6327,13 @@ class CareerLaunchNavigator(private val context: Context) {
         val walk = selection.walk
         MessageLog.i(
             TAG,
-            "[NAV] [BORROW] Re-selection scan for $intent ($because) read ${walk.screensInspected} screen(s) over ${walk.pageGestures} page gesture(s); ended ${walk.end}.",
+            "[NAV] [BORROW] Re-selection scan for $intent ($because) read ${walk.screensInspected} screen(s) over ${walk.pageGestures} page gesture(s); " +
+                "ended ${if (walk.end == BorrowWalkEnd.PICKED) "ROW_ACCEPTED" else walk.end}.",
         )
         val row = selection.row ?: return BorrowReselect(null, reopened = true)
-        MessageLog.i(TAG, "[NAV] [BORROW] Selecting \"${borrowLogText(row.second)}\" at (540, ${row.first.toInt()}).")
-        CoordinateTap.tap(gestureUtils, 540.0, row.first, "borrow_smart_row")
-        return BorrowReselect(row, reopened = true)
+        MessageLog.i(TAG, "[NAV] [BORROW] Accepted \"${borrowLogText(row.second)}\" at (540, ${row.first.toInt()}).")
+        val tap = tapAcceptedBorrowRow(row.first, row.second, "borrow_smart_row")
+        return BorrowReselect(row, reopened = true, tapResult = tap)
     }
 
     /** The bounded list walker wired to this navigator's capture, swipe, and stop checks. One
@@ -7407,10 +7476,10 @@ class CareerLaunchNavigator(private val context: Context) {
     private data class RevalidatedBorrowSelection(
         val tapped: Boolean,
         val status: Status,
-        val tappedRow: BorrowRowObservation? = null,
+        val acceptedRow: BorrowRowObservation? = null,
         val rebound: Boolean = false,
     ) {
-        enum class Status { TAPPED, CARD_NOT_FOUND, ROW_REVALIDATION_FAILED }
+        enum class Status { TAPPED, LOCATED_VALIDATED_TAP_SUPPRESSED, CARD_NOT_FOUND, ROW_REVALIDATION_FAILED }
     }
 
     /**
@@ -7479,10 +7548,15 @@ class CareerLaunchNavigator(private val context: Context) {
             TAG,
             "[LAUNCH-GATE] pre-tap revalidation OK (${if (rebound) "EQUIVALENT_SOURCE_REBOUND" else "EXACT_SOURCE_REVALIDATED"}): " +
                 "\"${chosen.observation.character ?: "-"} [${chosen.observation.outfit ?: "-"}]\" lb=${chosen.observation.limitBreakIndex ?: "-"} owner=${chosen.observation.ownerAlias ?: "-"}. " +
-                "Tapping fresh coordinate (540, ${chosen.centerY.toInt()}).",
+                "Fresh coordinate (540, ${chosen.centerY.toInt()}) accepted for the production pre-tap boundary.",
         )
-        CoordinateTap.tap(gestureUtils, 540.0, chosen.centerY, "a3r2_launch_borrow_select")
-        return RevalidatedBorrowSelection(true, RevalidatedBorrowSelection.Status.TAPPED, chosen.observation, rebound)
+        val identity = "${chosen.observation.character ?: "-"} [${chosen.observation.outfit ?: "-"}] lb=${chosen.observation.limitBreakIndex ?: "-"}"
+        val tap = tapAcceptedBorrowRow(chosen.centerY, identity, "a3r2_launch_borrow_select")
+        return if (tap.suppressed) {
+            RevalidatedBorrowSelection(false, RevalidatedBorrowSelection.Status.LOCATED_VALIDATED_TAP_SUPPRESSED, chosen.observation, rebound)
+        } else {
+            RevalidatedBorrowSelection(true, RevalidatedBorrowSelection.Status.TAPPED, chosen.observation, rebound)
+        }
     }
 
     /**
@@ -7571,7 +7645,7 @@ class CareerLaunchNavigator(private val context: Context) {
             }
         MessageLog.i(
             TAG,
-            "[LAUNCH-GATE] fresh locate RESOLVED ($sourceKind): \"${located.character ?: "-"} [${located.outfit ?: "-"}]\" lb=${located.limitBreakIndex ?: "-"} (intent #${intent!!.supportCardId}, ${intent.recommendationSource}, digest ${intent.recommendationEvidenceDigest ?: "-"}). Selecting it...",
+            "[LAUNCH-GATE] fresh locate RESOLVED ($sourceKind): \"${located.character ?: "-"} [${located.outfit ?: "-"}]\" lb=${located.limitBreakIndex ?: "-"} (intent #${intent!!.supportCardId}, ${intent.recommendationSource}, digest ${intent.recommendationEvidenceDigest ?: "-"}). Beginning exact row revalidation...",
         )
 
         // Owned-deck integrity anchor + TP evidence, read before the selection touches anything.
@@ -7590,6 +7664,21 @@ class CareerLaunchNavigator(private val context: Context) {
         }
         waitSafe(2.0)
         val selection = selectBorrowByIdentityRevalidated(intent!!)
+        if (selection.status == RevalidatedBorrowSelection.Status.LOCATED_VALIDATED_TAP_SUPPRESSED) {
+            val pre = LaunchPreconditions(intentPresent = true, intentBuildAware = true, freshLocateUnique = true, borrowSelected = false)
+            return BuildAwareLaunchResult(
+                state = LaunchTransactionState.BORROW_TAP_SUPPRESSED,
+                preconditions = pre,
+                furthestStage = LaunchTransactionState.BORROW_TAP_SUPPRESSED,
+                intent = intent,
+                locateMatch = match,
+                rowsObserved = rows,
+                slotCommitted = false,
+                deckNumberAtStart = deckAtStart,
+                tpRawAtStart = tpRawStart,
+                reason = "LOCATED_VALIDATED_TAP_SUPPRESSED: the intended row passed fresh exact or equivalent revalidation, then the armed validation boundary suppressed its tap",
+            )
+        }
         if (!selection.tapped) {
             ButtonClose.click(iu)
             waitSafe(1.5)

@@ -254,6 +254,8 @@ export interface Settings {
         hostInputMode: string
         // Pairing code emitted by the Windows helper. Stored in the app-private settings database and masked in the UI.
         hostInputPairingCode: string
+        // Stops a production launch after a fresh Borrow row is accepted but before the row is tapped. Off by default.
+        debugMode_stopBeforeBorrowTap: boolean
         // Sends one bounded host swipe from a recognized Borrow Card list, verifies movement from a fresh Android capture, and stops without selecting anything.
         debugMode_startHostBorrowSwipeTest: boolean
         // Sends one bounded host swipe from a recognized Legacy Sparks list, verifies movement from a fresh Android capture, and stops without continuing the launch.
@@ -797,6 +799,7 @@ export const defaultSettings: Settings = {
         debugMode_startDeckNumberReadTest: false,
         hostInputMode: "accessibility_only",
         hostInputPairingCode: "",
+        debugMode_stopBeforeBorrowTap: false,
         debugMode_startHostBorrowSwipeTest: false,
         debugMode_startHostLegacySwipeTest: false,
         debugMode_startSupportDeckRehearsalTest: false,

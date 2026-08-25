@@ -100,6 +100,15 @@ const DebugSettings = () => {
         void saveSettingsImmediate(nextSettings)
     }
 
+    const updateBorrowValidationSetting = (checked: boolean) => {
+        const nextSettings = {
+            ...bsc.settings,
+            debug: { ...bsc.settings.debug, debugMode_stopBeforeBorrowTap: checked },
+        }
+        bsc.setSettings(nextSettings)
+        void saveSettingsImmediate(nextSettings)
+    }
+
     const [deviceIp, setDeviceIp] = useState<string>("<phone-ip>")
     const [accessibilityStatus, setAccessibilityStatus] = useState<{ enabled: boolean; active: boolean } | null>(null)
     const [isRefreshing, setIsRefreshing] = useState(false)
@@ -521,6 +530,21 @@ const DebugSettings = () => {
                                     </View>
                                 </View>
                             </InfoContainer>
+
+                            <Separator style={{ marginVertical: 16 }} />
+
+                            <CustomTitle
+                                title="Borrow Selection Validation"
+                                description="Optional production safety check that stops after a fresh Borrow Card row is accepted and before it is tapped."
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-stop-before-borrow-tap"
+                                checked={bsc.settings.debug.debugMode_stopBeforeBorrowTap}
+                                onCheckedChange={updateBorrowValidationSetting}
+                                label="Stop Before Borrow Tap"
+                                description="Off by default. When enabled, the normal launch may scan and revalidate the Borrow list, then stops before selecting the accepted card. No fallback card is selected and Start Career is not pressed."
+                            />
 
                             <Separator style={{ marginVertical: 16 }} />
 

@@ -40,6 +40,10 @@ enum class LaunchTransactionState {
      * borrow), but the reason is a traversal failure, not a stale pool. */
     BORROW_LOCATOR_STALLED,
 
+    /** A fresh exact or equivalent Borrow row was revalidated, then the explicitly armed
+     * validation boundary suppressed its tap. No card is selected and launch cannot continue. */
+    BORROW_TAP_SUPPRESSED,
+
     /** The exact intended row was tapped and the friend slot is filled. */
     BORROW_SELECTED,
 

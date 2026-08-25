@@ -167,8 +167,9 @@ class BuildAwareLaunchProductionTest {
             assertTrue(body.contains("rowMatchesIntentIdentity("), "revalidation re-checks character, title, and limit break")
             assertTrue(body.contains("ROW_REVALIDATION_FAILED"), "a vanished or LB-changed row fails closed with no tap")
             val readIdx = body.indexOf("readBorrowPoolRichRows(")
-            val tapIdx = body.indexOf("CoordinateTap.tap(")
-            assertTrue(readIdx in 0 until tapIdx, "the fresh re-read must precede the tap")
+            val boundaryIdx = body.indexOf("tapAcceptedBorrowRow(")
+            assertTrue(readIdx in 0 until boundaryIdx, "the fresh re-read must precede the shared pre-tap boundary")
+            assertFalse(body.contains("CoordinateTap.tap("), "build-aware revalidation cannot bypass the shared pre-tap boundary")
         }
     }
 
