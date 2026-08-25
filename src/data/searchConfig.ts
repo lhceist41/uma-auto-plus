@@ -780,6 +780,12 @@ const searchConfig: SearchOption[] = [
         page: "DebugSettings",
     },
     {
+        id: "debug-swallow-borrow-accessibility-scroll",
+        title: "Swallow Borrow Accessibility Scroll",
+        description: "Validation-only fault that suppresses production Borrow-list Accessibility swipes without enabling host input. Off by default.",
+        page: "DebugSettings",
+    },
+    {
         id: "debug-host-borrow-swipe-test",
         title: "Start Host Borrow List Swipe Test",
         description: "Sends one bounded host swipe only from a recognized Borrow Card list, verifies movement from a fresh Android capture, and stops without selecting anything.",

@@ -109,6 +109,15 @@ const DebugSettings = () => {
         void saveSettingsImmediate(nextSettings)
     }
 
+    const updateBorrowAccessibilityFaultSetting = (checked: boolean) => {
+        const nextSettings = {
+            ...bsc.settings,
+            debug: { ...bsc.settings.debug, debugMode_swallowBorrowAccessibilityScroll: checked },
+        }
+        bsc.setSettings(nextSettings)
+        void saveSettingsImmediate(nextSettings)
+    }
+
     const [deviceIp, setDeviceIp] = useState<string>("<phone-ip>")
     const [accessibilityStatus, setAccessibilityStatus] = useState<{ enabled: boolean; active: boolean } | null>(null)
     const [isRefreshing, setIsRefreshing] = useState(false)
@@ -544,6 +553,15 @@ const DebugSettings = () => {
                                 onCheckedChange={updateBorrowValidationSetting}
                                 label="Stop Before Borrow Tap"
                                 description="Off by default. When enabled, the normal launch may scan and revalidate the Borrow list, then stops before selecting the accepted card. No fallback card is selected and Start Career is not pressed."
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-swallow-borrow-accessibility-scroll"
+                                checked={bsc.settings.debug.debugMode_swallowBorrowAccessibilityScroll}
+                                onCheckedChange={updateBorrowAccessibilityFaultSetting}
+                                label="Swallow Borrow Accessibility Scroll"
+                                description="Validation-only and off by default. Suppresses only production Borrow-list Accessibility swipes so the existing stronger gesture, service rebind, and optional host recovery ladder can be exercised. It does not suppress taps or enable host input."
+                                style={{ marginTop: 10 }}
                             />
 
                             <Separator style={{ marginVertical: 16 }} />

@@ -256,6 +256,8 @@ export interface Settings {
         hostInputPairingCode: string
         // Stops a production launch after a fresh Borrow row is accepted but before the row is tapped. Off by default.
         debugMode_stopBeforeBorrowTap: boolean
+        // Validation-only fault that swallows production Borrow-list Accessibility scroll dispatch. Off by default.
+        debugMode_swallowBorrowAccessibilityScroll: boolean
         // Sends one bounded host swipe from a recognized Borrow Card list, verifies movement from a fresh Android capture, and stops without selecting anything.
         debugMode_startHostBorrowSwipeTest: boolean
         // Sends one bounded host swipe from a recognized Legacy Sparks list, verifies movement from a fresh Android capture, and stops without continuing the launch.
@@ -800,6 +802,7 @@ export const defaultSettings: Settings = {
         hostInputMode: "accessibility_only",
         hostInputPairingCode: "",
         debugMode_stopBeforeBorrowTap: false,
+        debugMode_swallowBorrowAccessibilityScroll: false,
         debugMode_startHostBorrowSwipeTest: false,
         debugMode_startHostLegacySwipeTest: false,
         debugMode_startSupportDeckRehearsalTest: false,

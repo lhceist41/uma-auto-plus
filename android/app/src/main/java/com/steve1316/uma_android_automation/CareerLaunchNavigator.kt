@@ -540,6 +540,7 @@ class CareerLaunchNavigator(private val context: Context) {
     private val borrowExcludedCharacters = mutableSetOf<String>()
     private var lastBorrowPickEntry: String? = null
     private var borrowPreTapValidationGate = BorrowPreTapValidationGate()
+    private var borrowAccessibilityScrollFaultInjector = BorrowAccessibilityScrollFaultInjector()
 
     // The capture the borrow list walker read its current screen from. The page-advance swipe
     // needs the capture's dimensions for its coordinates, and reusing the screen's own capture
@@ -701,6 +702,14 @@ class CareerLaunchNavigator(private val context: Context) {
         borrowPreTapValidationGate =
             BorrowPreTapValidationGate(
                 SettingsHelper.getBooleanSetting("debug", BORROW_PRETAP_VALIDATION_SETTING, false),
+            )
+        borrowAccessibilityScrollFaultInjector =
+            BorrowAccessibilityScrollFaultInjector(
+                armed =
+                    borrowAccessibilityScrollFaultEnabled(
+                        SettingsHelper.getStringSetting("debug", BORROW_ACCESSIBILITY_SCROLL_FAULT_SETTING),
+                    ),
+                log = { MessageLog.i(TAG, "[NAV] [BORROW-FAULT] $it") },
             )
         forceBorrowReplacement = false
         // Mint the launch-transaction id for THIS launch pass. It correlates a lineage read taken on
@@ -6347,9 +6356,17 @@ class CareerLaunchNavigator(private val context: Context) {
                 lastBorrowListBitmap = bitmap
                 borrowRowsOnScreen(bitmap)
             },
-            advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
+            advancePage = { attempt -> lastBorrowListBitmap?.let { advanceProductionBorrowList(it, attempt) } },
             recoverService = { recoverGestureDispatch() },
-            recoverHost = { recoverBorrowScrollWithHost() },
+            recoverHost = {
+                recoverBorrowScrollWithHost().also { report ->
+                    MessageLog.i(
+                        TAG,
+                        "[NAV] [BORROW] Production host recovery rung completed after Accessibility exhaustion: " +
+                            "${report.execution.status}/${report.movement}/${report.detailCode}.",
+                    )
+                }
+            },
             abort = { !BotService.isRunning || StartModule.queueStopRequested },
             log = { MessageLog.i(TAG, "[NAV] [BORROW] $it") },
         )
@@ -6461,7 +6478,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * further over longer time) so a picker that ate a short drag gets a stronger one on retry rather than
      * the identical gesture that just failed. All variants stay within the frame.
      */
-    private fun swipeBorrowList(bitmap: Bitmap, attempt: Int = 0) {
+    private fun dispatchBorrowListSwipe(bitmap: Bitmap, attempt: Int) {
         val x = bitmap.width * 0.5f
         when (attempt) {
             0 -> {
@@ -6482,6 +6499,19 @@ class CareerLaunchNavigator(private val context: Context) {
                 gestureUtils.swipe(x, from, x, from - delta, duration = 1300L)
             }
         }
+    }
+
+    /** Production Borrow traversal keeps its normal settle delay even when validation swallows dispatch. */
+    private fun advanceProductionBorrowList(bitmap: Bitmap, attempt: Int) {
+        borrowAccessibilityScrollFaultInjector.dispatch(attempt) {
+            dispatchBorrowListSwipe(bitmap, attempt)
+        }
+        waitSafe(1.3)
+    }
+
+    /** Non-production Borrow diagnostics use the real Accessibility swipe path unchanged. */
+    private fun swipeBorrowList(bitmap: Bitmap, attempt: Int = 0) {
+        dispatchBorrowListSwipe(bitmap, attempt)
         waitSafe(1.3)
     }
 
