@@ -780,6 +780,12 @@ const searchConfig: SearchOption[] = [
         page: "DebugSettings",
     },
     {
+        id: "debug-stop-after-borrow-selection-verified",
+        title: "Stop After Borrow Selection Verification",
+        description: "Stops after a real Borrow selection is freshly verified as committed and before Start Career. Off by default.",
+        page: "DebugSettings",
+    },
+    {
         id: "debug-swallow-borrow-accessibility-scroll",
         title: "Swallow Borrow Accessibility Scroll",
         description: "Validation-only fault that suppresses production Borrow-list Accessibility swipes without enabling host input. Off by default.",

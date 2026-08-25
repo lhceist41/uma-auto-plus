@@ -540,6 +540,9 @@ class CareerLaunchNavigator(private val context: Context) {
     private val borrowExcludedCharacters = mutableSetOf<String>()
     private var lastBorrowPickEntry: String? = null
     private var borrowPreTapValidationGate = BorrowPreTapValidationGate()
+    private var borrowPostSelectionValidationGate = BorrowPostSelectionValidationGate()
+    private var borrowPostSelectionTpRawAtStart: String? = null
+    private var lastBorrowPostSelectionValidationResult: BorrowPostSelectionResult? = null
     private var borrowAccessibilityScrollFaultInjector = BorrowAccessibilityScrollFaultInjector()
 
     // The capture the borrow list walker read its current screen from. The page-advance swipe
@@ -703,6 +706,12 @@ class CareerLaunchNavigator(private val context: Context) {
             BorrowPreTapValidationGate(
                 SettingsHelper.getBooleanSetting("debug", BORROW_PRETAP_VALIDATION_SETTING, false),
             )
+        borrowPostSelectionValidationGate =
+            BorrowPostSelectionValidationGate(
+                SettingsHelper.getBooleanSetting("debug", BORROW_POST_SELECTION_VALIDATION_SETTING, false),
+            )
+        borrowPostSelectionTpRawAtStart = null
+        lastBorrowPostSelectionValidationResult = null
         borrowAccessibilityScrollFaultInjector =
             BorrowAccessibilityScrollFaultInjector(
                 armed =
@@ -4379,8 +4388,22 @@ class CareerLaunchNavigator(private val context: Context) {
             // pre/post deck latches the legacy path uses at the final confirmation gate.
             supportDeckPreBorrowVerified = true
             supportDeckPostBorrowVerified = true
-            MessageLog.i(TAG, "[NAV] [LAUNCH] Build-aware launch READY_TO_START_CAREER: verified borrow ${launch.intent?.displayName} (deck ${launch.deckNumberAtEnd}). Pressing Start Career...")
+            MessageLog.i(TAG, "[NAV] [LAUNCH] Build-aware launch READY_TO_START_CAREER: verified borrow ${launch.intent?.displayName} (deck ${launch.deckNumberAtEnd}).")
         }
+
+        val readyLaunch = lastBuildAwareLaunchResult
+        borrowPostSelectionValidationGate
+            .evaluate(
+                slotCommitted = readyLaunch?.slotCommitted == true,
+                freshVerifier = readyLaunch?.verification != null,
+                verification = readyLaunch?.verification,
+                returnedToSupportFormation = readyLaunch?.preconditions?.onSupportFormation == true,
+                tpRawAtEnd = readyLaunch?.tpRawAtEnd,
+            )
+            ?.let { result ->
+                lastBorrowPostSelectionValidationResult = result
+                return borrowPostSelectionValidationStopped(result)
+            }
 
         // Structural Start Career gate (A3): the tap is unreachable unless the stored transaction state is
         // READY_TO_START_CAREER. A future refactor that reaches this tap without a READY transaction trips
@@ -4415,13 +4438,16 @@ class CareerLaunchNavigator(private val context: Context) {
      * safely instead of falling through into a Start Career gate.
      */
     private fun runBorrowStep(bitmap: Bitmap): TransitionResult? {
+        if (borrowPostSelectionValidationGate.armed && !borrowPostSelectionValidationGate.hasTappedRow) {
+            borrowPostSelectionTpRawAtStart = readTpBandRaw(bitmap)
+        }
         // The game renders Start Career as enabled but silently ignores it while the friend
         // slot is empty, and the borrowed card never carries over between careers - so with
         // reuseLastLaunchSetup the deck always arrives here one card short. Borrow the first card
         // in the Borrow Card list to complete the deck. A single row tap selects the card and
         // closes the picker.
         if (IconFriendSlotEmpty.check(iu, sourceBitmap = bitmap)) {
-            return fillEmptyFriendSlot(bitmap)
+            return finishBorrowPostSelectionValidation(fillEmptyFriendSlot(bitmap))
         }
 
         // A borrowed card of a character already in the deck commits in the picker just fine -
@@ -4439,7 +4465,7 @@ class CareerLaunchNavigator(private val context: Context) {
         ) {
             val viaMessage = forceBorrowReplacement && !duplicateDeckPill && !traineeDeckPill
             forceBorrowReplacement = false
-            return performBorrowReplacement(duplicateDeckPill, traineeDeckPill, viaMessage)
+            return finishBorrowPostSelectionValidation(performBorrowReplacement(duplicateDeckPill, traineeDeckPill, viaMessage))
         }
         return null
     }
@@ -4450,10 +4476,22 @@ class CareerLaunchNavigator(private val context: Context) {
         identity: String,
         actionName: String,
     ): BorrowTapResult {
+        val observedIdentity =
+            if (borrowPostSelectionValidationGate.armed) {
+                val freshBitmap = iu.getSourceBitmap()
+                readBorrowPoolRichRows(freshBitmap, 0, false)
+                    .minByOrNull { kotlin.math.abs(it.centerY - centerY) }
+                    ?.observation
+                    ?.toLocatable()
+            } else {
+                null
+            }
+        val acceptedRow = AcceptedBorrowRow(centerY, identity, observedIdentity)
         val result =
-            borrowPreTapValidationGate.attempt(AcceptedBorrowRow(centerY, identity)) { row ->
+            borrowPreTapValidationGate.attempt(acceptedRow) { row ->
                 CoordinateTap.tap(gestureUtils, 540.0, row.centerY, actionName)
             }
+        borrowPostSelectionValidationGate.recordTap(result, borrowPostSelectionTpRawAtStart)
         when (result.status) {
             BorrowTapStatus.TAPPED ->
                 MessageLog.i(TAG, "[NAV] [BORROW] TAPPED accepted row \"${borrowLogText(identity)}\" at (540, ${centerY.toInt()}).")
@@ -4466,6 +4504,77 @@ class CareerLaunchNavigator(private val context: Context) {
                 error("accepted Borrow row unexpectedly missing at the pre-tap boundary")
         }
         return result
+    }
+
+    private fun finishBorrowPostSelectionValidation(step: TransitionResult): TransitionResult {
+        if (!borrowPostSelectionValidationGate.armed || !borrowPostSelectionValidationGate.hasTappedRow) return step
+
+        val committedBitmap = iu.getSourceBitmap()
+        val onFormation = LabelSupportFormation.check(iu, sourceBitmap = committedBitmap)
+        val slotCommitted = onFormation && !IconFriendSlotEmpty.check(iu, sourceBitmap = committedBitmap)
+        if (!slotCommitted) {
+            val result =
+                borrowPostSelectionValidationGate.evaluate(
+                    slotCommitted = false,
+                    freshVerifier = false,
+                    verification = null,
+                    returnedToSupportFormation = onFormation,
+                    tpRawAtEnd = readTpBandRaw(committedBitmap),
+                )!!
+            lastBorrowPostSelectionValidationResult = result
+            return borrowPostSelectionValidationStopped(result)
+        }
+
+        if (!reopenBorrowPicker(replaceMode = true)) {
+            val result =
+                borrowPostSelectionValidationGate.evaluate(
+                    slotCommitted = true,
+                    freshVerifier = false,
+                    verification = null,
+                    returnedToSupportFormation = true,
+                    tpRawAtEnd = readTpBandRaw(committedBitmap),
+                )!!
+            lastBorrowPostSelectionValidationResult = result
+            return borrowPostSelectionValidationStopped(result)
+        }
+
+        waitSafe(2.0)
+        val acceptedRow = checkNotNull(borrowPostSelectionValidationGate.acceptedTappedRow)
+        val verification = AcceptedBorrowSelectionVerifier.verify(acceptedRow, readSelectedSlotRows())
+        ButtonClose.click(iu)
+        waitSafe(1.5)
+
+        val returnedBitmap = iu.getSourceBitmap()
+        val returnedToSupportFormation =
+            LabelSupportFormation.check(iu, sourceBitmap = returnedBitmap) &&
+                !IconFriendSlotEmpty.check(iu, sourceBitmap = returnedBitmap)
+        val result =
+            borrowPostSelectionValidationGate.evaluate(
+                slotCommitted = true,
+                freshVerifier = true,
+                verification = verification,
+                returnedToSupportFormation = returnedToSupportFormation,
+                tpRawAtEnd = readTpBandRaw(returnedBitmap),
+            )!!
+        lastBorrowPostSelectionValidationResult = result
+        return borrowPostSelectionValidationStopped(result)
+    }
+
+    private fun borrowPostSelectionValidationStopped(result: BorrowPostSelectionResult): TransitionResult.Failed {
+        val identity = result.acceptedRow?.identity ?: "unreadable accepted row"
+        MessageLog.i(
+            TAG,
+            "[NAV] [BORROW-VALIDATION] ${result.status}: accepted=\"${borrowLogText(identity)}\" " +
+                "slotCommitted=${result.slotCommitted} freshVerifier=${result.freshVerifier} " +
+                "selected=${result.verification?.selectedRow?.character ?: "-"} " +
+                "startCareerTapped=${result.startCareerTapped} tp=${result.tpRawAtStart ?: "-"}->${result.tpRawAtEnd ?: "-"} " +
+                "reason=\"${result.reason}\"",
+        )
+        return TransitionResult.Failed(
+            reason = "${result.status}: ${result.reason}. Start Career was suppressed by the armed post-selection validation setting.",
+            transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+            recommendedAction = "Disable the post-selection Borrow validation setting before a normal launch.",
+        )
     }
 
     private fun borrowTapValidationStopped(result: BorrowTapResult): TransitionResult.Failed {
@@ -7200,7 +7309,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * as one is found (the game marks exactly one), and defers the verdict to [SmartBorrowSelectionVerifier].
      * Never taps a row.
      */
-    private fun readSelectedSlotVerification(intent: SmartBorrowIntent): SelectedSlotVerification {
+    private fun readSelectedSlotRows(): List<LocatableBorrowRow> {
         val selectedRows = mutableListOf<LocatableBorrowRow>()
         val walker =
             BorrowListWalker(
@@ -7230,8 +7339,11 @@ class CareerLaunchNavigator(private val context: Context) {
                 log = { MessageLog.i(TAG, "[BORROW-SELECT] $it") },
             )
         walker.walk { _, _ -> selectedRows.isNotEmpty() }
-        return SmartBorrowSelectionVerifier.verify(intent, selectedRows)
+        return selectedRows
     }
+
+    private fun readSelectedSlotVerification(intent: SmartBorrowIntent): SelectedSlotVerification =
+        SmartBorrowSelectionVerifier.verify(intent, readSelectedSlotRows())
 
     /**
      * Runs the full Smart Borrow SELECT-verify-rollback rehearsal (DeckLab Smart Borrow 2.0, Stage B
@@ -7335,6 +7447,9 @@ class CareerLaunchNavigator(private val context: Context) {
         val startBitmap = iu.getSourceBitmap()
         val deckAtStart = readDeckNumber(startBitmap)
         val tpRawStart = readTpBandRaw(startBitmap)
+        if (borrowPostSelectionValidationGate.armed) {
+            borrowPostSelectionTpRawAtStart = tpRawStart
+        }
         val tpStart = parseTpCurrent(tpRawStart)
 
         // Reopen the picker over the empty slot and tap EXACTLY the located row via the proven production
@@ -8120,6 +8235,8 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     private fun handlePreRunConfirmation(): TransitionResult {
+        lastBorrowPostSelectionValidationResult?.let { return borrowPostSelectionValidationStopped(it) }
+
         // Identity fail-closed: this is the final Start Career gate. A targeted single-run launch
         // that reached here without roster-verifying the trainee (both the roster screen and the
         // Legacy Select / Support Deck backstops skipped or misread) must STOP rather than press

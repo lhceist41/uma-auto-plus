@@ -6,6 +6,7 @@ internal const val BORROW_PRETAP_VALIDATION_SETTING = "debugMode_stopBeforeBorro
 internal data class AcceptedBorrowRow(
     val centerY: Double,
     val identity: String,
+    val observedIdentity: LocatableBorrowRow? = null,
 )
 
 internal enum class BorrowTapStatus {

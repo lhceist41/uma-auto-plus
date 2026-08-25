@@ -109,6 +109,15 @@ const DebugSettings = () => {
         void saveSettingsImmediate(nextSettings)
     }
 
+    const updateBorrowPostSelectionValidationSetting = (checked: boolean) => {
+        const nextSettings = {
+            ...bsc.settings,
+            debug: { ...bsc.settings.debug, debugMode_stopAfterBorrowSelectionVerified: checked },
+        }
+        bsc.setSettings(nextSettings)
+        void saveSettingsImmediate(nextSettings)
+    }
+
     const updateBorrowAccessibilityFaultSetting = (checked: boolean) => {
         const nextSettings = {
             ...bsc.settings,
@@ -553,6 +562,15 @@ const DebugSettings = () => {
                                 onCheckedChange={updateBorrowValidationSetting}
                                 label="Stop Before Borrow Tap"
                                 description="Off by default. When enabled, the normal launch may scan and revalidate the Borrow list, then stops before selecting the accepted card. No fallback card is selected and Start Career is not pressed."
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-stop-after-borrow-selection-verified"
+                                checked={bsc.settings.debug.debugMode_stopAfterBorrowSelectionVerified}
+                                onCheckedChange={updateBorrowPostSelectionValidationSetting}
+                                label="Stop After Borrow Selection Verification"
+                                description="Off by default. When enabled, a real Borrow selection must be freshly verified from the committed Selected marker before the launch stops. Start Career is not pressed and no TP is spent."
+                                style={{ marginTop: 10 }}
                             />
 
                             <CustomCheckbox

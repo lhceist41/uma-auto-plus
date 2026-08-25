@@ -376,35 +376,60 @@ data class SelectedSlotVerification(
  */
 object SmartBorrowSelectionVerifier {
     fun verify(intent: SmartBorrowIntent, selectedRows: List<LocatableBorrowRow>): SelectedSlotVerification {
-        if (selectedRows.isEmpty()) {
-            return SelectedSlotVerification(SelectedSlotVerdict.NO_SELECTION, null, selectedRows, "no reopened-picker row carried the Selected marker")
-        }
-        if (selectedRows.size > 1) {
-            return SelectedSlotVerification(SelectedSlotVerdict.MULTIPLE_SELECTION, null, selectedRows, "${selectedRows.size} rows carried the Selected marker (expected exactly one)")
-        }
-        val row = selectedRows[0]
-        val identityOk =
-            borrowRowMatchesPreference(row.character ?: "", intent.canonicalCharacter) &&
-                (intent.canonicalTitle == null || borrowRowMatchesPreference(row.outfit ?: "", intent.canonicalTitle))
-        if (!identityOk) {
-            return SelectedSlotVerification(
-                SelectedSlotVerdict.IDENTITY_MISMATCH,
-                row,
-                selectedRows,
-                "selected row \"${row.character ?: "-"} [${row.outfit ?: "-"}]\" != intent ${intent.canonicalCharacter} [${intent.canonicalTitle ?: "-"}]",
-            )
-        }
-        // Limit-break gate: decisive only when BOTH the intent and the selected row observed one.
-        if (intent.expectedLimitBreak != null && row.limitBreakIndex != null && row.limitBreakIndex != intent.expectedLimitBreak) {
-            return SelectedSlotVerification(
-                SelectedSlotVerdict.IDENTITY_MISMATCH,
-                row,
-                selectedRows,
-                "selected row limit break ${row.limitBreakIndex} != expected ${intent.expectedLimitBreak}",
-            )
-        }
-        return SelectedSlotVerification(SelectedSlotVerdict.VERIFIED, row, selectedRows, "the marked-selected row matches the intent identity")
+        return verifySelectedBorrowIdentity(
+            expectedCharacter = intent.canonicalCharacter,
+            expectedTitle = intent.canonicalTitle,
+            expectedLimitBreak = intent.expectedLimitBreak,
+            expectedLabel = "${intent.canonicalCharacter} [${intent.canonicalTitle ?: "-"}]",
+            selectedRows = selectedRows,
+        )
     }
+}
+
+internal fun verifySelectedBorrowIdentity(
+    expectedCharacter: String?,
+    expectedTitle: String?,
+    expectedLimitBreak: Int?,
+    expectedLabel: String,
+    selectedRows: List<LocatableBorrowRow>,
+    requireExpectedTitle: Boolean = false,
+): SelectedSlotVerification {
+    if (selectedRows.isEmpty()) {
+        return SelectedSlotVerification(SelectedSlotVerdict.NO_SELECTION, null, selectedRows, "no reopened-picker row carried the Selected marker")
+    }
+    if (selectedRows.size > 1) {
+        return SelectedSlotVerification(SelectedSlotVerdict.MULTIPLE_SELECTION, null, selectedRows, "${selectedRows.size} rows carried the Selected marker (expected exactly one)")
+    }
+    val row = selectedRows[0]
+    if (expectedCharacter.isNullOrBlank() || (requireExpectedTitle && expectedTitle.isNullOrBlank())) {
+        return SelectedSlotVerification(
+            SelectedSlotVerdict.IDENTITY_MISMATCH,
+            row,
+            selectedRows,
+            "accepted row identity was unreadable before the tap ($expectedLabel)",
+        )
+    }
+    val identityOk =
+        borrowRowMatchesPreference(row.character ?: "", expectedCharacter) &&
+            (expectedTitle == null || borrowRowMatchesPreference(row.outfit ?: "", expectedTitle))
+    if (!identityOk) {
+        return SelectedSlotVerification(
+            SelectedSlotVerdict.IDENTITY_MISMATCH,
+            row,
+            selectedRows,
+            "selected row \"${row.character ?: "-"} [${row.outfit ?: "-"}]\" != expected $expectedLabel",
+        )
+    }
+    // Limit-break gate: decisive only when BOTH the intent and the selected row observed one.
+    if (expectedLimitBreak != null && row.limitBreakIndex != null && row.limitBreakIndex != expectedLimitBreak) {
+        return SelectedSlotVerification(
+            SelectedSlotVerdict.IDENTITY_MISMATCH,
+            row,
+            selectedRows,
+            "selected row limit break ${row.limitBreakIndex} != expected $expectedLimitBreak",
+        )
+    }
+    return SelectedSlotVerification(SelectedSlotVerdict.VERIFIED, row, selectedRows, "the marked-selected row matches the expected identity")
 }
 
 /** Outcome of one Borrow "Remove" behaviour probe, for the diagnostic entry point. */
