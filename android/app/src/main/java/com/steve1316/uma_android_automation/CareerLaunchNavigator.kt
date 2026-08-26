@@ -7090,6 +7090,15 @@ class CareerLaunchNavigator(private val context: Context) {
                 },
                 advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
                 recoverService = { recoverGestureDispatch() },
+                recoverHost = {
+                    recoverBorrowScrollWithHost().also { report ->
+                        MessageLog.i(
+                            TAG,
+                            "[BORROW-LOCATE] Host recovery rung completed after Accessibility exhaustion: " +
+                                "${report.execution.status}/${report.movement}/${report.detailCode}.",
+                        )
+                    }
+                },
                 abort = { !BotService.isRunning || StartModule.queueStopRequested },
                 log = { MessageLog.i(TAG, "[BORROW-LOCATE] $it") },
             )
@@ -7357,6 +7366,15 @@ class CareerLaunchNavigator(private val context: Context) {
                 },
                 advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
                 recoverService = { recoverGestureDispatch() },
+                recoverHost = {
+                    recoverBorrowScrollWithHost().also { report ->
+                        MessageLog.i(
+                            TAG,
+                            "[BORROW-SELECT] Host recovery rung completed after Accessibility exhaustion: " +
+                                "${report.execution.status}/${report.movement}/${report.detailCode}.",
+                        )
+                    }
+                },
                 abort = { !BotService.isRunning || StartModule.queueStopRequested },
                 log = { MessageLog.i(TAG, "[BORROW-SELECT] $it") },
             )
@@ -7674,6 +7692,15 @@ class CareerLaunchNavigator(private val context: Context) {
                 },
                 advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
                 recoverService = { recoverGestureDispatch() },
+                recoverHost = {
+                    recoverBorrowScrollWithHost().also { report ->
+                        MessageLog.i(
+                            TAG,
+                            "[LAUNCH-GATE] Host recovery rung completed after Accessibility exhaustion: " +
+                                "${report.execution.status}/${report.movement}/${report.detailCode}.",
+                        )
+                    }
+                },
                 abort = { !BotService.isRunning || StartModule.queueStopRequested },
                 log = { MessageLog.i(TAG, "[LAUNCH-GATE] $it") },
             )
