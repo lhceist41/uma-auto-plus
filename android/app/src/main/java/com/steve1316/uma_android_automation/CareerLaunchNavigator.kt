@@ -4970,11 +4970,26 @@ class CareerLaunchNavigator(private val context: Context) {
         MessageLog.i(TAG, "[DECK-NUM-TEST] If the parsed number is wrong or null, tune deckNumberColFraction / deckNumberRowYFraction / deckNumberBox*. ===== end =====")
     }
 
-    private fun borrowHostSwipeFingerprint(bitmap: Bitmap): ScreenFingerprint =
-        ScreenFingerprint(
-            recognized = LabelBorrowLastLogin.findAll(iu, sourceBitmap = bitmap).size >= 2,
-            value = hostDiagnosticPixelFingerprint(bitmap, 0.14f, 0.84f),
+    /**
+     * Semantic movement evidence for the Borrow host-recovery swipe: the same ordered row-identity
+     * signature [BorrowListWalker] already trusts, not a pixel digest. The Borrow list is known to
+     * shift row positions by a few pixels between captures (see [borrowScreenSignature]), so a
+     * positional/pixel fingerprint reports movement that never happened and the generic settle
+     * verifier can never see two stable identical samples. Recognized requires at least two readable
+     * row identities, matching the threshold [BorrowListWalker] itself uses to tell a real screen
+     * from noise.
+     */
+    private fun borrowHostSwipeFingerprint(bitmap: Bitmap): ScreenFingerprint {
+        val scan = borrowRowsOnScreen(bitmap)
+        return ScreenFingerprint(
+            recognized = borrowScreenKeys(scan).size >= 2,
+            value = borrowScreenSignature(scan),
         )
+    }
+
+    /** Row count implied by a Borrow semantic signature, for a diagnostic log line that never
+     * reveals row text, card names, or owner aliases. */
+    private fun borrowSemanticRowCount(signature: String): Int = if (signature.isBlank()) 0 else signature.count { it == '|' } + 1
 
     private fun borrowHostSwipeRequest(bitmap: Bitmap): BoundedSwipe? {
         val startX = bitmap.width * 0.5f
@@ -6533,8 +6548,13 @@ class CareerLaunchNavigator(private val context: Context) {
             openTransport = { configuration -> HostAdbInputTransport(configuration, BuildConfig.VERSION_NAME) },
             prepareSwipe = {
                 val bitmap = iu.getSourceBitmap()
+                val before = borrowHostSwipeFingerprint(bitmap)
+                MessageLog.i(
+                    TAG,
+                    "[NAV] [BORROW] Host recovery before-swipe semantic read: rows=${borrowSemanticRowCount(before.value)} recognized=${before.recognized}.",
+                )
                 PreparedHostSwipe(
-                    before = borrowHostSwipeFingerprint(bitmap),
+                    before = before,
                     request = borrowHostSwipeRequest(bitmap),
                 )
             },
