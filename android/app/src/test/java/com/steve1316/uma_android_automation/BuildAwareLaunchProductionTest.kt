@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation
 
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
@@ -120,7 +121,7 @@ class BuildAwareLaunchProductionTest {
         @Test
         fun `production accepts a LOCATED equivalence class, not only a single identity candidate`() {
             val body = moduleBody()
-            assertTrue(body.contains("canSelectLocatedBorrow(locate.status, locate.traversalComplete)"), "production accepts any LOCATED (exact or equivalent source) that also completed traversal")
+            assertTrue(body.contains("canSelectLocatedBorrow(locate.status, locate.traversalComplete, locate.selectionEvidenceComplete)"), "production accepts any LOCATED (exact or equivalent source) with either a completed traversal or A3-R12 selection evidence")
             assertFalse(body.contains("identityCandidates?.size == 1"), "the strict single-candidate rule is gone from production")
         }
 
@@ -149,7 +150,7 @@ class BuildAwareLaunchProductionTest {
         @Test
         fun `the production gate authorises a tap only through canSelectLocatedBorrow, not bare LOCATED`() {
             val body = moduleBody()
-            assertTrue(body.contains("canSelectLocatedBorrow(locate.status, locate.traversalComplete)"), "the tap authority requires a completed, non-stalled traversal")
+            assertTrue(body.contains("canSelectLocatedBorrow(locate.status, locate.traversalComplete, locate.selectionEvidenceComplete)"), "the tap authority requires a completed traversal or A3-R12 selection evidence")
             assertTrue(body.contains("BORROW_LOCATOR_STALLED"), "a stalled LOCATED blocks as a locator stall before any tap")
         }
 
@@ -170,6 +171,85 @@ class BuildAwareLaunchProductionTest {
             val boundaryIdx = body.indexOf("tapAcceptedBorrowRow(")
             assertTrue(readIdx in 0 until boundaryIdx, "the fresh re-read must precede the shared pre-tap boundary")
             assertFalse(body.contains("CoordinateTap.tap("), "build-aware revalidation cannot bypass the shared pre-tap boundary")
+        }
+    }
+
+    @Nested
+    @DisplayName("A3-R12 build-aware locate scan ceiling")
+    inner class LocateScanCeiling {
+        private fun locateBody() = slice("internal fun locateSmartBorrowIntentReadOnly(", "private fun persistSmartBorrowLocate(")
+
+        private fun censusBody() = slice("internal fun scanBorrowPoolReadOnly(", "private fun nameKeyOf(obs: BorrowRowObservation):")
+
+        private fun selectBody() = slice("private fun selectBorrowByIdentityRevalidated(", "private fun revalidateAndTapBorrow(")
+
+        private fun selectedSlotRowsBody() = slice("private fun readSelectedSlotRows(", "private fun readSelectedSlotVerification(")
+
+        private fun defaultWalkerBody() = slice("private fun borrowWalker(): BorrowListWalker =", "private fun recoverBorrowScrollWithHost(): HostScrollRecoveryReport =")
+
+        private fun moduleBody() = slice("internal fun prepareBuildAwareLaunchToReady(", "internal fun dryRunBuildAwareLaunchGate(")
+
+        @Test
+        fun `only the locate walker uses the widened locate-only scan bound`() {
+            assertTrue(locateBody().contains("maxPageGestures = MAX_BORROW_LOCATE_SCAN_PAGES"), "the locate walker must use the widened locate-only bound")
+        }
+
+        @Test
+        fun `census, select, verify, and the default walker keep the shared bound unchanged`() {
+            assertTrue(censusBody().contains("maxPageGestures = MAX_BORROW_SCAN_PAGES"), "the census walker must not be widened")
+            assertTrue(selectBody().contains("maxPageGestures = MAX_BORROW_SCAN_PAGES"), "the select/revalidate walker must not be widened")
+            assertTrue(selectedSlotRowsBody().contains("maxPageGestures = MAX_BORROW_SCAN_PAGES"), "the selected-marker verification walker must not be widened")
+            assertTrue(defaultWalkerBody().contains("maxPageGestures = MAX_BORROW_SCAN_PAGES"), "the default/legacy walker must not be widened")
+        }
+
+        @Test
+        fun `the locate-only bound is a fixed multiple of the shared bound, not an unbounded scroll`() {
+            assertTrue(nav.contains("MAX_BORROW_LOCATE_SCAN_PAGES = MAX_BORROW_SCAN_PAGES * 5"), "the locate-only ceiling must be a fixed, finite, deterministic constant")
+        }
+
+        @Test
+        fun `a healthy locate scan budget exhaustion is worded distinctly from a true stall`() {
+            val body = locateBody()
+            assertTrue(body.contains("walk.end == BorrowWalkEnd.MAX_PAGES"), "the locate stage distinguishes a healthy MAX_PAGES cutoff from a stall")
+            assertTrue(body.contains("a healthy cutoff, not a stall"), "the healthy-cutoff log line must not claim the scroll stalled")
+        }
+
+        @Test
+        fun `the block reason for a non-stalled incomplete traversal does not claim the scroll stalled`() {
+            val body = moduleBody()
+            assertTrue(body.contains("locate.traversalStalled"), "the block-reason text keys on the true stall signal, not traversalComplete alone")
+            assertTrue(body.contains("the healthy locate scan budget was exhausted"), "a healthy budget exhaustion gets its own truthful wording")
+        }
+
+        @Test
+        fun `MAX_PAGES exhaustion never triggers host recovery merely because the budget ran out`() {
+            // A healthy walk that keeps moving to a fresh screen every page (never repeats, never stalls)
+            // must exhaust its forward budget as a plain MAX_PAGES ending without ever invoking the host
+            // recovery rung -- that rung is reachable only from the no-movement/stall branch.
+            var hostCalls = 0
+            var page = 0
+            val walker =
+                BorrowListWalker(
+                    maxPageGestures = 3,
+                    maxSwallowedRetries = 2,
+                    readScreen = { BorrowScan(listOf(0.0 to "row-${page}")) },
+                    advancePage = { page++ },
+                    recoverHost = {
+                        hostCalls++
+                        HostScrollRecoveryReport(
+                            scope = HostInputScope.BORROW_LIST_SCROLL,
+                            execution = InputExecutionResult(status = InputExecutionStatus.EXECUTED, foreground = true, detailCode = "test"),
+                            movement = SwipeMovement.MOVED,
+                            detailCode = "test",
+                            swipeAttempts = 1,
+                            stopped = false,
+                        )
+                    },
+                )
+            val result = walker.walk { _, _ -> false }
+            assertEquals(BorrowWalkEnd.MAX_PAGES, result.end)
+            assertFalse(result.stalled, "a healthy walk that always advances must not be marked stalled")
+            assertEquals(0, hostCalls, "host recovery must never fire merely because the forward budget ran out")
         }
     }
 

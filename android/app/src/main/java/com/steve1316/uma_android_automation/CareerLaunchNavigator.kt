@@ -266,6 +266,24 @@ class CareerLaunchNavigator(private val context: Context) {
          * new, so short lists pay no extra time. */
         private const val MAX_BORROW_SCAN_PAGES = 8
 
+        /** Locate-only census bound (A3-R12). The select/verify/legacy/census walkers stay on
+         * MAX_BORROW_SCAN_PAGES above: they stop as soon as they find the row they are looking for, or
+         * deliberately mirror the launch's own limits. The locate stage is different -- it is the one
+         * place a full pool census is required, because an intent with an unknown expected limit break
+         * needs the WHOLE pool read before a LOCATED verdict can be trusted not to flip to AMBIGUOUS. A
+         * live BUILD_AWARE run (expectedLimitBreak unknown) proved a real pool deeper than the ~29-row
+         * estimate behind MAX_BORROW_SCAN_PAGES: ~31 rows observed with MAX_PAGES hit before the natural
+         * end. No documented game-side maximum Friends-list depth exists anywhere in this repository to
+         * derive an exact bound from, and this is already the second time a point estimate here proved too
+         * small (the original five-page estimate, then eight). Rather than guess a third point estimate,
+         * the locate walker gets a materially larger, explicit hard safety ceiling instead: five times the
+         * shared budget. This is a conservative ceiling, not a claimed exact game maximum. The walker
+         * itself is already progress-based -- a page that contributes zero new rows ends the walk at the
+         * natural END_OF_LIST well before this ceiling is ever reached -- so raising it only widens how
+         * deep a genuinely long, healthy pool can be walked before the fallback cutoff. It never touches
+         * the once-per-walk Accessibility/host stall-recovery ladder, which is a separate, unrelated budget. */
+        private const val MAX_BORROW_LOCATE_SCAN_PAGES = MAX_BORROW_SCAN_PAGES * 5
+
         /** Repeats of a page-advance drag the picker swallowed (the screen came back identical).
          * Two is enough to absorb a dropped gesture; past that an unchanged screen means the list
          * has genuinely reached its end. Each retry spends page budget, so this cannot extend a
@@ -7078,7 +7096,7 @@ class CareerLaunchNavigator(private val context: Context) {
         var latestRows: List<BorrowRowObservation> = emptyList()
         val walker =
             BorrowListWalker(
-                maxPageGestures = MAX_BORROW_SCAN_PAGES,
+                maxPageGestures = MAX_BORROW_LOCATE_SCAN_PAGES,
                 maxSwallowedRetries = MAX_BORROW_SWALLOWED_SWIPE_RETRIES,
                 readScreen = {
                     val bmp = iu.getSourceBitmap()
@@ -7109,6 +7127,8 @@ class CareerLaunchNavigator(private val context: Context) {
             }
         if (walk.stalled) {
             MessageLog.w(TAG, "[BORROW-LOCATE] the borrow list stopped moving before a natural end (scroll stalled after the recovery ladder); the pool was not fully traversed.")
+        } else if (walk.end == BorrowWalkEnd.MAX_PAGES) {
+            MessageLog.w(TAG, "[BORROW-LOCATE] the healthy locate scan budget ($MAX_BORROW_LOCATE_SCAN_PAGES pages) was exhausted before a natural end; the pool was not fully traversed (a healthy cutoff, not a stall).")
         }
 
         // Always leave the picker the way it was found: closed, friend slot still empty. Never a tap.
@@ -7117,6 +7137,7 @@ class CareerLaunchNavigator(private val context: Context) {
 
         val rows = observations.values.toList()
         val match = SmartBorrowLocator.locate(intent, rows.map { it.toLocatable() })
+        val selectionEvidenceComplete = computeSelectionEvidenceComplete(intent, match, walk.stalled)
         val located = match.row
         MessageLog.i(
             TAG,
@@ -7150,8 +7171,22 @@ class CareerLaunchNavigator(private val context: Context) {
                 SmartBorrowLocateVerdict.LB_MISMATCH -> SmartBorrowLocateResult.Status.LB_MISMATCH
                 SmartBorrowLocateVerdict.AMBIGUOUS -> SmartBorrowLocateResult.Status.AMBIGUOUS
             }
-        MessageLog.i(TAG, "[BORROW-LOCATE] status=$status traversalComplete=${walk.fullyTraversed} runtime=${(System.currentTimeMillis() - startedAt) / 1000}s ===== end =====")
-        return SmartBorrowLocateResult(status, intent = intent, rowsObserved = rows.size, match = match, returnedToSupportFormation = onFormation, friendSlotStillEmpty = slotEmpty, traversalComplete = walk.fullyTraversed)
+        MessageLog.i(
+            TAG,
+            "[BORROW-LOCATE] status=$status traversalComplete=${walk.fullyTraversed} selectionEvidenceComplete=$selectionEvidenceComplete " +
+                "runtime=${(System.currentTimeMillis() - startedAt) / 1000}s ===== end =====",
+        )
+        return SmartBorrowLocateResult(
+            status,
+            intent = intent,
+            rowsObserved = rows.size,
+            match = match,
+            returnedToSupportFormation = onFormation,
+            friendSlotStillEmpty = slotEmpty,
+            traversalComplete = walk.fullyTraversed,
+            traversalStalled = walk.stalled,
+            selectionEvidenceComplete = selectionEvidenceComplete,
+        )
     }
 
     /** Appends one read-only locate record to the local corpus. Best-effort; a persist failure never
@@ -7791,14 +7826,17 @@ class CareerLaunchNavigator(private val context: Context) {
 
         val intentPresent = intent != null && locate.status != SmartBorrowLocateResult.Status.INTENT_MISSING
         val intentBuildAware = intent?.recommendationSource == IntentRecommendationSource.BUILD_AWARE
-        // Selection authority (A3-R2): the locator resolves an equivalence class -- the same canonical
-        // card at the same limit break, offered by one or more interchangeable owners -- to a single
-        // LOCATED pick. But LOCATED alone does NOT authorise a tap: the picker traversal must ALSO have
-        // fully completed. A stalled traversal's row coordinates and limit-break reads are not
-        // trustworthy (the A3-R1 live proof tapped a wrong-LB row off a stall), so a stalled LOCATED
-        // blocks as BORROW_LOCATOR_STALLED before any tap. A non-equivalent match, a true miss, or an
-        // incomplete traversal all fail this gate.
-        val tapAuthorised = canSelectLocatedBorrow(locate.status, locate.traversalComplete)
+        // Selection authority (A3-R2, widened by A3-R12): the locator resolves an equivalence class --
+        // the same canonical card at the same limit break, offered by one or more interchangeable owners
+        // -- to a single LOCATED pick. LOCATED alone does NOT authorise a tap: either the picker traversal
+        // must have fully completed, or the scan must carry sufficient selection evidence despite running
+        // out of budget first (a KNOWN expected limit break on a healthy, non-stalled scan -- an unseen
+        // remainder can only ever be filtered OUT by a known limit break, never turn this LOCATED into
+        // AMBIGUOUS). A stalled traversal's row coordinates and limit-break reads are never trustworthy
+        // regardless of pool depth seen (the A3-R1 live proof tapped a wrong-LB row off a stall), so a
+        // stalled LOCATED blocks as BORROW_LOCATOR_STALLED before any tap. A non-equivalent match, a true
+        // miss, or an incomplete-and-insufficient traversal all fail this gate.
+        val tapAuthorised = canSelectLocatedBorrow(locate.status, locate.traversalComplete, locate.selectionEvidenceComplete)
 
         // Fail closed before touching a row: no intent / not build-aware, or the card is not uniquely on
         // offer in the fresh pool. No selection, no rollback owed.
@@ -7817,11 +7855,24 @@ class CareerLaunchNavigator(private val context: Context) {
             val (state, why) =
                 when {
                     !locate.traversalComplete ->
+                        // Two distinct reasons reach here and must not be conflated in the log: a true
+                        // stall (the picker genuinely stopped responding) versus a healthy scan whose
+                        // bounded locate budget (A3-R12) simply ran out before the natural end. Both block
+                        // identically -- neither may authorise a tap -- but only the first is an actual
+                        // scroll stall.
                         LaunchTransactionState.BORROW_LOCATOR_STALLED to
                             (if (locate.status == SmartBorrowLocateResult.Status.LOCATED) {
-                                "intent card was located but the borrow list stalled before a full traversal; a positional tap on an unstable picker is NOT authorised"
+                                if (locate.traversalStalled) {
+                                    "intent card was located but the borrow list stalled before a full traversal; a positional tap on an unstable picker is NOT authorised"
+                                } else {
+                                    "intent card was located with an unknown expected limit break but the healthy locate scan budget was exhausted before a full traversal; an unseen later row could still conflict, so no positional tap is authorised"
+                                }
                             } else {
-                                "intent card not found and the borrow list stalled before a full traversal; cannot prove it absent (locate ${locate.status})"
+                                if (locate.traversalStalled) {
+                                    "intent card not found and the borrow list stalled before a full traversal; cannot prove it absent (locate ${locate.status})"
+                                } else {
+                                    "intent card not found and the healthy locate scan budget was exhausted before a full traversal; cannot prove it absent (locate ${locate.status})"
+                                }
                             })
                     locate.status == SmartBorrowLocateResult.Status.AMBIGUOUS ->
                         LaunchTransactionState.BORROW_POOL_STALE to "intent card offered at conflicting limit breaks in the fresh pool (not one equivalence class): ${match?.reason ?: "ambiguous"}"

@@ -285,6 +285,18 @@ data class SmartBorrowLocateResult(
     /** True only when the picker walk saw the whole list without stalling, so a CARD_NOT_FOUND here is a
      * genuine absence rather than a traversal the scroll gesture cut short. Defaults false (conservative). */
     val traversalComplete: Boolean = false,
+    /** True when the walk ended because a page gesture could not move the list even after the full
+     * Accessibility/host recovery ladder (mirrors [BorrowWalkResult.stalled] directly). Lets a caller tell
+     * "the scan was cut off healthy" (this false, [traversalComplete] false) apart from "the picker
+     * genuinely stopped responding" (this true), which [traversalComplete] alone collapses into the same
+     * false. */
+    val traversalStalled: Boolean = false,
+    /** True only when the target is LOCATED on a healthy (non-stalled) scan AND the intent's own expected
+     * limit break is KNOWN (A3-R12). See [canSelectLocatedBorrow] for why a known limit break makes an
+     * unseen remainder provably unable to turn this LOCATED into AMBIGUOUS, so selection may proceed even
+     * when [traversalComplete] is false purely because the bounded locate budget ran out. Always false
+     * when the expected limit break is unknown or the scan stalled. */
+    val selectionEvidenceComplete: Boolean = false,
     val failureReason: String? = null,
 ) {
     enum class Status {
@@ -309,17 +321,37 @@ data class SmartBorrowLocateResult(
 }
 
 /**
- * Selection authority (A3-R2): whether a locate result may authorise a positional tap.
+ * Selection authority (A3-R2, widened by A3-R12): whether a locate result may authorise a positional tap.
  *
- * LOCATED alone is NOT sufficient. The picker traversal must ALSO have fully completed -- a stalled or
- * incomplete traversal must block as BORROW_LOCATOR_STALLED before any tap, because a stalled picker's
- * row coordinates and limit-break pip reads are not trustworthy. The A3-R1 live proof committed a
+ * LOCATED alone is NOT sufficient. Either the picker traversal must have fully completed
+ * ([traversalComplete]), or the scan must carry sufficient selection evidence despite an incomplete
+ * traversal ([selectionEvidenceComplete]) -- a stalled or budget-exhausted traversal that satisfies
+ * neither must block as BORROW_LOCATOR_STALLED before any tap, because an untrustworthy picker's row
+ * coordinates and limit-break pip reads must never be tapped. The A3-R1 live proof committed a
  * wrong-limit-break row after returning LOCATED off a stalled traversal (the verify caught it and rolled
  * back, but the tap should never have fired). This predicate is the structural gate a production tap must
  * pass; a source guard keeps `if (verdict == LOCATED) tap()` from ever returning.
+ *
+ * [selectionEvidenceComplete] exists because a KNOWN expected limit break makes the unseen remainder of a
+ * healthy scan provably irrelevant: [SmartBorrowLocator] can only ever FILTER OUT a later row against a
+ * known limit break, never accept one into the equivalence class already chosen, so no unseen row can
+ * turn this LOCATED into AMBIGUOUS. A caller must never set it true off a stalled scan (a stalled picker's
+ * reads are untrustworthy regardless of how much of the pool was seen), and must never set it true when
+ * the intent's own expected limit break is unknown (there, a later row at a different KNOWN limit break
+ * CAN still force AMBIGUOUS, so only a full traversal authorises a tap).
  */
-fun canSelectLocatedBorrow(status: SmartBorrowLocateResult.Status, traversalComplete: Boolean): Boolean =
-    status == SmartBorrowLocateResult.Status.LOCATED && traversalComplete
+fun canSelectLocatedBorrow(status: SmartBorrowLocateResult.Status, traversalComplete: Boolean, selectionEvidenceComplete: Boolean): Boolean =
+    status == SmartBorrowLocateResult.Status.LOCATED && (traversalComplete || selectionEvidenceComplete)
+
+/**
+ * Whether a LOCATED match on a healthy (non-stalled) scan carries enough evidence to authorise selection
+ * even when the traversal budget ran out before the natural end (A3-R12). True only when the match is
+ * LOCATED, the intent's own expected limit break is KNOWN, and the scan did not stall -- see
+ * [canSelectLocatedBorrow] for why a known limit break makes the unseen remainder provably irrelevant.
+ * Pure so the rule is unit-testable independent of any live picker read.
+ */
+fun computeSelectionEvidenceComplete(intent: SmartBorrowIntent?, match: SmartBorrowLocateMatch?, stalled: Boolean): Boolean =
+    match?.verdict == SmartBorrowLocateVerdict.LOCATED && intent?.expectedLimitBreak != null && !stalled
 
 /**
  * Whether a picker row matches the intent's FULL tap-safe identity: canonical character AND canonical

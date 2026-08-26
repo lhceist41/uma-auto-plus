@@ -163,18 +163,30 @@ class SmartBorrowLocatorTest {
     inner class SelectionAuthority {
         @Test
         fun `LOCATED with a complete traversal authorises a tap`() {
-            assertTrue(canSelectLocatedBorrow(SmartBorrowLocateResult.Status.LOCATED, traversalComplete = true))
+            assertTrue(canSelectLocatedBorrow(SmartBorrowLocateResult.Status.LOCATED, traversalComplete = true, selectionEvidenceComplete = false))
         }
 
         @Test
-        fun `LOCATED with a stalled traversal does NOT authorise a tap`() {
-            assertFalse(canSelectLocatedBorrow(SmartBorrowLocateResult.Status.LOCATED, traversalComplete = false))
+        fun `LOCATED with a stalled incomplete traversal and no selection evidence does NOT authorise a tap`() {
+            assertFalse(canSelectLocatedBorrow(SmartBorrowLocateResult.Status.LOCATED, traversalComplete = false, selectionEvidenceComplete = false))
         }
 
         @Test
         fun `no non-LOCATED status ever authorises a tap, even with a complete traversal`() {
             for (s in SmartBorrowLocateResult.Status.values().filter { it != SmartBorrowLocateResult.Status.LOCATED }) {
-                assertFalse(canSelectLocatedBorrow(s, traversalComplete = true), "$s must not authorise a tap")
+                assertFalse(canSelectLocatedBorrow(s, traversalComplete = true, selectionEvidenceComplete = true), "$s must not authorise a tap")
+            }
+        }
+
+        @Test
+        fun `an incomplete traversal with selection evidence complete still authorises a tap (A3-R12 known-LB shortcut)`() {
+            assertTrue(canSelectLocatedBorrow(SmartBorrowLocateResult.Status.LOCATED, traversalComplete = false, selectionEvidenceComplete = true))
+        }
+
+        @Test
+        fun `no non-LOCATED status is authorised by selectionEvidenceComplete alone either`() {
+            for (s in SmartBorrowLocateResult.Status.values().filter { it != SmartBorrowLocateResult.Status.LOCATED }) {
+                assertFalse(canSelectLocatedBorrow(s, traversalComplete = false, selectionEvidenceComplete = true), "$s must not authorise a tap")
             }
         }
 
@@ -187,6 +199,42 @@ class SmartBorrowLocatorTest {
             assertFalse(rowMatchesIntentIdentity(i, "Kitasan Black", "Blossoming Bond", 4), "a wrong title never matches")
             assertTrue(rowMatchesIntentIdentity(i, "Kitasan Black", "Fire at My Heels", null), "an unread row LB is not decisive")
             assertTrue(rowMatchesIntentIdentity(intent(expectedLimitBreak = null), "Kitasan Black", "Fire at My Heels", 3), "an unknown intent LB is not decisive")
+        }
+    }
+
+    @Nested
+    @DisplayName("selection evidence complete (A3-R12 known-LB shortcut)")
+    inner class SelectionEvidenceComplete {
+        @Test
+        fun `LOCATED with a known expected limit break on a healthy scan is selection-evidence-complete`() {
+            val match = SmartBorrowLocator.locate(intent(expectedLimitBreak = 4), listOf(row(limitBreakIndex = 4)))
+            assertTrue(computeSelectionEvidenceComplete(intent(expectedLimitBreak = 4), match, stalled = false))
+        }
+
+        @Test
+        fun `LOCATED with a known expected limit break on a stalled scan is NOT selection-evidence-complete`() {
+            val match = SmartBorrowLocator.locate(intent(expectedLimitBreak = 4), listOf(row(limitBreakIndex = 4)))
+            assertFalse(computeSelectionEvidenceComplete(intent(expectedLimitBreak = 4), match, stalled = true), "a true dead-dispatch stall must block a known-LB target too")
+        }
+
+        @Test
+        fun `LOCATED with an unknown expected limit break on a healthy scan is NOT selection-evidence-complete`() {
+            val match = SmartBorrowLocator.locate(intent(expectedLimitBreak = null), listOf(row(limitBreakIndex = 4)))
+            assertFalse(computeSelectionEvidenceComplete(intent(expectedLimitBreak = null), match, stalled = false), "an unknown LB still needs a full traversal: a later conflicting LB could still appear")
+        }
+
+        @Test
+        fun `a non-LOCATED verdict is never selection-evidence-complete regardless of stall state`() {
+            val notFound = SmartBorrowLocator.locate(intent(), listOf(row(character = "Someone Else")))
+            assertFalse(computeSelectionEvidenceComplete(intent(), notFound, stalled = false))
+            assertFalse(computeSelectionEvidenceComplete(intent(), notFound, stalled = true))
+        }
+
+        @Test
+        fun `a null intent or null match is never selection-evidence-complete`() {
+            val match = SmartBorrowLocator.locate(intent(expectedLimitBreak = 4), listOf(row(limitBreakIndex = 4)))
+            assertFalse(computeSelectionEvidenceComplete(null, match, stalled = false))
+            assertFalse(computeSelectionEvidenceComplete(intent(expectedLimitBreak = 4), null, stalled = false))
         }
     }
 
