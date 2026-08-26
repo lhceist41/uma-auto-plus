@@ -6664,6 +6664,19 @@ class CareerLaunchNavigator(private val context: Context) {
         waitSafe(1.3)
     }
 
+    /** Build-aware Smart Borrow LOCATE traversal keeps the normal Accessibility timing (A3-R11), but the
+     * actual gesture dispatch is gated by [BuildAwareBorrowMidListStallInjector] so a deterministic
+     * mid-list dead-dispatch can be validated without waiting for the natural swallow near the list tail. */
+    private fun advanceBuildAwareLocateBorrowList(
+        bitmap: Bitmap,
+        attempt: Int,
+        uniqueRows: Int,
+        injector: BuildAwareBorrowMidListStallInjector,
+    ) {
+        injector.dispatch(uniqueRows, attempt) { dispatchBorrowListSwipe(bitmap, attempt) }
+        waitSafe(1.3)
+    }
+
     /**
      * One bounded accessibility gesture-dispatch recovery for the borrow-list walker (A3-R3). On MuMu the
      * gesture dispatcher can silently die mid-run, so a page gesture no-ops although the service still
@@ -7094,6 +7107,14 @@ class CareerLaunchNavigator(private val context: Context) {
         // tap on any row.
         val observations = LinkedHashMap<String, BorrowRowObservation>()
         var latestRows: List<BorrowRowObservation> = emptyList()
+        val midListStallInjector =
+            BuildAwareBorrowMidListStallInjector(
+                armed =
+                    buildAwareBorrowMidListStallEnabled(
+                        SettingsHelper.getStringSetting("debug", BUILD_AWARE_BORROW_MID_LIST_STALL_SETTING),
+                    ),
+                log = { MessageLog.i(TAG, "[BORROW-LOCATE] [BUILD-AWARE-HOST-FAULT] $it") },
+            )
         val walker =
             BorrowListWalker(
                 maxPageGestures = MAX_BORROW_LOCATE_SCAN_PAGES,
@@ -7106,9 +7127,12 @@ class CareerLaunchNavigator(private val context: Context) {
                     val blocked = latestRows.filter { it.blockedTag != null }.map { nameKeyOf(it) }
                     BorrowScan(readable, duplicateTexts = blocked)
                 },
-                advancePage = { attempt -> lastBorrowListBitmap?.let { swipeBorrowList(it, attempt) } },
+                advancePage = { attempt ->
+                    lastBorrowListBitmap?.let { advanceBuildAwareLocateBorrowList(it, attempt, observations.size, midListStallInjector) }
+                },
                 recoverService = { recoverGestureDispatch() },
                 recoverHost = {
+                    midListStallInjector.release()
                     recoverBorrowScrollWithHost().also { report ->
                         MessageLog.i(
                             TAG,

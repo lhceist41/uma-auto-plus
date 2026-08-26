@@ -127,6 +127,15 @@ const DebugSettings = () => {
         void saveSettingsImmediate(nextSettings)
     }
 
+    const updateBuildAwareBorrowMidListStallSetting = (checked: boolean) => {
+        const nextSettings = {
+            ...bsc.settings,
+            debug: { ...bsc.settings.debug, debugMode_injectBuildAwareBorrowMidListAccessibilityStall: checked },
+        }
+        bsc.setSettings(nextSettings)
+        void saveSettingsImmediate(nextSettings)
+    }
+
     const [deviceIp, setDeviceIp] = useState<string>("<phone-ip>")
     const [accessibilityStatus, setAccessibilityStatus] = useState<{ enabled: boolean; active: boolean } | null>(null)
     const [isRefreshing, setIsRefreshing] = useState(false)
@@ -579,6 +588,15 @@ const DebugSettings = () => {
                                 onCheckedChange={updateBorrowAccessibilityFaultSetting}
                                 label="Swallow Borrow Accessibility Scroll"
                                 description="Validation-only and off by default. Suppresses only production Borrow-list Accessibility swipes so the existing stronger gesture, service rebind, and optional host recovery ladder can be exercised. It does not suppress taps or enable host input."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-inject-build-aware-borrow-mid-list-stall"
+                                checked={bsc.settings.debug.debugMode_injectBuildAwareBorrowMidListAccessibilityStall}
+                                onCheckedChange={updateBuildAwareBorrowMidListStallSetting}
+                                label="Inject Build-Aware Borrow Mid-List Stall"
+                                description="Validation-only and off by default. Injects one deterministic mid-list Accessibility dead-dispatch into the build-aware Smart Borrow LOCATE walker after real forward progress, so the existing recovery ladder and production host-recovery rung can be proven on demand. It affects only the build-aware locate walker; it does not suppress taps or enable host input by itself."
                                 style={{ marginTop: 10 }}
                             />
 

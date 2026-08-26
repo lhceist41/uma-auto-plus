@@ -260,6 +260,10 @@ export interface Settings {
         debugMode_stopAfterBorrowSelectionVerified: boolean
         // Validation-only fault that swallows production Borrow-list Accessibility scroll dispatch. Off by default.
         debugMode_swallowBorrowAccessibilityScroll: boolean
+        // Validation-only fault that injects one deterministic mid-list Accessibility dead-dispatch into the
+        // build-aware Smart Borrow LOCATE walker, so the production host-recovery rung can be proven without
+        // waiting for the natural swallow near the list tail. Off by default.
+        debugMode_injectBuildAwareBorrowMidListAccessibilityStall: boolean
         // Sends one bounded host swipe from a recognized Borrow Card list, verifies movement from a fresh Android capture, and stops without selecting anything.
         debugMode_startHostBorrowSwipeTest: boolean
         // Sends one bounded host swipe from a recognized Legacy Sparks list, verifies movement from a fresh Android capture, and stops without continuing the launch.
@@ -806,6 +810,7 @@ export const defaultSettings: Settings = {
         debugMode_stopBeforeBorrowTap: false,
         debugMode_stopAfterBorrowSelectionVerified: false,
         debugMode_swallowBorrowAccessibilityScroll: false,
+        debugMode_injectBuildAwareBorrowMidListAccessibilityStall: false,
         debugMode_startHostBorrowSwipeTest: false,
         debugMode_startHostLegacySwipeTest: false,
         debugMode_startSupportDeckRehearsalTest: false,
