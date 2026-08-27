@@ -85,6 +85,10 @@ import com.steve1316.uma_android_automation.utils.SPARK_PAGER_HEADING_OCR_REGION
 import com.steve1316.uma_android_automation.utils.SPARK_REROLLED_TITLE_OCR_REGION
 import com.steve1316.uma_android_automation.utils.SparkListGeometry
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.FinalConfirmationMode
+import com.steve1316.uma_android_automation.utils.FinalConfirmationTabGeometry
+import com.steve1316.uma_android_automation.utils.classifyFinalConfirmationMode
+import com.steve1316.uma_android_automation.utils.finalConfirmationScreenPresent
 import com.steve1316.uma_android_automation.utils.LEGACY_EXPECTED_ANCESTORS
 import com.steve1316.uma_android_automation.utils.LegacyAncestorBlock
 import com.steve1316.uma_android_automation.utils.LegacyLineageAccumulator
@@ -1428,9 +1432,16 @@ class CareerLaunchNavigator(private val context: Context) {
 
         // Pre-run confirmation - "Start Career!" button visible without the Support
         // Formation banner. This is the Final Confirmation popup.
+        //
+        // The Independent Training tab of the same popup shows "Start!" (no "Career" glyphs), so none
+        // of the three templates match it and the screen fell to UNKNOWN before the mode gate could run
+        // (the A3 failure). The tab-independent colour probe (exactly one of the two mode tabs is
+        // green-selected) recognizes BOTH tabs so handlePreRunConfirmation can refuse or correct the
+        // wrong mode. It is additive: the templates still match Normal Career first and are unchanged.
         if (ButtonStartCareer.check(iu, sourceBitmap = bitmap) ||
             ButtonStartCareerOffset.check(iu, sourceBitmap = bitmap) ||
-            ButtonStartCareerRight.check(iu, sourceBitmap = bitmap)
+            ButtonStartCareerRight.check(iu, sourceBitmap = bitmap) ||
+            finalConfirmationScreenPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })
         ) {
             return LaunchScreenState.PRE_RUN_CONFIRMATION
         }
@@ -8382,6 +8393,16 @@ class CareerLaunchNavigator(private val context: Context) {
     private fun handlePreRunConfirmation(): TransitionResult {
         lastBorrowPostSelectionValidationResult?.let { return borrowPostSelectionValidationStopped(it) }
 
+        // N0: positively verify Normal Career mode before the irreversible Start Career press. The
+        // Final Confirmation screen has two tabs (Normal Career / Independent Training) and defaults to
+        // the last-started mode, so "not Independent Training" is NOT "Normal Career". Read the selected
+        // tab's green fill directly (asset-free; 100% separation on the Q1 fixtures). This dominates
+        // every existing gate below and the Start tap: only NORMAL_CAREER_VERIFIED falls through.
+        // Independent Training gets exactly one corrective tab tap, then a FRESH re-read; anything else
+        // fails closed with a named reason.
+        val modeResult = verifyNormalCareerMode()
+        if (modeResult != null) return modeResult
+
         // Identity fail-closed: this is the final Start Career gate. A targeted single-run launch
         // that reached here without roster-verifying the trainee (both the roster screen and the
         // Legacy Select / Support Deck backstops skipped or misread) must STOP rather than press
@@ -8467,6 +8488,73 @@ class CareerLaunchNavigator(private val context: Context) {
             transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
             recommendedAction = "Manually click 'Start Career!' and restart the queue.",
         )
+    }
+
+    /**
+     * N0 Normal Career mode gate. Reads the Final Confirmation tab colour and returns null only when
+     * the mode is NORMAL_CAREER_VERIFIED (the caller then proceeds through the existing gates to Start
+     * Career). Independent Training gets exactly ONE corrective tap to the Normal Career tab followed
+     * by a FRESH re-read -- the tap is never assumed to have worked. Every non-Normal outcome returns a
+     * fail-closed [TransitionResult] and never reaches the Start Career press.
+     */
+    private fun verifyNormalCareerMode(): TransitionResult? {
+        val initialMode = readFinalConfirmationMode()
+        when (val decision = FinalConfirmationModeGate.decide(initialMode)) {
+            is FinalConfirmationModeGate.Decision.Proceed -> {
+                MessageLog.i(TAG, "[NAV] [LAUNCH] Final Confirmation mode = NORMAL_CAREER_VERIFIED.")
+                return null
+            }
+            is FinalConfirmationModeGate.Decision.Refuse -> {
+                MessageLog.w(TAG, "[NAV] [LAUNCH] Final Start Career refused: mode unverified ($initialMode).")
+                return TransitionResult.Failed(
+                    reason = decision.reason,
+                    transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
+                    recommendedAction = "Open the Final Confirmation screen, select the Normal Career tab, and restart the queue.",
+                )
+            }
+            // Independent Training: fall through to the single corrective tab tap below.
+            is FinalConfirmationModeGate.Decision.CorrectToNormalCareer -> Unit
+        }
+
+        MessageLog.w(TAG, "[NAV] [LAUNCH] Final Confirmation mode = INDEPENDENT_TRAINING_VERIFIED.")
+        MessageLog.i(TAG, "[NAV] [LAUNCH] Final Confirmation mode switch requested (one corrective tap to the Normal Career tab).")
+        CoordinateTap.tap(
+            gestureUtils,
+            FinalConfirmationTabGeometry.NORMAL_TAB_CLICK_X.toDouble(),
+            FinalConfirmationTabGeometry.NORMAL_TAB_CLICK_Y.toDouble(),
+            "final_confirmation_normal_career_tab",
+        )
+        waitSafe(0.8)
+        // Never trust the tap: re-read a FRESH capture and re-classify. decideAfterCorrection is
+        // one-shot -- it never asks for another correction -- so there is no retry loop.
+        val freshMode = readFinalConfirmationMode()
+        return when (val decision = FinalConfirmationModeGate.decideAfterCorrection(freshMode)) {
+            is FinalConfirmationModeGate.Decision.Proceed -> {
+                MessageLog.i(TAG, "[NAV] [LAUNCH] Final Confirmation mode switch verified: NORMAL_CAREER_VERIFIED.")
+                null
+            }
+            is FinalConfirmationModeGate.Decision.Refuse -> {
+                MessageLog.w(TAG, "[NAV] [LAUNCH] Final Confirmation mode switch failed (fresh mode=$freshMode).")
+                TransitionResult.Failed(
+                    reason = decision.reason,
+                    transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
+                    recommendedAction = "Open the Final Confirmation screen, select the Normal Career tab, and restart the queue.",
+                )
+            }
+            // Unreachable by construction (one-shot); fail closed rather than tap again.
+            is FinalConfirmationModeGate.Decision.CorrectToNormalCareer ->
+                TransitionResult.Failed(
+                    reason = "Final Confirmation mode could not be corrected to Normal Career within one tap; Start Career refused.",
+                    transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
+                    recommendedAction = "Open the Final Confirmation screen, select the Normal Career tab, and restart the queue.",
+                )
+        }
+    }
+
+    /** Reads the current Final Confirmation mode from a FRESH screen capture. */
+    private fun readFinalConfirmationMode(): FinalConfirmationMode {
+        val bitmap = iu.getSourceBitmap()
+        return classifyFinalConfirmationMode(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })
     }
 
     /**
