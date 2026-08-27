@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.types.StatName
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -238,6 +239,43 @@ class GrandConcertSongCatalogTest {
                 GrandConcertSongCatalog.TechniqueEffectKind.UNKNOWN,
                 GrandConcertSongCatalog.parseTechnique("Some Future Technique", "###", v(0, 25, 0, 0, 0)).kind,
             )
+        }
+
+        @Test
+        fun `every single-stat title agrees with the stat its own cost family actually pays`() {
+            // Each family's title entry and the cost-signature fallback are two independent
+            // sources for the same fact (TECHNIQUE_TITLES vs COST_TYPE_STAT); this test just
+            // cross-checks them instead of hardcoding a stat and comparing it to itself, which
+            // would have missed the Audience Involvement / Makeup swap the same way the code did.
+            val familyCost =
+                mapOf(
+                    "Dance Step" to v(10, 0, 0, 0, 0),
+                    "Audience Involvement" to v(0, 10, 0, 0, 0),
+                    "Vocal Training" to v(0, 0, 10, 0, 0),
+                    "Makeup" to v(0, 0, 0, 10, 0),
+                    "Composure Training" to v(0, 0, 0, 0, 10),
+                )
+            for ((family, cost) in familyCost) {
+                val costFamilyStat = GrandConcertSongCatalog.parseTechniqueEffect(null, cost).stat
+                for (tier in listOf("Basics", "Intermediate Class", "Advanced Class")) {
+                    val title = "$family $tier"
+                    assertEquals(costFamilyStat, GrandConcertSongCatalog.matchTechniqueTitle(title)?.stat, title)
+                }
+            }
+        }
+
+        @Test
+        fun `Audience Involvement grants Stamina and Makeup grants Guts, per the live mastery text`() {
+            // learn_confirm_technique.png and technique_list.png show "Audience Involvement
+            // Basics" mastering "Stamina +5"; GrandConcertPolicyTest's Makeup fixture is
+            // "Guts +5". Both tiers above Basics follow the same family.
+            for (tier in listOf("Basics", "Intermediate Class", "Advanced Class")) {
+                assertEquals(StatName.STAMINA, GrandConcertSongCatalog.matchTechniqueTitle("Audience Involvement $tier")?.stat, tier)
+                assertEquals(StatName.GUTS, GrandConcertSongCatalog.matchTechniqueTitle("Makeup $tier")?.stat, tier)
+            }
+            assertEquals(StatName.SPEED, GrandConcertSongCatalog.matchTechniqueTitle("Dance Step Basics")?.stat)
+            assertEquals(StatName.POWER, GrandConcertSongCatalog.matchTechniqueTitle("Vocal Training Basics")?.stat)
+            assertEquals(StatName.WIT, GrandConcertSongCatalog.matchTechniqueTitle("Composure Training Basics")?.stat)
         }
     }
 }
