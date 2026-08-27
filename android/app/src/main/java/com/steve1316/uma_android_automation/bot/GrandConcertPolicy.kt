@@ -752,6 +752,13 @@ object GrandConcertPolicy {
      * and an OCR-uncertain magnitude is treated as the baseline instead of penalized. */
     private const val SINGLE_STAT_MAGNITUDE_BASELINE = 5
 
+    /** The largest known single-stat technique tier (Advanced Class, +12). OCR reads an unbounded
+     * "+N" from free text, so a garbled read (e.g. a stray digit turning +5 into +52) could
+     * otherwise inject a magnitude the game never actually offers. Clamping the magnitude itself,
+     * not just the adjustment, keeps a bogus reading from scoring any higher than the largest real
+     * tier while leaving every genuine +5/+8/+12 read untouched. */
+    private const val SINGLE_STAT_MAGNITUDE_CEILING = 12
+
     /** Per point of a single-stat technique's magnitude above [SINGLE_STAT_MAGNITUDE_BASELINE], on
      * top of [singleStatBase]. Set just above the highest [SCARCITY] weight (Vocal, 1.30): every
      * stat-technique tier doubles its cost with its magnitude (10/16/24 points for +5/+8/+12), so
@@ -773,9 +780,11 @@ object GrandConcertPolicy {
 
     /** Zero at or below the baseline tier, and zero when the magnitude could not be read at all -
      * both cases reproduce the pre-magnitude score exactly. [coerceAtLeast] guards against a future
-     * tier below the current known floor ever being penalized rather than simply left at baseline. */
+     * tier below the current known floor ever being penalized rather than simply left at baseline.
+     * [coerceAtMost] against [SINGLE_STAT_MAGNITUDE_CEILING] stops an off-ladder OCR read from
+     * scoring above the largest real tier. */
     private fun singleStatMagnitudeAdjustment(magnitude: Int?): Double =
-        ((magnitude ?: SINGLE_STAT_MAGNITUDE_BASELINE) - SINGLE_STAT_MAGNITUDE_BASELINE)
+        ((magnitude ?: SINGLE_STAT_MAGNITUDE_BASELINE).coerceAtMost(SINGLE_STAT_MAGNITUDE_CEILING) - SINGLE_STAT_MAGNITUDE_BASELINE)
             .coerceAtLeast(0)
             .toDouble() * SINGLE_STAT_MAGNITUDE_WEIGHT
 

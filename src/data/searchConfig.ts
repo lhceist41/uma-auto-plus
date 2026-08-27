@@ -29,6 +29,12 @@ const searchConfig: SearchOption[] = [
         page: "SettingsMain",
     },
     {
+        id: "settings-stop-at-date",
+        title: "Stop at Date",
+        description: "Stops the bot on one or more specified dates. The bot will stop at the earliest matching date it reaches.",
+        page: "SettingsMain",
+    },
+    {
         id: "settings-crane-game-attempt",
         title: "Enable Crane Game Attempt",
         description: "When enabled, the bot will attempt to complete the crane game. By default, the bot will stop when it is detected.",
@@ -69,6 +75,12 @@ const searchConfig: SearchOption[] = [
         id: "settings-wait-delay",
         title: "Wait Delay",
         description: "Sets the delay between actions and imaging operations. Lowering this will make the bot run much faster.",
+        page: "SettingsMain",
+    },
+    {
+        id: "settings-dialog-wait-delay",
+        title: "Dialog Wait Delay",
+        description: "Sets the delay between clicking a button that opens a dialog and actually handling the dialog. Lowering this will make the bot run faster at an increased risk of the bot incorrectly handling dialogs that pop up.",
         page: "SettingsMain",
     },
     {
@@ -199,10 +211,23 @@ const searchConfig: SearchOption[] = [
         page: "TrainingSettings",
     },
     {
+        id: "prioritize-near-max-friendship",
+        title: "Prioritize Near-Max Friendship Bars",
+        description:
+            "When enabled (Year 2+), trainings without a rainbow get up to a 1.6x score boost based on how full their friendship bars are, anticipating the rainbow they are about to unlock. Always stays below the real rainbow bonus so an actual rainbow wins.",
+        page: "TrainingSettings",
+    },
+    {
         id: "enable-training-analysis-validation",
         title: "Enable Training Analysis Validation",
         description:
             "When enabled, the bot will validate the current selected stat during training analysis. This helps prevent the bot from accidentally training a stat during analysis at the cost of a significant increase in scenario completion time.",
+        page: "TrainingSettings",
+    },
+    {
+        id: "enable-yolo-stat-detection",
+        title: "Enable YOLO Stat Detection",
+        description: "When enabled, the bot will use a custom YOLOv8 model for high-precision stat gain detection. This replaces the standard OCR/Template matching for stat gains.",
         page: "TrainingSettings",
     },
     {
@@ -250,9 +275,9 @@ const searchConfig: SearchOption[] = [
         page: "TrainingEventSettings",
     },
     {
-        id: "ocr-recognition-settings-title",
+        id: "ocr-recognition-settings",
         title: "OCR Recognition Settings",
-        description: "Configure settings for detecting and recognizing Training Event titles using OCR.",
+        description: "Configure settings for detecting and recognizing Training Event titles using OCR. These settings only affect the Training Event recognition process.",
         page: "TrainingEventSettings",
     },
     {
@@ -260,21 +285,21 @@ const searchConfig: SearchOption[] = [
         title: "Enable Automatic OCR Retry for Training Events",
         description: "When enabled, the bot will automatically retry OCR detection if the initial attempt for a training event title fails or has low confidence.",
         page: "TrainingEventSettings",
-        parentId: "ocr-recognition-settings-title",
+        parentId: "ocr-recognition-settings",
     },
     {
         id: "ocr-confidence-training",
         title: "OCR Confidence for Training Events",
         description: "The minimum confidence level required for a Training Event title to be considered a match.",
         page: "TrainingEventSettings",
-        parentId: "ocr-recognition-settings-title",
+        parentId: "ocr-recognition-settings",
     },
     {
         id: "hide-ocr-comparison-results-training",
         title: "Hide OCR String Comparison Results",
         description: "If enabled, the bot will suppress detailed logging of individual string similarity scores during training event detection to keep the logs cleaner.",
         page: "TrainingEventSettings",
-        parentId: "ocr-recognition-settings-title",
+        parentId: "ocr-recognition-settings",
     },
 
     // ============================================================
@@ -327,6 +352,13 @@ const searchConfig: SearchOption[] = [
         description: "When enabled, the bot will attempt to retry a failed mandatory race only if the daily free race retry is available.",
         page: "RacingSettings",
         parentId: "disable-race-retries",
+    },
+    {
+        id: "alarm-clock-policy",
+        title: "Alarm Clock Carat Policy",
+        description:
+            "When the bot runs out of free Alarm Clocks (5 per career) and the game prompts to buy one for 10 carats, this policy decides whether to spend carats based on what race was lost.",
+        page: "RacingSettings",
     },
     {
         id: "enable-complete-career-on-failure",
@@ -550,6 +582,13 @@ const searchConfig: SearchOption[] = [
         page: "SkillPlanSettingsSkillPointCheck",
         parentId: "enable-skill-plan-skillPointCheck",
     },
+    {
+        id: "show-selected-skills-SkillPlanSettingsSkillPointCheck",
+        title: "Show Only Selected Skills",
+        description: "Filters the Planned Skills list below to show only the skills currently added to this plan.",
+        page: "SkillPlanSettingsSkillPointCheck",
+        parentId: "enable-skill-plan-skillPointCheck",
+    },
 
     // ============================================================
     // Skill Plan Settings - Pre-Finals
@@ -574,6 +613,13 @@ const searchConfig: SearchOption[] = [
         page: "SkillPlanSettingsPreFinals",
         parentId: "enable-skill-plan-preFinals",
     },
+    {
+        id: "show-selected-skills-SkillPlanSettingsPreFinals",
+        title: "Show Only Selected Skills",
+        description: "Filters the Planned Skills list below to show only the skills currently added to this plan.",
+        page: "SkillPlanSettingsPreFinals",
+        parentId: "enable-skill-plan-preFinals",
+    },
 
     // ============================================================
     // Skill Plan Settings - Career Complete
@@ -595,6 +641,13 @@ const searchConfig: SearchOption[] = [
         id: "enable-buy-negative-skills-SkillPlanSettingsCareerComplete",
         title: "Purchase All Negative Skills",
         description: "When enabled, the bot will attempt to purchase all negative skills (i.e. Firm Conditions ×).",
+        page: "SkillPlanSettingsCareerComplete",
+        parentId: "enable-skill-plan-careerComplete",
+    },
+    {
+        id: "show-selected-skills-SkillPlanSettingsCareerComplete",
+        title: "Show Only Selected Skills",
+        description: "Filters the Planned Skills list below to show only the skills currently added to this plan.",
         page: "SkillPlanSettingsCareerComplete",
         parentId: "enable-skill-plan-careerComplete",
     },
@@ -754,6 +807,19 @@ const searchConfig: SearchOption[] = [
         description: "Scales the recording resolution. Lower values produce smaller file sizes but lower quality. 1.0 = full resolution, 0.5 = half resolution.",
         page: "DebugSettings",
         parentId: "enable-screen-recording",
+    },
+    {
+        id: "settings-enable-remote-log-viewer",
+        title: "Enable Remote Log Viewer",
+        description: "Starts an HTTP server on this device when the bot runs. Open the URL shown in a browser on your computer to view logs in real-time. Both devices must be on the same WiFi.",
+        page: "DebugSettings",
+    },
+    {
+        id: "settings-remote-log-viewer-port",
+        title: "Remote Log Viewer Port",
+        description: "Port number for the log stream server. Change only if the default conflicts with another service.",
+        page: "DebugSettings",
+        parentId: "settings-enable-remote-log-viewer",
     },
     {
         id: "debug-accessibility-service-check",
@@ -944,10 +1010,210 @@ const searchConfig: SearchOption[] = [
             "Disables normal bot operations and starts the Trackblazer buy items test. Opens the Shop if on the Main Screen and logs shop contents and purchase intentions without actually buying anything.",
         page: "DebugSettings",
     },
+    {
+        id: "debug-trainee-select-test",
+        title: "Start Trainee Select Test",
+        description:
+            "Read-only rotation calibration. Park the game on the Trainee Select screen, then start the bot: it logs what the header detector and the outfit/name banner OCR read, the match score against the current rotation target, and the computed grid tap targets, without tapping anything.",
+        page: "DebugSettings",
+    },
+    {
+        id: "debug-deck-stat-read-test",
+        title: "Start Deck Stat Read Test",
+        description:
+            "Read-only calibration. Park the game on the deck-selection screen (the one with Start Career! and Perks), then start the bot: it logs the support-card count it reads for each stat type and the build's core stat, without tapping anything.",
+        page: "DebugSettings",
+    },
+    {
+        id: "debug-deck-number-read-test",
+        title: "Start Deck Number Read Test",
+        description:
+            "Read-only calibration for the Required Support Deck feature. Park the game on the career-start Support Formation screen (the one with the Deck N label and left/right deck arrows), then start the bot: it logs the raw OCR and parsed deck number without tapping anything.",
+        page: "DebugSettings",
+    },
+    {
+        id: "debug-support-deck-rehearsal-test",
+        title: "Start Support Deck Rehearsal Test",
+        description:
+            "Rehearses the Required Support Deck selector on the real career-start Support Formation screen. Moves the saved-deck arrows with the production selector, reads each Deck N, and verifies the exact target deck. Never presses Start Career and spends no TP.",
+        page: "DebugSettings",
+    },
+    {
+        id: "debug-smart-borrow-rehearsal-test",
+        title: "Start Smart Borrow Rehearsal Test",
+        description:
+            "Exercises the production Smart Borrow flow (open the friend slot, pick a card, replace a duplicate or trainee-conflict borrow) and the exact post-borrow deck verification. Never presses Start Career and spends no TP.",
+        page: "DebugSettings",
+    },
+    {
+        id: "debug-smart-borrow-locate-test",
+        title: "Start Smart Borrow Locate Rehearsal",
+        description:
+            "Read-only: reads the pushed borrow intent and finds which live Borrow Card row it resolves to, then reports it. Opens the picker, reads the rows, matches the recommended card, closes the picker, and taps no card. Never presses Start Career, spends nothing.",
+        page: "DebugSettings",
+    },
+    {
+        id: "debug-borrow-remove-probe-test",
+        title: "Start Borrow Remove Probe",
+        description:
+            "Probes whether the picker's Remove control clears a borrowed card back to an empty Friends slot. This is the only one of these diagnostics that changes anything (it removes a throwaway card you placed first); it spends nothing and never presses Start Career.",
+        page: "DebugSettings",
+    },
+    {
+        id: "debug-smart-borrow-select-rollback-test",
+        title: "Start Smart Borrow Select + Rollback Rehearsal",
+        description:
+            "Reads the pushed borrow intent, taps the located Borrow Card row, verifies the committed Friends slot is that card, then taps Remove and confirms the slot went empty, repeating the cycle once. Never presses Start Career, spends nothing.",
+        page: "DebugSettings",
+    },
+    {
+        id: "debug-build-aware-launch-gate-test",
+        title: "Start Build-Aware Launch Gate Dry-Run",
+        description:
+            "Runs the production build-aware launch transaction to the final pre-launch gate, then deliberately does not press Start Career. Fails closed (no legacy fallback) if the pushed intent is missing, stale, or unverified. Spends nothing.",
+        page: "DebugSettings",
+    },
+    {
+        id: "debug-borrow-pool-scan-test",
+        title: "Start Borrow Pool Scan",
+        description:
+            "Read-only census of the cards you can borrow right now. Opens the Borrow Card picker, reads every visible row (name, rarity, level, limit-break, provenance, redacted owner), pages the list, and closes the picker. Taps no card, spends nothing.",
+        page: "DebugSettings",
+    },
+    {
+        id: "borrow-pool-scan-limit",
+        title: "Borrow Pool Scan Limit",
+        description:
+            "How many distinct borrow cards the Borrow Pool Scan census reads before it stops. Set 0 to read the whole visible pool. A small value reads only the first screen, which is the safe way to confirm the reader before committing to the full list.",
+        page: "DebugSettings",
+        parentId: "debug-borrow-pool-scan-test",
+    },
+    {
+        id: "borrow-pool-scan-evidence",
+        title: "Borrow Pool Scan Evidence",
+        description: "Logs each borrow row's raw per-field reads (name, rarity, level, limit-break pip count, provenance) so the row geometry can be calibrated without rescanning. Leave off for normal use.",
+        page: "DebugSettings",
+        parentId: "debug-borrow-pool-scan-test",
+    },
 
     // ============================================================
     // Run Queue Settings
     // ============================================================
+    {
+        id: "run-queue-enable",
+        title: "Enable Run Queue",
+        description:
+            "Queue multiple consecutive runs of the same scenario with the same settings. After each run completes, the bot navigates back to the career start and begins the next run automatically.",
+        page: "RunQueueSettings",
+    },
+    {
+        id: "run-queue-total-runs",
+        title: "Number of Runs",
+        description: "Total number of runs to perform in the queue. Each run uses the same scenario and settings.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-enable",
+    },
+    {
+        id: "run-queue-delay",
+        title: "Delay Between Runs",
+        description: "Seconds to wait between runs. This allows the game to settle and gives you a window to intervene if needed.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-enable",
+    },
+    {
+        id: "run-queue-max-runtime",
+        title: "Max Runtime Per Run",
+        description:
+            "Per-run safety timeout in minutes. If a single run takes longer than this it ends with a timeout result. Default 180 (3 hours) is comfortable for any scenario; raise it if you run on a very slow device.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-enable",
+    },
+    {
+        id: "run-queue-stop-on-error",
+        title: "Stop Queue on Error",
+        description:
+            "When enabled, the queue will halt if any run ends in an error or timeout. When disabled (recommended), the queue will skip the failed run and continue to the next one.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-enable",
+    },
+    {
+        id: "run-queue-reuse-setup",
+        title: "Reuse Last Launch Setup",
+        description: "Reuse the same trainee, support deck, and scenario setup from the previous run. If the game does not offer a reuse option, the queue will stop cleanly.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-enable",
+    },
+    {
+        id: "run-queue-auto-fill-supports",
+        title: "Auto-Fill Support Deck",
+        description:
+            "When enabled, clicks the game's own Auto-Fill button on the support deck screen before each career starts. The game then rebuilds the deck with its own logic, which may replace cards you placed yourself as well as fill empty slots. Disable this to keep your hand-built deck exactly as you left it.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-enable",
+    },
+    {
+        id: "run-queue-support-deck-index",
+        title: "Required Support Deck",
+        description:
+            "Require a specific saved support formation (Deck 1-10) at career start. The bot selects and verifies that deck on the Support Formation screen before and after the friend borrow, refusing to start (no TP spent) if it cannot, and suppresses Auto-Fill. 0 = off.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-enable",
+    },
+    {
+        id: "run-queue-tp-restore-items",
+        title: "Restore TP with Items",
+        description:
+            "When the game asks to restore TP between queued runs, refill TP to the max and continue. Priority: Toughness 30, then Star Fruit, then Carats as the last resort. Capped at 10 restores per session.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-enable",
+    },
+    {
+        id: "run-queue-spark-reroll",
+        title: "Auto-Reroll Sparks (30 TP)",
+        description:
+            "On the career-end Sparks screen, spend 30 TP to redraw the spark set once when it prices below a fresh roll. Reads both sets on the game's selection screen and keeps the better one, verifying which set is named before committing; if it cannot verify the selection it stops safely. Experimental: supervise the first spends. This spends TP.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-enable",
+    },
+    {
+        id: "run-queue-event-boost",
+        title: "Tick Event Boost (TP Usage x2)",
+        description:
+            "On the Start Career screen, tick 'Event Boost (TP Usage x2)' so each career earns double event rewards. The TP cost also doubles - the Restore TP with Items option covers it. Only worth it while a TP event is running.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-enable",
+    },
+    {
+        id: "run-queue-legacy-include-guests",
+        title: "Include Guests in Legacy Auto-Select",
+        description:
+            "On the Confirm Auto-Select legacy screen, tick 'Include Guests' so Auto-Select may borrow a guest (rental) parent. Borrowing a guest costs monies. Off by default - Auto-Select then uses only your owned umas.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-enable",
+    },
+    {
+        id: "run-queue-lineage-capture",
+        title: "Capture Lineage Data",
+        description:
+            "After Auto-Select fills the legacy slots, briefly open the Legacy Select Sparks view and record the six ancestors (both parents and all four grandparents) with their inherited factors as data for later analysis. Off by default. Observational only: it never changes the selected parents and never blocks a career.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-enable",
+    },
+    {
+        id: "run-queue-trainee-rotation",
+        title: "Rotate Trainees",
+        description:
+            "Instead of repeating one trainee, cycle through a list, switching every N runs. Each trainee plays under her own preset. The bot picks and verifies the trainee in-game at each switch; if the on-screen name does not match the target it stops rather than run the wrong career.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-enable",
+    },
+    {
+        id: "run-queue-switch-every",
+        title: "Switch Every N Runs",
+        description: "How many consecutive careers each trainee plays before the queue switches to the next. With 3 trainees and a value of 3, a 9-run queue plays 3 careers each.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-trainee-rotation",
+    },
     {
         id: "run-queue-smart-borrow",
         title: "Smart Borrow",
@@ -956,18 +1222,35 @@ const searchConfig: SearchOption[] = [
         page: "RunQueueSettings",
     },
     {
-        id: "run-queue-support-deck-index",
-        title: "Required Support Deck",
+        id: "run-queue-build-aware-launch",
+        title: "Build-Aware Launch (advanced)",
         description:
-            "Require a specific saved support formation (Deck 1-10) at career start. The bot selects and verifies that deck on the Support Formation screen before and after the friend borrow, refusing to start (no TP spent) if it cannot, and suppresses Auto-Fill. 0 = off.",
+            "Advanced. When on, a career launch borrows and starts through the build-aware launch transaction: it re-scans the live borrow pool for freshness, selects and verifies the exact card named by a pushed build-aware intent, checks the owned deck is unchanged, and presses Start Career only when everything verifies. If no fresh valid intent is available, the launch is blocked and no career starts.",
         page: "RunQueueSettings",
     },
+
+    // ============================================================
+    // Discord Settings
+    // ============================================================
     {
-        id: "run-queue-lineage-capture",
-        title: "Capture Lineage Data",
-        description:
-            "After Auto-Select fills the legacy slots, briefly open the Legacy Select Sparks view and record the six ancestors (both parents and all four grandparents) with their inherited factors as data for later analysis. Off by default. Observational only: it never changes the selected parents and never blocks a career.",
-        page: "RunQueueSettings",
+        id: "enableDiscordNotifications",
+        title: "Enable Discord Notifications",
+        description: "When enabled, the Discord bot will send a DM notification when it stops, including the run status and any error messages.",
+        page: "DiscordSettings",
+    },
+    {
+        id: "discordBotToken",
+        title: "Discord Bot Token",
+        description: "The token generated from the Discord Developer Portal. Your Discord bot must share a server with you.",
+        page: "DiscordSettings",
+        parentId: "enableDiscordNotifications",
+    },
+    {
+        id: "discordUserID",
+        title: "Discord User ID",
+        description: "Your Discord user ID. Enable Developer Mode in Discord settings, then click your name and select 'Copy User ID'.",
+        page: "DiscordSettings",
+        parentId: "enableDiscordNotifications",
     },
 ]
 

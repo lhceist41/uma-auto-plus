@@ -509,6 +509,27 @@ class GrandConcertPolicyTest {
         }
 
         @Test
+        fun `an off-ladder OCR magnitude is clamped to the largest known tier`() {
+            // The real ladder tops out at +12 (Advanced Class). A garbled OCR read of a much larger
+            // "+N" must not be able to outscore the largest technique the game actually offers.
+            val cost = v(24, 0, 0, 0, 0)
+            val twelve = techScore("Speed +12", cost)
+            val fiftyTwo = techScore("Speed +52", cost)
+            val nineNineNine = techScore("Speed +999", cost)
+            assertEquals(twelve, fiftyTwo, "clamped +52 must score identically to +12: twelve=$twelve fiftyTwo=$fiftyTwo")
+            assertEquals(twelve, nineNineNine, "clamped +999 must score identically to +12: twelve=$twelve nineNineNine=$nineNineNine")
+        }
+
+        @Test
+        fun `scarcity can still defeat a clamped off-ladder magnitude`() {
+            // Same as the existing scarce-color case, but with an off-ladder magnitude: the clamp
+            // must not bypass the scarcity/cost comparison that already beats a genuine +12.
+            val cheapSmall = techScore("Speed +5", v(10, 0, 0, 0, 0))
+            val scarceOffLadder = techScore("Speed +52", v(0, 0, 60, 0, 0))
+            assertTrue(cheapSmall > scarceOffLadder, "cheapSmall=$cheapSmall scarceOffLadder=$scarceOffLadder")
+        }
+
+        @Test
         fun `magnitude ordering survives under a Speed-first priority`() {
             val speedFirst = listOf(StatName.SPEED, StatName.GUTS, StatName.WIT, StatName.STAMINA, StatName.POWER)
             val ctx = LessonScoreContext(statPriority = speedFirst)
