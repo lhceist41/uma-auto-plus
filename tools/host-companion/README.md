@@ -1,6 +1,6 @@
 # Windows host companion
 
-The host companion is an optional diagnostic transport for UMA Auto+. The Android app remains fully usable with Accessibility Only selected. The companion exposes two authenticated operations over an ADB reverse connection: health and one bounded list swipe. It cannot select a card, advance a launch, run a generic shell command, change package settings, or install software.
+The host companion is an optional input transport for UMA Auto+. Normal operation is Accessibility only, and the app stays fully usable that way. When it is paired and enabled, the companion adds a single bounded list swipe the automation can call on: the Debug Settings swipe diagnostics use it directly, and a normal launch may fall back to it for recovery only after an Accessibility scroll has already failed. It exposes two authenticated operations over an ADB reverse connection, health and that one bounded list swipe, and the Android side always decides whether the list actually moved. It cannot select a card, advance a launch, run a generic shell command, change package settings, or install software. With no companion paired, the automation stays Accessibility only.
 
 ## Requirements
 

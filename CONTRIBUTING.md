@@ -90,6 +90,12 @@ Publish a note only when it is durable, generic, accurate, and useful to a futur
 - A hypothesis that was investigated and rejected does not earn a permanent home in production
   source as an archive. Record the conclusion, drop the chronology.
 
+When a note or a comment makes a claim, keep the kind of evidence behind it visible. Source and
+tests establish structural behavior; recorded fixtures and replay tests establish how a real capture
+is interpreted deterministically; a live run on the device or emulator establishes how the game
+itself behaves. A stronger claim needs the stronger evidence: do not let an implementation detail or
+a single passing test stand in for behavior that only a live run can show.
+
 ### Generated files
 
 - Prefer regeneration in a script or in CI over tracking the output.

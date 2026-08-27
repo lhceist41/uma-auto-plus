@@ -5019,9 +5019,10 @@ class CareerLaunchNavigator(private val context: Context) {
 
     /**
      * Sends one host diagnostic swipe only after the Borrow Card picker is proven by its repeated
-     * Last Login markers. The before/after identity is a local pixel digest of the list body. It is
-     * never logged or persisted. This path does not select a row, close the picker, or continue the
-     * launch.
+     * Last Login markers. Before/after movement is judged by the semantic Borrow-list fingerprint
+     * (the ordered row-identity signature, see [borrowHostSwipeFingerprint]), which tolerates the
+     * few-pixel row drift a positional digest cannot. The signature is never logged or persisted.
+     * This path does not select a row, close the picker, or continue the launch.
      */
     internal fun rehearseHostBorrowSwipe(injectedUtils: CustomImageUtils? = null): HostSwipeDiagnosticReport {
         prepareHostSwipeDiagnostic(injectedUtils)?.let { return unavailableHostSwipeReport(HostInputScope.BORROW_LIST_SCROLL, it) }

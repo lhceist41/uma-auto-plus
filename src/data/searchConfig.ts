@@ -792,6 +792,12 @@ const searchConfig: SearchOption[] = [
         page: "DebugSettings",
     },
     {
+        id: "debug-inject-build-aware-borrow-mid-list-stall",
+        title: "Inject Build-Aware Borrow Mid-List Stall",
+        description: "Validation-only fault that injects one deterministic mid-list Accessibility dead-dispatch into the build-aware Smart Borrow locate walker to exercise the recovery ladder and host-recovery rung. Off by default.",
+        page: "DebugSettings",
+    },
+    {
         id: "debug-host-borrow-swipe-test",
         title: "Start Host Borrow List Swipe Test",
         description: "Sends one bounded host swipe only from a recognized Borrow Card list, verifies movement from a fresh Android capture, and stops without selecting anything.",
