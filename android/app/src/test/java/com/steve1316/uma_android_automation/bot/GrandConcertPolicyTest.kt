@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.types.StatName
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -148,12 +149,15 @@ class GrandConcertPolicyTest {
 
         @Test
         fun `a tie is reported as uncertain and recommends nothing`() {
+            // Two identical offers (same title, effect, and cost) are the genuine tie now that
+            // single-stat techniques are valued by the run's own priority order: Speed and Power
+            // no longer score identically just for both being "core" stats.
             val offers =
                 LessonOfferSet(
                     listOf(
                         technique(1, "Dance Step Basics", "Speed +5"),
-                        technique(2, "Makeup Basics", "Guts +5"),
-                        technique(3, "Vocal Training Basics", "Power +5"),
+                        technique(2, "Dance Step Basics", "Speed +5"),
+                        technique(3, "Makeup Basics", "Guts +5"),
                     ),
                 )
             val d = GrandConcertPolicy.recommend(state(offers))
@@ -358,6 +362,118 @@ class GrandConcertPolicyTest {
             // unclassifiable card look purchasable.
             val end = LessonScoreContext(careerComplete = true)
             assertEquals(0, GrandConcertPolicy.scoreLesson(LessonCardKind.UNKNOWN, null, null, null, null, v(0, 0, 25, 0, 0), end))
+        }
+    }
+
+    @Nested
+    @DisplayName("stat priority in lesson scoring")
+    inner class StatPriorityScoring {
+        private fun v(da: Int, pa: Int, vo: Int, vi: Int, co: Int) = PerformancePointVector.of(da, pa, vo, vi, co)
+
+        private fun techScore(effect: String?, cost: PerformancePointVector, ctx: LessonScoreContext) =
+            GrandConcertPolicy.scoreLesson(LessonCardKind.TECHNIQUE, "Some Basics", null, null, effect, cost, ctx)
+
+        private fun songScore(title: String?, mastery: String?, concert: String?, cost: PerformancePointVector, ctx: LessonScoreContext) =
+            GrandConcertPolicy.scoreLesson(LessonCardKind.SONG, title, mastery, concert, null, cost, ctx)
+
+        /** UMA Auto+'s own default training.statPrioritization order. */
+        private val defaultPriority = listOf(StatName.WIT, StatName.SPEED, StatName.POWER, StatName.STAMINA, StatName.GUTS)
+
+        @Test
+        fun `the run's default priority still favors a Speed technique over a Stamina one`() {
+            val ctx = LessonScoreContext(statPriority = defaultPriority)
+            val speed = techScore("Speed +5", v(10, 0, 0, 0, 0), ctx)
+            val stamina = techScore("Stamina +5", v(0, 10, 0, 0, 0), ctx)
+            assertTrue(speed > stamina, "speed=$speed stamina=$stamina")
+        }
+
+        @Test
+        fun `a Stamina-first priority reverses the old bias, so the Stamina technique now wins`() {
+            val staminaFirst = listOf(StatName.STAMINA, StatName.GUTS, StatName.POWER, StatName.WIT, StatName.SPEED)
+            val cost = v(0, 10, 0, 0, 0)
+            val stamina = techScore("Stamina +5", cost, LessonScoreContext(statPriority = staminaFirst))
+            val speed = techScore("Speed +5", cost, LessonScoreContext(statPriority = staminaFirst))
+            assertTrue(stamina > speed, "stamina=$stamina speed=$speed")
+        }
+
+        @Test
+        fun `a Guts-first priority reverses the old bias, so the Guts technique now wins`() {
+            val gutsFirst = listOf(StatName.GUTS, StatName.STAMINA, StatName.POWER, StatName.SPEED, StatName.WIT)
+            val cost = v(0, 0, 0, 10, 0)
+            val guts = techScore("Guts +5", cost, LessonScoreContext(statPriority = gutsFirst))
+            val wit = techScore("Wit +5", cost, LessonScoreContext(statPriority = gutsFirst))
+            assertTrue(guts > wit, "guts=$guts wit=$wit")
+        }
+
+        @Test
+        fun `swapping two stats in the priority list reverses which one scores higher`() {
+            // Identical cost on both cards in each comparison, so only the priority order differs.
+            val cost = v(10, 0, 0, 0, 0)
+            val speedFirst = listOf(StatName.SPEED, StatName.STAMINA, StatName.POWER, StatName.GUTS, StatName.WIT)
+            val staminaFirst = listOf(StatName.STAMINA, StatName.SPEED, StatName.POWER, StatName.GUTS, StatName.WIT)
+            val speedAheadUnderSpeedFirst =
+                techScore("Speed +5", cost, LessonScoreContext(statPriority = speedFirst)) >
+                    techScore("Stamina +5", cost, LessonScoreContext(statPriority = speedFirst))
+            val staminaAheadUnderStaminaFirst =
+                techScore("Stamina +5", cost, LessonScoreContext(statPriority = staminaFirst)) >
+                    techScore("Speed +5", cost, LessonScoreContext(statPriority = staminaFirst))
+            assertTrue(speedAheadUnderSpeedFirst && staminaAheadUnderStaminaFirst, "the ranking should flip when the two stats swap places")
+        }
+
+        @Test
+        fun `stat priority never overrides the unconditional below-floor song pick`() {
+            // Even the highest score a single-stat technique can reach must still lose to a song
+            // while the cycle is below the Great Success floor.
+            val topPriorityTechnique = LessonOfferLine(1, "shiny tech", LessonCardKind.TECHNIQUE, true, false, 999, 10.0, rawCostTotal = 16)
+            val cheapSong = LessonOfferLine(0, "cheap song", LessonCardKind.SONG, true, false, 12, 30.0, rawCostTotal = 44)
+            val r = GrandConcertLessonReport(listOf(topPriorityTechnique, cheapSong), emptyList(), emptyList())
+            assertEquals(0, GrandConcertPolicy.chooseSongFirst(r, 0)?.slot, "the song must win below the floor regardless of the technique's score")
+        }
+
+        @Test
+        fun `stat priority never makes an unaffordable technique purchasable`() {
+            val line = LessonOfferLine(0, "Stamina Basics", LessonCardKind.TECHNIQUE, false, false, 40)
+            val r = GrandConcertLessonReport(listOf(line), emptyList(), emptyList())
+            assertNull(GrandConcertPolicy.chooseSpend(r), "unaffordable stays unaffordable no matter how the priority scores it")
+        }
+
+        @Test
+        fun `stat priority does not change the scarcity-weighted point-color penalty`() {
+            val staminaFirst = listOf(StatName.STAMINA, StatName.GUTS, StatName.POWER, StatName.WIT, StatName.SPEED)
+            val ctx = LessonScoreContext(statPriority = staminaFirst)
+            val vocalPriced = songScore("Some New Song", "Speed +22", null, v(0, 0, 21, 0, 0), ctx)
+            val dancePriced = songScore("Some New Song", "Speed +22", null, v(21, 0, 0, 0, 0), ctx)
+            assertTrue(dancePriced > vocalPriced, "dance=$dancePriced vocal=$vocalPriced")
+        }
+
+        @Test
+        fun `stat priority does not change song scoring at all`() {
+            // scoreSong never reads statPriority: a song is valued by its mastery and concert-bonus
+            // TYPE, not by which single stat a technique grants.
+            val cost = v(0, 21, 0, 21, 0)
+            val ctxA = LessonScoreContext(segment = ConcertSegment.BEFORE_PROMO_2, statPriority = defaultPriority)
+            val ctxB = LessonScoreContext(segment = ConcertSegment.BEFORE_PROMO_2, statPriority = defaultPriority.reversed())
+            val scoreA = songScore("Run for Our Dream!", null, null, cost, ctxA)
+            val scoreB = songScore("Run for Our Dream!", null, null, cost, ctxB)
+            assertEquals(scoreA, scoreB, "a song's score must not depend on the run's stat priority")
+        }
+
+        @Test
+        fun `stat priority does not change the energy technique's base value`() {
+            val cost = v(0, 0, 0, 0, 30)
+            val low = techScore("Energy +30", cost, LessonScoreContext(energyPercent = 40, statPriority = defaultPriority))
+            val lowReversed = techScore("Energy +30", cost, LessonScoreContext(energyPercent = 40, statPriority = defaultPriority.reversed()))
+            assertEquals(low, lowReversed, "an energy technique's score must not depend on the run's stat priority")
+        }
+
+        @Test
+        fun `an empty priority falls back to the same declaration order Training itself falls back to`() {
+            // Training.statPrioritization falls back to StatName.entries (Speed, Stamina, Power,
+            // Guts, Wit) when the setting is empty; Grand Concert reuses that exact fallback.
+            val cost = v(10, 0, 0, 0, 0)
+            val speed = techScore("Speed +5", cost, LessonScoreContext(statPriority = emptyList()))
+            val wit = techScore("Wit +5", cost, LessonScoreContext(statPriority = emptyList()))
+            assertTrue(speed > wit, "under the StatName.entries fallback, Speed (rank 0) must outscore Wit (last rank): speed=$speed wit=$wit")
         }
     }
 

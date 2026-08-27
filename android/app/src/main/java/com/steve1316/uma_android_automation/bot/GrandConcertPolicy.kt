@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.types.StatName
 import kotlin.math.roundToInt
 
 /**
@@ -682,7 +683,7 @@ object GrandConcertPolicy {
                     }
                 GrandConcertSongCatalog.TechniqueEffectKind.SKILL_POINTS -> 60.0
                 GrandConcertSongCatalog.TechniqueEffectKind.STAT_PLUS_SKILL_POINTS -> 50.0
-                GrandConcertSongCatalog.TechniqueEffectKind.SINGLE_STAT -> if (read.coreStat == true) 40.0 else 22.0
+                GrandConcertSongCatalog.TechniqueEffectKind.SINGLE_STAT -> singleStatBase(read.stat, read.coreStat, ctx.statPriority)
                 GrandConcertSongCatalog.TechniqueEffectKind.TWO_STATS -> 30.0
                 // Default off per the research; whitelist support is a later, separate decision.
                 GrandConcertSongCatalog.TechniqueEffectKind.SKILL_HINT -> 5.0
@@ -707,6 +708,38 @@ object GrandConcertPolicy {
         return (base - weightedCost(cost, flat = true) * CAREER_END_COST_WEIGHT)
             .roundToInt()
             .coerceAtLeast(SPEND_MIN_SCORE_CAREER_COMPLETE)
+    }
+
+    /** The single-stat base score for the run's highest-priority stat; the lowest-priority stat
+     * scores [SINGLE_STAT_LOW_PRIORITY_SCORE]. These are the same two endpoints the scenario used
+     * before this method existed, when every single-stat technique was scored 40 for Speed/Wit/
+     * Power and 22 for Stamina/Guts regardless of what the run was actually built for. */
+    private const val SINGLE_STAT_HIGH_PRIORITY_SCORE = 40.0
+    private const val SINGLE_STAT_LOW_PRIORITY_SCORE = 22.0
+
+    /**
+     * Values a single-stat technique by where its stat sits in the run's own priority order
+     * instead of the scenario's old fixed Speed/Wit/Power-over-Stamina/Guts split, so a Stamina-
+     * or Guts-focused build is no longer structurally demoted. The five ranks are spaced evenly
+     * between the old high and low scores, so reversing two stats in the priority list reverses
+     * which one this scores higher, and the untouched default order (Speed/Wit/Power ahead of
+     * Stamina/Guts) reproduces the old core-beats-secondary result.
+     *
+     * A stat missing from a partially-specified priority list is treated as lowest priority: with
+     * no stat-target ratio to fall back on (unlike normal Training scoring), a stat the player
+     * removed from the list is the closest available signal to "do not care about this."
+     *
+     * Falls back to the coarse core/secondary read when the technique's exact stat could not be
+     * identified (title unmatched, effect text unreadable, cost signature ambiguous) - the same
+     * fallback the scenario used everywhere before this change.
+     */
+    private fun singleStatBase(stat: StatName?, coreStat: Boolean?, priority: List<StatName>): Double {
+        if (stat == null) return if (coreStat == true) SINGLE_STAT_HIGH_PRIORITY_SCORE else SINGLE_STAT_LOW_PRIORITY_SCORE
+        val order = priority.ifEmpty { StatName.entries }
+        val rank = order.indexOf(stat).let { if (it >= 0) it else order.lastIndex }
+        val span = (order.size - 1).coerceAtLeast(1)
+        val t = rank.toDouble() / span
+        return SINGLE_STAT_HIGH_PRIORITY_SCORE + t * (SINGLE_STAT_LOW_PRIORITY_SCORE - SINGLE_STAT_HIGH_PRIORITY_SCORE)
     }
 
     /** Maps a readable mastery line to its bonus type. Handles both observed formats
@@ -770,6 +803,12 @@ data class LessonScoreContext(
     /** True on the Complete Career screen's final drain: no training turns or concerts remain, so
      * compounding and queued bonuses are residual and every deadline has already resolved. */
     val careerComplete: Boolean = false,
+    /** The run's own training stat priority ([Training.statPrioritization]), so a single-stat
+     * technique is valued against the stats the player actually chose to build rather than a
+     * scenario-fixed preference. Defaults to declaration order (Speed, Stamina, Power, Guts, Wit),
+     * the same empty-list fallback [Training] itself falls back to; callers should pass the run's
+     * resolved list rather than leaving this default. */
+    val statPriority: List<StatName> = StatName.entries,
 )
 
 /** One ranked offer line. [affordable] is null when it could not be determined. [weightedCost]

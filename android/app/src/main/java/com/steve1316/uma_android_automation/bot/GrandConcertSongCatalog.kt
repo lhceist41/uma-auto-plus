@@ -1,5 +1,7 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.types.StatName
+
 /**
  * Static catalog of the Grand Concert shop songs on Global, keyed by title.
  *
@@ -197,16 +199,41 @@ object GrandConcertSongCatalog {
     enum class TechniqueEffectKind { ENERGY, SKILL_POINTS, STAT_PLUS_SKILL_POINTS, SINGLE_STAT, TWO_STATS, SKILL_HINT, UNKNOWN }
 
     /** [coreStat] is true for Speed/Wit/Power, false for Stamina/Guts, null when no stat named.
-     * [viaCostSignature] marks a classification made from the cost alone (unreadable text). */
+     * [stat] is the exact stat a SINGLE_STAT technique grants, when identifiable; it is what lets
+     * the scorer weigh the technique by the run's own stat priority instead of the coarse
+     * core/secondary split. [viaCostSignature] marks a classification made from the cost alone
+     * (unreadable text). */
     data class TechniqueRead(
         val kind: TechniqueEffectKind,
         val magnitude: Int?,
         val coreStat: Boolean? = null,
         val viaCostSignature: Boolean = false,
+        val stat: StatName? = null,
     )
 
     private val CORE_STATS = listOf("speed", "wit", "power")
     private val SECONDARY_STATS = listOf("stamina", "guts")
+
+    /** Word -> exact stat, for identifying which single stat an effect line names. */
+    private val STAT_WORDS: Map<String, StatName> =
+        mapOf(
+            "speed" to StatName.SPEED,
+            "wit" to StatName.WIT,
+            "power" to StatName.POWER,
+            "stamina" to StatName.STAMINA,
+            "guts" to StatName.GUTS,
+        )
+
+    /** Cost token -> the exact stat its single-stat technique grants (Da=Speed, Pa=Stamina,
+     * Vo=Power, Vi=Guts, Co=Wit; same mapping [CORE_STAT_COST_TYPES] classifies coarsely). */
+    private val COST_TYPE_STAT: Map<PerformancePointType, StatName> =
+        mapOf(
+            PerformancePointType.DANCE to StatName.SPEED,
+            PerformancePointType.PASSION to StatName.STAMINA,
+            PerformancePointType.VOCAL to StatName.POWER,
+            PerformancePointType.VISUAL to StatName.GUTS,
+            PerformancePointType.COMPOSURE to StatName.WIT,
+        )
 
     /**
      * Global technique titles -> effect identity. The effect text on the lesson list is frequently
@@ -239,21 +266,21 @@ object GrandConcertSongCatalog {
             "Watch a Top-Tier Idol's Concert" to TechniqueRead(TechniqueEffectKind.SKILL_POINTS, 12),
             // Single-stat families, one per token: Dance pays Speed, Passion Stamina, Vocal Power,
             // Visual Guts, Composure Wit, at 10/16/24 for +5/+8/+12.
-            "Dance Step Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = true),
-            "Dance Step Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = true),
-            "Dance Step Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = true),
-            "Audience Involvement Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = false),
-            "Audience Involvement Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = false),
-            "Audience Involvement Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = false),
-            "Vocal Training Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = true),
-            "Vocal Training Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = true),
-            "Vocal Training Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = true),
-            "Makeup Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = false),
-            "Makeup Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = false),
-            "Makeup Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = false),
-            "Composure Training Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = true),
-            "Composure Training Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = true),
-            "Composure Training Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = true),
+            "Dance Step Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = true, stat = StatName.SPEED),
+            "Dance Step Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = true, stat = StatName.SPEED),
+            "Dance Step Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = true, stat = StatName.SPEED),
+            "Audience Involvement Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = false, stat = StatName.GUTS),
+            "Audience Involvement Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = false, stat = StatName.GUTS),
+            "Audience Involvement Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = false, stat = StatName.GUTS),
+            "Vocal Training Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = true, stat = StatName.POWER),
+            "Vocal Training Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = true, stat = StatName.POWER),
+            "Vocal Training Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = true, stat = StatName.POWER),
+            "Makeup Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = false, stat = StatName.STAMINA),
+            "Makeup Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = false, stat = StatName.STAMINA),
+            "Makeup Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = false, stat = StatName.STAMINA),
+            "Composure Training Basics" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 5, coreStat = true, stat = StatName.WIT),
+            "Composure Training Intermediate Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 8, coreStat = true, stat = StatName.WIT),
+            "Composure Training Advanced Class" to TechniqueRead(TechniqueEffectKind.SINGLE_STAT, 12, coreStat = true, stat = StatName.WIT),
             // Two-stat family observed live; the rest of the two-stat and range-effect families are
             // catalogued in master.mdb but not yet here (see the note above this map).
             "Mic Performance Basics" to TechniqueRead(TechniqueEffectKind.TWO_STATS, 4, coreStat = true),
@@ -330,7 +357,10 @@ object GrandConcertSongCatalog {
                         TechniqueRead(TechniqueEffectKind.SKILL_POINTS, magnitude)
                     }
                 statHits >= 2 -> return TechniqueRead(TechniqueEffectKind.TWO_STATS, magnitude, coreStat = coreHits > 0)
-                statHits == 1 -> return TechniqueRead(TechniqueEffectKind.SINGLE_STAT, magnitude, coreStat = coreHits > 0)
+                statHits == 1 -> {
+                    val namedStat = STAT_WORDS.entries.firstOrNull { (word, _) -> hasWord(word) }?.value
+                    return TechniqueRead(TechniqueEffectKind.SINGLE_STAT, magnitude, coreStat = coreHits > 0, stat = namedStat)
+                }
             }
         }
 
@@ -343,6 +373,7 @@ object GrandConcertSongCatalog {
                     tierMagnitude,
                     coreStat = single.first in CORE_STAT_COST_TYPES,
                     viaCostSignature = true,
+                    stat = COST_TYPE_STAT[single.first],
                 )
             }
         }

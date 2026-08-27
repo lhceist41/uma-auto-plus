@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.bot.campaigns
 
 import com.steve1316.automation_library.utils.MessageLog
+import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.bot.CampaignBreakpointException
 import com.steve1316.uma_android_automation.bot.ConcertSegment
@@ -31,6 +32,7 @@ import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonClose
 import com.steve1316.uma_android_automation.components.IconRaceDayRibbon
+import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.utils.GrandConcertCareerComplete
 import com.steve1316.uma_android_automation.utils.GrandConcertEscort
 import com.steve1316.uma_android_automation.utils.GrandCutsceneCheckbox
@@ -94,6 +96,13 @@ class GrandConcert(game: Game) : Campaign(game) {
 
     /** Reads the live Lesson list into telemetry. Never taps - navigation stays here in the campaign. */
     private val lessonReader = GrandConcertLessonReader(game)
+
+    /** The run's own training stat priority, read once the same way the Training class reads it:
+     * same setting key, same empty-list fallback to the enum's declaration order. Threading this into
+     * Lesson scoring is what lets a Stamina- or Guts-focused build outweigh a single-stat
+     * technique that used to be scored purely by the scenario's old Speed/Wit/Power preference. */
+    private val statPriority: List<StatName> =
+        SettingsHelper.getStringArraySetting("training", "statPrioritization").mapNotNull { StatName.fromName(it) }.ifEmpty { StatName.entries }
 
     /** The committed Grand Concert fan facts (goals, mandatory gates, payout floor), loaded once from
      * the packaged asset. Null when the asset is missing or malformed, which the fan-pressure snapshot
@@ -523,7 +532,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             exitLessonShop()
             return DRAIN_LIST_NEVER_SEEN
         }
-        val context = LessonScoreContext(careerComplete = true, energyPercent = trainee.energy)
+        val context = LessonScoreContext(careerComplete = true, energyPercent = trainee.energy, statPriority = statPriority)
         lessonReader.logLessonList(list)
         logLessonScores(list, context)
         val spent =
@@ -614,7 +623,7 @@ class GrandConcert(game: Game) : Campaign(game) {
         // (Lessons unlocks later), so day<=1 always means "not read yet": score without turn
         // context rather than as pre-1st-concert (which inflated a song to 365 on restart).
         if (day <= 1) {
-            return LessonScoreContext(songsLearnedThisCycle = songsBoughtThisCycle, energyPercent = trainee.energy)
+            return LessonScoreContext(songsLearnedThisCycle = songsBoughtThisCycle, energyPercent = trainee.energy, statPriority = statPriority)
         }
         // STRICTLY-before: the concert turn itself still belongs to the ENDING cycle. With <=,
         // the first context built on the concert day (the training recommendation runs before
@@ -642,6 +651,7 @@ class GrandConcert(game: Game) : Campaign(game) {
             turnsAfterNextConcert = nextConcert?.let { (CAREER_END_TURN - it).coerceAtLeast(0) },
             segment = segment,
             energyPercent = trainee.energy,
+            statPriority = statPriority,
         )
     }
 
