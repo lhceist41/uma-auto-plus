@@ -683,7 +683,8 @@ object GrandConcertPolicy {
                     }
                 GrandConcertSongCatalog.TechniqueEffectKind.SKILL_POINTS -> 60.0
                 GrandConcertSongCatalog.TechniqueEffectKind.STAT_PLUS_SKILL_POINTS -> 50.0
-                GrandConcertSongCatalog.TechniqueEffectKind.SINGLE_STAT -> singleStatBase(read.stat, read.coreStat, ctx.statPriority)
+                GrandConcertSongCatalog.TechniqueEffectKind.SINGLE_STAT ->
+                    singleStatBase(read.stat, read.coreStat, ctx.statPriority) + singleStatMagnitudeAdjustment(read.magnitude)
                 GrandConcertSongCatalog.TechniqueEffectKind.TWO_STATS -> 30.0
                 // Default off per the research; whitelist support is a later, separate decision.
                 GrandConcertSongCatalog.TechniqueEffectKind.SKILL_HINT -> 5.0
@@ -741,6 +742,42 @@ object GrandConcertPolicy {
         val t = rank.toDouble() / span
         return SINGLE_STAT_HIGH_PRIORITY_SCORE + t * (SINGLE_STAT_LOW_PRIORITY_SCORE - SINGLE_STAT_HIGH_PRIORITY_SCORE)
     }
+
+    /** The smallest known single-stat technique tier (Dance Step Basics and its siblings all grant
+     * +5) and the zero point for [singleStatMagnitudeAdjustment]. A technique at or below this
+     * tier, or one whose magnitude could not be read at all, keeps its exact pre-magnitude score;
+     * only a confirmed Intermediate or Advanced card picks up extra value. Zeroing at the smallest
+     * tier rather than at zero magnitude means the huge majority of existing scoring - every
+     * technique already offered and scored at its most common tier - is untouched by this change,
+     * and an OCR-uncertain magnitude is treated as the baseline instead of penalized. */
+    private const val SINGLE_STAT_MAGNITUDE_BASELINE = 5
+
+    /** Per point of a single-stat technique's magnitude above [SINGLE_STAT_MAGNITUDE_BASELINE], on
+     * top of [singleStatBase]. Set just above the highest [SCARCITY] weight (Vocal, 1.30): every
+     * stat-technique tier doubles its cost with its magnitude (10/16/24 points for +5/+8/+12), so
+     * the half-weighted cost term already charges `magnitude * scarcity` for one more point of
+     * stat. A weight above the highest scarcity guarantees that charge can never fully offset the
+     * credit, so two techniques of the SAME stat always rank by magnitude no matter which token
+     * either one costs, including Power's own Vocal token, the scarcest one there is. This is the
+     * exact defect an upstream audit caught: Speed +5/cost 10 outscored Speed +12/cost 24 (36 vs
+     * 30) because the flat, magnitude-blind base let a proportional cost win by default.
+     *
+     * Deliberately small relative to the run's own priority spread (18, the gap between
+     * [SINGLE_STAT_HIGH_PRIORITY_SCORE] and [SINGLE_STAT_LOW_PRIORITY_SCORE]): the full swing from
+     * the baseline to the largest known tier is worth barely more than half that gap, so a
+     * preferred stat's smallest tier still outranks an unwanted stat's largest one. It is also
+     * easily cleared by an outsized cost: a technique whose price eats deep into a scarce color
+     * still loses to a cheaper, smaller technique of the same stat, so the scarcity and reserve
+     * rules stay authoritative over raw magnitude. */
+    private const val SINGLE_STAT_MAGNITUDE_WEIGHT = 1.5
+
+    /** Zero at or below the baseline tier, and zero when the magnitude could not be read at all -
+     * both cases reproduce the pre-magnitude score exactly. [coerceAtLeast] guards against a future
+     * tier below the current known floor ever being penalized rather than simply left at baseline. */
+    private fun singleStatMagnitudeAdjustment(magnitude: Int?): Double =
+        ((magnitude ?: SINGLE_STAT_MAGNITUDE_BASELINE) - SINGLE_STAT_MAGNITUDE_BASELINE)
+            .coerceAtLeast(0)
+            .toDouble() * SINGLE_STAT_MAGNITUDE_WEIGHT
 
     /** Maps a readable mastery line to its bonus type. Handles both observed formats
      * ("Training Wit Gain +1", "Skill Pts +22", "Speed +22"). Never returns FREE_ALL: the free

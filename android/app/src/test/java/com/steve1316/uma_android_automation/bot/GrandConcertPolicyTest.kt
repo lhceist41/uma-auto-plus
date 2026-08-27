@@ -478,6 +478,104 @@ class GrandConcertPolicyTest {
     }
 
     @Nested
+    @DisplayName("technique magnitude scoring")
+    inner class TechniqueMagnitudeScoring {
+        private fun v(da: Int, pa: Int, vo: Int, vi: Int, co: Int) = PerformancePointVector.of(da, pa, vo, vi, co)
+
+        private fun techScore(effect: String?, cost: PerformancePointVector, ctx: LessonScoreContext = LessonScoreContext()) =
+            GrandConcertPolicy.scoreLesson(LessonCardKind.TECHNIQUE, "Some Basics", null, null, effect, cost, ctx)
+
+        @Test
+        fun `the audited example is pinned - a larger same-stat grant now outscores a smaller one`() {
+            // Upstream v5.8.8 reconciliation audit, reproduced against 7b38cbdc2 before this change:
+            // Speed +5/cost 10 scored 36 and Speed +12/cost 24 scored 30, purely because the
+            // magnitude-blind base let the proportional cost win by default. Both cards cost Dance,
+            // Speed's own token (scarcity 0.85). The smaller card is also the smallest known tier,
+            // so its score is the magnitude baseline and stays exactly what it was before this
+            // change; only the larger card picks up the credit that flips the ordering.
+            val smaller = techScore("Speed +5", v(10, 0, 0, 0, 0))
+            val larger = techScore("Speed +12", v(24, 0, 0, 0, 0))
+            assertEquals(36, smaller, "smaller=$smaller")
+            assertEquals(40, larger, "larger=$larger")
+            assertTrue(larger > smaller, "smaller=$smaller larger=$larger")
+        }
+
+        @Test
+        fun `same stat and cost tier, more magnitude never scores less under a neutral priority`() {
+            val five = techScore("Speed +5", v(10, 0, 0, 0, 0))
+            val eight = techScore("Speed +8", v(16, 0, 0, 0, 0))
+            val twelve = techScore("Speed +12", v(24, 0, 0, 0, 0))
+            assertTrue(twelve > eight && eight > five, "five=$five eight=$eight twelve=$twelve")
+        }
+
+        @Test
+        fun `magnitude ordering survives under a Speed-first priority`() {
+            val speedFirst = listOf(StatName.SPEED, StatName.GUTS, StatName.WIT, StatName.STAMINA, StatName.POWER)
+            val ctx = LessonScoreContext(statPriority = speedFirst)
+            val five = techScore("Speed +5", v(10, 0, 0, 0, 0), ctx)
+            val twelve = techScore("Speed +12", v(24, 0, 0, 0, 0), ctx)
+            assertTrue(twelve > five, "five=$five twelve=$twelve")
+        }
+
+        @Test
+        fun `magnitude ordering survives under a Stamina-first priority`() {
+            val staminaFirst = listOf(StatName.STAMINA, StatName.GUTS, StatName.POWER, StatName.WIT, StatName.SPEED)
+            val ctx = LessonScoreContext(statPriority = staminaFirst)
+            val five = techScore("Stamina +5", v(0, 10, 0, 0, 0), ctx)
+            val twelve = techScore("Stamina +12", v(0, 24, 0, 0, 0), ctx)
+            assertTrue(twelve > five, "five=$five twelve=$twelve")
+        }
+
+        @Test
+        fun `stat priority still outweighs magnitude - a preferred stat's smallest tier beats an unwanted stat's largest`() {
+            val witFirst = listOf(StatName.WIT, StatName.SPEED, StatName.POWER, StatName.STAMINA, StatName.GUTS)
+            val ctx = LessonScoreContext(statPriority = witFirst)
+            val preferredSmall = techScore("Wit +5", v(0, 0, 0, 0, 10), ctx)
+            val unwantedLarge = techScore("Guts +12", v(0, 0, 0, 24, 0), ctx)
+            assertTrue(preferredSmall > unwantedLarge, "preferredSmall=$preferredSmall unwantedLarge=$unwantedLarge")
+        }
+
+        @Test
+        fun `a technique that eats deep into a scarce color still loses to a cheaper, smaller technique of the same stat`() {
+            // Same stat both sides (so the priority base cancels out), but the larger grant is
+            // priced in a badly-needed scarce color instead of its own token.
+            val cheapSmall = techScore("Speed +5", v(10, 0, 0, 0, 0))
+            val scarceLarge = techScore("Speed +12", v(0, 0, 60, 0, 0))
+            assertTrue(cheapSmall > scarceLarge, "cheapSmall=$cheapSmall scarceLarge=$scarceLarge")
+        }
+
+        @Test
+        fun `magnitude cannot make an unaffordable technique purchasable`() {
+            val line = LessonOfferLine(0, "Dance Step Advanced Class", LessonCardKind.TECHNIQUE, false, false, 999)
+            val r = GrandConcertLessonReport(listOf(line), emptyList(), emptyList())
+            assertNull(GrandConcertPolicy.chooseSpend(r), "unaffordable stays unaffordable no matter how large the magnitude scores it")
+        }
+
+        @Test
+        fun `an unreadable magnitude preserves the pre-magnitude score instead of penalizing OCR uncertainty`() {
+            // "Speed Up!" names the stat but carries no readable "+N", so magnitude parses null.
+            val unreadMagnitude = techScore("Speed Up!", v(10, 0, 0, 0, 0))
+            assertEquals(36, unreadMagnitude, "null magnitude must reproduce the pre-magnitude formula exactly")
+        }
+
+        @Test
+        fun `a below-floor song still always wins over a technique regardless of the technique's magnitude`() {
+            val hugeMagnitudeTechnique = LessonOfferLine(1, "shiny tech", LessonCardKind.TECHNIQUE, true, false, 999, 10.0, rawCostTotal = 24)
+            val cheapSong = LessonOfferLine(0, "cheap song", LessonCardKind.SONG, true, false, 12, 30.0, rawCostTotal = 44)
+            val r = GrandConcertLessonReport(listOf(hugeMagnitudeTechnique, cheapSong), emptyList(), emptyList())
+            assertEquals(0, GrandConcertPolicy.chooseSongFirst(r, 0)?.slot, "the song must win below the floor regardless of the technique's magnitude-driven score")
+        }
+
+        @Test
+        fun `energy scoring is untouched - magnitude only affects single-stat techniques`() {
+            val ctx = LessonScoreContext(energyPercent = 40)
+            val small = techScore("Energy +20", v(0, 0, 0, 0, 20), ctx)
+            val large = techScore("Energy +40", v(0, 0, 0, 0, 20), ctx)
+            assertEquals(small, large, "same cost and energy bucket, different granted amounts: the score must be identical")
+        }
+    }
+
+    @Nested
     @DisplayName("spend picker")
     inner class SpendPicker {
         private fun line(slot: Int, score: Int, affordable: Boolean?, scheduled: Boolean = false) =
