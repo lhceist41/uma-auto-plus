@@ -72,7 +72,9 @@ const RULES = [
     {
         id: "private-directory",
         why: "private local working directories must never be tracked",
-        test: (p) => /^(scratchpad|private|validation|captures|gc-validation|gc-watch-out|docs-local|tools)\//.test(p),
+        test: (p) =>
+            /^(scratchpad|private|validation|captures|gc-validation|gc-watch-out|docs-local)\//.test(p) ||
+            (p.startsWith("tools/") && !p.startsWith("tools/host-companion/")),
     },
     {
         id: "hidden-directory",

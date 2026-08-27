@@ -26,6 +26,7 @@ object VeteranIdentityNames {
             "Agnes Tachyon",
             "Air Groove",
             "Air Shakur",
+            "Aston Machan",
             "Bamboo Memory",
             "Biwa Hayahide",
             "Copano Rickey",

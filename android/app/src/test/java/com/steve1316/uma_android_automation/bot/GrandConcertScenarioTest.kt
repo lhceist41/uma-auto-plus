@@ -12,6 +12,10 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.io.File
 
+/** Matches the start of the next class-level method at the standard four-space indent, used by
+ * `functionBody` to bound a source slice to one method's extent instead of a fixed length. */
+private val NEXT_METHOD = Regex("""\n {4}(private |internal |protected |public )?fun \w""")
+
 /**
  * The Grand Concert scenario model: key normalization, caps, the manual-handoff contract, the
  * Quick Mode planner, and the read-only decision engine.
@@ -256,6 +260,25 @@ class GrandConcertScenarioTest {
             error("could not locate the assets root")
         }
 
+        /**
+         * Slices [source] from [signature] up to (but excluding) the next sibling method
+         * declared at the same four-space indent, or end of file if [signature] is the last one.
+         * Line endings are normalized to LF before slicing, so the same semantic window comes
+         * back on a CRLF Windows checkout and an LF checkout alike. This replaced a fixed
+         * 6000-character window that measured a different byte offset under each line ending and
+         * would clip the target text once the function grew past it (observed on a CRLF checkout
+         * with the race-day exit branch: window end ~6022, marker just past it).
+         */
+        private fun functionBody(source: String, signature: String): String {
+            val normalized = source.replace("\r\n", "\n")
+            val start = normalized.indexOf(signature)
+            require(start >= 0) { "missing signature: $signature" }
+            val bodyStart = start + signature.length
+            val nextSibling = NEXT_METHOD.find(normalized, bodyStart)
+            val end = nextSibling?.range?.first ?: normalized.length
+            return normalized.substring(start, end)
+        }
+
         @Test
         fun `the scenario dispatches to its own campaign class under the canonical key`() {
             val game = source("bot/Game.kt")
@@ -464,9 +487,7 @@ class GrandConcertScenarioTest {
         @Test
         fun `the concert escort exits successfully onto a mandatory race day`() {
             val campaign = source("bot/campaigns/GrandConcert.kt")
-            val escortIdx = campaign.indexOf("private fun runConcertEscort()")
-            assertTrue(escortIdx >= 0, "the escort went missing")
-            val escortBody = campaign.substring(escortIdx, minOf(campaign.length, escortIdx + 6000))
+            val escortBody = functionBody(campaign, "private fun runConcertEscort()")
             assertTrue(
                 escortBody.contains("IconRaceDayRibbon.check"),
                 "the escort no longer recognises the race-day career screen as an exit",
@@ -475,6 +496,48 @@ class GrandConcertScenarioTest {
                 escortBody.contains("a mandatory race day follows and the main loop owns it"),
                 "the race-day exit must return the turn to the main loop",
             )
+        }
+
+        @Test
+        fun `functionBody finds its marker under both CRLF and LF line endings`() {
+            val lf =
+                "class Sample {\n" +
+                    "    private fun target(): Boolean {\n" +
+                    "        val marker = \"inside\"\n" +
+                    "        return true\n" +
+                    "    }\n" +
+                    "\n" +
+                    "    private fun next(): Boolean {\n" +
+                    "        return false\n" +
+                    "    }\n" +
+                    "}\n"
+            val crlf = lf.replace("\n", "\r\n")
+
+            assertTrue(functionBody(lf, "private fun target()").contains("inside"))
+            assertTrue(functionBody(crlf, "private fun target()").contains("inside"))
+        }
+
+        @Test
+        fun `functionBody stays bounded to the target method after it grows past the old fixed window`() {
+            val padding = "        val padding = 0\n".repeat(400) // ~9600 chars, past the old 6000-char window
+            val grown =
+                "class Sample {\n" +
+                    "    private fun target(): Boolean {\n" +
+                    "        val marker = \"inside\"\n" +
+                    padding +
+                    "        return true\n" +
+                    "    }\n" +
+                    "\n" +
+                    "    private fun next(): Boolean {\n" +
+                    "        return false\n" +
+                    "    }\n" +
+                    "}\n"
+
+            val body = functionBody(grown, "private fun target()")
+            assertTrue(body.contains("inside"), "the marker must still be found once the function outgrows a fixed-length window")
+            assertTrue(body.contains("return true"), "the slice must reach the actual end of the target function")
+            assertFalse(body.contains("private fun next"), "the slice leaked into the next sibling method")
+            assertFalse(body.contains("return false"), "the slice leaked into the next sibling method's body")
         }
 
         /**
