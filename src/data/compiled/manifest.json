@@ -6,7 +6,7 @@
     "skillsSchemaVersion": 1,
     "racesSchemaVersion": 1
   },
-  "fingerprint": "e500b84c7517f510e1236bab64ceb1e96eedd38a69c34446b1da9e46776474a8",
+  "fingerprint": "f12d18fd72e13bb42fb0d15ed0403741ec8d8b28ea5d9dc29107ad81eca4b4bf",
   "knownProvenance": {
     "generator": "scripts/data-scraper",
     "recordedSourceVersion": null,
@@ -17,8 +17,8 @@
     {
       "family": "objectives",
       "path": "src/data/character_objectives.json",
-      "sha256": "1f7c185b1d6d194f141c0b579e6c2e82a00435632ba133cf060387d5584a7636",
-      "recordCount": 64,
+      "sha256": "511e1f8d78cb0f46b47ec855bfafe96041bf6a34074b4c2494295411119750a6",
+      "recordCount": 65,
       "provenance": {
         "origin": "data-scraper",
         "sourceVersion": null
@@ -27,8 +27,8 @@
     {
       "family": "characters",
       "path": "src/data/characters.json",
-      "sha256": "6f6e1fbab266657d62538a7a9ceaa08830ecd1e63d68bff631f628fb4c99df98",
-      "recordCount": 64,
+      "sha256": "5ec8485cc318d46d258636747d5a1a84794d42f24b424410a486fcd4248eeb15",
+      "recordCount": 65,
       "provenance": {
         "origin": "data-scraper",
         "sourceVersion": null
@@ -57,7 +57,7 @@
     {
       "family": "skills",
       "path": "src/data/skills.json",
-      "sha256": "1f2f3e98c03cac038196c8ef3592e578292b9e95a64f642ad601dfe230bbb7c9",
+      "sha256": "f3c0ce1ae5c91e7fbc7d6441365d8f7b7e6a4cdff59869fbdd2009599b74f9ab",
       "recordCount": 695,
       "provenance": {
         "origin": "data-scraper",
@@ -83,7 +83,7 @@
     },
     {
       "path": "src/data/compiled/skills.json",
-      "sha256": "54bda92451e6765743690d047c539ac8af4a908c63622938941de48035f48afa",
+      "sha256": "7336f9bb95f80225c27195b032021a24252117e9d49b25c14c332642d1022698",
       "recordCount": 695
     }
   ],
@@ -105,7 +105,7 @@
       },
       {
         "code": "nullFieldPrevalence",
-        "detail": "skills: tier is null on 695/695 records"
+        "detail": "skills: tier is null on 181/695 records"
       },
       {
         "code": "provenanceUnavailable",

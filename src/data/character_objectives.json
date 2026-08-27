@@ -556,6 +556,109 @@
             }
         ]
     },
+    "Aston Machan": {
+        "name": "Aston Machan",
+        "mandatoryRaces": [
+            {
+                "turn": 21,
+                "isChoice": false,
+                "options": [
+                    {
+                        "raceName": "Fantasy Stakes",
+                        "grade": "G3",
+                        "surface": "Turf",
+                        "distanceType": "Sprint",
+                        "fans": 2900,
+                        "fansNeeded": 350
+                    }
+                ]
+            },
+            {
+                "turn": 23,
+                "isChoice": false,
+                "options": [
+                    {
+                        "raceName": "Hanshin Juvenile Fillies",
+                        "grade": "G1",
+                        "surface": "Turf",
+                        "distanceType": "Mile",
+                        "fans": 6500,
+                        "fansNeeded": 1000
+                    }
+                ]
+            },
+            {
+                "turn": 29,
+                "isChoice": false,
+                "options": [
+                    {
+                        "raceName": "Fillies' Revue",
+                        "grade": "G2",
+                        "surface": "Turf",
+                        "distanceType": "Sprint",
+                        "fans": 5200,
+                        "fansNeeded": 1750
+                    }
+                ]
+            },
+            {
+                "turn": 31,
+                "isChoice": false,
+                "options": [
+                    {
+                        "raceName": "Oka Sho",
+                        "grade": "G1",
+                        "surface": "Turf",
+                        "distanceType": "Mile",
+                        "fans": 10500,
+                        "fansNeeded": 4500
+                    }
+                ]
+            },
+            {
+                "turn": 42,
+                "isChoice": false,
+                "options": [
+                    {
+                        "raceName": "Sprinters Stakes",
+                        "grade": "G1",
+                        "surface": "Turf",
+                        "distanceType": "Sprint",
+                        "fans": 13000,
+                        "fansNeeded": 15000
+                    }
+                ]
+            },
+            {
+                "turn": 54,
+                "isChoice": false,
+                "options": [
+                    {
+                        "raceName": "Takamatsunomiya Kinen",
+                        "grade": "G1",
+                        "surface": "Turf",
+                        "distanceType": "Sprint",
+                        "fans": 13000,
+                        "fansNeeded": 15000
+                    }
+                ]
+            },
+            {
+                "turn": 66,
+                "isChoice": false,
+                "options": [
+                    {
+                        "raceName": "Sprinters Stakes",
+                        "grade": "G1",
+                        "surface": "Turf",
+                        "distanceType": "Sprint",
+                        "fans": 13000,
+                        "fansNeeded": 15000
+                    }
+                ]
+            }
+        ]
+    },
     "Bamboo Memory": {
         "name": "Bamboo Memory",
         "mandatoryRaces": [

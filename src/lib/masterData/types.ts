@@ -60,7 +60,8 @@ export interface CompiledSkill {
     precondition: string | null
     /** From raw `inherited`. */
     inherited: boolean | null
-    /** From raw `community_tier` (currently always null in the source). */
+    /** From raw `community_tier`: 0=SS, 1=S, 2=A, 3=B. Null when the skill isn't on the community tier list
+     * (JP-only, shop-less, negative) or when two tier-list sections disagreed on it. */
     tier: number | null
     /** Chain reference (raw `upgrade`): a skill `id`, or null. May reference an id absent from this dataset - see the manifest's chainReferenceUnresolved warnings. */
     upgrade: number | null

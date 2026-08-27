@@ -407,6 +407,81 @@
         }
       ]
     },
+    "Aston Machan": {
+      "fanGoals": [],
+      "mandatoryRaces": [
+        {
+          "turn": 21,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Fantasy Stakes",
+              "fansNeeded": 350
+            }
+          ]
+        },
+        {
+          "turn": 23,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Hanshin Juvenile Fillies",
+              "fansNeeded": 1000
+            }
+          ]
+        },
+        {
+          "turn": 29,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Fillies' Revue",
+              "fansNeeded": 1750
+            }
+          ]
+        },
+        {
+          "turn": 31,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Oka Sho",
+              "fansNeeded": 4500
+            }
+          ]
+        },
+        {
+          "turn": 42,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Sprinters Stakes",
+              "fansNeeded": 15000
+            }
+          ]
+        },
+        {
+          "turn": 54,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Takamatsunomiya Kinen",
+              "fansNeeded": 15000
+            }
+          ]
+        },
+        {
+          "turn": 66,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Sprinters Stakes",
+              "fansNeeded": 15000
+            }
+          ]
+        }
+      ]
+    },
     "Bamboo Memory": {
       "fanGoals": [
         {

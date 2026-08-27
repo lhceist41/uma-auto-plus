@@ -33,6 +33,15 @@ HTTP_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWe
 # "virtual" until it is actually seen on the skill list screen, and only non-virtual entries become purchase candidates.
 DEFAULT_SKILL_COST = 200
 
+# Integrity floor for the Game8 skill-tier scrape (see SkillScraper.scrape_skill_tier_list). Game8 groups the
+# list into per-category sections (Acceleration, Velocity, ...) each with up to four SS/S/A/B tables; every
+# section observed so far lists well over a dozen skills, so a handful per section is a conservative floor that
+# only trips when the row/column layout inside a still-recognized section has broken.
+MIN_SKILL_TIER_NAMES_PER_SECTION = 3
+# If more than this fraction of scanned tier-table rows yield no readable skill link, the layout inside a
+# recognized section has likely changed rather than a few rows simply being malformed.
+MAX_SKILL_TIER_UNRESOLVED_ROW_RATIO = 0.5
+
 # Module-level run state: the GameTora manifest index and per-dataset manifest data, each fetched once per run and reused across scrapers.
 _manifest_index_cache = None
 _manifest_data_cache = {}
@@ -325,48 +334,97 @@ class SkillScraper(BaseScraper):
         return data
 
     def scrape_skill_tier_list(self):
-        """Scrapes Game8's skill tier list, reading rank from each table's preceding header since the tables lack IDs.
+        """Scrapes Game8's skill tier list, reading each skill's tier from the "<Tier> Tier <Category> Skills"
+        heading above its table. Game8 grouped the list by skill category (Acceleration, Velocity, ...), each
+        with its own SS/S/A/B headings, so the tier comes from heading text rather than a fixed id: an id or
+        table-position scheme survives exactly until Game8 reshuffles the page again.
 
         Returns:
-            A dict mapping skill name to tier (see `h4_tier_map`).
+            A dict mapping skill name to tier (see `tier_letter_to_rank`).
+
+        Raises:
+            RuntimeError: If the page has no recognizable tier heading at all, or if the fraction of rows that
+                yielded a usable skill name is implausibly low. Both mean Game8 changed its layout again; the
+                alternative is silently returning an empty or near-empty map that turns every skill's
+                community_tier to null without anyone noticing.
         """
         soup = fetch_soup("https://game8.co/games/Umamusume-Pretty-Derby/archives/536805")
 
-        h4_tier_map = {
-            "hs_1": 0,  # SS
-            "hs_2": 1,  # S
-            "hs_3": 2,  # A
-            "hs_4": 3,  # B
-        }
+        tier_letter_to_rank = {"SS": 0, "S": 1, "A": 2, "B": 3}
+        heading_pattern = re.compile(r"^(SS|S|A|B)\s+Tier\b")
 
         res = {}
+        poisoned = set()  # Names dropped for an unresolved cross-section tier conflict; never re-added.
+        sections_found = 0
+        rows_seen = 0
+        rows_unresolved = 0
 
-        for h4_id, tier_name in h4_tier_map.items():
-            h4 = soup.find("h4", id=h4_id)
-            if not h4:
+        for heading in soup.find_all("h3"):
+            heading_text = heading.get_text(strip=True)
+            match = heading_pattern.match(heading_text)
+            if not match:
                 continue
-            # The tier names sit in the second table after each header.
-            tables = h4.find_next_siblings("table")
-            if len(tables) < 2:
+            sections_found += 1
+            tier_rank = tier_letter_to_rank[match.group(1)]
+
+            table = heading.find_next("table")
+            if table is None:
+                logging.warning(f"Skill tier section has no table after its heading: {heading_text}")
                 continue
 
-            for td in tables[1].find_all("td"):
-                for div in td.find_all("div"):
-                    anchors = div.find_all("a")
-                    if not anchors:
-                        continue
-                    skill_name = anchors[-1].get_text(strip=True)
-                    # Make sure we use the same special characters as GameTora.
-                    skill_name = skill_name.replace("◯", "○")
-                    skill_name = skill_name.replace("◎", "◎")
-                    # Get rid of any double spaces.
-                    skill_name = skill_name.replace("  ", "")
-                    if skill_name in res and res[skill_name] != tier_name:
-                        logging.warning(
-                            f"Skill is already in tier map with conflicting value: {skill_name} ({tier_name} != {res[skill_name]})"
-                        )
-                        continue
-                    res[skill_name] = tier_name
+            header_cells = [th.get_text(strip=True) for th in table.find_all("th")]
+            if "Skill" not in header_cells:
+                logging.warning(f"Skill tier table under '{heading_text}' has no Skill column: {header_cells}")
+                continue
+            skill_column = header_cells.index("Skill")
+
+            for row in table.find_all("tr")[1:]:
+                rows_seen += 1
+                cells = row.find_all("td")
+                anchors = cells[skill_column].find_all("a") if skill_column < len(cells) else []
+                if not anchors:
+                    rows_unresolved += 1
+                    logging.debug(f"Skill tier row under '{heading_text}' has no skill link: {row.get_text(strip=True)[:80]}")
+                    continue
+
+                # A row's Skill cell can hold more than one link (a base skill and its evolved/unique form
+                # share a row), and Game8 packs a distance/surface aptitude's two grades into one link's text
+                # as "X ◯ / X ◎" - split both to make sure every named skill gets the tier.
+                for anchor in anchors:
+                    for raw_name in anchor.get_text(strip=True).split(" / "):
+                        skill_name = raw_name.replace("◯", "○").replace("◎", "◎").replace("  ", "").strip()
+                        if not skill_name or skill_name in poisoned:
+                            continue
+                        if skill_name in res and res[skill_name] != tier_rank:
+                            logging.warning(
+                                f"Skill tier conflict, dropping as ambiguous: {skill_name} "
+                                f"({res[skill_name]} vs {tier_rank} from '{heading_text}')"
+                            )
+                            del res[skill_name]
+                            poisoned.add(skill_name)
+                            continue
+                        res[skill_name] = tier_rank
+
+        if sections_found == 0:
+            raise RuntimeError(
+                "Game8 skill tier page structure not recognized: found zero '<Tier> Tier <Category> Skills' "
+                "h3 headings even though the page fetched successfully. Game8 likely restructured the page; "
+                "inspect it and update scrape_skill_tier_list() rather than letting this fall back to nulls."
+            )
+
+        min_expected_names = sections_found * MIN_SKILL_TIER_NAMES_PER_SECTION
+        if len(res) < min_expected_names:
+            raise RuntimeError(
+                f"Game8 skill tier coverage implausibly low: {len(res)} skills resolved across {sections_found} "
+                f"tier sections (expected at least {min_expected_names}, {MIN_SKILL_TIER_NAMES_PER_SECTION} per "
+                "section). The headings still match, but the row/column layout inside a section likely changed."
+            )
+
+        if rows_seen and (rows_unresolved / rows_seen) > MAX_SKILL_TIER_UNRESOLVED_ROW_RATIO:
+            raise RuntimeError(
+                f"Game8 skill tier rows failed to parse at an implausible rate: {rows_unresolved}/{rows_seen} "
+                f"rows had no readable skill link (over the {MAX_SKILL_TIER_UNRESOLVED_ROW_RATIO:.0%} threshold)."
+            )
 
         # Fix tier-list misspellings so names match GameTora. Add an entry if a skill warns as unknown.
         rename_map = {

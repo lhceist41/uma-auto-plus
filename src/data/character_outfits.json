@@ -64,6 +64,16 @@
             }
         ]
     },
+    "Aston Machan": {
+        "name": "Aston Machan",
+        "outfits": [
+            {
+                "title": "Flare",
+                "cardId": 108701,
+                "releasedEn": "2026-08-25"
+            }
+        ]
+    },
     "Bamboo Memory": {
         "name": "Bamboo Memory",
         "outfits": [

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "outfitSource": "gametora character-cards title_en_gl",
-  "characterCount": 64,
-  "outfitCount": 118,
+  "characterCount": 65,
+  "outfitCount": 119,
   "characters": {
     "Admire Vega": {
       "outfits": [
@@ -30,6 +30,11 @@
     "Air Shakur": {
       "outfits": [
         "unsigned"
+      ]
+    },
+    "Aston Machan": {
+      "outfits": [
+        "Flare"
       ]
     },
     "Bamboo Memory": {

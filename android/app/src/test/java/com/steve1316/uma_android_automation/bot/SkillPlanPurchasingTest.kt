@@ -396,6 +396,35 @@ class SkillPlanPurchasingTest {
             assertTrue(result.any { it.first == "No Tier High Ratio" })
         }
 
+        @Test
+        fun `OPTIMIZE_SKILLS buys a worse-ratio tiered skill over a better-ratio untiered one when budget forces a choice`() {
+            // A budget-constrained case where OPTIMIZE_RANK and OPTIMIZE_SKILLS must disagree if the
+            // community tier signal is actually wired in: only one of these two skills fits the budget, one
+            // has by far the better eval-point ratio but no tier, the other is tiered but worse ratio. If
+            // OPTIMIZE_SKILLS silently degenerated into OPTIMIZE_RANK (the historical bug this guards
+            // against, caused by every community_tier being null), it would buy the untiered skill instead.
+            val candidates =
+                listOf(
+                    SkillCandidate("Tiered B", price = 90, evaluationPoints = 90, communityTier = 3), // ratio 1.0, B tier
+                    SkillCandidate("Untiered Best Ratio", price = 90, evaluationPoints = 900), // ratio 10.0, no tier
+                )
+
+            val rankSettings =
+                SkillPlanSettings(
+                    bIsEnabled = true,
+                    strategy = SpendingStrategy.OPTIMIZE_RANK,
+                    bEnableBuyInheritedUniqueSkills = false,
+                    bEnableBuyNegativeSkills = false,
+                    skillNames = emptyList(),
+                )
+            val rankResult = calculateSkillPurchases(candidates, 100, rankSettings)
+            assertEquals(listOf("Untiered Best Ratio"), rankResult.map { it.first })
+
+            val skillsSettings = rankSettings.copy(strategy = SpendingStrategy.OPTIMIZE_SKILLS)
+            val skillsResult = calculateSkillPurchases(candidates, 100, skillsSettings)
+            assertEquals(listOf("Tiered B"), skillsResult.map { it.first })
+        }
+
         // -----------------------------------------------------------------------
         // Random / stress tests with generated skill lists
         // -----------------------------------------------------------------------

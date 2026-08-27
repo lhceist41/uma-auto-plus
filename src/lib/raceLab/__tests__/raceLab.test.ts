@@ -61,10 +61,10 @@ describe("catalog", () => {
 // ---- Objectives (Part R) ----
 
 describe("objectives", () => {
-    it("resolves all 504 real options across 64 characters, 0 unresolved", () => {
+    it("resolves all 511 real options across 65 characters, 0 unresolved", () => {
         const { reconciliation } = buildAllObjectiveTimelines(rawObjectives, catalog)
-        expect(reconciliation.characterCount).toBe(64)
-        expect(reconciliation.optionCount).toBe(504)
+        expect(reconciliation.characterCount).toBe(65)
+        expect(reconciliation.optionCount).toBe(511)
         expect(reconciliation.unresolvedCount).toBe(0)
     })
     it("Yukino Bijin (v5.8.6 data refresh) resolves all 9 mandatory objectives canonically, including the adjacent t69/t70 G1 pair", () => {
