@@ -2100,8 +2100,10 @@ blocks the launch with a named reason rather than assuming the tap landed.
 
 Scrolling the Borrow Card list during a real launch (`borrowWalker` in `CareerLaunchNavigator.kt`)
 always tries Accessibility gesture dispatch first (`recoverGestureDispatch`, the same mechanism
-`Game.kt`'s `gestureUtils` getter backs -- see section 6 of `AGENTS.md`'s safety invariants). Only
-after that Accessibility budget is exhausted does the walker call `recoverHost`
+`Game.kt`'s `gestureUtils` getter backs). That getter resolves the Accessibility Service fresh on
+every access instead of caching it, so a mid-run service rebind (the emulator periodically drops
+and re-grants Accessibility) is picked up immediately rather than dispatching gestures through a
+dead instance. Only after that Accessibility budget is exhausted does the walker call `recoverHost`
 (`recoverBorrowScrollWithHost`), which runs `executeProductionHostScrollRecovery`
 (`ProductionHostScrollRecovery.kt`) for exactly one bounded swipe:
 
