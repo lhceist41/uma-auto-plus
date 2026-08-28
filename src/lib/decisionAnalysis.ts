@@ -6,8 +6,8 @@
  * consumed by `scripts/analyze-decisions.mjs` (CLI) and the Jest suite.
  *
  * The reader is read-only: it never rewrites, normalizes or truncates its input. It recognizes
- * exactly `type == "decision_trace"` at `v == 1`; anything else is reported, never silently
- * reinterpreted. Its job is to prove or disprove that a pulled corpus is internally consistent -
+ * `type == "decision_trace"` at any supported `v` (see `SUPPORTED_DECISION_SCHEMA_VERSIONS`); anything
+ * else is reported, never silently reinterpreted. Its job is to prove or disprove that a pulled corpus is internally consistent -
  * that the selection each record committed to is the one its own candidate list marks selected,
  * that turns are not double-emitted, and that a decision trace joins the `career_finalize` row on
  * `careerToken` - not to second-guess the bot's gameplay.
@@ -25,14 +25,24 @@
 /** Record type discriminator, matching `DecisionTrace.SCHEMA`. */
 export const DECISION_SCHEMA = "decision_trace"
 
-/** The only schema version this reader understands, matching `DecisionTrace.SCHEMA_VERSION`. */
+/** The current decision_trace schema version, matching `DecisionTrace.SCHEMA_VERSION` (the writer's output). */
 export const DECISION_SCHEMA_VERSION = 1
+
+/**
+ * The decision_trace schema versions this reader accepts. v1 is the current writer output; v2 is accepted
+ * ahead of any writer bump so a forward corpus reads without a reader change. Reader support is additive-only:
+ * the parser reads a fixed field set and ignores the rest, so a v2 record carrying unknown fields still parses.
+ */
+export const SUPPORTED_DECISION_SCHEMA_VERSIONS: ReadonlySet<number> = new Set([1, 2])
 
 /** Record type discriminator for the optional companion corpus, matching `CareerStateSerializer.SCHEMA`. */
 export const CAREER_STATE_SCHEMA = "career_state"
 
-/** The only career_state schema version this reader understands, matching `CareerStateSerializer.SCHEMA_VERSION`. */
+/** The current career_state schema version, matching `CareerStateSerializer.SCHEMA_VERSION` (the writer's output). */
 export const CAREER_STATE_SCHEMA_VERSION = 1
+
+/** The career_state schema versions this reader accepts. Same forward-compatible, additive-only contract as `SUPPORTED_DECISION_SCHEMA_VERSIONS`. */
+export const SUPPORTED_CAREER_STATE_SCHEMA_VERSIONS: ReadonlySet<number> = new Set([1, 2])
 
 // Exit codes. Higher = more serious; the CLI reports the worst category found (see `worstExit`).
 /** No parse errors, no schema failures, no consistency failures, no warnings. */
@@ -93,10 +103,27 @@ function lineBytes(rawLine: string): number {
 }
 
 /**
+ * True when `v` is a numeric schema version this reader supports. Non-numbers (a string "1", null, undefined,
+ * an absent field) are never supported, exactly as the prior `record.v !== VERSION` gate only ever accepted the
+ * numeric current version.
+ */
+function isSupportedVersion(v: unknown, supported: ReadonlySet<number>): boolean {
+    return typeof v === "number" && supported.has(v)
+}
+
+/** Formats a supported-version set for a diagnostic message, e.g. "v1, v2". Sorted for a deterministic message. */
+function formatSupportedVersions(supported: ReadonlySet<number>): string {
+    return [...supported]
+        .sort((a, b) => a - b)
+        .map((v) => `v${v}`)
+        .join(", ")
+}
+
+/**
  * Parses one raw JSONL line into a typed outcome.
  *
  * Blank lines (whitespace only) are ignored, so a trailing newline never counts as a malformed
- * record. A line that is valid JSON but is not a `decision_trace` at `v == 1`, or lacks the
+ * record. A line that is valid JSON but is not a `decision_trace` at a supported `v`, or lacks the
  * required envelope (`ts`), is returned as a schema failure rather than being interpreted.
  */
 export function parseDecisionLine(rawLine: string, lineNumber: number): LineParse {
@@ -118,7 +145,7 @@ export function parseDecisionLine(rawLine: string, lineNumber: number): LinePars
     if (record.type !== DECISION_SCHEMA) {
         return { kind: "wrongType", lineNumber, type: record.type, bytes }
     }
-    if (record.v !== DECISION_SCHEMA_VERSION) {
+    if (!isSupportedVersion(record.v, SUPPORTED_DECISION_SCHEMA_VERSIONS)) {
         return { kind: "unsupportedVersion", lineNumber, version: record.v, bytes }
     }
     // `ts` is the only always-written field besides type/v; every identity field is legitimately
@@ -177,7 +204,7 @@ export function parseCareerStateLine(rawLine: string, lineNumber: number): Caree
     if (record.type !== CAREER_STATE_SCHEMA) {
         return { kind: "wrongType", lineNumber, type: record.type, bytes }
     }
-    if (record.v !== CAREER_STATE_SCHEMA_VERSION) {
+    if (!isSupportedVersion(record.v, SUPPORTED_CAREER_STATE_SCHEMA_VERSIONS)) {
         return { kind: "unsupportedVersion", lineNumber, version: record.v, bytes }
     }
     const missing: string[] = []
@@ -648,7 +675,7 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
                 if (options.strict) aborted = true
                 return !options.strict
             case "unsupportedVersion":
-                schemaFailures.push({ lineNumber, detail: `unsupported schema version ${JSON.stringify(parsed.version)} (this reader understands v${DECISION_SCHEMA_VERSION})` })
+                schemaFailures.push({ lineNumber, detail: `unsupported schema version ${JSON.stringify(parsed.version)} (this reader understands ${formatSupportedVersions(SUPPORTED_DECISION_SCHEMA_VERSIONS)})` })
                 if (options.strict) aborted = true
                 return !options.strict
             case "malformedEnvelope":
@@ -715,7 +742,7 @@ export function createDecisionAnalyzer(options: AnalyzerOptions = {}): DecisionA
                 stateParseSchemaFailures.push({ lineNumber, detail: `unexpected type ${JSON.stringify(parsed.type)} (expected "${CAREER_STATE_SCHEMA}")` })
                 return
             case "unsupportedVersion":
-                stateParseSchemaFailures.push({ lineNumber, detail: `unsupported schema version ${JSON.stringify(parsed.version)} (this reader understands v${CAREER_STATE_SCHEMA_VERSION})` })
+                stateParseSchemaFailures.push({ lineNumber, detail: `unsupported schema version ${JSON.stringify(parsed.version)} (this reader understands ${formatSupportedVersions(SUPPORTED_CAREER_STATE_SCHEMA_VERSIONS)})` })
                 return
             case "malformedEnvelope":
                 stateParseSchemaFailures.push({ lineNumber, detail: `missing/invalid required field(s): ${parsed.missing.join(", ")}` })

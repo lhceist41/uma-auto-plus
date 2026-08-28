@@ -87,10 +87,33 @@ describe("parseDecisionLine", () => {
         expect(parsed.kind).toBe("wrongType")
     })
 
-    test("unsupported schema versions are reported", () => {
+    test("a valid v2 record parses (forward-compatible reader)", () => {
         const parsed = parseDecisionLine(traceLine({ v: 2 }), 1)
+        expect(parsed.kind).toBe("record")
+    })
+
+    test("a valid v2 record with unknown additive fields still parses", () => {
+        const parsed = parseDecisionLine(traceLine({ v: 2, futureField: { nested: true }, anotherNewField: [1, 2, 3] }), 1)
+        expect(parsed.kind).toBe("record")
+    })
+
+    test("a future unsupported schema version (v3) is reported, not reinterpreted", () => {
+        const parsed = parseDecisionLine(traceLine({ v: 3 }), 1)
         expect(parsed.kind).toBe("unsupportedVersion")
-        if (parsed.kind === "unsupportedVersion") expect(parsed.version).toBe(2)
+        if (parsed.kind === "unsupportedVersion") expect(parsed.version).toBe(3)
+    })
+
+    test("a non-numeric version is reported as unsupported", () => {
+        const parsed = parseDecisionLine(traceLine({ v: "2" }), 1)
+        expect(parsed.kind).toBe("unsupportedVersion")
+        if (parsed.kind === "unsupportedVersion") expect(parsed.version).toBe("2")
+    })
+
+    test("a v2 record still fails required-field validation (v2 does not weaken the envelope check)", () => {
+        const line = JSON.stringify({ type: DECISION_SCHEMA, v: 2, trainee: "x" })
+        const parsed = parseDecisionLine(line, 1)
+        expect(parsed.kind).toBe("malformedEnvelope")
+        if (parsed.kind === "malformedEnvelope") expect(parsed.missing).toContain("ts")
     })
 
     test("a record missing the ts envelope is a malformed envelope", () => {
@@ -140,6 +163,13 @@ describe("analysis", () => {
         const result = analyze([traceLine({ turn: 1 }), traceLine({ v: 99, turn: 2 })])
         expect(result.schemaFailures).toHaveLength(1)
         expect(result.exitCode).toBe(EXIT_PARSE_OR_SCHEMA)
+    })
+
+    test("v2 records are analyzed alongside v1 with no schema failure", () => {
+        const result = analyze([traceLine({ turn: 1 }), traceLine({ v: 2, turn: 2 })])
+        expect(result.decisionRecordCount).toBe(2)
+        expect(result.schemaFailures).toHaveLength(0)
+        expect(result.exitCode).toBe(EXIT_CLEAN)
     })
 
     test("duplicate observed turns are detected", () => {
@@ -609,10 +639,30 @@ describe("career_state join", () => {
             expect(parseCareerStateLine(careerStateLine({ type: "decision_trace" }), 1).kind).toBe("wrongType")
         })
 
-        test("an unsupported version is reported", () => {
+        test("a valid v2 record parses (forward-compatible reader)", () => {
             const parsed = parseCareerStateLine(careerStateLine({ v: 2 }), 1)
+            expect(parsed.kind).toBe("record")
+            if (parsed.kind === "record") {
+                expect(parsed.careerToken).toBe(token)
+                expect(parsed.seq).toBe(5)
+            }
+        })
+
+        test("a valid v2 record with unknown additive fields still parses", () => {
+            const parsed = parseCareerStateLine(careerStateLine({ v: 2, futureField: { nested: true }, anotherNewField: [1, 2, 3] }), 1)
+            expect(parsed.kind).toBe("record")
+        })
+
+        test("a future unsupported version (v3) is reported", () => {
+            const parsed = parseCareerStateLine(careerStateLine({ v: 3 }), 1)
             expect(parsed.kind).toBe("unsupportedVersion")
-            if (parsed.kind === "unsupportedVersion") expect(parsed.version).toBe(2)
+            if (parsed.kind === "unsupportedVersion") expect(parsed.version).toBe(3)
+        })
+
+        test("a v2 record still fails required-field validation (v2 does not weaken the envelope check)", () => {
+            const parsed = parseCareerStateLine(careerStateLine({ v: 2, seq: 0 }), 1)
+            expect(parsed.kind).toBe("malformedEnvelope")
+            if (parsed.kind === "malformedEnvelope") expect(parsed.missing).toContain("seq")
         })
 
         test("a bad ts is a malformed envelope", () => {
