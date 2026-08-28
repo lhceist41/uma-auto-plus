@@ -129,7 +129,6 @@ const searchConfig: SearchOption[] = [
         description:
             "Floor for the per-stat cap and OCR sanity ceiling. The bot uses the higher of this value and the scenario's own cap (URA 1400; Unity Cup 1300, Wit 1800; Trackblazer 1200, Stamina 1900, Wit 1500) to decide when a stat is maxed and to reject impossible stat reads.",
         page: "TrainingSettings",
-        parentId: "disable-training-on-maxed-stats",
     },
     {
         id: "maximum-failure-chance",
@@ -550,6 +549,12 @@ const searchConfig: SearchOption[] = [
         id: "preferred-track-surface",
         title: "Track Surface for Skills",
         description: "Dictates which skills are considered for purchase based on the terrain.",
+        page: "SkillSettings",
+    },
+    {
+        id: "preferred-track-distance",
+        title: "Track Distance for Skills",
+        description: "Dictates which skills are considered for purchase based on the track distance.",
         page: "SkillSettings",
     },
     {

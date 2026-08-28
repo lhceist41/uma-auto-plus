@@ -4,6 +4,7 @@ import { Divider } from "react-native-paper"
 import { useTheme } from "../../context/ThemeContext"
 import { BotStateContext } from "../../context/BotStateContext"
 import { SearchPageProvider } from "../../context/SearchPageContext"
+import SearchableItem from "../../components/SearchableItem"
 import CustomSelect from "../../components/CustomSelect"
 import CustomSlider from "../../components/CustomSlider"
 import CustomCheckbox from "../../components/CustomCheckbox"
@@ -312,145 +313,163 @@ const ScenarioOverridesSettings = () => {
                             />
                         </View>
 
-                        <View style={styles.section}>
-                            <Text style={{ fontSize: 16, color: colors.foreground, marginBottom: 8 }}>Race Grades to check Shop Afterwards</Text>
-                            <Text style={{ fontSize: 14, color: colors.foreground, opacity: 0.7, marginBottom: 12 }}>
-                                Select which race grades should trigger a shop check after the race in the Trackblazer scenario.
-                            </Text>
-                            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                                {["G1", "G2", "G3"].map((grade) => (
-                                    <View
-                                        key={grade}
-                                        style={{
-                                            padding: 10,
-                                            borderRadius: 8,
-                                            marginRight: 8,
-                                            marginBottom: 8,
-                                            backgroundColor: scenarioOverrides.trackblazerShopCheckGrades.includes(grade) ? colors.primary : colors.card,
-                                        }}
-                                        onTouchEnd={() => {
-                                            const currentGrades = scenarioOverrides.trackblazerShopCheckGrades
-                                            if (currentGrades.includes(grade)) {
-                                                updateOverrideSetting(
-                                                    "trackblazerShopCheckGrades",
-                                                    currentGrades.filter((g) => g !== grade)
-                                                )
-                                            } else {
-                                                updateOverrideSetting("trackblazerShopCheckGrades", [...currentGrades, grade])
-                                            }
-                                        }}
-                                    >
-                                        <Text
+                        <SearchableItem
+                            id="trackblazer-shop-check-grades"
+                            title="Trackblazer Shop Check Grades"
+                            description="Select which race grades should trigger a shop check after the race in the Trackblazer scenario."
+                        >
+                            <View style={styles.section}>
+                                <Text style={{ fontSize: 16, color: colors.foreground, marginBottom: 8 }}>Race Grades to check Shop Afterwards</Text>
+                                <Text style={{ fontSize: 14, color: colors.foreground, opacity: 0.7, marginBottom: 12 }}>
+                                    Select which race grades should trigger a shop check after the race in the Trackblazer scenario.
+                                </Text>
+                                <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                                    {["G1", "G2", "G3"].map((grade) => (
+                                        <View
+                                            key={grade}
                                             style={{
-                                                fontSize: 14,
-                                                fontWeight: "600",
-                                                color: scenarioOverrides.trackblazerShopCheckGrades.includes(grade) ? colors.background : colors.foreground,
+                                                padding: 10,
+                                                borderRadius: 8,
+                                                marginRight: 8,
+                                                marginBottom: 8,
+                                                backgroundColor: scenarioOverrides.trackblazerShopCheckGrades.includes(grade) ? colors.primary : colors.card,
+                                            }}
+                                            onTouchEnd={() => {
+                                                const currentGrades = scenarioOverrides.trackblazerShopCheckGrades
+                                                if (currentGrades.includes(grade)) {
+                                                    updateOverrideSetting(
+                                                        "trackblazerShopCheckGrades",
+                                                        currentGrades.filter((g) => g !== grade)
+                                                    )
+                                                } else {
+                                                    updateOverrideSetting("trackblazerShopCheckGrades", [...currentGrades, grade])
+                                                }
                                             }}
                                         >
-                                            {grade}
-                                        </Text>
-                                    </View>
-                                ))}
+                                            <Text
+                                                style={{
+                                                    fontSize: 14,
+                                                    fontWeight: "600",
+                                                    color: scenarioOverrides.trackblazerShopCheckGrades.includes(grade) ? colors.background : colors.foreground,
+                                                }}
+                                            >
+                                                {grade}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                </View>
                             </View>
-                        </View>
+                        </SearchableItem>
 
-                        <View style={styles.section}>
-                            <Text style={{ fontSize: 16, color: colors.foreground, marginBottom: 8 }}>Race Grades to use Race Retries on</Text>
-                            <Text style={{ fontSize: 14, color: colors.foreground, opacity: 0.7, marginBottom: 12 }}>
-                                Select which race grades should allow using a Race Retry in the Trackblazer scenario.
-                            </Text>
-                            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                                {["G1", "G2", "G3"].map((grade) => (
-                                    <View
-                                        key={grade}
-                                        style={{
-                                            padding: 10,
-                                            borderRadius: 8,
-                                            marginRight: 8,
-                                            marginBottom: 8,
-                                            backgroundColor: scenarioOverrides.trackblazerRetryRacesBeforeFinalGrades.includes(grade) ? colors.primary : colors.card,
-                                        }}
-                                        onTouchEnd={() => {
-                                            const currentGrades = scenarioOverrides.trackblazerRetryRacesBeforeFinalGrades
-                                            if (currentGrades.includes(grade)) {
-                                                updateOverrideSetting(
-                                                    "trackblazerRetryRacesBeforeFinalGrades",
-                                                    currentGrades.filter((g) => g !== grade)
-                                                )
-                                            } else {
-                                                updateOverrideSetting("trackblazerRetryRacesBeforeFinalGrades", [...currentGrades, grade])
-                                            }
-                                        }}
-                                    >
-                                        <Text
+                        <SearchableItem
+                            id="trackblazer-retry-races-before-final-grades"
+                            title="Trackblazer Race Grades to use Race Retries on"
+                            description="Select which race grades should allow using a Race Retry in the Trackblazer scenario."
+                        >
+                            <View style={styles.section}>
+                                <Text style={{ fontSize: 16, color: colors.foreground, marginBottom: 8 }}>Race Grades to use Race Retries on</Text>
+                                <Text style={{ fontSize: 14, color: colors.foreground, opacity: 0.7, marginBottom: 12 }}>
+                                    Select which race grades should allow using a Race Retry in the Trackblazer scenario.
+                                </Text>
+                                <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                                    {["G1", "G2", "G3"].map((grade) => (
+                                        <View
+                                            key={grade}
                                             style={{
-                                                fontSize: 14,
-                                                fontWeight: "600",
-                                                color: scenarioOverrides.trackblazerRetryRacesBeforeFinalGrades.includes(grade) ? colors.background : colors.foreground,
+                                                padding: 10,
+                                                borderRadius: 8,
+                                                marginRight: 8,
+                                                marginBottom: 8,
+                                                backgroundColor: scenarioOverrides.trackblazerRetryRacesBeforeFinalGrades.includes(grade) ? colors.primary : colors.card,
+                                            }}
+                                            onTouchEnd={() => {
+                                                const currentGrades = scenarioOverrides.trackblazerRetryRacesBeforeFinalGrades
+                                                if (currentGrades.includes(grade)) {
+                                                    updateOverrideSetting(
+                                                        "trackblazerRetryRacesBeforeFinalGrades",
+                                                        currentGrades.filter((g) => g !== grade)
+                                                    )
+                                                } else {
+                                                    updateOverrideSetting("trackblazerRetryRacesBeforeFinalGrades", [...currentGrades, grade])
+                                                }
                                             }}
                                         >
-                                            {grade}
-                                        </Text>
-                                    </View>
-                                ))}
+                                            <Text
+                                                style={{
+                                                    fontSize: 14,
+                                                    fontWeight: "600",
+                                                    color: scenarioOverrides.trackblazerRetryRacesBeforeFinalGrades.includes(grade) ? colors.background : colors.foreground,
+                                                }}
+                                            >
+                                                {grade}
+                                            </Text>
+                                        </View>
+                                    ))}
+                                </View>
                             </View>
-                        </View>
+                        </SearchableItem>
 
                         <Divider style={{ marginVertical: 16 }} />
 
-                        <View style={styles.section}>
-                            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 12 }}>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={{ fontSize: 16, color: colors.foreground }}>Items to Exclude from Shop</Text>
-                                    <Text style={{ fontSize: 14, color: colors.foreground, opacity: 0.7, marginTop: 4 }}>
-                                        Selected {scenarioOverrides.trackblazerExcludedItems.length} / {Object.keys(trackblazerIcons).length} items
-                                    </Text>
+                        <SearchableItem
+                            id="trackblazer-excluded-items"
+                            title="Trackblazer Items to Exclude from Shop"
+                            description="Select items that the bot will never purchase from the shop in the Trackblazer scenario."
+                        >
+                            <View style={styles.section}>
+                                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12, gap: 12 }}>
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ fontSize: 16, color: colors.foreground }}>Items to Exclude from Shop</Text>
+                                        <Text style={{ fontSize: 14, color: colors.foreground, opacity: 0.7, marginTop: 4 }}>
+                                            Selected {scenarioOverrides.trackblazerExcludedItems.length} / {Object.keys(trackblazerIcons).length} items
+                                        </Text>
+                                    </View>
+                                    <View style={{ flexDirection: "row", gap: 8 }}>
+                                        <CustomButton icon={<Trash2 size={16} />} onPress={() => updateOverrideSetting("trackblazerExcludedItems", [])}>
+                                            Clear
+                                        </CustomButton>
+                                    </View>
                                 </View>
-                                <View style={{ flexDirection: "row", gap: 8 }}>
-                                    <CustomButton icon={<Trash2 size={16} />} onPress={() => updateOverrideSetting("trackblazerExcludedItems", [])}>
-                                        Clear
-                                    </CustomButton>
-                                </View>
-                            </View>
 
-                            <Text style={{ fontSize: 14, color: colors.foreground, opacity: 0.7, marginBottom: 12 }}>
-                                Select items that the bot will never purchase from the shop in the Trackblazer scenario.
-                            </Text>
+                                <Text style={{ fontSize: 14, color: colors.foreground, opacity: 0.7, marginBottom: 12 }}>
+                                    Select items that the bot will never purchase from the shop in the Trackblazer scenario.
+                                </Text>
 
-                            <View style={{ marginBottom: 16 }}>
-                                <Input
-                                    style={{
-                                        borderWidth: 1,
-                                        borderColor: colors.border,
-                                        borderRadius: 8,
-                                        padding: 12,
-                                        fontSize: 16,
-                                        color: colors.foreground,
-                                        backgroundColor: colors.background,
-                                        marginBottom: 12,
-                                    }}
-                                    value={searchQuery}
-                                    onChangeText={setSearchQuery}
-                                    placeholder="Search items by name..."
-                                />
-                                <View style={{ height: 400 }}>
-                                    <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={true}>
-                                        {filteredItems.map((itemName) => (
-                                            <TouchableOpacity key={itemName} onPress={() => handleItemPress(itemName)} style={styles.itemContainer}>
-                                                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
-                                                    <Image source={trackblazerIcons[itemName].icon} style={{ width: 48, height: 48, marginRight: 8 }} />
-                                                    <View style={{ flex: 1 }}>
-                                                        <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground }}>{itemName}</Text>
-                                                        <Text style={{ fontSize: 12, color: colors.foreground, opacity: 0.6, marginTop: 2 }}>{trackblazerIcons[itemName].description}</Text>
+                                <View style={{ marginBottom: 16 }}>
+                                    <Input
+                                        style={{
+                                            borderWidth: 1,
+                                            borderColor: colors.border,
+                                            borderRadius: 8,
+                                            padding: 12,
+                                            fontSize: 16,
+                                            color: colors.foreground,
+                                            backgroundColor: colors.background,
+                                            marginBottom: 12,
+                                        }}
+                                        value={searchQuery}
+                                        onChangeText={setSearchQuery}
+                                        placeholder="Search items by name..."
+                                    />
+                                    <View style={{ height: 400 }}>
+                                        <ScrollView nestedScrollEnabled={true} showsVerticalScrollIndicator={true}>
+                                            {filteredItems.map((itemName) => (
+                                                <TouchableOpacity key={itemName} onPress={() => handleItemPress(itemName)} style={styles.itemContainer}>
+                                                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+                                                        <Image source={trackblazerIcons[itemName].icon} style={{ width: 48, height: 48, marginRight: 8 }} />
+                                                        <View style={{ flex: 1 }}>
+                                                            <Text style={{ fontSize: 16, fontWeight: "600", color: colors.foreground }}>{itemName}</Text>
+                                                            <Text style={{ fontSize: 12, color: colors.foreground, opacity: 0.6, marginTop: 2 }}>{trackblazerIcons[itemName].description}</Text>
+                                                        </View>
+                                                        {scenarioOverrides.trackblazerExcludedItems.includes(itemName) && <CircleCheckBig size={18} color={"green"} />}
                                                     </View>
-                                                    {scenarioOverrides.trackblazerExcludedItems.includes(itemName) && <CircleCheckBig size={18} color={"green"} />}
-                                                </View>
-                                            </TouchableOpacity>
-                                        ))}
-                                    </ScrollView>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    </View>
                                 </View>
                             </View>
-                        </View>
+                        </SearchableItem>
                     </View>
 
                     <Divider className="my-4" />

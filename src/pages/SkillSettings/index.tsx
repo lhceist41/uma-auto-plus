@@ -350,7 +350,7 @@ const SkillSettings = () => {
                         </View>
                         <View style={styles.inputContainer}>
                             <CustomSelect
-                                searchId="preferred-distance-override"
+                                searchId="preferred-track-distance"
                                 options={[
                                     { value: "inherit", label: "Use [Training Settings] -> [Preferred Distance Override]" },
                                     { value: "no_preference", label: "Any" },

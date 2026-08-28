@@ -5,6 +5,7 @@ import { Menu, House, Search, X } from "lucide-react-native"
 import { useTheme } from "../../context/ThemeContext"
 import { useSearchRegistry } from "../../context/SearchRegistryContext"
 import { Portal } from "@rn-primitives/portal"
+import { isNestedSettingsPage } from "./helpers"
 
 interface PageHeaderProps {
     /** The title to display in the header. */
@@ -183,23 +184,7 @@ const PageHeader = ({ title, showHomeButton = true, titleComponent, leftComponen
             fallbackTargetId: item.parentId || undefined,
         }
 
-        // List of pages that are nested inside the "Settings" stack.
-        const settingsPages = [
-            "SettingsMain",
-            "TrainingSettings",
-            "TrainingEventSettings",
-            "RacingSettings",
-            "RacingPlanSettings",
-            "SkillSettings",
-            "EventLogVisualizer",
-            "ImportSettingsPreview",
-            "DebugSettings",
-        ]
-
-        // Check if the target page is a regular Settings page or a dynamic Skill Plan Settings page.
-        const isSettingsPage = settingsPages.includes(item.page) || item.page.startsWith("SkillPlanSettings")
-
-        if (isSettingsPage) {
+        if (isNestedSettingsPage(item.page)) {
             // Use nested navigation to reach settings from outside the stack (e.g., from Home).
             ;(navigation.navigate as any)("Settings", {
                 screen: item.page,

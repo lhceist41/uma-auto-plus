@@ -1,8 +1,21 @@
 import fs from "fs"
 import path from "path"
 import searchConfig from "../searchConfig"
+import { skillPlanSettingsPages } from "../../pages/SkillPlanSettings/config"
 
 const PAGES_DIR = path.join(__dirname, "..", "..", "pages")
+
+/**
+ * Repo-specific registries used to expand a known template-literal searchId's interpolated
+ * variable into its full set of concrete runtime values. Keyed by the variable name as written
+ * in the template (e.g. `enable-skill-plan-${planKey}` looks up "planKey" here). Add an entry
+ * whenever a new dynamic searchId family is introduced with a different backing variable - an
+ * unrecognized variable name fails the coverage test loudly instead of being silently skipped.
+ */
+const TEMPLATE_VARIABLE_DOMAINS: Record<string, string[]> = {
+    name: Object.values(skillPlanSettingsPages).map((p) => p.name),
+    planKey: Object.values(skillPlanSettingsPages).map((p) => p.planKey),
+}
 
 /** Recursively collects every .tsx file under a directory, cross-platform (no shell globbing). */
 function collectTsxFiles(dir: string): string[] {
@@ -13,25 +26,32 @@ function collectTsxFiles(dir: string): string[] {
     })
 }
 
+interface TemplateId {
+    /** The static text before the interpolation, e.g. "enable-skill-plan-". */
+    prefix: string
+    /** The interpolated variable name, e.g. "planKey". */
+    variable: string
+}
+
 /**
  * Extracts every searchable id a page file declares, covering the three ways a control wires
  * into the search registry:
  *   1. `searchId="literal"` / `searchId='literal'` on CustomCheckbox/CustomSelect/CustomSlider/CustomTitle.
  *   2. `<SearchableItem id="literal" ...>` wrapping custom content directly.
  *   3. A template-literal id (`searchId={\`prefix-${var}\`}` or `id={\`prefix-${var}\`}`), which resolves
- *      to one of several concrete ids at runtime (e.g. one per SkillPlanSettings page). Only the static
- *      prefix can be recovered without evaluating the source, so these are checked as a prefix match
- *      instead of an exact id.
+ *      to one of several concrete ids at runtime (e.g. one per SkillPlanSettings page). Both the static
+ *      prefix and the interpolated variable name are recovered, so the concrete ids can be expanded via
+ *      `TEMPLATE_VARIABLE_DOMAINS` and checked exactly instead of by prefix alone.
  *
  * A bare dynamic id (`id={someVariable}`, no literal or template text at all) cannot be resolved by
  * source scanning and is intentionally skipped rather than guessed at.
  */
-function extractSearchableIds(source: string): { literal: string[]; prefixes: string[] } {
+function extractSearchableIds(source: string): { literal: string[]; templates: TemplateId[] } {
     const literal: string[] = []
-    const prefixes: string[] = []
+    const templates: TemplateId[] = []
 
     for (const m of source.matchAll(/searchId=(["'])([^"']+)\1/g)) literal.push(m[2])
-    for (const m of source.matchAll(/searchId=\{`([^$`]*)\$\{/g)) prefixes.push(m[1])
+    for (const m of source.matchAll(/searchId=\{`([^$`]*)\$\{(\w+)\}`\}/g)) templates.push({ prefix: m[1], variable: m[2] })
 
     // `(?<!=)>` stops at the tag's real closing bracket rather than an `=>` inside an attribute
     // value (e.g. `onCheckedChange={(checked) => ...}`), so multi-line attribute lists are safe.
@@ -42,24 +62,17 @@ function extractSearchableIds(source: string): { literal: string[]; prefixes: st
             literal.push(idLiteral[2])
             continue
         }
-        const idTemplate = attrs.match(/\bid=\{`([^$`]*)\$\{/)
-        if (idTemplate) prefixes.push(idTemplate[1])
+        const idTemplate = attrs.match(/\bid=\{`([^$`]*)\$\{(\w+)\}`\}/)
+        if (idTemplate) templates.push({ prefix: idTemplate[1], variable: idTemplate[2] })
         // else: bare dynamic id, e.g. `id={id}` - not statically resolvable, skipped.
     }
 
-    return { literal, prefixes }
+    return { literal, templates }
 }
 
 describe("searchId registration coverage", () => {
     const pageFiles = collectTsxFiles(PAGES_DIR)
     const configIds = new Set(searchConfig.map((item) => item.id))
-
-    /**
-     * Ids the scanner resolves as a template-literal prefix (e.g. `enable-skill-plan-`) are checked
-     * against every id in searchConfig, not just page-local ones, since the prefix alone doesn't say
-     * which page registered the concrete variant.
-     */
-    const allConfigIds = Array.from(configIds)
 
     it("every literal searchId in a page has a matching searchConfig entry", () => {
         const missing: string[] = []
@@ -75,14 +88,25 @@ describe("searchId registration coverage", () => {
         expect(missing).toEqual([])
     })
 
-    it("every template-literal searchId prefix in a page has at least one matching searchConfig entry", () => {
+    it("every template-literal searchId resolves to a registered entry for every concrete variant", () => {
+        // Expands each template to its full set of concrete ids via TEMPLATE_VARIABLE_DOMAINS and checks
+        // each one exactly, so deleting a single concrete registration (e.g. removing one SkillPlanSettings
+        // page from searchConfig while it's still rendered) fails here by name, not just a prefix match.
         const missing: string[] = []
         for (const file of pageFiles) {
             const source = fs.readFileSync(file, "utf8")
-            const { prefixes } = extractSearchableIds(source)
-            for (const prefix of prefixes) {
-                if (!allConfigIds.some((id) => id.startsWith(prefix))) {
-                    missing.push(`${prefix}* (${path.relative(PAGES_DIR, file)})`)
+            const { templates } = extractSearchableIds(source)
+            for (const { prefix, variable } of templates) {
+                const domain = TEMPLATE_VARIABLE_DOMAINS[variable]
+                if (!domain) {
+                    missing.push(`${prefix}\${${variable}} (${path.relative(PAGES_DIR, file)}): unrecognized template variable - add it to TEMPLATE_VARIABLE_DOMAINS`)
+                    continue
+                }
+                for (const value of domain) {
+                    const concreteId = `${prefix}${value}`
+                    if (!configIds.has(concreteId)) {
+                        missing.push(`${concreteId} (${path.relative(PAGES_DIR, file)})`)
+                    }
                 }
             }
         }

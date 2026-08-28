@@ -78,6 +78,7 @@ const TrainingSettings = () => {
     const {
         maximumFailureChance,
         disableTrainingOnMaxedStat,
+        manualStatCap,
         enableRainbowTrainingBonus,
         enablePrioritizeNearMaxFriendship,
         preferredDistanceOverride,
@@ -503,6 +504,23 @@ const TrainingSettings = () => {
                                 description="When enabled, training will be skipped for stats that have reached their maximum value."
                                 className="my-2"
                                 searchId="disable-training-on-maxed-stats"
+                            />
+                        </View>
+
+                        <View style={styles.section}>
+                            <CustomSlider
+                                value={manualStatCap || defaultSettings.training.manualStatCap}
+                                placeholder={defaultSettings.training.manualStatCap}
+                                onValueChange={(value) => updateTrainingSetting("manualStatCap", value)}
+                                min={100}
+                                max={2000}
+                                step={50}
+                                label="Manual Stat Cap"
+                                labelUnit=""
+                                showValue={true}
+                                showLabels={true}
+                                description="Floor for the per-stat cap and OCR sanity ceiling. The bot uses the higher of this value and the scenario's own cap (URA 1400; Unity Cup 1300, Wit 1800; Trackblazer 1200, Stamina 1900, Wit 1500) to decide when a stat is maxed and to reject impossible stat reads."
+                                searchId="manual-stat-cap"
                             />
                         </View>
 
