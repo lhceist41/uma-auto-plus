@@ -10,7 +10,7 @@ v1.4.0 - Grand Concert plays itself, Borrow list scanning gets more reliable, an
 - Improved: Smart Borrow handles long Borrow lists more reliably -- a stalled scroll is no longer mistaken for the end of the list, the selected card is re-checked immediately before the tap, and recovery after the accessibility service restarts mid-scroll is sturdier.
 - Fixed: the bot now verifies Normal Career mode is selected before pressing the irreversible Start Career button, instead of trusting whichever tab the game last had open.
 - Fixed: settings search now reaches every settings page it points at, including Run Queue, Discord, and Scenario Overrides settings.
-- Fixed: skill tier data is restored after the community source restructured its page, and the trainee-selection swipe, spark reroll chooser, and Grass Wonder (Saintly Jade Cleric) improvements from the last update are also included.
+- Fixed: skill tier data is restored after the community source restructured its page, and this release also includes the trainee-selection swipe, spark reroll chooser, and Grass Wonder (Saintly Jade Cleric) improvements.
 
     </releaseNotes>
   </update>

@@ -515,7 +515,7 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
                 <View style={styles.menuContainer}>{menuItems.map((item) => renderMenuItem(item, 0))}</View>
             </DrawerContentScrollView>
             <View style={styles.footer}>
-                <TouchableOpacity onPress={() => Linking.openURL("https://github.com/steve1316/uma-android-automation")} activeOpacity={0.7}>
+                <TouchableOpacity onPress={() => Linking.openURL("https://github.com/lhceist41/uma-auto-plus")} activeOpacity={0.7}>
                     <View style={styles.footerButton}>
                         <Github size={32} color={colors.primary} style={{ marginRight: 8 }} />
                         <Text style={styles.footerText}>Go to GitHub</Text>
