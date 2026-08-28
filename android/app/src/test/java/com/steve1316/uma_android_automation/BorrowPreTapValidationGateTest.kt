@@ -173,7 +173,7 @@ class BorrowPreTapValidationGateTest {
     @Test
     fun `15 build-aware exact revalidation uses the shared boundary`() {
         val revalidate = section("private fun revalidateAndTapBorrow", "/**\n     * Production build-aware launch transaction")
-        val transaction = section("internal fun prepareBuildAwareLaunchToReady", "/**\n     * A2 build-aware launch-gate")
+        val transaction = section("internal fun prepareBuildAwareLaunchToReady", "/**\n     * The launch-gate dry-run diagnostic")
 
         assertTrue(revalidate.contains("tapAcceptedBorrowRow"))
         assertTrue(revalidate.contains("LOCATED_VALIDATED_TAP_SUPPRESSED"))

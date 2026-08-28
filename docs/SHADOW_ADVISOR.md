@@ -2,7 +2,7 @@
 
 The Shadow Advisor is an observational baseline that answers one question, and only records the answer:
 
-> What would the static S1 policy `raw-gain-ranker-v1` have recommended from the same pre-decision facts,
+> What would the static policy `raw-gain-ranker-v1` have recommended from the same pre-decision facts,
 > given the turn the bot actually saw?
 
 It has **no gameplay authority**. It never influences `decideNextAction`, the committed `MainScreenAction`,
@@ -12,14 +12,15 @@ exactly as it does without it.
 
 ## Stages
 
-- **S1** (`src/lib/shadowAdvisor/`): the pure policy and context contract in TypeScript. `raw-gain-ranker-v1`
-  ranks a complete five-facility training contest by weighted raw stat gains minus a failure penalty, with a
-  state recovery guardrail (energy before mood) and a race-day suppression. It reuses none of the bot's scoring.
-- **S2** (`scripts/shadow-advisor.mjs`): offline evaluation of an archived corpus. It joins the advisor's
-  recommendation to the committed `DecisionTrace` on `(careerToken, seq)` and reports coverage / agreement, never
-  accuracy or "would have done better".
-- **S3** (live shadow): the Kotlin port of S1 evaluated at runtime, from the immutable serialized facts, writing
-  a separate telemetry stream. This is what this doc covers.
+- **The policy contract** (`src/lib/shadowAdvisor/`): the pure policy and context contract in TypeScript.
+  `raw-gain-ranker-v1` ranks a complete five-facility training contest by weighted raw stat gains minus a
+  failure penalty, with a state recovery guardrail (energy before mood) and a race-day suppression. It reuses
+  none of the bot's scoring.
+- **The offline evaluator** (`scripts/shadow-advisor.mjs`): offline evaluation of an archived corpus. It joins
+  the advisor's recommendation to the committed `DecisionTrace` on `(careerToken, seq)` and reports coverage /
+  agreement, never accuracy or "would have done better".
+- **S3** (live shadow): the Kotlin port of the policy contract evaluated at runtime, from the immutable
+  serialized facts, writing a separate telemetry stream. This is what this doc covers.
 
 ## S3 runtime pipeline
 
@@ -31,7 +32,7 @@ exactly as it does without it.
    `gains`/`failChance` and the serialized same-seq `career_state` (condition, stats, race flags, scenario). It
    never reads `selected`, `trainingSource`, `enteredRace`, `recovery`, observed transitions, the final outcome,
    or any `candidate.score`.
-3. It evaluates the Kotlin S1 policy and appends one record to `outcomes/shadow_advisor.jsonl`.
+3. It evaluates the Kotlin port of the policy and appends one record to `outcomes/shadow_advisor.jsonl`.
 
 The sink (`bot/shadowadvisor/ShadowAdvisorSink.kt`) is a per-`Campaign` instance under the same
 `BuildConfig.DEBUG || game.debugMode` gate as the decision tracer -- **no new setting**. It is wrapped entirely

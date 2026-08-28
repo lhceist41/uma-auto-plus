@@ -1,9 +1,9 @@
 package com.steve1316.uma_android_automation
 
 /**
- * Pure, Android-free launch-transaction gate for the build-aware Smart Borrow launch (A2).
+ * Pure, Android-free launch-transaction gate for the build-aware Smart Borrow launch.
  *
- * A2 integrates the already-proven build-aware borrow selection into the production career-launch
+ * This integrates the already-proven build-aware borrow selection into the production career-launch
  * transaction, one tap before Start Career. The structural invariant this file exists to enforce:
  *
  *     the Start Career tap is IMPOSSIBLE unless the transaction reached READY_TO_START_CAREER.
@@ -19,8 +19,9 @@ package com.steve1316.uma_android_automation
  * is [LaunchTransactionState.BORROW_NOT_AVAILABLE] (blocked), never a silent substitution.
  */
 
-/** The narrow launch-transaction state. A2 reaches at most [READY_TO_START_CAREER] and then rolls back;
- * only A3 may advance a READY transaction to [STARTED] by actually tapping Start Career. */
+/** The narrow launch-transaction state. The dry-run reaches at most [READY_TO_START_CAREER] and then rolls
+ * back; only the production build-aware launch may advance a READY transaction to [STARTED] by actually
+ * tapping Start Career. */
 enum class LaunchTransactionState {
     /** No launch decision has been made yet. */
     PREPARING,
@@ -53,13 +54,15 @@ enum class LaunchTransactionState {
     /** Owned-deck integrity and the upstream launch identity gates hold. */
     LAUNCH_PRECONDITIONS_VERIFIED,
 
-    /** Every precondition holds: the transaction may (in A3) tap Start Career, and only in this state. */
+    /** Every precondition holds: the transaction may (in the production build-aware launch) tap Start
+     * Career, and only in this state. */
     READY_TO_START_CAREER,
 
     /** A precondition after selection failed. The caller must roll the borrow back before returning. */
     LAUNCH_BLOCKED,
 
-    /** A3 only: Start Career was actually tapped. A2 never reaches this. */
+    /** Only the production build-aware launch reaches this: Start Career was actually tapped. The
+     * dry-run never reaches this. */
     STARTED,
 }
 
@@ -81,8 +84,9 @@ data class LaunchPreconditions(
     val borrowIdentityVerified: Boolean = false,
     /** The owned support deck is unchanged (deck identity/number held; only the Friends slot changed). */
     val ownedDeckIntact: Boolean = false,
-    /** The upstream launch identity gates (scenario / trainee / lineage) hold. In the A2 dry-run the
-     * operator established these at the parked career-start; A3 wires the production navigate() gates. */
+    /** The upstream launch identity gates (scenario / trainee / lineage) hold. In the launch-gate dry-run
+     * the operator established these at the parked career-start; the production build-aware launch wires
+     * them to the live navigate() gates. */
     val upstreamLaunchGatesHeld: Boolean = false,
     /** The transaction is on the expected career-start Support Formation screen. */
     val onSupportFormation: Boolean = false,
@@ -117,7 +121,8 @@ object BuildAwareLaunchGate {
     /**
      * The structural gate every Start Career tap primitive MUST pass. True only for
      * [LaunchTransactionState.READY_TO_START_CAREER]. A tap guarded by this predicate is impossible in
-     * any other state; A2 never calls a tap at all, but the guard is what makes A3's tap safe by construction.
+     * any other state; the dry-run never calls a tap at all, but the guard is what makes the production
+     * build-aware launch's tap safe by construction.
      */
     fun canStartCareer(state: LaunchTransactionState): Boolean = state == LaunchTransactionState.READY_TO_START_CAREER
 
@@ -137,10 +142,11 @@ object BuildAwareLaunchGate {
 }
 
 /**
- * Outcome of one build-aware launch transaction (A2 dry-run, and the shape A3 will consume). Carries the
- * gate verdict, the reduced preconditions, and the evidence behind them. [slotCommitted] is true when a
- * borrow is in the Friends slot and the caller still owes a rollback (the A2 dry-run always rolls back
- * before returning; A3 taps Start Career instead only when [state] is READY_TO_START_CAREER).
+ * Outcome of one build-aware launch transaction (the dry-run, and the shape the production build-aware
+ * launch consumes). Carries the gate verdict, the reduced preconditions, and the evidence behind them.
+ * [slotCommitted] is true when a borrow is in the Friends slot and the caller still owes a rollback (the
+ * dry-run always rolls back before returning; the production build-aware launch taps Start Career instead
+ * only when [state] is READY_TO_START_CAREER).
  */
 data class BuildAwareLaunchResult(
     val state: LaunchTransactionState,
@@ -158,7 +164,7 @@ data class BuildAwareLaunchResult(
     val deckNumberAtEnd: Int? = null,
     val tpRawAtStart: String? = null,
     val tpRawAtEnd: String? = null,
-    /** Always false in A2: the dry-run never taps Start Career. */
+    /** Always false for the dry-run: it never taps Start Career. */
     val startCareerTapped: Boolean = false,
     val reason: String? = null,
 ) {

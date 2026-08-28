@@ -278,7 +278,7 @@ export interface Settings {
         debugMode_startBorrowRemoveProbeTest: boolean
         // Smart Borrow SELECT-verify-rollback rehearsal (DeckLab). Reads the pushed borrow intent (outcomes/smart_borrow_intent.json), taps the located row, verifies the committed Friends slot via the reopened picker's "Selected" marker, Removes it, confirms empty, and repeats once. Park on the Support Formation with an empty Friends slot. Taps and removes a borrow (both reversible); never presses Start Career, spends nothing.
         debugMode_startSmartBorrowSelectRollbackTest: boolean
-        // A2 build-aware launch-gate dry-run. Runs the production build-aware launch transaction (fresh pool re-scan, exact intent-bound borrow selection, committed-slot identity verification, owned-deck integrity) to the final READY_TO_START_CAREER gate, then deliberately does NOT press Start Career: it rolls the borrow back via Remove. Requires a pushed BUILD_AWARE intent; fails closed with no legacy fallback. Never presses Start Career, spends nothing.
+        // The build-aware launch-gate dry-run. Runs the production build-aware launch transaction (fresh pool re-scan, exact intent-bound borrow selection, committed-slot identity verification, owned-deck integrity) to the final READY_TO_START_CAREER gate, then deliberately does NOT press Start Career: it rolls the borrow back via Remove. Requires a pushed BUILD_AWARE intent; fails closed with no legacy fallback. Never presses Start Career, spends nothing.
         debugMode_startBuildAwareLaunchGateTest: boolean
         // Read-only Borrow Card pool census (DeckLab). Park the game on the career-start Support Formation screen with an empty Friends slot; opens the borrow picker, reads every visible row, pages, and closes. Taps no card, selects nothing, never presses Start Career.
         debugMode_startBorrowPoolScanTest: boolean
@@ -343,7 +343,7 @@ export interface Settings {
         // duplicate of a card already in the deck) falls back to the default pick on the retry.
         // Off = the default pick only (the strong friend card when spotted, otherwise the top row).
         enableSmartBorrow: boolean
-        // Build-Aware Launch (A3, default off). When on, a career launch routes its Friends borrow and
+        // Build-Aware Launch (default off). When on, a career launch routes its Friends borrow and
         // its Start Career gate through the build-aware launch transaction: it re-scans the live borrow
         // pool for freshness, selects and verifies the exact card named by a pushed BUILD_AWARE intent
         // (outcomes/smart_borrow_intent.json), checks owned-deck integrity, and presses Start Career only

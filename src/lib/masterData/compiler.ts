@@ -55,10 +55,11 @@ function sha256(text: string): string {
  * The U+2014 (em dash) code point is re-emitted as the six-character JSON escape (backslash-u-2014). This
  * is purely textual: JSON.stringify only ever places that code point inside a string value (every
  * structural token is ASCII), and the escape decodes back to the identical code point, so JSON.parse
- * yields exactly the same string. The repository forbids literal U+2014 in newly added files (AGENTS.md
- * section 7); a compiled artifact is a new tracked file, and skill/race source text legitimately contains
- * em dashes (game skill names), so escaping keeps the canonical value intact while producing a committable
- * artifact. Applies to every artifact this serializer emits, so future em-dash source is handled too.
+ * yields exactly the same string. This repository avoids the literal U+2014 character in newly generated
+ * tracked files, but skill/race source text legitimately contains em dashes (game skill names), and a
+ * compiled artifact is itself a new tracked file, so escaping keeps the canonical value intact while
+ * producing a committable artifact. Applies to every artifact this serializer emits, so future em-dash
+ * source is handled too.
  */
 function canonicalJson(value: unknown): string {
     return JSON.stringify(value, null, 2).split(String.fromCharCode(0x2014)).join("\\u2014") + "\n"

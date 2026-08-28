@@ -8,7 +8,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
 /**
- * A3-R13: the Borrow host-recovery movement signal must be the same ordered row-identity
+ * The Borrow host-recovery movement signal must be the same ordered row-identity
  * signature [BorrowListWalker] already trusts ([borrowScreenKeys] / [borrowScreenSignature]),
  * not a positional pixel digest. The Borrow list is known to shift row pixel positions by a few
  * pixels between captures, so a pixel-based fingerprint reports movement that never happened and
@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test
  * `borrowHostSwipeFingerprint` calls -- and prove it through the real generic verifier functions
  * ([executeHostSwipeWithSettleVerification], [verifySwipeMovement]).
  */
-@DisplayName("A3-R13: Borrow host swipe uses semantic row-identity movement evidence")
+@DisplayName("Borrow host swipe uses semantic row-identity movement evidence")
 class BorrowHostSemanticFingerprintTest {
     /** Mirrors the production `borrowHostSwipeFingerprint`: recognized requires at least two
      * readable row identities, and the value is the ordered semantic screen signature. */

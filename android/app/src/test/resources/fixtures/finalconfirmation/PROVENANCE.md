@@ -1,7 +1,7 @@
 # Final Confirmation mode-tab fixture provenance
 
 Top-strip crops of the career-launch **Final Confirmation** screen, both career modes, captured on
-MuMu (1080x1920 portrait, native RGB) during the N0 evidence pass. The full-screen captures and the
+MuMu (1080x1920 portrait, native RGB) during the mode-gate evidence pass. The full-screen captures and the
 capture trail live in the git-ignored `validation/n0-final-confirmation-mode/`; only these two minimal
 crops are promoted here.
 

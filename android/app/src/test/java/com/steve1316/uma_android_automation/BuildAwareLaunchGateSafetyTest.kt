@@ -8,12 +8,12 @@ import org.junit.jupiter.api.Test
 import java.io.File
 
 /**
- * A2 build-aware launch-gate safety + wiring (source guards).
+ * Build-aware launch-gate safety + wiring (source guards).
  *
- * The production launch transaction and its A2 dry-run drive real OCR, real taps, and the borrow
+ * The production launch transaction and its dry-run drive real OCR, real taps, and the borrow
  * selection, so they cannot be unit-tested directly. These guards pin the load-bearing invariants
- * against the source: the A2 path NEVER taps Start Career (the tap stays strictly downstream of the
- * READY gate, which A2 never crosses), it fails closed with no legacy fallback, it reuses the proven
+ * against the source: the dry-run path NEVER taps Start Career (the tap stays strictly downstream of the
+ * READY gate, which it never crosses), it fails closed with no legacy fallback, it reuses the proven
  * selection/verification primitives, always rolls a committed borrow back, and the diagnostic is fully
  * registered so the arming fail-closed covers it.
  */
@@ -51,7 +51,7 @@ class BuildAwareLaunchGateSafetyTest {
         }
 
         @Test
-        fun `the A2 dry-run never taps Start Career`() {
+        fun `the dry-run never taps Start Career`() {
             val body = dryRunBody()
             assertFalse(body.contains("ButtonStartCareer.click"), "the dry-run must never click Start Career")
             assertFalse(body.contains("ButtonStartCareerOffset.click"), "the dry-run must never click the offset Start Career")

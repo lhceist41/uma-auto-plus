@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
 /**
- * Build-aware launch-transaction gate (A2), pure.
+ * Build-aware launch-transaction gate, pure.
  *
  * Proves the structural invariant: READY_TO_START_CAREER is reachable ONLY with every precondition
  * satisfied, and the Start Career tap predicate is true ONLY in that state. Every blocking case the

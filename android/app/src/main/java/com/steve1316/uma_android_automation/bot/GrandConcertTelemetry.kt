@@ -18,8 +18,10 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * The gating is layered on purpose: it fires only on a Grand Concert career, only in a debug build
  * or with Debug Mode enabled, and it logs through [android.util.Log] - never `MessageLog`, whose
- * single process-wide lock is the watchdog-deadlock hazard documented in docs/INCIDENTS.md. A capture
- * failure is swallowed and logged: instrumentation must never be able to break a run.
+ * single process-wide lock holds across both the buffer append and its EventBus post, so a subscriber
+ * doing blocking work while that lock is held can deadlock or freeze anything else waiting to log,
+ * watchdog recovery included. A capture failure is swallowed and logged: instrumentation must never
+ * be able to break a run.
  */
 object GrandConcertTelemetry {
     private const val LOG_TAG = "GCTelemetry"

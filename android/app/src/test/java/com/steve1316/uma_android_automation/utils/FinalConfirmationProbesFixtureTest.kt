@@ -7,7 +7,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
 /**
- * N0 mode-tab pixel probes on the promoted Final Confirmation crops (see
+ * Final Confirmation mode-tab pixel probes on the promoted Final Confirmation crops (see
  * src/test/resources/fixtures/finalconfirmation/PROVENANCE.md) and, as cross-screen negatives, on the
  * existing Grand Concert full-screen fixtures. Pins that Normal Career and Independent Training are each
  * positively classified, that the two-tab recognizer accepts both modes, and that the probe REFUSES

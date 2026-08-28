@@ -108,7 +108,7 @@ internal data class BorrowWalkResult(
      * absent from a stalled walk is NOT proof of absence. */
     val stalled: Boolean = false,
     /** Observability for the bounded accessibility recovery, so a skipped or failed rebind is never silent
-     * (the A3-R3 live defect emitted no reason). Distinguishes "recovery not needed" from "performed" from
+     * (a past live defect emitted no reason). Distinguishes "recovery not needed" from "performed" from
      * "needed but unavailable". */
     val recovery: BorrowRecovery = BorrowRecovery.NONE,
     /** How many post-rebind gesture attempts the walk spent (the first gesture after a MuMu rebind is often
@@ -138,8 +138,8 @@ internal data class BorrowWalkResult(
  *    this is the traversal budget and the only thing that ends a walk with MAX_PAGES;
  *  - a gesture that does not change the screen is retried at most [maxSwallowedRetries] times per gap.
  *    These retries are recovery, not forward progress: they do NOT spend the forward advance budget, so
- *    a stall can never starve the one accessibility rebind below (the A3-R3 live defect, where the ladder
- *    consumed the whole page budget and the rebind gate `gestures < maxPageGestures` was then unreachable);
+ *    a stall can never starve the one accessibility rebind below (a past defect let the ladder consume
+ *    the whole page budget, leaving the rebind gate `gestures < maxPageGestures` unreachable);
  *  - at most ONE accessibility-service rebind per walk, followed by at most [maxPostRebindGestures]
  *    post-rebind gesture attempts (the first gesture after a MuMu rebind is often swallowed);
  *  - at most ONE optional host recovery per walk, only after the Accessibility ladder above is exhausted;
@@ -223,7 +223,7 @@ internal class BorrowListWalker(
                 // gesture -- the retry index becomes the advance attempt, so a swallowed short drag gets a
                 // stronger recovery gesture instead of the identical one that just failed. Bounded per gap
                 // by maxSwallowedRetries; these retries are recovery, NOT forward progress, so they do not
-                // increment the forward budget (that is what starved the rebind below in A3-R3 live).
+                // increment the forward budget (that is what once starved the rebind below).
                 if (retriesThisGap < maxSwallowedRetries) {
                     retriesThisGap++
                     retriesTotal++

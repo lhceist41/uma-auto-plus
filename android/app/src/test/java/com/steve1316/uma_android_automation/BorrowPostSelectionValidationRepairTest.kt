@@ -57,7 +57,7 @@ class BorrowPostSelectionValidationRepairTest {
 
     @Test
     fun `4 default no-tap failure returns before Start Career and final confirmation`() {
-        val support = section("private fun handleSupportDeckScreen", "/**\n     * A3 build-aware production launch")
+        val support = section("private fun handleSupportDeckScreen", "/**\n     * The production build-aware launch")
         val noTapGate = support.indexOf("failClosedWithoutCurrentTap")
         val startCareer = support.indexOf("ButtonStartCareer.click")
 
@@ -146,7 +146,7 @@ class BorrowPostSelectionValidationRepairTest {
 
     @Test
     fun `13 build-aware branch remains ahead of the default no-tap stop`() {
-        val support = section("private fun handleSupportDeckScreen", "/**\n     * A3 build-aware production launch")
+        val support = section("private fun handleSupportDeckScreen", "/**\n     * The production build-aware launch")
         val buildAware = section("private fun handleBuildAwareLaunch", "/**\n     * One pass of the Smart Borrow sub-flow")
 
         assertTrue(support.indexOf("return handleBuildAwareLaunch(requiredDeck)") < support.indexOf("failClosedWithoutCurrentTap"))

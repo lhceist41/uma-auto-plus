@@ -765,9 +765,9 @@ object GrandConcertPolicy {
      * the half-weighted cost term already charges `magnitude * scarcity` for one more point of
      * stat. A weight above the highest scarcity guarantees that charge can never fully offset the
      * credit, so two techniques of the SAME stat always rank by magnitude no matter which token
-     * either one costs, including Power's own Vocal token, the scarcest one there is. This is the
-     * exact defect an upstream audit caught: Speed +5/cost 10 outscored Speed +12/cost 24 (36 vs
-     * 30) because the flat, magnitude-blind base let a proportional cost win by default.
+     * either one costs, including Power's own Vocal token, the scarcest one there is. This closes
+     * the exact defect where the flat, magnitude-blind base let a proportional cost win by default:
+     * Speed +5/cost 10 outscored Speed +12/cost 24 (36 vs 30).
      *
      * Deliberately small relative to the run's own priority spread (18, the gap between
      * [SINGLE_STAT_HIGH_PRIORITY_SCORE] and [SINGLE_STAT_LOW_PRIORITY_SCORE]): the full swing from

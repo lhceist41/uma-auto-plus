@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test
 import java.io.File
 
 /**
- * A3-R11 wiring guard: the three production build-aware Borrow walkers (locate, select/revalidate,
+ * Host-recovery wiring guard: the three production build-aware Borrow walkers (locate, select/revalidate,
  * selected-marker verification) must reuse the already-proven [recoverBorrowScrollWithHost] rung, the
  * census/read-only pool walker must not gain host authority, and the default production walker must be
  * untouched. The movement/freshness/budget behaviour of the shared walker itself is exercised behaviorally

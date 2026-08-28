@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 
 /**
- * A3-R12 regression: the build-aware locate stage must be able to walk a long, healthy Borrow pool past
+ * Locate-scan-ceiling regression: the build-aware locate stage must be able to walk a long, healthy Borrow pool past
  * the shared 8-page budget, and the known-limit-break selection-evidence shortcut must never let a real
  * ambiguity slip through.
  *
@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test
  * [BorrowListWalker], [SmartBorrowLocator], [computeSelectionEvidenceComplete], and [canSelectLocatedBorrow]
  * together over synthetic long pools, entirely offline.
  */
-@DisplayName("A3-R12 build-aware long-pool locate")
+@DisplayName("Build-aware long-pool locate")
 class BuildAwareLocateScanBoundTest {
     /** Mirrors the production MAX_BORROW_SCAN_PAGES (private in CareerLaunchNavigator; the source-guard
      * tests in BuildAwareLaunchProductionTest pin the actual constant and its wiring). */
@@ -97,7 +97,7 @@ class BuildAwareLocateScanBoundTest {
         contentScreens + listOf(listOf(contentScreens.last().first()))
 
     @Nested
-    @DisplayName("known expected limit break (A3-R12 selection-evidence shortcut)")
+    @DisplayName("known expected limit break (locate-scan-ceiling selection-evidence shortcut)")
     inner class KnownLimitBreak {
         @Test
         fun `1 - LOCATED with a known LB on a healthy MAX_PAGES cutoff authorises selection`() {

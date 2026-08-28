@@ -16,7 +16,7 @@ internal fun buildAwareBorrowMidListStallEnabled(raw: String?): Boolean =
 internal const val BUILD_AWARE_BORROW_MID_LIST_STALL_THRESHOLD = 10
 
 /**
- * Validation-only boundary for the build-aware Smart Borrow LOCATE walker (A3-R11): a single
+ * Validation-only boundary for the build-aware Smart Borrow LOCATE walker: a single
  * deterministic mid-list Accessibility dead-dispatch, so the production host-recovery rung can be
  * exercised on demand instead of waiting for the natural swallow that only reproduces near the list
  * tail.

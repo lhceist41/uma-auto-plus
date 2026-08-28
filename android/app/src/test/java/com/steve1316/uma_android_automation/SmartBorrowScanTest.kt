@@ -50,7 +50,7 @@ class SmartBorrowScanTest {
          * revives it -- models MuMu's mid-traversal dispatchGesture death after healthy paging. -1 = never. */
         private val dispatchDiesAtIndex: Int = -1,
         /** How many gestures AFTER a successful recovery are still swallowed before movement resumes --
-         * models the first-gesture-after-rebind swallow that A3-R4 could not clear with a single retry. */
+         * models the first-gesture-after-rebind swallow that a single retry could not clear. */
         private val postRebindSwallow: Int = 0,
         /** A SECOND dispatch death, at this index, that only bites after the first recovery -- models a fresh
          * gesture death at a later gap that the one-per-walk rebind may not touch again. -1 = never. */
@@ -461,7 +461,7 @@ class SmartBorrowScanTest {
     }
 
     /** Seven filler screens then the target, so the target is only reachable one page past where the
-     * dispatcher dies. Under the A3-R3 shared counter the forward paging plus the swallowed-retry ladder
+     * dispatcher dies. Under the shared gesture-recovery counter the forward paging plus the swallowed-retry ladder
      * spend the whole page budget before the rebind gate, so the rebind is skipped and the target is never
      * reached. This is the exact live failure. */
     private fun dispatchDeathBeforeTarget(): FakePicker {
@@ -540,7 +540,7 @@ class SmartBorrowScanTest {
     @DisplayName("26. REGRESSION: the first post-rebind gesture is swallowed, the second one moves the list")
     fun testSecondPostRebindGestureMoves() {
         // Fails against e12a4c55: there only ONE post-rebind gesture is issued, so a swallowed first gesture
-        // leaves the list stuck and the card past the death is never reached. This is the A3-R4 live failure.
+        // leaves the list stuck and the card past the death is never reached. This was the live failure.
         val fillers = (0..6).map { screen("[Outfit $it]\nFiller number $it") }
         val targetScreen = screen("[Outfit Seven]\n$target")
         val picker =
@@ -795,7 +795,7 @@ class SmartBorrowScanTest {
     @DisplayName("37. REGRESSION: a stale accessibility instance is not a reconnect; a fresh one is")
     fun testFreshInstanceReconnectSignal() {
         val stale = Any()
-        // The A3-R5 predicate was `getInstance() != null`, which the stale (never-nulled) 2.5.9 singleton
+        // The original predicate was `getInstance() != null`, which the stale (never-nulled) 2.5.9 singleton
         // satisfies immediately -- vacuous. freshInstanceObserved must reject exactly that case.
         assertNotNull(stale, "the stale instance is non-null, so the old != null gate would have passed it")
         assertFalse(freshInstanceObserved(stale) { stale }, "the same stale instance is not a reconnect")

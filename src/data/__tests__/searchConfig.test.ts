@@ -50,7 +50,7 @@ function extractSearchableIds(source: string): { literal: string[]; prefixes: st
     return { literal, prefixes }
 }
 
-describe("searchId registration coverage (RH2)", () => {
+describe("searchId registration coverage", () => {
     const pageFiles = collectTsxFiles(PAGES_DIR)
     const configIds = new Set(searchConfig.map((item) => item.id))
 

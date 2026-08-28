@@ -3,7 +3,7 @@ package com.steve1316.uma_android_automation
 import com.steve1316.uma_android_automation.utils.FinalConfirmationMode
 
 /**
- * Pure decision policy for the Normal Career Final Confirmation mode gate (N0).
+ * Pure decision policy for the Normal Career Final Confirmation mode gate.
  *
  * The Final Confirmation screen defaults to the LAST-STARTED mode, so it can open on either the
  * Normal Career or the Independent Training tab. A career-launch flow must positively verify Normal

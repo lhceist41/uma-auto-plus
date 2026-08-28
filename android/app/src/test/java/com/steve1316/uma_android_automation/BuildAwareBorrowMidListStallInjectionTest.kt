@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test
 import java.io.File
 
 /**
- * A3-R11 deterministic mid-list host-recovery proof seam.
+ * Deterministic mid-list host-recovery proof seam.
  *
  * Three natural build-aware Borrow LOCATE host-recovery attempts already proved the production ladder
  * end to end, but the natural no-movement gap only reproduces near the reproducible ~31-row list tail,
@@ -20,16 +20,16 @@ import java.io.File
  *
  * These tests drive the real [BorrowListWalker] with the real injector wired exactly as
  * [locateSmartBorrowIntentReadOnly] wires it, entirely offline. Source guards pin that only the
- * build-aware locate walker is affected, and that the existing R2 injector and DebugTestGate arming
+ * build-aware locate walker is affected, and that the existing scroll-fault injector and DebugTestGate arming
  * are unchanged.
  */
-@DisplayName("A3-R11 build-aware mid-list Accessibility stall injection")
+@DisplayName("build-aware mid-list Accessibility stall injection")
 class BuildAwareBorrowMidListStallInjectionTest {
     private val nav by lazy { source("android/app/src/main/java/com/steve1316/uma_android_automation/CareerLaunchNavigator.kt") }
     private val debugUi by lazy { source("src/pages/DebugSettings/index.tsx") }
     private val botState by lazy { source("src/context/BotStateContext.tsx") }
     private val injectorSource by lazy { source("android/app/src/main/java/com/steve1316/uma_android_automation/BuildAwareBorrowMidListStallInjector.kt") }
-    private val r2InjectorSource by lazy { source("android/app/src/main/java/com/steve1316/uma_android_automation/BorrowAccessibilityScrollFaultInjector.kt") }
+    private val scrollFaultInjectorSource by lazy { source("android/app/src/main/java/com/steve1316/uma_android_automation/BorrowAccessibilityScrollFaultInjector.kt") }
 
     private fun slice(signature: String, next: String): String {
         val start = nav.indexOf(signature)
@@ -320,9 +320,9 @@ class BuildAwareBorrowMidListStallInjectionTest {
         }
 
         @Test
-        fun `25 the existing R2 injector is untouched by the new seam`() {
-            assertFalse(r2InjectorSource.contains("BuildAwareBorrowMidListStallInjector"))
-            assertFalse(r2InjectorSource.contains(BUILD_AWARE_BORROW_MID_LIST_STALL_SETTING))
+        fun `25 the existing scroll-fault injector is untouched by the new seam`() {
+            assertFalse(scrollFaultInjectorSource.contains("BuildAwareBorrowMidListStallInjector"))
+            assertFalse(scrollFaultInjectorSource.contains(BUILD_AWARE_BORROW_MID_LIST_STALL_SETTING))
         }
 
         @Test

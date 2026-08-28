@@ -1,7 +1,7 @@
 package com.steve1316.uma_android_automation.utils
 
 /**
- * Pixel probes for the career-launch Final Confirmation screen's mode tabs (N0).
+ * Pixel probes for the career-launch Final Confirmation screen's mode tabs.
  *
  * The Final Confirmation screen carries two mutually exclusive tabs: LEFT "Normal Career" and RIGHT
  * "Independent Training". Only the Normal Career mode may reach the irreversible Start Career press.

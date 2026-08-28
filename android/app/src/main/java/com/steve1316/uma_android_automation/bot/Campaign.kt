@@ -1245,7 +1245,7 @@ abstract class Campaign(game: Game) : Task(game) {
     }
 
     /**
-     * A2 build-aware launch-gate dry-run. Push a BUILD_AWARE intent to outcomes/smart_borrow_intent.json,
+     * The build-aware launch-gate dry-run. Push a BUILD_AWARE intent to outcomes/smart_borrow_intent.json,
      * park the game on the career-start Support Formation with the required deck showing and the Friends
      * slot EMPTY, then start the bot: it runs the PRODUCTION build-aware launch transaction (fresh pool
      * re-scan for staleness, exact intent-bound borrow selection, committed-slot identity verification,
@@ -1254,7 +1254,7 @@ abstract class Campaign(game: Game) : Task(game) {
      * legacy fallback. Never presses Start Career and spends nothing. Tagged [LAUNCH-GATE].
      */
     open fun startBuildAwareLaunchGateTest() {
-        MessageLog.i(TAG, "\n[TEST] Running A2 build-aware launch-gate dry-run...")
+        MessageLog.i(TAG, "\n[TEST] Running build-aware launch-gate dry-run...")
         CareerLaunchNavigator(game.myContext).apply { attachLiveGame(game) }.dryRunBuildAwareLaunchGate(game.imageUtils)
     }
 

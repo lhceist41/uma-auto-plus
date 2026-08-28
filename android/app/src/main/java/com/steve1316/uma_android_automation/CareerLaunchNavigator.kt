@@ -270,7 +270,7 @@ class CareerLaunchNavigator(private val context: Context) {
          * new, so short lists pay no extra time. */
         private const val MAX_BORROW_SCAN_PAGES = 8
 
-        /** Locate-only census bound (A3-R12). The select/verify/legacy/census walkers stay on
+        /** Locate-only census bound (the locate-scan ceiling). The select/verify/legacy/census walkers stay on
          * MAX_BORROW_SCAN_PAGES above: they stop as soon as they find the row they are looking for, or
          * deliberately mirror the launch's own limits. The locate stage is different -- it is the one
          * place a full pool census is required, because an intent with an unknown expected limit break
@@ -597,7 +597,7 @@ class CareerLaunchNavigator(private val context: Context) {
     private var supportDeckPostBorrowVerified: Boolean = false
     private var supportDeckAutoFillSuppressedLogged: Boolean = false
 
-    // A3 build-aware launch state (reset per navigate()). lastBuildAwareLaunchResult holds the transaction
+    // Build-aware launch state (reset per navigate()). lastBuildAwareLaunchResult holds the transaction
     // outcome for THIS launch; its state, through [BuildAwareLaunchGate.canStartCareer], is the single
     // structural authority both Start Career taps consult -- so the final confirmation gate
     // ([handlePreRunConfirmation]) cannot confirm a borrow the build-aware transaction never brought to
@@ -1435,8 +1435,8 @@ class CareerLaunchNavigator(private val context: Context) {
         //
         // The Independent Training tab of the same popup shows "Start!" (no "Career" glyphs), so none
         // of the three templates match it and the screen fell to UNKNOWN before the mode gate could run
-        // (the A3 failure). The tab-independent colour probe (exactly one of the two mode tabs is
-        // green-selected) recognizes BOTH tabs so handlePreRunConfirmation can refuse or correct the
+        // (a template-matching gap the mode-gate work exposed). The tab-independent colour probe (exactly
+        // one of the two mode tabs is green-selected) recognizes BOTH tabs so handlePreRunConfirmation can refuse or correct the
         // wrong mode. It is additive: the templates still match Normal Career first and are unchanged.
         if (ButtonStartCareer.check(iu, sourceBitmap = bitmap) ||
             ButtonStartCareerOffset.check(iu, sourceBitmap = bitmap) ||
@@ -4241,7 +4241,7 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.i(TAG, "[NAV] Auto-Fill already done this session, skipping to Start Career.")
         }
 
-        // A3: when Build-Aware Launch mode is on, the borrow AND the Start Career gate are owned by the
+        // When Build-Aware Launch mode is on, the borrow AND the Start Career gate are owned by the
         // build-aware launch transaction; the legacy priority-list borrow and inline Start Career block
         // below run ONLY when the mode is off, so the default hands-off launch is byte-for-byte unchanged.
         if (SettingsHelper.getBooleanSetting("runQueue", "enableBuildAwareLaunch", false)) {
@@ -4378,12 +4378,12 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
-     * A3 build-aware production launch (runQueue.enableBuildAwareLaunch on). Drives the SAME
-     * [prepareBuildAwareLaunchToReady] transaction the A2 dry-run proves -- fresh pool re-locate for
+     * The production build-aware launch (runQueue.enableBuildAwareLaunch on). Drives the SAME
+     * [prepareBuildAwareLaunchToReady] transaction the launch-gate dry-run proves -- fresh pool re-locate for
      * staleness, exact intent-bound borrow selection, committed-slot identity verification, owned-deck
      * integrity -- and presses Start Career ONLY when it reached READY_TO_START_CAREER, guarded
-     * structurally by [BuildAwareLaunchGate.canStartCareer]. There is no legacy fallback (locked A2/A3
-     * policy): a blocked transaction rolls any committed borrow back via the proven Remove path and fails
+     * structurally by [BuildAwareLaunchGate.canStartCareer]. There is no legacy fallback (a deliberate,
+     * locked policy): a blocked transaction rolls any committed borrow back via the proven Remove path and fails
      * closed, so no career ever starts on an unverified or substituted borrow. The stored
      * [lastBuildAwareLaunchResult] is what authorises the downstream final confirmation tap
      * ([handlePreRunConfirmation]); a launch that never reached READY here cannot confirm.
@@ -4452,7 +4452,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 return borrowPostSelectionValidationStopped(result)
             }
 
-        // Structural Start Career gate (A3): the tap is unreachable unless the stored transaction state is
+        // Structural Start Career gate: the tap is unreachable unless the stored transaction state is
         // READY_TO_START_CAREER. A future refactor that reaches this tap without a READY transaction trips
         // this check loudly instead of launching a career silently.
         val gateState = lastBuildAwareLaunchResult?.state ?: LaunchTransactionState.LAUNCH_BLOCKED
@@ -6696,7 +6696,7 @@ class CareerLaunchNavigator(private val context: Context) {
         waitSafe(1.3)
     }
 
-    /** Build-aware Smart Borrow LOCATE traversal keeps the normal Accessibility timing (A3-R11), but the
+    /** Build-aware Smart Borrow LOCATE traversal keeps the normal Accessibility timing, but the
      * actual gesture dispatch is gated by [BuildAwareBorrowMidListStallInjector] so a deterministic
      * mid-list dead-dispatch can be validated without waiting for the natural swallow near the list tail. */
     private fun advanceBuildAwareLocateBorrowList(
@@ -6710,7 +6710,7 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
-     * One bounded accessibility gesture-dispatch recovery for the borrow-list walker (A3-R3). On MuMu the
+     * One bounded accessibility gesture-dispatch recovery for the borrow-list walker. On MuMu the
      * gesture dispatcher can silently die mid-run, so a page gesture no-ops although the service still
      * reads "enabled" -- exactly the dispatch-death the FSM's stuck-state path already rebinds. This lets
      * the borrow walker do the same, ONCE, when its gesture recovery ladder is exhausted: rebind the
@@ -7743,11 +7743,11 @@ class CareerLaunchNavigator(private val context: Context) {
         OutcomeCorpus.append(context, record, OutcomeCorpus.SMART_BORROW_SELECT_PATH)
     }
 
-    /** The A2 diagnostic's own debug key, so the launch gate can tell "the diagnostic that legitimately
+    /** The launch-gate dry-run's own debug key, so the launch gate can tell "the diagnostic that legitimately
      * armed this run" apart from any OTHER diagnostic, which would contend with a real launch. */
-    private val a2LaunchGateDebugKey = "debugMode_startBuildAwareLaunchGateTest"
+    private val dryRunLaunchGateDebugKey = "debugMode_startBuildAwareLaunchGateTest"
 
-    /** Outcome of the A3-R2 identity-and-limit-break-aware borrow selection with immediate pre-tap
+    /** Outcome of the identity-and-limit-break-aware borrow selection with immediate pre-tap
      * revalidation. [rebound] is true when the confirming read had to re-bind to a different (equivalent)
      * owner because the walk's chosen owner was no longer at that position. */
     private data class RevalidatedBorrowSelection(
@@ -7761,7 +7761,7 @@ class CareerLaunchNavigator(private val context: Context) {
 
     /**
      * Selects the intent's borrow by FULL identity (character + title + LIMIT BREAK) with an immediate
-     * pre-tap revalidation (A3-R2), instead of the old character+title-only text match that could tap a
+     * pre-tap revalidation, instead of the old character+title-only text match that could tap a
      * wrong-limit-break copy of the same card. It walks the picker with the rich reader (which reads the
      * limit-break pip), and on the first row whose identity AND limit break match the intent it hands off
      * to [revalidateAndTapBorrow], which re-reads the current screen and taps a FRESH coordinate. Never
@@ -7809,7 +7809,7 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
-     * Immediate pre-tap revalidation (A3-R2, Part 4): re-reads the CURRENT picker screen, re-locates the
+     * Immediate pre-tap revalidation: re-reads the CURRENT picker screen, re-locates the
      * intended row by identity + limit break (preferring the same owner, else a deterministic current
      * equivalent -- owner has no gameplay effect, so an equivalent is a safe re-bind), recomputes a fresh
      * tap coordinate, and taps THAT. Fails ROW_REVALIDATION_FAILED without tapping if the row is no longer
@@ -7846,17 +7846,17 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
-     * Production build-aware launch transaction (A2), driven to the final pre-Start-Career gate.
+     * Production build-aware launch transaction, driven to the final pre-Start-Career gate.
      *
-     * This is the ONE path that both the A2 dry-run diagnostic and (later) A3's real launch invoke; it is
-     * not a parallel rehearsal. It composes the already-live-proven Smart Borrow primitives -- the fresh
-     * read-only locate ([locateSmartBorrowIntentReadOnly]), the exact-row selection tap
-     * ([selectFromBorrowList] + [intentTextMatch]), and the reopened-picker Selected-marker verification
+     * This is the ONE path that both the launch-gate dry-run diagnostic and the production build-aware
+     * launch invoke; it is not a parallel rehearsal. It composes the already-live-proven Smart Borrow
+     * primitives -- the fresh read-only locate ([locateSmartBorrowIntentReadOnly]), the exact-row selection
+     * tap ([selectFromBorrowList] + [intentTextMatch]), and the reopened-picker Selected-marker verification
      * ([readSelectedSlotVerification]) -- adds the freshness and build-aware provenance gates, reduces
      * every observed fact to [LaunchPreconditions], and asks [BuildAwareLaunchGate.evaluate] for the
      * terminal state. It NEVER presses Start Career: reaching [LaunchTransactionState.READY_TO_START_CAREER]
-     * leaves the borrow committed for the caller to either roll back (A2) or launch (A3, gated on
-     * [BuildAwareLaunchGate.canStartCareer]). Fails closed with no legacy fallback: a missing or
+     * leaves the borrow committed for the caller to either roll back (the dry-run) or launch (the production
+     * build-aware launch, gated on [BuildAwareLaunchGate.canStartCareer]). Fails closed with no legacy fallback: a missing or
      * non-BUILD_AWARE intent is [LaunchTransactionState.BORROW_NOT_AVAILABLE], a card gone/ambiguous in the
      * fresh pool is [LaunchTransactionState.BORROW_POOL_STALE].
      */
@@ -7882,14 +7882,15 @@ class CareerLaunchNavigator(private val context: Context) {
 
         val intentPresent = intent != null && locate.status != SmartBorrowLocateResult.Status.INTENT_MISSING
         val intentBuildAware = intent?.recommendationSource == IntentRecommendationSource.BUILD_AWARE
-        // Selection authority (A3-R2, widened by A3-R12): the locator resolves an equivalence class --
+        // Selection authority (the pre-tap revalidation, widened by the locate-scan-ceiling selection-evidence
+        // shortcut): the locator resolves an equivalence class --
         // the same canonical card at the same limit break, offered by one or more interchangeable owners
         // -- to a single LOCATED pick. LOCATED alone does NOT authorise a tap: either the picker traversal
         // must have fully completed, or the scan must carry sufficient selection evidence despite running
         // out of budget first (a KNOWN expected limit break on a healthy, non-stalled scan -- an unseen
         // remainder can only ever be filtered OUT by a known limit break, never turn this LOCATED into
         // AMBIGUOUS). A stalled traversal's row coordinates and limit-break reads are never trustworthy
-        // regardless of pool depth seen (the A3-R1 live proof tapped a wrong-LB row off a stall), so a
+        // regardless of pool depth seen (a live proof once tapped a wrong-LB row off a stall), so a
         // stalled LOCATED blocks as BORROW_LOCATOR_STALLED before any tap. A non-equivalent match, a true
         // miss, or an incomplete-and-insufficient traversal all fail this gate.
         val tapAuthorised = canSelectLocatedBorrow(locate.status, locate.traversalComplete, locate.selectionEvidenceComplete)
@@ -7913,7 +7914,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     !locate.traversalComplete ->
                         // Two distinct reasons reach here and must not be conflated in the log: a true
                         // stall (the picker genuinely stopped responding) versus a healthy scan whose
-                        // bounded locate budget (A3-R12) simply ran out before the natural end. Both block
+                        // bounded locate budget simply ran out before the natural end. Both block
                         // identically -- neither may authorise a tap -- but only the first is an actual
                         // scroll stall.
                         LaunchTransactionState.BORROW_LOCATOR_STALLED to
@@ -7956,9 +7957,9 @@ class CareerLaunchNavigator(private val context: Context) {
         val tpRawStart = readTpBandRaw(startBitmap)
 
         // Select the intended row by FULL identity (character + title + LIMIT BREAK) with an immediate
-        // pre-tap revalidation (A3-R2): the selection reads each row's limit-break pip and, on a match,
+        // pre-tap revalidation: the selection reads each row's limit-break pip and, on a match,
         // re-reads the current screen and taps a FRESH coordinate. This never taps a stale coordinate or a
-        // wrong-limit-break copy of the same card (the A3-R1 defect). Reached only when the locator already
+        // wrong-limit-break copy of the same card, the failure mode of the old text-only match. Reached only when the locator already
         // proved a completed, non-stalled traversal above.
         if (!reopenBorrowPicker(replaceMode = false)) {
             val pre = LaunchPreconditions(intentPresent = true, intentBuildAware = true, freshLocateUnique = true, borrowSelected = false)
@@ -8009,7 +8010,7 @@ class CareerLaunchNavigator(private val context: Context) {
         }
 
         // A card is now committed: from here every return leaves slotCommitted=true so the caller rolls it
-        // back (A2) before returning; the mutation stays reversible until Start Career (Part 14).
+        // back before returning; the mutation stays reversible until Start Career (Part 14).
         MessageLog.i(TAG, "[LAUNCH-GATE] slot filled. Reopening the picker to verify the committed slot's identity...")
         val verification =
             if (reopenBorrowPicker(replaceMode = true)) {
@@ -8031,8 +8032,8 @@ class CareerLaunchNavigator(private val context: Context) {
         val deckAtEnd = readDeckNumber(doneBitmap)
         val tpRawEnd = readTpBandRaw(doneBitmap)
         val ownedDeckIntact = deckAtStart != null && deckAtEnd != null && deckAtStart == deckAtEnd
-        // No OTHER diagnostic armed: the only debug key allowed to be set is this A2 dry-run's own.
-        val otherArmed = DebugTestGate.requested { SettingsHelper.getBooleanSetting("debug", it) }.filter { it != a2LaunchGateDebugKey }
+        // No OTHER diagnostic armed: the only debug key allowed to be set is this dry-run's own.
+        val otherArmed = DebugTestGate.requested { SettingsHelper.getBooleanSetting("debug", it) }.filter { it != dryRunLaunchGateDebugKey }
         val noDebugConflict = otherArmed.isEmpty()
 
         val pre =
@@ -8043,9 +8044,9 @@ class CareerLaunchNavigator(private val context: Context) {
                 borrowSelected = true,
                 borrowIdentityVerified = verification?.verdict == SelectedSlotVerdict.VERIFIED,
                 ownedDeckIntact = ownedDeckIntact,
-                // Whether the upstream launch identity gates (scenario / trainee / lineage) hold. The A2
-                // dry-run defaults this true (the operator established a valid career-start). A3's
-                // production caller passes the real status: handleSupportDeckScreen only reaches the
+                // Whether the upstream launch identity gates (scenario / trainee / lineage) hold. The
+                // dry-run defaults this true (the operator established a valid career-start). The production
+                // caller passes the real status: handleSupportDeckScreen only reaches the
                 // build-aware transaction after SingleRunTraineeGate and the required-deck gate pass.
                 upstreamLaunchGatesHeld = upstreamGatesHeld,
                 onSupportFormation = onFormation,
@@ -8075,13 +8076,14 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
-     * A2 build-aware launch-gate DRY-RUN diagnostic. Push a BUILD_AWARE intent to
+     * The launch-gate dry-run diagnostic. Push a BUILD_AWARE intent to
      * outcomes/smart_borrow_intent.json, park the game on the career-start Support Formation with the
      * Friends slot EMPTY and the required deck showing, then start the bot: it runs the PRODUCTION launch
      * transaction ([prepareBuildAwareLaunchToReady]) through the final gate, proves it reaches
      * READY_TO_START_CAREER, and then DELIBERATELY DOES NOT press Start Career -- it rolls the borrow back
-     * via Remove and confirms the empty slot. This is the same production function A3 will call; A2 only
-     * suppresses the tap. Fails closed (no legacy fallback) and never spends. Tagged [LAUNCH-GATE].
+     * via Remove and confirms the empty slot. This is the same production function the production
+     * build-aware launch calls; the dry-run only suppresses the tap. Fails closed (no legacy fallback) and
+     * never spends. Tagged [LAUNCH-GATE].
      */
     internal fun dryRunBuildAwareLaunchGate(injectedUtils: CustomImageUtils? = null): BuildAwareLaunchResult {
         if (injectedUtils != null) {
@@ -8091,11 +8093,11 @@ class CareerLaunchNavigator(private val context: Context) {
             return BuildAwareLaunchResult(LaunchTransactionState.LAUNCH_BLOCKED, LaunchPreconditions(), LaunchTransactionState.PREPARING, reason = "image utils unavailable")
         }
         val startedAt = System.currentTimeMillis()
-        MessageLog.i(TAG, "[LAUNCH-GATE] ===== A2 build-aware launch-gate dry-run (reaches READY, NEVER presses Start Career) =====")
+        MessageLog.i(TAG, "[LAUNCH-GATE] ===== build-aware launch-gate dry-run (reaches READY, NEVER presses Start Career) =====")
 
         val prepared = prepareBuildAwareLaunchToReady()
         if (prepared.ready) {
-            MessageLog.i(TAG, "[LAUNCH-GATE] READY_TO_START_CAREER reached. This is A2: the Start Career tap is deliberately SUPPRESSED. Rolling the borrow back...")
+            MessageLog.i(TAG, "[LAUNCH-GATE] READY_TO_START_CAREER reached. This is the dry-run: the Start Career tap is deliberately SUPPRESSED. Rolling the borrow back...")
         } else {
             MessageLog.w(TAG, "[LAUNCH-GATE] state=${prepared.state} (${prepared.reason ?: "-"}); not ready. ${if (prepared.slotCommitted) "Rolling back the committed borrow..." else "Nothing committed."}")
         }
@@ -8142,7 +8144,7 @@ class CareerLaunchNavigator(private val context: Context) {
         return onEmptySupportFormation()
     }
 
-    /** Appends one A2 launch-gate dry-run record to the local corpus. Best-effort; carries no owner name.
+    /** Appends one launch-gate dry-run record to the local corpus. Best-effort; carries no owner name.
      * `started_career` is always false: this diagnostic never taps Start Career. */
     private fun persistBuildAwareLaunchGate(startedAt: Long, r: BuildAwareLaunchResult) {
         val located = r.locateMatch?.row
@@ -8394,7 +8396,7 @@ class CareerLaunchNavigator(private val context: Context) {
     private fun handlePreRunConfirmation(): TransitionResult {
         lastBorrowPostSelectionValidationResult?.let { return borrowPostSelectionValidationStopped(it) }
 
-        // N0: positively verify Normal Career mode before the irreversible Start Career press. The
+        // Positively verify Normal Career mode before the irreversible Start Career press. The
         // Final Confirmation screen has two tabs (Normal Career / Independent Training) and defaults to
         // the last-started mode, so "not Independent Training" is NOT "Normal Career". Read the selected
         // tab's green fill directly (asset-free; 100% separation on the Q1 fixtures). This dominates
@@ -8434,7 +8436,7 @@ class CareerLaunchNavigator(private val context: Context) {
             )
         }
 
-        // A3 structural gate on the FINAL Start Career tap (the actual career start / point of no return).
+        // Structural gate on the FINAL Start Career tap (the actual career start / point of no return).
         // When Build-Aware Launch mode is on, this confirmation may only fire when the build-aware
         // transaction reached READY_TO_START_CAREER on the Support Formation this launch -- the same
         // canStartCareer predicate the first tap passed. A resume that lands here after a process restart
@@ -8492,7 +8494,7 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
-     * N0 Normal Career mode gate. Reads the Final Confirmation tab colour and returns null only when
+     * Normal Career mode gate. Reads the Final Confirmation tab colour and returns null only when
      * the mode is NORMAL_CAREER_VERIFIED (the caller then proceeds through the existing gates to Start
      * Career). Independent Training gets exactly ONE corrective tap to the Normal Career tab followed
      * by a FRESH re-read -- the tap is never assumed to have worked. Every non-Normal outcome returns a

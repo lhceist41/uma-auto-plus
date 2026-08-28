@@ -9,7 +9,7 @@ import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 
 /**
- * Pure N0 flow-decision tests. The final Start Career press is reachable only from
+ * Pure Final Confirmation mode-gate flow-decision tests. The final Start Career press is reachable only from
  * NORMAL_CAREER_VERIFIED; Independent Training earns exactly one corrective tab tap and then a fresh
  * re-read whose decision can never ask for another tap.
  */

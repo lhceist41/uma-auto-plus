@@ -277,7 +277,7 @@ class BorrowPostSelectionValidationGateTest {
 
     @Test
     fun `23 default path verifies fresh selected rows before its first Start Career tap`() {
-        val support = section("private fun handleSupportDeckScreen", "/**\n     * A3 build-aware production launch")
+        val support = section("private fun handleSupportDeckScreen", "/**\n     * The production build-aware launch")
         val post = section("private fun finishBorrowPostSelectionValidation", "private fun borrowPostSelectionValidationStopped")
 
         assertTrue(support.indexOf("runBorrowStep(bitmap)") < support.indexOf("ButtonStartCareer.click"))

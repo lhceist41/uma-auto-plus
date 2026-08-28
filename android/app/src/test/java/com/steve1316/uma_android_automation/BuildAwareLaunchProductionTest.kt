@@ -9,9 +9,9 @@ import org.junit.jupiter.api.Test
 import java.io.File
 
 /**
- * A3 production build-aware launch integration (source guards).
+ * Production build-aware launch integration (source guards).
  *
- * A3 routes the normal Support Formation launch through the build-aware transaction when
+ * The production build-aware launch routes the normal Support Formation launch through the build-aware transaction when
  * runQueue.enableBuildAwareLaunch is on, and gates BOTH production Start Career taps (the Support
  * Formation tap and the final confirmation tap) on [BuildAwareLaunchGate.canStartCareer]. These guards
  * pin, against the source, that: the mode is opt-in with the legacy path preserved when off; the
@@ -19,7 +19,7 @@ import java.io.File
  * with no legacy fallback; and the final confirmation cannot fire without an authorized build-aware
  * launch. The live behaviour drives OCR/taps, so it cannot be unit-tested directly.
  */
-@DisplayName("A3 build-aware production launch")
+@DisplayName("Build-aware production launch")
 class BuildAwareLaunchProductionTest {
     private val nav by lazy { source("android/app/src/main/java/com/steve1316/uma_android_automation/CareerLaunchNavigator.kt") }
     private val botState by lazy { source("src/context/BotStateContext.tsx") }
@@ -109,19 +109,19 @@ class BuildAwareLaunchProductionTest {
         @Test
         fun `the build-aware launch reuses the proven transaction, not a copy`() {
             val body = buildAwareBody()
-            assertTrue(body.contains("prepareBuildAwareLaunchToReady("), "it drives the shared A2 transaction")
+            assertTrue(body.contains("prepareBuildAwareLaunchToReady("), "it drives the shared launch-gate transaction")
         }
     }
 
     @Nested
-    @DisplayName("A3-R1 borrow reliability (equivalence + truthful traversal)")
+    @DisplayName("Borrow reliability (equivalence + truthful traversal)")
     inner class BorrowReliability {
         private fun moduleBody() = slice("internal fun prepareBuildAwareLaunchToReady(", "internal fun dryRunBuildAwareLaunchGate(")
 
         @Test
         fun `production accepts a LOCATED equivalence class, not only a single identity candidate`() {
             val body = moduleBody()
-            assertTrue(body.contains("canSelectLocatedBorrow(locate.status, locate.traversalComplete, locate.selectionEvidenceComplete)"), "production accepts any LOCATED (exact or equivalent source) with either a completed traversal or A3-R12 selection evidence")
+            assertTrue(body.contains("canSelectLocatedBorrow(locate.status, locate.traversalComplete, locate.selectionEvidenceComplete)"), "production accepts any LOCATED (exact or equivalent source) with either a completed traversal or locate-scan-ceiling selection evidence")
             assertFalse(body.contains("identityCandidates?.size == 1"), "the strict single-candidate rule is gone from production")
         }
 
@@ -141,7 +141,7 @@ class BuildAwareLaunchProductionTest {
     }
 
     @Nested
-    @DisplayName("A3-R2 stall-before-tap + pre-tap revalidation")
+    @DisplayName("Stall-before-tap + pre-tap revalidation")
     inner class StallBeforeTap {
         private fun moduleBody() = slice("internal fun prepareBuildAwareLaunchToReady(", "internal fun dryRunBuildAwareLaunchGate(")
 
@@ -150,7 +150,7 @@ class BuildAwareLaunchProductionTest {
         @Test
         fun `the production gate authorises a tap only through canSelectLocatedBorrow, not bare LOCATED`() {
             val body = moduleBody()
-            assertTrue(body.contains("canSelectLocatedBorrow(locate.status, locate.traversalComplete, locate.selectionEvidenceComplete)"), "the tap authority requires a completed traversal or A3-R12 selection evidence")
+            assertTrue(body.contains("canSelectLocatedBorrow(locate.status, locate.traversalComplete, locate.selectionEvidenceComplete)"), "the tap authority requires a completed traversal or locate-scan-ceiling selection evidence")
             assertTrue(body.contains("BORROW_LOCATOR_STALLED"), "a stalled LOCATED blocks as a locator stall before any tap")
         }
 
@@ -175,7 +175,7 @@ class BuildAwareLaunchProductionTest {
     }
 
     @Nested
-    @DisplayName("A3-R12 build-aware locate scan ceiling")
+    @DisplayName("Build-aware locate scan ceiling")
     inner class LocateScanCeiling {
         private fun locateBody() = slice("internal fun locateSmartBorrowIntentReadOnly(", "private fun persistSmartBorrowLocate(")
 
@@ -254,10 +254,10 @@ class BuildAwareLaunchProductionTest {
     }
 
     @Nested
-    @DisplayName("A2 dry-run regression")
-    inner class A2Regression {
+    @DisplayName("Dry-run regression")
+    inner class DryRunRegression {
         @Test
-        fun `the A2 dry-run still reaches the module, suppresses the tap, and rolls back`() {
+        fun `the dry-run still reaches the module, suppresses the tap, and rolls back`() {
             val dry = slice("internal fun dryRunBuildAwareLaunchGate(", "private fun rollbackCommittedBorrow(")
             assertTrue(dry.contains("prepareBuildAwareLaunchToReady()"), "the dry-run drives the same production module")
             assertTrue(dry.contains("rollbackCommittedBorrow()"), "the dry-run still rolls back")

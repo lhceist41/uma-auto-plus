@@ -123,7 +123,7 @@ object OutcomeCorpus {
     const val BORROW_REMOVE_PROBE_PATH = "$OUTCOMES_DIR/borrow_remove_probe.jsonl"
 
     /**
-     * Relative path of the A2 build-aware launch-gate dry-run stream: one `build_aware_launch_gate`
+     * Relative path of the build-aware launch-gate dry-run stream: one `build_aware_launch_gate`
      * record per run, capturing the launch-transaction state reached (up to READY_TO_START_CAREER), the
      * verified borrow identity, the owned-deck/TP integrity anchors, and the rollback. The dry-run never
      * presses Start Career; the record's `started_career` is always false. Bound offline to the pushed

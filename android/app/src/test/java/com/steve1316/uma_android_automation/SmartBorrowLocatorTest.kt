@@ -159,7 +159,7 @@ class SmartBorrowLocatorTest {
     }
 
     @Nested
-    @DisplayName("selection authority + tap-safe identity (A3-R2)")
+    @DisplayName("selection authority + tap-safe identity (pre-tap revalidation)")
     inner class SelectionAuthority {
         @Test
         fun `LOCATED with a complete traversal authorises a tap`() {
@@ -179,7 +179,7 @@ class SmartBorrowLocatorTest {
         }
 
         @Test
-        fun `an incomplete traversal with selection evidence complete still authorises a tap (A3-R12 known-LB shortcut)`() {
+        fun `an incomplete traversal with selection evidence complete still authorises a tap (locate-scan-ceiling known-LB shortcut)`() {
             assertTrue(canSelectLocatedBorrow(SmartBorrowLocateResult.Status.LOCATED, traversalComplete = false, selectionEvidenceComplete = true))
         }
 
@@ -203,7 +203,7 @@ class SmartBorrowLocatorTest {
     }
 
     @Nested
-    @DisplayName("selection evidence complete (A3-R12 known-LB shortcut)")
+    @DisplayName("selection evidence complete (locate-scan-ceiling known-LB shortcut)")
     inner class SelectionEvidenceComplete {
         @Test
         fun `LOCATED with a known expected limit break on a healthy scan is selection-evidence-complete`() {
