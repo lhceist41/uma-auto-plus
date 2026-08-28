@@ -1,17 +1,16 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.3.8</latestVersion>
+    <latestVersion>1.4.0</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.3.8 - The spark reroll works, every career is graded, and the anniversary is covered
+v1.4.0 - Grand Concert plays itself, Borrow list scanning gets more reliable, and career-start safety gets tighter
 
-- New: every career gets an estimated overall rank (B+, A, S...) in its run history, the complete spark set each career kept is recorded (both sets when the reroll spends), and URA careers log whether the finale was actually won. 18 more characters close out the Global roster -- 213 presets across 70 entries, including parent-farming Legacy Farm builds with G1-dense racing agendas.
-- New: the career-end spark reroll finally works end to end -- the Reroll button is detected, the decision is priced from verified spark odds (a 2-star or better stat spark is kept, a weak one is redrawn unless a 3-star spark is worth protecting), TP is restored with items when short, and the spend button is matched against the real dialog. The queue's final run now also walks the full career-end flow instead of stopping at Complete Career.
-- New: Smart Borrow -- when the queue fills the empty friend slot, the bot scrolls down through the Borrow Card list and borrows the best card it finds from a curated list of great picks (Kitasan Black first). Cards that would duplicate a character already in your deck are skipped, and a duplicate that lands anyway is swapped for the next-best pick before the career starts. On by default.
-- Fixed: first-time races no longer stall the bot, the trophy popup closes immediately, a brief connection outage no longer ends the run, the daily-reset bounce to the lobby resumes the career in place, each career's log file contains exactly that one career, and a single run (queue off) launches the trainee whose preset you applied instead of whoever the game had preselected.
-- Fixed: a native memory leak in the stat-gain reader that made training analysis measurably slower the longer a session ran.
-- Ready for July 14: if the anniversary reskin breaks the home-screen detection, the bot falls back to reading the CAREER button's text and photographs anything it cannot recognize. Treat the first session after the update as supervised anyway.
-- Faster: switching trainees between queued careers drops from about 90 seconds to about 30 thanks to remembered roster positions.
+- New: Grand Concert is automated end to end -- training, races, training events, the Lesson shop's song and technique buying, and all five concerts including the Grand finale, with the right stat caps and a preset for every trainee in the roster. Run queues, trainee rotation, and TP restore all work with it too.
+- New: an advanced, opt-in Build-Aware Launch mode that verifies the live Borrow list, deck, and launch screen before spending TP and refuses to start rather than guess when it cannot confirm the setup -- off by default, alongside an optional Windows companion app for last-resort Borrow-list scroll recovery.
+- Improved: Smart Borrow handles long Borrow lists more reliably -- a stalled scroll is no longer mistaken for the end of the list, the selected card is re-checked immediately before the tap, and recovery after the accessibility service restarts mid-scroll is sturdier.
+- Fixed: the bot now verifies Normal Career mode is selected before pressing the irreversible Start Career button, instead of trusting whichever tab the game last had open.
+- Fixed: settings search now reaches every settings page it points at, including Run Queue, Discord, and Scenario Overrides settings.
+- Fixed: skill tier data is restored after the community source restructured its page, and the trainee-selection swipe, spark reroll chooser, and Grass Wonder (Saintly Jade Cleric) improvements from the last update are also included.
 
     </releaseNotes>
   </update>

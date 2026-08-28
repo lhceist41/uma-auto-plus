@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-28
+
 ### Added
 
 - **Grand Concert plays itself, start to finish.** The new career scenario ("Brighter Together Our Grand Concert") is supported end to end: training, races, training events, and skill buying run the way they do in the other scenarios, with the right stat caps (Speed 1600, Guts 1500, the rest 1300, plus whatever your inheritance sparks add on top), and the scenario's own two systems are now automated as well.
@@ -46,6 +48,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - **Copano Rickey**, the game's third pure dirt trainee, with a URA profile built to farm Kashiwa Kinen Winner's Sashes. Kashiwa is a Senior-May G1 over Dirt Mile at Funabashi, and her career objective there only asks for 3rd or better -- but a sash needs the win, so her URA preset ships a curated dirt agenda that deliberately stops racing after the Classic year and leaves the whole dense Senior half to her goal chain. She arrives at the sash race rested instead of chasing extra fans. Built as a Pace Chaser rather than a Front Runner: her unique and her entire innate kit read the back half of the field, which a front build never triggers. Her Unity Cup and Trackblazer presets ship as caution profiles -- Turf F against two turf-dominant schedules, the same advisory Haru Urara and Smart Falcon carry. Roster is now 217 presets across 71 entries; all three are research-graded until live careers say otherwise.
 
+- **Build-Aware Launch (advanced, opt-in, off by default).** A new Run Queue option that has the bot verify the live Borrow list, deck, and launch screen against what it intended to run before it spends TP, and refuse to start rather than guess when it cannot confirm that state. The default hands-off launch behavior (today's priority-list Smart Borrow) is unchanged unless you turn this on.
+
+- **An optional Windows host companion for Borrow-list recovery (advanced, off by default).** A small paired helper app that can perform one bounded list swipe as a last-resort recovery step after Accessibility itself has failed to scroll, and for a manual diagnostic under Debug Settings. The phone always verifies whether the list actually moved; the companion can never select a card, advance a launch, or start a career, and normal operation never needs it.
+
+- **Grand Concert technique scoring now weighs how much of a stat a card actually grants, not just which stat it grants.** A cheap small stat bump and a pricier big one used to score the same; the bigger grant now earns extra credit for its size on top of the existing stat-priority and point-scarcity rules, so the shop stops defaulting to the cheaper card.
+
 ### Fixed
 
 - **A misread Spark name no longer throws away the better rerolled set.** After a reroll the bot compares the two sets on the selection pager and keeps the better one. That pager renders its list slightly differently from the screens before it, and its text reading loses the first letter of a name often enough to matter: `Speed` comes back as `peed`, `Sprint` as `print`, `Late Surger` as `ate Surger`. Since the comparison ranks a set by whether its stat Spark is one of the stats you are farming, a name that lost a letter matched nothing and counted as if you were not farming it at all. That flipped a real decision on 6 August: a rerolled set holding Speed 2-star and Sprint 2-star, a 3-star skill Spark and nearly double the stars in total was discarded for the original, and the 30 TP bought the worse of the two. The bot already had a clean reading of that same set from the result screen a moment earlier, noticed the two readings disagreed, and used the damaged one anyway. It now uses the clean one to repair the damaged names, but only when the two readings provably describe the same list: the same set, the same page, both read completely, the same number of rows in the same order, and the same type and star count on every single row. Only stat and aptitude names can be repaired that way, because those are the only names with a fixed list to check against, and only when the earlier reading matches one exactly and the pager reading matches none. Skill, race, scenario and unique names are never touched. If the two readings ever name two genuinely different Sparks in the same row, nothing is repaired at all, because then they are not the same set. Nothing about which page the bot confirms changes: the pager alone still decides which set is on screen and which one gets kept, so this can only correct what a set is worth, never which set is taken. Both readings are now saved with every reroll, so a future disagreement is fully reconstructable.
@@ -81,6 +89,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **Smart Borrow could borrow a support card of the very trainee you were launching.** The game refuses such a deck -- the friend slot shows a red "! Trainee" badge, the formation message says the deck includes a character identical to the trainee, and Start Career stays disabled -- and one queued run was lost to the bot picking exactly that card and then retrying the disabled button until the queue stopped. Smart Borrow now skips the trainee's own cards everywhere it looks: the badge is detected in the borrow list and on the deck, the card name is checked against the active trainee, and the curated priority list drops her entries for that launch. A conflicting borrow that slips through anyway is swapped for the next valid card the same way duplicates are already handled, the formation is verified before Start Career is pressed, and when no valid borrowed support exists the queue stops with a clear message instead of retrying.
 
 - **The bundled race calendar was missing the entire new dirt schedule.** The race scraper had been switched off years-of-patches ago on the assumption that races never change, and its filter also treated every race tagged with a historical era as "not on Global yet" -- which silently dropped Kashiwa Kinen, Teio Sho, M.C. Nambu Hai, Tokyo Daishoten and the rest of the dirt calendar the moment Global actually received them. Re-enabled, taught the three new racecourses (Kawasaki, Funabashi, Morioka), and narrowed the filter to only the eras Global genuinely lacks. 26 races added, none changed or removed.
+
+- **Smart Borrow no longer gives up early on a long Borrow list.** An advanced launch mode's list search shared its page-scan limit with every other Borrow search, so a healthy list of 30+ cards could hit that shared ceiling before reaching its actual end and get reported as stalled. That search now gets its own, much larger limit so a long list is walked to its true end.
+
+- **A swallowed scroll on the Borrow list is no longer mistaken for the bottom of the list.** When a drag failed to move the list at all, the bot treated that exactly like reaching the end and could give up on a card that was still further down. A stalled scroll and a genuine end are now told apart and reported separately, and a stalled scroll retries with a stronger drag before giving up.
+
+- **The Borrow card the bot is about to select is re-checked immediately before the tap.** A card's position could shift after a scroll or a layout change between when it was found and when it was tapped, risking a tap on the wrong row. The bot now re-confirms the card at its current position right before tapping, and backs off cleanly if the row changed or disappeared.
+
+- **Accessibility rebind recovery during Borrow-list scrolling is sturdier**, including on setups where MuMu switches between displays. After the game kills and restarts the accessibility service mid-scroll, the bot now waits for a confirmed fresh service before retrying instead of tapping into a dead one.
+
+- **Normal Career mode is verified before the irreversible Start Career tap.** The Final Confirmation screen has two tabs -- Normal Career and Independent Training -- and opens on whichever one was used last, so a launch could previously reach the Start button while the wrong tab was open. The bot now confirms Normal Career is selected, correcting the tab once if it is not, before pressing Start; any other outcome stops the launch safely instead of starting the wrong mode.
+
+- **Settings search now reaches every settings page it points at.** Several nested pages (Run Queue, Discord, and Scenario Overrides settings) were missing from the app's internal routing table, so a search result for a setting on one of those pages would silently do nothing when selected from Home. A handful of individual controls that could be found but didn't actually navigate anywhere, or that jumped to the wrong control, are fixed as well.
+
+- **Skill tier data is back.** The community skill-tier source restructured its page, which had quietly zeroed out every skill's tier and made the tier-based skill spending strategy fall back to a plain rank sort. The data pipeline is rebuilt against the new page layout, and tiers are restored to match the community list.
 
 ---
 
@@ -547,6 +569,7 @@ The fork already differed substantially from upstream v5.4.8 on day one. The lis
 
 ---
 
+[1.4.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.3.8...v1.4.0
 [1.3.8]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.8
 [1.3.7]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.7
 [1.3.6]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.6
@@ -556,4 +579,4 @@ The fork already differed substantially from upstream v5.4.8 on day one. The lis
 [1.3.2]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.2
 [1.3.1]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.1
 [1.3.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.0
-[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.3.8...main
+[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.4.0...main
