@@ -616,7 +616,7 @@ const DebugSettings = () => {
                                 ]}
                                 onValueChange={(value) => value && updateHostInputSetting("hostInputMode", value)}
                                 label="Input Mode"
-                                description="Accessibility Only is the safe default. The companion option authorizes only the scoped host swipe diagnostics and never replaces normal accessibility input."
+                                description="Accessibility Only is the safe default. The companion option arms the scoped host swipe diagnostics, and also lets a normal launch fall back to one bounded host list-scroll as a last resort after an Accessibility scroll has already failed. It can never select a card, advance a career, or otherwise replace normal accessibility input, and Android always verifies whether the list actually moved."
                             />
 
                             <SearchableItem

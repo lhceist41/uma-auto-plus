@@ -13,7 +13,7 @@
 
 ## What this fork adds
 
-steve1316 built the bot engine. This fork is a substantial body of work on top of it -- roughly 300 commits past the v5.4.8 fork point -- turning that engine into a hands-off, meta-aligned distribution. Here is an honest split of what I added versus what is steve1316's.
+steve1316 built the bot engine. This fork is a substantial body of work on top of it, extending it well past the v5.4.8 fork point into a hands-off, meta-aligned distribution. Here is an honest split of what I added versus what is steve1316's.
 
 ### What I added
 
@@ -23,6 +23,7 @@ steve1316 built the bot engine. This fork is a substantial body of work on top o
 - **Trainee rotation** -- queue several different trainees and the bot cycles through them, each run under her own preset, switching automatically between careers (off by default). URA Finale, Unity Cup, Trackblazer, and Grand Concert mix freely: the bot pages the Scenario Select carousel to each trainee's scenario between runs.
 - **Between-run navigation** -- the bot walks back through the post-career menus and launches the next run by itself, and stops with a clear message instead of looping when it hits a screen it can't handle.
 - **Verified preset launch** -- Start waits until the preset you selected is confirmed saved before it launches, so the trainee shown on Home is always the trainee that runs. If the save can't be confirmed, the launch is blocked with a clear message and your selection is kept -- just press Start again.
+- **Stop at Date** -- schedule the bot to stop on one or more specific in-game dates, so an unattended run halts exactly where you want to step back in instead of running past it.
 - **Overnight resilience** -- the bot keeps the screen awake, restarts itself if it freezes, resumes the queue after a crash, gives up on a stuck run after a time limit you set, restores TP from whatever is available (Toughness, then Star Fruit, then a Carats refill), rides out brief connection outages and the daily reset's bounce back to the lobby without losing the career, and repairs its own Accessibility service when an emulator like MuMu silently kills it mid-run. Each of these came from a real overnight queue that died early.
 - **Fast trainee switching** -- the bot remembers where each trainee sits in the roster grid, so a queue switching trainees jumps straight to her instead of scanning the whole roster (measured at roughly ten seconds once the grid is anchored, against about ninety for a full scan), and it always verifies the name on screen before advancing.
 - **Career-end spark reroll** -- opt-in, off by default: spends 30 TP once to redraw a career's spark set when the set is weak. The decision is priced from measured spark odds: a 2-star or better stat spark is always kept, a 1-star one is redrawn unless a 3-star spark elsewhere in the set would be put at risk, and TP is refilled with items if it is short. After the spend, the bot reads both the original and the redrawn set on the game's selection screen and keeps the better one, verifying the named set on the final confirmation before committing; anything it cannot verify stops safely for you to finish by hand. The selection step is new and experimental -- supervise it.
@@ -79,7 +80,7 @@ My work extends that engine's *decisions* and wraps it in a hands-off distributi
 | **Fork base version** | v5.4.8 |
 
 > [!TIP]
-> For a detailed explanation of how the bot works -- including the decision engine, training scoring, racing system, item management, and scenario-specific logic -- see [HOW_IT_WORKS.md](HOW_IT_WORKS.md). That document is from the original project.
+> For a detailed explanation of how the bot works -- including the decision engine, training scoring, racing system, item management, and scenario-specific logic -- see [HOW_IT_WORKS.md](HOW_IT_WORKS.md). That document covers this fork's current architecture, including the features added on top of steve1316's engine.
 
 ---
 

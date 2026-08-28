@@ -7,8 +7,9 @@ package com.steve1316.uma_android_automation.utils
  * "Independent Training". Only the Normal Career mode may reach the irreversible Start Career press.
  * The selected tab is a solid green pill; the unselected one is near-white. That colour is read here
  * directly, exactly like the Event Boost checkbox reader in CareerLaunchNavigator: no template asset,
- * no OCR. On the Q1 device captures (1080x1920 MuMu, validation/n0-final-confirmation-mode) the
- * selected-tab sample reads green fraction 1.000 and the unselected one 0.000 -- complete separation.
+ * no OCR. On the device captures backing the fixture provenance (see the fixture PROVENANCE.md under
+ * src/test/resources/fixtures/finalconfirmation/) the selected-tab sample reads green fraction 1.000
+ * and the unselected one 0.000 -- complete separation.
  *
  * Every function is Android-free and takes a [SparkPixelSampler] so the runtime wraps a Bitmap and the
  * JUnit fixtures wrap a decoded PNG; the thresholds are pinned by fixture tests against those pixels.

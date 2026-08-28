@@ -32,22 +32,19 @@ If you use the run queue's trainee rotation and it stops with `Trainee '...' not
 - You actually **own** that trainee — the rotation picks from your in-game roster, not from the preset list.
 - The trainee's name in the rotation matches the in-game name.
 
-## Grand Concert: the bot won't start the career from the lobby
+## Grand Concert
 
-For Grand Concert you start the career yourself in game, then press Start. The bot cannot page the
-scenario carousel to Grand Concert yet, so a run that begins on the lobby stops with an unsupported
-scenario message rather than picking the wrong scenario. Once the career is running, the whole thing
-is automated: the lessons, all five concerts, and the career-end sequence, which spends leftover
-lesson points, buys the career-end skills, handles the spark set, and walks the game back to the
-home screen without you.
+The bot pages the Scenario Select carousel to Grand Concert like any other scenario, so it works with
+the run queue, trainee rotation, and automatic TP restore the same as URA Finale, Unity Cup, or
+Trackblazer. Once the career is running, the scenario's own systems are automated on top of the shared
+career loop: the lessons, all five concerts, and the career-end sequence, which spends leftover lesson
+points, buys the career-end skills, handles the spark set, and walks the game back to the home screen
+without you.
 
-For the same reason the run queue, trainee rotation, and automatic TP restore do not apply while
-Grand Concert is selected. Those settings are not rewritten, just not honored for this scenario, and
-they come back when you switch to another one.
-
-If the bot does stop mid-career on a lesson or concert screen, it says which screen it was looking at
-and leaves the career untouched. Handle that screen in game, return to the career screen, and press
-Start to resume the same career. Nothing is spent and no career is lost when that happens.
+If the bot does stop mid-career on a lesson or concert screen it doesn't recognize, it says which
+screen it was looking at and leaves the career untouched. Handle that screen in game, return to the
+career screen, and press Start to resume the same career. Nothing is spent and no career is lost when
+that happens.
 
 ## Skills aren't bought, or the wrong event option is picked
 

@@ -43,7 +43,7 @@ class BuildAwareLocateScanBoundTest {
             expectedLimitBreak = expectedLimitBreak,
             sourceAlias = null,
             resolutionPath = "EXACT_TITLE",
-            recommendationEvidenceDigest = "djb2-a3r12",
+            recommendationEvidenceDigest = "djb2-00000000",
             recommendationSource = IntentRecommendationSource.BUILD_AWARE,
         )
 

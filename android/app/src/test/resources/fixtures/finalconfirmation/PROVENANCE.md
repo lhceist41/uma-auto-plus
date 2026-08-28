@@ -2,8 +2,8 @@
 
 Top-strip crops of the career-launch **Final Confirmation** screen, both career modes, captured on
 MuMu (1080x1920 portrait, native RGB) during the mode-gate evidence pass. The full-screen captures and the
-capture trail live in the git-ignored `validation/n0-final-confirmation-mode/`; only these two minimal
-crops are promoted here.
+capture trail live in a local, git-ignored validation directory outside the tracked tree; only these two
+minimal crops are promoted here.
 
 Each fixture is the top **1080x360** band of the screen: the green "Final Confirmation" header and the
 two-tab pill strip. The crop stops well above the body, so it carries **no trainee, support-card, or

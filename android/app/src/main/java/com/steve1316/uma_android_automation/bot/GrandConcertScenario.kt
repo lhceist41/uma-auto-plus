@@ -14,9 +14,10 @@ import com.steve1316.uma_android_automation.types.StatName
  * buying) drives a Grand Concert career exactly as it drives URA Finale. The scenario's own
  * systems - the Lesson shop, the five performance point types, and the concerts - are automated
  * on top of that by the campaign class, and the ordinary career-end path carries the run from the
- * last concert back to the home screen. What stays manual is starting the career: the scenario
- * carousel cannot reach Grand Concert yet. Beyond that, only a Lesson or concert screen the bot
- * cannot identify reaches the manual-handoff boundary, rather than being clicked blind.
+ * last concert back to the home screen. The scenario carousel can select Grand Concert like any
+ * other scenario, so the run queue, trainee rotation, and automatic TP restore all apply to it the
+ * same as URA Finale, Unity Cup, or Trackblazer. Only a Lesson or concert screen the bot cannot
+ * identify reaches the manual-handoff boundary, rather than being clicked blind.
  *
  * Data provenance is tracked per fact ([Provenance]) because this file mixes three very
  * different evidence classes: strings pulled from the Global client's own master database,

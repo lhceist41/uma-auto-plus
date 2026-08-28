@@ -835,7 +835,8 @@ const searchConfig: SearchOption[] = [
     {
         id: "host-input-mode",
         title: "Input Mode",
-        description: "Keeps normal operation accessibility-only or enables the optional paired Windows helper for the bounded host swipe diagnostics.",
+        description:
+            "Keeps normal operation accessibility-only, or enables the optional paired Windows helper for the bounded host swipe diagnostics and as a last-resort list-scroll recovery after Accessibility fails during a normal launch.",
         page: "DebugSettings",
     },
     {

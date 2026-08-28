@@ -21,6 +21,7 @@ A comprehensive guide to the inner workings of the app. This document explains w
 - [13. Skill Purchasing](#13-skill-purchasing)
 - [14. Spark Reroll and the Selection Chooser](#14-spark-reroll-and-the-selection-chooser)
 - [15. The Start Persistence Barrier](#15-the-start-persistence-barrier)
+- [16. Career Launch: Build-Aware Launch, Smart Borrow, and Recovery](#16-career-launch-build-aware-launch-smart-borrow-and-recovery)
 
 ---
 
@@ -74,6 +75,9 @@ current.
 | `types/Trainee.kt` | Stats, aptitudes, mood, energy, conditions, and their OCR readers |
 | `types/GameDate.kt` | Turn arithmetic and date OCR |
 | `utils/CustomImageUtils.kt` | Bitmap helpers, OCR wrappers, scenario-aware support detection |
+| `BuildAwareLaunchGate.kt` | The structural gate deciding whether a build-aware launch transaction may reach Start Career (see section 16) |
+| `utils/FinalConfirmationProbes.kt` / `FinalConfirmationModeGate.kt` | Pixel read and flow decision for the Normal-Career-vs-Independent-Training mode gate before Start Career (see 16.5) |
+| `ProductionHostScrollRecovery.kt` / `HostAdbInputTransport.kt` | The optional, bounded host-companion swipe recovery rung and its authenticated ADB transport (see 16.4) |
 
 The frontend (`src/`) is a React Native settings and log UI. `src/context/BotStateContext.tsx` holds
 the canonical `Settings` shape; `src/data/characterPresets.ts` holds the preset library. Kotlin reads
@@ -2042,3 +2046,89 @@ scattered live `SettingsHelper` readers against a mid-career write: `Campaign` r
 DURING an active career could still change such a live read -- the residual gap. Routing every
 run-scoped reader through the immutable `RunConfigSnapshot` (a full frozen envelope) is the
 documented follow-up; until then, run settings should not be edited mid-career.
+
+---
+
+## 16. Career Launch: Build-Aware Launch, Smart Borrow, and Recovery
+
+The Support Formation screen's friend-slot borrow and the final Start Career press are the two most
+consequential taps in a launch -- a wrong borrow or a wrong career mode cannot be undone without
+losing TP. This section covers the production launch machinery that guards both, on top of the
+Start Persistence Barrier in section 15.
+
+### 16.1 Build-Aware Launch (opt-in, fails closed)
+
+Behind `runQueue.enableBuildAwareLaunch` (default off; `RunQueueSettings`), a launch borrows and
+starts through one transaction (`prepareBuildAwareLaunchToReady` in `CareerLaunchNavigator.kt`)
+instead of the legacy borrow path:
+
+1. **Fresh live re-locate.** The transaction opens the Borrow Card picker and re-resolves the
+   pushed intent (`outcomes/smart_borrow_intent.json`, read via `SmartBorrowIntent.kt`) against the
+   pool actually on screen right now, not whatever pool recommended the intent. A stale, changed,
+   or ambiguous card cannot resolve here.
+2. **Selection authority.** `canSelectLocatedBorrow` only authorizes a tap when the locator either
+   completed a full traversal of the list, or ran out of its bounded scan budget with sufficient
+   selection evidence (a known expected limit break on a healthy, non-stalled scan). A stalled
+   traversal blocks as `BORROW_LOCATOR_STALLED` before any tap, because a stalled picker's row
+   coordinates and limit-break reads are not trustworthy.
+3. **Owned-deck integrity anchor.** The active support deck number is read before the borrow touches
+   anything, and again after, so a launch cannot silently drift onto a different saved deck.
+4. **Pre-tap revalidation and post-selection verification.** See 16.2 and 16.3.
+5. **Gated Start Career.** `BuildAwareLaunchGate.canStartCareer` is the only path to the Start
+   Career press; it requires the transaction state to be exactly `READY_TO_START_CAREER`. There is
+   no legacy fallback -- a blocked transaction rolls any already-committed borrow back through the
+   proven Remove path and fails the launch closed, so no career ever starts on an unverified or
+   substituted borrow.
+
+### 16.2 Pre-tap revalidation
+
+Once the locator resolves a row, the picker is reopened and the intended card is selected by full
+identity (character + title + limit break) with an immediate re-read: the selector re-reads each
+row's limit-break pip on the current screen and taps a freshly re-read coordinate, not the
+coordinate the locator saw earlier. This is what stops a tap from landing on a stale coordinate or
+on a different copy of the same card at a different limit break -- the failure mode of the older
+text-only match.
+
+### 16.3 Post-selection verification
+
+After the tap, `borrowPostSelectionValidationGate` checks that the friend slot actually committed
+the intended card, that a fresh verifier ran (not a cached one), and that the screen returned to
+Support Formation, before the transaction is allowed to proceed toward Start Career. Any gap here
+blocks the launch with a named reason rather than assuming the tap landed.
+
+### 16.4 Accessibility-first scroll/recovery, and the optional host companion rung
+
+Scrolling the Borrow Card list during a real launch (`borrowWalker` in `CareerLaunchNavigator.kt`)
+always tries Accessibility gesture dispatch first (`recoverGestureDispatch`, the same mechanism
+`Game.kt`'s `gestureUtils` getter backs -- see section 6 of `AGENTS.md`'s safety invariants). Only
+after that Accessibility budget is exhausted does the walker call `recoverHost`
+(`recoverBorrowScrollWithHost`), which runs `executeProductionHostScrollRecovery`
+(`ProductionHostScrollRecovery.kt`) for exactly one bounded swipe:
+
+- The host companion is optional. With no companion paired, this rung is simply unavailable and the
+  walker's block stands; there is still no legacy fallback.
+- The connection is loopback-authenticated: `HostAdbInputTransport.kt` talks to the Windows helper
+  over one `adb reverse` mapping, and every request carries the pairing secret.
+- The one operation this rung may call is a bounded SWIPE. It cannot select a card, advance a
+  launch, run a shell command, or change any setting.
+- An `EXECUTED` transport result means only that the fixed ADB command exited successfully -- it is
+  never treated as proof that anything moved. The rung takes an Android screen fingerprint before
+  and after the swipe and classifies the result as `MOVED`, `NO_EFFECT`, or `UNCERTAIN`
+  (`HostScrollRecoveryReport.moved` is `true` only when execution succeeded AND the Android-side
+  fingerprint actually changed). Only `MOVED` returns control to the walker for a new locate pass.
+
+The same rung backs the read-only Debug Settings swipe diagnostics (`debug-host-borrow-swipe-test`,
+`debug-host-legacy-swipe-test`); see [`tools/host-companion/README.md`](tools/host-companion/README.md)
+for pairing and the Windows-side helper.
+
+### 16.5 Normal Career mode verification before Start Career
+
+The Final Confirmation screen defaults to whichever mode (Normal Career or Independent Training)
+was last started, so it can open on either tab. `FinalConfirmationModeGate.kt` requires a positive
+read of `NORMAL_CAREER_VERIFIED` before the irreversible Start Career press -- "not Independent
+Training" is not treated as equivalent to "Normal Career" verified. The mode is read as a pixel
+classification (`FinalConfirmationProbes.kt`: the selected tab pill is solid green, the unselected
+one near-white; no OCR, no template asset), the same approach as the Event Boost checkbox reader. If
+the screen opens on Independent Training, the gate allows exactly one corrective tap to the Normal
+Career tab followed by a fresh re-read; any other outcome fails closed rather than asking for a
+second correction.

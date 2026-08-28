@@ -12,14 +12,18 @@ exactly as it does without it.
 
 ## Stages
 
-- **The policy contract** (`src/lib/shadowAdvisor/`): the pure policy and context contract in TypeScript.
+`S1`, `S2`, and `S3` are the stable subsystem names used throughout the source comments, the CLI report text,
+and the test suites below - they are not internal task labels. Nothing under `src/lib/shadowAdvisor/` renames
+them.
+
+- **S1 - the policy contract** (`src/lib/shadowAdvisor/`): the pure policy and context contract in TypeScript.
   `raw-gain-ranker-v1` ranks a complete five-facility training contest by weighted raw stat gains minus a
   failure penalty, with a state recovery guardrail (energy before mood) and a race-day suppression. It reuses
   none of the bot's scoring.
-- **The offline evaluator** (`scripts/shadow-advisor.mjs`): offline evaluation of an archived corpus. It joins
-  the advisor's recommendation to the committed `DecisionTrace` on `(careerToken, seq)` and reports coverage /
-  agreement, never accuracy or "would have done better".
-- **S3** (live shadow): the Kotlin port of the policy contract evaluated at runtime, from the immutable
+- **S2 - the offline evaluator** (`scripts/shadow-advisor.mjs`): offline evaluation of an archived corpus. It
+  joins the advisor's recommendation to the committed `DecisionTrace` on `(careerToken, seq)` and reports
+  coverage / agreement, never accuracy or "would have done better".
+- **S3 - live shadow**: the Kotlin port of the policy contract evaluated at runtime, from the immutable
   serialized facts, writing a separate telemetry stream. This is what this doc covers.
 
 ## S3 runtime pipeline
