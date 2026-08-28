@@ -16,10 +16,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The Jest suites spawn scripts/*.mjs CLIs that import TypeScript .ts source directly. Node only
+      # loads those imports where type-stripping is on by default (>= 22.18 / >= 23.6); on Node 20 they
+      # throw ERR_UNKNOWN_FILE_EXTENSION, which is what reddened these suites in CI while they passed on
+      # newer local Node. scriptToolchainNode.test.ts guards this pin from drifting back below that line.
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'yarn'
 
       - name: Install dependencies
