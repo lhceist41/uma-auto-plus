@@ -1145,6 +1145,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         score = rawScore?.takeIf { it.isFinite() },
                         failureChance = option.failureChance.takeIf { it >= 0 },
                         statGains = option.statGains,
+                        evidence = trainingCandidateEvidence(option),
                     )
                 }
 
@@ -1154,8 +1155,53 @@ class Training(private val game: Game, private val campaign: Campaign) {
          *
          * @property pickedFailureChance The picked facility's OCR failure chance, or null when unmeasured.
          * @property pickedStatGains The picked facility's observed stat gains, or null when no same-turn option exists.
+         * @property pickedEvidence The picked facility's already-computed scorer inputs for the trace, or null when no same-turn option exists.
          */
-        internal data class SelectedTrainingEvidence(val pickedFailureChance: Int?, val pickedStatGains: Map<StatName, Int>?)
+        internal data class SelectedTrainingEvidence(
+            val pickedFailureChance: Int?,
+            val pickedStatGains: Map<StatName, Int>?,
+            val pickedEvidence: DecisionTracer.TrainingCandidateEvidence? = null,
+        )
+
+        /**
+         * Reshapes a [TrainingOption]'s already-computed scorer inputs into the trace-neutral
+         * [DecisionTracer.TrainingCandidateEvidence] that pick and runner-up records carry. Pure over its
+         * argument: no OCR, tap, wait, scoring, or mutation - it only copies fields the analyzer already
+         * produced this turn.
+         *
+         * Relationship bars are reduced to the fill/segment/colour/support fields the relationship scorer
+         * reads; UI coordinates, the stat-block handle, and the underlying bitmap are dropped. Performance
+         * gains are keyed by canonical type name in enum order for a deterministic record, and a null
+         * (unreadable) per-type value is dropped rather than emitted as zero. Spirit-gauge counts are carried
+         * raw; the serializer emits them only under Unity Cup, where they are meaningful.
+         *
+         * @param option The facility whose evidence to reshape.
+         * @return The trace-neutral candidate evidence.
+         */
+        fun trainingCandidateEvidence(option: TrainingOption): DecisionTracer.TrainingCandidateEvidence =
+            DecisionTracer.TrainingCandidateEvidence(
+                numRainbow = option.numRainbow,
+                numSkillHints = option.numSkillHints,
+                trainingLevel = option.trainingLevel,
+                numSpiritGaugesCanFill = option.numSpiritGaugesCanFill,
+                numSpiritGaugesReadyToBurst = option.numSpiritGaugesReadyToBurst,
+                relationshipBars =
+                    option.relationshipBars.map { bar ->
+                        DecisionTracer.RelationshipBarEvidence(
+                            fillPercent = bar.fillPercent,
+                            filledSegments = bar.filledSegments,
+                            dominantColor = bar.dominantColor,
+                            isSupport = bar.isTrainerSupport,
+                            trainerName = bar.trainerName,
+                        )
+                    },
+                performanceGains =
+                    LinkedHashMap<String, Int>().apply {
+                        PerformancePointType.entries.forEach { type ->
+                            option.performanceGains[type]?.let { put(type.displayName, it) }
+                        }
+                    },
+            )
 
         /**
          * Resolves the decision-time evidence for a forced/fallback [stat] pick so its TrainingSelection can carry the
@@ -1176,7 +1222,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             stat: StatName?,
         ): SelectedTrainingEvidence {
             val option = stat?.let { trainingMap[it] ?: skippedTrainingMap[it] } ?: return SelectedTrainingEvidence(null, null)
-            return SelectedTrainingEvidence(option.failureChance.takeIf { it >= 0 }, option.statGains)
+            return SelectedTrainingEvidence(option.failureChance.takeIf { it >= 0 }, option.statGains, trainingCandidateEvidence(option))
         }
 
         /**
@@ -2632,6 +2678,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 runnerUps = buildTracerRunnerUps(trainingScores, skippedScores, picked = best.name),
                 pickedFailureChance = best.failureChance.takeIf { it >= 0 },
                 pickedStatGains = best.statGains,
+                pickedEvidence = trainingCandidateEvidence(best),
             )
             return best.name
         }
@@ -2657,6 +2704,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                     runnerUps = buildTracerRunnerUps(trainingScores, skippedScores, picked = pick.name),
                     pickedFailureChance = pick.failureChance.takeIf { it >= 0 },
                     pickedStatGains = pick.statGains,
+                    pickedEvidence = trainingCandidateEvidence(pick),
                 )
                 return pick.name
             }
@@ -2674,6 +2722,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 runnerUps = buildTracerRunnerUps(trainingScores, skippedScores, picked = null),
                 pickedFailureChance = defaultEvidence.pickedFailureChance,
                 pickedStatGains = defaultEvidence.pickedStatGains,
+                pickedEvidence = defaultEvidence.pickedEvidence,
             )
             return defaulted
         }
@@ -2692,6 +2741,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             runnerUps = buildTracerRunnerUps(trainingScores, skippedScores, picked = null),
             pickedFailureChance = unforcedEvidence.pickedFailureChance,
             pickedStatGains = unforcedEvidence.pickedStatGains,
+            pickedEvidence = unforcedEvidence.pickedEvidence,
         )
         return unforced
     }
@@ -3103,6 +3153,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                                 reason = "forced Wit training during Finale",
                                 pickedFailureChance = evidence.pickedFailureChance,
                                 pickedStatGains = evidence.pickedStatGains,
+                                pickedEvidence = evidence.pickedEvidence,
                             )
                         }
                     } else {
@@ -3148,6 +3199,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                             reason = "forced training override: $forceStat",
                             pickedFailureChance = evidence.pickedFailureChance,
                             pickedStatGains = evidence.pickedStatGains,
+                            pickedEvidence = evidence.pickedEvidence,
                         )
                     }
                 }

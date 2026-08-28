@@ -116,6 +116,61 @@ class DecisionTracer {
         val failureChance: Int? = null,
         /** Optional full stat-gain map for this training (gain per `StatName`). Renders as `gains=[SPD:N STA:N PWR:N GUTS:N WIT:N]` when present. */
         val statGains: Map<StatName, Int>? = null,
+        /**
+         * Optional already-computed scorer inputs for this candidate, for the machine-readable trace only.
+         * Null when the caller did not attach them (e.g. a hand-built test runner-up). Not rendered in the
+         * human Decision Report.
+         */
+        val evidence: TrainingCandidateEvidence? = null,
+    )
+
+    /**
+     * One relationship/support bar as the analyzer read it for a training candidate, in the smallest form a
+     * downstream shadow-scorer needs to reproduce the relationship score: fill, discrete segments, band
+     * colour, and the trainer-support identity the Junior/Trackblazer bonuses key on. UI coordinates, the
+     * underlying bitmap, and the stat-block handle are deliberately not carried.
+     *
+     * @property fillPercent Percentage of the bar that is filled.
+     * @property filledSegments Discrete filled segments (0-5).
+     * @property dominantColor Band colour the scorer reads (e.g. "orange", "green", "blue").
+     * @property isSupport Whether this bar belongs to a trainer support character.
+     * @property trainerName Canonical support/trainer identity when known, else null. Used by the Akikawa
+     *   bonding bonus; a game-data identity, never user data.
+     */
+    data class RelationshipBarEvidence(
+        val fillPercent: Double,
+        val filledSegments: Int,
+        val dominantColor: String,
+        val isSupport: Boolean,
+        val trainerName: String?,
+    )
+
+    /**
+     * Already-computed, scorer-relevant evidence for one training candidate that the pick/runner-up records
+     * previously dropped before disk. Additive telemetry only: it is never consulted by any decision path.
+     *
+     * Honesty rules follow the trace's: a field the live analysis did not compute is omitted at serialization
+     * rather than placeholder-filled. [trainingLevel] is null unless level weighting actually read one;
+     * [relationshipBars] and [performanceGains] are empty when the facility had no supports / the scenario is
+     * not Grand Concert; the spirit-gauge counts are meaningful only under Unity Cup and the serializer emits
+     * them only there (they are carried here as the raw per-option values the analyzer holds).
+     *
+     * @property numRainbow Rainbow trainings detected on this facility (computed every scenario).
+     * @property numSkillHints Skill hints detected on this facility (computed every scenario).
+     * @property trainingLevel OCR'd facility level (1-5), or null when not read.
+     * @property numSpiritGaugesCanFill Unity Cup fillable Spirit Explosion gauges (raw; serialized under Unity Cup only).
+     * @property numSpiritGaugesReadyToBurst Unity Cup gauges ready to burst (raw; serialized under Unity Cup only).
+     * @property relationshipBars Per-bar relationship evidence, empty when the facility had no support bars.
+     * @property performanceGains Grand Concert per-type performance-point preview keyed by canonical type name, empty off Grand Concert.
+     */
+    data class TrainingCandidateEvidence(
+        val numRainbow: Int,
+        val numSkillHints: Int,
+        val trainingLevel: Int?,
+        val numSpiritGaugesCanFill: Int,
+        val numSpiritGaugesReadyToBurst: Int,
+        val relationshipBars: List<RelationshipBarEvidence>,
+        val performanceGains: Map<String, Int>,
     )
 
     /** Verdict for an inventory item considered during a turn. */
@@ -178,6 +233,11 @@ class DecisionTracer {
             val pickedFailureChance: Int? = null,
             /** Full stat-gain map for the picked training, when available. Rendered alongside `pickedFailureChance` on the `Pick:` line. */
             val pickedStatGains: Map<StatName, Int>? = null,
+            /**
+             * Already-computed scorer inputs for the picked training, for the machine-readable trace only.
+             * Null when the pick has no resolvable same-turn option. Not rendered in the human Decision Report.
+             */
+            val pickedEvidence: TrainingCandidateEvidence? = null,
         ) : DecisionEvent()
 
         /** Event recording whether the bot is eligible to race this turn. */
@@ -382,6 +442,7 @@ class DecisionTracer {
      * @param runnerUps Other trainings the analyzer evaluated this turn, with their scores and rejection reasons.
      * @param pickedFailureChance Failure chance percentage for the picked training, when available.
      * @param pickedStatGains Full stat-gain map for the picked training, when available.
+     * @param pickedEvidence Already-computed scorer inputs for the picked training, for the machine-readable trace.
      */
     fun recordTrainingSelection(
         selected: StatName?,
@@ -390,8 +451,9 @@ class DecisionTracer {
         runnerUps: List<TrainingRunnerUp> = emptyList(),
         pickedFailureChance: Int? = null,
         pickedStatGains: Map<StatName, Int>? = null,
+        pickedEvidence: TrainingCandidateEvidence? = null,
     ) {
-        events.add(DecisionEvent.TrainingSelection(selected, source, reason, runnerUps, pickedFailureChance, pickedStatGains))
+        events.add(DecisionEvent.TrainingSelection(selected, source, reason, runnerUps, pickedFailureChance, pickedStatGains, pickedEvidence))
     }
 
     /**

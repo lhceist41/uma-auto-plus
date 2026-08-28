@@ -359,6 +359,234 @@ class DecisionTraceTest {
         assertFalse(secondTurn.single().contains("Failed to record the decision trace"), secondTurn.toString())
     }
 
+    // //////////////////////////////////////////////////////////////////////////////////////////////////
+    // E1-1: additive training-candidate evidence enrichment (numRainbow, numSkillHints, trainingLevel,
+    // spirit gauges, relationshipBars, performanceGains) on both the picked and runner-up candidates.
+
+    private fun bar(
+        fillPercent: Double,
+        segments: Int,
+        color: String,
+        support: Boolean = false,
+        trainer: String? = null,
+    ): DecisionTracer.RelationshipBarEvidence =
+        DecisionTracer.RelationshipBarEvidence(fillPercent = fillPercent, filledSegments = segments, dominantColor = color, isSupport = support, trainerName = trainer)
+
+    private fun evidence(
+        numRainbow: Int = 0,
+        numSkillHints: Int = 0,
+        trainingLevel: Int? = null,
+        canFill: Int = 0,
+        readyToBurst: Int = 0,
+        bars: List<DecisionTracer.RelationshipBarEvidence> = emptyList(),
+        performanceGains: Map<String, Int> = emptyMap(),
+    ): DecisionTracer.TrainingCandidateEvidence =
+        DecisionTracer.TrainingCandidateEvidence(
+            numRainbow = numRainbow,
+            numSkillHints = numSkillHints,
+            trainingLevel = trainingLevel,
+            numSpiritGaugesCanFill = canFill,
+            numSpiritGaugesReadyToBurst = readyToBurst,
+            relationshipBars = bars,
+            performanceGains = performanceGains,
+        )
+
+    /** A turn whose picked and runner-up training candidates both carry enriched evidence. */
+    private fun enrichedTurn(): DecisionTracer {
+        val tracer = DecisionTracer()
+        tracer.startTurn(date = date(), trainee = trainee())
+        tracer.recordActionChoice(chosen = MainScreenAction.TRAIN, reason = "default action")
+        tracer.recordTrainingSelection(
+            selected = StatName.SPEED,
+            source = SelectionSource.ANALYSIS,
+            reason = "won analysis",
+            runnerUps =
+                listOf(
+                    DecisionTracer.TrainingRunnerUp(
+                        stat = StatName.WIT,
+                        rejected = false,
+                        reason = "outscored",
+                        score = 12.25,
+                        failureChance = 3,
+                        evidence = evidence(numRainbow = 0, numSkillHints = 1, trainingLevel = 3, bars = listOf(bar(40.0, 2, "green"))),
+                    ),
+                    DecisionTracer.TrainingRunnerUp(
+                        stat = StatName.GUTS,
+                        rejected = true,
+                        reason = "excluded (hard penalty)",
+                        score = null,
+                        evidence = evidence(numRainbow = 0, numSkillHints = 0),
+                    ),
+                ),
+            pickedFailureChance = 8,
+            pickedStatGains = mapOf(StatName.SPEED to 11),
+            pickedEvidence =
+                evidence(
+                    numRainbow = 2,
+                    numSkillHints = 1,
+                    trainingLevel = 5,
+                    bars = listOf(bar(88.0, 4, "blue", support = true, trainer = "Yayoi Akikawa"), bar(20.0, 1, "orange")),
+                ),
+        )
+        return tracer
+    }
+
+    private fun trainingCandidates(json: JSONObject): Map<String, JSONObject> {
+        val candidates = json.getJSONArray("candidates")
+        return (0 until candidates.length())
+            .map { candidates.getJSONObject(it) }
+            .filter { it.getString("type") == "training" }
+            .associateBy { it.getString("id") }
+    }
+
+    @Test
+    @DisplayName("picked and runner-up candidates both carry the enriched scorer evidence")
+    fun `enriched candidate evidence serializes for picked and runner-ups`() {
+        val byId = trainingCandidates(record(enrichedTurn()))
+
+        val speed = byId.getValue("SPEED")
+        assertEquals(2, speed.getInt("numRainbow"))
+        assertEquals(1, speed.getInt("numSkillHints"))
+        assertEquals(5, speed.getInt("trainingLevel"))
+        val speedBars = speed.getJSONArray("relationshipBars")
+        assertEquals(2, speedBars.length())
+        assertEquals(88.0, speedBars.getJSONObject(0).getDouble("fillPercent"))
+        assertEquals("blue", speedBars.getJSONObject(0).getString("dominantColor"))
+        assertTrue(speedBars.getJSONObject(0).getBoolean("support"))
+        assertEquals("Yayoi Akikawa", speedBars.getJSONObject(0).getString("trainer"))
+
+        // Symmetry: a runner-up exposes the same vocabulary where the source supports it.
+        val wit = byId.getValue("WIT")
+        assertEquals(0, wit.getInt("numRainbow"))
+        assertEquals(1, wit.getInt("numSkillHints"))
+        assertEquals(3, wit.getInt("trainingLevel"))
+        assertEquals(1, wit.getJSONArray("relationshipBars").length())
+
+        assertEquals(record(enrichedTurn()).toString(), JSONObject(record(enrichedTurn()).toString()).toString())
+    }
+
+    @Test
+    @DisplayName("unavailable evidence is omitted, never placeholder-filled")
+    fun `enriched evidence omits what the analysis did not compute`() {
+        val byId = trainingCandidates(record(enrichedTurn()))
+
+        // A non-support bar omits support and trainer rather than writing false / a fabricated name.
+        val speedBars = byId.getValue("SPEED").getJSONArray("relationshipBars")
+        val plainBar = speedBars.getJSONObject(1)
+        assertFalse(plainBar.has("support"), "a non-support bar omits the support flag")
+        assertFalse(plainBar.has("trainer"), "a non-support bar carries no trainer identity")
+
+        // The hard-excluded runner-up had no level, no bars, no performance gains: all omitted, not zeroed.
+        val guts = byId.getValue("GUTS")
+        assertEquals(0, guts.getInt("numRainbow"))
+        assertFalse(guts.has("trainingLevel"), "an unread level is omitted")
+        assertFalse(guts.has("relationshipBars"), "an empty bar list is omitted")
+        assertFalse(guts.has("performanceGains"), "empty performance gains are omitted")
+    }
+
+    @Test
+    @DisplayName("spirit-gauge counts serialize only under Unity Cup")
+    fun `spirit gauges gate on scenario`() {
+        val tracer = DecisionTracer()
+        tracer.startTurn(date = date(), trainee = trainee())
+        tracer.recordActionChoice(chosen = MainScreenAction.TRAIN, reason = "default action")
+        tracer.recordTrainingSelection(
+            selected = StatName.SPEED,
+            source = SelectionSource.ANALYSIS,
+            reason = "won analysis",
+            runnerUps =
+                listOf(
+                    DecisionTracer.TrainingRunnerUp(stat = StatName.WIT, rejected = false, reason = "outscored", score = 5.0, evidence = evidence(canFill = 0, readyToBurst = 0)),
+                ),
+            pickedEvidence = evidence(canFill = 2, readyToBurst = 1),
+        )
+
+        // Off Unity Cup: the uncomputed default is omitted on both picked and runner-up candidates.
+        val offCup = trainingCandidates(DecisionTrace.buildRecord(timestamp = 1L, evidence = tracer.turnEvidence(), scenario = "Trackblazer"))
+        assertFalse(offCup.getValue("SPEED").has("numSpiritGaugesCanFill"))
+        assertFalse(offCup.getValue("WIT").has("numSpiritGaugesReadyToBurst"))
+
+        // Under Unity Cup: the measured counts are written, including a genuine zero on the runner-up.
+        val onCup = trainingCandidates(DecisionTrace.buildRecord(timestamp = 1L, evidence = tracer.turnEvidence(), scenario = "Unity Cup"))
+        assertEquals(2, onCup.getValue("SPEED").getInt("numSpiritGaugesCanFill"))
+        assertEquals(1, onCup.getValue("SPEED").getInt("numSpiritGaugesReadyToBurst"))
+        assertEquals(0, onCup.getValue("WIT").getInt("numSpiritGaugesCanFill"))
+    }
+
+    @Test
+    @DisplayName("Grand Concert performance gains serialize by canonical type name when present")
+    fun `performance gains serialize when present`() {
+        val tracer = DecisionTracer()
+        tracer.startTurn(date = date(), trainee = trainee())
+        tracer.recordActionChoice(chosen = MainScreenAction.TRAIN, reason = "default action")
+        tracer.recordTrainingSelection(
+            selected = StatName.SPEED,
+            source = SelectionSource.ANALYSIS,
+            reason = "won analysis",
+            pickedEvidence = evidence(performanceGains = linkedMapOf("Dance" to 4, "Vocal" to 2)),
+        )
+        val speed = trainingCandidates(DecisionTrace.buildRecord(timestamp = 1L, evidence = tracer.turnEvidence(), scenario = "Grand Concert")).getValue("SPEED")
+        val gains = speed.getJSONObject("performanceGains")
+        assertEquals(4, gains.getInt("Dance"))
+        assertEquals(2, gains.getInt("Vocal"))
+        assertFalse(gains.has("Visual"), "a type the analysis did not read is absent")
+    }
+
+    @Test
+    @DisplayName("both schema versions stay at 1 and no writer v2 is emitted")
+    fun `schema versions are pinned`() {
+        assertEquals(1, DecisionTrace.SCHEMA_VERSION)
+        assertEquals(1, CareerStateSerializer.SCHEMA_VERSION)
+        assertEquals(1, record(enrichedTurn()).getInt("v"))
+    }
+
+    @Test
+    @DisplayName("the enrichment adds a modest, bounded number of bytes to a rich record")
+    fun `record size impact stays within budget`() {
+        // A rich five-facility contest: a picked facility plus four runner-ups, each with several support
+        // bars and the full scalar evidence, serialized once with the evidence attached and once without.
+        val bars3 = listOf(bar(90.0, 4, "blue", support = true, trainer = "Yayoi Akikawa"), bar(55.0, 3, "green", support = true), bar(15.0, 1, "orange"))
+        val bars2 = listOf(bar(70.0, 3, "green", support = true), bar(10.0, 1, "orange"))
+        val richEvidence = evidence(numRainbow = 2, numSkillHints = 2, trainingLevel = 5, canFill = 1, readyToBurst = 1, bars = bars3)
+
+        fun turn(withEvidence: Boolean): DecisionTracer {
+            val tracer = DecisionTracer()
+            tracer.startTurn(date = date(), trainee = trainee())
+            tracer.recordActionChoice(chosen = MainScreenAction.TRAIN, reason = "default action")
+            tracer.recordTrainingSelection(
+                selected = StatName.SPEED,
+                source = SelectionSource.ANALYSIS,
+                reason = "won analysis",
+                runnerUps =
+                    listOf(StatName.STAMINA, StatName.POWER, StatName.GUTS, StatName.WIT).mapIndexed { i, stat ->
+                        DecisionTracer.TrainingRunnerUp(
+                            stat = stat,
+                            rejected = false,
+                            reason = "outscored",
+                            score = 20.0 - i,
+                            failureChance = i,
+                            statGains = mapOf(stat to 8 + i),
+                            evidence = if (withEvidence) evidence(numRainbow = 1, numSkillHints = 1, trainingLevel = 4, bars = bars2) else null,
+                        )
+                    },
+                pickedFailureChance = 6,
+                pickedStatGains = mapOf(StatName.SPEED to 12),
+                pickedEvidence = if (withEvidence) richEvidence else null,
+            )
+            return tracer
+        }
+
+        val before = record(turn(withEvidence = false)).toString().toByteArray(Charsets.UTF_8).size
+        val after = record(turn(withEvidence = true)).toString().toByteArray(Charsets.UTF_8).size
+        val increase = after - before
+
+        println("[E1-1 size] before=$before after=$after increase=$increase (${"%.1f".format(100.0 * increase / before)}%)")
+
+        // The adversarial review's stop-and-reassess line: the added evidence alone must not push a rich
+        // record up by more than roughly 4 KB. A ~1-2 KB increase is the acceptable band.
+        assertTrue(increase in 1 until 4096, "enrichment added $increase bytes; expected a bounded (<4 KB) increase")
+    }
+
     @Test
     @DisplayName("an exact entered-race fact serializes with its name and no matchCount")
     fun `entered race exact serializes`() {

@@ -140,7 +140,10 @@ object DecisionTrace {
             record.put("settings", JSONObject().apply { evidence.settings.forEach { (key, value) -> put(key, value) } })
         }
 
-        val candidates = buildCandidates(evidence.events)
+        // Unity Cup is the only scenario that computes Spirit Explosion gauges, so gauge counts are emitted
+        // onto candidates only there. Off Unity Cup they are an uncomputed default, which the honesty rule
+        // omits rather than serialize as a measured zero.
+        val candidates = buildCandidates(evidence.events, unityCup = scenario == "Unity Cup")
         if (candidates.length() > 0) record.put("candidates", candidates)
         record.put("selected", buildSelected(evidence.events))
 
@@ -229,7 +232,7 @@ object DecisionTrace {
      * space. Training candidates carry the analyzer's own scores because the analyzer already
      * passes them to the tracer.
      */
-    private fun buildCandidates(events: List<DecisionTracer.DecisionEvent>): JSONArray {
+    private fun buildCandidates(events: List<DecisionTracer.DecisionEvent>, unityCup: Boolean): JSONArray {
         val candidates = JSONArray()
         // Only the FINAL training contest is authoritative. Trackblazer Irregular Training legitimately
         // calls recommendTraining twice in one turn - the pre-screen evaluation and then the executed
@@ -275,6 +278,7 @@ object DecisionTrace {
                                 put("reason", event.reason)
                                 event.pickedFailureChance?.let { put("failChance", it) }
                                 event.pickedStatGains?.let { put("gains", statGains(it)) }
+                                event.pickedEvidence?.let { putCandidateEvidence(this, it, unityCup) }
                             },
                         )
                     }
@@ -291,6 +295,7 @@ object DecisionTrace {
                                 runnerUp.score?.takeIf { it.isFinite() }?.let { put("score", it) }
                                 runnerUp.failureChance?.let { put("failChance", it) }
                                 runnerUp.statGains?.let { put("gains", statGains(it)) }
+                                runnerUp.evidence?.let { putCandidateEvidence(this, it, unityCup) }
                             },
                         )
                     }
@@ -386,5 +391,55 @@ object DecisionTrace {
     private fun statGains(gains: Map<StatName, Int>): JSONObject =
         JSONObject().apply {
             STAT_KEYS.forEach { (stat, key) -> gains[stat]?.let { put(key, it) } }
+        }
+
+    /**
+     * Attaches one training candidate's already-computed scorer inputs onto [target].
+     *
+     * Additive, honesty-preserving: `numRainbow`/`numSkillHints` are computed every scenario so they are
+     * written unconditionally (a real zero, not a placeholder); `trainingLevel` appears only when the OCR
+     * read one; the Spirit Explosion gauge counts are meaningful only under Unity Cup and are written only
+     * when [unityCup] is true; `relationshipBars` and `performanceGains` are written only when non-empty, so
+     * a facility with no supports and a non-Grand-Concert turn add nothing rather than an empty container.
+     */
+    private fun putCandidateEvidence(target: JSONObject, evidence: DecisionTracer.TrainingCandidateEvidence, unityCup: Boolean) {
+        target.put("numRainbow", evidence.numRainbow)
+        target.put("numSkillHints", evidence.numSkillHints)
+        evidence.trainingLevel?.let { target.put("trainingLevel", it) }
+        if (unityCup) {
+            target.put("numSpiritGaugesCanFill", evidence.numSpiritGaugesCanFill)
+            target.put("numSpiritGaugesReadyToBurst", evidence.numSpiritGaugesReadyToBurst)
+        }
+        if (evidence.relationshipBars.isNotEmpty()) {
+            target.put("relationshipBars", buildRelationshipBars(evidence.relationshipBars))
+        }
+        if (evidence.performanceGains.isNotEmpty()) {
+            target.put(
+                "performanceGains",
+                JSONObject().apply { evidence.performanceGains.forEach { (type, amount) -> put(type, amount) } },
+            )
+        }
+    }
+
+    /**
+     * Renders the per-bar relationship evidence in analysis order.
+     *
+     * Only the fields the relationship scorer reads are written. `support` is emitted only when true and
+     * `trainer` only when a canonical identity is known, so a plain non-support bar stays compact and no
+     * identity is fabricated for an unread one.
+     */
+    private fun buildRelationshipBars(bars: List<DecisionTracer.RelationshipBarEvidence>): JSONArray =
+        JSONArray().apply {
+            bars.forEach { bar ->
+                put(
+                    JSONObject().apply {
+                        put("fillPercent", bar.fillPercent)
+                        put("filledSegments", bar.filledSegments)
+                        put("dominantColor", bar.dominantColor)
+                        if (bar.isSupport) put("support", true)
+                        bar.trainerName?.takeIf { it.isNotBlank() }?.let { put("trainer", it) }
+                    },
+                )
+            }
         }
 }

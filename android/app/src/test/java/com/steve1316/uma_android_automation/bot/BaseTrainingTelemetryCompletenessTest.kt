@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.uma_android_automation.types.StatName
+import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
@@ -216,6 +217,68 @@ class BaseTrainingTelemetryCompletenessTest {
             // is never mislabeled as a training.
             val recovery = window("Could not find Wit training button", "Now select the training option with the highest weight.")
             assertFalse(recovery.contains("recordTrainingSelection"), "the recover-energy fallbacks record no training selection")
+        }
+    }
+
+    @Nested
+    @DisplayName("trainingCandidateEvidence converter")
+    inner class CandidateEvidenceConverter {
+        @Test
+        fun `copies the already-computed scalar evidence off the option`() {
+            val option =
+                Training.TrainingOption(
+                    name = StatName.SPEED,
+                    statGains = mapOf(StatName.SPEED to 12),
+                    failureChance = 6,
+                    relationshipBars = arrayListOf(),
+                    numRainbow = 2,
+                    numSpiritGaugesCanFill = 1,
+                    numSpiritGaugesReadyToBurst = 3,
+                    numSkillHints = 4,
+                    trainingLevel = 5,
+                )
+            val ev = Training.trainingCandidateEvidence(option)
+            assertEquals(2, ev.numRainbow)
+            assertEquals(4, ev.numSkillHints)
+            assertEquals(5, ev.trainingLevel)
+            // Spirit gauges are carried raw; the serializer, not the converter, gates them on Unity Cup.
+            assertEquals(1, ev.numSpiritGaugesCanFill)
+            assertEquals(3, ev.numSpiritGaugesReadyToBurst)
+        }
+
+        @Test
+        fun `an unread training level stays null`() {
+            val option = Training.TrainingOption(name = StatName.WIT, statGains = emptyMap(), failureChance = 0, relationshipBars = arrayListOf(), numRainbow = 0, trainingLevel = null)
+            assertNull(Training.trainingCandidateEvidence(option).trainingLevel)
+        }
+
+        @Test
+        fun `reduces relationship bars to the scorer-relevant fields`() {
+            val bars = arrayListOf(CustomImageUtils.BarFillResult(statName = StatName.SPEED, fillPercent = 62.5, filledSegments = 3, dominantColor = "green"))
+            val option = Training.TrainingOption(name = StatName.SPEED, statGains = emptyMap(), failureChance = 0, relationshipBars = bars, numRainbow = 0)
+            val out = Training.trainingCandidateEvidence(option).relationshipBars
+            assertEquals(1, out.size)
+            assertEquals(62.5, out[0].fillPercent)
+            assertEquals(3, out[0].filledSegments)
+            assertEquals("green", out[0].dominantColor)
+            // No stat block -> not a trainer support, and no fabricated trainer identity.
+            assertFalse(out[0].isSupport)
+            assertNull(out[0].trainerName)
+        }
+
+        @Test
+        fun `drops an unreadable (null) performance-gain value rather than emitting zero`() {
+            val option =
+                Training.TrainingOption(
+                    name = StatName.SPEED,
+                    statGains = emptyMap(),
+                    failureChance = 0,
+                    relationshipBars = arrayListOf(),
+                    numRainbow = 0,
+                    performanceGains = mapOf(PerformancePointType.DANCE to 4, PerformancePointType.VOCAL to null),
+                )
+            val gains = Training.trainingCandidateEvidence(option).performanceGains
+            assertEquals(mapOf("Dance" to 4), gains, "a null (unreadable) type value is omitted, not zero-filled")
         }
     }
 
