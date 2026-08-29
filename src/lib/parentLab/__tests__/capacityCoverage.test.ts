@@ -1,0 +1,468 @@
+import { execFileSync } from "node:child_process"
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { buildCapacityCoverage } from "../capacityCoverage.ts"
+import {
+    COVERAGE_EXPOSURES,
+    COVERAGE_STAR_FLOORS,
+    LAST_COPY_RISKS,
+    PARENTLAB_CAPACITY_COVERAGE_KIND,
+    PARENTLAB_CAPACITY_COVERAGE_SCHEMA,
+    isCapacityCoverageDocument,
+} from "../capacityCoverageTypes.ts"
+import { buildCapacityTriage } from "../capacityEvidence.ts"
+import { isCapacityTriageDocument } from "../capacityTypes.ts"
+import { retentionReportsOf } from "../quarantineSnapshot.ts"
+import { PARENTLAB_RETENTION_SCHEMA, PARENTLAB_RETENTION_SCHEMA_VERSION, RETENTION_STATES } from "../retentionTypes.ts"
+import type { FactorScarcityEntry, RetentionDataCompleteness, RetentionShadowReport, RetentionValueSummary, SelfFactorRef, VeteranRetentionRecommendation } from "../retentionTypes.ts"
+
+// Synthetic fixtures only. No real roster, character, factor, or account data is embedded here: every
+// factor key and character name below is invented. The real 257-Veteran corpus is exercised separately,
+// read-only, by the Slice 2 offline acceptance run, never copied into source.
+
+function completeness(o: Partial<RetentionDataCompleteness> = {}): RetentionDataCompleteness {
+    return {
+        rosterTrusted: true,
+        identityResolved: true,
+        inspirationCaptured: true,
+        inspirationComplete: true,
+        inspirationTrusted: true,
+        historicalMatched: true,
+        protectionKnown: true,
+        scarcityAccountWide: false,
+        score: 0.875,
+        ...o,
+    }
+}
+
+function valueSummary(selfFactors: readonly SelfFactorRef[] | null, o: Partial<RetentionValueSummary> = {}): RetentionValueSummary {
+    return {
+        statFactorStars: 3,
+        aptitudeFactorStars: 2,
+        uniqueFactorStars: 1,
+        whiteFactorCount: 2,
+        totalFactorStars: 8,
+        scarcestClaim: "OBSERVED_SCARCE",
+        observedUniqueFactorKeys: [],
+        selfFactors,
+        lineageAncestorsObserved: 1,
+        rating: 15000,
+        ...o,
+    }
+}
+
+let seq = 0
+function rec(o: Partial<VeteranRetentionRecommendation> & { selfFactors?: readonly SelfFactorRef[] | null } = {}): VeteranRetentionRecommendation {
+    const scanIndex = o.scanIndex ?? seq++
+    const selfFactors = o.selfFactors === undefined ? [{ factorKey: "stat:SYNTH_SPEED", stars: 3 }] : o.selfFactors
+    const character = o.character === undefined ? "Synth Alpha" : o.character
+    return {
+        rosterFingerprint: `fp-${scanIndex}`,
+        scanIndex,
+        character,
+        outfit: o.outfit === undefined ? "Synth Outfit One" : o.outfit,
+        rank: "S",
+        identityMultiplicity: 1,
+        stats: { spd: 900, sta: 700, pwr: 650, grt: 600, wit: 500 },
+        favoriteState: "not_set",
+        protectionState: "not_protected",
+        state: "KEEP",
+        confidence: "MEDIUM",
+        hardProtectReasons: [],
+        gateReasons: [],
+        keepReasons: ["HIGH_VALUE_FACTOR_SET"],
+        riskReasons: [],
+        factorValueSummary: valueSummary(selfFactors),
+        coverageSummary: { character, characterCarriers: 1, characterOutfitCarriers: 1, targetsCovered: o.coverageSummary?.targetsCovered ?? ["GENERAL_INHERITANCE"], soleTargetCoverage: [] },
+        replacement: { difficulty: "MODERATE", historicalSamples: 3, historicalAtOrAbove: 1, statTotal: 3350, historicalMatchStatus: "PROBABLE", basis: "3 historical careers" },
+        dominators: [],
+        substitutes: [],
+        dataCompleteness: completeness(o.dataCompleteness),
+        unknownEvidence: [],
+        explanation: "synthetic",
+        ...o,
+    }
+}
+
+/** Derives a scarcity index from the recs' trusted self factors, exactly as the real pipeline would:
+ * a factor at N stars is a carrier for every floor <= N, counted only from trusted (selfFactors!==null)
+ * captures. This keeps the fixture's observedCarriers consistent with the per-Veteran carrier evidence. */
+function scarcityFrom(recs: VeteranRetentionRecommendation[]): FactorScarcityEntry[] {
+    const byKey = new Map<string, { kind: string; canonicalName: string; starsPerVet: number[] }>()
+    for (const r of recs) {
+        const sf = r.factorValueSummary.selfFactors
+        if (sf === null) continue
+        for (const f of sf) {
+            const colon = f.factorKey.indexOf(":")
+            const kind = colon > 0 ? f.factorKey.slice(0, colon) : "white"
+            const canonicalName = colon > 0 ? f.factorKey.slice(colon + 1) : f.factorKey
+            let e = byKey.get(f.factorKey)
+            if (!e) {
+                e = { kind, canonicalName, starsPerVet: [] }
+                byKey.set(f.factorKey, e)
+            }
+            e.starsPerVet.push(f.stars)
+        }
+    }
+    return [...byKey.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([factorKey, e]) => {
+            const carriersByMinStars: Record<string, number> = {}
+            for (const floor of [1, 2, 3]) carriersByMinStars[String(floor)] = e.starsPerVet.filter((s) => s >= floor).length
+            return {
+                factorKey,
+                kind: e.kind,
+                canonicalName: e.canonicalName,
+                observedCarriers: e.starsPerVet.length,
+                carriersByMinStars,
+                maxObservedStars: Math.max(0, ...e.starsPerVet),
+            }
+        })
+}
+
+function report(recs: VeteranRetentionRecommendation[], o: Partial<RetentionShadowReport> & { accountWide?: boolean; unresolvedFactorReads?: number; entries?: FactorScarcityEntry[] } = {}): RetentionShadowReport {
+    const counts = Object.fromEntries(RETENTION_STATES.map((s) => [s, 0])) as Record<(typeof RETENTION_STATES)[number], number>
+    for (const r of recs) counts[r.state]++
+    const trusted = recs.filter((r) => r.factorValueSummary.selfFactors !== null).length
+    return {
+        schema: PARENTLAB_RETENTION_SCHEMA,
+        schemaVersion: PARENTLAB_RETENTION_SCHEMA_VERSION,
+        rosterScanId: "rs-cov-0001",
+        protectionScanId: "ps-cov-0001",
+        rosterFingerprint: `rs-cov-0001:${recs.length}/${recs.length}`,
+        generatedAt: Date.UTC(2026, 7, 29, 12, 0, 0),
+        targetProfile: "GENERAL_INHERITANCE",
+        counts,
+        scarcity: {
+            schema: PARENTLAB_RETENTION_SCHEMA,
+            schemaVersion: PARENTLAB_RETENTION_SCHEMA_VERSION,
+            identifiedRosterEntries: recs.length,
+            capturedTrusted: trusted,
+            capturedUntrusted: recs.length - trusted,
+            coverage: o.accountWide ? 1 : 0.75,
+            accountWide: o.accountWide ?? true,
+            entries: o.entries ?? scarcityFrom(recs),
+            unresolvedFactorReads: o.unresolvedFactorReads ?? 0,
+        },
+        recommendations: recs,
+        inactiveRules: [],
+        ...o,
+    }
+}
+
+/** A rec excluded by strict hard-protect but still carrying trusted factor evidence, so it anchors. */
+function anchorRec(selfFactors: readonly SelfFactorRef[], o: Partial<VeteranRetentionRecommendation> = {}): VeteranRetentionRecommendation {
+    return rec({ state: "HARD_PROTECT", hardProtectReasons: ["MANUAL_PROTECT"], selfFactors, ...o })
+}
+
+const slotByKeyFloor = (doc: ReturnType<typeof buildCapacityCoverage>, factorKey: string, floor: number) => doc.factorSlots.find((s) => s.factorKey === factorKey && s.starFloor === floor)
+
+beforeEach(() => {
+    seq = 0
+})
+
+describe("factor slot classification", () => {
+    test("one admitted + one excluded trusted carrier is ANCHORED", () => {
+        const admitted = rec({ selfFactors: [{ factorKey: "white:SHARED_A", stars: 3 }] })
+        const anchored = anchorRec([{ factorKey: "white:SHARED_A", stars: 3 }])
+        const doc = buildCapacityCoverage(report([admitted, anchored]))
+        const slot = slotByKeyFloor(doc, "white:SHARED_A", 1)!
+        expect(slot.exposure).toBe("ANCHORED")
+        expect(slot.anchoredCarriers).toBe(1)
+        expect(slot.admittedCarriers).toBe(1)
+        expect(slot.observedCarriers).toBe(2)
+    })
+
+    test("only admitted carriers is FULLY_EXPOSED", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:SHARED_B", stars: 2 }] }), rec({ selfFactors: [{ factorKey: "white:SHARED_B", stars: 2 }] })]))
+        const slot = slotByKeyFloor(doc, "white:SHARED_B", 1)!
+        expect(slot.exposure).toBe("FULLY_EXPOSED")
+        expect(slot.admittedCarriers).toBe(2)
+        expect(slot.anchoredCarriers).toBe(0)
+    })
+
+    test("exactly one admitted carrier is FULLY_EXPOSED_SOLE", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:SOLE_C", stars: 2 }] })]))
+        expect(slotByKeyFloor(doc, "white:SOLE_C", 1)!.exposure).toBe("FULLY_EXPOSED_SOLE")
+    })
+
+    test("a sole 1-star carrier admitted by Slice 1 still surfaces as sole observed risk", () => {
+        const soleVet = rec({ selfFactors: [{ factorKey: "white:SOLE_1STAR", stars: 1 }] })
+        const doc = buildCapacityCoverage(report([soleVet]))
+        expect(buildCapacityTriage(report([soleVet])).records[0].admission).toBe("ELIGIBLE_FOR_MANUAL_REVIEW")
+        const slot = slotByKeyFloor(doc, "white:SOLE_1STAR", 1)!
+        expect(slot.exposure).toBe("FULLY_EXPOSED_SOLE")
+        const exposure = doc.exposures.find((e) => e.scanIndex === soleVet.scanIndex)!
+        expect(exposure.soleCarrierSlots).toContain("white:SOLE_1STAR@1")
+        expect(exposure.lastCopyRisk).toBe("SOLE_OBSERVED_CARRIER")
+    })
+
+    test("two admitted carriers sharing a factor are shared fully exposed on both", () => {
+        const a = rec({ scanIndex: 0, selfFactors: [{ factorKey: "white:SHARED_D", stars: 3 }] })
+        const b = rec({ scanIndex: 1, selfFactors: [{ factorKey: "white:SHARED_D", stars: 3 }] })
+        const doc = buildCapacityCoverage(report([a, b]))
+        expect(slotByKeyFloor(doc, "white:SHARED_D", 1)!.exposure).toBe("FULLY_EXPOSED")
+        for (const s of doc.exposures) {
+            expect(s.fullyExposedSharedSlots).toContain("white:SHARED_D@1")
+            expect(s.lastCopyRisk).toBe("SHARED_FULLY_EXPOSED")
+        }
+    })
+
+    test("star floors stay separate: 3-star satisfies 1/2/3, 1-star satisfies only 1", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:HIGH", stars: 3 }, { factorKey: "white:LOW", stars: 1 }] })]))
+        expect([1, 2, 3].map((f) => slotByKeyFloor(doc, "white:HIGH", f)?.starFloor)).toEqual([1, 2, 3])
+        expect(slotByKeyFloor(doc, "white:LOW", 1)).toBeDefined()
+        expect(slotByKeyFloor(doc, "white:LOW", 2)).toBeUndefined()
+        expect(slotByKeyFloor(doc, "white:LOW", 3)).toBeUndefined()
+    })
+
+    test("an excluded Veteran with selfFactors === null anchors nothing", () => {
+        const admitted = rec({ selfFactors: [{ factorKey: "white:SOLE_E", stars: 3 }] })
+        const noEvidence = rec({ state: "REVIEW", selfFactors: null, gateReasons: ["INSPIRATION_CAPTURE_MISSING"] })
+        const doc = buildCapacityCoverage(report([admitted, noEvidence]))
+        const slot = slotByKeyFloor(doc, "white:SOLE_E", 1)!
+        expect(slot.exposure).toBe("FULLY_EXPOSED_SOLE")
+        expect(slot.anchoredCarriers).toBe(0)
+        expect(doc.recordsWithoutTrustedFactors).toBe(1)
+    })
+
+    test("unique factor slots are characterBound; white slots are not", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "unique:SYNTH_GREEN", stars: 2 }, { factorKey: "white:SYNTH_WHITE", stars: 2 }] })]))
+        expect(slotByKeyFloor(doc, "unique:SYNTH_GREEN", 1)!.characterBound).toBe(true)
+        expect(slotByKeyFloor(doc, "white:SYNTH_WHITE", 1)!.characterBound).toBe(false)
+    })
+})
+
+describe("degradation and claim strength", () => {
+    test("accountWide:false makes every factor claim OBSERVED_LOWER_BOUND and adds COVERAGE_INCOMPLETE", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:F", stars: 2 }] })], { accountWide: false }))
+        for (const s of doc.factorSlots) expect(s.claimStrength).toBe("OBSERVED_LOWER_BOUND")
+        expect(doc.limits.map((l) => l.code)).toContain("COVERAGE_INCOMPLETE")
+        expect(doc.accountWide).toBe(false)
+    })
+
+    test("accountWide:true permits ACCOUNT claims and omits COVERAGE_INCOMPLETE", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:G", stars: 2 }] })], { accountWide: true }))
+        for (const s of doc.factorSlots) expect(s.claimStrength).toBe("ACCOUNT")
+        expect(doc.limits.map((l) => l.code)).not.toContain("COVERAGE_INCOMPLETE")
+    })
+
+    test("an untrusted roster is usable:false with pool 0 and an empty, non-reassuring ledger", () => {
+        const recs = [rec({ dataCompleteness: completeness({ rosterTrusted: false }) }), rec({ dataCompleteness: completeness({ rosterTrusted: false }) })]
+        const doc = buildCapacityCoverage(report(recs))
+        expect(doc.usable).toBe(false)
+        expect(doc.poolSize).toBe(0)
+        expect(doc.factorSlots).toHaveLength(0)
+        expect(doc.characterSlots).toHaveLength(0)
+        expect(doc.exposures).toHaveLength(0)
+        // Not silent-safe: no exposure was measured, so nothing may read as "at risk == 0 == safe".
+        for (const v of Object.values(doc.factorExposureCounts)) expect(v).toBe(0)
+        expect(doc.limits.length).toBeGreaterThan(0)
+    })
+
+    test("unresolved factor reads surface the UNRESOLVED_FACTOR_READS limit", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:H", stars: 2 }] })], { unresolvedFactorReads: 4 }))
+        expect(doc.limits.map((l) => l.code)).toContain("UNRESOLVED_FACTOR_READS")
+        expect(doc.unresolvedFactorReads).toBe(4)
+    })
+
+    test("an unsupported retention schema version fails closed", () => {
+        expect(() => buildCapacityCoverage(report([rec()], { schemaVersion: 1 as unknown as typeof PARENTLAB_RETENTION_SCHEMA_VERSION }))).toThrow(/schema version/)
+    })
+
+    test("WHITE_SUBFAMILY_NOT_AVAILABLE is always present and every slot's whiteSubfamily is null", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:I", stars: 2 }, { factorKey: "unique:J", stars: 1 }] })]))
+        expect(doc.limits.map((l) => l.code)).toContain("WHITE_SUBFAMILY_NOT_AVAILABLE")
+        for (const s of doc.factorSlots) expect(s.whiteSubfamily).toBeNull()
+    })
+
+    test("UNMEASURED when observed carriers cannot be attributed to admitted or anchored", () => {
+        // Scarcity claims two carriers at floor 1, but only one Veteran actually carries trusted evidence.
+        const entries: FactorScarcityEntry[] = [{ factorKey: "white:GHOST", kind: "white", canonicalName: "GHOST", observedCarriers: 2, carriersByMinStars: { "1": 2, "2": 0, "3": 0 }, maxObservedStars: 1 }]
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:GHOST", stars: 1 }] })], { entries }))
+        expect(slotByKeyFloor(doc, "white:GHOST", 1)!.exposure).toBe("UNMEASURED")
+    })
+})
+
+describe("character, target and per-Veteran exposure", () => {
+    test("character slot exposure follows admitted vs excluded roster membership", () => {
+        const shared1 = rec({ scanIndex: 0, character: "Char Shared", outfit: "Outfit A" })
+        const shared2 = rec({ scanIndex: 1, character: "Char Shared", outfit: "Outfit B" })
+        const anchoredChar = rec({ scanIndex: 2, character: "Char Anchored", state: "HARD_PROTECT", hardProtectReasons: ["MANUAL_PROTECT"] })
+        const soleChar = rec({ scanIndex: 3, character: "Char Sole" })
+        const doc = buildCapacityCoverage(report([shared1, shared2, anchoredChar, soleChar]))
+        const byKey = (k: string) => doc.characterSlots.find((s) => s.characterKey === k)!
+        expect(byKey("Char Shared").exposure).toBe("FULLY_EXPOSED")
+        expect(byKey("Char Shared").outfits).toEqual(["Outfit A", "Outfit B"])
+        expect(byKey("Char Anchored").exposure).toBe("ANCHORED")
+        expect(byKey("Char Sole").exposure).toBe("FULLY_EXPOSED_SOLE")
+        expect(doc.exposures.find((e) => e.scanIndex === 3)!.soleCharacterSlot).toBe(true)
+    })
+
+    test("the target slot is profile-scoped and anchored when an excluded Veteran clears the gate", () => {
+        const admittedClear = rec({ scanIndex: 0 })
+        const excludedClear = rec({ scanIndex: 1, state: "HARD_PROTECT", hardProtectReasons: ["MANUAL_PROTECT"] })
+        const doc = buildCapacityCoverage(report([admittedClear, excludedClear]))
+        expect(doc.targetSlots).toHaveLength(1)
+        const t = doc.targetSlots[0]
+        expect(t.targetProfile).toBe("GENERAL_INHERITANCE")
+        expect(t.exposure).toBe("ANCHORED")
+        expect(t.clearingCarriers).toBe(2)
+        expect(t.admittedCarriers).toBe(1)
+        expect(doc.limits.map((l) => l.code)).toContain("SINGLE_TARGET_PROFILE_SCOPE")
+    })
+
+    test("a gated target slot counts only Veterans that list the profile in targetsCovered", () => {
+        const clears = rec({ scanIndex: 0, coverageSummary: { character: "Synth Alpha", characterCarriers: 1, characterOutfitCarriers: 1, targetsCovered: ["MILE_PARENT"], soleTargetCoverage: [] } })
+        const doesNot = rec({ scanIndex: 1, coverageSummary: { character: "Synth Beta", characterCarriers: 1, characterOutfitCarriers: 1, targetsCovered: [], soleTargetCoverage: [] } })
+        const doc = buildCapacityCoverage(report([clears, doesNot], { targetProfile: "MILE_PARENT" }))
+        const t = doc.targetSlots[0]
+        expect(t.targetProfile).toBe("MILE_PARENT")
+        expect(t.clearingCarriers).toBe(1)
+        expect(t.admittedCarriers).toBe(1)
+        expect(t.exposure).toBe("FULLY_EXPOSED_SOLE")
+    })
+
+    test("per-Veteran lastCopyRisk precedence: sole beats shared beats none", () => {
+        // The shared and none Veterans share a character so their character slot is not sole-exposed,
+        // isolating the factor-slot signal that each case is meant to exercise.
+        const sole = rec({ scanIndex: 0, character: "P Sole", selfFactors: [{ factorKey: "white:P_SOLE", stars: 2 }] })
+        const shareA = rec({ scanIndex: 1, character: "P Shared", selfFactors: [{ factorKey: "white:P_SHARED", stars: 2 }] })
+        const shareB = rec({ scanIndex: 2, character: "P Shared", selfFactors: [{ factorKey: "white:P_SHARED", stars: 2 }] })
+        const none = rec({ scanIndex: 3, character: "P None", selfFactors: [{ factorKey: "white:P_ANCHORED", stars: 2 }] })
+        const noneSib = rec({ scanIndex: 6, character: "P None", selfFactors: [{ factorKey: "white:P_ANCHORED", stars: 2 }] })
+        const anchorNone = anchorRec([{ factorKey: "white:P_ANCHORED", stars: 2 }], { scanIndex: 4, character: "P AnchorSrc" })
+        const doc = buildCapacityCoverage(report([sole, shareA, shareB, none, noneSib, anchorNone]))
+        const byScan = (i: number) => doc.exposures.find((e) => e.scanIndex === i)!
+        expect(byScan(0).lastCopyRisk).toBe("SOLE_OBSERVED_CARRIER")
+        expect(byScan(1).lastCopyRisk).toBe("SHARED_FULLY_EXPOSED")
+        expect(byScan(2).lastCopyRisk).toBe("SHARED_FULLY_EXPOSED")
+        expect(byScan(3).lastCopyRisk).toBe("NO_EXPOSED_SLOT_OBSERVED")
+    })
+
+    test("null / whitespace character records are counted as unkeyed, not as a character slot", () => {
+        const doc = buildCapacityCoverage(report([rec({ scanIndex: 0, character: null }), rec({ scanIndex: 1, character: "   " }), rec({ scanIndex: 2, character: "Real Char" })]))
+        expect(doc.unkeyedRecords).toBe(2)
+        expect(doc.characterSlots.map((s) => s.characterKey)).toEqual(["Real Char"])
+    })
+
+    test("exposureByKind breaks a Veteran's exposed slots down by factor kind", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:K1", stars: 1 }, { factorKey: "unique:K2", stars: 1 }] })]))
+        const v = doc.exposures[0]
+        expect(v.exposureByKind.white).toBeGreaterThanOrEqual(1)
+        expect(v.exposureByKind.unique).toBeGreaterThanOrEqual(1)
+    })
+})
+
+describe("contract, isolation and determinism", () => {
+    test("no forbidden decision/ranking/executor field appears in any emitted record", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:Z", stars: 3 }] }), anchorRec([{ factorKey: "white:Z", stars: 3 }], { scanIndex: 9 })]))
+        const forbidden = ["action", "execute", "transfer", "delete", "release", "favorite", "approve", "score", "weight", "tier", "rank", "priority", "order", "opportunityCost", "targetFreeSlots", "recommendation", "safeToTransfer"]
+        const objects: unknown[] = [doc, doc.factorSlots[0], doc.characterSlots[0], doc.targetSlots[0], doc.exposures[0], doc.limits[0]]
+        for (const obj of objects) {
+            for (const key of Object.keys(obj as object)) expect(forbidden).not.toContain(key)
+        }
+    })
+
+    test("no coverage enum overlaps a retention state or SAFE_TO_TRANSFER", () => {
+        for (const e of COVERAGE_EXPOSURES) {
+            expect(RETENTION_STATES as readonly string[]).not.toContain(e)
+            expect(e).not.toBe("SAFE_TO_TRANSFER")
+        }
+        for (const r of LAST_COPY_RISKS) {
+            expect(RETENTION_STATES as readonly string[]).not.toContain(r)
+            expect(r).not.toBe("SAFE_TO_TRANSFER")
+        }
+    })
+
+    test("the retention reader rejects a coverage document", () => {
+        const doc = buildCapacityCoverage(report([rec()]))
+        expect(() => retentionReportsOf(doc)).toThrow(/schema/)
+    })
+
+    test("the Slice 1 capacity reader rejects a coverage document", () => {
+        const doc = buildCapacityCoverage(report([rec()]))
+        expect(isCapacityTriageDocument(doc)).toBe(false)
+    })
+
+    test("the coverage reader accepts only its own document and rejects retention and Slice 1 docs", () => {
+        const retention = report([rec()])
+        const slice1 = buildCapacityTriage(retention)
+        const coverage = buildCapacityCoverage(retention)
+        expect(isCapacityCoverageDocument(coverage)).toBe(true)
+        expect(isCapacityCoverageDocument(retention)).toBe(false)
+        expect(isCapacityCoverageDocument(slice1)).toBe(false)
+        expect(coverage.schema).toBe(PARENTLAB_CAPACITY_COVERAGE_SCHEMA)
+        expect(coverage.kind).toBe(PARENTLAB_CAPACITY_COVERAGE_KIND)
+    })
+
+    test("star floors are pinned to [1,2,3]", () => {
+        expect(COVERAGE_STAR_FLOORS).toEqual([1, 2, 3])
+    })
+
+    test("output is deterministic and generatedAt copies the input observation, not a clock", () => {
+        const build = () => buildCapacityCoverage(report([rec({ scanIndex: 0, selfFactors: [{ factorKey: "white:D1", stars: 3 }] }), rec({ scanIndex: 1, selfFactors: [{ factorKey: "white:D2", stars: 2 }] })]))
+        expect(JSON.stringify(build())).toBe(JSON.stringify(build()))
+        expect(build().generatedAt).toBe(Date.UTC(2026, 7, 29, 12, 0, 0))
+    })
+
+    test("in-process Slice 1 admission is preserved verbatim", () => {
+        const recs = [rec({ scanIndex: 0, state: "KEEP" }), rec({ scanIndex: 1, state: "HARD_PROTECT", hardProtectReasons: ["MANUAL_PROTECT"] }), rec({ scanIndex: 2, state: "SAFE_TO_TRANSFER", confidence: "HIGH" }), rec({ scanIndex: 3, state: "UNKNOWN" })]
+        const rep = report(recs)
+        const triage = buildCapacityTriage(rep)
+        const doc = buildCapacityCoverage(rep)
+        const admissionByScan = new Map(triage.records.map((r) => [r.scanIndex, r.admission]))
+        expect(doc.poolSize).toBe(triage.admittedCount)
+        expect(doc.exposures.every((e) => e.admission === "ELIGIBLE_FOR_MANUAL_REVIEW")).toBe(true)
+        for (const e of doc.exposures) expect(admissionByScan.get(e.scanIndex)).toBe("ELIGIBLE_FOR_MANUAL_REVIEW")
+        expect(doc.exposures).toHaveLength(triage.admittedCount)
+    })
+})
+
+describe("CLI freshness binding and exit codes", () => {
+    const cliPath = join(process.cwd(), "scripts", "parent-lab-capacity-coverage.mjs")
+    const dir = mkdtempSync(join(tmpdir(), "cap-cov-"))
+
+    function writeRetention(recs: VeteranRetentionRecommendation[], o: Parameters<typeof report>[1] = {}): string {
+        const path = join(dir, `retention-${Math.abs(recs.length + (recs[0]?.scanIndex ?? 0))}-${o.accountWide === false ? "partial" : "full"}.json`)
+        writeFileSync(path, JSON.stringify(report(recs, o)), "utf8")
+        return path
+    }
+
+    function run(args: string[]): { status: number; stdout: string } {
+        try {
+            const stdout = execFileSync(process.execPath, [cliPath, ...args], { encoding: "utf8" })
+            return { status: 0, stdout }
+        } catch (e) {
+            const err = e as { status?: number; stdout?: string }
+            return { status: err.status ?? -1, stdout: err.stdout ?? "" }
+        }
+    }
+
+    test("a usable document exits 0", () => {
+        const path = writeRetention([rec({ selfFactors: [{ factorKey: "white:CLI_A", stars: 2 }] })])
+        expect(run(["--retention", path]).status).toBe(0)
+    })
+
+    test("an untrusted roster exits 1", () => {
+        const path = writeRetention([rec({ dataCompleteness: completeness({ rosterTrusted: false }) })])
+        expect(run(["--retention", path]).status).toBe(1)
+    })
+
+    test("a matching --expect-roster-scan is accepted", () => {
+        const path = writeRetention([rec({ selfFactors: [{ factorKey: "white:CLI_B", stars: 2 }] })])
+        expect(run(["--retention", path, "--expect-roster-scan", "rs-cov-0001"]).status).toBe(0)
+    })
+
+    test("a mismatching --expect-roster-scan fails closed with exit 2", () => {
+        const path = writeRetention([rec({ selfFactors: [{ factorKey: "white:CLI_C", stars: 2 }] })])
+        expect(run(["--retention", path, "--expect-roster-scan", "rs-DIFFERENT"]).status).toBe(2)
+    })
+
+    test("a malformed input fails with exit 2", () => {
+        const path = join(dir, "malformed.json")
+        writeFileSync(path, "{ not valid json", "utf8")
+        expect(run(["--retention", path]).status).toBe(2)
+    })
+})

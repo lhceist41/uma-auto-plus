@@ -24,6 +24,8 @@ export * from "./parentPairing.ts"
 export * from "./affinityAdvisor.ts"
 export * from "./capacityTypes.ts"
 export * from "./capacityEvidence.ts"
+export * from "./capacityCoverageTypes.ts"
+export * from "./capacityCoverage.ts"
 export { buildVeteranLibrary } from "./buildVeteranLibrary.ts"
 export {
     canonicalCareerEvidence,
