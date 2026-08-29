@@ -148,6 +148,9 @@ export interface Settings {
         currentProfileName: string
         messageLogFontSize: number
         overlayButtonSizeDP: number
+        // Records lightweight, on-device per-turn decision data so a career can be analyzed and improved later.
+        // Local only, no upload. Independent of Debug Mode: the heavy debug diagnostics stay off when this is on.
+        recordDecisionData: boolean
     }
 
     // Training settings
@@ -700,6 +703,7 @@ export const defaultSettings: Settings = {
         currentProfileName: "",
         messageLogFontSize: 8,
         overlayButtonSizeDP: 40,
+        recordDecisionData: true,
     },
     training: {
         trainingBlacklist: [],

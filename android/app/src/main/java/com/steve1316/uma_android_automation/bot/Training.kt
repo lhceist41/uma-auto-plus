@@ -2665,8 +2665,10 @@ class Training(private val game: Game, private val campaign: Campaign) {
         logSelectionReasoning(trainingConfig, finalScoringMode, trainingScores, skippedScores, best)
 
         // DecisionTracer: capture the per-stat scoring contest for the turn's Decision Report. The
-        // runner-up list is only built when a tracer is attached (debug builds) - the null-safe call
-        // short-circuits its arguments, so release builds (tracer == null) skip the allocation entirely.
+        // runner-up list is only built when a tracer is attached -- tracer presence controls the
+        // allocation, and the null-safe call short-circuits its arguments, so when no tracer is present
+        // (tracer == null) the allocation is skipped entirely. The tracer may now exist in normal
+        // release play when factual recording is enabled.
         val tracer = campaign.decisionTracer
 
         if (best != null) {

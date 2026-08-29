@@ -325,33 +325,57 @@ abstract class Campaign(game: Game) : Task(game) {
     var date: GameDate = GameDate(day = 1)
 
     /**
+     * Whether the operator opted into recording the lightweight factual per-turn decision corpus
+     * (`decision_trace` + `career_state`) during normal play. Independent of Debug Mode: it records
+     * the machine-readable corpus without the heavy debug diagnostics. Defaults on.
+     */
+    private val recordDecisionData: Boolean = SettingsHelper.getBooleanSetting("misc", "recordDecisionData", true)
+
+    /**
+     * Debug-diagnostics gate: a debug build or Debug Mode. Enables the full heavy bundle (the
+     * multi-line human Decision Report, fixture capture, the shadow_advisor stream). Named once here
+     * so the factual-corpus gate and the debug-only gates read from one expression.
+     */
+    private val debugDiagnosticsEnabled: Boolean = com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode
+
+    /**
+     * Effective gate for the factual per-turn corpus: records when the operator opted in OR any debug
+     * diagnostics are active (historical Debug Mode behavior preserved as a superset). Both
+     * `decision_trace` and `career_state` read this one gate so they record together and stay joinable.
+     */
+    private val factualCorpusEnabled: Boolean = DecisionCorpusGate.factualCorpusEnabled(recordDecisionData, debugDiagnosticsEnabled)
+
+    /**
      * Per-turn structured decision logger. Records WHY each turn's action / training / race / skill
-     * decision was made and emits one consolidated Decision Report block at turn end. Null unless this
-     * is a debug build or Debug Mode is enabled, so every `decisionTracer?.…` call compiles to a
-     * null-safe no-op. The block is a heavy diagnostic (one multi-line MessageLog write per turn),
-     * gated off by default in release for performance and log size, mirroring the fixture-capture gate.
+     * decision was made. Non-null whenever the factual corpus records, so the machine-readable
+     * `decision_trace` companion can be appended during normal release play; every `decisionTracer?.…`
+     * call still compiles to a null-safe no-op when the corpus is off. The heavy multi-line human
+     * Decision Report block is a debug-only diagnostic, written only under [debugDiagnosticsEnabled]
+     * (mirroring the fixture-capture gate), so a corpus-only run records the trace without the report.
      */
     val decisionTracer: DecisionTracer? =
-        if (com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode) DecisionTracer() else null
+        if (factualCorpusEnabled) DecisionTracer(humanReportEnabled = DecisionCorpusGate.humanReportEnabled(debugDiagnosticsEnabled)) else null
 
     init {
         // Machine-readable companion to the Decision Report block: the same evidence, appended as
         // one JSON line per turn. Attaching the sink is the only side effect - the lambda body runs
         // inside emit(), which fires AFTER the turn's action has already executed, so no failure in
-        // it can reach the decision path. Shares the tracer's gate, so release builds without Debug
-        // Mode never allocate or write anything.
+        // it can reach the decision path. The sink shares the tracer's factual-corpus gate, so a
+        // normal release build may record when Record Decision Data is enabled; the human/debug
+        // Decision Report stays separately gated on Debug Mode.
         decisionTracer?.traceSink = { evidence -> appendDecisionTrace(evidence) }
     }
 
     /**
      * Live Shadow Advisor S3 sink: observational only. After each factual decision_trace append it evaluates the
      * static S1 policy from the immutable serialized decision_trace plus the retained same-seq career_state, and
-     * appends a separate `shadow_advisor.jsonl` record. It shares the decision tracer's gate, never influences any
-     * decision/execution, and swallows all of its own failures, so it can never change a turn. Null (no-op) in
-     * release without Debug Mode.
+     * appends a separate `shadow_advisor.jsonl` record. Debug-only: it stays on the Debug Mode gate
+     * ([debugDiagnosticsEnabled]) even though the tracer now records on the broader corpus gate, so a
+     * corpus-only run never writes it. It never influences any decision/execution and swallows all of
+     * its own failures, so it can never change a turn. Null (no-op) in release without Debug Mode.
      */
     val shadowAdvisorSink: com.steve1316.uma_android_automation.bot.shadowadvisor.ShadowAdvisorSink? =
-        if (com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode) {
+        if (debugDiagnosticsEnabled) {
             com.steve1316.uma_android_automation.bot.shadowadvisor.ShadowAdvisorSink()
         } else {
             null
@@ -3421,13 +3445,13 @@ abstract class Campaign(game: Game) : Task(game) {
         // Scenario-specific main screen entry hook (e.g. for item usage).
         onMainScreenEntry()
 
-        // Canonical CareerState v1 (Phase A, shadow-only): snapshot the coherent pre-decision state
-        // exactly once per turn, now that all state-changing turn prep (race caches, global checks,
-        // scenario item use) has run. Phase A has no production consumer, so the automatic construction
-        // runs only under a debug build or Debug Mode; the builder/model stay available internally for
-        // tests and a future Phase B consumer, so a release build does no per-turn shadow work. Nothing
+        // Canonical CareerState v1 (Phase A): snapshot the coherent pre-decision state exactly once
+        // per turn, now that all state-changing turn prep (race caches, global checks, scenario item
+        // use) has run. The factual `career_state` record shares the decision_trace's gate
+        // ([factualCorpusEnabled]), so both per-turn streams record together (or not at all) and stay
+        // joinable by seq; a release build with the corpus off does no per-turn shadow work. Nothing
         // below reads it; a failure here must never change the decision, so the block is non-fatal.
-        if ((com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode) && careerStateLatch.shouldBuild()) {
+        if (factualCorpusEnabled && careerStateLatch.shouldBuild()) {
             // Allocate this logical decision turn's sequence exactly when the build opportunity is
             // consumed. currentTurnSeq stays null until the build succeeds, so a swallowed build leaves
             // the emitted trace without a seq rather than inheriting the previous turn's; the counter
@@ -3441,7 +3465,9 @@ abstract class Campaign(game: Game) : Task(game) {
                 // join, not a stale seq). Serialization is pure and the append swallows its own I/O.
                 careerStateSeq.retain(seq)
                 appendCareerState(careerState, seq)
-                compareCareerStateToTracer(careerState)
+                // Debug-only shadow comparison against the tracer's turn-open snapshot: one compact
+                // [CAREER_STATE] line. Kept on the debug gate so a corpus-only run adds no per-turn log noise.
+                if (debugDiagnosticsEnabled) compareCareerStateToTracer(careerState)
             } catch (e: Exception) {
                 // Shadow-only observability: swallow so a snapshot/compare fault cannot stop or alter the turn.
                 Log.e(TAG, "[CAREER_STATE] shadow snapshot failed (ignored): ${e.message}")

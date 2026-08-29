@@ -72,6 +72,12 @@ const searchConfig: SearchOption[] = [
         page: "SettingsMain",
     },
     {
+        id: "settings-record-decision-data",
+        title: "Record Decision Data",
+        description: "Records lightweight decision data each turn, stored only on this device, so a career can be reviewed and improved later. Nothing is uploaded.",
+        page: "SettingsMain",
+    },
+    {
         id: "settings-wait-delay",
         title: "Wait Delay",
         description: "Sets the delay between actions and imaging operations. Lowering this will make the bot run much faster.",

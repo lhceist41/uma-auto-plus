@@ -438,6 +438,20 @@ const Settings = () => {
                     className="mt-4"
                 />
 
+                <CustomCheckbox
+                    searchId="settings-record-decision-data"
+                    checked={bsc.settings.misc.recordDecisionData}
+                    onCheckedChange={(checked) => {
+                        bsc.setSettings({
+                            ...bsc.settings,
+                            misc: { ...bsc.settings.misc, recordDecisionData: checked },
+                        })
+                    }}
+                    label="Record Decision Data"
+                    description="Records lightweight decision data each turn, stored only on this device, so a career can be reviewed and improved later. Nothing is uploaded. Leave this on unless you want to minimize storage use."
+                    className="mt-4"
+                />
+
                 <CustomSlider
                     searchId="settings-wait-delay"
                     value={bsc.settings.general.waitDelay}

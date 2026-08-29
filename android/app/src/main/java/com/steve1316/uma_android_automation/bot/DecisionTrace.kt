@@ -58,10 +58,11 @@ object DecisionTrace {
     const val SCHEMA_VERSION: Int = 1
 
     /**
-     * Byte cap for the decision-trace file. A debug-gated per-turn record runs about 2 KB in practice
-     * (roughly 1,900 bytes measured live), so 32 MB still holds a few hundred careers; past it the
-     * writer drops records rather than filling the device. Nothing is rotated or deleted - the cap
-     * exists so an unattended debug session cannot grow the file without bound.
+     * Byte cap for the decision-trace file. This factual per-turn decision-corpus record runs about
+     * 2 KB in practice (roughly 1,900 bytes measured live), so 32 MB still holds a few hundred careers;
+     * past it the writer drops records rather than filling the device. Nothing is rotated or deleted;
+     * the corpus may record in normal release play when Record Decision Data is enabled, so this
+     * 32 MiB cap is what prevents unbounded local growth.
      */
     const val MAX_FILE_BYTES: Long = 32L * 1024 * 1024
 

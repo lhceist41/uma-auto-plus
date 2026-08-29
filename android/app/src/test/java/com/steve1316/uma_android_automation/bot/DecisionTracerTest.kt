@@ -97,6 +97,39 @@ class DecisionTracerTest {
     }
 
     @Test
+    @DisplayName("corpus-only tracer suppresses the human report but still drives the sink")
+    fun `human report off records the trace without the report`() {
+        // The corpus-only wiring (Record Decision Data on, Debug Mode off).
+        val tracer = DecisionTracer(humanReportEnabled = false)
+        var sinkCalls = 0
+        tracer.traceSink = { sinkCalls++ }
+        tracer.startTurn(date(), Trainee())
+
+        MessageLog.clearLog()
+        tracer.emit()
+
+        // No human Decision Report block was written, but the factual sink still ran exactly once.
+        assertEquals(0, MessageLog.getMessageLogCopy().size, "corpus-only emit must not write the human report")
+        assertEquals(1, sinkCalls, "the machine-readable sink must still run")
+    }
+
+    @Test
+    @DisplayName("default tracer writes the human report and drives the sink")
+    fun `human report on records both the report and the trace`() {
+        // The default / Debug Mode wiring.
+        val tracer = DecisionTracer(humanReportEnabled = true)
+        var sinkCalls = 0
+        tracer.traceSink = { sinkCalls++ }
+        tracer.startTurn(date(), Trainee())
+
+        MessageLog.clearLog()
+        tracer.emit()
+
+        assertEquals(1, MessageLog.getMessageLogCopy().size, "debug emit writes the human report")
+        assertEquals(1, sinkCalls, "the machine-readable sink runs alongside the report")
+    }
+
+    @Test
     @DisplayName("buildTracerRunnerUps omits the picked training")
     fun `picked training is excluded from runner-ups`() {
         val speed = option(StatName.SPEED)

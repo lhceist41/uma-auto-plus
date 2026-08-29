@@ -38,8 +38,9 @@ object CareerStateSerializer {
     const val SCHEMA_VERSION: Int = 1
 
     /**
-     * Byte cap for the `career_state` file, matching [DecisionTrace.MAX_FILE_BYTES] (one debug-gated
-     * record per decision turn, comparable volume). Past it the writer drops records rather than
+     * Byte cap for the `career_state` file, matching [DecisionTrace.MAX_FILE_BYTES] (one local factual
+     * career-state corpus record per decision turn, comparable volume; it can record during normal
+     * release play when Record Decision Data is enabled). Past it the writer drops records rather than
      * filling the device; nothing is rotated or deleted.
      */
     const val MAX_FILE_BYTES: Long = 32L * 1024 * 1024

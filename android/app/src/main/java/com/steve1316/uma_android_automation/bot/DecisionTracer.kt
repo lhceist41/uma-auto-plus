@@ -14,9 +14,18 @@ import com.steve1316.uma_android_automation.types.Trainee
  * Results` blocks so users have a single greppable section that answers "why did the bot do X this turn?".
  *
  * `startTurn(...)` snapshots state at the beginning of a main-screen decision. The various `record...` methods append events as the decision tree is
- * walked. `emit()` flushes the formatted block once and clears the buffer. Existing `MessageLog.i/v/w/e` lines are left untouched so chronological tracing is unaffected.
+ * walked. `emit()` flushes the formatted block once and clears the buffer, and also drives the optional machine-readable trace sink; the human block is
+ * written only when `humanReportEnabled` (Debug Mode), while the sink runs whenever it is attached. Existing `MessageLog.i/v/w/e` lines are left untouched so chronological tracing is unaffected.
  */
-class DecisionTracer {
+class DecisionTracer(
+    /**
+     * Whether `emit()` writes the heavy multi-line human Decision Report block via `MessageLog.i`.
+     * The machine-readable [traceSink] runs regardless: the dedicated Record Decision Data setting
+     * records the factual trace with the report suppressed, while Debug Mode enables both. Defaults
+     * true so existing callers and tests keep the historical report-on behavior.
+     */
+    private val humanReportEnabled: Boolean = true,
+) {
     /** Header for the current turn's Decision Report block (e.g. "Turn 25 (CLASSIC EARLY JANUARY)"). */
     private var turnLabel: String = ""
 
@@ -315,7 +324,10 @@ class DecisionTracer {
      */
     fun emit() {
         if (hasEmitted || stateSnapshot == null) return
-        MessageLog.i(TAG, formatReport())
+        // The human Decision Report is a heavy debug-only diagnostic. The dedicated Record Decision
+        // Data setting records only the machine-readable trace below, so suppress the block when the
+        // report is off; the sink still runs, keeping the factual corpus intact without the report.
+        if (humanReportEnabled) MessageLog.i(TAG, formatReport())
         // Set BEFORE the sink runs so a sink that throws cannot leave the turn re-emittable and
         // duplicate the block on the next tick.
         hasEmitted = true

@@ -11,8 +11,9 @@ import java.io.File
  * Static non-interference proof for Shadow Advisor S3. It pins, from the production source, that the advisor is
  * invoked at exactly one point strictly AFTER the factual decision_trace append, that no gameplay decision /
  * training-selection / race / queue path references it, that its runtime path is fully isolated in try/catch, and
- * that it is gated exactly where the decision tracer is with no new setting. These are the invariants that keep the
- * advisor observational-only; the parity suite pins its output.
+ * that it stays on the debug-diagnostics gate (decoupled from the broader factual-corpus setting the decision tracer
+ * now records under) with no advisor setting of its own. These are the invariants that keep the advisor
+ * observational-only and debug-only; the parity suite pins its output.
  */
 @DisplayName("shadow advisor static non-interference")
 class ShadowAdvisorNonInterferenceTest {
@@ -75,12 +76,23 @@ class ShadowAdvisorNonInterferenceTest {
     }
 
     @Test
-    fun `S3 is gated exactly where the decision tracer is, with no new setting`() {
-        // Same gate token as the decision tracer, and no advisor-specific SettingsHelper flag anywhere.
+    fun `S3 stays on the debug gate, decoupled from the corpus setting, with no advisor setting of its own`() {
+        // The sink is created on the debug-diagnostics gate, NOT the broader factual-corpus gate the
+        // decision tracer now records under, so a corpus-only run (Record Decision Data on, Debug Mode
+        // off) never writes a shadow_advisor record.
         assertTrue(campaign.contains("com.steve1316.uma_android_automation.bot.shadowadvisor.ShadowAdvisorSink()"))
         val ctor = campaign.indexOf("ShadowAdvisorSink()")
         val gateWindow = campaign.substring(maxOf(0, ctor - 200), ctor)
-        assertTrue(gateWindow.contains("BuildConfig.DEBUG || game.debugMode"), "the sink shares the decision tracer's debug gate")
+        assertTrue(gateWindow.contains("if (debugDiagnosticsEnabled) {"), "the sink is gated on the debug-diagnostics gate")
+        assertFalse(
+            gateWindow.contains("factualCorpusEnabled") || gateWindow.contains("recordDecisionData"),
+            "the sink is not gated on the factual-corpus setting",
+        )
+        // And the debug-diagnostics gate is exactly a debug build or Debug Mode.
+        assertTrue(
+            campaign.contains("val debugDiagnosticsEnabled: Boolean = com.steve1316.uma_android_automation.BuildConfig.DEBUG || game.debugMode"),
+            "the debug gate is a debug build or Debug Mode",
+        )
         assertFalse(sink.contains("getBooleanSetting") || sink.contains("SettingsHelper"), "the sink introduces no setting")
     }
 
