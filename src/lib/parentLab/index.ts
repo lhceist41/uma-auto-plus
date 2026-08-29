@@ -22,6 +22,8 @@ export * from "./targetBuild.ts"
 export * from "./parentCandidate.ts"
 export * from "./parentPairing.ts"
 export * from "./affinityAdvisor.ts"
+export * from "./capacityTypes.ts"
+export * from "./capacityEvidence.ts"
 export { buildVeteranLibrary } from "./buildVeteranLibrary.ts"
 export {
     canonicalCareerEvidence,
