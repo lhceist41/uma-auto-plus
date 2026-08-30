@@ -50,6 +50,7 @@ import {
     type RetentionGateReason,
     type RetentionKeepReason,
     type RetentionRiskReason,
+    type ReplacementEvidenceProvenance,
     type RetentionShadowReport,
     type RetentionState,
     type RetentionStateCounts,
@@ -446,6 +447,18 @@ export function buildRetentionShadowReport(input: RetentionAdvisorInput): Retent
     })
 
     const counts = Object.fromEntries(RETENTION_STATES.map((s) => [s, recommendations.filter((r) => r.state === s).length])) as RetentionStateCounts
+    // Provenance is a pure function of input.library: null library (no corpus supplied) -> null; a
+    // supplied corpus -> its library diagnostics, even when it built zero confirmed Veterans. The two
+    // corpus-provenance fields are library-owned, so no second evidence source is consulted here.
+    const replacementEvidence: ReplacementEvidenceProvenance | null = library
+        ? {
+              confirmedVeterans: library.diagnostics.confirmedVeterans,
+              traineeCount: library.diagnostics.traineeCount,
+              identityCollisions: library.diagnostics.identityCollisions,
+              appVersions: library.diagnostics.appVersions,
+              newestObservationTs: library.diagnostics.newestObservationTs,
+          }
+        : null
     return {
         schema: PARENTLAB_RETENTION_SCHEMA,
         schemaVersion: PARENTLAB_RETENTION_SCHEMA_VERSION,
@@ -458,5 +471,6 @@ export function buildRetentionShadowReport(input: RetentionAdvisorInput): Retent
         scarcity,
         recommendations: [...recommendations].sort((a, b) => a.scanIndex - b.scanIndex),
         inactiveRules: INACTIVE_RULES,
+        replacementEvidence,
     }
 }

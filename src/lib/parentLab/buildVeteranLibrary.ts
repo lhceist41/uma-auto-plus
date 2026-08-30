@@ -215,6 +215,12 @@ export function buildVeteranLibrary(corpus: VeteranCorpusInput): VeteranLibrary 
 
     const malformedSparkRows = corpus.sparks.reduce((sum, s) => sum + s.droppedRows, 0)
 
+    // Corpus provenance: describes the SUPPLIED parsed outcomes, not the admitted-Veteran subset, so it
+    // is derived before finalKeptRecord filtering. appVersions is distinct + deterministically sorted;
+    // newestObservationTs is the max finite `ts` (reduce, not spread, to stay safe on large corpora).
+    const appVersions = [...new Set(corpus.outcomes.map((o) => o.app).filter((a): a is string => typeof a === "string" && a.length > 0))].sort()
+    const newestObservationTs = corpus.outcomes.reduce<number | null>((max, o) => (typeof o.ts === "number" && Number.isFinite(o.ts) && (max === null || o.ts > max) ? o.ts : max), null)
+
     let keptCareerInstances = 0
     let realKeptInstances = 0
     let finalizeOnlyObservations = 0
@@ -298,6 +304,8 @@ export function buildVeteranLibrary(corpus: VeteranCorpusInput): VeteranLibrary 
         traineeCount: new Set(veterans.map((v) => v.trainee)).size,
         categoryCoverage: coverageOf(veterans),
         identityCollisions,
+        appVersions,
+        newestObservationTs,
     }
 
     return { schema: PARENTLAB_SCHEMA, schemaVersion: PARENTLAB_SCHEMA_VERSION, veterans, diagnostics }

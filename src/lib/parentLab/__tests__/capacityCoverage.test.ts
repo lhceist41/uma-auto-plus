@@ -147,6 +147,7 @@ function report(recs: VeteranRetentionRecommendation[], o: Partial<RetentionShad
         },
         recommendations: recs,
         inactiveRules: [],
+        replacementEvidence: null,
         ...o,
     }
 }

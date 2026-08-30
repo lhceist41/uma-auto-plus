@@ -26,8 +26,13 @@ export const PARENTLAB_RETENTION_SCHEMA = "parent_lab_retention_shadow" as const
  * document was built against. Nothing that existed at version 1 changed meaning, but a version-1
  * document is missing safety-critical identity evidence, so a consumer that needs it must reject
  * rather than infer.
+ *
+ * Version 3 adds `replacementEvidence`: explicit replacement/rebuildability provenance so a consumer
+ * can distinguish "no career corpus was supplied" (null) from "a corpus was supplied but built into an
+ * empty or unusable library" (non-null, with `confirmedVeterans` possibly 0). Nothing that existed at
+ * version 2 changed meaning.
  */
-export const PARENTLAB_RETENTION_SCHEMA_VERSION = 2 as const
+export const PARENTLAB_RETENTION_SCHEMA_VERSION = 3 as const
 
 /**
  * The recommendation states, in the fixed precedence order the engine resolves them.
@@ -346,6 +351,22 @@ export interface InactiveRuleNote {
 /** Counts by state, for the summary document. */
 export type RetentionStateCounts = Readonly<Record<RetentionState, number>>
 
+/**
+ * Replacement/rebuildability provenance for the whole document: what career corpus stood behind the
+ * replacement-difficulty bands. On `RetentionShadowReport` this is null when no corpus was supplied and
+ * non-null when one was, even if that corpus built into an empty library. The three counts are the
+ * library's own diagnostics; `appVersions` and `newestObservationTs` describe the SUPPLIED parsed
+ * corpus, not just the admitted Veterans, so a corpus that yields zero Veterans still reports the
+ * versions and timestamps it actually carried.
+ */
+export interface ReplacementEvidenceProvenance {
+    readonly confirmedVeterans: number
+    readonly traineeCount: number
+    readonly identityCollisions: number
+    readonly appVersions: readonly string[]
+    readonly newestObservationTs: number | null
+}
+
 /** The shadow document: one target profile's recommendations over one roster snapshot. */
 export interface RetentionShadowReport {
     readonly schema: typeof PARENTLAB_RETENTION_SCHEMA
@@ -368,4 +389,10 @@ export interface RetentionShadowReport {
     readonly scarcity: FactorScarcityIndex
     readonly recommendations: readonly VeteranRetentionRecommendation[]
     readonly inactiveRules: readonly InactiveRuleNote[]
+    /**
+     * Replacement-evidence provenance, or null when no career corpus was supplied. Non-null means a
+     * corpus was supplied and built into the library, even one that yielded zero confirmed Veterans, so
+     * a consumer can tell "no corpus" from "corpus supplied but empty/unusable".
+     */
+    readonly replacementEvidence: ReplacementEvidenceProvenance | null
 }

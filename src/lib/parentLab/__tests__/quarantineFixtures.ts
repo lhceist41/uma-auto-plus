@@ -134,6 +134,7 @@ export function reportsFor(scanId: string, specs: readonly VetSpec[], options: S
         },
         recommendations: recs,
         inactiveRules: [],
+        replacementEvidence: null,
     }))
 }
 

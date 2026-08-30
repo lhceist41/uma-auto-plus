@@ -6,6 +6,7 @@ import { buildRosterSnapshots, parseRosterScanRecords } from "../roster.ts"
 import { buildRetentionShadowReport, evaluateDominance, INACTIVE_RULES } from "../retentionAdvisor.ts"
 import { buildFactorScarcityIndex, buildRetentionEvidence, observedUniqueFactorKeys, replacementSummary } from "../retentionEvidence.ts"
 import { targetDimensions, TARGET_DIMENSION_NAMES, TARGET_PROFILES } from "../retentionTargets.ts"
+import { PARENTLAB_RETENTION_SCHEMA_VERSION } from "../retentionTypes.ts"
 import type { RetentionShadowReport, VeteranRetentionRecommendation } from "../retentionTypes.ts"
 
 // Every fixture goes through the real parse paths - roster rows and inspiration captures as JSONL,
@@ -527,6 +528,112 @@ describe("PL-R2 recommendation gates", () => {
         expect(report.counts.UNKNOWN).toBe(2)
         expect(report.recommendations.every((r) => r.confidence === "INSUFFICIENT")).toBe(true)
         expect(report.recommendations.every((r) => r.gateReasons.includes("ROSTER_SNAPSHOT_UNTRUSTED"))).toBe(true)
+    })
+})
+
+describe("PL-R2 replacement-evidence provenance (schema v3)", () => {
+    const threeEntries = [
+        rosterEntry({ scanIndex: 0, rosterFingerprint: "fp-0" }),
+        rosterEntry({ scanIndex: 1, rosterFingerprint: "fp-1" }),
+        rosterEntry({ scanIndex: 2, rosterFingerprint: "fp-2" }),
+    ]
+
+    /** Builds a report over `entries` with an explicit library (null = no corpus supplied). Reconcile
+     * still needs a library object, so a null library reconciles against an empty one - which is what
+     * "no careers" means - while the advisor itself receives the null. */
+    function reportWithLibrary(entries: readonly string[], library: ReturnType<typeof buildVeteranLibrary> | null): RetentionShadowReport {
+        const parsedRoster = parseRosterScanRecords([rosterHeader(entries.length), ...entries].join("\n"), "roster_scan.jsonl")
+        const snapshot = buildRosterSnapshots(parsedRoster)[0]
+        const reconciliation = reconcileRoster(library ?? buildVeteranLibrary({ outcomes: [], sparks: [] }), snapshot)
+        const evidence = buildRetentionEvidence(snapshot, new Map(), reconciliation)
+        return buildRetentionShadowReport({ evidence, library, reconciliation, profile: TARGET_PROFILES.GENERAL_INHERITANCE })
+    }
+
+    /** A completed career carrying an explicit producer version and observation timestamp. */
+    function careerWith(trainee: string, stats: { spd: number; sta: number; pwr: number; grt: number; wit: number }, fans: number, extra: { app?: string; ts: number }): string[] {
+        return [
+            JSON.stringify({ result: "BREAKPOINT_REACHED", outcome: "COMPLETED", trainee, scenario: "URA_Finale", turn: 75, ts: extra.ts, app: extra.app, fans, ...stats, skillPts: 30 }),
+            JSON.stringify({ type: "sparks", phase: "kept", ts: extra.ts, rows: [{ name: "Speed", stars: 1, kind: "stat" }] }),
+        ]
+    }
+
+    it("A. no career corpus: schema v3, replacementEvidence null, truthful basis, state unchanged vs empty library", () => {
+        const nullReport = reportWithLibrary(threeEntries, null)
+        expect(PARENTLAB_RETENTION_SCHEMA_VERSION).toBe(3)
+        expect(nullReport.schemaVersion).toBe(3)
+        expect(nullReport.replacementEvidence).toBeNull()
+        for (const r of nullReport.recommendations) {
+            expect(r.replacement.basis).toBe("no historical library supplied")
+            expect(r.gateReasons).toContain("REPLACEMENT_DIFFICULTY_UNKNOWN")
+        }
+        // The truthfulness switch (null library vs an empty *built* library) must not move any state or
+        // count: only the per-entry basis text and the provenance field itself are allowed to differ.
+        const emptyReport = reportWithLibrary(threeEntries, buildVeteranLibrary({ outcomes: [], sparks: [] }))
+        expect(emptyReport.counts).toEqual(nullReport.counts)
+        for (const r of nullReport.recommendations) {
+            const e = emptyReport.recommendations.find((x) => x.rosterFingerprint === r.rosterFingerprint)
+            expect(e?.state).toBe(r.state)
+        }
+        // An empty *built* library is the bound-but-empty case, so its provenance is present, not null.
+        expect(emptyReport.replacementEvidence).not.toBeNull()
+        expect(emptyReport.replacementEvidence?.confirmedVeterans).toBe(0)
+    })
+
+    it("B. careers bound: provenance mirrors library diagnostics; versions distinct + sorted; ts is the max; order-independent", () => {
+        // Versions supplied out of order and with a duplicate; timestamps deliberately out of order.
+        const careers = [
+            careerWith("Taiki_Shuttle", { spd: 900, sta: 700, pwr: 650, grt: 600, wit: 500 }, 1, { app: "1.4.0", ts: T - 5000 }),
+            careerWith("Taiki_Shuttle", { spd: 890, sta: 690, pwr: 640, grt: 590, wit: 490 }, 2, { app: "1.3.7", ts: T - 1000 }),
+            careerWith("Sakura_Bakushin_O", { spd: 880, sta: 680, pwr: 630, grt: 580, wit: 480 }, 3, { app: "1.3.7", ts: T - 9000 }),
+            careerWith("Mejiro_McQueen", { spd: 870, sta: 670, pwr: 620, grt: 570, wit: 470 }, 4, { app: "1.3.8", ts: T - 200 }),
+        ]
+        const corpus = parseCorpus(careers.flat().join("\n"), "careers.jsonl")
+        const library = buildVeteranLibrary({ outcomes: corpus.outcomes, sparks: corpus.sparks })
+        expect(library.diagnostics.appVersions).toEqual(["1.3.7", "1.3.8", "1.4.0"])
+        expect(library.diagnostics.newestObservationTs).toBe(T - 200)
+        expect(library.diagnostics.identityCollisions).toBe(0)
+
+        // Provenance is order-independent, exactly like the rest of the library.
+        const reversed = buildVeteranLibrary({ outcomes: [...corpus.outcomes].reverse(), sparks: [...corpus.sparks].reverse() })
+        expect(reversed.diagnostics.appVersions).toEqual(library.diagnostics.appVersions)
+        expect(reversed.diagnostics.newestObservationTs).toBe(library.diagnostics.newestObservationTs)
+
+        const report = reportWithLibrary(threeEntries, library)
+        expect(report.replacementEvidence).toEqual({
+            confirmedVeterans: library.diagnostics.confirmedVeterans,
+            traineeCount: library.diagnostics.traineeCount,
+            identityCollisions: library.diagnostics.identityCollisions,
+            appVersions: ["1.3.7", "1.3.8", "1.4.0"],
+            newestObservationTs: T - 200,
+        })
+    })
+
+    it("C. bound-but-empty: non-null provenance with confirmedVeterans 0, still describing the parsed outcomes", () => {
+        // Outcome records with declared app/ts but NO kept spark set: parsed, but no confirmed Veteran.
+        const outcomeOnly = [
+            JSON.stringify({ result: "UNHANDLED_EXCEPTION", outcome: "INCOMPLETE", trainee: "Taiki_Shuttle", scenario: "URA_Finale", turn: 40, ts: T - 3000, app: "9.9.9", fans: 1, spd: 1, sta: 1, pwr: 1, grt: 1, wit: 1, skillPts: 0 }),
+            JSON.stringify({ result: "UNHANDLED_EXCEPTION", outcome: "INCOMPLETE", trainee: "Taiki_Shuttle", scenario: "URA_Finale", turn: 41, ts: T - 100, app: "9.9.8", fans: 2, spd: 2, sta: 2, pwr: 2, grt: 2, wit: 2, skillPts: 0 }),
+        ].join("\n")
+        const corpus = parseCorpus(outcomeOnly, "careers.jsonl")
+        const library = buildVeteranLibrary({ outcomes: corpus.outcomes, sparks: corpus.sparks })
+        expect(library.diagnostics.confirmedVeterans).toBe(0)
+        expect(library.diagnostics.appVersions).toEqual(["9.9.8", "9.9.9"])
+        expect(library.diagnostics.newestObservationTs).toBe(T - 100)
+
+        const report = reportWithLibrary(threeEntries, library)
+        expect(report.replacementEvidence).not.toBeNull()
+        expect(report.replacementEvidence?.confirmedVeterans).toBe(0)
+        expect(report.replacementEvidence?.appVersions).toEqual(["9.9.8", "9.9.9"])
+        expect(report.replacementEvidence?.newestObservationTs).toBe(T - 100)
+    })
+
+    it("C2. truly empty corpus: non-null provenance, empty versions, null timestamp, never collapses to null", () => {
+        const library = buildVeteranLibrary({ outcomes: [], sparks: [] })
+        const report = reportWithLibrary(threeEntries, library)
+        expect(report.replacementEvidence).not.toBeNull()
+        expect(report.replacementEvidence?.confirmedVeterans).toBe(0)
+        expect(report.replacementEvidence?.appVersions).toEqual([])
+        expect(report.replacementEvidence?.newestObservationTs).toBeNull()
     })
 })
 

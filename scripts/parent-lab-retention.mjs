@@ -176,6 +176,16 @@ function renderReport(report, examples) {
         lines.push(`    A factor seen on one of ${s.capturedTrusted} captured Veterans is NOT a factor that exists once`)
         lines.push(`    among ${s.identifiedRosterEntries} owned Veterans. No ACCOUNT_UNIQUE claim is made below.`)
     }
+    lines.push("")
+    lines.push("  Replacement evidence")
+    const re = report.replacementEvidence
+    if (!re) {
+        lines.push("    NOT SUPPLIED  (no career corpus supplied)")
+    } else {
+        lines.push(`    BOUND  confirmedVeterans=${re.confirmedVeterans}  traineeCount=${re.traineeCount}  identityCollisions=${re.identityCollisions}`)
+        lines.push(`    appVersions           ${re.appVersions.length ? re.appVersions.join(", ") : "(none declared)"}`)
+        lines.push(`    newestObservationTs   ${re.newestObservationTs !== null ? new Date(re.newestObservationTs).toISOString() : "none"}`)
+    }
 
     const section = (title, rows, describe) => {
         if (rows.length === 0) return
@@ -254,6 +264,7 @@ function summaryOf(reports, inventory) {
             distinctFactors: reports[0].scarcity.entries.length,
         },
         targets: reports.map((r) => ({ targetProfile: r.targetProfile, counts: r.counts })),
+        replacementEvidence: reports[0].replacementEvidence,
         protection: inventory
             ? { protectionScanId: inventory.protectionScanId, compatible: inventory.compatible, defects: inventory.defects, counts: inventory.counts }
             : null,
@@ -286,16 +297,21 @@ function main(argv) {
     }
 
     let parsed
-    let library
+    // library stays null when no career corpus was supplied, so replacementEvidence can distinguish
+    // "no corpus" from "corpus supplied but empty". A supplied --careers always yields a non-null
+    // library, even one that admits zero Veterans.
+    let library = null
     let inspirationIndex = new Map()
     let protectionRecord = null
     try {
         parsed = parseRosterScanRecords(readable("--roster", opts.roster), opts.roster)
         if (opts.inspiration) inspirationIndex = buildInspirationIndex(parseInspirationRecords(readable("--inspiration", opts.inspiration), opts.inspiration))
         if (opts.protection) protectionRecord = latestTrustedProtectionRecord(parseProtectionRecords(readable("--protection", opts.protection), opts.protection))
-        const corpus = opts.careers ? parseCorpus(readable("--careers", opts.careers), opts.careers) : { outcomes: [], sparks: [] }
         const lineageEvents = opts.lineage ? parseLineageRecords(readable("--lineage", opts.lineage), opts.lineage) : []
-        library = buildVeteranLibrary({ outcomes: corpus.outcomes, sparks: corpus.sparks, lineageEvents })
+        if (opts.careers) {
+            const corpus = parseCorpus(readable("--careers", opts.careers), opts.careers)
+            library = buildVeteranLibrary({ outcomes: corpus.outcomes, sparks: corpus.sparks, lineageEvents })
+        }
     } catch (e) {
         console.error(e instanceof Error ? e.message : String(e))
         return 2
@@ -312,7 +328,9 @@ function main(argv) {
         return 2
     }
 
-    const reconciliation = reconcileRoster(library, snapshot)
+    // reconcileRoster needs a library object; with no career corpus an empty one resolves every entry
+    // to ROSTER_ONLY, which is exactly what "no careers" means. The advisor still receives library=null.
+    const reconciliation = reconcileRoster(library ?? buildVeteranLibrary({ outcomes: [], sparks: [] }), snapshot)
     const inventory = buildProtectionInventory(protectionRecord, snapshot)
     const evidence = buildRetentionEvidence(snapshot, inspirationIndex, reconciliation, inventory.byFingerprint)
     const manualProtect = new Set(opts.protect)

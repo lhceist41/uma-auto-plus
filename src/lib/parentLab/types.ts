@@ -247,6 +247,17 @@ export interface VeteranLibraryDiagnostics {
     readonly categoryCoverage: SparkCategoryCoverage
     /** Distinct canonical serializations that hash-collided onto one veteranId (expected 0). */
     readonly identityCollisions: number
+    /**
+     * Distinct declared producer (app) versions across the SUPPLIED parsed outcome corpus, sorted.
+     * Corpus provenance, not an admitted-Veteran fact: every parsed outcome record's non-empty `app`
+     * counts, including careers that never became a Veteran. `[]` when no record declares a version.
+     */
+    readonly appVersions: readonly string[]
+    /**
+     * Newest finite outcome observation timestamp (`ts`) across the SUPPLIED parsed outcome corpus, or
+     * null when no record carries one. Corpus provenance, deterministic, never a wall-clock read.
+     */
+    readonly newestObservationTs: number | null
 }
 
 /** The built shadow library: deterministic, sorted, duplicate-safe, with diagnostics. */
