@@ -85,8 +85,8 @@ It is stamped on every apply precisely so a strict floor cannot carry over to th
 `trainingEvent.supportEventOverrides: {}` and `trainingEvent.scenarioEventOverrides: {}` do not mean
 "no overrides". When they arrive empty, the apply path deliberately **preserves** the user's
 existing picks, because those maps are deck- and scenario-specific rather than character-specific.
-Filling them in "helpfully" clobbers whatever the user configured. Leave them empty unless you
-intend to overwrite.
+Filling them in "helpfully" overwrites the user's choices for any event keys the preset names.
+Leave them empty unless you intend to do that.
 
 ### `training.focusOnSparkStatTarget`
 
