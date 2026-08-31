@@ -2,7 +2,7 @@
 
 All notable changes to **UMA Auto+** are documented in this file.
 
-This project is a fork of [steve1316/uma-android-automation](https://github.com/steve1316/uma-android-automation). The fork baseline is upstream **v5.4.8**. A summary of all features added on top of that baseline can be found at the bottom of this file.
+This project is a fork of [steve1316/uma-android-automation](https://github.com/steve1316/uma-android-automation). The fork baseline is upstream **v5.4.8**. For a summary of what this fork adds on top of that baseline, see [README.md](README.md).
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
@@ -526,46 +526,6 @@ A big reliability + content release. The bot is dramatically more stable on MuMu
 
 ### Changed
 - README updated to clearly credit the upstream project and link back to steve1316/uma-android-automation.
-
----
-
-## Custom features vs. upstream [steve1316/uma-android-automation](https://github.com/steve1316/uma-android-automation) (baseline: v5.4.8)
-
-The fork already differed substantially from upstream v5.4.8 on day one. The list below is not exhaustive, but captures the major differences you'd notice compared to running the original:
-
-### Architecture / app shell
-- Rebranded to **UMA Auto+** (new name, icon, splash, package id `com.lhceist41.uma_auto_plus`).
-- Swapped the icon library to fix a crash on first launch.
-- Reduced logging load so long runs don't crash the app.
-- Automatic, signed APK builds published to GitHub on every release.
-- In-app update checker polling the GitHub releases feed.
-
-### Multi-run queue (entirely new)
-- Queue 2–20 consecutive career runs unattended, mixing scenarios freely — the between-run navigator pages the Scenario Select carousel to each run's scenario.
-- The bot navigates itself between runs: career summary → home → scenario select → deck setup → confirmation → cinematic → training menu.
-- Queue progress is saved continuously for crash recovery and resumption.
-- Queue progress UI on the Home page with skip-run button.
-- Configurable per-run max runtime with a safety timeout (default 180 min).
-- Configurable `stopOnError` (default: continue past errors), reuse-last-launch-setup, auto-fill support deck.
-
-### Character presets (entirely new)
-- 210 built-in character presets (70 characters and outfits × 3 scenarios: Trackblazer, Unity Cup, URA Finale).
-- Searchable trainee picker on the Home page — character-grouped with per-scenario advisory chips, validation badges, and starred favorites — that deep-merges preset settings into the active profile and sets the scenario together with the preset.
-
-### Bot behaviour improvements
-- Career flow: the mood-recovery deadlock fix, the skill-buy retry cap, and cleaner per-day state resets across scenarios.
-- Racing: maiden race attempts retry after a hiccup instead of counting as done for the day, and "no maiden available today" is distinguished from "no race fits her aptitudes".
-- Trackblazer: irregular training fails safe when a button can't be clicked, and the consecutive-race count that guards the -30 stat penalty is tracked correctly across days.
-
-### Screen recognition
-- The bot recognizes several screens and buttons the original doesn't, mostly for the between-run navigation.
-- The home-screen CAREER button is detected more reliably.
-
-### Android release hardening
-- Releases are always properly signed.
-- Release builds only allow secure network connections.
-- Build configuration fixes so release builds work reliably.
-- The app identifies itself differently from the original, so both can be installed side by side.
 
 ---
 
