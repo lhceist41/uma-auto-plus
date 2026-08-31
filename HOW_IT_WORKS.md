@@ -1249,9 +1249,11 @@ Three deliberate deviations from the generic engine, all specific to this scenar
 Grand Concert ("Brighter Together Our Grand Concert", community name "Grand Live") was added to
 Global on 2026-07-22 22:00 UTC. This fork drives it end to end: the shared campaign loop handles
 everything it handles in the other scenarios, and the scenario's own two systems (the Lesson shop
-and the five concerts) are automated on top of that. A career runs unattended from the first turn
-to the spark screen, with one exception noted under the capability gate below: the launch navigator
-cannot page the Scenario Select carousel to Grand Concert yet, so the player starts the career.
+and the five concerts) are automated on top of that. The launch navigator pages the Scenario Select
+carousel to Grand Concert's logo the same way it does for URA Finale, Unity Cup, and Trackblazer,
+and the shared pre-career sequence (Legacy, Support Deck, the mandatory Quick Mode prompt) is
+implemented for it identically to other scenarios (see the Quick Mode note below for its live-proof
+status). From the first turn to the spark screen, a career runs unattended.
 
 **Canonical key and aliases.** The persistence key is `Grand Concert`. Six spellings normalize
 onto it (`Grand Concert`, `Grand Live`, `Our Grand Concert`, and the three punctuation variants
@@ -1270,14 +1272,10 @@ per career (1641 Speed was observed on a linked run), so `getScenarioStatCap` re
 and the stat reader's `maxOf(scenarioCap, manualCap)` rejection guard must never be tightened
 onto it.
 
-**Capability gate.** Run queues, trainee rotation, and automatic TP restore are unavailable for
-this scenario, enforced in `StartModule` (queue setup and `loadRotationConfig`) and mirrored in
-Home's button label. The gate is applied at READ time and never rewrites the user's stored
-settings, so switching scenarios restores them intact. The reason is not that a queue would crash:
-it is that `handleScenarioSelect` maps only URA Finale, Unity Cup, and Trackblazer onto a logo
-template and returns a non-recoverable failure for anything else, so the navigator cannot launch a
-second Grand Concert career. Lifting the gate means adding a `scenario_select_grandconcert` template
-and its branch; nothing else about a queued Grand Concert career is known to be missing.
+**Launch and queueing.** Grand Concert launches and queues like every other scenario: `handleScenarioSelect`
+maps it onto its own logo template alongside URA Finale, Unity Cup, and Trackblazer, and `StartModule`
+honors the user's stored run-queue, trainee-rotation, and TP-restore settings for it exactly as it
+does elsewhere. No scenario-specific capability gate remains.
 
 **What is automated.** Everything shared (date and turn reading, training scoring, the racing plan,
 training events, skills, career end) plus both scenario systems:
@@ -1336,8 +1334,10 @@ which is what makes a verify-after-tap possible. The choice comes from a setting
 because the options change how much of the game the player sees. `QuickModePlanner` maps the setting
 to an action and `handleQuickModePrompt` executes it: tap the configured row, verify the radio
 actually moved before confirming, then confirm. A setting the planner cannot honor hands off before
-the career starts, which costs nothing because no TP has been spent yet. This path is still
-live-unproven, because the navigator cannot reach a Grand Concert career start yet.
+the career starts, which costs nothing because no TP has been spent yet. The handler is implemented
+for Grand Concert like every other scenario, but it remains live-unproven there: every Grand Concert
+evidence career collected so far resumed an already-in-progress career rather than launching fresh
+through Start Career, so none of them exercised this prompt.
 
 **Decision engine.** `GrandConcertPolicy` scores an offer and picks what to buy. A song is valued on
 its immediate mastery bonus, its concert bonus multiplied by the turns that remain *after* the bonus
@@ -1585,8 +1585,7 @@ Text parsing wins when it is unambiguous, then the title catalog, then the cost 
 costs nothing when the leftovers cannot afford the offer but is not understood yet. Cost and balance
 cells are OCR'd at a threshold of 230, which erases the digits on the grey cost strip an unaffordable
 card renders (measured: the saved threshold dump is solid black while the crop is legible), so those
-cells get a second read at a lower cutoff. Queued Grand Concert careers need the scenario-select
-template described above.
+cells get a second read at a lower cutoff.
 
 ---
 
