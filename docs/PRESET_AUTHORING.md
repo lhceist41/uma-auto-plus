@@ -49,7 +49,8 @@ authoring:
   restored after it**, so a preset cannot own them.
 - **`trainingEvent.supportEventOverrides` and `trainingEvent.scenarioEventOverrides` preserve the
   user's values only when a preset ships them empty** -- the sentinel explained below. A preset that
-  ships a non-empty map overwrites the user's picks like any other field.
+  ships a non-empty map overwrites the user's pick for each event key it names; unnamed user picks
+  survive the merge.
 
 Two fields are stamped on every apply (absent means the default), so nothing leaks between presets:
 `skills.skillSpendObjective` (absent -> `rank`) and `training.moodFloor` (absent -> `Good`).
