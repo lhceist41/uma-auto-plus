@@ -260,43 +260,28 @@ The real function does more around that loop: it captures the skill-point check 
 
 ### Prerequisites
 
-- A fully configured settings export for the character (JSON file)
+- A known settings configuration for the trainee and scenario (an exported settings file is a convenient reference, not a requirement)
 - The character must be configured for a specific scenario (URA Finale, Unity Cup, Trackblazer, or Grand Concert)
 - Each scenario requires a separate preset (the same character plays differently in each scenario)
 
-### Method 1: Export from the app (recommended)
+### Method 1: Start from an exported settings file
 
-1. **Configure the bot** in UMA Auto+ (or the original Steve app) for the new character:
-   - Set stat prioritization order
-   - Set stat targets per distance
-   - Configure training blacklist
-   - Set up racing plan and preferences
-   - Configure skill plans (preFinals, careerComplete, skillPointCheck)
-   - Set scenario-specific overrides
-   - Configure training event overrides for the character
+1. Configure the bot in UMA Auto+ (or the original Steve app) for the trainee and
+   scenario you are building: stat prioritization, stat targets, racing plan and
+   preferences, skill plans (`skillPointCheck`, `preFinals`, `careerComplete`),
+   scenario overrides, and training event overrides.
+2. Export the configuration from Settings > Settings Management > Export Settings.
+   This writes a JSON file containing the configurable settings, as a reference.
+3. Use that JSON as a reference while adding a new object to the `characterPresets`
+   array in `src/data/characterPresets.ts`: copy the fields you configured into the
+   preset's `settings` block, and apply the required-field rules below
+   (`enablePopupCheck: false`, no `discordToken`, no `formattedSettingsString` or
+   `currentProfileName`).
 
-2. **Export settings** via Settings > Settings Management > Export Settings.
-   This produces a JSON file like `UAA-settings-2026-04-13T120000.json`.
-
-3. **Rename the file** following the naming convention:
-   ```
-   {character-name-kebab-case}-profile-{scenario-kebab-case}.json
-   ```
-   Examples:
-   - `special-week-profile-trackblazer.json`
-   - `tokai-teio-profile-unity-cup.json`
-   - `silence-suzuka-profile-ura-finale.json`
-
-4. **Place the file** in the appropriate scenario folder (the same `<YOUR_PROFILES_DIRECTORY>` referenced by the extraction script below):
-   ```
-   <YOUR_PROFILES_DIRECTORY>/Trackblazer/
-   <YOUR_PROFILES_DIRECTORY>/Unity-Cup/
-   <YOUR_PROFILES_DIRECTORY>/URA-Finale/
-   ```
-
-5. **Run the extraction script** to regenerate `characterPresets.ts` (see "Regenerating All Presets" below).
-
-6. **Rebuild the APK**.
+There is no script that turns an exported settings file into a preset entry
+automatically. The export exists so you can build and check a configuration inside
+the app before transcribing it; the exported file itself is never committed or read
+by any build step.
 
 ### Method 2: Manual entry
 
@@ -356,81 +341,39 @@ The real function does more around that loop: it captures the skill-point check 
 
 ---
 
-## Regenerating All Presets
+## Maintaining Built-in Presets
 
-If you add new JSON profile files to the source folders, you can regenerate the entire `characterPresets.ts` file using this Python script:
+`characterPresets.ts` and `presetMeta.ts` split the preset system into two jobs.
 
-```python
-import json
-import os
+- `src/data/characterPresets.ts` owns the presets themselves: `basePresets`
+  (hand-written entries), `grandConcertFrom(...)` and the `grandConcertPresets` it
+  derives from a trainee's URA Finale preset, and the `trainerAdvisories` /
+  `avoidAdvisoryFor` scenario-fit metadata. Add or edit a preset here.
+- `src/data/presetMeta.ts` owns per-character lookup and status metadata that is not
+  specific to a single preset: base-outfit resolution (`presetCharacter`,
+  `presetOutfit`, `characterBaseOutfits`) and validation status (`presetValidation`,
+  `validatedPresets`). Update this file when a trainee's outfit identity or
+  validation status changes, not when a preset's settings change.
 
-base_dir = "<YOUR_PROFILES_DIRECTORY>"
-scenarios = {
-    "Trackblazer": "Trackblazer",
-    "Unity-Cup": "Unity Cup",
-    "URA-Finale": "URA Finale",
-    "Grand-Concert": "Grand Concert",
-}
+A Grand Concert entry is usually derived rather than hand-written. Check
+`grandConcertPresets` before adding one by hand, and prefer calling
+`grandConcertFrom("<trainee>", speedTarget?)` from the trainee's URA Finale preset.
 
-presets = []
+The preset count and roster structure are not safe to determine by grepping
+`scenario:` lines. The "locks the roster totals the docs quote" test in
+`src/data/__tests__/characterPresets.test.ts` is the authority for the exact roster
+size and Grand Concert count, and the same test also enforces unique
+`name`/`scenario` keys across the whole roster. Skill and race id checks exist only
+for the specific trainees the suite explicitly covers (for example Copano Rickey
+and Grass Wonder Saintly Jade Cleric); passing `yarn test` does not prove a new
+preset's skill or race ids are valid unless a test actually covers it. Run the
+suite after any preset change.
 
-for folder_name, scenario_name in scenarios.items():
-    folder_path = os.path.join(base_dir, folder_name)
-    if not os.path.exists(folder_path):
-        continue
+After changing a preset:
 
-    for filename in sorted(os.listdir(folder_path)):
-        if not filename.endswith(".json"):
-            continue
-
-        with open(os.path.join(folder_path, filename), 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        # Extract character name from filename
-        name_part = filename.replace(f"-profile-{folder_name.lower()}.json", "")
-        char_name = " ".join(word.capitalize() for word in name_part.split("-"))
-
-        # Apply required transformations
-        if "general" in data:
-            data["general"]["enablePopupCheck"] = False
-        if "profiles" in data:
-            del data["profiles"]
-        if "discord" in data and "discordToken" in data["discord"]:
-            del data["discord"]["discordToken"]
-        if "misc" in data:
-            data["misc"].pop("formattedSettingsString", None)
-            data["misc"].pop("currentProfileName", None)
-        if "trainingEvent" in data:
-            data["trainingEvent"].pop("scenarioEventData", None)
-        if "racing" in data:
-            data["racing"].pop("racingPlanData", None)
-
-        presets.append({
-            "name": char_name,
-            "scenario": scenario_name,
-            "settings": data,
-        })
-
-# Generate TypeScript
-output = 'import { Settings } from "../context/BotStateContext"\n\n'
-output += 'export interface CharacterPreset {\n'
-output += '    name: string\n'
-output += '    scenario: string\n'
-output += '    settings: DeepPartial<Settings>\n'
-output += '}\n\n'
-output += 'export const characterPresets: CharacterPreset[] = \n'
-output += json.dumps(presets, indent=4, ensure_ascii=False)
-output += '\n'
-
-with open("<REPO_ROOT>/src/data/characterPresets.ts", 'w', encoding='utf-8') as f:
-    f.write(output)
-
-print(f"Generated {len(presets)} presets")
-```
-
-Run from the project root:
 ```bash
-python generate_presets.py
+node_modules/.bin/tsc --noEmit
+yarn test
 ```
 
 ---
