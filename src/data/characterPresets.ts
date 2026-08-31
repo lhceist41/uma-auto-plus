@@ -16347,8 +16347,9 @@ const basePresets: CharacterPreset[] = [
     },
     {
         // Super Creek (Blue Farm) - inheritance/blue-spark farming variant of the Super Creek Unity
-        // Cup preset. A straight clone of that preset with ONE change: focusOnSparkStatTarget lists
-        // all five stats instead of just Speed+Stamina. Training.kt applies its under-600 spark-rescue
+        // Cup preset. A straight clone of that preset with two changes: focusOnSparkStatTarget lists
+        // all five stats instead of just Speed+Stamina, and skillSpendObjective is "sparks" (the
+        // base preset omits it, defaulting to "rank"). Training.kt applies its under-600 spark-rescue
         // (a 2.5x score boost) only to listed stats below 600, so this variant extends the rescue to
         // Power, Guts and Wit - giving every stat a chance to finish above the 600 3-star-blue floor
         // (the blue spark's stat is drawn at random from all five). This is NOT the default
