@@ -378,26 +378,6 @@ yarn test
 
 ---
 
-## Filename Naming Convention
-
-Source JSON files must follow this pattern:
-
-```
-{character-name}-profile-{scenario}.json
-```
-
-| Part | Format | Examples |
-|------|--------|---------|
-| Character name | kebab-case (lowercase, hyphens) | `el-condor-pasa`, `special-week`, `tokai-teio` |
-| Scenario | kebab-case matching folder name | `ura-finale`, `unity-cup`, `trackblazer`, `grand-concert` |
-
-The script converts the character name from kebab-case to Title Case:
-- `el-condor-pasa` becomes `El Condor Pasa`
-- `sakura-bakushin-o` becomes `Sakura Bakushin O`
-- `matikanefukukitaru` becomes `Matikanefukukitaru`
-
----
-
 ## Building After Changes
 
 After modifying presets, rebuild the APK:
@@ -467,4 +447,3 @@ At minimum, each character preset should define:
 
 ### Character name displays incorrectly
 - The name comes from the `name` field in the preset object.
-- If using the extraction script, the name is derived from the filename. Use proper kebab-case: `my-character-name-profile-trackblazer.json`.
