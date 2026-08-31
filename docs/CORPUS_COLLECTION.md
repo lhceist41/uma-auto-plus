@@ -20,9 +20,11 @@ collector never mutates, normalizes, clears, or renames the device files.
 
 ## Before a run
 
-- **Debug Mode must be ON before the career starts.** Per-turn DecisionTrace/CareerState production is gated
-  on `BuildConfig.DEBUG || game.debugMode`. On a release build, if Debug Mode is off, no per-turn telemetry is
-  written and there is nothing to collect. The collector never toggles Debug Mode.
+- **Verify Record Decision Data is enabled before the career starts.** Per-turn DecisionTrace/CareerState
+  production is gated on `recordDecisionData || debugDiagnostics`. Record Decision Data defaults on, so a
+  release build records the factual corpus without Debug Mode; Debug Mode is not required for it. Debug Mode
+  is still required for the debug-only artifacts (the human Decision Report, `shadow_advisor`). The collector
+  never toggles either setting.
 - **Do not uninstall the app while unarchived telemetry matters.** Uninstall wipes the app external files
   directory, taking the corpus with it.
 

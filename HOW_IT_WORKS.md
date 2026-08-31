@@ -354,7 +354,7 @@ The `[DECISION]` Decision Report block above is written for a human reading one 
 
 **Where.** `files/outcomes/decisions.jsonl` under the app's external files dir, appended one record per line through the same `OutcomeCorpus` writer the career corpus uses. It is a separate file on purpose: a career writes one outcome record but roughly 75 traces, so interleaving them would bury the rows the outcome analyzer reads. The file has a byte cap (`DecisionTrace.MAX_FILE_BYTES`); past it records are dropped with one warning rather than filling the device. Nothing is rotated or deleted.
 
-**When.** Tracing rides the existing Decision Report gate: debug builds, or Debug Mode enabled in settings. There is no separate toggle. Release builds without Debug Mode allocate nothing and write nothing.
+**When.** Tracing is gated by `DecisionCorpusGate.factualCorpusEnabled()`: it records when the dedicated **Record Decision Data** setting is on (the default) or debug diagnostics are active (a debug build or Debug Mode enabled). The heavy human Decision Report block above stays strictly debug-only and is unaffected by Record Decision Data.
 
 **Versioning.** `type` is `decision_trace` and `v` is the schema version. Purely additive fields keep the current version, so a reader must ignore fields it does not know. Renaming or removing a field, or changing the meaning or units of one, bumps `v`.
 
@@ -401,7 +401,7 @@ The `[DECISION]` Decision Report block above is written for a human reading one 
 
 **What it records.** The career identity (`careerToken`, scenario, trainee, preset, queueRun, `fp`), the observed date, condition (energy, mood, statuses), the five stats, skill points, aptitudes, the three cached race-day flags, the scenario extension, and group `provenance`. It follows the same honesty rules as the decision trace: a group that was never read this career is omitted rather than filled with a default, the date components appear only when the date was actually read, and `provenance` labels each group `observed` / `unread` / `configured` / `derived`. Fans are deliberately excluded (no per-field read flag exists, so a default fan count could not be labelled observed), and no candidate, score or selection evidence appears here -- that stays decision-trace-owned.
 
-**Where and when.** `files/outcomes/career_state.jsonl`, one record per line through the same `OutcomeCorpus` writer with its own byte cap, kept out of `decisions.jsonl` on purpose so each file's reader can reject the other record type. It rides the same debug / Debug-Mode gate and the same non-fatal, shadow-only policy: it is written at the pre-decision boundary, nothing in the gameplay path reads it, and a serialization or append failure is swallowed so a telemetry fault can never change a turn.
+**Where and when.** `files/outcomes/career_state.jsonl`, one record per line through the same `OutcomeCorpus` writer with its own byte cap, kept out of `decisions.jsonl` on purpose so each file's reader can reject the other record type. It rides the same `factualCorpusEnabled` gate (see 5.2) and the same non-fatal, shadow-only policy: it is written at the pre-decision boundary, nothing in the gameplay path reads it, and a serialization or append failure is swallowed so a telemetry fault can never change a turn.
 
 **The `seq` join key.** Each career-state record carries a per-career monotonic `seq`, allocated exactly once when the build opportunity for a new logical decision turn is consumed (so same-turn re-ticks do not advance it, and it does not depend on date OCR). The same `seq` is added as an optional additive field on the newly-emitted decision-trace records for that turn. Offline analysis joins the two streams by **`careerToken + seq`**, never by the observed turn or date: the turn number is a diagnostic that is absent whenever date OCR failed, so it cannot be the join authority. A resumed career starts a new `careerToken`, so restarting `seq` at 1 keeps the composite key unique. Because the sequence is retained on the campaign and read at emit time -- which happens after the action has already re-armed the turn latch for the next turn -- a trace stamps its own turn's `seq` rather than the next turn's.
 
@@ -1415,7 +1415,8 @@ same monotonic seq the `decision_trace` and `career_state` streams stamp), which
 committed training. `turn` alone is not a unique key: the Pre-Debut UI has no per-turn calendar date,
 so every Pre-Debut training resolves to the same canonical turn (the Debut race turn) and those lines
 share one `turn=`. Order and join committed records by `seq`, not `turn` alone; it is present whenever
-the decision streams exist (a debug build or Debug Mode) and omitted otherwise. Offline, joining these
+the decision streams exist (Record Decision Data on, the default, or debug diagnostics active) and
+omitted otherwise. Offline, joining these
 records by `seq` reconstructs each color's income timeline against song demand across a cycle and lines
 them up with the decision streams for the same action.
 
