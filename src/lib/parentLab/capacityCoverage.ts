@@ -19,6 +19,7 @@ import {
     PARENTLAB_CAPACITY_COVERAGE_SCHEMA,
     PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION,
     PERMANENT_COVERAGE_LIMITS,
+    WHITE_SUBFAMILIES,
     emptyCoverageExposureCounts,
     factorSlotKey,
     type CapacityCoverageDocument,
@@ -32,6 +33,9 @@ import {
     type LastCopyRisk,
     type TargetCoverageSlot,
     type VeteranCoverageExposure,
+    type WhiteFactorDomain,
+    type WhiteSubfamily,
+    type WhiteSubfamilyCoverage,
 } from "./capacityCoverageTypes.ts"
 import { PARENTLAB_CAPACITY_SCHEMA_VERSION } from "./capacityTypes.ts"
 import { resolveTargetProfile } from "./retentionTargets.ts"
@@ -59,13 +63,33 @@ function limitReason(code: CoverageLimitCode, report: RetentionShadowReport): st
     }
 }
 
-/** Assembles the limits array: conditional coverage limits first, then the permanent v1 limits. */
-function buildLimits(report: RetentionShadowReport): readonly CoverageLimit[] {
+/** Assembles the limits array: conditional coverage limits first, then the base limits. When a white
+ * factor domain is available, WHITE_SUBFAMILY_NOT_AVAILABLE is dropped since white slots are classified. */
+function buildLimits(report: RetentionShadowReport, whiteDomainAvailable: boolean): readonly CoverageLimit[] {
     const codes: CoverageLimitCode[] = []
     if (!report.scarcity.accountWide) codes.push("COVERAGE_INCOMPLETE")
     if (report.scarcity.unresolvedFactorReads > 0) codes.push("UNRESOLVED_FACTOR_READS")
-    for (const code of PERMANENT_COVERAGE_LIMITS) codes.push(code)
+    for (const code of PERMANENT_COVERAGE_LIMITS) {
+        if (code === "WHITE_SUBFAMILY_NOT_AVAILABLE" && whiteDomainAvailable) continue
+        codes.push(code)
+    }
     return codes.map((code) => ({ code, reason: limitReason(code, report) }))
+}
+
+/** Upper-cased canonical-name lookup per white family, matching factorKey()'s uppercase convention. */
+function whiteFamilySets(domain: WhiteFactorDomain): Record<WhiteSubfamily, ReadonlySet<string>> {
+    return {
+        race: new Set(domain.race.map((name) => name.toUpperCase())),
+        scenario: new Set(domain.scenario.map((name) => name.toUpperCase())),
+        skill: new Set(domain.skill.map((name) => name.toUpperCase())),
+    }
+}
+
+/** A fully-zeroed per-family exposure histogram, keyed in the fixed WHITE_SUBFAMILIES order. */
+function emptyWhiteExposureByFamily(): Record<WhiteSubfamily, Record<CoverageExposure, number>> {
+    const out = {} as Record<WhiteSubfamily, Record<CoverageExposure, number>>
+    for (const family of WHITE_SUBFAMILIES) out[family] = emptyCoverageExposureCounts()
+    return out
 }
 
 /**
@@ -102,12 +126,14 @@ interface SlotAccumulator {
  * closed on an unsupported one. When the roster snapshot is untrusted, the document is usable:false with
  * an empty ledger and poolSize 0 - it must never render as "nothing is at risk".
  */
-export function buildCapacityCoverage(report: RetentionShadowReport): CapacityCoverageDocument {
+export function buildCapacityCoverage(report: RetentionShadowReport, domain?: WhiteFactorDomain): CapacityCoverageDocument {
     // Slice 1 owns schema/version validation and the admission verdicts. Consume both verbatim.
     const triage = buildCapacityTriage(report)
     const rosterTrusted = triage.evidenceSummary.rosterTrusted
     const claimStrength: CoverageClaimStrength = report.scarcity.accountWide ? "ACCOUNT" : "OBSERVED_LOWER_BOUND"
-    const limits = buildLimits(report)
+    const whiteFamilies = domain ? whiteFamilySets(domain) : null
+    const whiteDomainAvailable = whiteFamilies !== null
+    const limits = buildLimits(report, whiteDomainAvailable)
 
     const base = {
         schema: PARENTLAB_CAPACITY_COVERAGE_SCHEMA,
@@ -143,6 +169,14 @@ export function buildCapacityCoverage(report: RetentionShadowReport): CapacityCo
             exposures: [],
             factorExposureCounts: emptyCoverageExposureCounts(),
             characterExposureCounts: emptyCoverageExposureCounts(),
+            whiteSubfamilyCoverage: {
+                available: whiteDomainAvailable,
+                exposureByFamily: emptyWhiteExposureByFamily(),
+                unresolved: 0,
+                ambiguous: 0,
+                unresolvedNames: [],
+                ambiguousNames: [],
+            },
         }
     }
 
@@ -185,6 +219,13 @@ export function buildCapacityCoverage(report: RetentionShadowReport): CapacityCo
     // each with the carrier partition above. observedCarriers is the scarcity carrier count at the floor.
     const factorSlots: FactorCoverageSlot[] = []
     const factorExposureCounts = emptyCoverageExposureCounts()
+    // White subfamily classification, populated only when a domain is supplied. Exposure is tallied per
+    // slot (a factor at N stars occupies a slot at each floor <= N); the name lists dedupe by canonical name.
+    const whiteExposureByFamily = emptyWhiteExposureByFamily()
+    let whiteUnresolved = 0
+    let whiteAmbiguous = 0
+    const whiteUnresolvedNames = new Set<string>()
+    const whiteAmbiguousNames = new Set<string>()
     // slotKey -> the sole admitted carrier's scanIndex, for the per-Veteran sole-carrier lists.
     const soleFactorCarrierByScan = new Map<number, string[]>()
     // slotKey -> admitted carrier scanIndices, for shared fully-exposed participation and exposureByKind.
@@ -199,11 +240,26 @@ export function buildCapacityCoverage(report: RetentionShadowReport): CapacityCo
             const exposure = classifyExposure(observed, acc.admitted, acc.anchored)
             factorExposureCounts[exposure]++
             const characterBound = entry.kind === "unique"
+            let whiteSubfamily: WhiteSubfamily | null = null
+            if (whiteFamilies && entry.kind === "white") {
+                const name = entry.canonicalName.toUpperCase()
+                const matches = WHITE_SUBFAMILIES.filter((family) => whiteFamilies[family].has(name))
+                if (matches.length === 1) {
+                    whiteSubfamily = matches[0]
+                    whiteExposureByFamily[matches[0]][exposure]++
+                } else if (matches.length === 0) {
+                    whiteUnresolved++
+                    whiteUnresolvedNames.add(entry.canonicalName)
+                } else {
+                    whiteAmbiguous++
+                    whiteAmbiguousNames.add(entry.canonicalName)
+                }
+            }
             factorSlots.push({
                 factorKey: entry.factorKey,
                 kind: entry.kind,
                 canonicalName: entry.canonicalName,
-                whiteSubfamily: null,
+                whiteSubfamily,
                 characterBound,
                 starFloor: floor as CoverageStarFloor,
                 observedCarriers: observed,
@@ -311,6 +367,15 @@ export function buildCapacityCoverage(report: RetentionShadowReport): CapacityCo
         exposures.push(buildVeteranExposure(rec, admission, soleFactorCarrierByScan, sharedFactorSlotMembers, soleCharacterScan))
     }
 
+    const whiteSubfamilyCoverage: WhiteSubfamilyCoverage = {
+        available: whiteDomainAvailable,
+        exposureByFamily: whiteExposureByFamily,
+        unresolved: whiteUnresolved,
+        ambiguous: whiteAmbiguous,
+        unresolvedNames: [...whiteUnresolvedNames].sort(),
+        ambiguousNames: [...whiteAmbiguousNames].sort(),
+    }
+
     return {
         ...base,
         usable: true,
@@ -323,6 +388,7 @@ export function buildCapacityCoverage(report: RetentionShadowReport): CapacityCo
         exposures,
         factorExposureCounts,
         characterExposureCounts,
+        whiteSubfamilyCoverage,
     }
 }
 

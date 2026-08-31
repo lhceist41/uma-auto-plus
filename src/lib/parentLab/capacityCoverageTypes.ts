@@ -25,9 +25,10 @@ import type { CapacityAdmission } from "./capacityTypes.ts"
 /** Schema discriminator for the coverage document. Distinct from every other ParentLab schema so a
  * persistence reader cannot confuse it with a retention, Slice 1 capacity, or quarantine document. */
 export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA = "parent_lab_capacity_coverage" as const
-/** Version 1: coverage exposure accounting only. Valuation is deferred until the shared Factor Value
- * Domain lands, so no white subfamily, affinity, rebuildability or active-racer utility is modelled. */
-export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION = 1 as const
+/** Version 2: additively classifies each white factor slot into a skill/race/scenario subfamily when a
+ * white factor domain is supplied, and reports the per-family exposure breakdown. Valuation (affinity,
+ * rebuildability, active-racer utility) is still deferred. */
+export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION = 2 as const
 /** Human-readable document kind, carried alongside the schema for defense in depth. */
 export const PARENTLAB_CAPACITY_COVERAGE_KIND = "CAPACITY_COVERAGE_EXPOSURE" as const
 
@@ -65,6 +66,11 @@ export type CoverageExposure = (typeof COVERAGE_EXPOSURES)[number]
 export const COVERAGE_CLAIM_STRENGTHS = ["ACCOUNT", "OBSERVED_LOWER_BOUND"] as const
 export type CoverageClaimStrength = (typeof COVERAGE_CLAIM_STRENGTHS)[number]
 
+/** The white factor families a white slot is classified into. A fixed, neutral (alphabetical) order,
+ * never sorted by exposure or count, so the subfamily breakdown serializes identically across rebuilds. */
+export const WHITE_SUBFAMILIES = ["race", "scenario", "skill"] as const
+export type WhiteSubfamily = (typeof WHITE_SUBFAMILIES)[number]
+
 /**
  * A per-Veteran, coverage-structural risk classification. An enum, never a score and never an order:
  * two Veterans with the same value are not ranked against each other by it.
@@ -90,7 +96,8 @@ export const COVERAGE_LIMITS = [
     "COVERAGE_INCOMPLETE",
     /** Some self-factor reads did not resolve onto the canonical domain. Conditional. */
     "UNRESOLVED_FACTOR_READS",
-    /** White factor subfamily is not derived in v1; every white slot reports whiteSubfamily = null. */
+    /** No white factor domain was supplied, so white subfamily is not derived and every white slot
+     * reports whiteSubfamily = null. Dropped when a domain is available. Conditional. */
     "WHITE_SUBFAMILY_NOT_AVAILABLE",
     /** Affinity is not decoded in this repository and is not consumed. */
     "AFFINITY_NOT_DECODED",
@@ -105,7 +112,8 @@ export const COVERAGE_LIMITS = [
 ] as const
 export type CoverageLimitCode = (typeof COVERAGE_LIMITS)[number]
 
-/** The permanent v1 limits, always present regardless of the input. */
+/** The base coverage limits. WHITE_SUBFAMILY_NOT_AVAILABLE is dropped when a white factor domain is
+ * supplied; the rest are always present regardless of the input. */
 export const PERMANENT_COVERAGE_LIMITS: readonly CoverageLimitCode[] = [
     "WHITE_SUBFAMILY_NOT_AVAILABLE",
     "AFFINITY_NOT_DECODED",
@@ -136,8 +144,10 @@ export interface FactorCoverageSlot {
     readonly factorKey: string
     readonly kind: string
     readonly canonicalName: string
-    /** Null for every slot in v1: white factor subfamily is not derived here (WHITE_SUBFAMILY_NOT_AVAILABLE). */
-    readonly whiteSubfamily: string | null
+    /** For a white slot classified from a supplied domain, its skill/race/scenario subfamily. Null for
+     * non-white slots, for a white name that matched no family or more than one, and for every slot when
+     * no domain is supplied (WHITE_SUBFAMILY_NOT_AVAILABLE). */
+    readonly whiteSubfamily: WhiteSubfamily | null
     /** kind === "unique": a green factor is character-bound. A structural fact, not a value judgment. */
     readonly characterBound: boolean
     readonly starFloor: CoverageStarFloor
@@ -207,6 +217,34 @@ export interface VeteranCoverageExposure {
 }
 
 /**
+ * Canonical white factor names per family, as parsed from veteran_factor_domain.json. The builder matches
+ * a white slot's canonical name against these by exact membership, upper-cased the same way factorKey() is.
+ */
+export interface WhiteFactorDomain {
+    readonly skill: readonly string[]
+    readonly race: readonly string[]
+    readonly scenario: readonly string[]
+}
+
+/**
+ * White factor exposure split into skill/race/scenario subfamilies. Counts only: no weight, score, tier
+ * or ordering, and families are never sorted by count. `available` is false when no domain was supplied
+ * (every white slot stays null). White names matching no family (unresolved) or more than one (ambiguous)
+ * are counted and listed, never silently resolved.
+ */
+export interface WhiteSubfamilyCoverage {
+    readonly available: boolean
+    /** Per-family exposure histograms, keyed in the fixed WHITE_SUBFAMILIES order. */
+    readonly exposureByFamily: Readonly<Record<WhiteSubfamily, CoverageExposureCounts>>
+    /** White slots whose canonical name matched no family. */
+    readonly unresolved: number
+    /** White slots whose canonical name matched more than one family. */
+    readonly ambiguous: number
+    readonly unresolvedNames: readonly string[]
+    readonly ambiguousNames: readonly string[]
+}
+
+/**
  * The Capacity Coverage Exposure Ledger: coverage exposure over one roster snapshot under one target
  * profile lens, built in-process from the SAME retention report Slice 1 triaged. Structure only.
  */
@@ -241,6 +279,7 @@ export interface CapacityCoverageDocument {
     readonly exposures: readonly VeteranCoverageExposure[]
     readonly factorExposureCounts: CoverageExposureCounts
     readonly characterExposureCounts: CoverageExposureCounts
+    readonly whiteSubfamilyCoverage: WhiteSubfamilyCoverage
     readonly limits: readonly CoverageLimit[]
 }
 

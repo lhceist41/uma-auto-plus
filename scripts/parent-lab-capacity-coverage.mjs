@@ -22,11 +22,33 @@
 // is exercised by the Jest suite).
 
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
 import { buildCapacityCoverage } from "../src/lib/parentLab/capacityCoverage.ts"
 import { retentionReportsOf } from "../src/lib/parentLab/quarantineSnapshot.ts"
 import { resolveTargetProfile, TARGET_PROFILE_IDS, TARGET_PROFILES } from "../src/lib/parentLab/retentionTargets.ts"
 
 const DEFAULT_TARGET = "GENERAL_INHERITANCE"
+
+// The canonical white factor domain ships as an app asset. Resolving it relative to this script keeps the
+// lookup independent of the caller's working directory; PARENT_LAB_WHITE_FACTOR_DOMAIN overrides it for tests.
+const DOMAIN_ASSET = process.env.PARENT_LAB_WHITE_FACTOR_DOMAIN ?? join(dirname(fileURLToPath(import.meta.url)), "..", "android", "app", "src", "main", "assets", "veteran_factor_domain.json")
+
+/** Parses the white factor families from the committed domain asset. This asset is required CLI evidence,
+ * so a missing, syntax-invalid, or structurally invalid asset fails closed instead of degrading. */
+function loadWhiteFactorDomain(path) {
+    if (!existsSync(path) || !statSync(path).isFile()) throw new Error(`white factor domain asset is missing: ${path}`)
+    let families
+    try {
+        families = JSON.parse(readFileSync(path, "utf8")).families
+    } catch (e) {
+        throw new Error(`white factor domain asset is not valid JSON (${e instanceof Error ? e.message : String(e)}): ${path}`)
+    }
+    if (!families || !Array.isArray(families.skill) || !Array.isArray(families.race) || !Array.isArray(families.scenario)) {
+        throw new Error(`white factor domain asset has an invalid structure (expected families.skill/race/scenario arrays): ${path}`)
+    }
+    return { skill: families.skill, race: families.race, scenario: families.scenario }
+}
 
 const HELP = `parent-lab-capacity-coverage - Capacity Coverage Exposure Ledger, Slice 2 (read-only, structure only)
 
@@ -124,6 +146,7 @@ function exposedViewOf(doc) {
         poolSize: doc.poolSize,
         factorExposureCounts: doc.factorExposureCounts,
         characterExposureCounts: doc.characterExposureCounts,
+        whiteSubfamilyCoverage: doc.whiteSubfamilyCoverage,
         exposedFactorSlots,
         exposedCharacterSlots,
         exposedTargetSlots,
@@ -167,6 +190,20 @@ function renderSummary(doc) {
     lines.push("  Character slot exposure (roster membership)")
     lines.push(`    total slots                     ${pad(doc.characterSlots.length, 5)}`)
     for (const [exposure, count] of Object.entries(doc.characterExposureCounts)) lines.push(`    ${exposure.padEnd(24)} ${pad(count, 5)}`)
+    lines.push("")
+    lines.push("  White factor subfamily exposure")
+    const w = doc.whiteSubfamilyCoverage
+    if (!w.available) {
+        lines.push("    (no white factor domain supplied; every white slot's subfamily is null)")
+    } else {
+        for (const [family, counts] of Object.entries(w.exposureByFamily)) {
+            const total = counts.ANCHORED + counts.FULLY_EXPOSED + counts.FULLY_EXPOSED_SOLE + counts.UNMEASURED
+            lines.push(`    ${family.padEnd(10)} total ${pad(total, 4)}  ANCHORED ${pad(counts.ANCHORED, 4)}  FULLY_EXPOSED ${pad(counts.FULLY_EXPOSED, 4)}  SOLE ${pad(counts.FULLY_EXPOSED_SOLE, 3)}  UNMEASURED ${pad(counts.UNMEASURED, 3)}`)
+        }
+        lines.push(`    unresolved ${pad(w.unresolved, 4)}  ambiguous ${pad(w.ambiguous, 4)}`)
+        if (w.unresolvedNames.length > 0) lines.push(`    unresolved names: ${w.unresolvedNames.join(", ")}`)
+        if (w.ambiguousNames.length > 0) lines.push(`    ambiguous names: ${w.ambiguousNames.join(", ")}`)
+    }
     lines.push("")
     const sole = doc.factorSlots.filter((s) => s.exposure === "FULLY_EXPOSED_SOLE")
     if (sole.length > 0) {
@@ -216,7 +253,8 @@ function main(argv) {
         if (opts.expectRosterScan !== null && report.rosterScanId !== opts.expectRosterScan) {
             throw new Error(`expected roster scan ${opts.expectRosterScan} but the selected ${report.targetProfile} report is ${report.rosterScanId}; refusing to run on unexpected evidence`)
         }
-        doc = buildCapacityCoverage(report)
+        const domain = loadWhiteFactorDomain(DOMAIN_ASSET)
+        doc = buildCapacityCoverage(report, domain)
     } catch (e) {
         console.error(e instanceof Error ? e.message : String(e))
         return 2

@@ -9,7 +9,9 @@ import {
     LAST_COPY_RISKS,
     PARENTLAB_CAPACITY_COVERAGE_KIND,
     PARENTLAB_CAPACITY_COVERAGE_SCHEMA,
+    WHITE_SUBFAMILIES,
     isCapacityCoverageDocument,
+    type WhiteFactorDomain,
 } from "../capacityCoverageTypes.ts"
 import { buildCapacityTriage } from "../capacityEvidence.ts"
 import { isCapacityTriageDocument } from "../capacityTypes.ts"
@@ -286,6 +288,91 @@ describe("degradation and claim strength", () => {
     })
 })
 
+describe("white subfamily classification", () => {
+    // Synthetic families, except "Trackblazer" which is public game data and the required real-world
+    // ambiguity case: it exists in both the skill and scenario families of the canonical domain asset.
+    const whiteDomain: WhiteFactorDomain = {
+        skill: ["Synth Skill White", "Trackblazer"],
+        race: ["Synth Race White"],
+        scenario: ["Synth Scenario White", "Trackblazer"],
+    }
+
+    test("a supplied domain classifies white slots into skill/race/scenario and drops the limit", () => {
+        const recs = [
+            rec({ scanIndex: 0, selfFactors: [{ factorKey: "white:SYNTH SKILL WHITE", stars: 3 }] }),
+            rec({ scanIndex: 1, selfFactors: [{ factorKey: "white:SYNTH RACE WHITE", stars: 3 }] }),
+            rec({ scanIndex: 2, selfFactors: [{ factorKey: "white:SYNTH SCENARIO WHITE", stars: 3 }] }),
+        ]
+        const doc = buildCapacityCoverage(report(recs), whiteDomain)
+        expect(slotByKeyFloor(doc, "white:SYNTH SKILL WHITE", 1)!.whiteSubfamily).toBe("skill")
+        expect(slotByKeyFloor(doc, "white:SYNTH RACE WHITE", 1)!.whiteSubfamily).toBe("race")
+        expect(slotByKeyFloor(doc, "white:SYNTH SCENARIO WHITE", 1)!.whiteSubfamily).toBe("scenario")
+        expect(doc.whiteSubfamilyCoverage.available).toBe(true)
+        expect(doc.limits.map((l) => l.code)).not.toContain("WHITE_SUBFAMILY_NOT_AVAILABLE")
+    })
+
+    test("non-white slots keep whiteSubfamily null even with a domain", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "unique:SYNTH GREEN", stars: 2 }, { factorKey: "stat:SYNTH SPEED", stars: 2 }] })]), whiteDomain)
+        expect(slotByKeyFloor(doc, "unique:SYNTH GREEN", 1)!.whiteSubfamily).toBeNull()
+        expect(slotByKeyFloor(doc, "stat:SYNTH SPEED", 1)!.whiteSubfamily).toBeNull()
+    })
+
+    test("a white name in no family stays null and is counted and listed as unresolved", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:SYNTH UNMATCHED", stars: 2 }] })]), whiteDomain)
+        expect(slotByKeyFloor(doc, "white:SYNTH UNMATCHED", 1)!.whiteSubfamily).toBeNull()
+        expect(doc.whiteSubfamilyCoverage.unresolved).toBeGreaterThanOrEqual(1)
+        expect(doc.whiteSubfamilyCoverage.unresolvedNames).toContain("SYNTH UNMATCHED")
+    })
+
+    test("Trackblazer matches skill and scenario, so it stays null and is counted and listed as ambiguous", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:TRACKBLAZER", stars: 2 }] })]), whiteDomain)
+        expect(slotByKeyFloor(doc, "white:TRACKBLAZER", 1)!.whiteSubfamily).toBeNull()
+        expect(doc.whiteSubfamilyCoverage.ambiguous).toBeGreaterThanOrEqual(1)
+        expect(doc.whiteSubfamilyCoverage.ambiguousNames).toContain("TRACKBLAZER")
+    })
+
+    test("omitting the domain preserves v1 behavior: white subfamily unavailable and the limit present", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:SYNTH SKILL WHITE", stars: 2 }] })]))
+        expect(doc.whiteSubfamilyCoverage.available).toBe(false)
+        expect(slotByKeyFloor(doc, "white:SYNTH SKILL WHITE", 1)!.whiteSubfamily).toBeNull()
+        expect(doc.limits.map((l) => l.code)).toContain("WHITE_SUBFAMILY_NOT_AVAILABLE")
+        for (const counts of Object.values(doc.whiteSubfamilyCoverage.exposureByFamily)) {
+            for (const v of Object.values(counts)) expect(v).toBe(0)
+        }
+    })
+
+    test("the breakdown uses a fixed neutral (alphabetical) family order", () => {
+        const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:SYNTH SKILL WHITE", stars: 2 }] })]), whiteDomain)
+        expect(Object.keys(doc.whiteSubfamilyCoverage.exposureByFamily)).toEqual(["race", "scenario", "skill"])
+        expect([...WHITE_SUBFAMILIES]).toEqual(["race", "scenario", "skill"])
+    })
+
+    test("supplying a domain leaves the existing factor and character exposure partitions unchanged", () => {
+        const recs = [
+            rec({ scanIndex: 0, character: "Char A", selfFactors: [{ factorKey: "white:SYNTH SKILL WHITE", stars: 3 }] }),
+            rec({ scanIndex: 1, character: "Char B", selfFactors: [{ factorKey: "white:SYNTH RACE WHITE", stars: 2 }] }),
+            anchorRec([{ factorKey: "white:SYNTH SCENARIO WHITE", stars: 3 }], { scanIndex: 2, character: "Char C" }),
+        ]
+        const without = buildCapacityCoverage(report(recs))
+        const withDomain = buildCapacityCoverage(report(recs), whiteDomain)
+        expect(withDomain.factorExposureCounts).toEqual(without.factorExposureCounts)
+        expect(withDomain.characterExposureCounts).toEqual(without.characterExposureCounts)
+        // The only per-slot difference is the added whiteSubfamily classification.
+        const strip = (d: ReturnType<typeof buildCapacityCoverage>) => d.factorSlots.map((s) => ({ ...s, whiteSubfamily: null }))
+        expect(strip(withDomain)).toEqual(strip(without))
+        // Every matched white slot lands in exactly one family, so the family totals plus the null cases
+        // account for every white slot.
+        const familyTotal = Object.values(withDomain.whiteSubfamilyCoverage.exposureByFamily).reduce((sum, counts) => sum + counts.ANCHORED + counts.FULLY_EXPOSED + counts.FULLY_EXPOSED_SOLE + counts.UNMEASURED, 0)
+        const whiteSlots = withDomain.factorSlots.filter((s) => s.kind === "white").length
+        expect(familyTotal + withDomain.whiteSubfamilyCoverage.unresolved + withDomain.whiteSubfamilyCoverage.ambiguous).toBe(whiteSlots)
+    })
+
+    test("output with a domain is deterministic", () => {
+        const build = () => buildCapacityCoverage(report([rec({ scanIndex: 0, selfFactors: [{ factorKey: "white:SYNTH SKILL WHITE", stars: 3 }] })]), whiteDomain)
+        expect(JSON.stringify(build())).toBe(JSON.stringify(build()))
+    })
+})
+
 describe("character, target and per-Veteran exposure", () => {
     test("character slot exposure follows admitted vs excluded roster membership", () => {
         const shared1 = rec({ scanIndex: 0, character: "Char Shared", outfit: "Outfit A" })
@@ -431,9 +518,9 @@ describe("CLI freshness binding and exit codes", () => {
         return path
     }
 
-    function run(args: string[]): { status: number; stdout: string } {
+    function run(args: string[], env: Record<string, string> = {}): { status: number; stdout: string } {
         try {
-            const stdout = execFileSync(process.execPath, [cliPath, ...args], { encoding: "utf8" })
+            const stdout = execFileSync(process.execPath, [cliPath, ...args], { encoding: "utf8", env: { ...process.env, ...env } })
             return { status: 0, stdout }
         } catch (e) {
             const err = e as { status?: number; stdout?: string }
@@ -465,5 +552,24 @@ describe("CLI freshness binding and exit codes", () => {
         const path = join(dir, "malformed.json")
         writeFileSync(path, "{ not valid json", "utf8")
         expect(run(["--retention", path]).status).toBe(2)
+    })
+
+    test("a missing white factor domain asset fails closed with exit 2", () => {
+        const path = writeRetention([rec({ selfFactors: [{ factorKey: "white:CLI_D", stars: 2 }] })])
+        expect(run(["--retention", path], { PARENT_LAB_WHITE_FACTOR_DOMAIN: join(dir, "no-such-domain.json") }).status).toBe(2)
+    })
+
+    test("a structurally invalid white factor domain asset fails closed with exit 2", () => {
+        const bad = join(dir, "wrong-shape-domain.json")
+        writeFileSync(bad, JSON.stringify({ families: { skill: "not-an-array" } }), "utf8")
+        const path = writeRetention([rec({ selfFactors: [{ factorKey: "white:CLI_E", stars: 2 }] })])
+        expect(run(["--retention", path], { PARENT_LAB_WHITE_FACTOR_DOMAIN: bad }).status).toBe(2)
+    })
+
+    test("a syntax-invalid white factor domain asset fails closed with exit 2", () => {
+        const broken = join(dir, "broken-domain.json")
+        writeFileSync(broken, "{ not valid json", "utf8")
+        const path = writeRetention([rec({ selfFactors: [{ factorKey: "white:CLI_F", stars: 2 }] })])
+        expect(run(["--retention", path], { PARENT_LAB_WHITE_FACTOR_DOMAIN: broken }).status).toBe(2)
     })
 })
