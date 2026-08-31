@@ -23,7 +23,9 @@ live here.
   file with a different job: it holds support-card training *events*, keyed by character display name.
 
 `characterPresets.ts` and `presetMeta.ts` are the preset sources. They are the authority for the
-preset inventory; `PRESETS_GUIDE.md` is their documented view and must be updated in the same change.
+preset inventory; [`PRESETS_GUIDE.md`](../../PRESETS_GUIDE.md) documents the player-facing view and
+[`docs/PRESET_AUTHORING.md`](../../docs/PRESET_AUTHORING.md) documents the contributor authoring
+rules. Update the relevant one in the same change.
 
 `searchConfig.ts` is the registry the in-app settings search reads. A new setting has to be listed
 there or it cannot be found from the search box, even though it works everywhere else.
