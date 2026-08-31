@@ -1908,8 +1908,7 @@ measured pixels and the page never moved, while every mid-screen tap in the same
 landed -- the thin outline is a poor dispatch target, and the floating overlay bubble rides
 the same screen edge and can swallow edge taps. The swipe lanes stay clear of both edge
 strips, the scrollbar, the header band, and the Confirm band, carry no vertical component
-(which would scroll the list instead), and follow the Scenario Select carousel's proven
-central-drag pattern. After each swipe the page must re-prove itself from a fresh capture --
+(which would scroll the list instead), and stay a central drag rather than an edge tap. After each swipe the page must re-prove itself from a fresh capture --
 heading and dot both naming the target -- with exactly one retry on a provably-unchanged
 page and an immediate block on anything unreadable or contradictory; the settle wait is
 never proof. The final Confirm is pressed only after the confirmation pill names the chosen
