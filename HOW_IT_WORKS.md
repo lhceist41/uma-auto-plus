@@ -736,395 +736,74 @@ Once the dialog is open, the bot scrolls through the full item list, performing 
 > [!TIP]
 > The single-pass design means the bot opens the Training Items dialog **at most once per turn** (plus once for race items if racing). After the first full scan, subsequent turns use the cached inventory to skip items that aren't needed, enabling early exit from the scroll loop.
 
-#### Complete Item Reference
-
-Below is every item in the Trackblazer shop, organized by category. For each item: what it does, when the bot uses it, and when it does not.
-
----
-
-<details>
-<summary><strong>Stats — Notepads, Manuals, and Scrolls</strong></summary>
-
-| Item | Price | Effect |
-|------|-------|--------|
-| Speed/Stamina/Power/Guts/Wit **Notepad** | 10 coins | +3 to the respective stat |
-| Speed/Stamina/Power/Guts/Wit **Manual** | 15 coins | +7 to the respective stat |
-| Speed/Stamina/Power/Guts/Wit **Scroll** | 30 coins | +15 to the respective stat |
-
-**When used:** Immediately on sight during the inventory scan pass, every turn. The bot clicks the "+" button up to **5 times per item** (consuming up to 5 copies in one pass). These are "quick-use" items — no conditional logic is needed.
-
-**When NOT used:**
-- The stat is already at its cap.
-- Turn is before 13 (Pre-Debut).
-
-**Shop priority:** Scrolls are purchased before Manuals. Notepads are **not** included in the default buy priority list — they are only purchased if the bot happens to have leftover coins after everything else. However, if the user already has Notepads in inventory, they will still be used.
-
-</details>
-
-<details>
-<summary><strong>Energy — Vita 20, Vita 40, Vita 65</strong></summary>
-
-| Item | Price | Effect |
-|------|-------|--------|
-| **Vita 20** | 35 coins | Energy +20 |
-| **Vita 40** | 55 coins | Energy +40 |
-| **Vita 65** | 75 coins | Energy +65 |
-
-**When used:** Only when **all** of these conditions are true:
-1. Energy is at or below the energy threshold (default 40%)
-2. A **Good-Luck Charm is NOT being used this turn** (see [Charm interaction](#good-luck-charm--energy-item-interaction) below)
-3. The item is the **optimal choice** according to the greedy energy algorithm
-
-**The greedy energy algorithm (`isBestEnergyItemToUse()`):**
-1. Collect the energy items still available this scan pass, **minus one reserved unit**. The lowest-tier energy item still owned (Energy Drink MAX first, then Vita 20, Vita 40, Vita 65) is held back for emergency race recovery unless a force-override is active.
-2. Sort by gain descending (65 → 40 → 20).
-3. Greedily take items while simulated energy stays within a **soft cap of 110%**. The 10-point overshoot is deliberate: it prefers Vita 65 + Vita 40 (105) over Vita 65 + Vita 20 (85) rather than leaving 15% on the table.
-4. If the current item was in the picked set → use it. Otherwise → skip it.
-
-**Example:** Trainee at 35% energy owning one each of Vita 65, Vita 40, and Vita 20.
-- The Vita 20 is the reserved unit, so the pool is {65, 40}.
-- 35 + 65 = 100, within the cap → pick Vita 65.
-- 100 + 40 = 140, over the cap → skip Vita 40.
-- Result: use Vita 65.
-
-**Example:** Trainee at 50% energy owning one each of Vita 65, Vita 40, and Vita 20.
-- The Vita 20 is the reserved unit, so the pool is {65, 40}.
-- 50 + 65 = 115, over the cap → skip Vita 65.
-- 50 + 40 = 90, within the cap → pick Vita 40.
-- Result: use Vita 40.
-
-**When NOT used:**
-- Energy is above the threshold (default 40%).
-- A Good-Luck Charm is being used this turn (Charm sets failure to 0%, making energy irrelevant for training, and using energy items would waste them since the energy cost is deducted after training).
-- Using this item would push past the 110% soft cap when a smaller item would be more efficient.
-- The item is the last copy of the conserved lowest-tier energy item, which is held for emergency race recovery.
-
-**Special Royal Kale Juice priority:** When energy ≤ 20%, the bot checks if Royal Kale Juice is available. If it is, all Vita items are skipped in favor of Kale Juice, since any Vita used first would be partially wasted by the Kale Juice's full restore.
-
-</details>
-
-<details>
-<summary><strong>Energy — Royal Kale Juice</strong></summary>
-
-| Item | Price | Effect |
-|------|-------|--------|
-| **Royal Kale Juice** | 70 coins | Energy set to 100%, Motivation -1 |
-
-Royal Kale Juice is handled separately from Vita items because of its mood penalty.
-
-**When used:** Only when **all** of these conditions are true:
-1. A **Good-Luck Charm is NOT being used this turn**
-2. The greedy energy algorithm selects it as the best choice
-3. **AND** at least one of these "mood safety" conditions is met:
-   - Energy is critically low (≤ 20%) — used as a **last resort** regardless of mood
-   - Mood recovery items (Cupcakes) are available in inventory to offset the -1 mood
-   - Mood is already Awful (can't get worse)
-
-**When NOT used:**
-- Energy is above 20% and no cupcakes are available and mood is not Awful (the -1 mood penalty has no safety net).
-- A Good-Luck Charm is being used this turn.
-- A Vita item is more efficient (e.g., at 60% energy, Vita 40 gives exactly what's needed without a mood penalty).
-
-**Side effects:** After use, the trainee's mood is decremented by 1 level (e.g., Great → Good). The bot tracks this internally.
-
-</details>
-
-<details>
-<summary><strong>Energy — Energy Drink MAX and Energy Drink MAX EX</strong></summary>
-
-| Item | Price | Effect |
-|------|-------|--------|
-| **Energy Drink MAX** | 30 coins | Maximum energy +4, Energy +5 |
-| **Energy Drink MAX EX** | 50 coins | Maximum energy +8 |
-
-**Both are excluded from buying by default,** and every bundled Trackblazer preset excludes them too, so a stock run never owns either one. They are the worst energy-per-coin in the shop: Energy Drink MAX is 0.17 energy per coin against Vita 20's 0.57 and Vita 65's 0.87, and Energy Drink MAX EX gives no immediate energy at all. Their only real value is the permanent max-energy raise, and at buy-list position 32 of 37 the coins would otherwise go to stat scrolls and race hammers, which convert directly into score.
-
-**If un-excluded:** neither is a quick-use item (`isQuickUsage = false` for both). **Energy Drink MAX** then behaves as an ordinary energy item worth 5: it enters the greedy energy pool above alongside the Vitas, and it is first in the conservation order, so the last copy is held for emergency race recovery. Note that makes an emergency recovery worth only +5 while a copy is owned.
-
-**Energy Drink MAX EX cannot be bought at all.** It was removed from the buy list because nothing consumes it: it is absent from the energy item table, the stat item list, the bad-condition heal list, and every inline-usage branch, so a purchased copy would sit in the bag forever. Wire up a usage path before adding it back.
-
-</details>
-
-<details>
-<summary><strong>Mood — Berry Sweet Cupcake and Plain Cupcake</strong></summary>
-
-| Item | Price | Effect |
-|------|-------|--------|
-| **Berry Sweet Cupcake** | 55 coins | Motivation +2 |
-| **Plain Cupcake** | 30 coins | Motivation +1 |
-
-**When used:** Only when **all** of these conditions are true:
-1. Mood is Normal or below (≤ Normal)
-2. Energy is below 70% (if energy is high enough, the bot prefers to train without mood recovery)
-
-The first cupcake encountered during the scan is used. Berry Sweet Cupcake raises mood to Good; Plain Cupcake raises it to Normal (from the decremented state).
-
-**When NOT used:**
-- Mood is Good or Great.
-- Energy is ≥ 70% (high energy means training will succeed well enough despite mood).
-
-**Note — Interaction with Royal Kale Juice:** Cupcakes serve as a "safety net" for Kale Juice usage. The bot checks for cupcake availability before using Kale Juice at moderate energy levels (21–40%) because the Kale Juice would drop mood by 1. If cupcakes are available to compensate, Kale Juice is considered safe to use.
-
-</details>
-
-<details>
-<summary><strong>Bond — Yummy Cat Food and Grilled Carrots</strong></summary>
-
-| Item | Price | Effect |
-|------|-------|--------|
-| **Yummy Cat Food** | 10 coins | Yayoi Akikawa's bond +5 |
-| **Grilled Carrots** | 40 coins | All support card bonds +5 |
-
-**When used:** These are marked as **quick-use** items. Used immediately on sight during the inventory scan, every turn.
-
-**When NOT used:**
-- Bond is already maxed for all relevant characters.
-
-**Shop priority:** Grilled Carrots is in Tier 1 (critical) because +5 bond to all support cards is extremely valuable early. Yummy Cat Food is not in the default priority list.
-
-</details>
-
-<details>
-<summary><strong>Good Conditions — Pretty Mirror, Reporter's Binoculars, Master Practice Guide, Scholar's Hat</strong></summary>
-
-| Item | Price | Effect |
-|------|-------|--------|
-| **Pretty Mirror** | 150 coins | Gain "Charming ○" status |
-| **Reporter's Binoculars** | 150 coins | Gain "Hot Topic" status |
-| **Master Practice Guide** | 150 coins | Gain "Practice Perfect ○" status |
-| **Scholar's Hat** | 280 coins | Gain "Fast Learner" status |
-
-**When used:** These are marked as **quick-use** items. Used immediately on sight during the inventory scan.
-
-**When NOT used:**
-- The status effect is already active.
-
-**Shop priority:** Tier 8 (lowest priority). These are expensive and only purchased after all other categories are covered. The bot caps inventory at 1 copy each since each status effect can only be active once.
-
-</details>
-
-<details>
-<summary><strong>Heal Bad Conditions — Fluffy Pillow, Pocket Planner, Rich Hand Cream, Smart Scale, Aroma Diffuser, Practice Drills DVD</strong></summary>
-
-| Item | Price | Heals |
-|------|-------|-------|
-| **Fluffy Pillow** | 15 coins | Night Owl |
-| **Pocket Planner** | 15 coins | Slacker |
-| **Rich Hand Cream** | 15 coins | Skin Outbreak |
-| **Smart Scale** | 15 coins | Slow Metabolism |
-| **Aroma Diffuser** | 15 coins | Migraine |
-| **Practice Drills DVD** | 15 coins | Practice Poor |
-
-**When used:** During the inventory scan, if the trainee currently has **any negative status** and the corresponding heal item is encountered, it is used.
-
-**When NOT used:**
-- The trainee has no negative statuses.
-- The specific negative status that this item heals is not currently active.
-
-**Shop priority:** Rich Hand Cream is in Tier 1 (critical) because Skin Outbreak prevents the trainee from entering races, which is devastating in Trackblazer's race-heavy strategy. All other condition heals are in Tier 5. Inventory limit is 1 copy each (except Rich Hand Cream at 5 copies due to its critical nature).
-
-</details>
-
-<details>
-<summary><strong>Heal Bad Conditions — Miracle Cure</strong></summary>
-
-| Item | Price | Effect |
-|------|-------|--------|
-| **Miracle Cure** | 40 coins | Heal all negative status effects |
-
-**When used:** Same conditions as individual heal items — used when the trainee has any negative status. This is a quick-use item so it's used on sight if any negative status is active.
-
-**When NOT used:**
-- The trainee has no negative statuses.
-
-**Shop priority:** Tier 1 (critical). Inventory limit is 5 copies. The bot buys Miracle Cures as general-purpose insurance against bad conditions.
-
-</details>
-
-<details>
-<summary><strong>Training Effects — Megaphones (Empowering, Motivating, Coaching)</strong></summary>
-
-| Item | Price | Effect | Duration |
-|------|-------|--------|----------|
-| **Empowering Megaphone** | 70 coins | Training bonus +60% | 2 turns |
-| **Motivating Megaphone** | 55 coins | Training bonus +40% | 3 turns |
-| **Coaching Megaphone** | 40 coins | Training bonus +20% | 4 turns |
-
-**When used:** Only when **all** of these conditions are true:
-1. No megaphone is currently active (`megaphoneTurnCounter == 0`)
-2. A training has been selected for this turn (`trainingSelected != null`)
-3. No **better** megaphone is available in inventory
-4. The turn is not being conserved (see the conservation gate below)
-5. The selected training clears that megaphone tier's own minimum-gain threshold, so a high-tier megaphone is not burned on a weak training
-
-**Megaphone priority logic:** The bot always uses the **best available** megaphone, not just the first one encountered during scanning. When it encounters a megaphone:
-- It checks if a higher-tier megaphone exists in inventory that hasn't been scanned yet or is known to be enabled.
-- For Motivating Megaphone: skips if Empowering exists.
-- For Coaching Megaphone: skips if Empowering or Motivating exists.
-- Empowering is always used immediately since nothing is better.
-
-**When NOT used:**
-- A megaphone effect is already active (turns remaining > 0). The bot decrements the counter each turn after an action is taken.
-- No training is selected this turn (e.g., the bot is racing or resting).
-- A better megaphone is available in inventory.
-- The conservation gate fires (below).
-
-> [!IMPORTANT]
-> **Conservation gate (`shouldConserveTrainingEffectItems`).** Megaphones and the Good-Luck Charm are both skipped when the trainee's mood is **below Normal** *and* the selected training's main stat gain is **below the low-gain floor** (default 15, configurable). Both conditions must hold. The point is to avoid spending a limited training-effect item on a turn that is already compromised: a bad mood suppresses gains, so a weak training under a bad mood is the worst possible turn to burn one on.
-
-**Duration tracking:** After use, the bot sets `megaphoneTurnCounter` to 2/3/4 depending on the megaphone type. This counter is decremented by 1 at the end of each turn where an action was taken.
-
-</details>
-
-<details>
-<summary><strong>Training Effects — Ankle Weights (Speed, Stamina, Power, Guts, Wit)</strong></summary>
-
-| Item | Price | Effect |
-|------|-------|--------|
-| **[Stat] Ankle Weights** | 50 coins each | Training bonus +50% for that stat, Energy consumption +20% (one turn) |
-
-**When used:** Only when **all** of these conditions are true:
-1. A training has been selected for this turn
-2. The Ankle Weights match the **selected training stat** (e.g., Speed Ankle Weights are only used when Speed training is selected)
-
-**When NOT used:**
-- No training is selected this turn.
-- The Ankle Weights are for a different stat than the selected training.
-- Wit Ankle Weights: they exist in the shop but are **never purchased and never used**. The buy list only covers Speed/Stamina/Power/Guts weights for the top 3 prioritized stats, and the usage lookup maps Wit to no item at all, so even a Wit Ankle Weights obtained some other way would sit unused on a Wit training turn.
-
-> **Warning:** Ankle Weights increase energy consumption by 20% for that turn. The bot does not factor this into the energy threshold check — if the trainee is at low energy and Ankle Weights are used, the training may consume more energy than expected.
-
-**Shop priority:** Tier 4. Only purchased for the top 3 stats in the user's stat prioritization order. For example, if stat priority is Speed > Power > Stamina > Guts > Wit, the bot buys Speed, Power, and Stamina Ankle Weights but not Guts or Wit.
-
-</details>
-
-<details>
-<summary><strong>Training Effects — Good-Luck Charm</strong></summary>
-
-| Item | Price | Effect |
-|------|-------|--------|
-| **Good-Luck Charm** | 40 coins | Training failure rate set to 0% (one turn) |
-
-**When used:** Only when **all** of these conditions are true:
-1. A training has been selected for this turn
-2. The selected training's failure chance is **≥ 20%**
-3. A Charm has **not already been used** this turn (`bUsedCharmToday == false`)
-4. The conservation gate does not fire: the Charm is skipped when mood is below Normal *and* the selected training's main gain is below the low-gain floor (see the megaphone section above)
-
-**When NOT used:**
-- No training is selected this turn.
-- The training's failure chance is < 20% (not risky enough to warrant a Charm).
-- A Charm was already used this turn (only 1 per turn).
+#### Item Reference
+
+Quick-use items are consumed the moment the bot sees them with their row enabled, including right after they are bought in the shop, before the buy dialog even closes; the game can disable a row (for example a stat item already at cap), in which case it is skipped instead. Held items are only used when their trigger condition holds, checked each time the Training Items dialog opens (or, for race items, on the Race Prep screen). Energy items and the Good-Luck Charm interact: see [Charm / Energy interaction](#good-luck-charm--energy-item-interaction) below.
+
+| Item | Cost | Quick-use / Held | Cap | Trigger (when used) | Notes |
+|------|------|-------------------|-----|----------------------|-------|
+| Speed/Stamina/Power/Guts/Wit Notepad | 10 each | Quick-use | 5 each | On sight, if the stat isn't already at cap | Stat +3 each. Not in the default buy priority list; still used if owned |
+| Speed/Stamina/Power/Guts/Wit Manual | 15 each | Quick-use | 5 each | Same as Notepad | Bought after Scrolls |
+| Speed/Stamina/Power/Guts/Wit Scroll | 30 each | Quick-use | 5 each | Same as Notepad | Bought before Manuals: the top stat-item buy priority |
+| Vita 20 | 35 | Held | 5 | Energy at or below the energy threshold (default 40%), no Charm in play this turn, and the greedy energy algorithm picks it | Skipped in favor of Royal Kale Juice at 20% energy or below when Kale Juice is available |
+| Vita 40 | 55 | Held | 5 | Same as Vita 20 | |
+| Vita 65 | 75 | Held | 5 | Same as Vita 20 | |
+| Royal Kale Juice | 70 | Held | 5 | No Charm in play, the greedy algorithm picks it, and at least one mood-safety condition holds: energy at or below 20%, a Cupcake held, or mood already Awful | Sets energy to 100% and drops mood one level; a Vita item is used instead when it covers the gap without the mood cost |
+| Energy Drink MAX | 30 | Held | 5 | Excluded from buying by default and by every bundled preset | If un-excluded: joins the greedy energy pool at gain 5, first in the conservation order |
+| Energy Drink MAX EX | 50 | Held | 5 | Never; removed from every buy list | No usage path exists in code at all, so a copy obtained any other way sits unused |
+| Plain Cupcake | 30 | Quick-use | 5 | Mood +1. Consumed whenever its row is enabled, on purchase and during the ordinary item pass alike, before the mood-conservation logic in the Notes column ever runs | `mood ≤ Normal && energy < 70%` only decides whether the item dialog opens for cupcakes' sake, not whether a cupcake is spent; the enabled-row path does not actually preserve a reserve. A cupcake read as disabled at scan time can still be spent as a Royal Kale Juice mood offset via the post-Juice recheck |
+| Berry Sweet Cupcake | 55 | Quick-use | 5 | Mood +2. Same as Plain Cupcake | Same as Plain Cupcake |
+| Yummy Cat Food | 10 | Quick-use | 5 | On sight, if owned | Not in the default buy priority list |
+| Grilled Carrots | 40 | Quick-use | 5 | On sight | Tier 1 buy priority |
+| Pretty Mirror / Reporter's Binoculars / Master Practice Guide | 150 each | Quick-use | 1 each | On sight, if the status isn't already active | Tier 8 (lowest) buy priority |
+| Scholar's Hat | 280 | Quick-use | 1 | Same as above | Tier 8; most expensive shop item |
+| Fluffy Pillow / Pocket Planner / Smart Scale / Aroma Diffuser / Practice Drills DVD | 15 each | Quick-use | 1 each | The item's specific negative status is currently active | Each heals one status only (Night Owl, Slacker, Slow Metabolism, Migraine, Practice Poor respectively); Tier 5 buy priority |
+| Rich Hand Cream | 15 | Quick-use | 5 | Skin Outbreak is currently active | Tier 1; stockpiled up to 5 regardless of current status because Skin Outbreak blocks race entry |
+| Miracle Cure | 40 | Quick-use | 5 | Any negative status is currently active | Tier 1; stockpiled up to 5 as general-purpose insurance |
+| Speed/Stamina/Power/Guts/Wit Training Application | 150 each | Quick-use | 5 each | On sight, if the facility isn't already at max level | Only bought for the top 3 prioritized stats |
+| Empowering Megaphone | 70 | Held | 5 | No megaphone active, a training selected, and it is the best tier that clears both the conservation gate and its own gain threshold | Training bonus +60% for 2 turns. Fires first whenever eligible; nothing outranks it |
+| Motivating Megaphone | 55 | Held | 5 | Same as Empowering | Training bonus +40% for 3 turns. Held back if Empowering is also eligible |
+| Coaching Megaphone | 40 | Held | 5 | Same as Empowering | Training bonus +20% for 4 turns. Excluded from buying by default; held back if Empowering or Motivating is also eligible |
+| Speed/Stamina/Power/Guts Ankle Weights | 50 each | Held | 5 each | That stat's training is selected | Only bought for the top 3 prioritized stats; the +20% energy cost is not factored into the energy threshold check |
+| Wit Ankle Weights | 50 | Held | 5 | Never; absent from both the buy list and the usage lookup | Dead-inventory trap: never bought, never used even if obtained another way |
+| Good-Luck Charm | 40 | Held | 5 | A training selected, its failure chance at or above 20%, no Charm used yet today, and the conservation gate doesn't fire | Tier 1, top buy priority; skips all energy items for the turn once queued |
+| Reset Whistle | 20 | Held | 5 | Turn 13 or later, not used yet today, no suitable training found, energy recovery isn't needed instead, and this isn't an irregular-training evaluation | Blocked below Normal mood once enough non-blacklisted trainings already show low main-stat gain (reshuffling can't recover from the mood penalty); otherwise re-runs the training analysis after use and forces the best remaining training if still nothing qualifies (default on) |
+| Master Cleat Hammer | 40 | Held | 5 | G1 race, on the Race Prep screen (see 11.4) | Race bonus +35%. Tier 1; Finale conservation ladder in 11.4 |
+| Artisan Cleat Hammer | 25 | Held | 5 | G2/G3 race, or G1 with no Master Hammer available, on the Race Prep screen | Race bonus +20%. Tier 1; Finale conservation ladder in 11.4 |
+| Glow Sticks | 15 | Held | 5 | G1 race awarding 20,000 fans or more, on the Race Prep screen (fan requirement waived during Finale) | Fan gain +50%. Tier 1; Finale conservation ladder in 11.4 |
+
+#### Special Interactions and Exceptions
 
 <h4 id="good-luck-charm--energy-item-interaction">Good-Luck Charm / Energy Item Interaction</h4>
 
-> **Caution:** This is a critical interaction: **when a Good-Luck Charm is being used (or will be used) this turn, all energy items (Vita 20/40/65 and Royal Kale Juice) are skipped.**
+> **Caution:** When a Good-Luck Charm is being used (or will be used) this turn, all energy items (Vita 20/40/65 and Royal Kale Juice) are skipped.
 
-**Why:** The Charm sets training failure to 0%, making the trainee's energy level irrelevant for training success. Energy is deducted *after* training completes, so restoring it beforehand provides no benefit. Using energy items would waste them.
+The Charm sets training failure to 0%, making energy irrelevant to training success. Energy is deducted *after* training completes, so restoring it beforehand gives no benefit; using energy items would waste them. The bot treats a Charm as "being used" if one has already been queued this turn, or if one is available and the current training's failure chance is at or above 20% (meaning it *will* be queued when the scan reaches it).
 
-The bot checks for this interaction before evaluating any energy item. It considers a Charm "being used" if:
-- A Charm has already been queued this turn, OR
-- A Charm is available in inventory AND the current training's failure chance is ≥ 20% (meaning a Charm *will* be queued when the scan reaches it)
+**The greedy energy algorithm.** When multiple energy items are available, the bot reserves one unit of the lowest-tier item still owned (Energy Drink MAX first, then Vita 20, 40, 65) for emergency race recovery, sorts the rest by gain descending, and greedily takes items while simulated energy stays within a 110% soft cap. The 10-point overshoot is deliberate: it prefers Vita 65 + Vita 40 (105) over Vita 65 + Vita 20 (85) rather than leaving 15% on the table. Example: at 35% energy owning one each of Vita 65/40/20, the Vita 20 is reserved, so the pool is {65, 40}; 35 + 65 = 100 picks Vita 65, and 100 + 40 = 140 skips Vita 40.
 
-**Shop priority:** Tier 1 (critical). This is the **highest priority** purchase in the shop because it enables the bot to safely train high-risk options that would otherwise be filtered out.
+**Megaphone tier selection.** The bot fires the best eligible tier, trying Empowering, then Motivating, then Coaching, and picking the first tier that is both owned and clears its own per-tier gain threshold (0 by default, configurable per tier). A lower tier fires only when every higher one is unowned or blocked by its threshold.
 
-**Irregular Training interaction:** When evaluating irregular training, the bot checks if a Charm is available. If so, it passes `ignoreFailureChance = true` to the training analysis, allowing high-failure trainings to be considered as candidates.
+> [!IMPORTANT]
+> **Conservation gate.** Megaphones and the Good-Luck Charm are both skipped when mood is **below Normal** *and* the selected training's main stat gain is **below the low-gain floor** (default 15, configurable). Both conditions must hold: a bad mood already suppresses gains, so a weak training under a bad mood is the worst turn to burn a limited item on.
 
-</details>
-
-<details>
-<summary><strong>Training Effects — Reset Whistle</strong></summary>
-
-| Item | Price | Effect |
-|------|-------|--------|
-| **Reset Whistle** | 20 coins | Shuffle support card distribution across training facilities |
-
-**When used:** Only when **all** of these conditions are true:
-1. Turn is ≥ 13
-2. A Whistle has **not already been used** this turn (`bUsedWhistleToday == false`)
-3. The training analysis found **no suitable training** (`trainingSelected == null`)
-4. This is **not** an irregular training evaluation (whistles are blocked during irregular checks to prevent wasting them on opportunistic training)
-
-**What happens after use:**
-1. The bot confirms usage and closes the item dialog.
-2. Support cards are reshuffled across the 5 training facilities.
-3. The bot re-runs the full training analysis.
-4. If `whistleForcesTraining` is enabled (default: true) and the re-analysis still finds no suitable training, the bot **forces the best available training** even if it doesn't meet normal thresholds.
-5. After the whistle, a second item usage pass runs in case the new training recommendation changes which items should be used (e.g., different Ankle Weights).
-
-**When NOT used:**
-- A suitable training was already found (the whistle is only for "rescuing" bad turns).
-- A Whistle was already used this turn.
-- This is an irregular training evaluation (the whistle is too valuable to use on a speculative check).
-- Energy recovery is needed (`needsEnergyRecovery` is true) — the problem is low energy, not bad training options, so reshuffling won't help.
-
-**Shop priority:** Tier 4 (training effects). Relatively cheap at 20 coins and very useful as a safety net.
-
-</details>
-
-<details>
-<summary><strong>Training Facilities — Training Applications</strong></summary>
-
-| Item | Price | Effect |
-|------|-------|--------|
-| **Speed Training Application** | 150 coins | Speed Training Level +1 |
-| **Stamina Training Application** | 150 coins | Stamina Training Level +1 |
-| **Power Training Application** | 150 coins | Power Training Level +1 |
-| **Guts Training Application** | 150 coins | Guts Training Level +1 |
-| **Wit Training Application** | 150 coins | Wit Training Level +1 |
-
-**When used:** These are marked as **quick-use** items. Used immediately on sight during the inventory scan. Training level increases are permanent and improve all future training gains for that stat.
-
-**When NOT used:**
-- The facility is already at max level.
-
-**Shop priority:** Tier 6. Only purchased for the top 3 stats in the user's stat prioritization order. At 150 coins each, they are expensive but provide a lasting benefit.
-
-</details>
+**Reset Whistle.** After use: the bot confirms and closes the item dialog, the game reshuffles support cards across the 5 training facilities, and the bot re-runs the full training analysis. If `whistleForcesTraining` is enabled (default: true) and the re-analysis still finds nothing suitable, the bot forces the best available training even if it doesn't meet normal thresholds. A second item-usage pass then runs in case the new recommendation changes which items apply, such as different Ankle Weights.
 
 ### 11.4 Race Item Usage
 
-The three race items are the one group that does **not** flow through the training item pass above. They have their own usage path on the Race Prep screen, with their own conservation rules built around the Twinkle Star Climax.
+The three race items, priced and gated in the item reference above, do not flow through the training item pass. They have their own usage flow that triggers on the **Race Prep screen** before a race begins, including mandatory Finale races (turns 73-75) and scheduled races via the `onScheduledRacePrepScreen()` hook.
 
-<details>
-<summary><strong>Races — Master Cleat Hammer, Artisan Cleat Hammer, Glow Sticks</strong></summary>
+**Finale conservation ladder** (Twinkle Star Climax, turns 73-75):
 
-| Item | Price | Effect |
-|------|-------|--------|
-| **Master Cleat Hammer** | 40 coins | Race bonus +35% (one turn) |
-| **Artisan Cleat Hammer** | 25 coins | Race bonus +20% (one turn) |
-| **Glow Sticks** | 15 coins | Race fan gain +50% (one turn) |
+| Item | Turn 73 | Turn 74 | Turn 75 | Before turn 73 |
+|------|---------|---------|---------|-----------------|
+| Master Cleat Hammer | needs 3+ copies | needs 2+ | needs 1+ | needs more than 3 (hoard 3 for the climax) |
+| Artisan Cleat Hammer | needs 2+ copies | any copy | any copy | any copy |
+| Glow Sticks | needs 2+ copies | needs 2+ | any copy | any copy |
 
-> **Important:** These items are **not** used during the normal training item pass. They have their own dedicated usage flow that triggers on the **Race Prep screen** before a race begins. This includes mandatory races (Finale turns 73–75) and scheduled races via the `onScheduledRacePrepScreen()` hook.
+The Master Cleat Hammer ladder chains one hammer to each of the three climax races; pre-climax turns need more than 3 in reserve because the climax races have the highest stat return per hammer in the run. Artisan holds one back on turn 73 for the Semi-Final and Final. Glow Sticks holds one back through turns 73 and 74 for the Final; during all three Finale turns the standard 20,000-fan requirement for Glow Sticks is waived, so any G1 qualifies.
 
-**Master Cleat Hammer — when used:**
-- The upcoming race is **G1 grade**.
-- The item is available in inventory.
-- **Finale conservation:** A sliding threshold across the climax: turn 73 needs **3 or more** copies, turn 74 needs **2 or more**, turn 75 needs **1**. That chain guarantees one hammer for each of the three Twinkle Star Climax races.
-- **Pre-climax reserve:** On every turn before 73 the bot needs **more than 3** copies to spend one, hoarding three for the climax races, which have the highest stat return per hammer in the run. With 1-3 in inventory, a regular G1 uses none.
-
-**Artisan Cleat Hammer — when used:**
-- The upcoming race is **G2 or G3 grade**.
-- OR the race is G1 but no Master Cleat Hammer is available (fallback).
-- The item is available in inventory.
-- **Finale conservation:** Turn 73 needs **2 or more** copies, saving one for the Semi-Final and Final. Turns 74 and 75 carry no reserve; any copy is spent.
-
-**Glow Sticks — when used:**
-- The upcoming race is **G1 grade**.
-- The race awards **≥ 20,000 fans**.
-- The item is available in inventory.
-- **Finale exception:** During all Finale turns (73–75), the 20,000 fan requirement is **waived** — Glow Sticks are used for any G1 race.
-- **Finale conservation:** During turns 73 and 74, the bot only uses Glow Sticks if it has **2 or more copies**, saving the last one for turn 75 (Finals). On turn 75, all remaining copies are used freely.
-
-**When NONE of these are used:**
-- The race is OP or Pre-OP grade (no items for low-grade races).
-- A race item (`bUsedHammerToday`) has already been used this turn.
-- Turn is before 13.
-- No matching items are available in inventory.
-
-**Shop priority:** Master Cleat Hammer is Tier 1 (critical). Artisan Cleat Hammer is also Tier 1. Glow Sticks is also Tier 1. All three are among the first items the bot purchases.
-
-</details>
+**When none of the three are used:** the race is OP or Pre-OP grade, a race item (`bUsedHammerToday`) was already used this turn, the turn is before 13, or no matching item is in inventory.
 
 ### 11.5 Consecutive Race System
 
