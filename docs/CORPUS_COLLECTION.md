@@ -66,13 +66,13 @@ collector never mutates, normalizes, clears, or renames the device files.
 
 ### Decision trace (`decisions.jsonl`)
 
-One `decision_trace` record per main-screen turn, built by `DecisionTrace.buildRecord` (`bot/DecisionTrace.kt`).
+One `decision_trace` record per main-screen turn, built by `DecisionTrace.buildRecord` (`bot/DecisionTrace.kt`), except when the turn ends in a dialog before the action tick.
 
 - Identity: `type`, `v` (schema version), wall-clock `ts`, app version (`app`), config fingerprint (`fp`), `scenario`, `trainee`, applied `preset`, `careerToken` (the same identity the career-finalize records use, so traces join to them directly), `queueRun`.
 - Date: `turn` (present only when the date was actually read this career), `year`, `month`, `phase`.
 - `state`: energy, mood, the five stats, skill points, fans, negative statuses, and any scenario inventory or extra state -- the snapshot taken when the turn opened, not live state at write time.
 - `observation`: whether the turn number, stats, skill points and aptitudes came from an actual read this career rather than a carried-over or default value. These are the existing readers' read flags, not confidence scores.
-- `candidates`: main-screen actions carry the chosen one plus each alternative the priority cascade explicitly ruled out; trainings carry the analyzer's pick plus its runner-ups with their scores, failure chances, stat gains and evidence (rainbow/skill-hint counts, relationship bars, Unity Cup spirit gauges where applicable).
+- `candidates`: main-screen actions carry the chosen one plus each alternative the priority cascade explicitly ruled out; trainings carry the analyzer's pick plus its runner-ups with their scores, failure chances, stat gains and evidence (rainbow/skill-hint counts, relationship bars, Unity Cup spirit gauges, Grand Concert performance gains where applicable).
 - `selected`: the committed action and its reason, the training pick and its source, and a `recovery` block when the turn abandoned its pick and executed a recovery instead.
 - `raceEligibility`, `items` and `notes` when the turn recorded them.
 - `enteredRace`: identity of a race that actually completed this turn (turn number, resolution, path, and an optional catalog name/match count) -- present only on a turn whose race completed.
