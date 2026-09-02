@@ -167,6 +167,11 @@ function provenance(o: Partial<ReplacementEvidenceProvenance> = {}): Replacement
     return { confirmedVeterans: 7, traineeCount: 3, identityCollisions: 0, appVersions: ["1.4.0"], newestObservationTs: Date.UTC(2026, 7, 28, 9, 0, 0), ...o }
 }
 
+/** What JSON.parse of a hand-edited retention document can yield: the approved fields plus injected extras. */
+function withExtras(): ReplacementEvidenceProvenance {
+    return { ...provenance(), safeToDelete: true, fragility: 0.9, recommendation: "DELETE", nested: { transfer: true } } as unknown as ReplacementEvidenceProvenance
+}
+
 /** Decision, ranking, executor and destructive-advice field names this slice must never emit. */
 const FORBIDDEN_CONTRACT_KEYS = ["action", "execute", "transfer", "delete", "release", "favorite", "approve", "score", "weight", "tier", "rank", "priority", "order", "opportunityCost", "targetFreeSlots", "recommendation", "safeToTransfer", "safeToDelete", "fragility"]
 
@@ -483,10 +488,11 @@ describe("replacement evidence provenance", () => {
         expect(doc.limits.map((l) => l.code)).not.toContain("REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")
     })
 
-    test("present evidence is carried through verbatim and adds the corpus-dependence limit exactly once", () => {
+    test("present evidence is projected into a new object and adds the corpus-dependence limit exactly once", () => {
         const evidence = provenance()
         const doc = buildCapacityCoverage(report([withFactors()], { replacementEvidence: evidence }))
-        expect(doc.replacementEvidence).toBe(evidence)
+        expect(doc.replacementEvidence).toEqual(evidence)
+        expect(doc.replacementEvidence).not.toBe(evidence)
         expect(Object.keys(doc.replacementEvidence as object).sort()).toEqual(["appVersions", "confirmedVeterans", "identityCollisions", "newestObservationTs", "traineeCount"])
         expect(doc.limits.filter((l) => l.code === "REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")).toHaveLength(1)
     })
@@ -512,13 +518,53 @@ describe("replacement evidence provenance", () => {
         expect(doc.poolSize).toBe(0)
         expect(doc.factorSlots).toHaveLength(0)
         expect(doc.exposures).toHaveLength(0)
-        expect(doc.replacementEvidence).toBe(evidence)
+        expect(doc.replacementEvidence).toEqual(evidence)
+        expect(doc.limits.filter((l) => l.code === "REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")).toHaveLength(1)
+    })
+
+    test("extra top-level keys on a hand-edited provenance block are stripped on the usable branch", () => {
+        const doc = buildCapacityCoverage(report([withFactors()], { replacementEvidence: withExtras() }))
+        expect(doc.usable).toBe(true)
+        expect(doc.replacementEvidence).toEqual(provenance())
+        expect(Object.keys(doc.replacementEvidence as object).sort()).toEqual(["appVersions", "confirmedVeterans", "identityCollisions", "newestObservationTs", "traineeCount"])
+        expect(doc.replacementEvidence).not.toHaveProperty("safeToDelete")
+        expect(doc.replacementEvidence).not.toHaveProperty("fragility")
+        expect(doc.replacementEvidence).not.toHaveProperty("recommendation")
+        expect(doc.replacementEvidence).not.toHaveProperty("nested")
+        expect(forbiddenKeyPaths(doc)).toEqual([])
+        expect(doc.limits.filter((l) => l.code === "REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")).toHaveLength(1)
+    })
+
+    test("extra top-level keys are stripped on the fail-closed branch too", () => {
+        const untrusted = rec({ scanIndex: 0, dataCompleteness: completeness({ rosterTrusted: false }) })
+        const doc = buildCapacityCoverage(report([untrusted], { replacementEvidence: withExtras() }))
+        expect(doc.usable).toBe(false)
+        expect(doc.poolSize).toBe(0)
+        expect(doc.factorSlots).toHaveLength(0)
+        expect(doc.exposures).toHaveLength(0)
+        expect(doc.replacementEvidence).toEqual(provenance())
+        expect(Object.keys(doc.replacementEvidence as object).sort()).toEqual(["appVersions", "confirmedVeterans", "identityCollisions", "newestObservationTs", "traineeCount"])
+        expect(forbiddenKeyPaths(doc)).toEqual([])
         expect(doc.limits.filter((l) => l.code === "REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")).toHaveLength(1)
     })
 
     test("output with present provenance is deterministic", () => {
         const build = () => buildCapacityCoverage(report([withFactors()], { replacementEvidence: provenance() }))
         expect(JSON.stringify(build())).toBe(JSON.stringify(build()))
+    })
+
+    test("provenance key order in the output does not depend on the input key order", () => {
+        const declared = provenance()
+        const reversed: ReplacementEvidenceProvenance = {
+            newestObservationTs: declared.newestObservationTs,
+            appVersions: declared.appVersions,
+            identityCollisions: declared.identityCollisions,
+            traineeCount: declared.traineeCount,
+            confirmedVeterans: declared.confirmedVeterans,
+        }
+        const build = (evidence: ReplacementEvidenceProvenance) => buildCapacityCoverage(report([withFactors()], { replacementEvidence: evidence }))
+        expect(JSON.stringify(build(declared))).toBe(JSON.stringify(build(reversed)))
+        expect(Object.keys(build(reversed).replacementEvidence as object)).toEqual(["confirmedVeterans", "traineeCount", "identityCollisions", "appVersions", "newestObservationTs"])
     })
 })
 

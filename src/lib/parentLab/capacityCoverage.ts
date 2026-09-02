@@ -39,7 +39,7 @@ import {
 } from "./capacityCoverageTypes.ts"
 import { PARENTLAB_CAPACITY_SCHEMA_VERSION } from "./capacityTypes.ts"
 import { resolveTargetProfile } from "./retentionTargets.ts"
-import type { RetentionShadowReport, VeteranRetentionRecommendation } from "./retentionTypes.ts"
+import type { ReplacementEvidenceProvenance, RetentionShadowReport, VeteranRetentionRecommendation } from "./retentionTypes.ts"
 
 /** Deterministic display text for each limit. No clock or environment reads. */
 function limitReason(code: CoverageLimitCode, report: RetentionShadowReport): string {
@@ -138,8 +138,19 @@ export function buildCapacityCoverage(report: RetentionShadowReport, domain?: Wh
     const whiteFamilies = domain ? whiteFamilySets(domain) : null
     const whiteDomainAvailable = whiteFamilies !== null
     // Persisted retention v2 inputs carry no replacementEvidence key, and JSON.stringify drops an
-    // undefined value, so normalize to null to keep the coverage key always present.
-    const replacementEvidence = report.replacementEvidence ?? null
+    // undefined value, so normalize to null to keep the coverage key always present. The report here is
+    // parsed retention JSON, which may have been hand-edited, so project only the approved provenance
+    // fields instead of carrying the input object through.
+    const provenance = report.replacementEvidence
+    const replacementEvidence: ReplacementEvidenceProvenance | null = provenance
+        ? {
+              confirmedVeterans: provenance.confirmedVeterans,
+              traineeCount: provenance.traineeCount,
+              identityCollisions: provenance.identityCollisions,
+              appVersions: provenance.appVersions,
+              newestObservationTs: provenance.newestObservationTs,
+          }
+        : null
     const limits = buildLimits(report, whiteDomainAvailable, replacementEvidence !== null)
 
     const base = {

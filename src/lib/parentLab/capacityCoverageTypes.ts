@@ -260,8 +260,9 @@ export interface CapacityCoverageDocument {
     readonly rosterScanId: string
     readonly rosterFingerprint: string
     readonly protectionScanId: string | null
-    /** Replacement-evidence provenance carried verbatim from the retention document, or null when the
-     * input carried none. Provenance only: never a count, ranking, or transfer verdict. */
+    /** The five approved replacement-evidence provenance fields projected from the retention document,
+     * or null when the input carried none. Extra top-level keys on the input are not carried through.
+     * Provenance only: never a count, ranking, or transfer verdict. */
     readonly replacementEvidence: ReplacementEvidenceProvenance | null
     /** Newest input observation time from the retention document, NOT a clock read. */
     readonly generatedAt: number | null
