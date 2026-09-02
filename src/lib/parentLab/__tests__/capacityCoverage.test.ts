@@ -13,6 +13,7 @@ import {
     PERMANENT_COVERAGE_LIMITS,
     WHITE_SUBFAMILIES,
     isCapacityCoverageDocument,
+    type VeteranCoverageExposure,
     type WhiteFactorDomain,
 } from "../capacityCoverageTypes.ts"
 import { buildCapacityTriage } from "../capacityEvidence.ts"
@@ -694,6 +695,13 @@ describe("multi-target coverage slots", () => {
         // so the selected profile drops off the row without any Veteran changing pool.
         expect(general.exposures.map((e) => e.soleTargetSlots)).toEqual([["MILE_PARENT"], []])
         expect(mile.exposures.map((e) => e.soleTargetSlots)).toEqual([[], []])
+        // Every other exposure field is lens-independent: strip only the two fields proven to legitimately
+        // differ above, and require the rest of each row to match exactly across lenses.
+        const withoutLensDependentFields = (row: VeteranCoverageExposure) => {
+            const { soleTargetSlots: _soleTargetSlots, explanation: _explanation, ...rest } = row
+            return rest
+        }
+        expect(mile.exposures.map(withoutLensDependentFields)).toEqual(general.exposures.map(withoutLensDependentFields))
         expect(mile.factorExposureCounts).toEqual(general.factorExposureCounts)
         expect(mile.characterExposureCounts).toEqual(general.characterExposureCounts)
         expect(JSON.stringify(mile.targetSlots)).toBe(JSON.stringify(general.targetSlots))
