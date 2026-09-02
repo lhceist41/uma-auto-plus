@@ -34,20 +34,23 @@ const DEFAULT_TARGET = "GENERAL_INHERITANCE"
 // lookup independent of the caller's working directory; PARENT_LAB_WHITE_FACTOR_DOMAIN overrides it for tests.
 const DOMAIN_ASSET = process.env.PARENT_LAB_WHITE_FACTOR_DOMAIN ?? join(dirname(fileURLToPath(import.meta.url)), "..", "android", "app", "src", "main", "assets", "veteran_factor_domain.json")
 
-/** Parses the white factor families from the committed domain asset. This asset is required CLI evidence,
- * so a missing, syntax-invalid, or structurally invalid asset fails closed instead of degrading. */
+/** Parses the white factor families and the asset's own identity from the committed domain asset. This
+ * asset is required CLI evidence, so a missing, syntax-invalid, or structurally invalid asset fails closed
+ * instead of degrading. schemaVersion and source are passed through as read: buildCapacityCoverage rejects
+ * a malformed identity, so a hand-edited asset cannot produce a document with unusable provenance. */
 function loadWhiteFactorDomain(path) {
     if (!existsSync(path) || !statSync(path).isFile()) throw new Error(`white factor domain asset is missing: ${path}`)
-    let families
+    let asset
     try {
-        families = JSON.parse(readFileSync(path, "utf8")).families
+        asset = JSON.parse(readFileSync(path, "utf8"))
     } catch (e) {
         throw new Error(`white factor domain asset is not valid JSON (${e instanceof Error ? e.message : String(e)}): ${path}`)
     }
+    const families = asset?.families
     if (!families || !Array.isArray(families.skill) || !Array.isArray(families.race) || !Array.isArray(families.scenario)) {
         throw new Error(`white factor domain asset has an invalid structure (expected families.skill/race/scenario arrays): ${path}`)
     }
-    return { skill: families.skill, race: families.race, scenario: families.scenario }
+    return { schemaVersion: asset.schemaVersion, source: asset.source, skill: families.skill, race: families.race, scenario: families.scenario }
 }
 
 const HELP = `parent-lab-capacity-coverage - Capacity Coverage Exposure Ledger, Slice 2 (read-only, structure only)
@@ -142,6 +145,7 @@ function exposedViewOf(doc) {
         rosterScanId: doc.rosterScanId,
         rosterFingerprint: doc.rosterFingerprint,
         replacementEvidence: doc.replacementEvidence,
+        whiteFactorDomainProvenance: doc.whiteFactorDomainProvenance,
         generatedAt: doc.generatedAt,
         usable: doc.usable,
         poolSize: doc.poolSize,

@@ -26,10 +26,10 @@ import type { ReplacementEvidenceProvenance } from "./retentionTypes.ts"
 /** Schema discriminator for the coverage document. Distinct from every other ParentLab schema so a
  * persistence reader cannot confuse it with a retention, Slice 1 capacity, or quarantine document. */
 export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA = "parent_lab_capacity_coverage" as const
-/** Version 3: additively carries the retention document's replacement-evidence provenance so a reader can
- * see which career corpus the retention states behind this ledger were derived from. Provenance only:
- * valuation (affinity, rebuildability, active-racer utility) is still deferred. */
-export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION = 3 as const
+/** Version 4: additively carries the white factor domain that classified this document's white slots,
+ * alongside v3's replacement-evidence provenance. Provenance only: valuation (affinity, rebuildability,
+ * active-racer utility) is still deferred. */
+export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION = 4 as const
 /** Human-readable document kind, carried alongside the schema for defense in depth. */
 export const PARENTLAB_CAPACITY_COVERAGE_KIND = "CAPACITY_COVERAGE_EXPOSURE" as const
 
@@ -98,8 +98,13 @@ export const COVERAGE_LIMITS = [
     /** Some self-factor reads did not resolve onto the canonical domain. Conditional. */
     "UNRESOLVED_FACTOR_READS",
     /** No white factor domain was supplied, so white subfamily is not derived and every white slot
-     * reports whiteSubfamily = null. Dropped when a domain is available. Conditional. */
+     * reports whiteSubfamily = null. Replaced by CAPTURE_FACTOR_DOMAIN_NOT_RECORDED when a domain is
+     * available. Conditional. */
     "WHITE_SUBFAMILY_NOT_AVAILABLE",
+    /** A white factor domain classified these slots and is pinned in whiteFactorDomainProvenance, but the
+     * domain the device used when those factor names were captured is not recorded. Conditional, and the
+     * exact complement of WHITE_SUBFAMILY_NOT_AVAILABLE. */
+    "CAPTURE_FACTOR_DOMAIN_NOT_RECORDED",
     /** Affinity is not decoded in this repository and is not consumed. */
     "AFFINITY_NOT_DECODED",
     /** Independent Training rebuildability / replacement difficulty is not measured here. */
@@ -116,8 +121,9 @@ export const COVERAGE_LIMITS = [
 ] as const
 export type CoverageLimitCode = (typeof COVERAGE_LIMITS)[number]
 
-/** The base coverage limits. WHITE_SUBFAMILY_NOT_AVAILABLE is dropped when a white factor domain is
- * supplied; the rest are always present regardless of the input. */
+/** The base coverage limits. WHITE_SUBFAMILY_NOT_AVAILABLE is replaced in place by
+ * CAPTURE_FACTOR_DOMAIN_NOT_RECORDED when a white factor domain is supplied; the rest are always present
+ * regardless of the input. */
 export const PERMANENT_COVERAGE_LIMITS: readonly CoverageLimitCode[] = [
     "WHITE_SUBFAMILY_NOT_AVAILABLE",
     "AFFINITY_NOT_DECODED",
@@ -223,11 +229,30 @@ export interface VeteranCoverageExposure {
 /**
  * Canonical white factor names per family, as parsed from veteran_factor_domain.json. The builder matches
  * a white slot's canonical name against these by exact membership, upper-cased the same way factorKey() is.
+ * schemaVersion and source are the asset's own identity, carried into the document's domain provenance.
  */
 export interface WhiteFactorDomain {
+    readonly schemaVersion: number
+    readonly source: string
     readonly skill: readonly string[]
     readonly race: readonly string[]
     readonly scenario: readonly string[]
+}
+
+/**
+ * Which white factor domain classified this document's white slots.
+ *
+ * `contentHash128` pins CLASSIFICATION semantics rather than the asset file: it covers exactly the three
+ * canonical family sets the classifier reads, upper-cased, deduplicated and sorted, so an edit to the
+ * asset's stat/aptitude/unique families cannot move it while a renamed or re-homed white name does.
+ * `counts` are those canonical set sizes, not the raw array lengths. Provenance only: never a coverage
+ * count, a ranking, or a transfer verdict.
+ */
+export interface WhiteFactorDomainProvenance {
+    readonly schemaVersion: number
+    readonly source: string
+    readonly counts: Readonly<Record<WhiteSubfamily, number>>
+    readonly contentHash128: string
 }
 
 /**
@@ -265,6 +290,10 @@ export interface CapacityCoverageDocument {
      * a malformed value under an approved key rejects the whole block instead of producing a document.
      * Provenance only: never a count, ranking, or transfer verdict. */
     readonly replacementEvidence: ReplacementEvidenceProvenance | null
+    /** The white factor domain that classified this document's white slots, or null when none was
+     * supplied to buildCapacityCoverage. Null means exactly that absence: never malformed, degraded,
+     * unverified, or a capture-side mismatch. A malformed domain identity throws instead. */
+    readonly whiteFactorDomainProvenance: WhiteFactorDomainProvenance | null
     /** Newest input observation time from the retention document, NOT a clock read. */
     readonly generatedAt: number | null
     /** The Slice 1 capacity schema version this document was built against, for provenance. */

@@ -34,10 +34,12 @@ import {
     type TargetCoverageSlot,
     type VeteranCoverageExposure,
     type WhiteFactorDomain,
+    type WhiteFactorDomainProvenance,
     type WhiteSubfamily,
     type WhiteSubfamilyCoverage,
 } from "./capacityCoverageTypes.ts"
 import { PARENTLAB_CAPACITY_SCHEMA_VERSION } from "./capacityTypes.ts"
+import { contentHash128 } from "./identity.ts"
 import { resolveTargetProfile } from "./retentionTargets.ts"
 import type { ReplacementEvidenceProvenance, RetentionShadowReport, VeteranRetentionRecommendation } from "./retentionTypes.ts"
 
@@ -50,6 +52,8 @@ function limitReason(code: CoverageLimitCode, report: RetentionShadowReport): st
             return `${report.scarcity.unresolvedFactorReads} self-factor read(s) did not resolve onto the canonical domain and are excluded from carrier evidence`
         case "WHITE_SUBFAMILY_NOT_AVAILABLE":
             return "white factor subfamily is not derived in v1; every white slot reports whiteSubfamily = null"
+        case "CAPTURE_FACTOR_DOMAIN_NOT_RECORDED":
+            return "the white factor domain used to classify these slots is pinned by schemaVersion, source and content hash; the domain identity used on device when these factor names were captured is not recorded anywhere in this pipeline, so classification-side and capture-side domains are not shown to agree"
         case "AFFINITY_NOT_DECODED":
             return "affinity is not decoded in this repository and is not consumed"
         case "REBUILDABILITY_NOT_MEASURED":
@@ -65,16 +69,16 @@ function limitReason(code: CoverageLimitCode, report: RetentionShadowReport): st
     }
 }
 
-/** Assembles the limits array: conditional coverage limits first, then the base limits. When a white
- * factor domain is available, WHITE_SUBFAMILY_NOT_AVAILABLE is dropped since white slots are classified.
+/** Assembles the limits array: conditional coverage limits first, then the base limits. A supplied white
+ * factor domain classifies the white slots, so WHITE_SUBFAMILY_NOT_AVAILABLE gives up its slot to
+ * CAPTURE_FACTOR_DOMAIN_NOT_RECORDED; exactly one of the two is always present.
  * REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT is seated with the rebuildability limit it qualifies. */
 function buildLimits(report: RetentionShadowReport, whiteDomainAvailable: boolean, hasReplacementEvidence: boolean): readonly CoverageLimit[] {
     const codes: CoverageLimitCode[] = []
     if (!report.scarcity.accountWide) codes.push("COVERAGE_INCOMPLETE")
     if (report.scarcity.unresolvedFactorReads > 0) codes.push("UNRESOLVED_FACTOR_READS")
     for (const code of PERMANENT_COVERAGE_LIMITS) {
-        if (code === "WHITE_SUBFAMILY_NOT_AVAILABLE" && whiteDomainAvailable) continue
-        codes.push(code)
+        codes.push(code === "WHITE_SUBFAMILY_NOT_AVAILABLE" && whiteDomainAvailable ? "CAPTURE_FACTOR_DOMAIN_NOT_RECORDED" : code)
         if (code === "REBUILDABILITY_NOT_MEASURED" && hasReplacementEvidence) codes.push("REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")
     }
     return codes.map((code) => ({ code, reason: limitReason(code, report) }))
@@ -86,6 +90,30 @@ function whiteFamilySets(domain: WhiteFactorDomain): Record<WhiteSubfamily, Read
         race: new Set(domain.race.map((name) => name.toUpperCase())),
         scenario: new Set(domain.scenario.map((name) => name.toUpperCase())),
         skill: new Set(domain.skill.map((name) => name.toUpperCase())),
+    }
+}
+
+/**
+ * Pins which white factor domain classified this document's white slots. Null only when no domain was
+ * supplied.
+ *
+ * Counts and hash are derived from the classifier's own canonical family sets rather than accepted from
+ * the caller, so they cannot disagree with how the slots were actually classified. A hand-edited asset can
+ * carry any JSON under schemaVersion/source, so a malformed identity throws instead of emitting a document
+ * whose provenance cannot be trusted.
+ */
+function whiteFactorDomainProvenanceOf(domain: WhiteFactorDomain | undefined, families: Record<WhiteSubfamily, ReadonlySet<string>> | null): WhiteFactorDomainProvenance | null {
+    if (domain === undefined || families === null) return null
+    const schemaVersion = domain.schemaVersion
+    if (typeof schemaVersion !== "number" || !Number.isInteger(schemaVersion) || schemaVersion < 0) throw new Error(`white factor domain schemaVersion is not a non-negative integer: ${String(schemaVersion)}`)
+    const source = domain.source
+    if (typeof source !== "string") throw new Error(`white factor domain source is not a string: ${String(source)}`)
+    const canonical = (family: WhiteSubfamily) => [...families[family]].sort()
+    return {
+        schemaVersion,
+        source,
+        counts: { race: families.race.size, scenario: families.scenario.size, skill: families.skill.size },
+        contentHash128: contentHash128(JSON.stringify({ v: 1, race: canonical("race"), scenario: canonical("scenario"), skill: canonical("skill") })),
     }
 }
 
@@ -177,6 +205,7 @@ export function buildCapacityCoverage(report: RetentionShadowReport, domain?: Wh
     // Persisted retention v2 inputs carry no replacementEvidence key, and JSON.stringify drops an
     // undefined value, so normalize to null to keep the coverage key always present.
     const replacementEvidence = readReplacementEvidence(report.replacementEvidence)
+    const whiteFactorDomainProvenance = whiteFactorDomainProvenanceOf(domain, whiteFamilies)
     const limits = buildLimits(report, whiteDomainAvailable, replacementEvidence !== null)
 
     const base = {
@@ -188,6 +217,7 @@ export function buildCapacityCoverage(report: RetentionShadowReport, domain?: Wh
         rosterFingerprint: report.rosterFingerprint,
         protectionScanId: report.protectionScanId,
         replacementEvidence,
+        whiteFactorDomainProvenance,
         generatedAt: report.generatedAt,
         capacitySchemaVersion: PARENTLAB_CAPACITY_SCHEMA_VERSION as number,
         coverage: report.scarcity.coverage,

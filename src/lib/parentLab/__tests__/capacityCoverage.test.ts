@@ -10,6 +10,7 @@ import {
     PARENTLAB_CAPACITY_COVERAGE_KIND,
     PARENTLAB_CAPACITY_COVERAGE_SCHEMA,
     PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION,
+    PERMANENT_COVERAGE_LIMITS,
     WHITE_SUBFAMILIES,
     isCapacityCoverageDocument,
     type WhiteFactorDomain,
@@ -172,6 +173,20 @@ function withExtras(): ReplacementEvidenceProvenance {
     return { ...provenance(), safeToDelete: true, fragility: 0.9, recommendation: "DELETE", nested: { transfer: true } } as unknown as ReplacementEvidenceProvenance
 }
 
+/** A synthetic white factor domain carrying the asset's identity fields. "Trackblazer" is public game
+ * data and the required real-world ambiguity case: it exists in both the skill and scenario families of
+ * the canonical domain asset. Overrides take arbitrary JSON so malformed-identity cases stay expressible. */
+function domain(o: Record<string, unknown> = {}): WhiteFactorDomain {
+    return {
+        schemaVersion: 1,
+        source: "synthetic test domain",
+        skill: ["Synth Skill White", "Trackblazer"],
+        race: ["Synth Race White"],
+        scenario: ["Synth Scenario White", "Trackblazer"],
+        ...o,
+    } as unknown as WhiteFactorDomain
+}
+
 /** Decision, ranking, executor and destructive-advice field names this slice must never emit. */
 const FORBIDDEN_CONTRACT_KEYS = ["action", "execute", "transfer", "delete", "release", "favorite", "approve", "score", "weight", "tier", "rank", "priority", "order", "opportunityCost", "targetFreeSlots", "recommendation", "safeToTransfer", "safeToDelete", "fragility"]
 
@@ -311,13 +326,7 @@ describe("degradation and claim strength", () => {
 })
 
 describe("white subfamily classification", () => {
-    // Synthetic families, except "Trackblazer" which is public game data and the required real-world
-    // ambiguity case: it exists in both the skill and scenario families of the canonical domain asset.
-    const whiteDomain: WhiteFactorDomain = {
-        skill: ["Synth Skill White", "Trackblazer"],
-        race: ["Synth Race White"],
-        scenario: ["Synth Scenario White", "Trackblazer"],
-    }
+    const whiteDomain = domain()
 
     test("a supplied domain classifies white slots into skill/race/scenario and drops the limit", () => {
         const recs = [
@@ -392,6 +401,156 @@ describe("white subfamily classification", () => {
     test("output with a domain is deterministic", () => {
         const build = () => buildCapacityCoverage(report([rec({ scanIndex: 0, selfFactors: [{ factorKey: "white:SYNTH SKILL WHITE", stars: 3 }] })]), whiteDomain)
         expect(JSON.stringify(build())).toBe(JSON.stringify(build()))
+    })
+})
+
+describe("white factor domain provenance", () => {
+    const withFactors = () => rec({ scanIndex: 0, selfFactors: [{ factorKey: "white:SYNTH SKILL WHITE", stars: 3 }] })
+    const build = (d?: WhiteFactorDomain) => buildCapacityCoverage(report([withFactors()]), d)
+    const untrustedBuild = (d?: WhiteFactorDomain) => buildCapacityCoverage(report([rec({ scanIndex: 0, dataCompleteness: completeness({ rosterTrusted: false }) })]), d)
+
+    test("a supplied domain is projected with exactly the approved fields, in order", () => {
+        const p = build(domain()).whiteFactorDomainProvenance!
+        expect(Object.keys(p)).toEqual(["schemaVersion", "source", "counts", "contentHash128"])
+        expect(p.schemaVersion).toBe(1)
+        expect(p.source).toBe("synthetic test domain")
+        expect(Object.keys(p.counts)).toEqual(["race", "scenario", "skill"])
+        expect(p.counts).toEqual({ race: 1, scenario: 2, skill: 2 })
+        expect(p.contentHash128).toMatch(/^[0-9a-f]{32}$/)
+    })
+
+    test("counts are canonical set sizes, not raw array lengths", () => {
+        const p = build(domain({ skill: ["Synth Skill White", "SYNTH SKILL WHITE", "Trackblazer", "Trackblazer"] })).whiteFactorDomainProvenance!
+        expect(p.counts.skill).toBe(2)
+    })
+
+    test("array order, letter case and duplicates move neither the hash nor the counts", () => {
+        const declared = build(domain()).whiteFactorDomainProvenance!
+        const equivalent = build(domain({ skill: ["Trackblazer", "synth skill white"], scenario: ["trackblazer", "SYNTH SCENARIO WHITE", "Trackblazer"] })).whiteFactorDomainProvenance!
+        expect(equivalent.contentHash128).toBe(declared.contentHash128)
+        expect(equivalent.counts).toEqual(declared.counts)
+    })
+
+    test("the asset's own identity does not move the classification hash", () => {
+        const declared = build(domain()).whiteFactorDomainProvenance!
+        const relabelled = build(domain({ schemaVersion: 9, source: "some other source" })).whiteFactorDomainProvenance!
+        expect(relabelled.contentHash128).toBe(declared.contentHash128)
+        expect(relabelled.schemaVersion).toBe(9)
+        expect(relabelled.source).toBe("some other source")
+    })
+
+    test("renaming one white name moves the hash while every family count is preserved", () => {
+        const declared = build(domain()).whiteFactorDomainProvenance!
+        const renamed = build(domain({ skill: ["Synth Skill Renamed", "Trackblazer"] })).whiteFactorDomainProvenance!
+        expect(renamed.counts).toEqual(declared.counts)
+        expect(renamed.contentHash128).not.toBe(declared.contentHash128)
+    })
+
+    test("re-homing a name across families moves the hash while every family count is preserved", () => {
+        // Trackblazer leaves skill for race and Synth Race White takes its place. Both families keep their
+        // size, but the cross-family membership the classifier reports as ambiguous has changed.
+        const declared = build(domain()).whiteFactorDomainProvenance!
+        const rehomed = build(domain({ skill: ["Synth Skill White", "Synth Race White"], race: ["Trackblazer"] })).whiteFactorDomainProvenance!
+        expect(rehomed.counts).toEqual(declared.counts)
+        expect(rehomed.contentHash128).not.toBe(declared.contentHash128)
+    })
+
+    test("families the classifier does not read are outside the hash", () => {
+        const declared = build(domain()).whiteFactorDomainProvenance!
+        const withUnread = build(domain({ stat: ["Speed"], aptitude: ["Turf"], unique: ["Synth Unique"] })).whiteFactorDomainProvenance!
+        expect(withUnread.contentHash128).toBe(declared.contentHash128)
+    })
+
+    test("no domain yields explicit null provenance and the unavailable limit instead", () => {
+        const doc = build()
+        expect(doc.whiteFactorDomainProvenance).toBeNull()
+        expect(doc.whiteSubfamilyCoverage.available).toBe(false)
+        const codes = doc.limits.map((l) => l.code)
+        expect(codes).toContain("WHITE_SUBFAMILY_NOT_AVAILABLE")
+        expect(codes).not.toContain("CAPTURE_FACTOR_DOMAIN_NOT_RECORDED")
+        const roundTripped = JSON.parse(JSON.stringify(doc))
+        expect(Object.keys(roundTripped)).toContain("whiteFactorDomainProvenance")
+        expect(roundTripped.whiteFactorDomainProvenance).toBeNull()
+    })
+
+    test("provenance is present exactly when the white subfamily breakdown is available", () => {
+        for (const doc of [build(domain()), build(), untrustedBuild(domain()), untrustedBuild()]) {
+            expect(doc.whiteFactorDomainProvenance !== null).toBe(doc.whiteSubfamilyCoverage.available)
+        }
+    })
+
+    test("the usable and fail-closed branches carry identical provenance", () => {
+        const failClosed = untrustedBuild(domain())
+        expect(failClosed.usable).toBe(false)
+        expect(failClosed.poolSize).toBe(0)
+        expect(failClosed.factorSlots).toHaveLength(0)
+        expect(failClosed.exposures).toHaveLength(0)
+        expect(failClosed.whiteFactorDomainProvenance).toEqual(build(domain()).whiteFactorDomainProvenance)
+        expect(forbiddenKeyPaths(failClosed)).toEqual([])
+        expect(forbiddenKeyPaths(build(domain()))).toEqual([])
+    })
+
+    test("a malformed schemaVersion throws before a document exists", () => {
+        for (const bad of ["1", null, {}, [], true, 1.5, NaN, Infinity, -1, undefined, { safeToDelete: true }]) {
+            expect(() => build(domain({ schemaVersion: bad }))).toThrow(/schemaVersion is not a non-negative integer/)
+        }
+    })
+
+    test("a malformed source throws before a document exists", () => {
+        for (const bad of [1, null, {}, [], true, undefined, { safeToDelete: true }]) {
+            expect(() => build(domain({ source: bad }))).toThrow(/source is not a string/)
+        }
+    })
+
+    test("a malformed domain identity throws on the untrusted-roster branch too", () => {
+        expect(() => untrustedBuild(domain({ schemaVersion: "1" }))).toThrow(/schemaVersion is not a non-negative integer/)
+        expect(() => untrustedBuild(domain({ source: { safeToDelete: true } }))).toThrow(/source is not a string/)
+    })
+
+    test("an unsupported retention schema version is reported ahead of a malformed domain identity", () => {
+        const rep = report([withFactors()], { schemaVersion: 1 as unknown as typeof PARENTLAB_RETENTION_SCHEMA_VERSION })
+        expect(() => buildCapacityCoverage(rep, domain({ schemaVersion: "1" }))).toThrow(/retention schema version/)
+    })
+
+    test("a supplied domain emits the capture-domain limit exactly once, in place of the unavailable one", () => {
+        const codes = build(domain()).limits.map((l) => l.code)
+        expect(codes.filter((c) => c === "CAPTURE_FACTOR_DOMAIN_NOT_RECORDED")).toHaveLength(1)
+        expect(codes).not.toContain("WHITE_SUBFAMILY_NOT_AVAILABLE")
+    })
+
+    test("exactly one of the capture-domain and unavailable limits is present on every branch", () => {
+        for (const doc of [build(domain()), build(), untrustedBuild(domain()), untrustedBuild()]) {
+            const codes = doc.limits.map((l) => l.code)
+            expect(codes.filter((c) => c === "CAPTURE_FACTOR_DOMAIN_NOT_RECORDED" || c === "WHITE_SUBFAMILY_NOT_AVAILABLE")).toHaveLength(1)
+        }
+    })
+
+    test("the capture-domain limit sits immediately before AFFINITY_NOT_DECODED and is not a base limit", () => {
+        for (const codes of [build(domain()).limits.map((l) => l.code), untrustedBuild(domain()).limits.map((l) => l.code)]) {
+            expect(codes.indexOf("CAPTURE_FACTOR_DOMAIN_NOT_RECORDED")).toBe(codes.indexOf("AFFINITY_NOT_DECODED") - 1)
+        }
+        expect(PERMANENT_COVERAGE_LIMITS).not.toContain("CAPTURE_FACTOR_DOMAIN_NOT_RECORDED")
+    })
+
+    test("the capture-domain limit states the classification pin without claiming the capture domain agrees", () => {
+        const reason = build(domain()).limits.find((l) => l.code === "CAPTURE_FACTOR_DOMAIN_NOT_RECORDED")!.reason
+        expect(reason).toMatch(/is not recorded/)
+        expect(reason).toMatch(/not shown to agree/)
+        expect(reason).not.toMatch(/verified|compatible|matches/i)
+    })
+
+    test("the coverage schema is v4 while the capacity and retention schemas are unchanged", () => {
+        expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(4)
+        expect(build(domain()).schemaVersion).toBe(4)
+        expect(build(domain()).capacitySchemaVersion).toBe(PARENTLAB_CAPACITY_SCHEMA_VERSION)
+        expect(PARENTLAB_CAPACITY_SCHEMA_VERSION).toBe(1)
+        expect(PARENTLAB_RETENTION_SCHEMA_VERSION).toBe(3)
+    })
+
+    test("output is byte-identical across rebuilds and across semantically equal domains", () => {
+        expect(JSON.stringify(build(domain()))).toBe(JSON.stringify(build(domain())))
+        const equivalent = domain({ skill: ["Trackblazer", "synth skill white"], scenario: ["Trackblazer", "trackblazer", "SYNTH SCENARIO WHITE"] })
+        expect(JSON.stringify(build(equivalent))).toBe(JSON.stringify(build(domain())))
     })
 })
 
@@ -502,10 +661,10 @@ describe("replacement evidence provenance", () => {
         expect(codes.indexOf("REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")).toBe(codes.indexOf("REBUILDABILITY_NOT_MEASURED") + 1)
     })
 
-    test("the coverage schema is v3 and the Slice 1 capacity schema version is unchanged", () => {
+    test("the coverage schema is v4 and the Slice 1 capacity schema version is unchanged", () => {
         const doc = buildCapacityCoverage(report([withFactors()], { replacementEvidence: provenance() }))
-        expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(3)
-        expect(doc.schemaVersion).toBe(3)
+        expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(4)
+        expect(doc.schemaVersion).toBe(4)
         expect(doc.capacitySchemaVersion).toBe(1)
         expect(doc.capacitySchemaVersion).toBe(PARENTLAB_CAPACITY_SCHEMA_VERSION)
     })
@@ -794,5 +953,12 @@ describe("CLI freshness binding and exit codes", () => {
         writeFileSync(broken, "{ not valid json", "utf8")
         const path = writeRetention([rec({ selfFactors: [{ factorKey: "white:CLI_F", stars: 2 }] })])
         expect(run(["--retention", path], { PARENT_LAB_WHITE_FACTOR_DOMAIN: broken }).status).toBe(2)
+    })
+
+    test("a white factor domain asset with a malformed schemaVersion fails closed with exit 2", () => {
+        const bad = join(dir, "bad-identity-domain.json")
+        writeFileSync(bad, JSON.stringify({ schemaVersion: "1", source: "synthetic", families: { skill: [], race: [], scenario: [] } }), "utf8")
+        const path = writeRetention([rec({ selfFactors: [{ factorKey: "white:CLI_G", stars: 2 }] })])
+        expect(run(["--retention", path], { PARENT_LAB_WHITE_FACTOR_DOMAIN: bad }).status).toBe(2)
     })
 })
