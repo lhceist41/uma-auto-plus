@@ -26,10 +26,11 @@ import type { ReplacementEvidenceProvenance } from "./retentionTypes.ts"
 /** Schema discriminator for the coverage document. Distinct from every other ParentLab schema so a
  * persistence reader cannot confuse it with a retention, Slice 1 capacity, or quarantine document. */
 export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA = "parent_lab_capacity_coverage" as const
-/** Version 4: additively carries the white factor domain that classified this document's white slots,
- * alongside v3's replacement-evidence provenance. Provenance only: valuation (affinity, rebuildability,
+/** Version 5: targetSlots now covers every known target profile against the selected-lens review pool,
+ * where v4 emitted only the selected profile's slot. The pool, the white factor domain provenance and the
+ * replacement-evidence provenance are unchanged. Structure only: valuation (affinity, rebuildability,
  * active-racer utility) is still deferred. */
-export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION = 4 as const
+export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION = 5 as const
 /** Human-readable document kind, carried alongside the schema for defense in depth. */
 export const PARENTLAB_CAPACITY_COVERAGE_KIND = "CAPACITY_COVERAGE_EXPOSURE" as const
 
@@ -116,7 +117,8 @@ export const COVERAGE_LIMITS = [
     "ACTIVE_RACER_VALUE_NOT_MODELLED",
     /** Cross-target applicability of a factor is not modelled. */
     "TARGET_APPLICABILITY_NOT_MODELLED",
-    /** Coverage is scoped to the single selected target profile; other profiles are not aggregated. */
+    /** The eligible review pool is scoped to the selected target profile; the target slots report every
+     * known profile against that same pool, and no other profile's pool is recalculated. */
     "SINGLE_TARGET_PROFILE_SCOPE",
 ] as const
 export type CoverageLimitCode = (typeof COVERAGE_LIMITS)[number]
@@ -146,7 +148,8 @@ export type CoverageExposureCounts = Readonly<Record<CoverageExposure, number>>
  * One factor coverage slot, keyed by factorKey + starFloor.
  *
  * observedCarriers, admittedCarriers and anchoredCarriers describe the account-observed carrier set at
- * this star floor and its partition. `whiteSubfamily` is null in v1 (the shared domain is deferred).
+ * this star floor and its partition. `whiteSubfamily` is derived only when a white factor domain is
+ * supplied, and is null otherwise.
  * `characterBound` is the structural fact that a unique (green) factor is bound to its character; it is
  * not a value judgment.
  */
@@ -188,8 +191,14 @@ export interface CharacterCoverageSlot {
 }
 
 /**
- * The single target coverage slot for the selected report profile. Profile-scoped only: this slice
- * never aggregates multiple target profiles (SINGLE_TARGET_PROFILE_SCOPE is always emitted).
+ * One target coverage slot. The document carries one per TARGET_PROFILE_IDS entry, in that fixed order,
+ * every one of them measured against the SAME selected-lens review pool: no per-profile admission is
+ * recalculated and no other profile's pool is built (SINGLE_TARGET_PROFILE_SCOPE is always emitted). A
+ * non-selected slot therefore exposes a Veteran that is the account's only coverage of a profile the
+ * reviewer did not select.
+ *
+ * Clearing a profile's Veteran target gate is a different question from whether a factor is applicable
+ * to that target, which is not modelled here (TARGET_APPLICABILITY_NOT_MODELLED).
  */
 export interface TargetCoverageSlot {
     readonly targetProfile: string

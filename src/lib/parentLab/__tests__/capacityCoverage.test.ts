@@ -18,6 +18,7 @@ import {
 import { buildCapacityTriage } from "../capacityEvidence.ts"
 import { PARENTLAB_CAPACITY_SCHEMA_VERSION, isCapacityTriageDocument } from "../capacityTypes.ts"
 import { retentionReportsOf } from "../quarantineSnapshot.ts"
+import { TARGET_PROFILE_IDS } from "../retentionTargets.ts"
 import { PARENTLAB_RETENTION_SCHEMA, PARENTLAB_RETENTION_SCHEMA_VERSION, RETENTION_STATES } from "../retentionTypes.ts"
 import type { FactorScarcityEntry, ReplacementEvidenceProvenance, RetentionDataCompleteness, RetentionShadowReport, RetentionValueSummary, SelfFactorRef, VeteranRetentionRecommendation } from "../retentionTypes.ts"
 
@@ -163,6 +164,16 @@ function anchorRec(selfFactors: readonly SelfFactorRef[], o: Partial<VeteranRete
 
 const slotByKeyFloor = (doc: ReturnType<typeof buildCapacityCoverage>, factorKey: string, floor: number) => doc.factorSlots.find((s) => s.factorKey === factorKey && s.starFloor === floor)
 
+const targetSlot = (doc: ReturnType<typeof buildCapacityCoverage>, profile: string) => doc.targetSlots.find((s) => s.targetProfile === profile)!
+
+/** A rec whose retention coverage summary lists exactly these gated target profiles. The default
+ * fixture claims GENERAL_INHERITANCE, which the real advisor never emits (it lists gated profiles only),
+ * so every target-slot fixture states its own coverage rather than inheriting that default. */
+function coveringRec(scanIndex: number, targetsCovered: readonly string[], o: Partial<VeteranRetentionRecommendation> = {}): VeteranRetentionRecommendation {
+    const character = o.character ?? `Synth T${scanIndex}`
+    return rec({ scanIndex, character, coverageSummary: { character, characterCarriers: 1, characterOutfitCarriers: 1, targetsCovered, soleTargetCoverage: [] }, ...o })
+}
+
 /** A synthetic replacement-evidence provenance block with the exact retention v3 field set. */
 function provenance(o: Partial<ReplacementEvidenceProvenance> = {}): ReplacementEvidenceProvenance {
     return { confirmedVeterans: 7, traineeCount: 3, identityCollisions: 0, appVersions: ["1.4.0"], newestObservationTs: Date.UTC(2026, 7, 28, 9, 0, 0), ...o }
@@ -295,6 +306,7 @@ describe("degradation and claim strength", () => {
         expect(doc.poolSize).toBe(0)
         expect(doc.factorSlots).toHaveLength(0)
         expect(doc.characterSlots).toHaveLength(0)
+        expect(doc.targetSlots).toHaveLength(0)
         expect(doc.exposures).toHaveLength(0)
         // Not silent-safe: no exposure was measured, so nothing may read as "at risk == 0 == safe".
         for (const v of Object.values(doc.factorExposureCounts)) expect(v).toBe(0)
@@ -539,9 +551,9 @@ describe("white factor domain provenance", () => {
         expect(reason).not.toMatch(/verified|compatible|matches/i)
     })
 
-    test("the coverage schema is v4 while the capacity and retention schemas are unchanged", () => {
-        expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(4)
-        expect(build(domain()).schemaVersion).toBe(4)
+    test("the coverage schema is v5 while the capacity and retention schemas are unchanged", () => {
+        expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(5)
+        expect(build(domain()).schemaVersion).toBe(5)
         expect(build(domain()).capacitySchemaVersion).toBe(PARENTLAB_CAPACITY_SCHEMA_VERSION)
         expect(PARENTLAB_CAPACITY_SCHEMA_VERSION).toBe(1)
         expect(PARENTLAB_RETENTION_SCHEMA_VERSION).toBe(3)
@@ -569,25 +581,23 @@ describe("character, target and per-Veteran exposure", () => {
         expect(doc.exposures.find((e) => e.scanIndex === 3)!.soleCharacterSlot).toBe(true)
     })
 
-    test("the target slot is profile-scoped and anchored when an excluded Veteran clears the gate", () => {
+    test("the selected gateless target slot is anchored when an excluded Veteran clears the gate", () => {
         const admittedClear = rec({ scanIndex: 0 })
         const excludedClear = rec({ scanIndex: 1, state: "HARD_PROTECT", hardProtectReasons: ["MANUAL_PROTECT"] })
         const doc = buildCapacityCoverage(report([admittedClear, excludedClear]))
-        expect(doc.targetSlots).toHaveLength(1)
-        const t = doc.targetSlots[0]
-        expect(t.targetProfile).toBe("GENERAL_INHERITANCE")
+        const t = targetSlot(doc, "GENERAL_INHERITANCE")
         expect(t.exposure).toBe("ANCHORED")
         expect(t.clearingCarriers).toBe(2)
         expect(t.admittedCarriers).toBe(1)
+        expect(t.anchoredCarriers).toBe(1)
         expect(doc.limits.map((l) => l.code)).toContain("SINGLE_TARGET_PROFILE_SCOPE")
     })
 
     test("a gated target slot counts only Veterans that list the profile in targetsCovered", () => {
-        const clears = rec({ scanIndex: 0, coverageSummary: { character: "Synth Alpha", characterCarriers: 1, characterOutfitCarriers: 1, targetsCovered: ["MILE_PARENT"], soleTargetCoverage: [] } })
-        const doesNot = rec({ scanIndex: 1, coverageSummary: { character: "Synth Beta", characterCarriers: 1, characterOutfitCarriers: 1, targetsCovered: [], soleTargetCoverage: [] } })
+        const clears = coveringRec(0, ["MILE_PARENT"])
+        const doesNot = coveringRec(1, [])
         const doc = buildCapacityCoverage(report([clears, doesNot], { targetProfile: "MILE_PARENT" }))
-        const t = doc.targetSlots[0]
-        expect(t.targetProfile).toBe("MILE_PARENT")
+        const t = targetSlot(doc, "MILE_PARENT")
         expect(t.clearingCarriers).toBe(1)
         expect(t.admittedCarriers).toBe(1)
         expect(t.exposure).toBe("FULLY_EXPOSED_SOLE")
@@ -621,6 +631,90 @@ describe("character, target and per-Veteran exposure", () => {
         const v = doc.exposures[0]
         expect(v.exposureByKind.white).toBeGreaterThanOrEqual(1)
         expect(v.exposureByKind.unique).toBeGreaterThanOrEqual(1)
+    })
+})
+
+describe("multi-target coverage slots", () => {
+    test("every lens emits one slot per known profile, in TARGET_PROFILE_IDS order", () => {
+        for (const lens of TARGET_PROFILE_IDS) {
+            const doc = buildCapacityCoverage(report([coveringRec(0, ["MILE_PARENT"]), coveringRec(1, ["LONG_PARENT"])], { targetProfile: lens }))
+            expect(doc.targetSlots.map((s) => s.targetProfile)).toEqual([...TARGET_PROFILE_IDS])
+            expect(doc.targetSlots).toHaveLength(TARGET_PROFILE_IDS.length)
+        }
+    })
+
+    test("a gateless profile counts the whole report even under a gated lens", () => {
+        const recs = [coveringRec(0, ["MILE_PARENT"]), coveringRec(1, ["MILE_PARENT"]), coveringRec(2, [])]
+        const doc = buildCapacityCoverage(report(recs, { targetProfile: "MILE_PARENT" }))
+        const general = targetSlot(doc, "GENERAL_INHERITANCE")
+        expect(general.clearingCarriers).toBe(3)
+        expect(general.admittedCarriers).toBe(3)
+        expect(general.exposure).toBe("FULLY_EXPOSED")
+    })
+
+    test("a non-selected gated profile counts only the Veterans that list it", () => {
+        const recs = [coveringRec(0, ["MILE_PARENT"]), coveringRec(1, ["MILE_PARENT", "LONG_PARENT"]), coveringRec(2, [])]
+        const doc = buildCapacityCoverage(report(recs))
+        expect(targetSlot(doc, "MILE_PARENT").clearingCarriers).toBe(2)
+        expect(targetSlot(doc, "LONG_PARENT").clearingCarriers).toBe(1)
+    })
+
+    test("a sole coverer of a profile the reviewer did not select is exposed, not hidden", () => {
+        const recs = [coveringRec(0, ["MILE_PARENT"]), coveringRec(1, []), coveringRec(2, [])]
+        const doc = buildCapacityCoverage(report(recs))
+        const general = targetSlot(doc, "GENERAL_INHERITANCE")
+        expect(general.clearingCarriers).toBe(3)
+        expect(general.admittedCarriers).toBe(3)
+        expect(general.anchoredCarriers).toBe(0)
+        expect(general.exposure).toBe("FULLY_EXPOSED")
+        const mile = targetSlot(doc, "MILE_PARENT")
+        expect(mile.clearingCarriers).toBe(1)
+        expect(mile.admittedCarriers).toBe(1)
+        expect(mile.anchoredCarriers).toBe(0)
+        expect(mile.exposure).toBe("FULLY_EXPOSED_SOLE")
+        const long = targetSlot(doc, "LONG_PARENT")
+        expect(long.clearingCarriers).toBe(0)
+        expect(long.exposure).toBe("UNMEASURED")
+    })
+
+    test("switching the lens moves no Veteran into or out of the review pool", () => {
+        // Slice 1 admission reads only per-Veteran evidence, and the factor/character ledger is built
+        // from that pool alone, so for one set of recommendations the lens changes nothing but which
+        // profile scoped the pool. The target slots are read-only views over that pool and match too.
+        const recs = [coveringRec(0, ["MILE_PARENT"]), coveringRec(1, ["LONG_PARENT"], { state: "HARD_PROTECT", hardProtectReasons: ["MANUAL_PROTECT"] }), coveringRec(2, [])]
+        const general = buildCapacityCoverage(report(recs))
+        const mile = buildCapacityCoverage(report(recs, { targetProfile: "MILE_PARENT" }))
+        expect(mile.poolSize).toBe(general.poolSize)
+        expect(mile.excludedSize).toBe(general.excludedSize)
+        expect(JSON.stringify(mile.factorSlots)).toBe(JSON.stringify(general.factorSlots))
+        expect(JSON.stringify(mile.characterSlots)).toBe(JSON.stringify(general.characterSlots))
+        expect(JSON.stringify(mile.exposures)).toBe(JSON.stringify(general.exposures))
+        expect(mile.factorExposureCounts).toEqual(general.factorExposureCounts)
+        expect(mile.characterExposureCounts).toEqual(general.characterExposureCounts)
+        expect(JSON.stringify(mile.targetSlots)).toBe(JSON.stringify(general.targetSlots))
+    })
+
+    test("an unknown selected profile is preserved but adds no synthetic slot", () => {
+        const doc = buildCapacityCoverage(report([coveringRec(0, ["MILE_PARENT"])], { targetProfile: "NOT_A_PROFILE" }))
+        expect(doc.targetProfile).toBe("NOT_A_PROFILE")
+        expect(doc.targetSlots.map((s) => s.targetProfile)).toEqual([...TARGET_PROFILE_IDS])
+        expect(doc.targetSlots).toHaveLength(TARGET_PROFILE_IDS.length)
+    })
+
+    test("the pool-scope limit names pool scope, and factor applicability stays unmodelled", () => {
+        const doc = buildCapacityCoverage(report([coveringRec(0, ["MILE_PARENT"])]))
+        const byCode = (code: string) => doc.limits.find((l) => l.code === code)!
+        expect(byCode("SINGLE_TARGET_PROFILE_SCOPE").reason).toBe(
+            "the eligible review pool is scoped to the selected target profile; target coverage slots report every known profile against that same pool, and no other profile's pool is recalculated"
+        )
+        expect(byCode("TARGET_APPLICABILITY_NOT_MODELLED").reason).toBe("cross-target applicability of a factor is not modelled")
+        expect(doc.limits.map((l) => l.code)).toEqual([...PERMANENT_COVERAGE_LIMITS])
+    })
+
+    test("target slots serialize identically across rebuilds and carry no forbidden key", () => {
+        const build = () => buildCapacityCoverage(report([coveringRec(0, ["MILE_PARENT"]), coveringRec(1, ["LONG_PARENT"])]))
+        expect(JSON.stringify(build().targetSlots)).toBe(JSON.stringify(build().targetSlots))
+        expect(forbiddenKeyPaths(build())).toEqual([])
     })
 })
 
@@ -661,10 +755,10 @@ describe("replacement evidence provenance", () => {
         expect(codes.indexOf("REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")).toBe(codes.indexOf("REBUILDABILITY_NOT_MEASURED") + 1)
     })
 
-    test("the coverage schema is v4 and the Slice 1 capacity schema version is unchanged", () => {
+    test("the coverage schema is v5 and the Slice 1 capacity schema version is unchanged", () => {
         const doc = buildCapacityCoverage(report([withFactors()], { replacementEvidence: provenance() }))
-        expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(4)
-        expect(doc.schemaVersion).toBe(4)
+        expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(5)
+        expect(doc.schemaVersion).toBe(5)
         expect(doc.capacitySchemaVersion).toBe(1)
         expect(doc.capacitySchemaVersion).toBe(PARENTLAB_CAPACITY_SCHEMA_VERSION)
     })

@@ -4,8 +4,9 @@
 // This module builds Slice 1's admission verdicts in-process (buildCapacityTriage) and consumes them
 // VERBATIM. It never re-derives ELIGIBLE/EXCLUDED and never reinterprets the strict retention state.
 // On top of that pool it measures coverage exposure: for every factor slot (factorKey @ starFloor),
-// every character, and the selected target profile, it partitions the observed carriers into the
-// eligible review pool (exposed) versus anchored outside it, and classifies the slot.
+// every character, and every known target profile, it partitions the observed carriers into the
+// eligible review pool (exposed) versus anchored outside it, and classifies the slot. The pool itself
+// stays scoped to the selected profile; the target slots are read-only views over that one pool.
 //
 // The conservative direction is fixed. A carrier only anchors a slot when it is genuinely outside the
 // review pool AND has trusted factor evidence; a Veteran with missing/untrusted factor evidence anchors
@@ -40,7 +41,7 @@ import {
 } from "./capacityCoverageTypes.ts"
 import { PARENTLAB_CAPACITY_SCHEMA_VERSION } from "./capacityTypes.ts"
 import { contentHash128 } from "./identity.ts"
-import { resolveTargetProfile } from "./retentionTargets.ts"
+import { TARGET_PROFILE_IDS, TARGET_PROFILES } from "./retentionTargets.ts"
 import type { ReplacementEvidenceProvenance, RetentionShadowReport, VeteranRetentionRecommendation } from "./retentionTypes.ts"
 
 /** Deterministic display text for each limit. No clock or environment reads. */
@@ -65,7 +66,7 @@ function limitReason(code: CoverageLimitCode, report: RetentionShadowReport): st
         case "TARGET_APPLICABILITY_NOT_MODELLED":
             return "cross-target applicability of a factor is not modelled"
         case "SINGLE_TARGET_PROFILE_SCOPE":
-            return "coverage is scoped to the single selected target profile; other profiles are not aggregated"
+            return "the eligible review pool is scoped to the selected target profile; target coverage slots report every known profile against that same pool, and no other profile's pool is recalculated"
     }
 }
 
@@ -406,33 +407,34 @@ export function buildCapacityCoverage(report: RetentionShadowReport, domain?: Wh
         })
     }
 
-    // Target slot: one, for the selected profile. clearingCarriers are Veterans clearing this profile's
-    // aptitude gate, partitioned by admission. A profile with no gate (e.g. GENERAL_INHERITANCE) is
-    // cleared by every roster Veteran, and the retention coverage summary deliberately does not list
-    // such a trivially-cleared profile - so a gateless profile counts the whole roster rather than the
-    // empty targetsCovered set, which would otherwise read as a false "no Veteran covers this target".
-    const selectedProfile = resolveTargetProfile(report.targetProfile)
-    const gatelessTarget = selectedProfile !== null && selectedProfile.aptitudeGate === null
-    let clearing = 0
-    let clearingAdmitted = 0
-    let clearingAnchored = 0
-    for (const rec of report.recommendations) {
-        if (!gatelessTarget && !rec.coverageSummary.targetsCovered.includes(report.targetProfile)) continue
-        clearing++
-        if (isAdmitted(admissionByScan.get(rec.scanIndex) ?? "")) clearingAdmitted++
-        else clearingAnchored++
-    }
-    const targetExposure = classifyExposure(clearing, clearingAdmitted, clearingAnchored)
-    const targetSlots: readonly TargetCoverageSlot[] = [
-        {
-            targetProfile: report.targetProfile,
+    // Target slots: one per known profile, every one measured against this same selected-lens pool.
+    // clearingCarriers are Veterans clearing that profile's aptitude gate, partitioned by admission. A
+    // profile with no gate (e.g. GENERAL_INHERITANCE) is cleared by every roster Veteran, and the retention
+    // coverage summary deliberately does not list such a trivially-cleared profile - so a gateless profile
+    // counts the whole roster rather than the empty targetsCovered set, which would otherwise read as a
+    // false "no Veteran covers this target". Gatelessness follows the profile being measured, never the
+    // selected one, or a gated lens would bypass the gate for every profile.
+    const targetSlots: readonly TargetCoverageSlot[] = TARGET_PROFILE_IDS.map((targetProfile) => {
+        const gateless = TARGET_PROFILES[targetProfile].aptitudeGate === null
+        let clearing = 0
+        let clearingAdmitted = 0
+        let clearingAnchored = 0
+        for (const rec of report.recommendations) {
+            if (!gateless && !rec.coverageSummary.targetsCovered.includes(targetProfile)) continue
+            clearing++
+            if (isAdmitted(admissionByScan.get(rec.scanIndex) ?? "")) clearingAdmitted++
+            else clearingAnchored++
+        }
+        const exposure = classifyExposure(clearing, clearingAdmitted, clearingAnchored)
+        return {
+            targetProfile,
             clearingCarriers: clearing,
             admittedCarriers: clearingAdmitted,
             anchoredCarriers: clearingAnchored,
-            exposure: targetExposure,
-            explanation: targetSlotExplanation(report.targetProfile, clearing, clearingAdmitted, clearingAnchored, targetExposure),
-        },
-    ]
+            exposure,
+            explanation: targetSlotExplanation(targetProfile, clearing, clearingAdmitted, clearingAnchored, exposure),
+        }
+    })
 
     // Per-Veteran exposure, for admitted (eligible) Veterans only, in roster scan order.
     const exposures: VeteranCoverageExposure[] = []
