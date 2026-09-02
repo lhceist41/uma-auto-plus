@@ -54,6 +54,8 @@ function limitReason(code: CoverageLimitCode, report: RetentionShadowReport): st
             return "affinity is not decoded in this repository and is not consumed"
         case "REBUILDABILITY_NOT_MEASURED":
             return "Independent Training rebuildability / replacement difficulty is not measured here"
+        case "REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT":
+            return "the retention states behind this document consumed replacement-difficulty evidence derived from the recorded career corpus; a different corpus can move Veterans between the eligible pool and the excluded set in either direction"
         case "ACTIVE_RACER_VALUE_NOT_MODELLED":
             return "active-racer utility of a Veteran is not modelled"
         case "TARGET_APPLICABILITY_NOT_MODELLED":
@@ -64,14 +66,16 @@ function limitReason(code: CoverageLimitCode, report: RetentionShadowReport): st
 }
 
 /** Assembles the limits array: conditional coverage limits first, then the base limits. When a white
- * factor domain is available, WHITE_SUBFAMILY_NOT_AVAILABLE is dropped since white slots are classified. */
-function buildLimits(report: RetentionShadowReport, whiteDomainAvailable: boolean): readonly CoverageLimit[] {
+ * factor domain is available, WHITE_SUBFAMILY_NOT_AVAILABLE is dropped since white slots are classified.
+ * REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT is seated with the rebuildability limit it qualifies. */
+function buildLimits(report: RetentionShadowReport, whiteDomainAvailable: boolean, hasReplacementEvidence: boolean): readonly CoverageLimit[] {
     const codes: CoverageLimitCode[] = []
     if (!report.scarcity.accountWide) codes.push("COVERAGE_INCOMPLETE")
     if (report.scarcity.unresolvedFactorReads > 0) codes.push("UNRESOLVED_FACTOR_READS")
     for (const code of PERMANENT_COVERAGE_LIMITS) {
         if (code === "WHITE_SUBFAMILY_NOT_AVAILABLE" && whiteDomainAvailable) continue
         codes.push(code)
+        if (code === "REBUILDABILITY_NOT_MEASURED" && hasReplacementEvidence) codes.push("REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")
     }
     return codes.map((code) => ({ code, reason: limitReason(code, report) }))
 }
@@ -133,7 +137,10 @@ export function buildCapacityCoverage(report: RetentionShadowReport, domain?: Wh
     const claimStrength: CoverageClaimStrength = report.scarcity.accountWide ? "ACCOUNT" : "OBSERVED_LOWER_BOUND"
     const whiteFamilies = domain ? whiteFamilySets(domain) : null
     const whiteDomainAvailable = whiteFamilies !== null
-    const limits = buildLimits(report, whiteDomainAvailable)
+    // Persisted retention v2 inputs carry no replacementEvidence key, and JSON.stringify drops an
+    // undefined value, so normalize to null to keep the coverage key always present.
+    const replacementEvidence = report.replacementEvidence ?? null
+    const limits = buildLimits(report, whiteDomainAvailable, replacementEvidence !== null)
 
     const base = {
         schema: PARENTLAB_CAPACITY_COVERAGE_SCHEMA,
@@ -143,6 +150,7 @@ export function buildCapacityCoverage(report: RetentionShadowReport, domain?: Wh
         rosterScanId: report.rosterScanId,
         rosterFingerprint: report.rosterFingerprint,
         protectionScanId: report.protectionScanId,
+        replacementEvidence,
         generatedAt: report.generatedAt,
         capacitySchemaVersion: PARENTLAB_CAPACITY_SCHEMA_VERSION as number,
         coverage: report.scarcity.coverage,

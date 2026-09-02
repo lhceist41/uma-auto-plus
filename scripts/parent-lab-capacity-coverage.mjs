@@ -141,6 +141,7 @@ function exposedViewOf(doc) {
         targetProfile: doc.targetProfile,
         rosterScanId: doc.rosterScanId,
         rosterFingerprint: doc.rosterFingerprint,
+        replacementEvidence: doc.replacementEvidence,
         generatedAt: doc.generatedAt,
         usable: doc.usable,
         poolSize: doc.poolSize,

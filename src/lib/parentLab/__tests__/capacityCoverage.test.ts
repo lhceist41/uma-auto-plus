@@ -9,15 +9,16 @@ import {
     LAST_COPY_RISKS,
     PARENTLAB_CAPACITY_COVERAGE_KIND,
     PARENTLAB_CAPACITY_COVERAGE_SCHEMA,
+    PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION,
     WHITE_SUBFAMILIES,
     isCapacityCoverageDocument,
     type WhiteFactorDomain,
 } from "../capacityCoverageTypes.ts"
 import { buildCapacityTriage } from "../capacityEvidence.ts"
-import { isCapacityTriageDocument } from "../capacityTypes.ts"
+import { PARENTLAB_CAPACITY_SCHEMA_VERSION, isCapacityTriageDocument } from "../capacityTypes.ts"
 import { retentionReportsOf } from "../quarantineSnapshot.ts"
 import { PARENTLAB_RETENTION_SCHEMA, PARENTLAB_RETENTION_SCHEMA_VERSION, RETENTION_STATES } from "../retentionTypes.ts"
-import type { FactorScarcityEntry, RetentionDataCompleteness, RetentionShadowReport, RetentionValueSummary, SelfFactorRef, VeteranRetentionRecommendation } from "../retentionTypes.ts"
+import type { FactorScarcityEntry, ReplacementEvidenceProvenance, RetentionDataCompleteness, RetentionShadowReport, RetentionValueSummary, SelfFactorRef, VeteranRetentionRecommendation } from "../retentionTypes.ts"
 
 // Synthetic fixtures only. No real roster, character, factor, or account data is embedded here: every
 // factor key and character name below is invented. The real 257-Veteran corpus is exercised separately,
@@ -160,6 +161,22 @@ function anchorRec(selfFactors: readonly SelfFactorRef[], o: Partial<VeteranRete
 }
 
 const slotByKeyFloor = (doc: ReturnType<typeof buildCapacityCoverage>, factorKey: string, floor: number) => doc.factorSlots.find((s) => s.factorKey === factorKey && s.starFloor === floor)
+
+/** A synthetic replacement-evidence provenance block with the exact retention v3 field set. */
+function provenance(o: Partial<ReplacementEvidenceProvenance> = {}): ReplacementEvidenceProvenance {
+    return { confirmedVeterans: 7, traineeCount: 3, identityCollisions: 0, appVersions: ["1.4.0"], newestObservationTs: Date.UTC(2026, 7, 28, 9, 0, 0), ...o }
+}
+
+/** Decision, ranking, executor and destructive-advice field names this slice must never emit. */
+const FORBIDDEN_CONTRACT_KEYS = ["action", "execute", "transfer", "delete", "release", "favorite", "approve", "score", "weight", "tier", "rank", "priority", "order", "opportunityCost", "targetFreeSlots", "recommendation", "safeToTransfer", "safeToDelete", "fragility"]
+
+/** Every path in `value` whose key is exactly a forbidden name. Descends objects and arrays by index so a
+ * decision field cannot hide below the top level. Exact-key matching only, never substring. */
+function forbiddenKeyPaths(value: unknown, path = "$"): string[] {
+    if (value === null || typeof value !== "object") return []
+    if (Array.isArray(value)) return value.flatMap((item, i) => forbiddenKeyPaths(item, `${path}[${i}]`))
+    return Object.entries(value as Record<string, unknown>).flatMap(([key, child]) => (FORBIDDEN_CONTRACT_KEYS.includes(key) ? [`${path}.${key}`] : forbiddenKeyPaths(child, `${path}.${key}`)))
+}
 
 beforeEach(() => {
     seq = 0
@@ -443,14 +460,91 @@ describe("character, target and per-Veteran exposure", () => {
     })
 })
 
+describe("replacement evidence provenance", () => {
+    const withFactors = () => rec({ scanIndex: 0, selfFactors: [{ factorKey: "white:PROV", stars: 3 }] })
+
+    test("absent evidence carries the key through as null and emits no corpus-dependence limit", () => {
+        const doc = buildCapacityCoverage(report([withFactors()]))
+        expect(doc.replacementEvidence).toBeNull()
+        expect(Object.keys(doc)).toContain("replacementEvidence")
+        const roundTripped = JSON.parse(JSON.stringify(doc))
+        expect(Object.keys(roundTripped)).toContain("replacementEvidence")
+        expect(roundTripped.replacementEvidence).toBeNull()
+        expect(doc.limits.map((l) => l.code)).not.toContain("REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")
+    })
+
+    test("a persisted v2-style report with no replacementEvidence key still emits the key as null", () => {
+        const v2 = { ...report([withFactors()]) } as Record<string, unknown>
+        delete v2.replacementEvidence
+        expect("replacementEvidence" in v2).toBe(false)
+        const doc = buildCapacityCoverage(v2 as unknown as RetentionShadowReport)
+        expect(Object.keys(doc)).toContain("replacementEvidence")
+        expect(doc.replacementEvidence).toBeNull()
+        expect(doc.limits.map((l) => l.code)).not.toContain("REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")
+    })
+
+    test("present evidence is carried through verbatim and adds the corpus-dependence limit exactly once", () => {
+        const evidence = provenance()
+        const doc = buildCapacityCoverage(report([withFactors()], { replacementEvidence: evidence }))
+        expect(doc.replacementEvidence).toBe(evidence)
+        expect(Object.keys(doc.replacementEvidence as object).sort()).toEqual(["appVersions", "confirmedVeterans", "identityCollisions", "newestObservationTs", "traineeCount"])
+        expect(doc.limits.filter((l) => l.code === "REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")).toHaveLength(1)
+    })
+
+    test("the corpus-dependence limit is seated immediately after REBUILDABILITY_NOT_MEASURED", () => {
+        const codes = buildCapacityCoverage(report([withFactors()], { replacementEvidence: provenance() })).limits.map((l) => l.code)
+        expect(codes.indexOf("REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")).toBe(codes.indexOf("REBUILDABILITY_NOT_MEASURED") + 1)
+    })
+
+    test("the coverage schema is v3 and the Slice 1 capacity schema version is unchanged", () => {
+        const doc = buildCapacityCoverage(report([withFactors()], { replacementEvidence: provenance() }))
+        expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(3)
+        expect(doc.schemaVersion).toBe(3)
+        expect(doc.capacitySchemaVersion).toBe(1)
+        expect(doc.capacitySchemaVersion).toBe(PARENTLAB_CAPACITY_SCHEMA_VERSION)
+    })
+
+    test("an untrusted roster still carries the provenance and the limit while staying fail-closed", () => {
+        const untrusted = rec({ scanIndex: 0, dataCompleteness: completeness({ rosterTrusted: false }) })
+        const evidence = provenance()
+        const doc = buildCapacityCoverage(report([untrusted], { replacementEvidence: evidence }))
+        expect(doc.usable).toBe(false)
+        expect(doc.poolSize).toBe(0)
+        expect(doc.factorSlots).toHaveLength(0)
+        expect(doc.exposures).toHaveLength(0)
+        expect(doc.replacementEvidence).toBe(evidence)
+        expect(doc.limits.filter((l) => l.code === "REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")).toHaveLength(1)
+    })
+
+    test("output with present provenance is deterministic", () => {
+        const build = () => buildCapacityCoverage(report([withFactors()], { replacementEvidence: provenance() }))
+        expect(JSON.stringify(build())).toBe(JSON.stringify(build()))
+    })
+})
+
 describe("contract, isolation and determinism", () => {
-    test("no forbidden decision/ranking/executor field appears in any emitted record", () => {
+    test("no forbidden decision/ranking/executor field appears anywhere in an emitted document", () => {
         const doc = buildCapacityCoverage(report([rec({ selfFactors: [{ factorKey: "white:Z", stars: 3 }] }), anchorRec([{ factorKey: "white:Z", stars: 3 }], { scanIndex: 9 })]))
-        const forbidden = ["action", "execute", "transfer", "delete", "release", "favorite", "approve", "score", "weight", "tier", "rank", "priority", "order", "opportunityCost", "targetFreeSlots", "recommendation", "safeToTransfer"]
-        const objects: unknown[] = [doc, doc.factorSlots[0], doc.characterSlots[0], doc.targetSlots[0], doc.exposures[0], doc.limits[0]]
-        for (const obj of objects) {
-            for (const key of Object.keys(obj as object)) expect(forbidden).not.toContain(key)
-        }
+        expect(forbiddenKeyPaths(doc)).toEqual([])
+    })
+
+    test("the recursive guard finds a forbidden key nested below objects and arrays", () => {
+        expect(forbiddenKeyPaths({ a: { b: [{ c: { safeToTransfer: true } }] } })).toEqual(["$.a.b[0].c.safeToTransfer"])
+        expect(forbiddenKeyPaths({ slots: [{ fragility: 1 }, { safeToDelete: false }] })).toEqual(["$.slots[0].fragility", "$.slots[1].safeToDelete"])
+    })
+
+    test("a legitimate nested provenance and limits structure trips no forbidden key", () => {
+        expect(forbiddenKeyPaths({ replacementEvidence: provenance(), limits: [{ code: "REBUILDABILITY_NOT_MEASURED", reason: "not measured" }], counts: { ANCHORED: 1 }, names: ["a", null] })).toEqual([])
+    })
+
+    test("documents built with present provenance carry no destructive semantics on either branch", () => {
+        const evidence = provenance()
+        const usable = buildCapacityCoverage(report([rec({ scanIndex: 0, selfFactors: [{ factorKey: "white:GUARD", stars: 3 }] })], { replacementEvidence: evidence }))
+        const failClosed = buildCapacityCoverage(report([rec({ scanIndex: 0, dataCompleteness: completeness({ rosterTrusted: false }) })], { replacementEvidence: evidence }))
+        expect(usable.replacementEvidence).not.toBeNull()
+        expect(failClosed.replacementEvidence).not.toBeNull()
+        expect(forbiddenKeyPaths(usable)).toEqual([])
+        expect(forbiddenKeyPaths(failClosed)).toEqual([])
     })
 
     test("no coverage enum overlaps a retention state or SAFE_TO_TRANSFER", () => {

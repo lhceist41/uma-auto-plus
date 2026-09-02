@@ -21,14 +21,15 @@
 //     safeToTransfer field, and no executor/mutation field. This slice describes structure only.
 
 import type { CapacityAdmission } from "./capacityTypes.ts"
+import type { ReplacementEvidenceProvenance } from "./retentionTypes.ts"
 
 /** Schema discriminator for the coverage document. Distinct from every other ParentLab schema so a
  * persistence reader cannot confuse it with a retention, Slice 1 capacity, or quarantine document. */
 export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA = "parent_lab_capacity_coverage" as const
-/** Version 2: additively classifies each white factor slot into a skill/race/scenario subfamily when a
- * white factor domain is supplied, and reports the per-family exposure breakdown. Valuation (affinity,
- * rebuildability, active-racer utility) is still deferred. */
-export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION = 2 as const
+/** Version 3: additively carries the retention document's replacement-evidence provenance so a reader can
+ * see which career corpus the retention states behind this ledger were derived from. Provenance only:
+ * valuation (affinity, rebuildability, active-racer utility) is still deferred. */
+export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION = 3 as const
 /** Human-readable document kind, carried alongside the schema for defense in depth. */
 export const PARENTLAB_CAPACITY_COVERAGE_KIND = "CAPACITY_COVERAGE_EXPOSURE" as const
 
@@ -88,8 +89,8 @@ export const LAST_COPY_RISKS = [
 export type LastCopyRisk = (typeof LAST_COPY_RISKS)[number]
 
 /**
- * The limits/degradations a coverage document may carry. Six are permanent in v1 (the valuation the
- * shared domain will later supply); two are conditional on the input's coverage state.
+ * The limits/degradations a coverage document may carry. Six are permanent (the valuation the shared
+ * domain will later supply); the rest are conditional on the input's coverage and provenance state.
  */
 export const COVERAGE_LIMITS = [
     /** Capture coverage is not account-wide, so factor claims are observed lower bounds. Conditional. */
@@ -103,6 +104,9 @@ export const COVERAGE_LIMITS = [
     "AFFINITY_NOT_DECODED",
     /** Independent Training rebuildability / replacement difficulty is not measured here. */
     "REBUILDABILITY_NOT_MEASURED",
+    /** The retention states behind this document consumed corpus-derived replacement evidence, so a
+     * different career corpus can move Veterans in or out of the eligible pool. Conditional. */
+    "REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT",
     /** A Veteran's active-racer utility is not modelled. */
     "ACTIVE_RACER_VALUE_NOT_MODELLED",
     /** Cross-target applicability of a factor is not modelled. */
@@ -256,6 +260,9 @@ export interface CapacityCoverageDocument {
     readonly rosterScanId: string
     readonly rosterFingerprint: string
     readonly protectionScanId: string | null
+    /** Replacement-evidence provenance carried verbatim from the retention document, or null when the
+     * input carried none. Provenance only: never a count, ranking, or transfer verdict. */
+    readonly replacementEvidence: ReplacementEvidenceProvenance | null
     /** Newest input observation time from the retention document, NOT a clock read. */
     readonly generatedAt: number | null
     /** The Slice 1 capacity schema version this document was built against, for provenance. */
