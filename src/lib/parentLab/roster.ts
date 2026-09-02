@@ -349,6 +349,9 @@ export interface RosterSnapshot {
     /** Entry rows actually present for this scan. */
     readonly scanCount: number
     readonly uniqueFingerprints: number
+    /** Duplicate fingerprints among entries that qualify as identified under the identity-evidence
+     * contract. An entry rejected as unidentified (see `unidentified`) contributes to neither this
+     * count nor `uniqueFingerprints`, so this is not a raw-input duplicate census. */
     readonly duplicateFingerprints: number
     readonly unidentified: number
     /** scanCount minus the account's own displayed used count. Null when that count was unread. */
