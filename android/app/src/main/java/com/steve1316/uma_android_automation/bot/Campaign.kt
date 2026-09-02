@@ -88,6 +88,9 @@ import com.steve1316.uma_android_automation.types.TrackDistance
 import com.steve1316.uma_android_automation.types.TrackSurface
 import com.steve1316.uma_android_automation.types.Trainee
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
+import com.steve1316.uma_android_automation.utils.PersistentSkipStateLog
+import com.steve1316.uma_android_automation.utils.pillVisible
+import com.steve1316.uma_android_automation.utils.classifyPersistentSkip
 import com.steve1316.uma_android_automation.utils.ScrollList
 import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
 import com.steve1316.uma_android_automation.utils.VeteranIdentityCatalog
@@ -158,6 +161,8 @@ abstract class Campaign(game: Game) : Task(game) {
 
     /** Required instance of the SkillPlan class. */
     protected var skillPlan: SkillPlan = SkillPlan(game, this)
+
+    private val skipStateLog = PersistentSkipStateLog(TAG, "cutscene")
 
     /** Lazily-built [SkillList] used only for career-end screen detection in [process]. Lazy and
      * shared because the constructor generates the full skill entries map from the database. */
@@ -4710,11 +4715,18 @@ abstract class Campaign(game: Game) : Task(game) {
             return false
         }
 
-        if (ButtonSkipOff.check(game.imageUtils, sourceBitmap = sourceBitmap) ||
-            ButtonSkipOn.check(game.imageUtils, sourceBitmap = sourceBitmap)
-        ) {
-            return true
-        }
+        val skipState =
+            classifyPersistentSkip(
+                offPillMatched = { ButtonSkipOff.check(game.imageUtils, sourceBitmap = sourceBitmap) },
+                onPillMatched = { ButtonSkipOn.check(game.imageUtils, sourceBitmap = sourceBitmap) },
+                skipTextFound = { skipPillTextFound(sourceBitmap) },
+            )
+        skipStateLog.record(skipState)
+        return skipState.pillVisible
+    }
+
+    /** OCR fallback for the cutscene Skip pill: the intro-pill band, then a wider bottom-left scan. */
+    private fun skipPillTextFound(sourceBitmap: Bitmap): Boolean {
         return try {
             // Scan 22%-53% width, 94%-98% height - centered on the event-INTRO Skip pill.
             val skipPillOcr =

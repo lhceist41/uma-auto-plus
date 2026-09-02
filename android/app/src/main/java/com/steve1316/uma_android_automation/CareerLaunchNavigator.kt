@@ -60,12 +60,15 @@ import com.steve1316.uma_android_automation.bot.QuickModePlanner
 import com.steve1316.uma_android_automation.utils.BoundedExecution
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
+import com.steve1316.uma_android_automation.utils.PersistentSkipStateLog
+import com.steve1316.uma_android_automation.utils.pillVisible
 import com.steve1316.uma_android_automation.utils.PostCareerScreenProbes
 import com.steve1316.uma_android_automation.utils.QuickModeGeometry
 import com.steve1316.uma_android_automation.utils.QuickModeOption
 import com.steve1316.uma_android_automation.utils.RosterScanPolicy
 import com.steve1316.uma_android_automation.utils.grandConcertCareerCompleteScreenPresent
 import com.steve1316.uma_android_automation.utils.grandConcertConcertPendingScreenPresent
+import com.steve1316.uma_android_automation.utils.classifyPersistentSkip
 import com.steve1316.uma_android_automation.utils.quickModeDialogPresent
 import com.steve1316.uma_android_automation.utils.quickModeSelectedIndex
 import com.steve1316.uma_android_automation.utils.SPARKS_CONFIRM_GEOMETRY
@@ -519,6 +522,8 @@ class CareerLaunchNavigator(private val context: Context) {
 
     // Session-scoped flag: Skip toggle has already been maxed (Skip >>) in this session.
     private var skipToggleAlreadyDone: Boolean = false
+
+    private val skipStateLog = PersistentSkipStateLog(TAG, "launch")
 
     // Session-scoped latch: the launch has provably advanced PAST Start Career (we have reached
     // the final confirmation / cinematic / quick-mode prompt). Once set, Trainee Select is no longer
@@ -1472,29 +1477,14 @@ class CareerLaunchNavigator(private val context: Context) {
         // (TAP_TO_CONTINUE, body-tapped to advance). This avoids a fragile UI discriminator: the
         // prompt is not a registered titled dialog (no DialogUtils gradient) and reaches this block
         // precisely because POST_RUN_RESULTS above found no matchable Confirm on it.
-        var hasSkipPill = ButtonSkipOff.check(iu, sourceBitmap = bitmap) || ButtonSkipOn.check(iu, sourceBitmap = bitmap)
-        if (!hasSkipPill) {
-            try {
-                // Scan 22%-53% width, 94%-98% height - centered on the Skip pill button.
-                val skipOcr =
-                    iu.performOCROnRegion(
-                        bitmap,
-                        (bitmap.width * 0.22).toInt(),
-                        (bitmap.height * 0.94).toInt(),
-                        (bitmap.width * 0.31).toInt(),
-                        (bitmap.height * 0.04).toInt(),
-                        useThreshold = false,
-                        useGrayscale = false,
-                        scale = 2.0,
-                        debugName = "nav_skip_button_ocr",
-                    )
-                if (skipOcr.uppercase().contains("SKIP")) hasSkipPill = true
-            } catch (e: InterruptedException) {
-                throw e
-            } catch (_: Exception) {
-            }
-        }
-        if (hasSkipPill) {
+        val skipState =
+            classifyPersistentSkip(
+                offPillMatched = { ButtonSkipOff.check(iu, sourceBitmap = bitmap) },
+                onPillMatched = { ButtonSkipOn.check(iu, sourceBitmap = bitmap) },
+                skipTextFound = { skipPillTextFound(bitmap) },
+            )
+        skipStateLog.record(skipState)
+        if (skipState.pillVisible) {
             if (!skipToggleAlreadyDone) {
                 return LaunchScreenState.QUICK_MODE_PROMPT
             }
@@ -1594,6 +1584,29 @@ class CareerLaunchNavigator(private val context: Context) {
         }
 
         return LaunchScreenState.UNKNOWN
+    }
+
+    /** OCR fallback for the Skip pill: scans 22%-53% width, 94%-98% height, centered on the pill. */
+    private fun skipPillTextFound(bitmap: Bitmap): Boolean {
+        return try {
+            val skipOcr =
+                iu.performOCROnRegion(
+                    bitmap,
+                    (bitmap.width * 0.22).toInt(),
+                    (bitmap.height * 0.94).toInt(),
+                    (bitmap.width * 0.31).toInt(),
+                    (bitmap.height * 0.04).toInt(),
+                    useThreshold = false,
+                    useGrayscale = false,
+                    scale = 2.0,
+                    debugName = "nav_skip_button_ocr",
+                )
+            skipOcr.uppercase().contains("SKIP")
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (_: Exception) {
+            false
+        }
     }
 
     // ////////////////////////////////////////////////////////////////////////////
