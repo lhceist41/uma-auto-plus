@@ -1934,7 +1934,9 @@ class Trackblazer(game: Game) : Campaign(game) {
                                 (isQuick && !isBad) ||
                                 (isEnergy && trainee != null && trainee.energy <= 100) ||
                                 // We might want any energy item if not full.
-                                (isMood && trainee != null && trainee.mood < Mood.GREAT) ||
+                                // Cupcakes stay of interest even at GREAT mood so the scan still reaches their rows
+                                // after Kale Juice is queued; they no longer ride the isQuick clause above.
+                                (isMood && trainee != null) ||
                                 (isMegaphone && trainee != null && trainingSelected != null && trainee.megaphoneTurnCounter == 0 && !shouldConserveTrainingEffectItems(trainingSelected, trainee)) ||
                                 (isAnkleWeight && trainee != null && trainingSelected != null) ||
                                 (isCharm && trainee != null && trainingSelected != null && !shouldConserveTrainingEffectItems(trainingSelected, trainee))

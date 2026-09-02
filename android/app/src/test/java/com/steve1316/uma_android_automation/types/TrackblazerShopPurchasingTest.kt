@@ -81,6 +81,54 @@ class TrackblazerShopPurchasingTest {
     }
 
     // =========================================================================
+    // Real companion catalog - quick-use routing flags
+    // =========================================================================
+
+    @Nested
+    @DisplayName("Companion catalog quick-use flags")
+    inner class CompanionCatalogQuickUseTests {
+        // Pins the real production catalog map (not a test fixture) so an accidental
+        // broad "consistency" rewrite of the isQuickUsage flags fails the build.
+        private val catalog = TrackblazerShopList.shopItems
+
+        @Test
+        fun `cupcakes are held-policy items, not quick-use`() {
+            assertFalse(catalog.getValue("Plain Cupcake").isQuickUsage, "Plain Cupcake must not be blind quick-use")
+            assertFalse(catalog.getValue("Berry Sweet Cupcake").isQuickUsage, "Berry Sweet Cupcake must not be blind quick-use")
+        }
+
+        @Test
+        fun `representative quick-use items remain quick-use`() {
+            val quickUse =
+                listOf(
+                    "Speed Scroll",
+                    "Grilled Carrots",
+                    "Pretty Mirror",
+                    "Fluffy Pillow",
+                    "Miracle Cure",
+                    "Speed Training Application",
+                )
+            for (name in quickUse) {
+                assertTrue(catalog.getValue(name).isQuickUsage, "$name should remain quick-use")
+            }
+        }
+
+        @Test
+        fun `representative held items remain held`() {
+            val held =
+                listOf(
+                    "Royal Kale Juice",
+                    "Vita 65",
+                    "Coaching Megaphone",
+                    "Master Cleat Hammer",
+                )
+            for (name in held) {
+                assertFalse(catalog.getValue(name).isQuickUsage, "$name should remain held (not quick-use)")
+            }
+        }
+    }
+
+    // =========================================================================
     // calculatePurchases() - core purchasing algorithm
     // =========================================================================
 

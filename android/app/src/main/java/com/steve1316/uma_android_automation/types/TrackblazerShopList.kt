@@ -40,7 +40,7 @@ data class ScannedItem(val entry: ScrollListEntry, val itemName: String, val isD
  *
  * @property price The cost of the item in the Shop.
  * @property effect A brief description of the item's effect.
- * @property isQuickUsage Whether the item can be used directly from the Training Items dialog.
+ * @property isQuickUsage Whether the item is used on sight when its row is enabled (blind quick-use routing); policy-gated items usable from the dialog (e.g. cupcakes) are not quick-use.
  * @property category The category the item belongs to for UI and organization.
  */
 data class TrackblazerItemInfo(val price: Int, val effect: String, val isQuickUsage: Boolean, val category: String)
@@ -104,6 +104,75 @@ class TrackblazerShopList(private val game: Game) {
 
             return result
         }
+
+        /** Mapping of shop items to their price, effect, and whether they are allowed for quick usage. */
+        val shopItems: Map<String, TrackblazerItemInfo> =
+            mapOf(
+                // Stats
+                "Speed Notepad" to TrackblazerItemInfo(10, "Speed +3", true, "Stats"),
+                "Stamina Notepad" to TrackblazerItemInfo(10, "Stamina +3", true, "Stats"),
+                "Power Notepad" to TrackblazerItemInfo(10, "Power +3", true, "Stats"),
+                "Guts Notepad" to TrackblazerItemInfo(10, "Guts +3", true, "Stats"),
+                "Wit Notepad" to TrackblazerItemInfo(10, "Wit +3", true, "Stats"),
+                "Speed Manual" to TrackblazerItemInfo(15, "Speed +7", true, "Stats"),
+                "Stamina Manual" to TrackblazerItemInfo(15, "Stamina +7", true, "Stats"),
+                "Power Manual" to TrackblazerItemInfo(15, "Power +7", true, "Stats"),
+                "Guts Manual" to TrackblazerItemInfo(15, "Guts +7", true, "Stats"),
+                "Wit Manual" to TrackblazerItemInfo(15, "Wit +7", true, "Stats"),
+                "Speed Scroll" to TrackblazerItemInfo(30, "Speed +15", true, "Stats"),
+                "Stamina Scroll" to TrackblazerItemInfo(30, "Stamina +15", true, "Stats"),
+                "Power Scroll" to TrackblazerItemInfo(30, "Power +15", true, "Stats"),
+                "Guts Scroll" to TrackblazerItemInfo(30, "Guts +15", true, "Stats"),
+                "Wit Scroll" to TrackblazerItemInfo(30, "Wit +15", true, "Stats"),
+                // Energy and Motivation
+                "Vita 20" to TrackblazerItemInfo(35, "Energy +20", false, "Energy and Motivation"),
+                "Vita 40" to TrackblazerItemInfo(55, "Energy +40", false, "Energy and Motivation"),
+                "Vita 65" to TrackblazerItemInfo(75, "Energy +65", false, "Energy and Motivation"),
+                "Royal Kale Juice" to TrackblazerItemInfo(70, "Energy +100, Motivation -1", false, "Energy and Motivation"),
+                "Energy Drink MAX" to TrackblazerItemInfo(30, "Maximum energy +4, Energy +5", false, "Energy and Motivation"),
+                "Energy Drink MAX EX" to TrackblazerItemInfo(50, "Maximum energy +8", false, "Energy and Motivation"),
+                // Cupcakes are not blind quick-use: they must reach the mood/energy-gated Kale-reserve policy
+                // (same-pass mood offset) instead of being consumed on sight, so they stay isQuickUsage = false.
+                "Plain Cupcake" to TrackblazerItemInfo(30, "Motivation +1", false, "Energy and Motivation"),
+                "Berry Sweet Cupcake" to TrackblazerItemInfo(55, "Motivation +2", false, "Energy and Motivation"),
+                // Bond
+                "Yummy Cat Food" to TrackblazerItemInfo(10, "Yayoi Akikawa's bond +5", true, "Bond"),
+                "Grilled Carrots" to TrackblazerItemInfo(40, "All Support card bonds +5", true, "Bond"),
+                // Get Good Conditions
+                "Pretty Mirror" to TrackblazerItemInfo(150, "Get Charming ○ status effect", true, "Get Good Conditions"),
+                "Reporter's Binoculars" to TrackblazerItemInfo(150, "Get Hot Topic status effect", true, "Get Good Conditions"),
+                "Master Practice Guide" to TrackblazerItemInfo(150, "Get Practice Perfect ○ status effect", true, "Get Good Conditions"),
+                "Scholar's Hat" to TrackblazerItemInfo(280, "Get Fast Learner status effect", true, "Get Good Conditions"),
+                // Heal Bad Conditions
+                "Fluffy Pillow" to TrackblazerItemInfo(15, "Heal Night Owl", true, "Heal Bad Conditions"),
+                "Pocket Planner" to TrackblazerItemInfo(15, "Heal Slacker", true, "Heal Bad Conditions"),
+                "Rich Hand Cream" to TrackblazerItemInfo(15, "Heal Skin Outbreak", true, "Heal Bad Conditions"),
+                "Smart Scale" to TrackblazerItemInfo(15, "Heal Slow Metabolism", true, "Heal Bad Conditions"),
+                "Aroma Diffuser" to TrackblazerItemInfo(15, "Heal Migraine", true, "Heal Bad Conditions"),
+                "Practice Drills DVD" to TrackblazerItemInfo(15, "Heal Practice Poor", true, "Heal Bad Conditions"),
+                "Miracle Cure" to TrackblazerItemInfo(40, "Heal all negative status effects", true, "Heal Bad Conditions"),
+                // Training Facilities
+                "Speed Training Application" to TrackblazerItemInfo(150, "Speed Training Level +1", true, "Training Facilities"),
+                "Stamina Training Application" to TrackblazerItemInfo(150, "Stamina Training Level +1", true, "Training Facilities"),
+                "Power Training Application" to TrackblazerItemInfo(150, "Power Training Level +1", true, "Training Facilities"),
+                "Guts Training Application" to TrackblazerItemInfo(150, "Guts Training Level +1", true, "Training Facilities"),
+                "Wit Training Application" to TrackblazerItemInfo(150, "Wit Training Level +1", true, "Training Facilities"),
+                // Training Effects
+                "Coaching Megaphone" to TrackblazerItemInfo(40, "Training bonus +20% for 4 turns", false, "Training Effects"),
+                "Motivating Megaphone" to TrackblazerItemInfo(55, "Training bonus +40% for 3 turns", false, "Training Effects"),
+                "Empowering Megaphone" to TrackblazerItemInfo(70, "Training bonus +60% for 2 turns", false, "Training Effects"),
+                "Speed Ankle Weights" to TrackblazerItemInfo(50, "Speed training bonus +50%, Energy consumption +20% (One turn)", false, "Training Effects"),
+                "Stamina Ankle Weights" to TrackblazerItemInfo(50, "Stamina training bonus +50%, Energy consumption +20% (One turn)", false, "Training Effects"),
+                "Power Ankle Weights" to TrackblazerItemInfo(50, "Power training bonus +50%, Energy consumption +20% (One turn)", false, "Training Effects"),
+                "Guts Ankle Weights" to TrackblazerItemInfo(50, "Guts training bonus +50%, Energy consumption +20% (One turn)", false, "Training Effects"),
+                "Wit Ankle Weights" to TrackblazerItemInfo(50, "Wit training bonus +50%, Energy consumption +20% (One turn)", false, "Training Effects"),
+                "Good-Luck Charm" to TrackblazerItemInfo(40, "Training failure rate set to 0% (One turn)", false, "Training Effects"),
+                "Reset Whistle" to TrackblazerItemInfo(20, "Shuffle support card distribution", false, "Training Effects"),
+                // Races
+                "Artisan Cleat Hammer" to TrackblazerItemInfo(25, "Race bonus +20% (One turn)", false, "Races"),
+                "Master Cleat Hammer" to TrackblazerItemInfo(40, "Race bonus +35% (One turn)", false, "Races"),
+                "Glow Sticks" to TrackblazerItemInfo(15, "Race fan gain +50% (One turn)", false, "Races"),
+            )
     }
 
     /** Callback provider to retrieve the current inventory summary. */
@@ -119,71 +188,7 @@ class TrackblazerShopList(private val game: Game) {
     val badConditionHealItemNames get() = shopItems.filter { it.value.category == "Heal Bad Conditions" }.keys.toList()
 
     /** Mapping of shop items to their price, effect, and whether they are allowed for quick usage. */
-    val shopItems: Map<String, TrackblazerItemInfo> =
-        mapOf(
-            // Stats
-            "Speed Notepad" to TrackblazerItemInfo(10, "Speed +3", true, "Stats"),
-            "Stamina Notepad" to TrackblazerItemInfo(10, "Stamina +3", true, "Stats"),
-            "Power Notepad" to TrackblazerItemInfo(10, "Power +3", true, "Stats"),
-            "Guts Notepad" to TrackblazerItemInfo(10, "Guts +3", true, "Stats"),
-            "Wit Notepad" to TrackblazerItemInfo(10, "Wit +3", true, "Stats"),
-            "Speed Manual" to TrackblazerItemInfo(15, "Speed +7", true, "Stats"),
-            "Stamina Manual" to TrackblazerItemInfo(15, "Stamina +7", true, "Stats"),
-            "Power Manual" to TrackblazerItemInfo(15, "Power +7", true, "Stats"),
-            "Guts Manual" to TrackblazerItemInfo(15, "Guts +7", true, "Stats"),
-            "Wit Manual" to TrackblazerItemInfo(15, "Wit +7", true, "Stats"),
-            "Speed Scroll" to TrackblazerItemInfo(30, "Speed +15", true, "Stats"),
-            "Stamina Scroll" to TrackblazerItemInfo(30, "Stamina +15", true, "Stats"),
-            "Power Scroll" to TrackblazerItemInfo(30, "Power +15", true, "Stats"),
-            "Guts Scroll" to TrackblazerItemInfo(30, "Guts +15", true, "Stats"),
-            "Wit Scroll" to TrackblazerItemInfo(30, "Wit +15", true, "Stats"),
-            // Energy and Motivation
-            "Vita 20" to TrackblazerItemInfo(35, "Energy +20", false, "Energy and Motivation"),
-            "Vita 40" to TrackblazerItemInfo(55, "Energy +40", false, "Energy and Motivation"),
-            "Vita 65" to TrackblazerItemInfo(75, "Energy +65", false, "Energy and Motivation"),
-            "Royal Kale Juice" to TrackblazerItemInfo(70, "Energy +100, Motivation -1", false, "Energy and Motivation"),
-            "Energy Drink MAX" to TrackblazerItemInfo(30, "Maximum energy +4, Energy +5", false, "Energy and Motivation"),
-            "Energy Drink MAX EX" to TrackblazerItemInfo(50, "Maximum energy +8", false, "Energy and Motivation"),
-            "Plain Cupcake" to TrackblazerItemInfo(30, "Motivation +1", true, "Energy and Motivation"),
-            "Berry Sweet Cupcake" to TrackblazerItemInfo(55, "Motivation +2", true, "Energy and Motivation"),
-            // Bond
-            "Yummy Cat Food" to TrackblazerItemInfo(10, "Yayoi Akikawa's bond +5", true, "Bond"),
-            "Grilled Carrots" to TrackblazerItemInfo(40, "All Support card bonds +5", true, "Bond"),
-            // Get Good Conditions
-            "Pretty Mirror" to TrackblazerItemInfo(150, "Get Charming ○ status effect", true, "Get Good Conditions"),
-            "Reporter's Binoculars" to TrackblazerItemInfo(150, "Get Hot Topic status effect", true, "Get Good Conditions"),
-            "Master Practice Guide" to TrackblazerItemInfo(150, "Get Practice Perfect ○ status effect", true, "Get Good Conditions"),
-            "Scholar's Hat" to TrackblazerItemInfo(280, "Get Fast Learner status effect", true, "Get Good Conditions"),
-            // Heal Bad Conditions
-            "Fluffy Pillow" to TrackblazerItemInfo(15, "Heal Night Owl", true, "Heal Bad Conditions"),
-            "Pocket Planner" to TrackblazerItemInfo(15, "Heal Slacker", true, "Heal Bad Conditions"),
-            "Rich Hand Cream" to TrackblazerItemInfo(15, "Heal Skin Outbreak", true, "Heal Bad Conditions"),
-            "Smart Scale" to TrackblazerItemInfo(15, "Heal Slow Metabolism", true, "Heal Bad Conditions"),
-            "Aroma Diffuser" to TrackblazerItemInfo(15, "Heal Migraine", true, "Heal Bad Conditions"),
-            "Practice Drills DVD" to TrackblazerItemInfo(15, "Heal Practice Poor", true, "Heal Bad Conditions"),
-            "Miracle Cure" to TrackblazerItemInfo(40, "Heal all negative status effects", true, "Heal Bad Conditions"),
-            // Training Facilities
-            "Speed Training Application" to TrackblazerItemInfo(150, "Speed Training Level +1", true, "Training Facilities"),
-            "Stamina Training Application" to TrackblazerItemInfo(150, "Stamina Training Level +1", true, "Training Facilities"),
-            "Power Training Application" to TrackblazerItemInfo(150, "Power Training Level +1", true, "Training Facilities"),
-            "Guts Training Application" to TrackblazerItemInfo(150, "Guts Training Level +1", true, "Training Facilities"),
-            "Wit Training Application" to TrackblazerItemInfo(150, "Wit Training Level +1", true, "Training Facilities"),
-            // Training Effects
-            "Coaching Megaphone" to TrackblazerItemInfo(40, "Training bonus +20% for 4 turns", false, "Training Effects"),
-            "Motivating Megaphone" to TrackblazerItemInfo(55, "Training bonus +40% for 3 turns", false, "Training Effects"),
-            "Empowering Megaphone" to TrackblazerItemInfo(70, "Training bonus +60% for 2 turns", false, "Training Effects"),
-            "Speed Ankle Weights" to TrackblazerItemInfo(50, "Speed training bonus +50%, Energy consumption +20% (One turn)", false, "Training Effects"),
-            "Stamina Ankle Weights" to TrackblazerItemInfo(50, "Stamina training bonus +50%, Energy consumption +20% (One turn)", false, "Training Effects"),
-            "Power Ankle Weights" to TrackblazerItemInfo(50, "Power training bonus +50%, Energy consumption +20% (One turn)", false, "Training Effects"),
-            "Guts Ankle Weights" to TrackblazerItemInfo(50, "Guts training bonus +50%, Energy consumption +20% (One turn)", false, "Training Effects"),
-            "Wit Ankle Weights" to TrackblazerItemInfo(50, "Wit training bonus +50%, Energy consumption +20% (One turn)", false, "Training Effects"),
-            "Good-Luck Charm" to TrackblazerItemInfo(40, "Training failure rate set to 0% (One turn)", false, "Training Effects"),
-            "Reset Whistle" to TrackblazerItemInfo(20, "Shuffle support card distribution", false, "Training Effects"),
-            // Races
-            "Artisan Cleat Hammer" to TrackblazerItemInfo(25, "Race bonus +20% (One turn)", false, "Races"),
-            "Master Cleat Hammer" to TrackblazerItemInfo(40, "Race bonus +35% (One turn)", false, "Races"),
-            "Glow Sticks" to TrackblazerItemInfo(15, "Race fan gain +50% (One turn)", false, "Races"),
-        )
+    val shopItems: Map<String, TrackblazerItemInfo> get() = Companion.shopItems
 
     /** Items to not purchase from the Shop. */
     private val excludedItemsString = SettingsHelper.getStringSetting("scenarioOverrides", "trackblazerExcludedItems", "[]")
