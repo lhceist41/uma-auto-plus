@@ -261,7 +261,8 @@ export interface CapacityCoverageDocument {
     readonly rosterFingerprint: string
     readonly protectionScanId: string | null
     /** The five approved replacement-evidence provenance fields projected from the retention document,
-     * or null when the input carried none. Extra top-level keys on the input are not carried through.
+     * or null when the input carried none. Extra top-level keys on the input are not carried through, and
+     * a malformed value under an approved key rejects the whole block instead of producing a document.
      * Provenance only: never a count, ranking, or transfer verdict. */
     readonly replacementEvidence: ReplacementEvidenceProvenance | null
     /** Newest input observation time from the retention document, NOT a clock read. */

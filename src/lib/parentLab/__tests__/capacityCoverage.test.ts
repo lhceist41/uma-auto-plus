@@ -566,6 +566,89 @@ describe("replacement evidence provenance", () => {
         expect(JSON.stringify(build(declared))).toBe(JSON.stringify(build(reversed)))
         expect(Object.keys(build(reversed).replacementEvidence as object)).toEqual(["confirmedVeterans", "traineeCount", "identityCollisions", "appVersions", "newestObservationTs"])
     })
+
+    /** Builds with an arbitrary value under replacementEvidence, as JSON.parse of a hand-edited document can yield. */
+    const buildWith = (evidence: unknown) => () => buildCapacityCoverage(report([withFactors()], { replacementEvidence: evidence as ReplacementEvidenceProvenance }))
+    const COUNT_FIELDS = ["confirmedVeterans", "traineeCount", "identityCollisions"] as const
+    const MALFORMED_COUNTS = ["212", null, {}, [], true, -1, 1.5, NaN, Infinity, undefined]
+
+    test("an explicit undefined provenance value carries the key through as null", () => {
+        const doc = buildWith(undefined)()
+        expect(doc.replacementEvidence).toBeNull()
+        expect(doc.limits.map((l) => l.code)).not.toContain("REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")
+    })
+
+    test("zeroed counts, an empty version list and a null timestamp are valid and build", () => {
+        const zeroed = provenance({ confirmedVeterans: 0, traineeCount: 0, identityCollisions: 0, appVersions: [], newestObservationTs: null })
+        expect(buildWith(zeroed)().replacementEvidence).toEqual(zeroed)
+    })
+
+    test("a negative or fractional timestamp builds, since the producer's contract is finite, not integer", () => {
+        for (const ts of [0, -1, 1.5, 1788020859193.5]) {
+            expect(buildWith(provenance({ newestObservationTs: ts }))().replacementEvidence?.newestObservationTs).toBe(ts)
+        }
+    })
+
+    test("a non-null provenance value that is not an object throws instead of building a document", () => {
+        for (const bad of [0, false, "", [], "text", 123]) {
+            expect(buildWith(bad)).toThrow(/replacement evidence is not an object/)
+        }
+    })
+
+    test("a malformed count field throws", () => {
+        for (const field of COUNT_FIELDS) {
+            for (const bad of MALFORMED_COUNTS) {
+                expect(buildWith({ ...provenance(), [field]: bad })).toThrow(new RegExp(`replacement evidence ${field} is not a non-negative integer`))
+            }
+        }
+    })
+
+    test("four valid fields do not rescue a fifth malformed one", () => {
+        expect(buildWith({ ...provenance(), identityCollisions: -1 })).toThrow(/identityCollisions is not a non-negative integer/)
+        expect(buildWith({ ...provenance(), appVersions: [1] })).toThrow(/appVersions is not an array of strings/)
+    })
+
+    test("a malformed appVersions field throws", () => {
+        for (const bad of ["1.4.0", {}, null, [1], [null], ["1.4.0", 2], undefined]) {
+            expect(buildWith({ ...provenance(), appVersions: bad })).toThrow(/appVersions is not an array of strings/)
+        }
+    })
+
+    test("appVersions is type-checked only: emptiness, uniqueness, sortedness and syntax are not enforced", () => {
+        for (const versions of [[], [""], ["1.4.0", "1.4.0"], ["9.9.9", "1.3.8", "not-a-version"]]) {
+            expect(buildWith(provenance({ appVersions: versions }))().replacementEvidence?.appVersions).toEqual(versions)
+        }
+    })
+
+    test("the emitted appVersions array does not share identity with the input array", () => {
+        const versions = ["1.4.0", "1.3.8"]
+        const emitted = buildWith(provenance({ appVersions: versions }))().replacementEvidence?.appVersions
+        expect(emitted).toEqual(versions)
+        expect(emitted).not.toBe(versions)
+    })
+
+    test("a malformed newestObservationTs throws", () => {
+        for (const bad of ["1788020859193", {}, [], true, NaN, Infinity, undefined]) {
+            expect(buildWith({ ...provenance(), newestObservationTs: bad })).toThrow(/newestObservationTs is not a finite number or null/)
+        }
+    })
+
+    test("an injected decision object under an approved value key throws before a document exists", () => {
+        expect(buildWith({ ...provenance(), appVersions: { safeToDelete: true } })).toThrow(/appVersions is not an array of strings/)
+        expect(buildWith({ ...provenance(), newestObservationTs: { fragility: 1 } })).toThrow(/newestObservationTs is not a finite number or null/)
+    })
+
+    test("malformed provenance throws on the untrusted-roster branch too, never a fail-closed document", () => {
+        const untrusted = rec({ scanIndex: 0, dataCompleteness: completeness({ rosterTrusted: false }) })
+        const build = (evidence: unknown) => () => buildCapacityCoverage(report([untrusted], { replacementEvidence: evidence as ReplacementEvidenceProvenance }))
+        expect(build(0)).toThrow(/replacement evidence is not an object/)
+        expect(build({ ...provenance(), appVersions: { safeToDelete: true } })).toThrow(/appVersions is not an array of strings/)
+    })
+
+    test("an unsupported retention schema version is reported ahead of malformed provenance", () => {
+        const rep = report([withFactors()], { schemaVersion: 1 as unknown as typeof PARENTLAB_RETENTION_SCHEMA_VERSION, replacementEvidence: 0 as unknown as ReplacementEvidenceProvenance })
+        expect(() => buildCapacityCoverage(rep)).toThrow(/retention schema version/)
+    })
 })
 
 describe("contract, isolation and determinism", () => {

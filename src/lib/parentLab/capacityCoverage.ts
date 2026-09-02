@@ -124,6 +124,43 @@ interface SlotAccumulator {
 }
 
 /**
+ * Reads the five approved replacement-evidence provenance fields off a parsed retention document.
+ *
+ * The input may be hand-edited JSON, so approved keys carrying unapproved values are rejected rather
+ * than coerced or nulled: null means no career corpus was supplied, and mapping corrupt provenance onto
+ * it would make a false absence claim. Any malformed field rejects the whole block, so no coverage
+ * document is emitted. Extra top-level keys are ignored - the projection never carries them through.
+ * `newestObservationTs` is finite-or-null, NOT an integer: the producer emits whatever observation time
+ * the corpus carried.
+ */
+function readReplacementEvidence(value: unknown): ReplacementEvidenceProvenance | null {
+    if (value === null || value === undefined) return null
+    if (typeof value !== "object" || Array.isArray(value)) throw new Error(`replacement evidence is not an object: ${String(value)}`)
+    const block = value as Record<string, unknown>
+    const count = (field: string): number => {
+        const raw = block[field]
+        if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) throw new Error(`replacement evidence ${field} is not a non-negative integer: ${String(raw)}`)
+        return raw
+    }
+    const confirmedVeterans = count("confirmedVeterans")
+    const traineeCount = count("traineeCount")
+    const identityCollisions = count("identityCollisions")
+    const versions = block.appVersions
+    if (!Array.isArray(versions) || versions.some((entry) => typeof entry !== "string")) throw new Error("replacement evidence appVersions is not an array of strings")
+    const newestObservationTs = block.newestObservationTs
+    if (newestObservationTs !== null && (typeof newestObservationTs !== "number" || !Number.isFinite(newestObservationTs))) {
+        throw new Error(`replacement evidence newestObservationTs is not a finite number or null: ${String(newestObservationTs)}`)
+    }
+    return {
+        confirmedVeterans,
+        traineeCount,
+        identityCollisions,
+        appVersions: [...(versions as readonly string[])],
+        newestObservationTs,
+    }
+}
+
+/**
  * Builds the Capacity Coverage Exposure Ledger for one target profile's retention report.
  *
  * Slice 1 is built in-process from the same report and validates the retention schema/version, failing
@@ -138,19 +175,8 @@ export function buildCapacityCoverage(report: RetentionShadowReport, domain?: Wh
     const whiteFamilies = domain ? whiteFamilySets(domain) : null
     const whiteDomainAvailable = whiteFamilies !== null
     // Persisted retention v2 inputs carry no replacementEvidence key, and JSON.stringify drops an
-    // undefined value, so normalize to null to keep the coverage key always present. The report here is
-    // parsed retention JSON, which may have been hand-edited, so project only the approved provenance
-    // fields instead of carrying the input object through.
-    const provenance = report.replacementEvidence
-    const replacementEvidence: ReplacementEvidenceProvenance | null = provenance
-        ? {
-              confirmedVeterans: provenance.confirmedVeterans,
-              traineeCount: provenance.traineeCount,
-              identityCollisions: provenance.identityCollisions,
-              appVersions: provenance.appVersions,
-              newestObservationTs: provenance.newestObservationTs,
-          }
-        : null
+    // undefined value, so normalize to null to keep the coverage key always present.
+    const replacementEvidence = readReplacementEvidence(report.replacementEvidence)
     const limits = buildLimits(report, whiteDomainAvailable, replacementEvidence !== null)
 
     const base = {
