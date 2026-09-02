@@ -32,6 +32,11 @@ export type RosterScanTermination =
 export const ROSTER_STAT_KEYS = ["spd", "sta", "pwr", "grt", "wit"] as const
 export type RosterStatKey = (typeof ROSTER_STAT_KEYS)[number]
 
+/** The ten aptitude keys, in the order the device writes them. Canonical here rather than beside the
+ * target profiles: the roster identity check and the profile gates must read the same list. */
+export const ROSTER_APTITUDE_KEYS = ["turf", "dirt", "sprint", "mile", "medium", "long", "front", "pace", "late", "end"] as const
+export type RosterAptitudeKey = (typeof ROSTER_APTITUDE_KEYS)[number]
+
 /** The Career Info block, when the device read it. Every field is independently nullable: the block
  * is read field by field and a label that did not match yields null rather than a guess. */
 export interface RosterCareerInfoRecord {
@@ -387,9 +392,36 @@ const ENUMERATION_DEFECTS = new Set<RosterSnapshotDefect>([
 /** Defects that mean some enumerated entry did not resolve to a distinct identity. */
 const IDENTITY_DEFECTS = new Set<RosterSnapshotDefect>(["duplicate_fingerprints", "unidentified_entries"])
 
+/** The `unresolvedFields` tokens the device writes for an identity feeder. Matched exactly, never by
+ * prefix: `statGrade_spd` is an auxiliary read and must not be mistaken for the identity `stat_spd`. */
+const IDENTITY_UNRESOLVED_FIELDS = new Set<string>([
+    "character",
+    "outfit",
+    "rank",
+    "rating",
+    ...ROSTER_STAT_KEYS.map((k) => `stat_${k}`),
+    ...ROSTER_APTITUDE_KEYS.map((k) => `aptitude_${k}`),
+])
+
+/**
+ * Whether the entry carries every field the device builds its fingerprint from.
+ *
+ * The writer nulls `rosterFingerprint` whenever any identity feeder is unread, so a fingerprint next
+ * to a missing identity field contradicts the record's own writer and must not be read as identity.
+ * `unresolvedFields` is authoritative alongside the parsed values: a record naming an identity field
+ * unread stays unidentified even when that field also carries a plausible value, so a hand-edited
+ * row cannot be promoted into trust by filling one in.
+ */
+function identityEvidenceComplete(e: RosterEntryRecord): boolean {
+    if (e.character === null || e.outfit === null || e.rank === null || e.rating === null) return false
+    if (ROSTER_STAT_KEYS.some((k) => e.stats[k] === null)) return false
+    if (ROSTER_APTITUDE_KEYS.some((k) => !e.aptitudes[k])) return false
+    return !e.unresolvedFields.some((f) => IDENTITY_UNRESOLVED_FIELDS.has(f))
+}
+
 function snapshotFor(scanId: string, header: RosterScanRecord | undefined, rows: readonly RosterEntryRecord[]): RosterSnapshot {
     const entries = [...rows].sort((a, b) => a.scanIndex - b.scanIndex)
-    const fingerprints = entries.map((e) => e.rosterFingerprint).filter((f): f is string => f !== null)
+    const fingerprints = entries.map((e) => (identityEvidenceComplete(e) ? e.rosterFingerprint : null)).filter((f): f is string => f !== null)
     const uniqueFingerprints = new Set(fingerprints).size
     const duplicateFingerprints = fingerprints.length - uniqueFingerprints
     const unidentified = entries.length - fingerprints.length

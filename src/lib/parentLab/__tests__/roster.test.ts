@@ -1,4 +1,5 @@
-import { buildRosterSnapshots, latestTrustedSnapshot, parseRosterScanRecords } from "../roster.ts"
+import { buildRosterSnapshots, latestTrustedSnapshot, parseRosterScanRecords, ROSTER_APTITUDE_KEYS } from "../roster.ts"
+import { ROSTER_APTITUDE_KEYS as RE_EXPORTED_APTITUDE_KEYS } from "../retentionTargets.ts"
 
 // The roster snapshot is exercised through the same parse path the device writer produces: JSONL
 // lines authored exactly as the Kotlin serializer writes them, parsed and derived offline.
@@ -233,6 +234,69 @@ describe("buildRosterSnapshots completeness", () => {
         const snapshot = snapshotOf(partial)
         expect(snapshot.unidentified).toBe(1)
         expect(snapshot.defects).toContain("unidentified_entries")
+    })
+})
+
+describe("identity evidence consistency", () => {
+    // The device emits a fingerprint only when every identity feeder read cleanly, so a fingerprinted
+    // entry that is also missing one contradicts its own writer. Reading it as identified is how an
+    // aptitude nobody ever read reaches a transfer decision as though it had been.
+
+    /** A scan whose header still claims a clean trusted walk, with the last entry overridden. */
+    function contradictoryScan(o: Record<string, unknown>): string {
+        return [entryLine("scan-a", 0), entryLine("scan-a", 1), entryLine("scan-a", 2, o), headerLine("scan-a")].join("\n")
+    }
+
+    const UNREAD_LONG = { aptitudes: { ...APTITUDES, long: undefined }, unresolvedFields: ["aptitude_long"] }
+
+    it("refuses a fingerprinted entry whose aptitude was never read", () => {
+        const snapshot = snapshotOf(contradictoryScan(UNREAD_LONG))
+        expect(snapshot.unidentified).toBe(1)
+        expect(snapshot.uniqueFingerprints).toBe(2)
+        expect(snapshot.identityComplete).toBe(false)
+        expect(snapshot.trustedComplete).toBe(false)
+        expect(snapshot.defects).toContain("unidentified_entries")
+    })
+
+    it.each([
+        ["character", { character: undefined, unresolvedFields: ["character"] }],
+        ["outfit", { outfit: undefined, unresolvedFields: ["outfit"] }],
+        ["rank", { rank: undefined, unresolvedFields: ["rank"] }],
+        ["rating", { rating: undefined, unresolvedFields: ["rating"] }],
+        ["stat_spd", { stats: { sta: 699, pwr: 648, grt: 687, wit: 420 }, unresolvedFields: ["stat_spd"] }],
+    ])("refuses a fingerprinted entry whose %s was never read", (_field, override) => {
+        const snapshot = snapshotOf(contradictoryScan(override))
+        expect(snapshot.unidentified).toBe(1)
+        expect(snapshot.trustedComplete).toBe(false)
+        expect(snapshot.defects).toContain("unidentified_entries")
+    })
+
+    it("refuses a fingerprinted entry that names an identity field unread while carrying a value for it", () => {
+        // A hand-edited record cannot buy its way back into trust by filling in a plausible grade: the
+        // device's own account of what it failed to read outranks the value sitting next to it.
+        const snapshot = snapshotOf(contradictoryScan({ aptitudes: { ...APTITUDES, long: "A" }, unresolvedFields: ["aptitude_long"] }))
+        expect(snapshot.unidentified).toBe(1)
+        expect(snapshot.trustedComplete).toBe(false)
+    })
+
+    it.each([["careerRaces"], ["statGrade_spd"]])("keeps an entry identified when only the auxiliary %s is unread", (field) => {
+        // statGrade_spd is the trap: it is not the identity field stat_spd, and matching by prefix
+        // would block a scan the device itself reports as clean.
+        const snapshot = snapshotOf(contradictoryScan({ unresolvedFields: [field] }))
+        expect(snapshot.unidentified).toBe(0)
+        expect(snapshot.identityComplete).toBe(true)
+        expect(snapshot.trustedComplete).toBe(true)
+        expect(snapshot.defects).toEqual([])
+    })
+
+    it("derives the same snapshot on a repeated build of a contradictory scan", () => {
+        const text = contradictoryScan(UNREAD_LONG)
+        expect(JSON.stringify(buildRosterSnapshots(parseRosterScanRecords(text)))).toBe(JSON.stringify(buildRosterSnapshots(parseRosterScanRecords(text))))
+    })
+
+    it("keeps the aptitude keys canonical in one place, in the order the device writes them", () => {
+        expect(ROSTER_APTITUDE_KEYS).toEqual(["turf", "dirt", "sprint", "mile", "medium", "long", "front", "pace", "late", "end"])
+        expect(RE_EXPORTED_APTITUDE_KEYS).toBe(ROSTER_APTITUDE_KEYS)
     })
 })
 

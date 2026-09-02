@@ -1,6 +1,8 @@
 import { parseCorpus } from "../../outcomeAnalysis.ts"
 import { buildVeteranLibrary } from "../buildVeteranLibrary.ts"
+import { buildCapacityCoverage } from "../capacityCoverage.ts"
 import { buildInspirationIndex, parseInspirationRecords } from "../inspiration.ts"
+import { buildAdvisorSnapshot } from "../quarantineSnapshot.ts"
 import { reconcileRoster } from "../reconcile.ts"
 import { buildRosterSnapshots, parseRosterScanRecords } from "../roster.ts"
 import { buildRetentionShadowReport, evaluateDominance, INACTIVE_RULES } from "../retentionAdvisor.ts"
@@ -658,5 +660,74 @@ describe("PL-R2 determinism", () => {
         buildRetentionShadowReport({ evidence, library: null, reconciliation: null, profile: TARGET_PROFILES.GENERAL_INHERITANCE })
         expect(JSON.stringify(snapshot)).toBe(snapshotBefore)
         expect(JSON.stringify(evidence.veterans.map((v) => v.entry))).toBe(evidenceBefore)
+    })
+})
+
+describe("PL-R2 roster identity-evidence consistency", () => {
+    // The device writes a fingerprint only when every identity feeder read cleanly. A fingerprinted
+    // entry that also names one unread contradicts its own writer, and reading it as identified is how
+    // an aptitude nobody ever read ends up backing a transfer verdict.
+
+    const UNREAD_LONG = { aptitudes: { ...APTITUDES, long: "A" }, unresolvedFields: ["aptitude_long"] }
+
+    /** The one fixture where every strict gate is satisfiable, so the transfer side is reachable. */
+    function unlockedTrio(overrides: Record<string, unknown> = {}) {
+        return fullyCoveredTrio(GENERIC_SUBJECT, GENERIC_DOMINATOR, { favoriteState: "not_set", protectionState: "not_protected", ...overrides })
+    }
+
+    /** Two Veterans clearing the LONG gate, the first of them open to an identity override. */
+    function longCoverage(overrides: Record<string, unknown> = {}) {
+        return {
+            entries: [
+                rosterEntry({ scanIndex: 0, rosterFingerprint: "fp-a", aptitudes: { ...APTITUDES, long: "A" }, favoriteState: "not_set", protectionState: "not_protected", ...overrides }),
+                rosterEntry({ scanIndex: 1, rosterFingerprint: "fp-b", aptitudes: { ...APTITUDES, long: "A" } }),
+                rosterEntry({ scanIndex: 2, rosterFingerprint: "fp-c", aptitudes: { ...APTITUDES, long: "B" } }),
+            ],
+            captures: [capture("fp-a", GENERIC_SUBJECT), capture("fp-b", GENERIC_DOMINATOR), capture("fp-c", GENERIC_DOMINATOR)],
+            profile: "LONG_PARENT" as const,
+        }
+    }
+
+    it("still reaches SAFE_TO_TRANSFER while every identity field reads cleanly", () => {
+        const { snapshot, report } = build(unlockedTrio())
+        expect(snapshot.trustedComplete).toBe(true)
+        expect(forFingerprint(report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+    })
+
+    it("withdraws every transfer verdict when a fingerprinted entry's aptitude was never read", () => {
+        const { snapshot, report } = build(unlockedTrio(UNREAD_LONG))
+        expect(snapshot.trustedComplete).toBe(false)
+        expect(snapshot.defects).toContain("unidentified_entries")
+        expect(report.counts.SAFE_TO_TRANSFER).toBe(0)
+        expect(report.recommendations.every((r) => r.state === "UNKNOWN")).toBe(true)
+        expect(report.recommendations.every((r) => r.confidence === "INSUFFICIENT")).toBe(true)
+        expect(report.recommendations.every((r) => r.gateReasons.includes("ROSTER_SNAPSHOT_UNTRUSTED"))).toBe(true)
+    })
+
+    it("blocks every quarantine candidate on the same untrusted snapshot", () => {
+        const advisor = buildAdvisorSnapshot([build(unlockedTrio(UNREAD_LONG)).report])
+        expect(advisor.rosterTrusted).toBe(false)
+        expect(advisor.defects).toContain("ROSTER_SNAPSHOT_UNTRUSTED")
+        const candidates = [...advisor.candidates.values()]
+        expect(candidates.length).toBeGreaterThan(0)
+        expect(candidates.every((c) => c.blockers.includes("ROSTER_SNAPSHOT_UNTRUSTED"))).toBe(true)
+        expect(candidates.some((c) => c.eligible)).toBe(false)
+    })
+
+    it("builds a usable target-coverage ledger while both LONG clearers read cleanly", () => {
+        const doc = buildCapacityCoverage(build(longCoverage()).report)
+        expect(doc.usable).toBe(true)
+        expect(doc.targetSlots.length).toBeGreaterThan(0)
+        expect(doc.exposures.length).toBeGreaterThan(0)
+    })
+
+    it("empties the target-coverage ledger when a LONG clearer never read its aptitude", () => {
+        // Both entries read "long: A", but one of them says it never read that grade - so the account
+        // has no proven count of LONG clearers and the ledger must not render a sole or shared claim.
+        const doc = buildCapacityCoverage(build(longCoverage(UNREAD_LONG)).report)
+        expect(doc.usable).toBe(false)
+        expect(doc.poolSize).toBe(0)
+        expect(doc.targetSlots).toEqual([])
+        expect(doc.exposures).toEqual([])
     })
 })

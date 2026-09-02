@@ -11,11 +11,9 @@
 // repository, and inventing one would put a fabricated number underneath a retention decision.
 
 import type { InspirationFactorRecord } from "./inspiration.ts"
-import type { RosterEntryRecord } from "./roster.ts"
+import type { RosterAptitudeKey, RosterEntryRecord } from "./roster.ts"
 
-/** The roster aptitude keys the device writes, in its own order. */
-export const ROSTER_APTITUDE_KEYS = ["turf", "dirt", "sprint", "mile", "medium", "long", "front", "pace", "late", "end"] as const
-export type RosterAptitudeKey = (typeof ROSTER_APTITUDE_KEYS)[number]
+export { ROSTER_APTITUDE_KEYS, type RosterAptitudeKey } from "./roster.ts"
 
 /**
  * Aptitude letter grades, worst to best. The index IS the ordinal, so a comparison never depends on
