@@ -136,7 +136,7 @@ function exposedViewOf(doc) {
     const exposedFactorSlots = doc.factorSlots.filter((s) => s.exposure === "FULLY_EXPOSED" || s.exposure === "FULLY_EXPOSED_SOLE")
     const exposedCharacterSlots = doc.characterSlots.filter((s) => s.exposure === "FULLY_EXPOSED" || s.exposure === "FULLY_EXPOSED_SOLE")
     const exposedTargetSlots = doc.targetSlots.filter((s) => s.exposure === "FULLY_EXPOSED" || s.exposure === "FULLY_EXPOSED_SOLE")
-    const riskyVeterans = doc.exposures.filter((v) => v.lastCopyRisk === "SOLE_OBSERVED_CARRIER" || v.lastCopyRisk === "SHARED_FULLY_EXPOSED")
+    const riskyVeterans = doc.exposures.filter((v) => v.lastCopyRisk === "SOLE_OBSERVED_CARRIER" || v.lastCopyRisk === "SHARED_FULLY_EXPOSED" || v.soleTargetSlots.length > 0)
     return {
         schema: doc.schema,
         schemaVersion: doc.schemaVersion,

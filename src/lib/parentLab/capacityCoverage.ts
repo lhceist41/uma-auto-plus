@@ -414,18 +414,31 @@ export function buildCapacityCoverage(report: RetentionShadowReport, domain?: Wh
     // counts the whole roster rather than the empty targetsCovered set, which would otherwise read as a
     // false "no Veteran covers this target". Gatelessness follows the profile being measured, never the
     // selected one, or a gated lens would bypass the gate for every profile.
+    //
+    // A gated non-selected slot with exactly one admitted clearer also names that Veteran on its own row.
+    // Derived from this pass rather than from the retention coverage summary's soleTargetCoverage, which is
+    // roster-relative and hand-editable, so the row and the slot cannot contradict each other.
+    const soleTargetSlotsByScan = new Map<number, string[]>()
     const targetSlots: readonly TargetCoverageSlot[] = TARGET_PROFILE_IDS.map((targetProfile) => {
         const gateless = TARGET_PROFILES[targetProfile].aptitudeGate === null
         let clearing = 0
         let clearingAdmitted = 0
         let clearingAnchored = 0
+        let soleAdmittedScan: number | null = null
         for (const rec of report.recommendations) {
             if (!gateless && !rec.coverageSummary.targetsCovered.includes(targetProfile)) continue
             clearing++
-            if (isAdmitted(admissionByScan.get(rec.scanIndex) ?? "")) clearingAdmitted++
-            else clearingAnchored++
+            if (isAdmitted(admissionByScan.get(rec.scanIndex) ?? "")) {
+                clearingAdmitted++
+                soleAdmittedScan = clearingAdmitted === 1 ? rec.scanIndex : null
+            } else clearingAnchored++
         }
         const exposure = classifyExposure(clearing, clearingAdmitted, clearingAnchored)
+        if (exposure === "FULLY_EXPOSED_SOLE" && !gateless && targetProfile !== report.targetProfile && soleAdmittedScan !== null) {
+            const list = soleTargetSlotsByScan.get(soleAdmittedScan) ?? []
+            list.push(targetProfile)
+            soleTargetSlotsByScan.set(soleAdmittedScan, list)
+        }
         return {
             targetProfile,
             clearingCarriers: clearing,
@@ -441,7 +454,7 @@ export function buildCapacityCoverage(report: RetentionShadowReport, domain?: Wh
     for (const rec of report.recommendations) {
         const admission = admissionByScan.get(rec.scanIndex) ?? ""
         if (!isAdmitted(admission)) continue
-        exposures.push(buildVeteranExposure(rec, admission, soleFactorCarrierByScan, sharedFactorSlotMembers, soleCharacterScan))
+        exposures.push(buildVeteranExposure(rec, admission, soleFactorCarrierByScan, sharedFactorSlotMembers, soleCharacterScan, soleTargetSlotsByScan))
     }
 
     const whiteSubfamilyCoverage: WhiteSubfamilyCoverage = {
@@ -483,6 +496,7 @@ function buildVeteranExposure(
     soleFactorCarrierByScan: ReadonlyMap<number, string[]>,
     sharedFactorSlotMembers: ReadonlyMap<string, { kind: string; scanIndices: number[] }>,
     soleCharacterScan: ReadonlySet<number>,
+    soleTargetSlotsByScan: ReadonlyMap<number, string[]>,
 ): VeteranCoverageExposure {
     const soleCarrierSlots = [...(soleFactorCarrierByScan.get(rec.scanIndex) ?? [])].sort()
     const fullyExposedSharedSlots: string[] = []
@@ -508,6 +522,8 @@ function buildVeteranExposure(
     for (const kind of [...exposureByKindMap.keys()].sort()) exposureByKind[kind] = exposureByKindMap.get(kind)!
 
     const lastCopyRisk = classifyLastCopyRisk(rec, soleCarrierSlots.length, fullyExposedSharedSlots.length, soleCharacterSlot)
+    // Already in TARGET_PROFILE_IDS order: the target-slot pass appends in that order.
+    const soleTargetSlots = [...(soleTargetSlotsByScan.get(rec.scanIndex) ?? [])]
 
     return {
         rosterFingerprint: rec.rosterFingerprint,
@@ -518,9 +534,10 @@ function buildVeteranExposure(
         soleCarrierSlots,
         fullyExposedSharedSlots,
         soleCharacterSlot,
+        soleTargetSlots,
         exposureByKind,
         lastCopyRisk,
-        explanation: veteranExposureExplanation(soleCarrierSlots.length, fullyExposedSharedSlots.length, soleCharacterSlot, lastCopyRisk),
+        explanation: veteranExposureExplanation(soleCarrierSlots.length, fullyExposedSharedSlots.length, soleCharacterSlot, lastCopyRisk, soleTargetSlots),
     }
 }
 
@@ -586,11 +603,12 @@ function targetSlotExplanation(targetProfile: string, clearing: number, admitted
     }
 }
 
-function veteranExposureExplanation(soleFactorSlots: number, sharedSlots: number, soleCharacter: boolean, risk: LastCopyRisk): string {
+function veteranExposureExplanation(soleFactorSlots: number, sharedSlots: number, soleCharacter: boolean, risk: LastCopyRisk, soleTargetSlots: readonly string[]): string {
     const parts: string[] = []
     if (soleFactorSlots > 0) parts.push(`${soleFactorSlots} sole factor slot(s)`)
     if (soleCharacter) parts.push("sole character")
     if (sharedSlots > 0) parts.push(`${sharedSlots} shared fully-exposed slot(s)`)
     const detail = parts.length > 0 ? parts.join(", ") : "no exposed slot observed"
-    return `eligible for manual review; ${risk} (${detail})`
+    const base = `eligible for manual review; ${risk} (${detail})`
+    return soleTargetSlots.length > 0 ? `${base}; sole admitted clearer of ${soleTargetSlots.join(", ")}` : base
 }

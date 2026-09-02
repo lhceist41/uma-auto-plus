@@ -26,11 +26,11 @@ import type { ReplacementEvidenceProvenance } from "./retentionTypes.ts"
 /** Schema discriminator for the coverage document. Distinct from every other ParentLab schema so a
  * persistence reader cannot confuse it with a retention, Slice 1 capacity, or quarantine document. */
 export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA = "parent_lab_capacity_coverage" as const
-/** Version 5: targetSlots now covers every known target profile against the selected-lens review pool,
- * where v4 emitted only the selected profile's slot. The pool, the white factor domain provenance and the
- * replacement-evidence provenance are unchanged. Structure only: valuation (affinity, rebuildability,
- * active-racer utility) is still deferred. */
-export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION = 5 as const
+/** Version 6: each exposure row now names the gated non-selected target profiles it is the sole admitted
+ * clearer of, which v5 measured in targetSlots but never connected to the Veteran. The pool, admission,
+ * lastCopyRisk, the white factor domain provenance and the replacement-evidence provenance are unchanged.
+ * Structure only: valuation (affinity, rebuildability, active-racer utility) is still deferred. */
+export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION = 6 as const
 /** Human-readable document kind, carried alongside the schema for defense in depth. */
 export const PARENTLAB_CAPACITY_COVERAGE_KIND = "CAPACITY_COVERAGE_EXPOSURE" as const
 
@@ -229,6 +229,10 @@ export interface VeteranCoverageExposure {
     readonly fullyExposedSharedSlots: readonly string[]
     /** True when this Veteran is the sole carrier of a fully-exposed-sole character slot. */
     readonly soleCharacterSlot: boolean
+    /** Canonical gated non-selected target profiles for which this Veteran is the sole admitted clearer
+     * against this document's selected-lens review pool, in TARGET_PROFILE_IDS order. [] when none.
+     * Clearing a profile's gate says nothing about whether this Veteran's factors suit that profile. */
+    readonly soleTargetSlots: readonly string[]
     /** Count of exposed factor slots this Veteran participates in, keyed by factor kind. Sorted keys. */
     readonly exposureByKind: Readonly<Record<string, number>>
     readonly lastCopyRisk: LastCopyRisk

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { mkdtempSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { buildCapacityCoverage } from "../capacityCoverage.ts"
@@ -18,7 +18,7 @@ import {
 import { buildCapacityTriage } from "../capacityEvidence.ts"
 import { PARENTLAB_CAPACITY_SCHEMA_VERSION, isCapacityTriageDocument } from "../capacityTypes.ts"
 import { retentionReportsOf } from "../quarantineSnapshot.ts"
-import { TARGET_PROFILE_IDS } from "../retentionTargets.ts"
+import { TARGET_PROFILE_IDS, TARGET_PROFILES } from "../retentionTargets.ts"
 import { PARENTLAB_RETENTION_SCHEMA, PARENTLAB_RETENTION_SCHEMA_VERSION, RETENTION_STATES } from "../retentionTypes.ts"
 import type { FactorScarcityEntry, ReplacementEvidenceProvenance, RetentionDataCompleteness, RetentionShadowReport, RetentionValueSummary, SelfFactorRef, VeteranRetentionRecommendation } from "../retentionTypes.ts"
 
@@ -169,7 +169,7 @@ const targetSlot = (doc: ReturnType<typeof buildCapacityCoverage>, profile: stri
 /** A rec whose retention coverage summary lists exactly these gated target profiles. The default
  * fixture claims GENERAL_INHERITANCE, which the real advisor never emits (it lists gated profiles only),
  * so every target-slot fixture states its own coverage rather than inheriting that default. */
-function coveringRec(scanIndex: number, targetsCovered: readonly string[], o: Partial<VeteranRetentionRecommendation> = {}): VeteranRetentionRecommendation {
+function coveringRec(scanIndex: number, targetsCovered: readonly string[], o: Partial<VeteranRetentionRecommendation> & { selfFactors?: readonly SelfFactorRef[] | null } = {}): VeteranRetentionRecommendation {
     const character = o.character ?? `Synth T${scanIndex}`
     return rec({ scanIndex, character, coverageSummary: { character, characterCarriers: 1, characterOutfitCarriers: 1, targetsCovered, soleTargetCoverage: [] }, ...o })
 }
@@ -551,9 +551,9 @@ describe("white factor domain provenance", () => {
         expect(reason).not.toMatch(/verified|compatible|matches/i)
     })
 
-    test("the coverage schema is v5 while the capacity and retention schemas are unchanged", () => {
-        expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(5)
-        expect(build(domain()).schemaVersion).toBe(5)
+    test("the coverage schema is v6 while the capacity and retention schemas are unchanged", () => {
+        expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(6)
+        expect(build(domain()).schemaVersion).toBe(6)
         expect(build(domain()).capacitySchemaVersion).toBe(PARENTLAB_CAPACITY_SCHEMA_VERSION)
         expect(PARENTLAB_CAPACITY_SCHEMA_VERSION).toBe(1)
         expect(PARENTLAB_RETENTION_SCHEMA_VERSION).toBe(3)
@@ -688,7 +688,12 @@ describe("multi-target coverage slots", () => {
         expect(mile.excludedSize).toBe(general.excludedSize)
         expect(JSON.stringify(mile.factorSlots)).toBe(JSON.stringify(general.factorSlots))
         expect(JSON.stringify(mile.characterSlots)).toBe(JSON.stringify(general.characterSlots))
-        expect(JSON.stringify(mile.exposures)).toBe(JSON.stringify(general.exposures))
+        expect(mile.exposures.map((e) => e.scanIndex)).toEqual(general.exposures.map((e) => e.scanIndex))
+        expect(mile.exposures.map((e) => e.lastCopyRisk)).toEqual(general.exposures.map((e) => e.lastCopyRisk))
+        // soleTargetSlots is the one lens-dependent exposure field: it names non-selected profiles only,
+        // so the selected profile drops off the row without any Veteran changing pool.
+        expect(general.exposures.map((e) => e.soleTargetSlots)).toEqual([["MILE_PARENT"], []])
+        expect(mile.exposures.map((e) => e.soleTargetSlots)).toEqual([[], []])
         expect(mile.factorExposureCounts).toEqual(general.factorExposureCounts)
         expect(mile.characterExposureCounts).toEqual(general.characterExposureCounts)
         expect(JSON.stringify(mile.targetSlots)).toBe(JSON.stringify(general.targetSlots))
@@ -715,6 +720,131 @@ describe("multi-target coverage slots", () => {
         const build = () => buildCapacityCoverage(report([coveringRec(0, ["MILE_PARENT"]), coveringRec(1, ["LONG_PARENT"])]))
         expect(JSON.stringify(build().targetSlots)).toBe(JSON.stringify(build().targetSlots))
         expect(forbiddenKeyPaths(build())).toEqual([])
+    })
+})
+
+describe("per-Veteran cross-target coverage risk", () => {
+    /** The MILE lens defect fixture: Veteran 0 is the only admitted Veteran clearing LONG_PARENT, while an
+     * excluded Veteran shares its character and its only factor, so it carries no factor or character
+     * exposure of its own and classifies NO_EXPOSED_SLOT_OBSERVED. */
+    function crossTargetRecs(): VeteranRetentionRecommendation[] {
+        const selfFactors = [{ factorKey: "white:XT_SHARED", stars: 3 }]
+        const character = "Synth XT Char"
+        return [
+            coveringRec(0, ["MILE_PARENT", "LONG_PARENT"], { character, selfFactors }),
+            coveringRec(1, ["MILE_PARENT"], { character, selfFactors }),
+            coveringRec(2, ["MILE_PARENT"], { character, selfFactors }),
+            coveringRec(3, [], { character, selfFactors, state: "HARD_PROTECT", hardProtectReasons: ["MANUAL_PROTECT"] }),
+        ]
+    }
+
+    const byScan = (doc: ReturnType<typeof buildCapacityCoverage>, scanIndex: number) => doc.exposures.find((e) => e.scanIndex === scanIndex)!
+
+    test("the sole admitted clearer of a non-selected profile still classifies NO_EXPOSED_SLOT_OBSERVED", () => {
+        const doc = buildCapacityCoverage(report(crossTargetRecs(), { targetProfile: "MILE_PARENT" }))
+        const long = targetSlot(doc, "LONG_PARENT")
+        expect(long.exposure).toBe("FULLY_EXPOSED_SOLE")
+        expect(long.clearingCarriers).toBe(1)
+        expect(long.admittedCarriers).toBe(1)
+        expect(long.anchoredCarriers).toBe(0)
+        expect(byScan(doc, 0).lastCopyRisk).toBe("NO_EXPOSED_SLOT_OBSERVED")
+    })
+
+    test("soleTargetSlots names the profile on the clearer's own row and leaves the others empty", () => {
+        const doc = buildCapacityCoverage(report(crossTargetRecs(), { targetProfile: "MILE_PARENT" }))
+        expect(byScan(doc, 0).soleTargetSlots).toEqual(["LONG_PARENT"])
+        expect(byScan(doc, 1).soleTargetSlots).toEqual([])
+        expect(byScan(doc, 2).soleTargetSlots).toEqual([])
+        expect(byScan(doc, 0).explanation).toContain("sole admitted clearer of LONG_PARENT")
+        expect(byScan(doc, 1).explanation).toBe("eligible for manual review; NO_EXPOSED_SLOT_OBSERVED (no exposed slot observed)")
+    })
+
+    test("the selected profile is never listed, even when its own slot is fully exposed sole", () => {
+        const recs = [coveringRec(0, ["MILE_PARENT", "LONG_PARENT"]), coveringRec(1, []), coveringRec(2, [])]
+        const doc = buildCapacityCoverage(report(recs, { targetProfile: "MILE_PARENT" }))
+        expect(targetSlot(doc, "MILE_PARENT").exposure).toBe("FULLY_EXPOSED_SOLE")
+        expect(byScan(doc, 0).soleTargetSlots).toEqual(["LONG_PARENT"])
+    })
+
+    test("two non-selected profiles are listed in TARGET_PROFILE_IDS order", () => {
+        const recs = [coveringRec(0, ["MILE_PARENT", "LONG_PARENT"]), coveringRec(1, []), coveringRec(2, [])]
+        const doc = buildCapacityCoverage(report(recs))
+        expect(byScan(doc, 0).soleTargetSlots).toEqual(["MILE_PARENT", "LONG_PARENT"])
+    })
+
+    test("a gateless profile is excluded even when its slot is fully exposed sole", () => {
+        const doc = buildCapacityCoverage(report([coveringRec(0, ["MILE_PARENT"])], { targetProfile: "MILE_PARENT" }))
+        expect(targetSlot(doc, "GENERAL_INHERITANCE").exposure).toBe("FULLY_EXPOSED_SOLE")
+        expect(byScan(doc, 0).soleTargetSlots).toEqual([])
+    })
+
+    test("an anchored sole target is listed on no row, and the excluded Veteran emits none", () => {
+        const recs = [coveringRec(0, ["MILE_PARENT"]), coveringRec(1, ["LONG_PARENT"], { state: "HARD_PROTECT", hardProtectReasons: ["MANUAL_PROTECT"] })]
+        const doc = buildCapacityCoverage(report(recs, { targetProfile: "MILE_PARENT" }))
+        expect(targetSlot(doc, "LONG_PARENT").exposure).toBe("ANCHORED")
+        expect(doc.exposures.map((e) => e.scanIndex)).toEqual([0])
+        for (const e of doc.exposures) expect(e.soleTargetSlots).not.toContain("LONG_PARENT")
+    })
+
+    test("retention's roster-relative sole claim is ignored; only listed clearers count", () => {
+        const summary = (character: string, targetsCovered: readonly string[], soleTargetCoverage: readonly string[]) => ({ character, characterCarriers: 1, characterOutfitCarriers: 1, targetsCovered, soleTargetCoverage })
+        const recs = [
+            coveringRec(0, ["LONG_PARENT"], { coverageSummary: summary("Synth T0", ["LONG_PARENT"], ["LONG_PARENT"]) }),
+            coveringRec(1, ["LONG_PARENT"], { coverageSummary: summary("Synth T1", ["LONG_PARENT"], []) }),
+            coveringRec(2, [], { coverageSummary: summary("Synth T2", [], ["LONG_PARENT"]) }),
+        ]
+        const doc = buildCapacityCoverage(report(recs, { targetProfile: "MILE_PARENT" }))
+        // The third rec claims the target but does not list it, so it is not a clearer at all.
+        expect(targetSlot(doc, "LONG_PARENT").clearingCarriers).toBe(2)
+        expect(targetSlot(doc, "LONG_PARENT").exposure).toBe("FULLY_EXPOSED")
+        for (const e of doc.exposures) expect(e.soleTargetSlots).toEqual([])
+    })
+
+    test("every listed target is a gated, non-selected, sole-admitted target slot", () => {
+        const doc = buildCapacityCoverage(report(crossTargetRecs(), { targetProfile: "MILE_PARENT" }))
+        let listed = 0
+        for (const e of doc.exposures) {
+            for (const id of e.soleTargetSlots) {
+                listed++
+                const slot = targetSlot(doc, id)
+                expect(slot.exposure).toBe("FULLY_EXPOSED_SOLE")
+                expect(slot.admittedCarriers).toBe(1)
+                expect(slot.anchoredCarriers).toBe(0)
+                expect(id).not.toBe(doc.targetProfile)
+                expect(TARGET_PROFILES[id as (typeof TARGET_PROFILE_IDS)[number]].aptitudeGate).not.toBeNull()
+            }
+        }
+        expect(listed).toBe(1)
+    })
+
+    test("lastCopyRisk and its enum are untouched by the new field", () => {
+        const doc = buildCapacityCoverage(report(crossTargetRecs(), { targetProfile: "MILE_PARENT" }))
+        for (const e of doc.exposures) expect(e.lastCopyRisk).toBe("NO_EXPOSED_SLOT_OBSERVED")
+        expect(LAST_COPY_RISKS).toEqual(["SOLE_OBSERVED_CARRIER", "SHARED_FULLY_EXPOSED", "NO_EXPOSED_SLOT_OBSERVED", "UNMEASURED"])
+    })
+
+    test("the coverage schema is 6 and the sibling schemas are unchanged", () => {
+        const doc = buildCapacityCoverage(report(crossTargetRecs(), { targetProfile: "MILE_PARENT" }))
+        expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(6)
+        expect(doc.schemaVersion).toBe(6)
+        expect(PARENTLAB_CAPACITY_SCHEMA_VERSION).toBe(1)
+        expect(doc.capacitySchemaVersion).toBe(1)
+        expect(PARENTLAB_RETENTION_SCHEMA_VERSION).toBe(3)
+    })
+
+    test("an untrusted roster synthesizes no cross-target risk", () => {
+        const recs = crossTargetRecs().map((r) => ({ ...r, dataCompleteness: completeness({ rosterTrusted: false }) }))
+        const doc = buildCapacityCoverage(report(recs, { targetProfile: "MILE_PARENT" }))
+        expect(doc.usable).toBe(false)
+        expect(doc.exposures).toEqual([])
+        expect(doc.targetSlots).toEqual([])
+    })
+
+    test("a document carrying a non-empty soleTargetSlots trips no forbidden key and rebuilds identically", () => {
+        const build = () => buildCapacityCoverage(report(crossTargetRecs(), { targetProfile: "MILE_PARENT" }))
+        expect(build().exposures.some((e) => e.soleTargetSlots.length > 0)).toBe(true)
+        expect(forbiddenKeyPaths(build())).toEqual([])
+        expect(JSON.stringify(build())).toBe(JSON.stringify(build()))
     })
 })
 
@@ -755,10 +885,10 @@ describe("replacement evidence provenance", () => {
         expect(codes.indexOf("REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")).toBe(codes.indexOf("REBUILDABILITY_NOT_MEASURED") + 1)
     })
 
-    test("the coverage schema is v5 and the Slice 1 capacity schema version is unchanged", () => {
+    test("the coverage schema is v6 and the Slice 1 capacity schema version is unchanged", () => {
         const doc = buildCapacityCoverage(report([withFactors()], { replacementEvidence: provenance() }))
-        expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(5)
-        expect(doc.schemaVersion).toBe(5)
+        expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(6)
+        expect(doc.schemaVersion).toBe(6)
         expect(doc.capacitySchemaVersion).toBe(1)
         expect(doc.capacitySchemaVersion).toBe(PARENTLAB_CAPACITY_SCHEMA_VERSION)
     })
@@ -1054,5 +1184,23 @@ describe("CLI freshness binding and exit codes", () => {
         writeFileSync(bad, JSON.stringify({ schemaVersion: "1", source: "synthetic", families: { skill: [], race: [], scenario: [] } }), "utf8")
         const path = writeRetention([rec({ selfFactors: [{ factorKey: "white:CLI_G", stars: 2 }] })])
         expect(run(["--retention", path], { PARENT_LAB_WHITE_FACTOR_DOMAIN: bad }).status).toBe(2)
+    })
+
+    test("the exposed view lists a cross-target sole clearer that no lastCopyRisk flags, in scan order", () => {
+        const selfFactors = [{ factorKey: "white:CLI_XT", stars: 3 }]
+        const character = "Synth CLI XT"
+        const recs = [
+            coveringRec(0, ["MILE_PARENT"], { character, selfFactors }),
+            coveringRec(1, ["MILE_PARENT", "LONG_PARENT"], { character, selfFactors }),
+            coveringRec(2, [], { character, selfFactors, state: "HARD_PROTECT", hardProtectReasons: ["MANUAL_PROTECT"] }),
+        ]
+        const path = join(dir, "retention-cross-target.json")
+        writeFileSync(path, JSON.stringify(report(recs, { targetProfile: "MILE_PARENT" })), "utf8")
+        const exposedOut = join(dir, "exposed-cross-target.json")
+        expect(run(["--retention", path, "--target", "MILE_PARENT", "--exposed-out", exposedOut]).status).toBe(0)
+        const exposed = JSON.parse(readFileSync(exposedOut, "utf8"))
+        expect(exposed.riskyVeterans.map((v: { scanIndex: number }) => v.scanIndex)).toEqual([1])
+        expect(exposed.riskyVeterans[0].lastCopyRisk).toBe("NO_EXPOSED_SLOT_OBSERVED")
+        expect(exposed.riskyVeterans[0].soleTargetSlots).toEqual(["LONG_PARENT"])
     })
 })
