@@ -70,6 +70,13 @@ function extractSearchableIds(source: string): { literal: string[]; templates: T
     return { literal, templates }
 }
 
+/**
+ * Searchable ids that are neither a literal nor a template literal in source: TrainingSettings renders
+ * three stat selectors through a shared helper that forwards a plain `id` variable into
+ * `<SearchableItem id={id}>`. Pinned here because source scanning cannot resolve a bare dynamic id.
+ */
+const BARE_DYNAMIC_IDS = ["training-blacklist", "training-prioritization", "focus-on-sparks"]
+
 describe("searchId registration coverage", () => {
     const pageFiles = collectTsxFiles(PAGES_DIR)
     const configIds = new Set(searchConfig.map((item) => item.id))
@@ -118,9 +125,26 @@ describe("searchId registration coverage", () => {
         // plain `id` variable into `<SearchableItem id={id}>` - a bare dynamic reference the
         // generic scanner above cannot resolve. Pinned here instead, since it is the one place in
         // the app where a searchable id is neither a literal nor a template literal.
-        for (const id of ["training-blacklist", "training-prioritization", "focus-on-sparks"]) {
+        for (const id of BARE_DYNAMIC_IDS) {
             expect(configIds.has(id)).toBe(true)
         }
+    })
+
+    it("every searchConfig entry is declared by a rendered control", () => {
+        // The reverse direction of the checks above. Without it a control can be deleted or renamed
+        // while its searchConfig entry survives, leaving in-app search offering a result that
+        // navigates to a control that no longer exists.
+        const renderedIds = new Set(BARE_DYNAMIC_IDS)
+        for (const file of pageFiles) {
+            const { literal, templates } = extractSearchableIds(fs.readFileSync(file, "utf8"))
+            for (const id of literal) renderedIds.add(id)
+            for (const { prefix, variable } of templates) {
+                for (const value of TEMPLATE_VARIABLE_DOMAINS[variable] ?? []) renderedIds.add(`${prefix}${value}`)
+            }
+        }
+
+        const stale = searchConfig.filter((item) => !renderedIds.has(item.id)).map((item) => `${item.id} (page: ${item.page})`)
+        expect(stale).toEqual([])
     })
 })
 

@@ -32,6 +32,11 @@ jobs:
       - name: Typecheck
         run: node_modules/.bin/tsc --noEmit
 
+      # A Kotlin settings read is a string lookup, so a renamed or deleted Settings field keeps
+      # compiling and silently returns the caller's default forever. Neither tsc nor ktlint sees it.
+      - name: Settings contract parity
+        run: yarn test:settings-parity
+
       - name: Jest
         run: yarn jest --ci
 
