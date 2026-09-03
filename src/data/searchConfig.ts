@@ -96,6 +96,36 @@ const searchConfig: SearchOption[] = [
         page: "SettingsMain",
     },
     {
+        id: "settings-daily-race-multi-race",
+        title: "Ensure Multi-Race Is On",
+        description: "Keeps multi-race enabled when running Daily Races, so every remaining ticket runs in one go.",
+        page: "SettingsMain",
+    },
+    {
+        id: "settings-daily-race-target-race",
+        title: "Target Race",
+        description: "Which daily race to enter (Moonlight Sho or Jupiter Cup).",
+        page: "SettingsMain",
+    },
+    {
+        id: "settings-daily-race-difficulty",
+        title: "Target Difficulty",
+        description: "Which difficulty tier to race in Daily Races. Very Hard pays the most and costs the same ticket.",
+        page: "SettingsMain",
+    },
+    {
+        id: "settings-team-trials-opponent-pick",
+        title: "Opponent To Pick",
+        description: "Which of the three listed Team Trials opponents to fight. They are listed strongest first, so Bottom is the safest.",
+        page: "SettingsMain",
+    },
+    {
+        id: "settings-team-trials-max-matches",
+        title: "Max Matches Per Session",
+        description: "Stops Team Trials after this many matches even if Race Points remain.",
+        page: "SettingsMain",
+    },
+    {
         id: "settings-management-title",
         title: "Settings Management",
         description: "Import and export settings from JSON file or access the app's data directory.",

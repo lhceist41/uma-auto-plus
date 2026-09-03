@@ -22,6 +22,24 @@ import { useSettingsFileManager } from "../../hooks/useSettingsFileManager"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 import { DATING_SCHEDULE_PRESETS } from "../../lib/datingSchedule"
 
+// The Daily Races and Team Trials tasks match on the persisted strings themselves, so these
+// tables hold the exact values DailyRaceTask/TeamTrialsTask accept. Selecting through them keeps
+// the controls from ever writing a value the Kotlin side would fall back on.
+const DAILY_RACE_TARGETS = ["Moonlight Sho", "Jupiter Cup"] as const
+
+const DAILY_RACE_DIFFICULTIES = [
+    { value: "VERY_HARD", label: "Very Hard" },
+    { value: "HARD", label: "Hard" },
+    { value: "NORMAL", label: "Normal" },
+    { value: "EASY", label: "Easy" },
+] as const
+
+const TEAM_TRIALS_OPPONENT_PICKS = [
+    { value: "TOP", label: "Top" },
+    { value: "MIDDLE", label: "Middle" },
+    { value: "BOTTOM", label: "Bottom" },
+] as const
+
 /**
  * The main Settings page of the application.
  * Provides scenario selection, navigation links to sub-settings pages,
@@ -243,6 +261,101 @@ const Settings = () => {
                 description="Configure Discord bot notifications to receive DM updates when the bot stops."
                 onPress={() => navigation.navigate("DiscordSettings" as never)}
             />
+        )
+    }
+
+    const renderMiscTaskSettings = () => {
+        return (
+            <View style={{ marginTop: 16 }}>
+                <Separator style={{ marginVertical: 16 }} />
+
+                <CustomTitle title="Daily Races" description="Options for the Daily Races mode, which spends the day's race tickets in one multi-race sequence." />
+
+                <CustomCheckbox
+                    searchId="settings-daily-race-multi-race"
+                    checked={bsc.settings.miscDailyRace.ensureMultiRaceOn}
+                    onCheckedChange={(checked) => {
+                        bsc.setSettings({
+                            ...bsc.settings,
+                            miscDailyRace: { ...bsc.settings.miscDailyRace, ensureMultiRaceOn: checked },
+                        })
+                    }}
+                    label="Ensure Multi-Race Is On"
+                    description="Keeps multi-race enabled when running Daily Races, so every remaining ticket runs in one go. Turn this off to run the races one at a time."
+                    className="mt-4"
+                />
+
+                <CustomSelect
+                    searchId="settings-daily-race-target-race"
+                    value={bsc.settings.miscDailyRace.targetRace}
+                    options={DAILY_RACE_TARGETS.map((race) => ({ label: race, value: race }))}
+                    onValueChange={(value) => {
+                        const race = DAILY_RACE_TARGETS.find((option) => option === value)
+                        if (race) {
+                            bsc.setSettings({ ...bsc.settings, miscDailyRace: { ...bsc.settings.miscDailyRace, targetRace: race } })
+                        }
+                    }}
+                    placeholder="Select race"
+                    label="Target Race"
+                    description="Which daily race to enter. If the chosen race is not in the current rotation, the bot stops cleanly instead of picking the other one."
+                    style={{ marginTop: 16 }}
+                />
+
+                <CustomSelect
+                    searchId="settings-daily-race-difficulty"
+                    value={bsc.settings.miscDailyRace.targetDifficulty}
+                    options={DAILY_RACE_DIFFICULTIES.map((tier) => ({ label: tier.label, value: tier.value }))}
+                    onValueChange={(value) => {
+                        const tier = DAILY_RACE_DIFFICULTIES.find((option) => option.value === value)
+                        if (tier) {
+                            bsc.setSettings({ ...bsc.settings, miscDailyRace: { ...bsc.settings.miscDailyRace, targetDifficulty: tier.value } })
+                        }
+                    }}
+                    placeholder="Select difficulty"
+                    label="Target Difficulty"
+                    description="Which difficulty tier to race. Very Hard pays the most and costs the same ticket."
+                    style={{ marginTop: 16 }}
+                />
+
+                <Separator style={{ marginVertical: 16 }} />
+
+                <CustomTitle title="Team Trials" description="Options for the Team Trials mode, which runs matches until Race Points run out." />
+
+                <CustomSelect
+                    searchId="settings-team-trials-opponent-pick"
+                    value={bsc.settings.miscTeamTrials.opponentPick}
+                    options={TEAM_TRIALS_OPPONENT_PICKS.map((pick) => ({ label: pick.label, value: pick.value }))}
+                    onValueChange={(value) => {
+                        const pick = TEAM_TRIALS_OPPONENT_PICKS.find((option) => option.value === value)
+                        if (pick) {
+                            bsc.setSettings({ ...bsc.settings, miscTeamTrials: { ...bsc.settings.miscTeamTrials, opponentPick: pick.value } })
+                        }
+                    }}
+                    placeholder="Select opponent"
+                    label="Opponent To Pick"
+                    description="Which of the three listed opponents to fight. They are listed strongest first, so Bottom is the safest and Top pays the most points."
+                    style={{ marginTop: 16 }}
+                />
+
+                <CustomSlider
+                    searchId="settings-team-trials-max-matches"
+                    value={bsc.settings.miscTeamTrials.maxMatchesPerSession}
+                    placeholder={bsc.defaultSettings.miscTeamTrials.maxMatchesPerSession}
+                    onValueChange={(value) => {
+                        bsc.setSettings({ ...bsc.settings, miscTeamTrials: { ...bsc.settings.miscTeamTrials, maxMatchesPerSession: value } })
+                    }}
+                    onSlidingComplete={(value) => {
+                        bsc.setSettings({ ...bsc.settings, miscTeamTrials: { ...bsc.settings.miscTeamTrials, maxMatchesPerSession: value } })
+                    }}
+                    min={1}
+                    max={5}
+                    step={1}
+                    label="Max Matches Per Session"
+                    showValue={true}
+                    showLabels={true}
+                    description="Stops after this many matches even if Race Points remain. A full Race Point pool is 5 matches, so 5 lets the run finish on the game's own limit."
+                />
+            </View>
         )
     }
 
@@ -567,6 +680,7 @@ const Settings = () => {
                         {renderRunQueueLink()}
                         {renderScenarioOverridesLink()}
                         {renderDebugLink()}
+                        {renderMiscTaskSettings()}
                         {renderMiscSettings()}
                     </View>
                 </ScrollView>

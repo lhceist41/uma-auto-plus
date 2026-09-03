@@ -153,6 +153,20 @@ export interface Settings {
         recordDecisionData: boolean
     }
 
+    // Daily Races misc-task settings. DailyRaceTask compares the persisted strings directly
+    // (difficulty case-insensitively, the race name exactly), so the values must stay verbatim.
+    miscDailyRace: {
+        ensureMultiRaceOn: boolean
+        targetRace: "Moonlight Sho" | "Jupiter Cup"
+        targetDifficulty: "VERY_HARD" | "HARD" | "NORMAL" | "EASY"
+    }
+
+    // Team Trials misc-task settings. TeamTrialsTask matches opponentPick case-insensitively.
+    miscTeamTrials: {
+        opponentPick: "TOP" | "MIDDLE" | "BOTTOM"
+        maxMatchesPerSession: number
+    }
+
     // Training settings
     training: {
         trainingBlacklist: string[]
@@ -188,9 +202,13 @@ export interface Settings {
         // Pre-career deck validation: on the first aptitude read of a run, log a warning if the
         // trainee's preferred-distance and preferred-style aptitudes are below the floor.
         // Informational only; the run continues either way.
+        // Advanced internal safety control with intentionally no normal settings UI: turning it off
+        // silences both aptitude advisories (floor shortfall and prediction-visibility risk).
         enableDeckValidation: boolean
         // Aptitude letter floor for deck validation. "B" matches the in-game soft
         // requirement for race-bonus uplift; "A" is the strict meta-deck floor.
+        // Advanced internal safety threshold, paired with enableDeckValidation and likewise not
+        // exposed in the normal settings UI; lowering it weakens the check rather than fixing it.
         deckValidationMinAptitude: string
         // Deck concentration check ([DECK] advisory): at career start, read the support-deck
         // composition off the deck screen and warn if the build's core stat type has too few cards
@@ -704,6 +722,19 @@ export const defaultSettings: Settings = {
         messageLogFontSize: 8,
         overlayButtonSizeDP: 40,
         recordDecisionData: true,
+    },
+    miscDailyRace: {
+        ensureMultiRaceOn: true,
+        // Moonlight Sho pays Monies, which is useful at every stage of the account.
+        targetRace: "Moonlight Sho",
+        // Very Hard is the top reward tier and the daily tickets are the same either way.
+        targetDifficulty: "VERY_HARD",
+    },
+    miscTeamTrials: {
+        // Opponents are listed strongest first, so the bottom row is the safest fight.
+        opponentPick: "BOTTOM",
+        // A full RP pool is 5 matches; this is a secondary fuse, not the real limit.
+        maxMatchesPerSession: 5,
     },
     training: {
         trainingBlacklist: [],
