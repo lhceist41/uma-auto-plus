@@ -354,7 +354,7 @@ object ButtonSkipOff : ButtonInterface {
 }
 
 object ButtonSkipOn : ButtonInterface {
-    override val template = Template("components/button/skip_on", region = Region.bottomHalf)
+    override val template = Template("components/button/skip_on", region = Region.persistentSkipPill)
 }
 
 object ButtonSkills : ButtonInterface {

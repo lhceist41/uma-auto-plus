@@ -30,9 +30,9 @@ object Region {
     val topRightThird: IntArray = intArrayOf(SharedData.displayWidth - (SharedData.displayWidth / 3), 0, SharedData.displayWidth / 3, SharedData.displayHeight - (SharedData.displayHeight / 3))
 
     /**
-     * Where the persistent Skip pill's "Skip Off" template can legitimately match, scaled from its
-     * 1080x1920 baseline and clamped to the screen. Narrower than [bottomHalf]: the wider search let
-     * the in-career "Quick" button's corner clear the match threshold and misread as Off.
+     * Where the persistent Skip pill's templates can legitimately match, scaled from its 1080x1920
+     * baseline and clamped to the screen. Narrower than [bottomHalf]: the wider search let the launch
+     * Quick Mode dialog's "Quick" button clear the match threshold and misread as a pill state.
      */
     val persistentSkipPill: IntArray = persistentSkipPillRegion(SharedData.displayWidth, SharedData.displayHeight)
 }

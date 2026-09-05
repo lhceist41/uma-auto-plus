@@ -12,6 +12,8 @@ import org.junit.jupiter.api.TestInstance
 
 private const val SKIP_OFF_TEMPLATE_WIDTH = 244
 private const val SKIP_OFF_TEMPLATE_HEIGHT = 84
+private const val SKIP_ON_TEMPLATE_WIDTH = 242
+private const val SKIP_ON_TEMPLATE_HEIGHT = 81
 
 /** True if a template of the given footprint, placed at (originX, originY), fits entirely inside [region]. */
 private fun regionContainsFootprint(region: IntArray, originX: Int, originY: Int, footprintWidth: Int = SKIP_OFF_TEMPLATE_WIDTH, footprintHeight: Int = SKIP_OFF_TEMPLATE_HEIGHT): Boolean {
@@ -74,6 +76,36 @@ class PersistentSkipPillRegionTest {
             assertFalse(regionContainsFootprint(region, 265, 1770))
             assertFalse(regionContainsFootprint(region, 265, 1837))
         }
+
+        @Test
+        @DisplayName("the observed one- and two-chevron On pill origin (263, 1831) is inside")
+        fun observedOnOriginInside() {
+            assertTrue(regionContainsFootprint(region, 263, 1831, SKIP_ON_TEMPLATE_WIDTH, SKIP_ON_TEMPLATE_HEIGHT))
+        }
+
+        @Test
+        @DisplayName("the Quick button's On-sized footprint at (504, 1831) is outside")
+        fun quickButtonOnFootprintOutside() {
+            assertFalse(regionContainsFootprint(region, 504, 1831, SKIP_ON_TEMPLATE_WIDTH, SKIP_ON_TEMPLATE_HEIGHT))
+        }
+
+        @Test
+        @DisplayName("On x boundary: 203 and 323 accept, 202 and 324 reject")
+        fun onXBoundary() {
+            assertTrue(regionContainsFootprint(region, 203, 1831, SKIP_ON_TEMPLATE_WIDTH, SKIP_ON_TEMPLATE_HEIGHT))
+            assertTrue(regionContainsFootprint(region, 323, 1831, SKIP_ON_TEMPLATE_WIDTH, SKIP_ON_TEMPLATE_HEIGHT))
+            assertFalse(regionContainsFootprint(region, 202, 1831, SKIP_ON_TEMPLATE_WIDTH, SKIP_ON_TEMPLATE_HEIGHT))
+            assertFalse(regionContainsFootprint(region, 324, 1831, SKIP_ON_TEMPLATE_WIDTH, SKIP_ON_TEMPLATE_HEIGHT))
+        }
+
+        @Test
+        @DisplayName("On y boundary: 1771 and 1839 accept, 1770 and 1840 reject")
+        fun onYBoundary() {
+            assertTrue(regionContainsFootprint(region, 263, 1771, SKIP_ON_TEMPLATE_WIDTH, SKIP_ON_TEMPLATE_HEIGHT))
+            assertTrue(regionContainsFootprint(region, 263, 1839, SKIP_ON_TEMPLATE_WIDTH, SKIP_ON_TEMPLATE_HEIGHT))
+            assertFalse(regionContainsFootprint(region, 263, 1770, SKIP_ON_TEMPLATE_WIDTH, SKIP_ON_TEMPLATE_HEIGHT))
+            assertFalse(regionContainsFootprint(region, 263, 1840, SKIP_ON_TEMPLATE_WIDTH, SKIP_ON_TEMPLATE_HEIGHT))
+        }
     }
 
     @Nested
@@ -99,6 +131,16 @@ class PersistentSkipPillRegionTest {
         }
 
         @Test
+        @DisplayName("the region is always large enough for the full skip_on template, at baseline and a scaled resolution")
+        fun fitsOnTemplate() {
+            for ((displayWidth, displayHeight) in listOf(1080 to 1920, 1440 to 2560)) {
+                val (_, _, w, h) = persistentSkipPillRegion(displayWidth, displayHeight)
+                assertTrue(w >= SKIP_ON_TEMPLATE_WIDTH, "w=$w at ${displayWidth}x$displayHeight")
+                assertTrue(h >= SKIP_ON_TEMPLATE_HEIGHT, "h=$h at ${displayWidth}x$displayHeight")
+            }
+        }
+
+        @Test
         @DisplayName("the baseline region is the frozen presence window, clamped to the screen (203, 1771, 362, 149)")
         fun baselineMatchesFrozenWindow() {
             assertEquals(listOf(203, 1771, 362, 149), persistentSkipPillRegion(1080, 1920).toList())
@@ -115,9 +157,9 @@ class PersistentSkipPillRegionTest {
         }
 
         @Test
-        @DisplayName("ButtonSkipOn is unchanged: still bottomHalf")
-        fun buttonSkipOnUnchanged() {
-            assertEquals(Region.bottomHalf.toList(), ButtonSkipOn.template.region.toList())
+        @DisplayName("ButtonSkipOn searches the constrained pill region, not bottomHalf")
+        fun buttonSkipOnUsesPillRegion() {
+            assertEquals(Region.persistentSkipPill.toList(), ButtonSkipOn.template.region.toList())
         }
     }
 }

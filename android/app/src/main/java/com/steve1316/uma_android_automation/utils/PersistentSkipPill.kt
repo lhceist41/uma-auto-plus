@@ -9,8 +9,8 @@ import com.steve1316.automation_library.utils.MessageLog
  *
  * A distinct one-chevron state is deliberately absent. It has no template asset:
  * `skip_off` is the white "Skip Off" pill and `skip_on` visually depicts the green two-chevron
- * "Skip >>" pill, but whether `skip_on` also matches a one-chevron pill above threshold has never
- * been measured on a live frame. [ON_TEMPLATE_MATCH] therefore only claims the template matched,
+ * "Skip >>" pill, but it matches a one-chevron pill on a live frame just as strongly.
+ * [ON_TEMPLATE_MATCH] therefore only claims the template matched,
  * not which chevron count it represents; reporting a guessed chevron count there would be worse
  * than reporting nothing, so an unrecognized-but-present pill stays [PRESENT_UNRESOLVED].
  *
@@ -23,8 +23,8 @@ enum class PersistentSkipState {
 
     /**
      * The `skip_on` template matched. This proves only the template match, not two chevrons, a
-     * fastest/max state, or that it is safe to treat as a stop condition for future actuation -
-     * that requires measuring a live one-chevron frame against `skip_on` first.
+     * fastest/max state, or that it is safe to treat as a stop condition for future actuation: the
+     * same template matches a one-chevron pill.
      */
     ON_TEMPLATE_MATCH,
 
