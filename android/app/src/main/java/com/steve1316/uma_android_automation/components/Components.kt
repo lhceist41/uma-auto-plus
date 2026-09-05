@@ -28,6 +28,25 @@ object Region {
     val rightHalf: IntArray = intArrayOf(SharedData.displayWidth / 2, 0, SharedData.displayWidth / 2, SharedData.displayHeight)
     val threeQuarterRight: IntArray = intArrayOf((SharedData.displayWidth * 0.625).toInt(), 0, (SharedData.displayWidth * 0.375).toInt(), SharedData.displayHeight)
     val topRightThird: IntArray = intArrayOf(SharedData.displayWidth - (SharedData.displayWidth / 3), 0, SharedData.displayWidth / 3, SharedData.displayHeight - (SharedData.displayHeight / 3))
+
+    /**
+     * Where the persistent Skip pill's "Skip Off" template can legitimately match, scaled from its
+     * 1080x1920 baseline and clamped to the screen. Narrower than [bottomHalf]: the wider search let
+     * the in-career "Quick" button's corner clear the match threshold and misread as Off.
+     */
+    val persistentSkipPill: IntArray = persistentSkipPillRegion(SharedData.displayWidth, SharedData.displayHeight)
+}
+
+/**
+ * The scaling and clamping arithmetic behind [Region.persistentSkipPill], factored out so it is
+ * testable at arbitrary resolutions independent of [SharedData]'s process-wide, initialize-once state.
+ */
+internal fun persistentSkipPillRegion(displayWidth: Int, displayHeight: Int): IntArray {
+    val x = (203 * displayWidth) / 1080
+    val y = (1771 * displayHeight) / 1920
+    val w = (362 * displayWidth) / 1080
+    val h = minOf((149 * displayHeight) / 1920, displayHeight - y)
+    return intArrayOf(x, y, w, h)
 }
 
 /**
