@@ -69,6 +69,7 @@ import com.steve1316.uma_android_automation.utils.RosterScanPolicy
 import com.steve1316.uma_android_automation.utils.grandConcertCareerCompleteScreenPresent
 import com.steve1316.uma_android_automation.utils.grandConcertConcertPendingScreenPresent
 import com.steve1316.uma_android_automation.utils.classifyPersistentSkip
+import com.steve1316.uma_android_automation.utils.isLaunchQuickModePrompt
 import com.steve1316.uma_android_automation.utils.quickModeDialogPresent
 import com.steve1316.uma_android_automation.utils.quickModeSelectedIndex
 import com.steve1316.uma_android_automation.utils.SPARKS_CONFIRM_GEOMETRY
@@ -523,6 +524,11 @@ class CareerLaunchNavigator(private val context: Context) {
     // Session-scoped flag: Skip toggle has already been maxed (Skip >>) in this session.
     private var skipToggleAlreadyDone: Boolean = false
 
+    /** True when this call was made to resume a career that is already running (the in-career loop's
+     * lobby re-entry), not to launch a new one. No launch Quick Mode prompt exists on that path, so
+     * the skip-maxing handler stays unreachable there however the pill reads. Set per navigate(). */
+    private var resumeInProgressCareerMode: Boolean = false
+
     private val skipStateLog = PersistentSkipStateLog(TAG, "launch")
 
     // Session-scoped latch: the launch has provably advanced PAST Start Career (we have reached
@@ -709,6 +715,9 @@ class CareerLaunchNavigator(private val context: Context) {
      *   of being tapped through on the game's sticky preselection; queue callers leave it blank.
      * @param singleRunTraineeExcludes Sibling-outfit names to skip for [singleRunTrainee],
      *   newline-joined (same convention as queueState.currentTraineeExcludes).
+     * @param resumeInProgressCareer If true, this call re-enters a career that is already running
+     *   (the in-career loop's lobby re-entry) instead of launching a new one, so no launch Quick
+     *   Mode prompt is coming and the skip-maxing handler must stay unreachable.
      * @return A [NavigationResult] indicating success or failure with diagnostics.
      */
     fun navigate(
@@ -717,6 +726,7 @@ class CareerLaunchNavigator(private val context: Context) {
         singleRunTrainee: String = "",
         singleRunTraineeExcludes: String = "",
         previousCareerComplete: Boolean = false,
+        resumeInProgressCareer: Boolean = false,
     ): NavigationResult {
         val autoFillSupports = SettingsHelper.getBooleanSetting("runQueue", "autoFillSupports", false)
         MessageLog.i(
@@ -777,6 +787,7 @@ class CareerLaunchNavigator(private val context: Context) {
         finalizeGuardActive = SettingsHelper.getStringSetting("skills", "skillSpendMode").trim().lowercase() == "adaptive"
         finalizeToHomeMode = finalizeToHome
         previousCareerCompleteMode = previousCareerComplete
+        resumeInProgressCareerMode = resumeInProgressCareer
         // Resolve the trainee THIS launch must roster-verify. The queue launch paths (StartModule's
         // cold-start and between-run navigate() calls) pass a blank singleRunTrainee, so a queued
         // rotation-off run would otherwise arm no target and tap through Trainee Select onto the
@@ -1477,6 +1488,10 @@ class CareerLaunchNavigator(private val context: Context) {
         // (TAP_TO_CONTINUE, body-tapped to advance). This avoids a fragile UI discriminator: the
         // prompt is not a registered titled dialog (no DialogUtils gradient) and reaches this block
         // precisely because POST_RUN_RESULTS above found no matchable Confirm on it.
+        // That ordering argument only holds while this call is launching a career. A lobby re-entry
+        // into a RUNNING career starts with the latch false, so its first in-career cutscene pill
+        // read as the launch prompt and took the two blind pill taps, walking an already-maxed pill
+        // back toward Off. No Quick Mode prompt follows such a call at all.
         val skipState =
             classifyPersistentSkip(
                 offPillMatched = { ButtonSkipOff.check(iu, sourceBitmap = bitmap) },
@@ -1485,10 +1500,11 @@ class CareerLaunchNavigator(private val context: Context) {
             )
         skipStateLog.record(skipState)
         if (skipState.pillVisible) {
-            if (!skipToggleAlreadyDone) {
+            if (isLaunchQuickModePrompt(resumeInProgressCareerMode, skipToggleAlreadyDone)) {
                 return LaunchScreenState.QUICK_MODE_PROMPT
             }
-            MessageLog.i(TAG, "[NAV] Skip pill with skip already maxed -> TAP_TO_CONTINUE (in-career tap-to-continue screen).")
+            val reason = if (resumeInProgressCareerMode) "career resume in progress" else "skip already maxed"
+            MessageLog.i(TAG, "[NAV] Skip pill with $reason -> TAP_TO_CONTINUE (in-career tap-to-continue screen).")
             return LaunchScreenState.TAP_TO_CONTINUE
         }
 
@@ -8701,16 +8717,17 @@ class CareerLaunchNavigator(private val context: Context) {
      * 1. Click Confirm on the Quick Mode Settings dialog (if visible).
      * 2. Click "Skip Off" button twice to enable "Skip >>" (fast-forward all events).
      *
-     * Detection: ButtonSkipOff or ButtonSkipOn template match.
-     * Transition: ButtonConfirm.click() + ButtonSkipOff.click() x2, all template-matched.
+     * Detection: a visible persistent Skip pill (skip_off / skip_on template, then the pill-band
+     * OCR fallback) on a call that is launching a career.
+     * Transition: two coordinate taps on the Skip pill, then the Quick Mode dialog's own selection
+     * and Confirm taps.
      */
     private fun handleQuickModePrompt(): TransitionResult {
         MessageLog.i(TAG, "[NAV] Quick Mode / Skip toggle screen detected.")
 
-        // Reached only while skip has NOT been maxed yet this session: detectScreenState routes a
-        // skip pill to QUICK_MODE_PROMPT only while !skipToggleAlreadyDone (once maxed, later skip
-        // pills become TAP_TO_CONTINUE). So this is the genuine launch Quick Mode prompt - max skip,
-        // then confirm.
+        // Reached only on a launch call whose skip has NOT been maxed yet: detectScreenState routes a
+        // skip pill here only while isLaunchQuickModePrompt holds (once maxed, and on every career
+        // resume, skip pills become TAP_TO_CONTINUE). So max skip, then confirm.
 
         // Tap the Skip button position twice to cycle Skip Off → Skip > → Skip >>.
         // Position calibrated from actual game screen: white pill button center at

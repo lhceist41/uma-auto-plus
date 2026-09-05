@@ -76,3 +76,16 @@ class PersistentSkipStateLog(private val tag: String, private val context: Strin
         MessageLog.i(tag, "[SKIP_PILL] $context state=${state.name} previous=${prior?.name ?: "none"}")
     }
 }
+
+/**
+ * Whether a visible Skip pill is the launch-time Quick Mode prompt rather than an in-career
+ * tap-to-continue screen.
+ *
+ * Both screens show the same pill, and within a career launch the prompt is always the FIRST one,
+ * so [skipToggleAlreadyDone] separates them. That latch cannot separate anything when the navigator
+ * was called to resume a career that is already running: it starts false on every call, so the
+ * first in-career cutscene pill read as the launch prompt and received the launch handler's two
+ * blind pill taps, cycling an already-maxed pill back down toward Off.
+ */
+fun isLaunchQuickModePrompt(resumingInProgressCareer: Boolean, skipToggleAlreadyDone: Boolean): Boolean =
+    !resumingInProgressCareer && !skipToggleAlreadyDone

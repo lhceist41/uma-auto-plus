@@ -4821,7 +4821,7 @@ abstract class Campaign(game: Game) : Task(game) {
             if (navigator.isOnHomeScreen()) {
                 lobbyReentryAttempts++
                 MessageLog.w(TAG, "[RECOVERY] Detected the game's Home lobby mid-career (likely a daily-reset bounce). Re-entering the in-progress career in place (attempt $lobbyReentryAttempts/$maxLobbyReentryAttempts)...")
-                val result = navigator.navigate(reuseLastLaunchSetup = true)
+                val result = navigator.navigate(reuseLastLaunchSetup = true, resumeInProgressCareer = true)
                 if (result.success) {
                     MessageLog.i(TAG, "[RECOVERY] Re-entered the career via the navigator; resuming the in-career loop.")
                     consecutiveUnknownScreenCount = 0
