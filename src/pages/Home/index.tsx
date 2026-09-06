@@ -25,6 +25,7 @@ import { deriveInGameName, deriveExcludeOutfits } from "../../lib/rotationSnapsh
 import { presetObjectiveOf } from "../../lib/adaptiveSkillPolicy"
 import { presetMoodFloorOf } from "../../lib/moodFloorPolicy"
 import { GRAND_CONCERT_KEY, GRAND_CONCERT_WARNING, isGrandConcert, scenarioCapabilities } from "../../lib/scenarioKey"
+import { presentQueueProgress, type QueueProgressEvent } from "../../lib/queueProgressPresentation"
 import { useNavigation } from "@react-navigation/native"
 
 const styles = StyleSheet.create({
@@ -125,7 +126,7 @@ const Home = () => {
     const [unsupportedReason, setUnsupportedReason] = useState<string | null>(null)
     const [showAccessibilityDialog, setShowAccessibilityDialog] = useState<boolean>(false)
     const [accessibilityRequirement, setAccessibilityRequirement] = useState<"enable" | "restart" | null>(null)
-    const [queueProgress, setQueueProgress] = useState<{ currentRun: number; totalRuns: number; status: string; message?: string } | null>(null)
+    const [queueProgress, setQueueProgress] = useState<QueueProgressEvent | null>(null)
     const [selectedPreset, setSelectedPreset] = useState<string | undefined>(undefined)
     const [pickerOpen, setPickerOpen] = useState<boolean>(false)
     // Pre-start mismatch gate: the avoid pairings found in the pending launch, and whether the
@@ -234,15 +235,21 @@ const Home = () => {
         const queueProgressSubscription = DeviceEventEmitter.addListener("RunQueueProgress", (data) => {
             try {
                 const payload = JSON.parse(data["message"])
-                setQueueProgress({
+                const event: QueueProgressEvent = {
                     currentRun: payload.currentRun,
                     totalRuns: payload.totalRuns,
                     status: payload.status,
+                    resultCode: payload.resultCode,
                     message: payload.message,
-                })
-                // Clear queue progress when queue is complete or failed.
-                if (payload.status === "queueComplete" || payload.status === "queueFailed") {
-                    setTimeout(() => setQueueProgress(null), 10000)
+                }
+                setQueueProgress(event)
+                // Clear the banner once the queue has reached a terminal state (complete,
+                // stopped, halted, or failed) -- it stops making sense once nothing more will
+                // change it. Clear only if this event is still the one on screen: a queue
+                // restarted inside the 10s window would otherwise be blanked by the previous
+                // queue's timer.
+                if (presentQueueProgress(event).isTerminal) {
+                    setTimeout(() => setQueueProgress((shown) => (shown === event ? null : shown)), 10000)
                 }
             } catch (e) {
                 // Ignore parse errors.
@@ -268,6 +275,9 @@ const Home = () => {
         })
         return () => subscription.remove()
     }, [refreshInterruptedQueue])
+
+    /** The queue-progress banner's presentation, recomputed only when the underlying event changes. */
+    const queueProgressView = useMemo(() => (queueProgress ? presentQueueProgress(queueProgress) : null), [queueProgress])
 
     /**
      * Checks if the currently selected scenario exists in the available scenarios data.
@@ -942,7 +952,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                 }}
             />
 
-            {queueProgress && (
+            {queueProgressView && (
                 <View
                     style={{
                         flexDirection: "row",
@@ -958,19 +968,12 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                 >
                     <View style={{ flexDirection: "row", alignItems: "center", flex: 1 }}>
                         <Repeat size={16} color={colors.primary} style={{ marginRight: 6 }} />
-                        <Text style={{ fontSize: 13, color: colors.foreground }}>
-                            {queueProgress.status === "queueComplete"
-                                ? `Queue complete: ${queueProgress.currentRun}/${queueProgress.totalRuns} runs`
-                                : queueProgress.status === "queueFailed"
-                                  ? `Queue failed at run ${queueProgress.currentRun}/${queueProgress.totalRuns}`
-                                  : queueProgress.status === "waiting"
-                                    ? `Run ${queueProgress.currentRun}/${queueProgress.totalRuns} - Waiting...`
-                                    : queueProgress.status === "navigating"
-                                      ? `Run ${queueProgress.currentRun}/${queueProgress.totalRuns} - Navigating...`
-                                      : `Run ${queueProgress.currentRun}/${queueProgress.totalRuns} - ${queueProgress.status}`}
-                        </Text>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 13, color: colors.foreground }}>{queueProgressView.title}</Text>
+                            {queueProgressView.detail && <Text style={{ fontSize: 11, color: colors.mutedForeground }}>{queueProgressView.detail}</Text>}
+                        </View>
                     </View>
-                    {botRunning && queueProgress.status !== "queueComplete" && queueProgress.status !== "queueFailed" && (
+                    {botRunning && !queueProgressView.isTerminal && (
                         <TouchableOpacity
                             onPress={() => StartModule.skipQueueRun()}
                             style={{

@@ -337,6 +337,22 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         }
 
         /**
+         * Runs already completed before this process started, given the persisted queue state's
+         * [phase] and the [currentRun] it recorded. Feeds the resumed queue's completedRuns count
+         * so a queue resumed at run 4 of 6 that goes on to finish runs 4-6 reports 6/6 completed
+         * to Home, not 3/6 (this-session-only count, the 2026-07-28 undercount).
+         *
+         * PHASE_LAUNCHING means currentRun's career had already finished (it counts). PHASE_CAREER
+         * means currentRun was still in flight when interrupted; the resume logic either re-enters
+         * it (rotation) or abandons it (single trainee), so it never counts as already done.
+         *
+         * Pure: no Android, no settings reads. Unit tested without standing up the module (see
+         * PriorCompletedRunsTest).
+         */
+        fun priorCompletedRunsFor(phase: String, currentRun: Int): Int =
+            if (phase == PHASE_LAUNCHING) currentRun else currentRun - 1
+
+        /**
          * Reads the trainee-rotation config from settings. Returns a disabled config when rotation
          * is off, the list is empty, or the JSON is malformed — the queue then runs as a normal
          * single-trainee queue.
@@ -1097,9 +1113,17 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      *
      * @param currentRun The current run index (1-based).
      * @param totalRuns The total number of runs in the queue.
-     * @param status The current status string (e.g. "starting", "completed", "navigating", "waiting", "queueComplete", "queueFailed").
-     * @param resultCode Optional result code name from the completed run.
-     * @param message Optional descriptive message.
+     * @param status "starting", "resuming", "navigating", "waiting", "completed" (per-run,
+     *   non-terminal), or one of the terminal statuses: "queueComplete", "queueStopped" (plain
+     *   user Stop), "queueHalted" (a controlled internal stop with a known reason), "queueFailed"
+     *   (breakpoint or an unexpected failure, distinguished by resultCode).
+     * @param resultCode Optional TaskResultCode name; a stable category the JS side can map to
+     *   safe copy without trusting free text.
+     * @param message Optional descriptive text. Whether it is safe to show a player depends on
+     *   [status]: the terminal statuses carry a dev-authored sentence or a breakpoint's own
+     *   description, while the per-run "completed" carries the task's own message, which can be
+     *   raw exception text. A UI consumer must surface it only for the statuses whose producer
+     *   marks it player-safe.
      */
     private fun sendQueueProgressEvent(currentRun: Int, totalRuns: Int, status: String, resultCode: String? = null, message: String? = null) {
         val payload =
@@ -1552,6 +1576,14 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // one. Only applies when queueing is currently enabled AND the saved totalRuns
                 // matches the current setting. If the user changed queue config after the
                 // crash, the saved state is no longer applicable and we ignore it.
+                // Runs already completed before this process started, per the persisted queue
+                // state. PHASE_LAUNCHING means currentRun's career had already finished (it
+                // counts); PHASE_CAREER means currentRun was still in flight when interrupted, and
+                // the resume logic below either re-enters it or abandons it, so it does not count
+                // either way. Feeds completedRuns below so a queue resumed at run 4 of 6 that goes
+                // on to finish runs 4-6 reports 6/6 completed, not 3/6 (2026-07-28 undercount).
+                var priorCompletedRuns = 0
+
                 val startFromRun: Int =
                     run {
                         if (!enableRunQueue) return@run 1
@@ -1573,6 +1605,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         // way, and not re-entering a possibly-wedged career is the safer default.
                         val reEnter = rotation.enabled && saved.phase == PHASE_CAREER
                         val next = if (reEnter) saved.currentRun else saved.currentRun + 1
+                        priorCompletedRuns = priorCompletedRunsFor(saved.phase, saved.currentRun)
                         if (next > totalRuns) {
                             MessageLog.i(
                                 TAG,
@@ -1598,7 +1631,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         next
                     }
 
-                var completedRuns = 0
+                // Seeded from the persisted state so a resumed queue counts the whole queue,
+                // not just what this process launch played.
+                var completedRuns = priorCompletedRuns
 
                 // Non-null once the queue exits for a reason the user did not ask for. The post-loop
                 // block used to log "Queue finished" and emit queueComplete no matter how the loop
@@ -1610,10 +1645,20 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // failure there has to reach the same halt branch, or it falls through to the
                 // success branch and clears a resumable queue's saved state on its way out.
                 var queueHaltReason: String? = null
-                // The run index the queue was on when it halted. completedRuns counts only THIS
-                // session, so after a resume it undercounts: the 2026-07-28 halt printed "after 1 of
-                // 4 runs (3 not started)" when runs 1 and 2 were both done and only 2 were owed. A
-                // pre-loop failure has run nothing this session, so it reports startFromRun - 1.
+                // Safe, source-grounded category for the JS-facing event only (a TaskResultCode
+                // name). queueHaltReason above can carry raw navigation-exception text destined
+                // for MessageLog/Discord; Home must never see that, so it gets this instead.
+                var queueHaltResultCode: String? = null
+                // A specific, already-safe reason to show inline in Home, when one exists. Only
+                // ever set for breakpoints: CampaignBreakpointException.message describes WHY the
+                // breakpoint fired and is developer-authored, not a caught generic exception, so
+                // it is safe to surface verbatim. Every other halt site leaves this null and Home
+                // falls back to a resultCode-keyed generic reason.
+                var queueHaltDetail: String? = null
+                // The run index the queue had reached when it halted: the run being played for an
+                // in-flight halt, the last finished run for a halt between runs, and startFromRun - 1
+                // for a pre-loop failure that reached nothing. Deliberately not completedRuns - the
+                // "$unrun not started" tally below counts from the run reached, not from careers finished.
                 var queueHaltRun = 0
                 // True when the halt leaves a career still occupying the game's single slot. A
                 // breakpoint does; a between-run navigation failure after a COMPLETED career does
@@ -1629,6 +1674,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     val r = applyRotationForRun(rotation, startFromRun, reuseLastLaunchSetup)
                     if (r == null) {
                         queueHaltReason = "missing rotation snapshot for the first trainee (run $startFromRun)"
+                        queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                         queueHaltRun = startFromRun - 1
                         queueStopRequested = true
                     } else {
@@ -1668,6 +1714,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             // ending, same as a Stop during a run.
                             if (navResult.lastDetectedState != "STOPPED") {
                                 queueHaltReason = "cold-start career launch failed before run $startFromRun: ${navResult.failureReason}"
+                                queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                                 queueHaltRun = startFromRun - 1
                             }
                             queueStopRequested = true
@@ -1790,6 +1837,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 MessageLog.e(TAG, "[QUEUE] Run $i hit a breakpoint. Stopping queue: ${effectiveResult.message}")
                             }
                             queueHaltReason = "run $i hit a breakpoint: ${effectiveResult.message}"
+                            queueHaltResultCode = TaskResultCode.TASK_RESULT_BREAKPOINT_REACHED.name
+                            queueHaltDetail = effectiveResult.message
                             queueHaltRun = i
                             queueHaltCareerInFlight = true
                             break
@@ -1804,6 +1853,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 // and leave the game where it is for the user to look at.
                                 MessageLog.e(TAG, "[QUEUE] Run $i stopped because the game could not be recovered. Pausing the queue instead of starting the next run on a dead or foreign screen.")
                                 queueHaltReason = "run $i stopped because the game could not be recovered"
+                                queueHaltResultCode = effectiveResult.code.name
                                 queueHaltRun = i
                                 queueHaltCareerInFlight = true
                                 break
@@ -1811,6 +1861,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             if (stopOnError) {
                                 MessageLog.e(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Stopping queue (stopOnError=true).")
                                 queueHaltReason = "run $i ended with ${effectiveResult.code} and stopOnError is on"
+                                queueHaltResultCode = effectiveResult.code.name
                                 queueHaltRun = i
                                 queueHaltCareerInFlight = true
                                 break
@@ -1881,6 +1932,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         if (nextReuse == null) {
                             sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, "Missing rotation snapshot for the next trainee.")
                             queueHaltReason = "missing rotation snapshot for the trainee after run $i"
+                            queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                             queueHaltRun = i
                             break
                         }
@@ -1915,11 +1967,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 // navigation failure - no failure event, the post-loop queueComplete
                                 // reports the ending.
                                 if (navResult.lastDetectedState != "STOPPED") {
-                                    sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, navResult.failureReason)
+                                    // navResult.failureReason can carry a raw caught-exception string
+                                    // (CareerLaunchNavigator's "threw <Exception>: ..." reasons) - safe
+                                    // only for MessageLog/Discord above, never for the JS-facing event.
+                                    sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, "Between-run navigation failed after run $i.")
                                     // Includes the finalize gate refusing to press Finish on unspent
                                     // skill points, which is the protection working: halt, never
                                     // auto-continue, and now say so instead of reporting completion.
                                     queueHaltReason = "between-run navigation failed after run $i: ${navResult.failureReason}"
+                                    queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                                     queueHaltRun = i
                                 }
                                 break
@@ -1947,11 +2003,16 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         // before startFromRun finished in an earlier session and are still done.
                         val doneRuns = if (queueHaltRun > 0) queueHaltRun else completedRuns
                         val unrun = (totalRuns - doneRuns).coerceAtLeast(0)
+                        // The JS-facing message is queueHaltDetail (only ever set, and only ever
+                        // safe, for a breakpoint) or a plain numeric summary - never $halt, which
+                        // can carry raw navigation-exception text and is for MessageLog/Discord
+                        // below only.
                         sendQueueProgressEvent(
                             doneRuns,
                             totalRuns,
                             "queueFailed",
-                            message = "Halted after $doneRuns of $totalRuns runs: $halt",
+                            resultCode = queueHaltResultCode,
+                            message = queueHaltDetail ?: "Halted after $doneRuns of $totalRuns runs.",
                         )
                         MessageLog.e(TAG, "\n[QUEUE] ========================================")
                         MessageLog.e(TAG, "[QUEUE] Queue HALTED after $doneRuns of $totalRuns runs ($unrun not started).")
@@ -1966,15 +2027,56 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     } else {
                         // Clear persisted queue state since queue finished normally.
                         clearQueueState(context)
-                        // currentRun was hard-coded to totalRuns, and the banner renders
-                        // "Queue complete: {currentRun}/{totalRuns} runs" from these fields rather
-                        // than from the message. A queue stopped before its first run therefore
-                        // showed "Queue complete: 4/4 runs" over a log reading "Completed 0 of 4"
-                        // (2026-07-28 12:39). Report what actually completed.
-                        sendQueueProgressEvent(completedRuns, totalRuns, "queueComplete", message = "Completed $completedRuns of $totalRuns runs.")
-                        MessageLog.i(TAG, "\n[QUEUE] ========================================")
-                        MessageLog.i(TAG, "[QUEUE] Queue finished. Completed $completedRuns of $totalRuns runs.")
-                        MessageLog.i(TAG, "[QUEUE] ========================================\n")
+                        // Cleared for every outcome below: the queue is only resumed after a halt,
+                        // which is the branch above.
+                        val stopReason = queueStopReason
+                        when {
+                            queueStopRequested && stopReason != null -> {
+                                // A controlled internal stop (trainee mismatch, or an unresponsive
+                                // between-run navigation) rather than a plain user Stop or a
+                                // failure. stopReason is always developer-authored prose (set at
+                                // its two call sites, here and in Campaign.kt), never exception
+                                // text, so it is safe to show verbatim.
+                                sendQueueProgressEvent(completedRuns, totalRuns, "queueHalted", message = stopReason)
+                                MessageLog.w(TAG, "\n[QUEUE] ========================================")
+                                MessageLog.w(TAG, "[QUEUE] Queue halted after $completedRuns of $totalRuns runs.")
+                                MessageLog.w(TAG, "[QUEUE] Reason: $stopReason")
+                                MessageLog.w(TAG, "[QUEUE] ========================================\n")
+                            }
+                            queueStopRequested -> {
+                                // Only the app's Stop button and stopQueue() set this flag, so the
+                                // user attribution is provable on this branch.
+                                sendQueueProgressEvent(completedRuns, totalRuns, "queueStopped", message = "Stopped by the user after $completedRuns of $totalRuns runs.")
+                                MessageLog.i(TAG, "\n[QUEUE] ========================================")
+                                MessageLog.i(TAG, "[QUEUE] Queue stopped by the user after $completedRuns of $totalRuns runs.")
+                                MessageLog.i(TAG, "[QUEUE] ========================================\n")
+                            }
+                            !BotService.isRunning -> {
+                                // The service went away without the app asking it to: the overlay
+                                // Stop interrupts this thread and tears the service down itself,
+                                // and the library's exception cleanup does the same, so this is
+                                // reported without attributing it to the user. It cannot swallow a
+                                // genuine finish - the library clears isRunning only after this
+                                // subscriber returns, so a normal completion still reads as running
+                                // here.
+                                sendQueueProgressEvent(completedRuns, totalRuns, "queueStopped", message = "Stopped after $completedRuns of $totalRuns runs.")
+                                MessageLog.w(TAG, "\n[QUEUE] ========================================")
+                                MessageLog.w(TAG, "[QUEUE] Queue stopped after $completedRuns of $totalRuns runs: the bot service is no longer running.")
+                                MessageLog.w(TAG, "[QUEUE] ========================================\n")
+                            }
+                            else -> {
+                                // currentRun was hard-coded to totalRuns, and the banner rendered
+                                // "Queue complete: {currentRun}/{totalRuns} runs" from these fields
+                                // rather than from the message. A queue stopped before its first
+                                // run therefore showed "Queue complete: 4/4 runs" over a log
+                                // reading "Completed 0 of 4" (2026-07-28 12:39). Report what
+                                // actually completed.
+                                sendQueueProgressEvent(completedRuns, totalRuns, "queueComplete", message = "Completed $completedRuns of $totalRuns runs.")
+                                MessageLog.i(TAG, "\n[QUEUE] ========================================")
+                                MessageLog.i(TAG, "[QUEUE] Queue finished. Completed $completedRuns of $totalRuns runs.")
+                                MessageLog.i(TAG, "[QUEUE] ========================================\n")
+                            }
+                        }
                     }
                 }
             } finally {

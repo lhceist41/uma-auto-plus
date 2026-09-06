@@ -21,7 +21,8 @@ import java.io.File
  * StartModule is a React module that is impractical to unit-test directly, so these are source
  * guards on the wiring that keeps the invariant: the halt metadata is declared above both sites,
  * each site populates it instead of emitting its own terminal event, and the shared halt branch
- * owns the single queueFailed while leaving the persisted state alone.
+ * owns the single queueFailed while leaving the persisted state alone. The last group guards the
+ * other arm of the same decision -- how a queue that exits without a halt reason is classified.
  */
 @DisplayName("StartModule pre-loop queue halt")
 class StartModulePreLoopQueueHaltTest {
@@ -32,7 +33,9 @@ class StartModulePreLoopQueueHaltTest {
 
     /** Everything between the queue bookkeeping locals and the run loop: both pre-loop failure sites live here. */
     private val preLoop by lazy {
-        val start = startModule.indexOf("var completedRuns = 0")
+        // Anchored on the completedRuns declaration itself rather than its initializer text, so
+        // the region survives a change to what completedRuns starts at.
+        val start = Regex("var completedRuns\\b").find(startModule)?.range?.first ?: -1
         val end = startModule.indexOf("for (i in startFromRun..totalRuns) {")
         assertTrue(start in 0 until end, "the pre-loop region must sit between completedRuns and the run loop")
         startModule.substring(start, end)
@@ -58,6 +61,14 @@ class StartModulePreLoopQueueHaltTest {
         val start = startModule.indexOf("val halt = queueHaltReason")
         val end = startModule.indexOf("// Clear persisted queue state since queue finished normally.", start)
         assertTrue(start in 0 until end, "the post-loop halt branch must precede the success branch")
+        startModule.substring(start, end)
+    }
+
+    /** The post-loop success branch: everything from the state clear to the end of the session body. */
+    private val successBranch by lazy {
+        val start = startModule.indexOf("// Clear persisted queue state since queue finished normally.")
+        val end = startModule.indexOf("} finally {", start)
+        assertTrue(start in 0 until end, "the post-loop success branch must exist")
         startModule.substring(start, end)
     }
 
@@ -225,6 +236,65 @@ class StartModulePreLoopQueueHaltTest {
                 haltBranch.contains("The career itself completed"),
                 "a pre-loop halt reaches the same log without any career having completed",
             )
+        }
+    }
+
+    @Nested
+    @DisplayName("a queue that exits without a halt reason is classified truthfully")
+    inner class NonHaltClassification {
+        /** Arm headers in the order the when must test them. */
+        private val armOrder =
+            listOf(
+                "queueStopRequested && stopReason != null ->",
+                "queueStopRequested ->",
+                "!BotService.isRunning ->",
+                "else -> {",
+            )
+
+        private fun armAt(index: Int): String {
+            val start = successBranch.indexOf(armOrder[index])
+            val end = if (index + 1 < armOrder.size) successBranch.indexOf(armOrder[index + 1], start) else successBranch.length
+            assertTrue(start in 0 until end, "arm ${armOrder[index]} must exist")
+            return successBranch.substring(start, end)
+        }
+
+        @Test
+        fun `the arms are tested in order of certainty, most specific first`() {
+            var previous = -1
+            armOrder.forEach { arm ->
+                val at = successBranch.indexOf(arm)
+                assertTrue(at > previous, "$arm must come after the arm before it")
+                previous = at
+            }
+        }
+
+        @Test
+        fun `a torn-down service is reported as stopped, never as a finished queue`() {
+            val teardown = armAt(2)
+            assertTrue(teardown.contains("\"queueStopped\""), "a torn-down service must report queueStopped")
+            assertFalse(teardown.contains("\"queueComplete\""), "a torn-down service must never report completion")
+        }
+
+        @Test
+        fun `the torn-down-service arm does not blame the user`() {
+            // The overlay Stop tears the service down without setting queueStopRequested, and so
+            // does the library exception cleanup, so this arm cannot claim the user asked for it.
+            val teardown = armAt(2)
+            assertFalse(teardown.contains("by the user"), "the teardown arm must stay neutral about who stopped the queue")
+            assertTrue(armAt(1).contains("by the user"), "the explicit app Stop arm may still name the user")
+        }
+
+        @Test
+        fun `only the last arm reports completion`() {
+            assertEquals(1, successBranch.split("\"queueComplete\"").size - 1, "exactly one queueComplete in the success branch")
+            assertTrue(armAt(3).contains("\"queueComplete\""), "completion belongs to the final arm alone")
+        }
+
+        @Test
+        fun `the completion arm is not guarded by a service-running check of its own`() {
+            // The library clears BotService.isRunning only after this subscriber returns, so a
+            // normal finish still reads as running here and reaches the final arm.
+            assertFalse(armAt(3).contains("BotService.isRunning"), "the completion arm must not re-test the service state")
         }
     }
 
