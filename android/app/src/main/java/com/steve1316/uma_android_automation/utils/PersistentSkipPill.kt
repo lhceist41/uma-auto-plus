@@ -9,7 +9,7 @@ import com.steve1316.automation_library.utils.MessageLog
  *
  * A distinct one-chevron state is deliberately absent. It has no template asset:
  * `skip_off` is the white "Skip Off" pill and `skip_on` visually depicts the green two-chevron
- * "Skip >>" pill, but it matches a one-chevron pill on a live frame just as strongly.
+ * "Skip >>" pill, but it also matches a one-chevron pill above threshold on live frames.
  * [ON_TEMPLATE_MATCH] therefore only claims the template matched,
  * not which chevron count it represents; reporting a guessed chevron count there would be worse
  * than reporting nothing, so an unrecognized-but-present pill stays [PRESENT_UNRESOLVED].

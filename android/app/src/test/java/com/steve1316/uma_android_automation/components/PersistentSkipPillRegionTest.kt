@@ -23,7 +23,7 @@ private fun regionContainsFootprint(region: IntArray, originX: Int, originY: Int
 
 /**
  * The spatially constrained region [ButtonSkipOff] searches within, which replaced [Region.bottomHalf]
- * to close a false-positive match against the in-career "Quick" button (see
+ * to close a false-positive match against the launch Quick Mode dialog's "Quick" button (see
  * `docs-local/validation/skip-chevron/2026-09-05-independent-review-prototype-revision-2.md`).
  *
  * [persistentSkipPillRegion] is exercised directly rather than through [Region.persistentSkipPill]
