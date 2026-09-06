@@ -25,7 +25,7 @@ import type { FactorScarcityEntry, ReplacementEvidenceProvenance, RetentionDataC
 
 // Synthetic fixtures only. No real roster, character, factor, or account data is embedded here: every
 // factor key and character name below is invented. The real 257-Veteran corpus is exercised separately,
-// read-only, by the Slice 2 offline acceptance run, never copied into source.
+// read-only, by the coverage ledger's offline acceptance run, never copied into source.
 
 function completeness(o: Partial<RetentionDataCompleteness> = {}): RetentionDataCompleteness {
     return {
@@ -239,7 +239,7 @@ describe("factor slot classification", () => {
         expect(slotByKeyFloor(doc, "white:SOLE_C", 1)!.exposure).toBe("FULLY_EXPOSED_SOLE")
     })
 
-    test("a sole 1-star carrier admitted by Slice 1 still surfaces as sole observed risk", () => {
+    test("a sole 1-star carrier admitted by capacity triage still surfaces as sole observed risk", () => {
         const soleVet = rec({ selfFactors: [{ factorKey: "white:SOLE_1STAR", stars: 1 }] })
         const doc = buildCapacityCoverage(report([soleVet]))
         expect(buildCapacityTriage(report([soleVet])).records[0].admission).toBe("ELIGIBLE_FOR_MANUAL_REVIEW")
@@ -679,7 +679,7 @@ describe("multi-target coverage slots", () => {
     })
 
     test("switching the lens moves no Veteran into or out of the review pool", () => {
-        // Slice 1 admission reads only per-Veteran evidence, and the factor/character ledger is built
+        // Capacity-triage admission reads only per-Veteran evidence, and the factor/character ledger is built
         // from that pool alone, so for one set of recommendations the lens changes nothing but which
         // profile scoped the pool. The target slots are read-only views over that pool and match too.
         const recs = [coveringRec(0, ["MILE_PARENT"]), coveringRec(1, ["LONG_PARENT"], { state: "HARD_PROTECT", hardProtectReasons: ["MANUAL_PROTECT"] }), coveringRec(2, [])]
@@ -893,7 +893,7 @@ describe("replacement evidence provenance", () => {
         expect(codes.indexOf("REPLACEMENT_EVIDENCE_CORPUS_DEPENDENT")).toBe(codes.indexOf("REBUILDABILITY_NOT_MEASURED") + 1)
     })
 
-    test("the coverage schema is v6 and the Slice 1 capacity schema version is unchanged", () => {
+    test("the coverage schema is v6 and the capacity-triage schema version is unchanged", () => {
         const doc = buildCapacityCoverage(report([withFactors()], { replacementEvidence: provenance() }))
         expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(6)
         expect(doc.schemaVersion).toBe(6)
@@ -1083,18 +1083,18 @@ describe("contract, isolation and determinism", () => {
         expect(() => retentionReportsOf(doc)).toThrow(/schema/)
     })
 
-    test("the Slice 1 capacity reader rejects a coverage document", () => {
+    test("the capacity-triage reader rejects a coverage document", () => {
         const doc = buildCapacityCoverage(report([rec()]))
         expect(isCapacityTriageDocument(doc)).toBe(false)
     })
 
-    test("the coverage reader accepts only its own document and rejects retention and Slice 1 docs", () => {
+    test("the coverage reader accepts only its own document and rejects retention and capacity-triage docs", () => {
         const retention = report([rec()])
-        const slice1 = buildCapacityTriage(retention)
+        const triageDoc = buildCapacityTriage(retention)
         const coverage = buildCapacityCoverage(retention)
         expect(isCapacityCoverageDocument(coverage)).toBe(true)
         expect(isCapacityCoverageDocument(retention)).toBe(false)
-        expect(isCapacityCoverageDocument(slice1)).toBe(false)
+        expect(isCapacityCoverageDocument(triageDoc)).toBe(false)
         expect(coverage.schema).toBe(PARENTLAB_CAPACITY_COVERAGE_SCHEMA)
         expect(coverage.kind).toBe(PARENTLAB_CAPACITY_COVERAGE_KIND)
     })
@@ -1109,7 +1109,7 @@ describe("contract, isolation and determinism", () => {
         expect(build().generatedAt).toBe(Date.UTC(2026, 7, 29, 12, 0, 0))
     })
 
-    test("in-process Slice 1 admission is preserved verbatim", () => {
+    test("in-process capacity-triage admission is preserved verbatim", () => {
         const recs = [rec({ scanIndex: 0, state: "KEEP" }), rec({ scanIndex: 1, state: "HARD_PROTECT", hardProtectReasons: ["MANUAL_PROTECT"] }), rec({ scanIndex: 2, state: "SAFE_TO_TRANSFER", confidence: "HIGH" }), rec({ scanIndex: 3, state: "UNKNOWN" })]
         const rep = report(recs)
         const triage = buildCapacityTriage(rep)

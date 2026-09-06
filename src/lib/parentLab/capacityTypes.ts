@@ -1,4 +1,4 @@
-// ParentLab Manual Capacity Triage - Slice 1 contract. Pure, offline, deterministic, read-only.
+// ParentLab Manual Capacity Triage - capacity-triage contract. Pure, offline, deterministic, read-only.
 //
 // This subsystem answers a different question from the Strict Retention Advisor. Retention asks
 // "can we prove this exact Veteran is safe or redundant?" and fails closed toward protection.
@@ -11,7 +11,7 @@
 //     readers reject it structurally rather than mis-parsing it as a retention snapshot.
 //   - The admission enum (ELIGIBLE / EXCLUDED) shares no member with RETENTION_STATES. Admitted is
 //     never "safe": SAFE_TO_TRANSFER is a retention verdict this stage neither produces nor implies.
-//   - There is no score, no rank, no ledger, no maturity gate and no executor/mutation field. Slice 1
+//   - There is no score, no rank, no ledger, no maturity gate and no executor/mutation field. Capacity triage
 //     is counts-only: it discovers how large the eligible human-review pool is and why the rest fell out.
 //
 // The strict retention state is carried verbatim on every record as context. It is never reinterpreted:

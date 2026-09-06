@@ -1,4 +1,4 @@
-// ParentLab Manual Capacity Triage - Slice 1 gate and accounting. Pure, offline, deterministic,
+// ParentLab Manual Capacity Triage - capacity-triage gate and accounting. Pure, offline, deterministic,
 // read-only. Given the persisted retention document(s) for one roster walk, this decides which owned
 // Veterans are candidates for a future HUMAN capacity review and tallies why the rest are excluded.
 //

@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test
  * [classifyPersistentSkip] is the narrowest testable abstraction here: the template matches it
  * consumes run through OpenCV inside CustomImageUtils, which local unit tests cannot execute
  * (android.jar stubs, no native OpenCV), so asset-to-state recognition itself stays unproven
- * offline and is what the Slice 1 telemetry exists to observe live. What these tests do pin is the
+ * offline and is what the telemetry exists to observe live. What these tests do pin is the
  * part that decides behavior: which recognizer wins, that an unrecognized-but-present pill fails
  * closed to PRESENT_UNRESOLVED rather than NOT_VISIBLE, and that the observer performs no more
  * recognition work than the two call sites performed before it existed.

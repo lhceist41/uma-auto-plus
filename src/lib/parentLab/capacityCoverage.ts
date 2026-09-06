@@ -1,7 +1,7 @@
-// ParentLab Manual Capacity Triage - Slice 2 builder: the Capacity Coverage Exposure Ledger.
+// ParentLab Manual Capacity Triage - coverage ledger builder: the Capacity Coverage Exposure Ledger.
 // Pure, offline, deterministic, read-only. Structure only - no valuation, ranking, scoring, or advice.
 //
-// This module builds Slice 1's admission verdicts in-process (buildCapacityTriage) and consumes them
+// This module builds capacity triage's admission verdicts in-process (buildCapacityTriage) and consumes them
 // VERBATIM. It never re-derives ELIGIBLE/EXCLUDED and never reinterprets the strict retention state.
 // On top of that pool it measures coverage exposure: for every factor slot (factorKey @ starFloor),
 // every character, and every known target profile, it partitions the observed carriers into the
@@ -192,12 +192,12 @@ function readReplacementEvidence(value: unknown): ReplacementEvidenceProvenance 
 /**
  * Builds the Capacity Coverage Exposure Ledger for one target profile's retention report.
  *
- * Slice 1 is built in-process from the same report and validates the retention schema/version, failing
+ * Capacity triage is built in-process from the same report and validates the retention schema/version, failing
  * closed on an unsupported one. When the roster snapshot is untrusted, the document is usable:false with
  * an empty ledger and poolSize 0 - it must never render as "nothing is at risk".
  */
 export function buildCapacityCoverage(report: RetentionShadowReport, domain?: WhiteFactorDomain): CapacityCoverageDocument {
-    // Slice 1 owns schema/version validation and the admission verdicts. Consume both verbatim.
+    // Capacity triage owns schema/version validation and the admission verdicts. Consume both verbatim.
     const triage = buildCapacityTriage(report)
     const rosterTrusted = triage.evidenceSummary.rosterTrusted
     const claimStrength: CoverageClaimStrength = report.scarcity.accountWide ? "ACCOUNT" : "OBSERVED_LOWER_BOUND"

@@ -1,7 +1,7 @@
-// ParentLab Manual Capacity Triage (Slice 2) - the Capacity Coverage Exposure Ledger.
+// ParentLab Manual Capacity Triage - the Capacity Coverage Exposure Ledger.
 // Offline, read-only, structure-only, advisory only.
 //
-// Reads a persisted retention document (what `parent-lab-retention --out` writes), builds Slice 1's
+// Reads a persisted retention document (what `parent-lab-retention --out` writes), builds capacity triage's
 // admission verdicts in-process from the SAME selected report, and reports coverage exposure on top of
 // that pool: for every factor slot (factorKey @ starFloor), every character, and the selected target
 // profile, which carriers are inside the eligible manual-review pool (exposed) versus anchored outside
@@ -9,7 +9,7 @@
 // device, and rewrites none of its inputs.
 //
 // "Exposed" is a coverage-structure fact, NOT a transfer-safety claim: it says every observed carrier
-// of a slot is inside the review pool, so a human should see the exposure before acting on Slice 1.
+// of a slot is inside the review pool, so a human should see the exposure before acting on capacity triage.
 //
 // Usage:
 //   node scripts/parent-lab-capacity-coverage.mjs --retention <retention_document.json>
@@ -53,7 +53,7 @@ function loadWhiteFactorDomain(path) {
     return { schemaVersion: asset.schemaVersion, source: asset.source, skill: families.skill, race: families.race, scenario: families.scenario }
 }
 
-const HELP = `parent-lab-capacity-coverage - Capacity Coverage Exposure Ledger, Slice 2 (read-only, structure only)
+const HELP = `parent-lab-capacity-coverage - Capacity Coverage Exposure Ledger (read-only, structure only)
 
 Options:
   --retention <path>        Path to a persisted retention document from parent-lab-retention --out (required).
@@ -116,7 +116,7 @@ function pad(value, width) {
     return String(value).padStart(width)
 }
 
-/** Chooses which target report to measure, exactly as Slice 1 does. */
+/** Chooses which target report to measure, exactly as capacity triage does. */
 function selectReport(reports, requestedTarget) {
     if (requestedTarget) {
         const profile = resolveTargetProfile(requestedTarget)
@@ -163,7 +163,7 @@ function exposedViewOf(doc) {
 function renderSummary(doc) {
     const lines = []
     const label = TARGET_PROFILES[doc.targetProfile] ? TARGET_PROFILES[doc.targetProfile].label : doc.targetProfile
-    lines.push(`=== Capacity Coverage Exposure Ledger (Slice 2): ${doc.targetProfile} (${label}) ===`)
+    lines.push(`=== Capacity Coverage Exposure Ledger: ${doc.targetProfile} (${label}) ===`)
     lines.push(`  roster scan           ${doc.rosterScanId}`)
     lines.push(`  roster fingerprint    ${doc.rosterFingerprint}`)
     lines.push(`  protection scan       ${doc.protectionScanId ?? "none (protection gates stayed closed)"}`)
@@ -254,7 +254,7 @@ function main(argv) {
         if (reports.length === 0) throw new Error("retention document carries no reports")
         const report = selectReport(reports, opts.target)
         // Freshness binding: refuse to act on a report whose roster scan is not the one expected. This
-        // closes the Slice 1 carry-forward at the first consumer where acting on stale evidence bites.
+        // closes the capacity-triage carry-forward at the first consumer where acting on stale evidence bites.
         if (opts.expectRosterScan !== null && report.rosterScanId !== opts.expectRosterScan) {
             throw new Error(`expected roster scan ${opts.expectRosterScan} but the selected ${report.targetProfile} report is ${report.rosterScanId}; refusing to run on unexpected evidence`)
         }

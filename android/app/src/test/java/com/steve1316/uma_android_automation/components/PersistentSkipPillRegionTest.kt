@@ -23,8 +23,7 @@ private fun regionContainsFootprint(region: IntArray, originX: Int, originY: Int
 
 /**
  * The spatially constrained region [ButtonSkipOff] searches within, which replaced [Region.bottomHalf]
- * to close a false-positive match against the launch Quick Mode dialog's "Quick" button (see
- * `docs-local/validation/skip-chevron/2026-09-05-independent-review-prototype-revision-2.md`).
+ * to close a false-positive match against the launch Quick Mode dialog's "Quick" button.
  *
  * [persistentSkipPillRegion] is exercised directly rather than through [Region.persistentSkipPill]
  * where more than one resolution is needed: [Region] is a Kotlin object, so its `val` fields freeze

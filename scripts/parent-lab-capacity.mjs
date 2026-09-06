@@ -1,4 +1,4 @@
-// ParentLab Manual Capacity Triage (Slice 1) - offline, read-only, counts-only, advisory only.
+// ParentLab Manual Capacity Triage - offline, read-only, counts-only, advisory only.
 //
 // Reads a persisted retention document (what `parent-lab-retention --out` writes) and reports how
 // large the eligible HUMAN capacity-review pool is, how many Veterans are excluded, and why. It never
@@ -27,7 +27,7 @@ import { resolveTargetProfile, TARGET_PROFILE_IDS, TARGET_PROFILES } from "../sr
 
 const DEFAULT_TARGET = "GENERAL_INHERITANCE"
 
-const HELP = `parent-lab-capacity - Manual Capacity Triage, Slice 1 (read-only, counts-only, advisory only)
+const HELP = `parent-lab-capacity - Manual Capacity Triage (read-only, counts-only, advisory only)
 
 Options:
   --retention <path>    Path to a persisted retention document from parent-lab-retention --out (required).
@@ -125,7 +125,7 @@ function summaryOf(doc) {
 function renderSummary(doc) {
     const lines = []
     const label = TARGET_PROFILES[doc.targetProfile] ? TARGET_PROFILES[doc.targetProfile].label : doc.targetProfile
-    lines.push(`=== Manual Capacity Triage (Slice 1): ${doc.targetProfile} (${label}) ===`)
+    lines.push(`=== Manual Capacity Triage: ${doc.targetProfile} (${label}) ===`)
     lines.push(`  roster scan           ${doc.rosterScanId}`)
     lines.push(`  roster fingerprint    ${doc.rosterFingerprint}`)
     lines.push(`  protection scan       ${doc.protectionScanId ?? "none (protection gates stayed closed)"}`)
@@ -157,7 +157,7 @@ function renderSummary(doc) {
     lines.push(`    records w/ trusted self-factors ${pad(e.recordsWithTrustedSelfFactors, 5)}`)
     lines.push(`    records w/ known protection     ${pad(e.recordsProtectionKnown, 5)}`)
     lines.push("")
-    lines.push("  Slice 1 is counts-only: it does NOT say which admitted Veteran is better or worse to release.")
+    lines.push("  Capacity triage is counts-only: it does NOT say which admitted Veteran is better or worse to release.")
     lines.push("  This document is advisory and human-review-only. Nothing was ranked, transferred or modified.")
     return lines.join("\n")
 }

@@ -1,18 +1,19 @@
-// ParentLab Manual Capacity Triage - Slice 2 contract: the Capacity Coverage Exposure Ledger.
+// ParentLab Manual Capacity Triage - coverage ledger contract: the Capacity Coverage Exposure Ledger.
 // Pure, offline, deterministic, read-only. A human-review safety layer, not a value model.
 //
-// Slice 1 answered "which owned Veterans are candidates for a HUMAN capacity review?" and tallied why
-// the rest fell out. Slice 2 answers a different, narrower question about the SAME pool:
+// Capacity triage answered "which owned Veterans are candidates for a HUMAN capacity review?" and
+// tallied why the rest fell out. The coverage ledger answers a different, narrower question about the
+// SAME pool:
 //
 //   If Veterans are removed from the eligible manual-review pool, what coverage does the account
 //   provably lose, and which coverage slots are structurally protected from any review outcome?
 //
 // It never values, ranks, scores, tiers, recommends a transfer, or mutates anything. It partitions the
 // carriers of each coverage slot into the eligible pool (exposed) versus outside it (anchored), and
-// reports the structure so a human can see the exposure before acting on Slice 1's admissions.
+// reports the structure so a human can see the exposure before acting on capacity triage's admissions.
 //
-// Three boundaries are load-bearing and mirror Slice 1's:
-//   - The schema string is its own constant, so retention, Slice 1 and quarantine readers reject a
+// Three boundaries are load-bearing and mirror capacity triage's:
+//   - The schema string is its own constant, so retention, capacity triage and quarantine readers reject a
 //     coverage document structurally rather than mis-parsing it.
 //   - The exposure enum shares no member with the retention states or SAFE_TO_TRANSFER. "Exposed" is a
 //     coverage-structure fact ("every observed carrier is inside the review pool"), never a value or
@@ -24,7 +25,7 @@ import type { CapacityAdmission } from "./capacityTypes.ts"
 import type { ReplacementEvidenceProvenance } from "./retentionTypes.ts"
 
 /** Schema discriminator for the coverage document. Distinct from every other ParentLab schema so a
- * persistence reader cannot confuse it with a retention, Slice 1 capacity, or quarantine document. */
+ * persistence reader cannot confuse it with a retention, capacity-triage, or quarantine document. */
 export const PARENTLAB_CAPACITY_COVERAGE_SCHEMA = "parent_lab_capacity_coverage" as const
 /** Version 6: each exposure row now names the gated non-selected target profiles it is the sole admitted
  * clearer of, which v5 measured in targetSlots but never connected to the Veteran. The pool, admission,
@@ -221,7 +222,7 @@ export interface VeteranCoverageExposure {
     readonly scanIndex: number
     readonly character: string | null
     readonly outfit: string | null
-    /** Carried verbatim from Slice 1. Always ELIGIBLE here, since only admitted Veterans are emitted. */
+    /** Carried verbatim from capacity triage. Always ELIGIBLE here, since only admitted Veterans are emitted. */
     readonly admission: CapacityAdmission
     /** Factor slots (factorKey@starFloor) where this Veteran is the sole observed carrier. Sorted. */
     readonly soleCarrierSlots: readonly string[]
@@ -288,7 +289,7 @@ export interface WhiteSubfamilyCoverage {
 
 /**
  * The Capacity Coverage Exposure Ledger: coverage exposure over one roster snapshot under one target
- * profile lens, built in-process from the SAME retention report Slice 1 triaged. Structure only.
+ * profile lens, built in-process from the SAME retention report capacity triage triaged. Structure only.
  */
 export interface CapacityCoverageDocument {
     readonly schema: typeof PARENTLAB_CAPACITY_COVERAGE_SCHEMA
@@ -309,11 +310,11 @@ export interface CapacityCoverageDocument {
     readonly whiteFactorDomainProvenance: WhiteFactorDomainProvenance | null
     /** Newest input observation time from the retention document, NOT a clock read. */
     readonly generatedAt: number | null
-    /** The Slice 1 capacity schema version this document was built against, for provenance. */
+    /** The capacity-triage schema version this document was built against, for provenance. */
     readonly capacitySchemaVersion: number
     /** False when the roster snapshot is untrusted. An unusable document must never read as "safe". */
     readonly usable: boolean
-    /** Size of the eligible manual-review pool (Slice 1 admitted). 0 when unusable. */
+    /** Size of the eligible manual-review pool (capacity-triage admitted). 0 when unusable. */
     readonly poolSize: number
     readonly excludedSize: number
     readonly rosterCount: number
@@ -350,7 +351,7 @@ export function factorSlotKey(factorKey: string, starFloor: number): string {
  * Structural guard: is this a Capacity Coverage Exposure document?
  *
  * The mirror of isCapacityTriageDocument and retentionReportsOf's schema check. A coverage document
- * must never be mistaken for a retention snapshot or a Slice 1 capacity document, and vice versa.
+ * must never be mistaken for a retention snapshot or a capacity-triage document, and vice versa.
  */
 export function isCapacityCoverageDocument(document: unknown): document is CapacityCoverageDocument {
     if (typeof document !== "object" || document === null) return false
