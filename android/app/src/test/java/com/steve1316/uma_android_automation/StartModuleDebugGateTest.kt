@@ -123,7 +123,8 @@ class StartModuleDebugGateTest {
         private val diagRun = startModule.indexOf("val diagnosticResult = runSingleGame()")
         private val loopRun = startModule.indexOf("val result = runSingleGame()")
         private val rotationParse = startModule.indexOf("val rotation = loadRotationConfig()", diagRun)
-        private val firstLoadQueueState = startModule.indexOf("loadQueueState(context)")
+        private val onStartEvent = startModule.indexOf("fun onStartEvent(event: StartEvent)")
+        private val firstLoadQueueState = startModule.indexOf("loadQueueState(context)", onStartEvent)
         private val phaseCareerWrite = startModule.indexOf("phase = PHASE_CAREER")
 
         @Test

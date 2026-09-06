@@ -1,10 +1,11 @@
 import * as Application from "expo-application"
 import MessageLog from "../../components/MessageLog"
-import { useContext, useEffect, useRef, useState, useMemo } from "react"
+import { useCallback, useContext, useEffect, useReducer, useRef, useState, useMemo } from "react"
 import { BotStateContext } from "../../context/BotStateContext"
 import { useSettings } from "../../context/SettingsContext"
 import { logWithTimestamp, logErrorWithTimestamp } from "../../lib/logger"
-import { Animated, DeviceEventEmitter, StyleSheet, TouchableOpacity, View, NativeModules } from "react-native"
+import { sessionStateReducer, initialSessionState, sessionPhase } from "../../lib/sessionState"
+import { Animated, AppState, DeviceEventEmitter, StyleSheet, TouchableOpacity, View, NativeModules } from "react-native"
 import { Snackbar } from "react-native-paper"
 import { MessageLogContext } from "../../context/MessageLogContext"
 import { useTheme } from "../../context/ThemeContext"
@@ -43,6 +44,11 @@ const styles = StyleSheet.create({
         width: 100,
     },
 })
+
+/** Semantic outcome of a Home snackbar, decided by the call site rather than inferred from the
+ * message text (a "Preset" prefix check used to stand in for success/error, which broke the
+ * moment a message's wording changed). */
+type SnackbarState = { message: string; tone: "success" | "error" }
 
 /**
  * Supported scenarios. First three are Career scenarios (full debut-to-finale run); last two
@@ -102,10 +108,16 @@ const Home = () => {
     const { StartModule } = NativeModules
 
     const { colors } = useTheme()
-    const [isRunning, setIsRunning] = useState<boolean>(false)
+    // Truthful session state: `armed` (MediaProjectionService up -- Stop is meaningful) is kept
+    // separate from `botRunning` (BotService actually executing), so a status derived from one
+    // can never misrepresent the other. See src/lib/sessionState.ts.
+    const [session, dispatchSession] = useReducer(sessionStateReducer, initialSessionState)
+    const armed = session.armed
+    const botRunning = session.botRunning
+    const phase = sessionPhase(session)
     const [showNotReadyDialog, setShowNotReadyDialog] = useState<boolean>(false)
     const [snackbarOpen, setSnackbarOpen] = useState<boolean>(false)
-    const [snackbarMessage, setSnackbarMessage] = useState<string>("")
+    const [snackbar, setSnackbar] = useState<SnackbarState>({ message: "", tone: "success" })
     // Preset persistence state for the Home row + Start gate: a preset shows as launch-ready only
     // once its write is confirmed on disk, so Start can never launch a not-yet-saved selection.
     const [presetSaveState, setPresetSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle")
@@ -120,13 +132,39 @@ const Home = () => {
     // confirm dialog is shown. Empty list → start proceeds without a prompt.
     const [showAvoidDialog, setShowAvoidDialog] = useState<boolean>(false)
     const [avoidWarnings, setAvoidWarnings] = useState<{ label: string; reason: string }[]>([])
-    const [interruptedQueue, setInterruptedQueue] = useState<{ currentRun: number; totalRuns: number; ageMinutes: number } | null>(null)
+    const [interruptedQueue, setInterruptedQueue] = useState<{ currentRun: number; totalRuns: number; ageMinutes: number; phase: string } | null>(null)
 
     const navigation = useNavigation()
 
     const bsc = useContext(BotStateContext)
     const mlc = useContext(MessageLogContext)
     const { flushAndVerifyLaunchConfig, prepareTraineeRotation } = useSettings()
+
+    /** Shows a Home snackbar with an explicit success/error tone, decided by the caller. */
+    const showSnackbar = (message: string, tone: SnackbarState["tone"]) => {
+        setSnackbar({ message, tone })
+        setSnackbarOpen(true)
+    }
+
+    /** Re-reads the interrupted-queue banner state from the same validated source Kotlin's
+     * auto-resume uses. Called on mount, on every bot-end event, and as an AppState-active
+     * backstop -- never polled. */
+    const refreshInterruptedQueue = useCallback(() => {
+        StartModule.getInterruptedQueueState()
+            .then((state: any) => {
+                setInterruptedQueue(
+                    state
+                        ? {
+                              currentRun: state.currentRun,
+                              totalRuns: state.totalRuns,
+                              ageMinutes: state.ageMinutes,
+                              phase: state.phase,
+                          }
+                        : null
+                )
+            })
+            .catch(() => {})
+    }, [StartModule])
 
     // Single-flight gate for Start: at most one barrier+launch sequence in flight; re-entrant
     // presses are ignored, and a cancel (Stop, preset change, unmount) refuses a launch even if
@@ -174,12 +212,22 @@ const Home = () => {
 
     useEffect(() => {
         const mediaProjectionSubscription = DeviceEventEmitter.addListener("MediaProjectionService", (data) => {
-            setIsRunning(data["message"] === "Running")
+            dispatchSession({ type: data["message"] === "Running" ? "PROJECTION_RUNNING" : "PROJECTION_NOT_RUNNING" })
         })
 
         const botServiceSubscription = DeviceEventEmitter.addListener("BotService", (data) => {
             if (data["message"] === "Running") {
                 mlc.setMessageLog([])
+                dispatchSession({ type: "BOT_RUNNING" })
+            } else {
+                dispatchSession({ type: "BOT_NOT_RUNNING" })
+                // Every bot end, not just the ones the reducer records as a natural end. A user
+                // Stop sends MediaProjectionService "Not Running" first, which resets the whole
+                // session, so the BotService end that follows is a reducer no-op -- keying the
+                // refresh off that transition left the banner showing a snapshot Kotlin had
+                // already rewritten or cleared. Kotlin emits this after the queue session has
+                // made its save/clear decision, so the reread here sees the settled state.
+                refreshInterruptedQueue()
             }
         })
 
@@ -203,19 +251,7 @@ const Home = () => {
 
         getVersion()
         fetchDeviceMetrics()
-
-        // Check for interrupted queue state from a previous crash.
-        StartModule.getInterruptedQueueState()
-            .then((state: any) => {
-                if (state) {
-                    setInterruptedQueue({
-                        currentRun: state.currentRun,
-                        totalRuns: state.totalRuns,
-                        ageMinutes: state.ageMinutes,
-                    })
-                }
-            })
-            .catch(() => {})
+        refreshInterruptedQueue()
 
         return () => {
             mediaProjectionSubscription.remove()
@@ -223,6 +259,15 @@ const Home = () => {
             queueProgressSubscription.remove()
         }
     }, [])
+
+    // AppState backstop: catches the case where Kotlin changed the persisted state while this
+    // screen was backgrounded (e.g. the app was killed and relaunched into a resumed queue).
+    useEffect(() => {
+        const subscription = AppState.addEventListener("change", (nextState) => {
+            if (nextState === "active") refreshInterruptedQueue()
+        })
+        return () => subscription.remove()
+    }, [refreshInterruptedQueue])
 
     /**
      * Checks if the currently selected scenario exists in the available scenarios data.
@@ -266,12 +311,40 @@ const Home = () => {
     }, [appliedPreset, bsc.settings.general.scenario])
 
     /**
+     * Why pressing Start will not auto-resume the saved run, or null when it will. Mirrors the
+     * three ways Kotlin's plain-Start resume (onStartEvent) declines to re-enter a saved queue,
+     * so the banner can never promise a resume that will not happen.
+     */
+    const noAutoResumeReason: "queueDisabled" | "totalsDiffer" | "noRunLeft" | null = useMemo(() => {
+        if (!interruptedQueue) return null
+        if (!bsc.settings.runQueue.enableRunQueue) return "queueDisabled"
+        if (bsc.settings.runQueue.totalRuns !== interruptedQueue.totalRuns) return "totalsDiffer"
+        // Kotlin re-enters the saved run itself only for a rotation queue killed mid-career, so
+        // that trainee finishes under her own preset; every other saved state resumes at the run
+        // after it. When that next run is past the end, Kotlin clears the state and reports the
+        // queue complete without playing a career.
+        const reEntersSavedRun = bsc.settings.runQueue.enableTraineeRotation && bsc.settings.runQueue.traineeRotation.length > 0 && interruptedQueue.phase === "career"
+        const nextRun = reEntersSavedRun ? interruptedQueue.currentRun : interruptedQueue.currentRun + 1
+        return nextRun > interruptedQueue.totalRuns ? "noRunLeft" : null
+    }, [
+        interruptedQueue,
+        bsc.settings.runQueue.enableRunQueue,
+        bsc.settings.runQueue.totalRuns,
+        bsc.settings.runQueue.enableTraineeRotation,
+        bsc.settings.runQueue.traineeRotation,
+    ])
+
+    /**
      * Action label for the center button: what pressing it will do, not which scenario is
      * selected (the preset card below already shows that). Undefined falls back to the
      * "Select a Scenario" placeholder.
      */
     const startButtonLabel: string | undefined = useMemo(() => {
-        if (isRunning) return "Stop"
+        // Pressing the button always Stops while armed, regardless of whether the bot itself has
+        // started yet -- but the label must not claim the bot is running before it actually is,
+        // nor keep claiming it after a natural end.
+        if (phase === "armed") return "Waiting for overlay..."
+        if (phase === "running" || phase === "ended") return "Stop"
         // While the selected preset is being persisted, the launch is gated (handleButtonPress
         // ignores the press) and the label says so, so a user cannot launch a not-yet-saved preset.
         if (presetSaveState === "saving") return "Saving preset..."
@@ -285,7 +358,7 @@ const Home = () => {
             return `Start Queue (${bsc.settings.runQueue.totalRuns} runs)`
         }
         return `Start · ${scenario}`
-    }, [isRunning, presetSaveState, bsc.settings.general.scenario, bsc.settings.runQueue.enableRunQueue, bsc.settings.runQueue.totalRuns])
+    }, [phase, presetSaveState, bsc.settings.general.scenario, bsc.settings.runQueue.enableRunQueue, bsc.settings.runQueue.totalRuns])
 
     /**
      * Applies a character preset's settings to the current configuration.
@@ -407,13 +480,12 @@ const Home = () => {
         if (result.ok) {
             setPresetSaveState("saved")
             logWithTimestamp(`[SETTINGS] readback_verified preset="${presetName}" trainee="${result.persisted?.trainee}" revision=${result.persisted?.revision} hash=${result.persisted?.hash}`)
-            setSnackbarMessage(`Preset "${presetName}" applied`)
+            showSnackbar(`Preset "${presetName}" applied`, "success")
         } else {
             setPresetSaveState("failed")
             logErrorWithTimestamp(`[SETTINGS] persistence failed at ${result.stage}: ${result.reason}`)
-            setSnackbarMessage(`Could not save preset "${presetName}": ${result.reason}. Tap the preset again to retry.`)
+            showSnackbar(`Could not save preset "${presetName}": ${result.reason}. Tap the preset again to retry.`, "error")
         }
-        setSnackbarOpen(true)
     }
 
     /**
@@ -517,8 +589,7 @@ const Home = () => {
         if (!barrier.ok) {
             setPresetSaveState("failed")
             logErrorWithTimestamp(`[START] launch_barrier_blocked stage=${barrier.stage} reason=${barrier.reason}`)
-            setSnackbarMessage(`Could not start: ${barrier.reason}. Your preset is kept -- press Start to try again.`)
-            setSnackbarOpen(true)
+            showSnackbar(`Could not start: ${barrier.reason}. Your preset is kept -- press Start to try again.`, "error")
             return
         }
         // A cancel (Stop / preset change / unmount) during the barrier await refuses the launch,
@@ -543,14 +614,12 @@ const Home = () => {
             // navigator pages the Scenario Select carousel to it before confirming the launch.
             const missing = await prepareTraineeRotation()
             if (missing === null) {
-                setSnackbarMessage("Failed to prepare trainee rotation snapshots. Not starting.")
-                setSnackbarOpen(true)
+                showSnackbar("Failed to prepare trainee rotation snapshots. Not starting.", "error")
                 return
             }
             if (missing.length > 0) {
                 const detail = missing.map((m) => `#${m.index + 1} ${m.presetKey} (${m.scenario})`).join(", ")
-                setSnackbarMessage(`Rotation has unresolved presets: ${detail}. Fix the rotation list before starting.`)
-                setSnackbarOpen(true)
+                showSnackbar(`Rotation has unresolved presets: ${detail}. Fix the rotation list before starting.`, "error")
                 return
             }
         } else {
@@ -573,8 +642,10 @@ const Home = () => {
     }
 
     const handleButtonPress = async () => {
-        if (isRunning) {
-            // Stopping cancels any in-flight Start barrier so a race between Stop and a
+        if (armed) {
+            // Stop's availability/meaning is armed-sensitive, not bot-running-sensitive: it must
+            // still turn off the still-active projection even after the bot naturally ended.
+            // Stopping also cancels any in-flight Start barrier so a race between Stop and a
             // just-verifying launch cannot start the bot after the user asked it to stop.
             startGate.cancel()
             StartModule.stop()
@@ -603,7 +674,7 @@ const Home = () => {
     const getSelectButtonIconName = (): LucideIcon | undefined => {
         if (!isScenarioValid) {
             return undefined
-        } else if (isRunning) {
+        } else if (armed) {
             return Square
         } else {
             return Play
@@ -612,9 +683,10 @@ const Home = () => {
 
     /** Gets the SelectButton variant based on device state. */
     const getSelectButtonVariant = (): any => {
-        if (isRunning) {
-            // Red = "press to stop", not an actual error. Checked first so a running bot is always red
-            // regardless of the other conditions.
+        if (armed) {
+            // Red = "press to stop", not an actual error. Checked first so an armed session is
+            // always red regardless of the other conditions -- Stop must stay available and
+            // visually obvious whether or not the bot itself has started yet.
             return "error"
         } else if (unsupportedReason !== null) {
             return "warning"
@@ -658,7 +730,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
             )
         }
 
-        if (!bsc.readyStatus && !isRunning) {
+        if (!bsc.readyStatus && !armed) {
             return (
                 <Tooltip delayDuration={150}>
                     <TooltipTrigger>
@@ -713,7 +785,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                 rightComponent={renderStatus()}
             />
 
-            {interruptedQueue && !isRunning && (
+            {interruptedQueue && !botRunning && (
                 <View
                     style={{
                         width: "100%",
@@ -730,30 +802,27 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                         Queue interrupted at run {interruptedQueue.currentRun} of {interruptedQueue.totalRuns} ({Math.round(interruptedQueue.ageMinutes)} min ago)
                     </Text>
                     <Text style={{ fontSize: 12, color: colors.warningText || "#ffd000", marginBottom: 8 }}>
-                        The app crashed during a queued session. Navigate to the training menu in-game and tap Start to resume.
+                        {noAutoResumeReason === "queueDisabled"
+                            ? "Run Queue is turned off, so this saved run will not resume. Pressing Start plays a single career instead and leaves the saved run alone."
+                            : noAutoResumeReason === "totalsDiffer"
+                              ? "Your queue length changed since this run was saved, so it cannot be resumed. Pressing Start discards it and begins a new queue with your current settings."
+                              : noAutoResumeReason === "noRunLeft"
+                                ? "This saved queue has no run left to resume. Pressing Start reports the queue as complete without playing another career."
+                                : "Pressing Start resumes this queue automatically from where it left off. Make sure the game is at the training menu first."}
                     </Text>
-                    <View style={{ flexDirection: "row", gap: 8 }}>
-                        <TouchableOpacity
-                            onPress={() => {
-                                // Update queue settings to resume from the interrupted run.
-                                const remainingRuns = interruptedQueue.totalRuns - interruptedQueue.currentRun + 1
-                                bsc.setSettings({
-                                    ...bsc.settings,
-                                    runQueue: {
-                                        ...bsc.settings.runQueue,
-                                        enableRunQueue: true,
-                                        totalRuns: remainingRuns,
-                                    },
-                                })
-                                StartModule.clearInterruptedQueueState()
-                                setInterruptedQueue(null)
-                                setSnackbarMessage(`Queue will resume: ${remainingRuns} runs remaining`)
-                                setSnackbarOpen(true)
-                            }}
-                            style={{ paddingHorizontal: 14, paddingVertical: 6, backgroundColor: colors.primary, borderRadius: 6 }}
-                        >
-                            <Text style={{ fontSize: 12, color: colors.primaryForeground, fontWeight: "600" }}>Resume ({interruptedQueue.totalRuns - interruptedQueue.currentRun + 1} runs left)</Text>
-                        </TouchableOpacity>
+                    {noAutoResumeReason !== null && (
+                        <View style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: 8 }}>
+                            <AlertTriangle size={14} color={colors.warningText || "#ffd000"} style={{ marginRight: 6, marginTop: 2 }} />
+                            <Text style={{ flex: 1, fontSize: 12, color: colors.warningText || "#ffd000" }}>
+                                {noAutoResumeReason === "queueDisabled"
+                                    ? "Run Queue is currently disabled."
+                                    : noAutoResumeReason === "totalsDiffer"
+                                      ? `Configured runs (${bsc.settings.runQueue.totalRuns}) differs from the saved run's total (${interruptedQueue.totalRuns}).`
+                                      : "The saved run was already the last one in its queue."}
+                            </Text>
+                        </View>
+                    )}
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                         <TouchableOpacity
                             onPress={() => {
                                 StartModule.clearInterruptedQueueState()
@@ -761,13 +830,14 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                             }}
                             style={{ paddingHorizontal: 14, paddingVertical: 6, backgroundColor: colors.muted, borderRadius: 6 }}
                         >
-                            <Text style={{ fontSize: 12, color: colors.foreground }}>Dismiss</Text>
+                            <Text style={{ fontSize: 12, color: colors.foreground }}>Discard</Text>
                         </TouchableOpacity>
+                        <Text style={{ flex: 1, fontSize: 11, color: colors.warningText || "#ffd000", opacity: 0.8 }}>Clears the saved run so the next Start begins fresh.</Text>
                     </View>
                 </View>
             )}
 
-            {!isRunning && (
+            {!armed && (
                 <View style={{ width: "100%", paddingHorizontal: 4, marginBottom: 6 }}>
                     <TouchableOpacity
                         onPress={() => setPickerOpen(true)}
@@ -900,7 +970,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                                       : `Run ${queueProgress.currentRun}/${queueProgress.totalRuns} - ${queueProgress.status}`}
                         </Text>
                     </View>
-                    {isRunning && queueProgress.status !== "queueComplete" && queueProgress.status !== "queueFailed" && (
+                    {botRunning && queueProgress.status !== "queueComplete" && queueProgress.status !== "queueFailed" && (
                         <TouchableOpacity
                             onPress={() => StartModule.skipQueueRun()}
                             style={{
@@ -1017,9 +1087,9 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                         setSnackbarOpen(false)
                     },
                 }}
-                style={{ backgroundColor: snackbarMessage.startsWith("Preset") ? "green" : "red", borderRadius: 10 }}
+                style={{ backgroundColor: snackbar.tone === "success" ? colors.success : colors.error, borderRadius: 10 }}
             >
-                {snackbarMessage}
+                <Text style={{ color: snackbar.tone === "success" ? colors.successContent : colors.errorContent }}>{snackbar.message}</Text>
             </Snackbar>
         </View>
     )

@@ -17,6 +17,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - The preset documentation is split in two: `PRESETS_GUIDE.md` now covers what a preset does, how to pick one, and what to check when a run does not go the way you expected, while building or editing a preset moved to `docs/PRESET_AUTHORING.md`.
+- Home now distinguishes waiting for the overlay from the bot actually running. The interrupted-queue notice refreshes automatically instead of only on app launch, and its Resume button is replaced with a Discard action plus a warning when your current queue settings would not actually resume the saved run.
 
 ## [1.4.0] - 2026-08-28
 

@@ -864,54 +864,25 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
     /**
      * Checks if there is an interrupted queue state from a previous crash.
-     * Returns a WritableMap with {active, currentRun, totalRuns, timestamp} or null values if no state exists.
+     *
+     * Delegates to [loadQueueState], the same validated source the auto-resume decision in
+     * [onStartEvent] reads, instead of maintaining a second copy of the active/stale/malformed
+     * checks. Returns a WritableMap with {currentRun, totalRuns, ageMinutes, phase}, or null if
+     * there is nothing resumable.
      */
     @ReactMethod
     fun getInterruptedQueueState(promise: Promise) {
-        try {
-            val dbFile = File(context.filesDir, "SQLite/settings.db")
-            if (!dbFile.exists()) {
-                promise.resolve(null)
-                return
-            }
-            val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
-            val cursor =
-                db.rawQuery(
-                    "SELECT key, value FROM settings WHERE category = 'queueState'",
-                    null,
-                )
-            val state = mutableMapOf<String, String>()
-            while (cursor.moveToNext()) {
-                state[cursor.getString(0)] = cursor.getString(1)
-            }
-            cursor.close()
-            db.close()
-
-            val active = state["active"]?.toBoolean() ?: false
-            if (!active) {
-                promise.resolve(null)
-                return
-            }
-
-            // Check that the crash wasn't too long ago (stale state = older than 6 hours).
-            val timestamp = state["timestamp"]?.toLongOrNull() ?: 0
-            val ageMs = System.currentTimeMillis() - timestamp
-            if (ageMs > 6 * 60 * 60 * 1000) {
-                // State is stale, clear it.
-                clearQueueState(context)
-                promise.resolve(null)
-                return
-            }
-
-            val map = Arguments.createMap()
-            map.putInt("currentRun", state["currentRun"]?.toIntOrNull() ?: 0)
-            map.putInt("totalRuns", state["totalRuns"]?.toIntOrNull() ?: 0)
-            map.putDouble("ageMinutes", ageMs / 60000.0)
-            promise.resolve(map)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to read queue state: ${e.message}")
+        val saved = loadQueueState(context)
+        if (saved == null) {
             promise.resolve(null)
+            return
         }
+        val map = Arguments.createMap()
+        map.putInt("currentRun", saved.currentRun)
+        map.putInt("totalRuns", saved.totalRuns)
+        map.putDouble("ageMinutes", saved.ageMs / 60000.0)
+        map.putString("phase", saved.phase)
+        promise.resolve(map)
     }
 
     /** Clears any persisted interrupted queue state. */
@@ -2010,6 +1981,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // Always release the wake lock and the session latch, even on exception or break paths.
                 Game.releaseWakeLock()
                 sessionActive.set(false)
+                // Bot execution truthfully ends here, on every exit path (including the early
+                // launch-identity-mismatch returns above). Enqueued through the same FIFO as the
+                // externally-posted "Running" event so a fast-abort session can never have this
+                // event overtake its own start event on the JS side.
+                enqueueJsEvent(JSEvent("BotService", "Not Running", false))
             }
         }
     }
@@ -2162,6 +2138,21 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     }
 
     /**
+     * Enqueues [event] onto [jsEventQueue] for the [ensureJsEventWorker] worker to relay to the
+     * JS bridge. The single shared entry point for that queue, so every JSEvent -- whether
+     * sourced from EventBus via [onJSEvent] or emitted directly by this module -- is forwarded
+     * in the same FIFO order.
+     */
+    private fun enqueueJsEvent(event: JSEvent) {
+        ensureJsEventWorker()
+        if (!jsEventQueue.offer(event)) {
+            // Queue full: the UI cannot keep up. Drop the oldest line rather than block the bot.
+            jsEventQueue.poll()
+            jsEventQueue.offer(event)
+        }
+    }
+
+    /**
      * Listener function to forward MessageLog events to the Javascript frontend.
      *
      * Runs synchronously inside MessageLog's lock - enqueue only, never emit here.
@@ -2173,12 +2164,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         // Only send the event to the React Native frontend if it's not internal.
         // This prevents flooding the bridge during parallel operations where disableOutput is true.
         if (event.isInternal) return
-        ensureJsEventWorker()
-        if (!jsEventQueue.offer(event)) {
-            // Queue full: the UI cannot keep up. Drop the oldest line rather than block the bot.
-            jsEventQueue.poll()
-            jsEventQueue.offer(event)
-        }
+        enqueueJsEvent(event)
     }
 
     /**
