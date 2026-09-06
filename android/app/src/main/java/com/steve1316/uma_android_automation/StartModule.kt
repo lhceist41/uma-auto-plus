@@ -1152,13 +1152,19 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      * opt-in and best-effort: a failure here must never mask the halt itself, which is already on
      * the log above this call.
      */
-    private fun notifyQueueHalted(completedRuns: Int, totalRuns: Int, unrun: Int, reason: String) {
+    private fun notifyQueueHalted(completedRuns: Int, totalRuns: Int, unrun: Int, reason: String, careerInFlight: Boolean) {
         if (!DiscordUtils.enableDiscordNotifications) return
         try {
             DiscordUtils.queue.add(
                 "```diff\n- ${MessageLog.getSystemTimeString()} QUEUE HALTED after $completedRuns of $totalRuns runs " +
-                    "($unrun not started).\n- Reason: $reason\n- The career slot is occupied; no further run can start until " +
-                    "this is handled in-game.\n```",
+                    "($unrun not started).\n- Reason: $reason\n- " +
+                    (
+                        if (careerInFlight) {
+                            "The career slot is occupied; no further run can start until this is handled in-game."
+                        } else {
+                            "No career is in flight; clear whatever screen the game is parked on, then restart to resume."
+                        }
+                    ) + "\n```",
             )
         } catch (e: Exception) {
             Log.e(TAG, "[ERROR] notifyQueueHalted:: Could not queue the Discord alert: ${e.message}")
@@ -1623,6 +1629,27 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
                 var completedRuns = 0
 
+                // Non-null once the queue exits for a reason the user did not ask for. The post-loop
+                // block used to log "Queue finished" and emit queueComplete no matter how the loop
+                // ended, so a queue abandoned mid-way reported success: the 2026-07-26 breakpoint
+                // logged "Queue finished. Completed 2 of 4 runs" at 23:45 and nothing said otherwise
+                // for the next 6h21m. The navigation-failure paths were equally misreported - they
+                // emit queueFailed and then the post-loop queueComplete immediately overwrote it.
+                // Declared above the two pre-loop failure sites below, not just above the loop: a
+                // failure there has to reach the same halt branch, or it falls through to the
+                // success branch and clears a resumable queue's saved state on its way out.
+                var queueHaltReason: String? = null
+                // The run index the queue was on when it halted. completedRuns counts only THIS
+                // session, so after a resume it undercounts: the 2026-07-28 halt printed "after 1 of
+                // 4 runs (3 not started)" when runs 1 and 2 were both done and only 2 were owed. A
+                // pre-loop failure has run nothing this session, so it reports startFromRun - 1.
+                var queueHaltRun = 0
+                // True when the halt leaves a career still occupying the game's single slot. A
+                // breakpoint does; a between-run navigation failure after a COMPLETED career does
+                // not, and telling the operator to go clear a slot that is already empty sends them
+                // looking for the wrong thing.
+                var queueHaltCareerInFlight = false
+
                 // Rotation cycle parsed above (before the resume block). The cold-start snapshot for
                 // the first launched run is applied just below, before the home-screen probe reads
                 // the scenario, so a rotation that switches scenarios launches the correct campaign.
@@ -1630,7 +1657,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 if (enableRunQueue && rotation.enabled && startFromRun <= totalRuns && BotService.isRunning && !queueStopRequested) {
                     val r = applyRotationForRun(rotation, startFromRun, reuseLastLaunchSetup)
                     if (r == null) {
-                        sendQueueProgressEvent(startFromRun, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, "Missing rotation snapshot for the first trainee.")
+                        queueHaltReason = "missing rotation snapshot for the first trainee (run $startFromRun)"
+                        queueHaltRun = startFromRun - 1
                         queueStopRequested = true
                     } else {
                         coldStartReuse = r
@@ -1665,32 +1693,16 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         if (!navResult.success) {
                             logNavigationFailure(navResult)
                             // A user Stop mid-navigation is a clean cancellation, not a navigation
-                            // failure - skip the failure event and let the post-loop queueComplete
-                            // report the ending, same as a Stop during a run.
+                            // failure - no halt reason, so the post-loop queueComplete reports the
+                            // ending, same as a Stop during a run.
                             if (navResult.lastDetectedState != "STOPPED") {
-                                sendQueueProgressEvent(startFromRun, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, navResult.failureReason)
+                                queueHaltReason = "cold-start career launch failed before run $startFromRun: ${navResult.failureReason}"
+                                queueHaltRun = startFromRun - 1
                             }
                             queueStopRequested = true
                         }
                     }
                 }
-
-                // Non-null once the queue exits for a reason the user did not ask for. The post-loop
-                // block used to log "Queue finished" and emit queueComplete no matter how the loop
-                // ended, so a queue abandoned mid-way reported success: the 2026-07-26 breakpoint
-                // logged "Queue finished. Completed 2 of 4 runs" at 23:45 and nothing said otherwise
-                // for the next 6h21m. The navigation-failure paths were equally misreported - they
-                // emit queueFailed and then the post-loop queueComplete immediately overwrote it.
-                var queueHaltReason: String? = null
-                // The run index the queue was on when it halted. completedRuns counts only THIS
-                // session, so after a resume it undercounts: the 2026-07-28 halt printed "after 1 of
-                // 4 runs (3 not started)" when runs 1 and 2 were both done and only 2 were owed.
-                var queueHaltRun = 0
-                // True when the halt leaves a career still occupying the game's single slot. A
-                // breakpoint does; a between-run navigation failure after a COMPLETED career does
-                // not, and telling the operator to go clear a slot that is already empty sends them
-                // looking for the wrong thing.
-                var queueHaltCareerInFlight = false
 
                 for (i in startFromRun..totalRuns) {
                     // Check stop flag before starting each run.
@@ -1976,10 +1988,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         if (queueHaltCareerInFlight) {
                             MessageLog.e(TAG, "[QUEUE] A career is still occupying the game's single slot; no further run can start until it is finished or abandoned in-game.")
                         } else {
-                            MessageLog.e(TAG, "[QUEUE] The career itself completed; the game is parked on whatever screen navigation stopped at. Clear that screen, then restart to resume.")
+                            MessageLog.e(TAG, "[QUEUE] No career is in flight; the game is parked on whatever screen the queue stopped at. Clear that screen, then restart to resume.")
                         }
                         MessageLog.e(TAG, "[QUEUE] ========================================\n")
-                        notifyQueueHalted(doneRuns, totalRuns, unrun, halt)
+                        notifyQueueHalted(doneRuns, totalRuns, unrun, halt, queueHaltCareerInFlight)
                     } else {
                         // Clear persisted queue state since queue finished normally.
                         clearQueueState(context)
