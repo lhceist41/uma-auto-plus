@@ -128,6 +128,14 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         private const val NAV_INTERRUPT_GRACE_MS: Long = 60 * 1000L
 
         /**
+         * How long the between-run wait keeps looking for a stop after this thread is interrupted.
+         * The overlay Stop interrupts first and tears the service down afterwards, so without a
+         * short settle the queue's terminal classification can run before BotService.isRunning
+         * turns false.
+         */
+        private const val STOP_EVIDENCE_SETTLE_MS: Long = 1500L
+
+        /**
          * Persists the current queue state to SQLite so it can survive app crashes.
          * Writes directly to the settings database using INSERT OR REPLACE.
          */
@@ -1210,7 +1218,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
     /**
      * Waits for the specified number of seconds, checking queue control flags every 100ms.
-     * Returns false if the wait was interrupted by a stop request.
+     * Returns false if the wait was cut short by a stop, true if it ran to completion.
      * Ticks [Game.heartbeat] each iteration so user-configured between-runs delays don't
      * false-trigger the stall watchdog.
      */
@@ -1222,10 +1230,36 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 return false
             }
             Game.heartbeat()
-            Thread.sleep(100)
+            try {
+                Thread.sleep(100)
+            } catch (_: InterruptedException) {
+                // The overlay Stop interrupts this thread and only then tears the service down, so
+                // the interrupt arrives before either flag above, and letting it escape skipped the
+                // queue's terminal report entirely. Thread.sleep leaves the interrupt flag clear;
+                // keep it clear while the stop attribution settles.
+                awaitStopEvidence()
+                return false
+            }
             elapsed += 100
         }
         return true
+    }
+
+    /**
+     * Polls for up to [STOP_EVIDENCE_SETTLE_MS] until a stop becomes visible in
+     * [queueStopRequested] or BotService.isRunning, after an interrupt that landed ahead of the
+     * flag it belongs to. Without it the post-loop classifier can still read a running service and
+     * report an aborted queue as complete. Task.interruptResult settles the same race at run level.
+     */
+    private fun awaitStopEvidence() {
+        val deadline = System.currentTimeMillis() + STOP_EVIDENCE_SETTLE_MS
+        while (System.currentTimeMillis() < deadline && !queueStopRequested && BotService.isRunning) {
+            try {
+                Thread.sleep(50)
+            } catch (_: InterruptedException) {
+                // A second interrupt changes nothing about what the classifier needs to see.
+            }
+        }
     }
 
     /**
@@ -1987,7 +2021,18 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         MessageLog.i(TAG, "[QUEUE] Waiting ${delayBetweenRuns}s before next run...")
 
                         if (!interruptibleWait(delayBetweenRuns)) {
-                            MessageLog.i(TAG, "[QUEUE] Queue stop requested during wait. Exiting queue.")
+                            // Nothing claimed the abort: the device going to sleep interrupts the
+                            // bot thread through the library without setting either flag. Halt on
+                            // the shared path so the launch record saved above survives for the
+                            // next Start, instead of falling through to the branch that clears it
+                            // and reports the queue complete.
+                            if (!queueStopRequested && BotService.isRunning) {
+                                queueHaltReason = "the wait after run $i was interrupted with no stop requested"
+                                queueHaltResultCode = TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION.name
+                                queueHaltRun = i
+                                queueHaltCareerInFlight = !isMiscQueue
+                            }
+                            MessageLog.i(TAG, "[QUEUE] Between-run wait aborted. Exiting queue.")
                             break
                         }
                     }

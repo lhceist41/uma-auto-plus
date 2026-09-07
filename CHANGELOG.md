@@ -20,6 +20,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Home now distinguishes waiting for the overlay from the bot actually running. The interrupted-queue notice refreshes automatically instead of only on app launch, and its Resume button is replaced with a Discard action plus a warning when your current queue settings would not actually resume the saved run.
 - The queue-progress banner on Home is more truthful: a resumed queue counts the runs finished across the whole queue instead of only this app launch, a stopped queue is reported separately from a completed one, a breakpoint or trainee mismatch shows its own reason inline, and a failure says which run it reached without exposing raw internal error text.
 
+### Fixed
+
+- Stopping the bot from the floating overlay button during the pause between queued runs now ends the queue properly, instead of leaving Home stuck on "Waiting..." for a queue that had already stopped.
+
 ## [1.4.0] - 2026-08-28
 
 ### Added
