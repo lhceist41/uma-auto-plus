@@ -11,6 +11,8 @@ import { Input } from "../../components/ui/input"
 import { CircleCheckBig, Plus, Trash2 } from "lucide-react-native"
 import racesData from "../../data/races.json"
 import PageHeader from "../../components/PageHeader"
+import PlanFeasibilityPanel from "../../components/PlanFeasibilityPanel"
+import { buildPlanFeasibilityPreview } from "../../lib/raceLab/planFeasibility"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 import SearchableItem from "../../components/SearchableItem"
 
@@ -78,7 +80,11 @@ const RacingPlanSettings = () => {
         improvementThreshold,
         preferredGrades,
         preferredDistances,
+        ignoreConsecutiveRaceWarning,
+        enableForceRacing,
     } = racingSettings
+    const { scenario } = { ...defaultSettings.general, ...settings.general }
+    const { trackblazerConsecutiveRacesLimit } = { ...defaultSettings.scenarioOverrides, ...settings.scenarioOverrides }
 
     const [searchQuery, setSearchQuery] = useState("")
     // Local state for decimal inputs to preserve intermediate values while typing (e.g., "7.").
@@ -99,10 +105,27 @@ const RacingPlanSettings = () => {
         setImprovementThresholdInput(improvementThreshold.toString())
     }, [improvementThreshold])
 
-    // Parse racing plan from JSON string.
+    // Parse racing plan from JSON string. A saved plan can be malformed (an imported settings file, a
+    // hand-edited value), and the bot ignores the whole plan when it is: fall back to an empty selection
+    // and let the plan check below report it, rather than throwing out of render.
     const parsedRacingPlan: PlannedRace[] = useMemo(() => {
-        return racingPlan && racingPlan !== "[]" && typeof racingPlan === "string" ? JSON.parse(racingPlan) : []
+        if (!racingPlan || racingPlan === "[]" || typeof racingPlan !== "string") return []
+        try {
+            const parsed = JSON.parse(racingPlan)
+            return Array.isArray(parsed) ? parsed : []
+        } catch {
+            return []
+        }
     }, [racingPlan])
+
+    // The plan check reads the same racingPlan value the list below renders from: selecting a race writes
+    // straight through to settings, so the page keeps no separate unsaved plan.
+    // Building the verified race catalog costs real time on first use, so skip it entirely while the
+    // Racing Plan is off and the panel is not on screen. null means "not checked", never "no issues".
+    const planPreview = useMemo(
+        () => (enableRacingPlan ? buildPlanFeasibilityPreview({ racingPlan, scenario, trackblazerConsecutiveRacesLimit, ignoreConsecutiveRaceWarning, enableForceRacing }) : null),
+        [enableRacingPlan, racingPlan, scenario, trackblazerConsecutiveRacesLimit, ignoreConsecutiveRaceWarning, enableForceRacing]
+    )
 
     // Convert races.json to array.
     const allRaces: Race[] = useMemo(() => Object.values(racesData), [])
@@ -650,6 +673,8 @@ const RacingPlanSettings = () => {
                         </View>
                     </View>
                 </SearchableItem>
+
+                {planPreview !== null && <PlanFeasibilityPanel preview={planPreview} />}
 
                 <View style={{ marginBottom: 16 }}>
                     <Input style={styles.input} value={searchQuery} onChangeText={setSearchQuery} placeholder="Search races by name or date..." />

@@ -40,7 +40,7 @@
 
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { loadRaceCatalog } from "../src/lib/raceLab/catalog.ts"
+import { loadRaceCatalog } from "../src/lib/raceLab/catalog.node.ts"
 import { loadRaceSurvivalEvidence } from "../src/lib/raceSurvival/evidence.ts"
 import { computeSurvivalEnvelope, createRaceSurvivalInput } from "../src/lib/raceSurvival/envelope.ts"
 import { computeEffectiveHp, computeMaxHp } from "../src/lib/raceSurvival/mechanics.ts"

@@ -103,12 +103,13 @@ export interface PlannedRace {
 /** Severity of a plan-validation finding. */
 export type IssueSeverity = "error" | "warning" | "info"
 
-/** One plan-validation finding. `turn` present when the finding is turn-scoped. */
+/** One plan-validation finding. `turn` present when the finding is turn-scoped, `raceName` when it names one. */
 export interface PlanIssue {
     severity: IssueSeverity
     code: string
     detail: string
     turn: number | null
+    raceName?: string
 }
 
 /** Where a scheduled race turn came from. */

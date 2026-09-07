@@ -2,13 +2,15 @@
 //
 // Loads the compiled manifest + skills + races, verifies each artifact's SHA256 against the manifest,
 // checks schema versions, and exposes deterministic lookups. It never falls back to the raw layer (that
-// would create a second runtime authority) and never mutates loaded data (records are frozen).
+// would create a second runtime authority) and never mutates loaded data (records are frozen). The
+// filesystem convenience loader lives in reader.node.ts so this module stays importable from the app.
 
-import { createHash } from "node:crypto"
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
+import { canonicalJson, sha256Hex } from "./digest.ts"
 import { MANIFEST_SCHEMA_VERSION, SKILLS_SCHEMA_VERSION, RACES_SCHEMA_VERSION } from "./types.ts"
 import type { CompiledSkill, CompiledRace, MasterDataManifest } from "./types.ts"
+
+const SKILLS_ARTIFACT_PATH = "src/data/compiled/skills.json"
+const RACES_ARTIFACT_PATH = "src/data/compiled/races.json"
 
 /** A deterministic reader failure. Distinct `code` values let callers branch without string matching. */
 export class MasterDataReaderError extends Error {
@@ -28,24 +30,24 @@ export interface CompiledSources {
     races: string
 }
 
-/** The read-only reader surface. Returned records/arrays are frozen. */
-export interface MasterDataReader {
-    readonly manifest: MasterDataManifest
+/** The verified race half of the compiled layer: everything a race catalog needs. */
+export interface RaceSource {
     readonly fingerprint: string
-    /** All compiled skills, frozen, in canonical (id-ascending) order. */
-    readonly skills: readonly CompiledSkill[]
     /** All compiled races, frozen, in canonical order. */
     readonly races: readonly CompiledRace[]
-    /** Skill by numeric id, or undefined. */
-    skillById(id: number): CompiledSkill | undefined
     /** Race by the canonical composite key, or undefined. */
     raceByKey(name: string, turnNumber: number): CompiledRace | undefined
     /** ALL races sharing a bare name (bare names collide by design); empty array when none. */
     racesByName(name: string): readonly CompiledRace[]
 }
 
-function sha256(text: string): string {
-    return createHash("sha256").update(text, "utf8").digest("hex")
+/** The read-only reader surface. Returned records/arrays are frozen. */
+export interface MasterDataReader extends RaceSource {
+    readonly manifest: MasterDataManifest
+    /** All compiled skills, frozen, in canonical (id-ascending) order. */
+    readonly skills: readonly CompiledSkill[]
+    /** Skill by numeric id, or undefined. */
+    skillById(id: number): CompiledSkill | undefined
 }
 
 function raceKeyString(name: string, turnNumber: number): string {
@@ -60,39 +62,35 @@ function parseOrThrow(text: string, artifact: string): unknown {
     }
 }
 
-/**
- * Builds a reader from the three artifact contents. Verifies schema versions and both artifact hashes
- * against the manifest before exposing any data. Throws {@link MasterDataReaderError} on any mismatch.
- */
-export function createMasterDataReader(sources: CompiledSources): MasterDataReader {
-    const manifest = parseOrThrow(sources.manifest, "manifest.json") as MasterDataManifest
+function readManifest(text: string): MasterDataManifest {
+    const manifest = parseOrThrow(text, "manifest.json") as MasterDataManifest
     if (manifest?.manifestSchemaVersion !== MANIFEST_SCHEMA_VERSION) {
         throw new MasterDataReaderError("unsupportedManifestVersion", `manifest schema version ${manifest?.manifestSchemaVersion} != supported ${MANIFEST_SCHEMA_VERSION}`)
     }
+    return manifest
+}
 
-    // Verify each compiled artifact's bytes against the manifest hash before trusting its content.
-    const expected = new Map((manifest.compiled ?? []).map((c) => [c.path, c.sha256]))
-    verifyArtifactHash(expected, "src/data/compiled/skills.json", sources.skills)
-    verifyArtifactHash(expected, "src/data/compiled/races.json", sources.races)
+function compiledHashes(manifest: MasterDataManifest): Map<string, string> {
+    return new Map((manifest.compiled ?? []).map((c) => [c.path, c.sha256]))
+}
 
-    const skillsDoc = parseOrThrow(sources.skills, "skills.json") as { schemaVersion?: number; skills?: CompiledSkill[] }
-    if (skillsDoc?.schemaVersion !== SKILLS_SCHEMA_VERSION) {
-        throw new MasterDataReaderError("unsupportedSkillsVersion", `skills schema version ${skillsDoc?.schemaVersion} != supported ${SKILLS_SCHEMA_VERSION}`)
+function verifyArtifactHash(expected: Map<string, string>, path: string, content: string): void {
+    const want = expected.get(path)
+    if (want === undefined) throw new MasterDataReaderError("missingArtifactEntry", `manifest has no compiled entry for ${path}`)
+    const got = sha256Hex(content)
+    if (got !== want) throw new MasterDataReaderError("artifactHashMismatch", `${path} sha256 ${got} != manifest ${want}`)
+}
+
+function readRaces(text: string): CompiledRace[] {
+    const doc = parseOrThrow(text, "races.json") as { schemaVersion?: number; races?: CompiledRace[] }
+    if (doc?.schemaVersion !== RACES_SCHEMA_VERSION) {
+        throw new MasterDataReaderError("unsupportedRacesVersion", `races schema version ${doc?.schemaVersion} != supported ${RACES_SCHEMA_VERSION}`)
     }
-    const racesDoc = parseOrThrow(sources.races, "races.json") as { schemaVersion?: number; races?: CompiledRace[] }
-    if (racesDoc?.schemaVersion !== RACES_SCHEMA_VERSION) {
-        throw new MasterDataReaderError("unsupportedRacesVersion", `races schema version ${racesDoc?.schemaVersion} != supported ${RACES_SCHEMA_VERSION}`)
-    }
+    return doc.races ?? []
+}
 
-    const skills = skillsDoc.skills ?? []
-    const races = racesDoc.races ?? []
-
-    // Build lookups, rejecting a duplicate canonical key in the artifact (an integrity failure).
-    const byId = new Map<number, CompiledSkill>()
-    for (const s of skills) {
-        if (byId.has(s.id)) throw new MasterDataReaderError("duplicateSkillId", `compiled skills carry duplicate id ${s.id}`)
-        byId.set(s.id, Object.freeze(s))
-    }
+/** Freezes the race records and builds the canonical lookups, rejecting a duplicate key in the artifact. */
+function buildRaceSource(fingerprint: string, races: CompiledRace[]): RaceSource {
     const byKey = new Map<string, CompiledRace>()
     const byName = new Map<string, CompiledRace[]>()
     for (const r of races) {
@@ -105,40 +103,59 @@ export function createMasterDataReader(sources: CompiledSources): MasterDataRead
         if (list) list.push(r)
         else byName.set(r.name, [r])
     }
-
-    const frozenSkills = Object.freeze(skills.slice())
-    const frozenRaces = Object.freeze(races.slice())
     for (const list of byName.values()) Object.freeze(list)
-
+    const frozenRaces = Object.freeze(races.slice())
     return {
-        manifest: Object.freeze(manifest),
-        fingerprint: manifest.fingerprint,
-        skills: frozenSkills,
+        fingerprint,
         races: frozenRaces,
-        skillById: (id) => byId.get(id),
         raceByKey: (name, turnNumber) => byKey.get(raceKeyString(name, turnNumber)),
         racesByName: (name) => byName.get(name) ?? [],
     }
 }
 
-function verifyArtifactHash(expected: Map<string, string>, path: string, content: string): void {
-    const want = expected.get(path)
-    if (want === undefined) throw new MasterDataReaderError("missingArtifactEntry", `manifest has no compiled entry for ${path}`)
-    const got = sha256(content)
-    if (got !== want) throw new MasterDataReaderError("artifactHashMismatch", `${path} sha256 ${got} != manifest ${want}`)
+/**
+ * Builds a reader from the three artifact contents. Verifies schema versions and both artifact hashes
+ * against the manifest before exposing any data. Throws {@link MasterDataReaderError} on any mismatch.
+ */
+export function createMasterDataReader(sources: CompiledSources): MasterDataReader {
+    const manifest = readManifest(sources.manifest)
+
+    // Verify each compiled artifact's bytes against the manifest hash before trusting its content.
+    const expected = compiledHashes(manifest)
+    verifyArtifactHash(expected, SKILLS_ARTIFACT_PATH, sources.skills)
+    verifyArtifactHash(expected, RACES_ARTIFACT_PATH, sources.races)
+
+    const skillsDoc = parseOrThrow(sources.skills, "skills.json") as { schemaVersion?: number; skills?: CompiledSkill[] }
+    if (skillsDoc?.schemaVersion !== SKILLS_SCHEMA_VERSION) {
+        throw new MasterDataReaderError("unsupportedSkillsVersion", `skills schema version ${skillsDoc?.schemaVersion} != supported ${SKILLS_SCHEMA_VERSION}`)
+    }
+    const races = readRaces(sources.races)
+    const skills = skillsDoc.skills ?? []
+
+    const byId = new Map<number, CompiledSkill>()
+    for (const s of skills) {
+        if (byId.has(s.id)) throw new MasterDataReaderError("duplicateSkillId", `compiled skills carry duplicate id ${s.id}`)
+        byId.set(s.id, Object.freeze(s))
+    }
+    const frozenSkills = Object.freeze(skills.slice())
+
+    return {
+        ...buildRaceSource(manifest.fingerprint, races),
+        manifest: Object.freeze(manifest),
+        skills: frozenSkills,
+        skillById: (id) => byId.get(id),
+    }
 }
 
 /**
- * Convenience fs loader for the CLI and real use. Reads the three artifacts from a compiled directory and
- * builds a verified reader. A missing artifact throws a deterministic {@link MasterDataReaderError}.
+ * Builds a verified race source from already-parsed compiled documents. The app bundles the artifacts as
+ * parsed JSON rather than text, so the documents are re-serialized with the compiler's canonical writer and
+ * the races artifact is hash-checked against the same manifest entry {@link createMasterDataReader} checks.
+ * Skills are not read here, so nothing is claimed about them.
  */
-export function loadMasterDataFromDir(compiledDir: string): MasterDataReader {
-    const read = (name: string): string => {
-        try {
-            return readFileSync(join(compiledDir, name), "utf8")
-        } catch (e) {
-            throw new MasterDataReaderError("missingArtifact", `cannot read ${name} from ${compiledDir}: ${e instanceof Error ? e.message : String(e)}`)
-        }
-    }
-    return createMasterDataReader({ manifest: read("manifest.json"), skills: read("skills.json"), races: read("races.json") })
+export function createRaceSourceFromDocuments(manifestDoc: unknown, racesDoc: unknown): RaceSource {
+    const manifest = readManifest(canonicalJson(manifestDoc))
+    const racesText = canonicalJson(racesDoc)
+    verifyArtifactHash(compiledHashes(manifest), RACES_ARTIFACT_PATH, racesText)
+    return buildRaceSource(manifest.fingerprint, readRaces(racesText))
 }

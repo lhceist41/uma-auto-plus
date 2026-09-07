@@ -1,6 +1,6 @@
 import { join } from "node:path"
 import process from "node:process"
-import { loadRaceCatalog } from "../../raceLab/catalog.ts"
+import { loadRaceCatalog } from "../../raceLab/catalog.node.ts"
 import { DISTANCE_BAND_MAX, classifyActivation, distanceTypeFor, gatesAdmit, loadRaceSurvivalEvidence, opponentDamageFraction, parseRaceGates, resolveCourse, resolveRecoverySkill, resolveWorstThreat, selfRecoveryFraction } from "../evidence.ts"
 import { STRATEGY_HP_COEFFICIENT, computeCruiseHp, computeEffectiveHp, computeMaxHp, solveRequiredStamina } from "../mechanics.ts"
 import { buildSurvivalConstraint, computeSurvivalEnvelope, createRaceSurvivalInput } from "../envelope.ts"

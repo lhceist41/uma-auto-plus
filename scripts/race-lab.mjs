@@ -30,9 +30,10 @@
 import { existsSync, statSync } from "node:fs"
 import { join, dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { loadRaceCatalog } from "../src/lib/raceLab/catalog.ts"
+import { loadRaceCatalog } from "../src/lib/raceLab/catalog.node.ts"
 import { buildObjectiveTimeline, buildAllObjectiveTimelines, loadRawObjectives, RaceLabError } from "../src/lib/raceLab/objectives.ts"
-import { loadPlan, validatePlan } from "../src/lib/raceLab/planValidator.ts"
+import { validatePlan } from "../src/lib/raceLab/planValidator.ts"
+import { loadPlan } from "../src/lib/raceLab/planValidator.node.ts"
 import { buildSchedule, analyzePressure } from "../src/lib/raceLab/pressure.ts"
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..")

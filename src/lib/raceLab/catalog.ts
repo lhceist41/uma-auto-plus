@@ -3,10 +3,10 @@
 // A thin, deterministic facade over the master-data reader. It exposes canonical-key and bare-name
 // lookups plus a per-turn index and collision statistics. There is deliberately NO bare-name
 // single-result helper (that would silently pick one of the colliding same-name races), and there is no
-// raw-`races.json` fallback (the compiled layer is the single authority).
+// raw-`races.json` fallback (the compiled layer is the single authority). The filesystem loader lives in
+// catalog.node.ts so this module stays importable from the app bundle.
 
-import { loadMasterDataFromDir } from "../masterData/reader.ts"
-import type { MasterDataReader } from "../masterData/reader.ts"
+import type { RaceSource } from "../masterData/reader.ts"
 import type { CompiledRace, CatalogStats } from "./types.ts"
 
 /** The read-only catalog surface. All returned arrays are frozen (inherited from the reader). */
@@ -29,8 +29,8 @@ function compositeKey(name: string, turnNumber: number): string {
     return JSON.stringify([name, turnNumber])
 }
 
-/** Builds a catalog from an already-loaded, hash-verified master-data reader. */
-export function createRaceCatalog(reader: MasterDataReader): RaceCatalog {
+/** Builds a catalog from an already-loaded, hash-verified race source. */
+export function createRaceCatalog(reader: RaceSource): RaceCatalog {
     // Per-turn index, built once. Reader arrays are already frozen; sort defensively into new arrays.
     const byTurn = new Map<number, CompiledRace[]>()
     for (const race of reader.races) {
@@ -64,9 +64,4 @@ export function createRaceCatalog(reader: MasterDataReader): RaceCatalog {
         catalogStats: () => stats,
         fingerprint: () => reader.fingerprint,
     }
-}
-
-/** Convenience loader: hash-verify the compiled artifacts from a directory and build a catalog. */
-export function loadRaceCatalog(compiledDir: string): RaceCatalog {
-    return createRaceCatalog(loadMasterDataFromDir(compiledDir))
 }

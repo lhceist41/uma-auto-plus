@@ -23,7 +23,7 @@ const APT = "turf=A,dirt=A,sprint=A,mile=A,medium=A,long=A"
 
 describe("generate-racing-plan consumes RaceLab (adoption seam)", () => {
     it("1. imports RaceLab factual APIs and no longer reads raw races.json / hand-rolls objective canonicalization", () => {
-        expect(GENERATOR_SRC).toMatch(/from "\.\.\/src\/lib\/raceLab\/catalog\.ts"/)
+        expect(GENERATOR_SRC).toMatch(/from "\.\.\/src\/lib\/raceLab\/catalog\.node\.ts"/)
         expect(GENERATOR_SRC).toMatch(/buildObjectiveTimeline/)
         expect(GENERATOR_SRC).toMatch(/loadRaceCatalog/)
         // it must not read the raw race data file directly anymore (a comment may still name it)

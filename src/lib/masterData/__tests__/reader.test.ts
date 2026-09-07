@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto"
 import { compileMasterData } from "../compiler.ts"
-import { createMasterDataReader, MasterDataReaderError } from "../reader.ts"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import process from "node:process"
+import { createMasterDataReader, createRaceSourceFromDocuments, MasterDataReaderError } from "../reader.ts"
+import { loadMasterDataFromDir } from "../reader.node.ts"
 import type { RawFamily, RawInput } from "../types.ts"
 
 const sha = (s: string): string => createHash("sha256").update(s, "utf8").digest("hex")
@@ -114,5 +118,47 @@ describe("createMasterDataReader - Part P failure behavior", () => {
     })
     it("malformed compiled JSON (with a matching hash) still fails, never falls back to raw", () => {
         throwsCode(() => createMasterDataReader(sources([], [race("R", 10)], { skillsRaw: "{not json" })), "malformedCompiledJson")
+    })
+})
+
+describe("createRaceSourceFromDocuments", () => {
+    const COMPILED_DIR = join(process.cwd(), "src/data/compiled")
+    const read = (name: string): string => readFileSync(join(COMPILED_DIR, name), "utf8")
+    const manifestDoc = JSON.parse(read("manifest.json"))
+    const racesDoc = JSON.parse(read("races.json"))
+
+    it("matches the filesystem reader on the tracked artifacts", () => {
+        const fromText = loadMasterDataFromDir(COMPILED_DIR)
+        const fromDocs = createRaceSourceFromDocuments(manifestDoc, racesDoc)
+        expect(fromDocs.fingerprint).toBe(fromText.fingerprint)
+        expect(fromDocs.races.length).toBe(fromText.races.length)
+        expect(fromDocs.races).toEqual(fromText.races)
+        // Same collision behaviour on a bare name that recurs, and same composite-key resolution.
+        expect(fromDocs.racesByName("Marine Cup").map((r) => r.turnNumber)).toEqual(fromText.racesByName("Marine Cup").map((r) => r.turnNumber))
+        expect(fromDocs.raceByKey("Marine Cup", 31)).toEqual(fromText.raceByKey("Marine Cup", 31))
+        expect(fromDocs.raceByKey("Marine Cup", 32)).toBeUndefined()
+    })
+
+    it("rejects a tampered races document", () => {
+        const tampered = JSON.parse(read("races.json"))
+        tampered.races[0].fans = tampered.races[0].fans + 1
+        try {
+            createRaceSourceFromDocuments(manifestDoc, tampered)
+            throw new Error("expected artifactHashMismatch")
+        } catch (e) {
+            expect((e as MasterDataReaderError).code).toBe("artifactHashMismatch")
+        }
+    })
+
+    it("rejects a manifest whose recorded hash does not describe the races artifact", () => {
+        const tamperedManifest = JSON.parse(read("manifest.json"))
+        const entry = tamperedManifest.compiled.find((c: { path: string }) => c.path === "src/data/compiled/races.json")
+        entry.sha256 = "0".repeat(64)
+        try {
+            createRaceSourceFromDocuments(tamperedManifest, racesDoc)
+            throw new Error("expected artifactHashMismatch")
+        } catch (e) {
+            expect((e as MasterDataReaderError).code).toBe("artifactHashMismatch")
+        }
     })
 })

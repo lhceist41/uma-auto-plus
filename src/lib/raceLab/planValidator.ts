@@ -6,9 +6,7 @@
 // the wrong turn. Findings are severity-tagged (error/warning/info) and deterministically ordered. It uses
 // no "optimal"/"best" language and makes no policy recommendation - the runtime remains the race authority.
 
-import { readFileSync } from "node:fs"
 import type { RaceCatalog } from "./catalog.ts"
-import { RaceLabError } from "./objectives.ts"
 import { buildSchedule, analyzePressure } from "./pressure.ts"
 import type { PlannedRace, PlanIssue, ObjectiveTimeline, PlanValidationReport, IssueSeverity } from "./types.ts"
 
@@ -35,13 +33,16 @@ export function parsePlan(input: string): { plan: PlannedRace[]; issues: PlanIss
     }
     const plan: PlannedRace[] = []
     parsed.forEach((entry, i) => {
-        if (!isObject(entry) || typeof entry.raceName !== "string" || typeof entry.turnNumber !== "number" || !Number.isInteger(entry.turnNumber)) {
-            issues.push({ severity: "error", code: "malformedPlanEntry", detail: `plan entry ${i} is missing a string raceName or integer turnNumber`, turn: null })
+        // raceName, date and turnNumber are all required reads in Racing.kt#loadUserPlannedRaces; priority
+        // is an optInt. A missing required field throws there and discards the WHOLE plan, so an entry that
+        // omits one is an error here even though this parser keeps going to report every one of them.
+        if (!isObject(entry) || typeof entry.raceName !== "string" || typeof entry.date !== "string" || typeof entry.turnNumber !== "number" || !Number.isInteger(entry.turnNumber)) {
+            issues.push({ severity: "error", code: "malformedPlanEntry", detail: `plan entry ${i} is missing a string raceName, a string date, or an integer turnNumber`, turn: null })
             return
         }
         plan.push({
             raceName: entry.raceName,
-            date: typeof entry.date === "string" ? entry.date : "",
+            date: entry.date,
             turnNumber: entry.turnNumber,
             priority: typeof entry.priority === "number" && Number.isInteger(entry.priority) ? entry.priority : 0,
         })
@@ -64,9 +65,9 @@ export function validatePlan(plan: readonly PlannedRace[], catalog: RaceCatalog,
         if (race === undefined) {
             const byName = catalog.racesByName(entry.raceName)
             if (byName.length > 0) {
-                issues.push({ severity: "error", code: "planTurnMismatch", detail: `"${entry.raceName}" is not run on turn ${entry.turnNumber}; it exists on turn(s) ${byName.map((r) => r.turnNumber).join(", ")}`, turn: entry.turnNumber })
+                issues.push({ severity: "error", code: "planTurnMismatch", detail: `"${entry.raceName}" is not run on turn ${entry.turnNumber}; it exists on turn(s) ${byName.map((r) => r.turnNumber).join(", ")}`, turn: entry.turnNumber, raceName: entry.raceName })
             } else {
-                issues.push({ severity: "error", code: "raceNotFound", detail: `no canonical race named "${entry.raceName}"`, turn: entry.turnNumber })
+                issues.push({ severity: "error", code: "raceNotFound", detail: `no canonical race named "${entry.raceName}"`, turn: entry.turnNumber, raceName: entry.raceName })
             }
         }
     }
@@ -84,7 +85,7 @@ export function validatePlan(plan: readonly PlannedRace[], catalog: RaceCatalog,
         if (distinctNames.size > 1) {
             issues.push({ severity: "error", code: "conflictingRacesOnTurn", detail: `turn ${turn} has ${distinctNames.size} different planned races: ${[...distinctNames].sort().join(", ")}`, turn })
         } else {
-            issues.push({ severity: "error", code: "duplicateTurn", detail: `turn ${turn} lists the same race ${entries.length} times`, turn })
+            issues.push({ severity: "error", code: "duplicateTurn", detail: `turn ${turn} lists the same race ${entries.length} times`, turn, raceName: entries[0].raceName })
         }
     }
 
@@ -118,17 +119,4 @@ export function validatePlan(plan: readonly PlannedRace[], catalog: RaceCatalog,
 
     issues.sort((a, b) => (a.turn ?? -1) - (b.turn ?? -1) || SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || (a.code < b.code ? -1 : a.code > b.code ? 1 : a.detail < b.detail ? -1 : a.detail > b.detail ? 1 : 0))
     return { plan: [...plan], issues, pressure, ok: !issues.some((i) => i.severity === "error") }
-}
-
-/** Loads a plan from a file path or an inline JSON string (offline, read-only). */
-export function loadPlan(pathOrString: string): { plan: PlannedRace[]; issues: PlanIssue[] } {
-    const looksLikeJson = pathOrString.trim().startsWith("[")
-    if (looksLikeJson) return parsePlan(pathOrString)
-    let content: string
-    try {
-        content = readFileSync(pathOrString, "utf8")
-    } catch (e) {
-        throw new RaceLabError("planFileUnreadable", `cannot read plan file ${pathOrString}: ${e instanceof Error ? e.message : String(e)}`)
-    }
-    return parsePlan(content)
 }

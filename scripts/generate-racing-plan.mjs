@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url"
 // Factual race/objective interpretation flows through the landed RaceLab layer (canonical (name,
 // turnNumber) identity, hash-verified compiled data, URA objective modeling) instead of re-reading the
 // raw JSON here. RaceLab is factual only; all selection/ordering/strategy below stays generator-local.
-import { loadRaceCatalog } from "../src/lib/raceLab/catalog.ts"
+import { loadRaceCatalog } from "../src/lib/raceLab/catalog.node.ts"
 import { buildObjectiveTimeline, loadRawObjectives } from "../src/lib/raceLab/objectives.ts"
 import { APTITUDE_ORDER } from "../src/lib/raceLab/types.ts"
 

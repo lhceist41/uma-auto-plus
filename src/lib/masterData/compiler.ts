@@ -10,6 +10,7 @@
 // the same compiler version yield byte-identical artifacts and an identical fingerprint on any machine.
 
 import { createHash } from "node:crypto"
+import { canonicalJson } from "./digest.ts"
 import {
     COMPILER_VERSION,
     NORMALIZATION_VERSION,
@@ -47,22 +48,6 @@ const LARGE_CHANGE_PCT = 0.2
 
 function sha256(text: string): string {
     return createHash("sha256").update(text, "utf8").digest("hex")
-}
-
-/**
- * Deterministic JSON: fixed 2-space indent, trailing newline, key order taken from construction order.
- *
- * The U+2014 (em dash) code point is re-emitted as the six-character JSON escape (backslash-u-2014). This
- * is purely textual: JSON.stringify only ever places that code point inside a string value (every
- * structural token is ASCII), and the escape decodes back to the identical code point, so JSON.parse
- * yields exactly the same string. This repository avoids the literal U+2014 character in newly generated
- * tracked files, but skill/race source text legitimately contains em dashes (game skill names), and a
- * compiled artifact is itself a new tracked file, so escaping keeps the canonical value intact while
- * producing a committable artifact. Applies to every artifact this serializer emits, so future em-dash
- * source is handled too.
- */
-function canonicalJson(value: unknown): string {
-    return JSON.stringify(value, null, 2).split(String.fromCharCode(0x2014)).join("\\u2014") + "\n"
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
