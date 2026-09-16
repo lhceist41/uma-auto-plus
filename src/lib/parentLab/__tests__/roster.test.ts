@@ -1,5 +1,6 @@
 import { buildRosterSnapshots, latestTrustedSnapshot, parseRosterScanRecords, ROSTER_APTITUDE_KEYS } from "../roster.ts"
-import { ROSTER_APTITUDE_KEYS as RE_EXPORTED_APTITUDE_KEYS } from "../retentionTargets.ts"
+import * as retentionTargets from "../retentionTargets.ts"
+import * as parentLab from "../index.ts"
 
 // The roster snapshot is exercised through the same parse path the device writer produces: JSONL
 // lines authored exactly as the Kotlin serializer writes them, parsed and derived offline.
@@ -296,7 +297,19 @@ describe("identity evidence consistency", () => {
 
     it("keeps the aptitude keys canonical in one place, in the order the device writes them", () => {
         expect(ROSTER_APTITUDE_KEYS).toEqual(["turf", "dirt", "sprint", "mile", "medium", "long", "front", "pace", "late", "end"])
-        expect(RE_EXPORTED_APTITUDE_KEYS).toBe(ROSTER_APTITUDE_KEYS)
+        expect(retentionTargets.ROSTER_APTITUDE_KEYS).toBe(ROSTER_APTITUDE_KEYS)
+        expect(parentLab.ROSTER_APTITUDE_KEYS).toBe(ROSTER_APTITUDE_KEYS)
+    })
+
+    it("exports the original retention-target bindings through the public barrel", () => {
+        expect(parentLab.APTITUDE_GRADE_ORDER).toBe(retentionTargets.APTITUDE_GRADE_ORDER)
+        expect(parentLab.aptitudeGradeRank).toBe(retentionTargets.aptitudeGradeRank)
+        expect(parentLab.TARGET_PROFILE_IDS).toBe(retentionTargets.TARGET_PROFILE_IDS)
+        expect(parentLab.TARGET_PROFILES).toBe(retentionTargets.TARGET_PROFILES)
+        expect(parentLab.resolveTargetProfile).toBe(retentionTargets.resolveTargetProfile)
+        expect(parentLab.clearsAptitudeGate).toBe(retentionTargets.clearsAptitudeGate)
+        expect(parentLab.TARGET_DIMENSION_NAMES).toBe(retentionTargets.TARGET_DIMENSION_NAMES)
+        expect(parentLab.targetDimensions).toBe(retentionTargets.targetDimensions)
     })
 })
 

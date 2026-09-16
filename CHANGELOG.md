@@ -12,7 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- A plan check on the Racing Plan page. Before a career starts it reports what your planned races look like to the bot: races it does not recognise, races planned on a turn they do not run on, more than one race booked on the same turn, and races planned back to back that the bot may not be allowed to run. It also tells you when a saved plan is missing information the bot needs, which is the case for the plan the app ships with until you pick your own races. It is read-only and never blocks saving or starting a career, and it does not promise a race will be entered: aptitude, fans and energy are still decided during the career.
+- A plan check on the Racing Plan page. Before a career starts it reports what your planned races look like to the bot: races it does not recognise, races planned on a turn they do not run on, more than one race booked on the same turn, and races planned back to back that the bot may not be allowed to run. It also tells you when a saved plan is missing information the bot needs, including older saved defaults. It is read-only and never blocks saving or starting a career, and it does not promise a race will be entered: aptitude, fans and energy are still decided during the career.
 
 - **Record Decision Data**, a new setting on the Settings page, on by default. The bot keeps a small per-turn record of the decisions it made so a career can be reviewed and improved later. It is stored on your device only and nothing is uploaded, it is independent of Debug Mode (turning it on does not turn on the heavy debug diagnostics), and you can switch it off to keep storage use down.
 
@@ -24,6 +24,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Newly generated default Racing Plans include the turn information the bot needs to read them. Race selection, order and priorities are unchanged, so scheduling conflicts can still appear. Existing saved and imported plans are preserved; see [Racing Plan recovery](TROUBLESHOOTING.md#the-racing-plan-is-missing-information) for older incomplete plans.
 - Stopping the bot from the floating overlay button during the pause between queued runs now ends the queue properly, instead of leaving Home stuck on "Waiting..." for a queue that had already stopped.
 
 ## [1.4.0] - 2026-08-28

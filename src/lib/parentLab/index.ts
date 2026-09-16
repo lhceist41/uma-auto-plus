@@ -8,7 +8,20 @@ export * from "./lineage.ts"
 export * from "./roster.ts"
 export * from "./reconcile.ts"
 export * from "./retentionTypes.ts"
-export * from "./retentionTargets.ts"
+export {
+    APTITUDE_GRADE_ORDER,
+    aptitudeGradeRank,
+    TARGET_PROFILE_IDS,
+    TARGET_PROFILES,
+    resolveTargetProfile,
+    clearsAptitudeGate,
+    TARGET_DIMENSION_NAMES,
+    targetDimensions,
+    type TargetProfileId,
+    type TargetProfile,
+    type TargetDimensionName,
+    type TargetDimensions,
+} from "./retentionTargets.ts"
 export * from "./retentionEvidence.ts"
 export * from "./retentionAdvisor.ts"
 export * from "./quarantineTypes.ts"

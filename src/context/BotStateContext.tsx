@@ -511,6 +511,7 @@ export const defaultSettings: Settings = {
                 raceName: race.name,
                 date: race.date,
                 priority: index,
+                turnNumber: race.turnNumber,
             }))
         ),
         racingPlanData: JSON.stringify(racesData),

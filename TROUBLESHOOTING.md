@@ -50,6 +50,14 @@ that happens.
 
 Apply a **preset** for the character you're running: **Home → pick a scenario → pick the character**. The presets carry the skill-purchase plans and per-event choices. Without one, the bot falls back to generic scoring.
 
+## The Racing Plan is missing information
+
+Older saved defaults can lack information the bot needs, causing it to ignore the whole plan. Newly generated defaults include that information, but saved and imported plans are not automatically repaired. The default still contains all races and can have scheduling conflicts.
+
+Before replacing an affected plan, use **Settings > Settings Management > Export Settings** and save a copy through the share dialog. Keep a record of the races and dates you want; importing the old export later will also restore its incomplete plan.
+
+On **Racing Plan**, use **Clear** to remove the entire current selection, then pick the required races and dates again. Search, minimum fans, terrain, grade and distance filters limit the visible list; OP and Pre-OP races are excluded. If a wanted race is unavailable, keep your saved copy rather than substitute a different race. **Add All** replaces the entire plan with the currently filtered list, including new priorities; it does not append to your selection or restore the previous schedule. Review the resulting selections and plan check before use. Readable data can still have same-turn conflicts or consecutive-race warnings.
+
 ## Reporting a bug
 
 A useful report includes a **log file**. The bot writes one per career to:
