@@ -6,7 +6,7 @@
     "skillsSchemaVersion": 1,
     "racesSchemaVersion": 1
   },
-  "fingerprint": "f12d18fd72e13bb42fb0d15ed0403741ec8d8b28ea5d9dc29107ad81eca4b4bf",
+  "fingerprint": "41ceb7389fcc9a506417de79e8161e6e24048b2de7bcb0a59cbbb5b8340593f0",
   "knownProvenance": {
     "generator": "scripts/data-scraper",
     "recordedSourceVersion": null,
@@ -67,8 +67,8 @@
     {
       "family": "supports",
       "path": "src/data/supports.json",
-      "sha256": "8d2a9569cc2ba6949bc92c3cb99e4ac773c55c9e540c3e89cd5f813f4eb93116",
-      "recordCount": 84,
+      "sha256": "ea6eadebb05cada2606b89f632083e01479d16765364129e0731915a121eca6b",
+      "recordCount": 86,
       "provenance": {
         "origin": "data-scraper",
         "sourceVersion": null

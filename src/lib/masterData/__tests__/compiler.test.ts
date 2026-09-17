@@ -1,5 +1,6 @@
 import { readFileSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
 import { execFileSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import { join } from "node:path"
 import process from "node:process"
 import { compileMasterData } from "../compiler.ts"
@@ -376,6 +377,38 @@ describe("real committed dataset", () => {
         expect(r.stats.distinctBareRaceNameCount).toBe(296)
         expect(r.stats.bareNameCollisionCount).toBe(106)
         expect(r.stats.objectiveReferencesChecked).toBe(511)
+    })
+
+    // Event names and ordered outcomes from steve1316/uma-android-automation src/data/supports.json,
+    // revision 6e3c185ed8bc91523b2dd9d133deab49401d1c0f.
+    const supportEvents = {
+        "Symboli Kris S": {
+            "A Professional's Feelings": ["Guts +25\nSymboli Kris S bond +5", "Energy +15\nSymboli Kris S bond +5"],
+            "A Professional's Creed": ["Stamina +15\nSymboli Kris S bond +5", "Cloudy Days ○ hint +1\nSymboli Kris S bond +5"],
+            "(❯)\nA Day off with Kris S": ["Maximum Energy +4\nMood +1\nSymboli Kris S bond +5", "Stamina +7\nPower +7\nGuts +7\nSymboli Kris S bond +5"],
+            "(❯❯)\nProud and Polar Opposites": ["Energy +15\nGuts +10\nCompetitive Spirit ○ hint +2\nSymboli Kris S bond +5"],
+            "(❯❯❯)\nKris S the Coachinator": ["Stamina +15\nGuts +15\nSkill points +10\nClaw Forward hint +1\nSymboli Kris S bond +5"],
+        },
+        "Tanino Gimlet": {
+            "The Euphoria of Destruction!": ["Energy +15\nTanino Gimlet bond +5", "Skill points +30\nTanino Gimlet bond +5"],
+            "An Electrifying Present!": ["Power +10\nSkill points +5\nTanino Gimlet bond +5", "End Closer Savvy ○ hint +1\nTanino Gimlet bond +5"],
+            "(❯)\nAs the Great Artists of Yore...": ["Randomly either\n----------\nPower +15\nSkill points +15\nTanino Gimlet bond +5\n----------\n\n----------\nSkill points +10\nTanino Gimlet bond +5"],
+            "(❯❯)\nAs the Criminal from the North...": ["Randomly either\n----------\nStamina +15\nPower +15\nTanino Gimlet bond +5\n----------\n\n----------\nPower +10\nTanino Gimlet bond +5"],
+            "(❯❯❯)\nAs Bacchus, God of Wine...": ["Stamina +10\nPower +10\nSturm und Drang hint +1\nTanino Gimlet bond +5"],
+        },
+    }
+
+    it.each(Object.entries(supportEvents))("preserves the verified event and outcome order for %s", (name, expected) => {
+        const supports = JSON.parse(readFileSync(join(DATA_DIR, "supports.json"), "utf8"))
+        expect(Object.entries(supports[name])).toEqual(Object.entries(expected))
+    })
+
+    it("records the actual support source bytes and count in the committed manifest", () => {
+        const bytes = readFileSync(join(DATA_DIR, "supports.json"))
+        const manifest = JSON.parse(readFileSync(join(DATA_DIR, "compiled/manifest.json"), "utf8")) as MasterDataManifest
+        const source = manifest.source.find((entry) => entry.family === "supports")
+        expect(source?.sha256).toBe(createHash("sha256").update(bytes).digest("hex"))
+        expect(source?.recordCount).toBe(Object.keys(JSON.parse(bytes.toString("utf8"))).length)
     })
 
     // Part D: pin the exact unresolved-chain reference set so a second dangling ref cannot pass silently
