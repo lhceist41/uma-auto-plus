@@ -85,6 +85,7 @@ object VeteranIdentityNames {
             "Vodka",
             "Winning Ticket",
             "Yaeno Muteki",
+            "Yamanin Zephyr",
             "Yukino Bijin",
         )
 }

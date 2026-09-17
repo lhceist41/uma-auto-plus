@@ -85,6 +85,46 @@ test("buildPayload preserves a multiple-goal character and a character with no f
     assert.ok(admire.mandatoryRaces.length > 0)
 })
 
+test("Yamanin Zephyr preserves all seven entry gates independently of race rewards", () => {
+    const expected = [
+        [31, "New Zealand Trophy", 1750],
+        [34, "Aoi Stakes", 1250],
+        [42, "Sprinters Stakes", 15000],
+        [46, "Mile Championship", 15000],
+        [59, "Yasuda Kinen", 15000],
+        [66, "Sprinters Stakes", 15000],
+        [68, "Tenno Sho (Autumn)", 20000],
+    ]
+    const payload = buildPayload(objectives, races)
+    const zephyr = payload.characters["Yamanin Zephyr"]
+    assert.deepEqual(zephyr, {
+        fanGoals: [],
+        mandatoryRaces: expected.map(([turn, raceName, fansNeeded]) => ({ turn, isChoice: false, options: [{ raceName, fansNeeded }] })),
+    })
+    for (const [turn, raceName, fansNeeded] of expected) {
+        const matches = Object.values(races).filter((race) => race.name === raceName && race.turnNumber === turn)
+        assert.equal(matches.length, 1)
+        assert.notEqual(matches[0].fans, fansNeeded)
+    }
+    const withoutZephyr = { ...objectives }
+    delete withoutZephyr["Yamanin Zephyr"]
+    delete payload.characters["Yamanin Zephyr"]
+    assert.deepEqual(payload, buildPayload(withoutZephyr, races))
+})
+
+test("Yamanin Zephyr rejects unknown or invalid gates and never substitutes rewards for zero", () => {
+    for (const fansNeeded of [undefined, -1, 1.5, "1750", NaN]) {
+        const character = structuredClone(objectives["Yamanin Zephyr"])
+        character.mandatoryRaces[0].options[0].fansNeeded = fansNeeded
+        assert.throws(() => buildCharacter("Yamanin Zephyr", character), GenerateError)
+    }
+    const character = structuredClone(objectives["Yamanin Zephyr"])
+    character.mandatoryRaces[0].options[0].fansNeeded = 0
+    const built = buildCharacter("Yamanin Zephyr", character)
+    assert.equal(built.mandatoryRaces.length, 6)
+    assert.ok(built.mandatoryRaces.every((race) => race.turn !== 31))
+})
+
 test("buildPayload preserves a differing-threshold choice turn without flattening it", () => {
     const payload = buildPayload(objectives, races)
     const t30 = payload.characters["Matikanefukukitaru"].mandatoryRaces.find((m) => m.turn === 30)

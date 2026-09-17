@@ -67,6 +67,24 @@ test("the live-observed alternate costumes are present with their exact canonica
     assert.equal(payload.characters["Mihono Bourbon"].outfits[0], "MB-19890425")
 })
 
+test("Yamanin Zephyr adds exactly the Global Fluttertail Spirit identity", () => {
+    assert.deepEqual(outfits["Yamanin Zephyr"], {
+        name: "Yamanin Zephyr",
+        outfits: [{ title: "Fluttertail Spirit", cardId: 107801, releasedEn: "2026-09-01" }],
+    })
+    const payload = buildPayload(characters, outfits)
+    assert.equal(Object.keys(payload.characters).filter((name) => name === "Yamanin Zephyr").length, 1)
+    assert.deepEqual(payload.characters["Yamanin Zephyr"], { outfits: ["Fluttertail Spirit"] })
+    assert.equal(payload.outfitSource, "gametora character-cards title_en_gl")
+    const withoutZephyr = { ...characters }
+    delete withoutZephyr["Yamanin Zephyr"]
+    const prior = buildPayload(withoutZephyr, outfits)
+    assert.equal(payload.characterCount, prior.characterCount + 1)
+    assert.equal(payload.outfitCount, prior.outfitCount + 1)
+    delete payload.characters["Yamanin Zephyr"]
+    assert.deepEqual(payload.characters, prior.characters)
+})
+
 test("no two outfits of the SAME character are close enough to be confused", () => {
     // The whole point of conditioning the matcher on the resolved character: within one character
     // the costume titles are far apart, so a confident read cannot land on the wrong costume. This

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "outfitSource": "gametora character-cards title_en_gl",
-  "characterCount": 65,
-  "outfitCount": 119,
+  "characterCount": 66,
+  "outfitCount": 120,
   "characters": {
     "Admire Vega": {
       "outfits": [
@@ -376,6 +376,11 @@
     "Yaeno Muteki": {
       "outfits": [
         "Blazed Head, Covered Fists"
+      ]
+    },
+    "Yamanin Zephyr": {
+      "outfits": [
+        "Fluttertail Spirit"
       ]
     },
     "Yukino Bijin": {

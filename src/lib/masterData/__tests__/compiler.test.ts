@@ -376,7 +376,7 @@ describe("real committed dataset", () => {
         expect(r.stats.uniqueRaceKeyCount).toBe(402)
         expect(r.stats.distinctBareRaceNameCount).toBe(296)
         expect(r.stats.bareNameCollisionCount).toBe(106)
-        expect(r.stats.objectiveReferencesChecked).toBe(511)
+        expect(r.stats.objectiveReferencesChecked).toBe(518)
     })
 
     // Event names and ordered outcomes from steve1316/uma-android-automation src/data/supports.json,
