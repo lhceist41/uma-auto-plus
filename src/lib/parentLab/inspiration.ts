@@ -389,6 +389,7 @@ export interface VeteranInspirationView {
     readonly rank: string | null
     readonly observedAt: number | null
     readonly scanId: string
+    readonly snapshotCompatible: boolean
     readonly selfFactorCount: number
     readonly selfFactors: readonly InspirationFactorRecord[]
     /** Trusted canonical self fingerprint, or null when any self factor is unresolved. */
@@ -439,6 +440,17 @@ function rankBeats(a: readonly number[], b: readonly number[]): boolean {
     return false
 }
 
+function compatibleScanIds(scans: readonly InspirationScanRecord[]): ReadonlySet<string> {
+    const compatible = new Set<string>()
+    const incompatible = new Set<string>()
+    for (const scan of scans) {
+        if (scan.snapshotCompatibility) compatible.add(scan.scanId)
+        else incompatible.add(scan.scanId)
+    }
+    for (const scanId of incompatible) compatible.delete(scanId)
+    return compatible
+}
+
 /**
  * The best capture per Veteran, keyed by `rosterFingerprint`, chosen by [captureRank].
  *
@@ -447,7 +459,7 @@ function rankBeats(a: readonly number[], b: readonly number[]): boolean {
  * so no Veteran is silently dropped to MISSING by a single bad batch.
  */
 export function buildInspirationIndex(parsed: ParsedInspiration): ReadonlyMap<string, VeteranInspirationView> {
-    const compatibleScans = new Set<string>(parsed.scans.filter((s) => s.snapshotCompatibility).map((s) => s.scanId))
+    const compatibleScans = compatibleScanIds(parsed.scans)
     const best = new Map<string, VeteranInspirationRecord>()
     for (const entry of parsed.entries) {
         const fingerprint = entry.rosterFingerprint
@@ -466,6 +478,7 @@ export function buildInspirationIndex(parsed: ParsedInspiration): ReadonlyMap<st
             rank: entry.rank,
             observedAt: entry.observedAt,
             scanId: entry.scanId,
+            snapshotCompatible: compatibleScans.has(entry.scanId),
             selfFactorCount: entry.selfFactors.length,
             selfFactors: entry.selfFactors,
             selfFactorFingerprint: entry.selfFactorFingerprint,
@@ -494,7 +507,7 @@ export function buildInspirationIndex(parsed: ParsedInspiration): ReadonlyMap<st
  * seen, so the caller can fail closed on that Veteran.
  */
 export function detectInspirationConflicts(parsed: ParsedInspiration): ReadonlyMap<string, readonly string[]> {
-    const compatibleScans = new Set<string>(parsed.scans.filter((s) => s.snapshotCompatibility).map((s) => s.scanId))
+    const compatibleScans = compatibleScanIds(parsed.scans)
     const byFingerprint = new Map<string, Set<string>>()
     for (const entry of parsed.entries) {
         const fingerprint = entry.rosterFingerprint

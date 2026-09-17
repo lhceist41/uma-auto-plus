@@ -1,3 +1,5 @@
+import { contentHash128 } from "./identity.ts"
+
 // ParentLab PL-R1b roster ingest - the read side of the on-device `roster_scan` / `roster_entry`
 // records (roster_scan.jsonl). Pure, offline, deterministic, tolerant of malformed lines like
 // parseCorpus.
@@ -168,6 +170,10 @@ function num(v: unknown): number | null {
     return Number.isFinite(n) ? n : null
 }
 
+function exactInteger(v: unknown): number | null {
+    return typeof v === "number" && Number.isSafeInteger(v) ? v : null
+}
+
 function str(v: unknown): string | null {
     return typeof v === "string" && v.length > 0 ? v : null
 }
@@ -253,11 +259,11 @@ export function parseRosterScanRecords(text: string, file?: string): ParsedRoste
             }
             scans.push({
                 type: "roster_scan",
-                schemaVersion: num(obj.schemaVersion) ?? 0,
+                schemaVersion: exactInteger(obj.schemaVersion) ?? 0,
                 scanId,
                 startedAt: num(obj.startedAt),
                 completedAt: num(obj.completedAt),
-                displayedRegisteredUsed: num(obj.displayedRegisteredUsed),
+                displayedRegisteredUsed: exactInteger(obj.displayedRegisteredUsed),
                 displayedRegisteredCapacity: num(obj.displayedRegisteredCapacity),
                 filtersOff: typeof obj.filtersOff === "boolean" ? obj.filtersOff : null,
                 sortKey: str(obj.sortKey),
@@ -282,14 +288,14 @@ export function parseRosterScanRecords(text: string, file?: string): ParsedRoste
             continue
         }
         if (obj.type === "roster_entry") {
-            const scanIndex = num(obj.scanIndex)
+            const scanIndex = exactInteger(obj.scanIndex)
             if (!scanId || scanIndex === null) {
                 malformedRecords++
                 continue
             }
             entries.push({
                 type: "roster_entry",
-                schemaVersion: num(obj.schemaVersion) ?? 0,
+                schemaVersion: exactInteger(obj.schemaVersion) ?? 0,
                 scanId,
                 scanIndex,
                 observedAt: num(obj.observedAt),
@@ -336,6 +342,7 @@ export interface RosterSnapshot {
     readonly schema: typeof PARENTLAB_ROSTER_SCHEMA
     readonly schemaVersion: typeof PARENTLAB_ROSTER_SCHEMA_VERSION
     readonly scanId: string
+    readonly headerSchemaVersion: number | null
     /** The scan's completion time, or its start, or the newest entry observation. Null when unknown. */
     readonly observedAt: number | null
     readonly registeredUsed: number | null
@@ -456,6 +463,7 @@ function snapshotFor(scanId: string, header: RosterScanRecord | undefined, rows:
         schema: PARENTLAB_ROSTER_SCHEMA,
         schemaVersion: PARENTLAB_ROSTER_SCHEMA_VERSION,
         scanId,
+        headerSchemaVersion: header?.schemaVersion ?? null,
         observedAt,
         registeredUsed,
         registeredCapacity,
@@ -515,4 +523,25 @@ export function buildRosterSnapshots(parsed: ParsedRosterScans): readonly Roster
  */
 export function latestTrustedSnapshot(snapshots: readonly RosterSnapshot[]): RosterSnapshot | null {
     return snapshots.find((s) => s.trustedComplete) ?? null
+}
+
+/** The binding digest exists only for a complete v1 roster with a bijection of rows and identities. */
+export function rosterBindingDigest(snapshot: RosterSnapshot): string | null {
+    const count = snapshot.registeredUsed
+    if (!snapshot.trustedComplete || snapshot.headerSchemaVersion !== 1 || !Number.isSafeInteger(count) || count === null || count <= 0 || count !== snapshot.entries.length) return null
+    const indexes = new Set<number>()
+    const fingerprints = new Set<string>()
+    for (const entry of snapshot.entries) {
+        if (entry.schemaVersion !== 1 || entry.scanId !== snapshot.scanId || !Number.isSafeInteger(entry.scanIndex) || entry.scanIndex < 0 || entry.scanIndex >= count || indexes.has(entry.scanIndex)) return null
+        const fp = entry.rosterFingerprint
+        if (typeof fp !== "string" || !/^[0-9a-f]{32}$/.test(fp) || fingerprints.has(fp)) return null
+        indexes.add(entry.scanIndex)
+        fingerprints.add(fp)
+    }
+    return rosterBindingDigestForFingerprints([...fingerprints])
+}
+
+export function rosterBindingDigestForFingerprints(fingerprints: readonly unknown[]): string | null {
+    if (fingerprints.length === 0 || fingerprints.some((fp) => typeof fp !== "string" || !/^[0-9a-f]{32}$/.test(fp)) || new Set(fingerprints).size !== fingerprints.length) return null
+    return contentHash128(`parent_lab_roster_binding_v1\n${fingerprints.length}\n${[...(fingerprints as string[])].sort().join("\n")}\n`)
 }

@@ -17,7 +17,7 @@ import org.json.JSONObject
  * are in it. When a partition is empty, every Veteran in the trusted roster snapshot is outside it,
  * and that complement is derived offline against the snapshot rather than by re-walking the roster.
  */
-const val VETERAN_PROTECTION_SCHEMA_VERSION: Int = 1
+const val VETERAN_PROTECTION_SCHEMA_VERSION: Int = 2
 
 /** The account-wide size class of a favorite/memo partition, from the OK-enabled probe. */
 enum class ProtectionPopulation { EMPTY, NONEMPTY, UNKNOWN }
@@ -78,6 +78,9 @@ data class VeteranProtectionScan(
     val appVersion: String,
     val screenWidth: Int,
     val screenHeight: Int,
+    val rosterBindingVersion: Int? = null,
+    val rosterScanId: String? = null,
+    val rosterDigest: String? = null,
 )
 
 /** Serializes the protection scan to its durable `type:"veteran_protection"` record. Every value the
@@ -87,6 +90,9 @@ fun serializeVeteranProtectionScan(s: VeteranProtectionScan): JSONObject =
     JSONObject().apply {
         put("type", "veteran_protection")
         put("schemaVersion", s.schemaVersion)
+        s.rosterBindingVersion?.let { put("rosterBindingVersion", it) }
+        s.rosterScanId?.let { put("rosterScanId", it) }
+        s.rosterDigest?.let { put("rosterDigest", it) }
         put("scanId", s.scanId)
         put("startedAt", s.startedAt)
         put("completedAt", s.completedAt)

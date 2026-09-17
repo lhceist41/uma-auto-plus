@@ -3,6 +3,7 @@ package com.steve1316.uma_android_automation.bot
 import com.steve1316.uma_android_automation.utils.APTITUDE_ROLES
 import com.steve1316.uma_android_automation.utils.RosterIdentityEvidence
 import com.steve1316.uma_android_automation.utils.STAT_KEYS
+import com.steve1316.uma_android_automation.utils.contentHash128
 import com.steve1316.uma_android_automation.utils.rosterFingerprint
 import org.json.JSONArray
 import org.json.JSONObject
@@ -192,6 +193,20 @@ data class VeteranRosterScan(
 
 /** The assembled scan: one header plus its entries, ready for serialization. */
 data class AssembledRosterScan(val header: VeteranRosterScan, val entries: List<RosterScanEntry>)
+
+fun rosterBindingDigest(scan: AssembledRosterScan): String? {
+    val header = scan.header
+    val used = header.list.registeredUsed ?: return null
+    if (header.schemaVersion != 1 || header.scanId.isEmpty() || !header.trustedForRetention || header.list.filtersOff != true || used <= 0 || used != scan.entries.size) return null
+    val indexes = mutableSetOf<Int>()
+    val fingerprints = mutableSetOf<String>()
+    for (entry in scan.entries) {
+        if (entry.scanIndex !in 0 until used || !indexes.add(entry.scanIndex)) return null
+        val fp = entry.rosterFingerprint ?: return null
+        if (!fp.matches(Regex("[0-9a-f]{32}")) || !fingerprints.add(fp)) return null
+    }
+    return contentHash128("parent_lab_roster_binding_v1\n$used\n${fingerprints.sorted().joinToString("\n")}\n")
+}
 
 /** The identity feeders. An entry missing any of these cannot be fingerprinted at all. Public so the
  * walk can decide which fields are worth preserving failure evidence for without re-deriving the

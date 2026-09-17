@@ -20,6 +20,7 @@
 
 import { contentHash128 } from "./identity.ts"
 import { normalizeJoinName } from "./reconcile.ts"
+import { rosterBindingDigestForFingerprints } from "./roster.ts"
 import { TARGET_PROFILE_IDS } from "./retentionTargets.ts"
 import { PARENTLAB_RETENTION_SCHEMA, REPLACEABLE_DIFFICULTIES, RETENTION_CONFIDENCE_RANK, type RetentionShadowReport, type VeteranRetentionRecommendation } from "./retentionTypes.ts"
 import {
@@ -181,12 +182,34 @@ function snapshotDefects(reports: readonly RetentionShadowReport[]): readonly Sn
     if (new Set(profiles).size !== profiles.length) defects.add("DUPLICATE_TARGET_PROFILE")
     for (const id of TARGET_PROFILE_IDS) if (!profiles.includes(id)) defects.add("TARGET_PROFILE_COVERAGE_INCOMPLETE")
 
-    const signature = (r: RetentionShadowReport) => r.recommendations.map((x) => x.scanIndex).join(",")
+    const signature = (r: RetentionShadowReport) => r.recommendations.map((x) => x.scanIndex).sort((a, b) => a - b).join(",")
     if (new Set(reports.map(signature)).size > 1) defects.add("RECOMMENDATION_SET_MISMATCH")
 
     if (reports.some((r) => r.recommendations.length === 0)) defects.add("EMPTY_SNAPSHOT")
     if (reports.some((r) => r.recommendations.some((x) => !x.dataCompleteness.rosterTrusted))) defects.add("ROSTER_SNAPSHOT_UNTRUSTED")
     if (reports.some((r) => r.recommendations.some((x) => x.rosterFingerprint === null))) defects.add("UNRESOLVED_ROSTER_IDENTITY_PRESENT")
+
+    const bindingKey = (r: RetentionShadowReport) => JSON.stringify(r.protectionBinding ?? null)
+    if (new Set(reports.map(bindingKey)).size !== 1) defects.add("PROTECTION_BINDING_INVALID")
+    const base = reports.find((r) => r.targetProfile === TARGET_PROFILE_IDS[0]) ?? reports[0]
+    const canonicalByIndex = new Map(base.recommendations.map((rec) => [rec.scanIndex, rec]))
+    for (const report of reports) {
+        const binding = report.protectionBinding
+        const recs = report.recommendations
+        const indexes = recs.map((r) => r.scanIndex)
+        const fingerprints = recs.map((r) => r.rosterFingerprint)
+        if (!binding || binding.version !== 1 || typeof binding.protectionScanId !== "string" || binding.protectionScanId.length === 0 || binding.protectionScanId !== report.protectionScanId ||
+            typeof binding.rosterScanId !== "string" || binding.rosterScanId.length === 0 || binding.rosterScanId !== report.rosterScanId ||
+            typeof binding.rosterDigest !== "string" || !/^[0-9a-f]{32}$/.test(binding.rosterDigest) ||
+            recs.length === 0 || report.scarcity.identifiedRosterEntries !== recs.length || indexes.some((v) => !Number.isSafeInteger(v) || v < 0 || v >= recs.length) || new Set(indexes).size !== recs.length ||
+            rosterBindingDigestForFingerprints(fingerprints) !== binding.rosterDigest || recs.length !== base.recommendations.length ||
+            recs.some((rec) => canonicalByIndex.get(rec.scanIndex)?.rosterFingerprint !== rec.rosterFingerprint)) defects.add("PROTECTION_BINDING_INVALID")
+        if (recs.some((rec) => {
+            const canonical = canonicalByIndex.get(rec.scanIndex)
+            return !canonical || !sameCandidate(candidateRefFor(rec, null), candidateRefFor(canonical, null)) ||
+                rec.identityMultiplicity !== canonical.identityMultiplicity || rec.favoriteState !== canonical.favoriteState || rec.protectionState !== canonical.protectionState
+        })) defects.add("RECOMMENDATION_SET_MISMATCH")
+    }
 
     return [...defects].sort()
 }
@@ -262,7 +285,7 @@ export function buildAdvisorSnapshot(reports: readonly RetentionShadowReport[]):
         snapshotId: first?.rosterScanId ?? "",
         rosterScanId: first?.rosterScanId ?? "",
         rosterFingerprint: first?.rosterFingerprint ?? "",
-        protectionScanId: first?.protectionScanId ?? null,
+        protectionScanId: defects.includes("PROTECTION_BINDING_INVALID") ? null : first?.protectionScanId ?? null,
         observedAt,
         targetProfiles,
         accountWide,

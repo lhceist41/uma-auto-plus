@@ -32,8 +32,9 @@ export const PARENTLAB_QUARANTINE_SCHEMA_VERSION = 1 as const
  * candidate reference could not be built from them and a post-batch coverage recompute would have
  * nothing to recompute from. Reading one anyway would mean inferring the missing evidence, which is
  * exactly the failure this stage exists to prevent, so an older document is refused instead.
+ * Version 4 supplies the roster binding required before protection evidence can permit transfer.
  */
-export const MIN_SUPPORTED_RETENTION_SCHEMA_VERSION = 2
+export const MIN_SUPPORTED_RETENTION_SCHEMA_VERSION = 4
 
 /** Confidence a candidate must hold, under every target profile, to be approval-eligible. */
 export const REQUIRED_APPROVAL_CONFIDENCE: RetentionConfidence = "HIGH"
@@ -168,6 +169,7 @@ export const SNAPSHOT_DEFECTS = [
     "UNRESOLVED_ROSTER_IDENTITY_PRESENT",
     /** The snapshot carries no recommendations at all. */
     "EMPTY_SNAPSHOT",
+    "PROTECTION_BINDING_INVALID",
 ] as const
 export type SnapshotDefect = (typeof SNAPSHOT_DEFECTS)[number]
 
@@ -316,6 +318,7 @@ export const BATCH_REJECTION_REASONS = [
     "AMBIGUOUS_ROSTER_IDENTITY",
     /** The candidate carries a merit protection rule under at least one target profile. */
     "HARD_PROTECT_IN_BATCH",
+    "CANDIDATE_CURRENTLY_INELIGIBLE",
     /** Removing the batch would leave the candidate with no dominator under some target profile,
      * so its own redundancy proof does not survive the batch it is part of. */
     "DOMINATOR_REMOVED_BY_BATCH",

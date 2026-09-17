@@ -63,16 +63,20 @@ class VeteranProtectionScannerSafetyTest {
     inner class NoMutation {
         @Test
         fun `the probe never names a transfer, batch-favorite, career-start, or detail-favorite control`() {
-            val code = codeOnly(scanner)
-            for (forbidden in listOf("Transfer", "BatchFavorite", "Batch Favorite", "StartCareer", "ButtonStartCareer", "CareerLaunchNavigator", "DETAIL_FAVORITE")) {
-                assertFalse(code.contains(forbidden), "the probe must not reference $forbidden")
+            val rosterScanner = source("android/app/src/main/java/com/steve1316/uma_android_automation/VeteranRosterScanner.kt")
+            for (code in listOf(codeOnly(scanner), codeOnly(rosterScanner))) {
+                for (forbidden in listOf("Transfer", "BatchFavorite", "Batch Favorite", "StartCareer", "ButtonStartCareer", "CareerLaunchNavigator", "DETAIL_FAVORITE")) {
+                    assertFalse(code.contains(forbidden), "the probe and roster walk must not reference $forbidden")
+                }
             }
         }
 
         @Test
-        fun `the only device streams it writes is its own protection corpus`() {
+        fun `the delegated roster walk and the protection probe write only their evidence streams`() {
             assertTrue(scanner.contains("OutcomeCorpus.VETERAN_PROTECTION_PATH"), "the probe writes to its own append-only stream")
-            for (other in listOf("CORPUS_PATH", "DECISIONS_PATH", "CAREER_STATE_PATH", "LINEAGE_PATH", "SHADOW_ADVISOR_PATH", "ROSTER_SCAN_PATH", "VETERAN_INSPIRATION_PATH")) {
+            assertTrue(scanner.contains("VeteranRosterScanner(game).runScan(0)"), "the probe delegates a full roster walk")
+            assertTrue(source("android/app/src/main/java/com/steve1316/uma_android_automation/VeteranRosterScanner.kt").contains("OutcomeCorpus.ROSTER_SCAN_PATH"), "the delegated walk persists roster evidence")
+            for (other in listOf("CORPUS_PATH", "DECISIONS_PATH", "CAREER_STATE_PATH", "LINEAGE_PATH", "SHADOW_ADVISOR_PATH", "VETERAN_INSPIRATION_PATH")) {
                 assertFalse(scanner.contains("OutcomeCorpus.$other"), "the probe must not write into $other")
             }
         }
@@ -99,16 +103,17 @@ class VeteranProtectionScannerSafetyTest {
     }
 
     @Nested
-    @DisplayName("preconditions fail closed before the first gesture")
+    @DisplayName("preconditions fail closed before protection filter gestures")
     inner class Preconditions {
         private fun beforeFirstGesture(): String = scanner.substring(0, scanner.indexOf("openDialogToFilterBottom()"))
 
         @Test
-        fun `the roster list, the Registered count and Filters OFF are asserted before any tap`() {
+        fun `the roster list, the Registered count and Filters OFF are asserted before protection filter taps`() {
             val head = beforeFirstGesture()
             assertTrue(head.contains("listScreen.kind != RosterScreenKind.ROSTER_LIST"), "the roster list is required")
-            assertTrue(head.contains("list.registeredUsed == null || list.filtersOff != true"), "an unread count or unconfirmed filter state stops the probe")
-            assertEquals(2, Regex("ProtectionScanOutcome\\.PRECONDITION_FAILED").findAll(head).count(), "both precondition failures record the same terminal outcome")
+            assertTrue(head.contains("list.registeredUsed != roster.header.list.registeredUsed || list.filtersOff != true"), "the post-walk count and filter state must still agree")
+            assertTrue(head.contains("rosterBindingDigest(roster)"), "the protection probe computes its binding from the completed roster walk")
+            assertEquals(3, Regex("ProtectionScanOutcome\\.PRECONDITION_FAILED").findAll(head).count(), "binding and both screen preconditions record failure")
         }
 
         @Test
@@ -125,6 +130,17 @@ class VeteranProtectionScannerSafetyTest {
     @Nested
     @DisplayName("the partition is verified, not assumed")
     inner class PartitionVerify {
+        @Test
+        fun `nonempty enumeration requires bound unique identities and disabled chevron termination`() {
+            val walk = scanner.substring(scanner.indexOf("private fun walkFilteredFingerprints("), scanner.indexOf("private fun restoreFiltersOffFromRoster("))
+            assertTrue(walk.contains("?: throw ProbeAbort"), "an unread row aborts")
+            assertTrue(walk.contains("fp !in boundFingerprints || fp in fingerprints"), "foreign and repeated identities abort")
+            assertTrue(walk.contains("chevron == ChevronState.DISABLED) break"), "only a disabled chevron proves the end")
+            assertTrue(walk.contains("chevron != ChevronState.ENABLED"), "an unread chevron aborts")
+            assertTrue(walk.contains("fingerprints.size >= boundFingerprints.size"), "the bound roster limits traversal")
+            assertFalse(walk.contains("fingerprints.distinct()"), "duplicates cannot be silently dropped")
+        }
+
         @Test
         fun `setPartition re-checks the checkbox states and retries`() {
             assertTrue(scanner.contains("PARTITION_SET_ROUNDS"), "the setter retries over several rounds")

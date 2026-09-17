@@ -332,9 +332,9 @@ function main(argv) {
     // to ROSTER_ONLY, which is exactly what "no careers" means. The advisor still receives library=null.
     const reconciliation = reconcileRoster(library ?? buildVeteranLibrary({ outcomes: [], sparks: [] }), snapshot)
     const inventory = buildProtectionInventory(protectionRecord, snapshot)
-    const evidence = buildRetentionEvidence(snapshot, inspirationIndex, reconciliation, inventory.byFingerprint)
+    const evidence = buildRetentionEvidence(snapshot, inspirationIndex, reconciliation, inventory)
     const manualProtect = new Set(opts.protect)
-    const reports = profiles.map((profile) => buildRetentionShadowReport({ evidence, library, reconciliation, profile, manualProtect, protectionScanId: inventory.protectionScanId }))
+    const reports = profiles.map((profile) => buildRetentionShadowReport({ evidence, library, reconciliation, profile, manualProtect }))
     const document = reports.length === 1 ? reports[0] : { schema: reports[0].schema, schemaVersion: reports[0].schemaVersion, reports }
 
     if (opts.json) console.log(JSON.stringify(document, null, 2))

@@ -31,8 +31,10 @@ export const PARENTLAB_RETENTION_SCHEMA = "parent_lab_retention_shadow" as const
  * can distinguish "no career corpus was supplied" (null) from "a corpus was supplied but built into an
  * empty or unusable library" (non-null, with `confirmedVeterans` possibly 0). Nothing that existed at
  * version 2 changed meaning.
+ *
+ * Version 4 binds protection evidence to the exact roster scan and its canonical content digest.
  */
-export const PARENTLAB_RETENTION_SCHEMA_VERSION = 3 as const
+export const PARENTLAB_RETENTION_SCHEMA_VERSION = 4 as const
 
 /**
  * The recommendation states, in the fixed precedence order the engine resolves them.
@@ -377,6 +379,7 @@ export interface RetentionShadowReport {
      * Null means every protection gate stayed closed, which is a different fact from a probe that
      * ran and found nothing. */
     readonly protectionScanId: string | null
+    readonly protectionBinding: { readonly version: 1; readonly protectionScanId: string; readonly rosterScanId: string; readonly rosterDigest: string } | null
     /** Fingerprint of the roster state: `<scanId>:<identified>/<entries>`. Stable per snapshot. */
     readonly rosterFingerprint: string
     /**

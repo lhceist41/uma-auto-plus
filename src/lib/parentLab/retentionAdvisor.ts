@@ -319,9 +319,6 @@ export interface RetentionAdvisorInput {
     readonly profile: TargetProfile
     /** Roster fingerprints the operator has explicitly protected. */
     readonly manualProtect?: ReadonlySet<string>
-    /** The PL-R2a probe whose derivation the evidence already carries, recorded as provenance so a
-     * consumer can tell "a probe ran and cleared these Veterans" from "no probe was supplied". */
-    readonly protectionScanId?: string | null
 }
 
 /**
@@ -459,11 +456,16 @@ export function buildRetentionShadowReport(input: RetentionAdvisorInput): Retent
               newestObservationTs: library.diagnostics.newestObservationTs,
           }
         : null
+    const protection = evidence.protectionInventory
+    const protectionBinding = protection?.compatible && protection.protectionScanId && protection.rosterDigest && protection.rosterScanId === snapshot.scanId
+        ? { version: 1 as const, protectionScanId: protection.protectionScanId, rosterScanId: protection.rosterScanId, rosterDigest: protection.rosterDigest }
+        : null
     return {
         schema: PARENTLAB_RETENTION_SCHEMA,
         schemaVersion: PARENTLAB_RETENTION_SCHEMA_VERSION,
         rosterScanId: snapshot.scanId,
-        protectionScanId: input.protectionScanId ?? null,
+        protectionScanId: protectionBinding?.protectionScanId ?? null,
+        protectionBinding,
         rosterFingerprint: `${snapshot.scanId}:${scarcity.identifiedRosterEntries}/${snapshot.scanCount}`,
         generatedAt: evidence.observedAt,
         targetProfile: profile.id,

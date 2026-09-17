@@ -1,10 +1,12 @@
 import { parseCorpus } from "../../outcomeAnalysis.ts"
+import { contentHash128 } from "../identity.ts"
+import { buildProtectionInventory, parseProtectionRecords } from "../protection.ts"
 import { buildVeteranLibrary } from "../buildVeteranLibrary.ts"
 import { buildCapacityCoverage } from "../capacityCoverage.ts"
 import { buildInspirationIndex, parseInspirationRecords } from "../inspiration.ts"
 import { buildAdvisorSnapshot } from "../quarantineSnapshot.ts"
 import { reconcileRoster } from "../reconcile.ts"
-import { buildRosterSnapshots, parseRosterScanRecords } from "../roster.ts"
+import { buildRosterSnapshots, parseRosterScanRecords, rosterBindingDigest } from "../roster.ts"
 import { buildRetentionShadowReport, evaluateDominance, INACTIVE_RULES } from "../retentionAdvisor.ts"
 import { buildFactorScarcityIndex, buildRetentionEvidence, observedUniqueFactorKeys, replacementSummary } from "../retentionEvidence.ts"
 import { targetDimensions, TARGET_DIMENSION_NAMES, TARGET_PROFILES } from "../retentionTargets.ts"
@@ -20,9 +22,10 @@ const ISCAN = "insp-test-0001"
 const T = Date.UTC(2026, 7, 21, 12, 0, 0)
 
 const APTITUDES = { turf: "A", dirt: "G", sprint: "C", mile: "A", medium: "A", long: "B", front: "A", pace: "A", late: "B", end: "C" }
+const testFingerprint = (label: string) => contentHash128(`retention fixture:${label}`)
 
 function rosterEntry(o: Record<string, unknown> = {}): string {
-    return JSON.stringify({
+    const record: Record<string, unknown> = {
         type: "roster_entry",
         schemaVersion: 1,
         scanId: SCAN,
@@ -44,7 +47,9 @@ function rosterEntry(o: Record<string, unknown> = {}): string {
         unresolvedFields: [],
         diagnostics: null,
         ...o,
-    })
+    }
+    if (typeof record.rosterFingerprint === "string") record.rosterFingerprint = testFingerprint(record.rosterFingerprint)
+    return JSON.stringify(record)
 }
 
 function rosterHeader(count: number, o: Record<string, unknown> = {}): string {
@@ -94,7 +99,7 @@ function factor(kind: string, name: string, stars: number) {
 }
 
 function capture(fingerprint: string, factors: ReturnType<typeof factor>[], o: Record<string, unknown> = {}): string {
-    return JSON.stringify({
+    const record: Record<string, unknown> = {
         type: "veteran_inspiration",
         schemaVersion: 2,
         scanId: ISCAN,
@@ -117,7 +122,9 @@ function capture(fingerprint: string, factors: ReturnType<typeof factor>[], o: R
         unresolvedFields: [],
         diagnostics: null,
         ...o,
-    })
+    }
+    if (typeof record.rosterFingerprint === "string") record.rosterFingerprint = testFingerprint(record.rosterFingerprint)
+    return JSON.stringify(record)
 }
 
 /** A completed career the Veteran library will confirm, with a kept spark set. */
@@ -135,29 +142,35 @@ interface BuildOptions {
     readonly profile?: keyof typeof TARGET_PROFILES
     readonly manualProtect?: readonly string[]
     readonly withReconciliation?: boolean
+    readonly captureCompatibility?: boolean
+    readonly extraInspirationLines?: readonly string[]
+    readonly protection?: boolean
 }
 
 function build(options: BuildOptions) {
     const parsedRoster = parseRosterScanRecords([rosterHeader(options.entries.length), ...options.entries].join("\n"), "roster_scan.jsonl")
     const snapshot = buildRosterSnapshots(parsedRoster)[0]
-    const index = buildInspirationIndex(parseInspirationRecords((options.captures ?? []).join("\n"), "veteran_inspiration.jsonl"))
+    const inspirationHeader = JSON.stringify({ type: "veteran_inspiration_scan", schemaVersion: 2, scanId: ISCAN, snapshotCompatibility: options.captureCompatibility ?? true })
+    const index = buildInspirationIndex(parseInspirationRecords([inspirationHeader, ...(options.captures ?? []), ...(options.extraInspirationLines ?? [])].join("\n"), "veteran_inspiration.jsonl"))
     const corpus = parseCorpus((options.careers ?? []).flat().join("\n"), "careers.jsonl")
     const library = buildVeteranLibrary({ outcomes: corpus.outcomes, sparks: corpus.sparks })
     const reconciliation = options.withReconciliation === false ? null : reconcileRoster(library, snapshot)
-    const evidence = buildRetentionEvidence(snapshot, index, reconciliation)
+    const protectionRecord = options.protection ? parseProtectionRecords(JSON.stringify({ type: "veteran_protection", schemaVersion: 2, rosterBindingVersion: 1, rosterScanId: snapshot.scanId, rosterDigest: rosterBindingDigest(snapshot), scanId: "vp-retention-test", registeredUsed: snapshot.registeredUsed, filtersOffConfirmed: true, favoritePopulation: "empty", favoriteApplyState: "disabled", memoPopulation: "empty", memoApplyState: "disabled", enumerationPerformed: false, favoritedFingerprints: [], memoFingerprints: [], restoredFiltersOff: true, outcome: "complete" })).records[0] : null
+    const inventory = options.protection ? buildProtectionInventory(protectionRecord, snapshot) : null
+    const evidence = buildRetentionEvidence(snapshot, index, reconciliation, inventory)
     const report = buildRetentionShadowReport({
         evidence,
         library,
         reconciliation,
         profile: TARGET_PROFILES[options.profile ?? "GENERAL_INHERITANCE"],
-        manualProtect: new Set(options.manualProtect ?? []),
+        manualProtect: new Set((options.manualProtect ?? []).map(testFingerprint)),
     })
     return { snapshot, evidence, library, reconciliation, report }
 }
 
 /** Finds the recommendation for a roster fingerprint. */
 function forFingerprint(report: RetentionShadowReport, fingerprint: string): VeteranRetentionRecommendation {
-    const found = report.recommendations.find((r) => r.rosterFingerprint === fingerprint)
+    const found = report.recommendations.find((r) => r.rosterFingerprint === testFingerprint(fingerprint))
     if (!found) throw new Error(`no recommendation for ${fingerprint}`)
     return found
 }
@@ -392,7 +405,7 @@ describe("PL-R2 dominance", () => {
         const { evidence, report } = build({ ...fixture, profile })
         const scarcity = buildFactorScarcityIndex(evidence)
         const make = (fingerprint: string) => {
-            const v = evidence.veterans.find((x) => x.rosterFingerprint === fingerprint)
+            const v = evidence.veterans.find((x) => x.rosterFingerprint === testFingerprint(fingerprint))
             if (!v) throw new Error(`no evidence for ${fingerprint}`)
             const rec = forFingerprint(report, fingerprint)
             return { evidence: v, dimensions: targetDimensions(v.entry, v.selfFactors, TARGET_PROFILES[profile]), hardProtectReasons: rec.hardProtectReasons, observedUnique: observedUniqueFactorKeys(v, scarcity) }
@@ -462,8 +475,30 @@ describe("PL-R2 recommendation gates", () => {
     /** The one fixture where every strict gate is satisfiable, so the transfer side is reachable. */
     function unlockedTrio(subjectFactors = GENERIC_SUBJECT, dominatorFactors = GENERIC_DOMINATOR) {
         const fixture = fullyCoveredTrio(subjectFactors, dominatorFactors, { favoriteState: "not_set", protectionState: "not_protected" })
-        return fixture
+        return { ...fixture, protection: true }
     }
+
+    it("never trusts an incompatible-only Inspiration batch or makes an account-wide claim from it", () => {
+        const result = build({ ...unlockedTrio(), captureCompatibility: false })
+        expect(result.evidence.veterans.every((v) => v.capture !== null && !v.captureTrusted && v.selfFactors === null)).toBe(true)
+        expect(buildFactorScarcityIndex(result.evidence).accountWide).toBe(false)
+        expect(result.report.counts.SAFE_TO_TRANSFER).toBe(0)
+        expect(result.report.counts.QUARANTINE_TRANSFER).toBe(0)
+        expect([...buildAdvisorSnapshot([result.report]).candidates.values()].every((c) => !c.eligible)).toBe(true)
+    })
+
+    it("uses only compatible captures in a mixed batch", () => {
+        const fixture = unlockedTrio()
+        const badHeader = JSON.stringify({ type: "veteran_inspiration_scan", schemaVersion: 2, scanId: "bad", snapshotCompatibility: false })
+        const result = build({ ...fixture, captures: fixture.captures.slice(0, 2), extraInspirationLines: [badHeader, capture("fp-third", GENERIC_DOMINATOR, { scanId: "bad" }), capture("fp-subject", GENERIC_SUBJECT, { scanId: "bad", observedAt: T + 10000 })] })
+        expect(result.evidence.veterans.map((v) => v.captureTrusted)).toEqual([true, true, false])
+        expect(result.evidence.veterans[0].capture?.scanId).toBe(ISCAN)
+        const scarcity = buildFactorScarcityIndex(result.evidence)
+        expect(scarcity.capturedTrusted).toBe(2)
+        expect(scarcity.capturedUntrusted).toBe(1)
+        expect(scarcity.accountWide).toBe(false)
+        expect(build(unlockedTrio()).report.counts.SAFE_TO_TRANSFER).toBeGreaterThan(0)
+    })
 
     it("produces SAFE_TO_TRANSFER only when every strict gate passes", () => {
         const { report } = build(unlockedTrio())
@@ -477,7 +512,7 @@ describe("PL-R2 recommendation gates", () => {
     it("withdraws SAFE_TO_TRANSFER the moment in-game protection cannot be excluded", () => {
         const fixture = unlockedTrio()
         const gated = { ...fixture, entries: [rosterEntry({ scanIndex: 0, rosterFingerprint: "fp-subject", rating: 16000, stats: { spd: 700, sta: 500, pwr: 500, grt: 400, wit: 400 }, favoriteState: "unknown", protectionState: "unknown" }), ...fixture.entries.slice(1)] }
-        const subject = forFingerprint(build(gated).report, "fp-subject")
+        const subject = forFingerprint(build({ ...gated, protection: false }).report, "fp-subject")
         expect(subject.gateReasons).toEqual(expect.arrayContaining(["PROTECTION_STATE_UNKNOWN", "FAVORITE_STATE_UNKNOWN"]))
         expect(subject.state).toBe("QUARANTINE_TRANSFER")
     })
@@ -533,7 +568,7 @@ describe("PL-R2 recommendation gates", () => {
     })
 })
 
-describe("PL-R2 replacement-evidence provenance (schema v3)", () => {
+describe("PL-R2 replacement-evidence provenance (introduced in schema v3)", () => {
     const threeEntries = [
         rosterEntry({ scanIndex: 0, rosterFingerprint: "fp-0" }),
         rosterEntry({ scanIndex: 1, rosterFingerprint: "fp-1" }),
@@ -559,10 +594,10 @@ describe("PL-R2 replacement-evidence provenance (schema v3)", () => {
         ]
     }
 
-    it("A. no career corpus: schema v3, replacementEvidence null, truthful basis, state unchanged vs empty library", () => {
+    it("A. no career corpus: schema v4, replacementEvidence null, truthful basis, state unchanged vs empty library", () => {
         const nullReport = reportWithLibrary(threeEntries, null)
-        expect(PARENTLAB_RETENTION_SCHEMA_VERSION).toBe(3)
-        expect(nullReport.schemaVersion).toBe(3)
+        expect(PARENTLAB_RETENTION_SCHEMA_VERSION).toBe(4)
+        expect(nullReport.schemaVersion).toBe(4)
         expect(nullReport.replacementEvidence).toBeNull()
         for (const r of nullReport.recommendations) {
             expect(r.replacement.basis).toBe("no historical library supplied")
@@ -672,7 +707,7 @@ describe("PL-R2 roster identity-evidence consistency", () => {
 
     /** The one fixture where every strict gate is satisfiable, so the transfer side is reachable. */
     function unlockedTrio(overrides: Record<string, unknown> = {}) {
-        return fullyCoveredTrio(GENERIC_SUBJECT, GENERIC_DOMINATOR, { favoriteState: "not_set", protectionState: "not_protected", ...overrides })
+        return { ...fullyCoveredTrio(GENERIC_SUBJECT, GENERIC_DOMINATOR, { favoriteState: "not_set", protectionState: "not_protected", ...overrides }), protection: true }
     }
 
     /** Two Veterans clearing the LONG gate, the first of them open to an identity override. */
@@ -684,6 +719,7 @@ describe("PL-R2 roster identity-evidence consistency", () => {
                 rosterEntry({ scanIndex: 2, rosterFingerprint: "fp-c", aptitudes: { ...APTITUDES, long: "B" } }),
             ],
             captures: [capture("fp-a", GENERIC_SUBJECT), capture("fp-b", GENERIC_DOMINATOR), capture("fp-c", GENERIC_DOMINATOR)],
+            protection: true,
             profile: "LONG_PARENT" as const,
         }
     }

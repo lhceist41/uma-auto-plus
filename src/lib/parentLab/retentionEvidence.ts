@@ -12,9 +12,9 @@
 // confident and completely wrong claim that some factor exists exactly once on the account.
 
 import type { InspirationFactorRecord, VeteranInspirationView } from "./inspiration.ts"
-import type { DerivedProtection } from "./protection.ts"
+import type { DerivedProtection, ProtectionInventory } from "./protection.ts"
 import { normalizeJoinName, type RosterMatchStatus, type RosterReconciliation } from "./reconcile.ts"
-import { ROSTER_STAT_KEYS, type RosterEntryRecord, type RosterSnapshot } from "./roster.ts"
+import { ROSTER_STAT_KEYS, rosterBindingDigest, type RosterEntryRecord, type RosterSnapshot } from "./roster.ts"
 import { PARENTLAB_RETENTION_SCHEMA, PARENTLAB_RETENTION_SCHEMA_VERSION, type FactorScarcityEntry, type FactorScarcityIndex, type ReplacementDifficulty, type ReplacementSummary, type ScarcityClaim } from "./retentionTypes.ts"
 import type { VeteranLibrary } from "./types.ts"
 
@@ -77,6 +77,7 @@ export interface VeteranEvidence {
 /** The normalized evidence for one snapshot, in traversal order. */
 export interface RetentionEvidenceSet {
     readonly snapshot: RosterSnapshot
+    readonly protectionInventory: ProtectionInventory | null
     readonly veterans: readonly VeteranEvidence[]
     /** Newest observation time across the roster snapshot and the joined captures. Never a wall clock. */
     readonly observedAt: number | null
@@ -91,9 +92,8 @@ export interface RetentionEvidenceSet {
  * derivation for it.
  */
 function withDerivedProtection(entry: RosterEntryRecord, derived: DerivedProtection | undefined): RosterEntryRecord {
-    if (!derived) return entry
-    const favoriteState = derived.favoriteState === "not_favorite" ? "not_set" : derived.favoriteState === "favorite" ? "favorite" : entry.favoriteState
-    const protectionState = derived.protectionState === "unknown" ? entry.protectionState : derived.protectionState
+    const favoriteState = derived?.favoriteState === "not_favorite" ? "not_set" : derived?.favoriteState === "favorite" ? "favorite" : entry.favoriteState === "not_set" ? "unknown" : entry.favoriteState
+    const protectionState = derived?.protectionState === "not_protected" || derived?.protectionState === "protected" ? derived.protectionState : entry.protectionState === "not_protected" ? "unknown" : entry.protectionState
     if (favoriteState === entry.favoriteState && protectionState === entry.protectionState) return entry
     return { ...entry, favoriteState, protectionState }
 }
@@ -119,10 +119,7 @@ export function buildRetentionEvidence(
     snapshot: RosterSnapshot,
     inspirationIndex: ReadonlyMap<string, VeteranInspirationView>,
     reconciliation: RosterReconciliation | null,
-    /** Per-fingerprint protection derived by PL-R2a. When supplied, it overrides the roster entry's
-     * favorite/protection fields (which the device roster walk cannot read reliably); when absent,
-     * the entry's own values stand and the transfer-side gates stay closed as before. */
-    protectionByFingerprint?: ReadonlyMap<string, DerivedProtection>,
+    protectionInventory: ProtectionInventory | null = null,
 ): RetentionEvidenceSet {
     const characterCounts = new Map<string, number>()
     const characterOutfitCounts = new Map<string, number>()
@@ -137,6 +134,7 @@ export function buildRetentionEvidence(
 
     const byScanIndex = new Map<number, { status: RosterMatchStatus; veteranId: string | null }>()
     for (const r of reconciliation?.entries ?? []) byScanIndex.set(r.scanIndex, { status: r.status, veteranId: r.veteranId })
+    const validProtection = protectionInventory?.compatible === true && protectionInventory.schemaVersion === 2 && protectionInventory.rosterScanId === snapshot.scanId && protectionInventory.rosterDigest !== null && protectionInventory.rosterDigest === rosterBindingDigest(snapshot)
 
     let newest = snapshot.observedAt
     const veterans: VeteranEvidence[] = []
@@ -144,10 +142,10 @@ export function buildRetentionEvidence(
         const fingerprint = entry.rosterFingerprint
         const capture = fingerprint ? (inspirationIndex.get(fingerprint) ?? null) : null
         if (capture?.observedAt !== null && capture?.observedAt !== undefined && (newest === null || capture.observedAt > newest)) newest = capture.observedAt
-        const captureTrusted = capture !== null && capture.sparkCaptureComplete && capture.selfFactorSetTrusted
+        const captureTrusted = capture !== null && capture.snapshotCompatible && capture.sparkCaptureComplete && capture.selfFactorSetTrusted
         const match = byScanIndex.get(entry.scanIndex)
         const character = entry.character ? normalizeJoinName(entry.character) : null
-        const effectiveEntry = withDerivedProtection(entry, fingerprint ? protectionByFingerprint?.get(fingerprint) : undefined)
+        const effectiveEntry = withDerivedProtection(entry, fingerprint && validProtection ? protectionInventory?.byFingerprint.get(fingerprint) : undefined)
         veterans.push({
             entry: effectiveEntry,
             rosterFingerprint: fingerprint,
@@ -162,7 +160,7 @@ export function buildRetentionEvidence(
             characterOutfitCarriers: character ? (characterOutfitCounts.get(`${character}|${entry.outfit ? normalizeJoinName(entry.outfit) : ""}`) ?? 0) : 0,
         })
     }
-    return { snapshot, veterans, observedAt: newest }
+    return { snapshot, protectionInventory: validProtection ? protectionInventory : null, veterans, observedAt: newest }
 }
 
 /**

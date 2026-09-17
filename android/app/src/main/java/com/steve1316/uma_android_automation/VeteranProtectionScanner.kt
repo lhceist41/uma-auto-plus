@@ -9,6 +9,7 @@ import com.steve1316.uma_android_automation.bot.VETERAN_PROTECTION_SCHEMA_VERSIO
 import com.steve1316.uma_android_automation.bot.VeteranProtectionScan
 import com.steve1316.uma_android_automation.bot.entryFingerprint
 import com.steve1316.uma_android_automation.bot.populationFromApply
+import com.steve1316.uma_android_automation.bot.rosterBindingDigest
 import com.steve1316.uma_android_automation.bot.serializeVeteranProtectionScan
 import com.steve1316.uma_android_automation.utils.ALL_FAVORITE_CHECKBOXES
 import com.steve1316.uma_android_automation.utils.ApplyButtonState
@@ -67,8 +68,6 @@ private const val NAV_SETTLE_SECONDS = 1.0
  * that normally converges in one. */
 private const val PARTITION_SET_ROUNDS = 3
 
-/** Enumeration hard bound (only reached on the non-empty branch, never on this account). */
-private const val ENUMERATE_HARD_BOUND_SLACK = 8
 private const val CHEVRON_SETTLE_SECONDS = 0.6
 
 /**
@@ -106,22 +105,39 @@ class VeteranProtectionScanner(private val game: Game) {
         val scanId = "vp-$startedAt-${java.util.UUID.randomUUID().toString().substring(0, 8)}"
         MessageLog.i(TAG, "[PROTECTION-SCAN] ===== Veteran protection probe scanId=$scanId =====")
 
+        val roster = try {
+            VeteranRosterScanner(game).runScan(0)
+        } catch (e: InterruptedException) {
+            throw e
+        } catch (e: Exception) {
+            MessageLog.e(TAG, "[PROTECTION-SCAN] Roster walk failed: $e")
+            persistOutcome(scanId, startedAt, null, null, null, ProtectionScanOutcome.UI_UNEXPECTED, game.imageUtils.getSourceBitmap())
+            return
+        }
+        val digest = rosterBindingDigest(roster)
+        if (digest == null) {
+            val list = roster.header.list
+            persistOutcome(scanId, startedAt, list.registeredUsed, list.registeredCapacity, list.filtersOff, ProtectionScanOutcome.PRECONDITION_FAILED, game.imageUtils.getSourceBitmap(), roster.header.scanId)
+            return
+        }
+        val boundFingerprints = roster.entries.mapNotNull { it.rosterFingerprint }.toSet()
+
         val (listBitmap, listScreen) = reader.classifyScreenWithRetries()
         if (listScreen.kind != RosterScreenKind.ROSTER_LIST) {
             MessageLog.w(
                 TAG,
                 "[PROTECTION-SCAN] Precondition failed: expected the Veteran Roster list, saw ${listScreen.kind} " +
-                    "(registered OCR='${listScreen.registeredRaw}' title OCR='${listScreen.titleRaw}'). No gesture dispatched.",
+                    "(registered OCR='${listScreen.registeredRaw}' title OCR='${listScreen.titleRaw}'). No protection filter gesture dispatched.",
             )
             persistOutcome(scanId, startedAt, null, null, null, ProtectionScanOutcome.PRECONDITION_FAILED, listBitmap)
             return
         }
         val list = reader.readListState(listBitmap, listScreen, verbose = true)
-        if (list.registeredUsed == null || list.filtersOff != true) {
+        if (list.registeredUsed != roster.header.list.registeredUsed || list.filtersOff != true) {
             MessageLog.w(
                 TAG,
                 "[PROTECTION-SCAN] Precondition failed: registeredUsed=${list.registeredUsed ?: "UNREAD"} " +
-                    "filtersOff=${list.filtersOff ?: "UNREAD"}. A probe under an unknown filter state is meaningless, so it stops. No gesture dispatched.",
+                    "filtersOff=${list.filtersOff ?: "UNREAD"}. A probe under an unknown filter state is meaningless, so it stops before protection filter gestures.",
             )
             persistOutcome(scanId, startedAt, list.registeredUsed, list.registeredCapacity, list.filtersOff, ProtectionScanOutcome.PRECONDITION_FAILED, listBitmap)
             return
@@ -163,11 +179,11 @@ class VeteranProtectionScanner(private val game: Game) {
             // zero memos: both branches are skipped and the offline reader derives the whole-roster
             // complement from the trusted snapshot.
             if (favoritePop == ProtectionPopulation.NONEMPTY) {
-                favoritedFps = enumeratePartition("favorite", FAVORITE_ICON_CHECKBOXES.toSet(), list.registeredCapacity ?: list.registeredUsed)
+                favoritedFps = enumeratePartition("favorite", FAVORITE_ICON_CHECKBOXES.toSet(), boundFingerprints)
                 enumerationPerformed = true
             }
             if (memoPop == ProtectionPopulation.NONEMPTY) {
-                memoFps = enumeratePartition("memo", setOf(MEMO_HAS_CHECKBOX), list.registeredCapacity ?: list.registeredUsed)
+                memoFps = enumeratePartition("memo", setOf(MEMO_HAS_CHECKBOX), boundFingerprints)
                 enumerationPerformed = true
             }
 
@@ -210,6 +226,9 @@ class VeteranProtectionScanner(private val game: Game) {
                 appVersion = BuildConfig.VERSION_NAME,
                 screenWidth = lastFrame.width,
                 screenHeight = lastFrame.height,
+                rosterBindingVersion = 1,
+                rosterScanId = roster.header.scanId,
+                rosterDigest = digest,
             )
         OutcomeCorpus.append(game.myContext, serializeVeteranProtectionScan(record), OutcomeCorpus.VETERAN_PROTECTION_PATH)
         MessageLog.i(
@@ -360,7 +379,7 @@ class VeteranProtectionScanner(private val game: Game) {
      * Filters: OFF. The walk reuses the same chevron primitives the roster scan is built on. Restore
      * runs in a finally so an applied filter is never left behind.
      */
-    private fun enumeratePartition(label: String, desiredSelected: Set<FilterCheckbox>, hardBoundBase: Int?): List<String> {
+    private fun enumeratePartition(label: String, desiredSelected: Set<FilterCheckbox>, boundFingerprints: Set<String>): List<String> {
         MessageLog.i(TAG, "[PROTECTION-SCAN] $label partition is non-empty; enumerating the filtered subset.")
         requireDialog("before applying the $label partition for enumeration")
         if (!setPartition(desiredSelected)) {
@@ -370,17 +389,17 @@ class VeteranProtectionScanner(private val game: Game) {
         try {
             game.tapCoordinate(DIALOG_OK_X.toDouble(), DIALOG_OK_Y.toDouble(), "apply_${label}_filter")
             game.wait(NAV_SETTLE_SECONDS)
-            fingerprints = walkFilteredFingerprints(hardBoundBase)
+            fingerprints = walkFilteredFingerprints(boundFingerprints)
         } finally {
             restoreFiltersOffFromRoster()
         }
+        openDialogToFilterBottom()
         MessageLog.i(TAG, "[PROTECTION-SCAN] $label enumeration collected ${fingerprints.size} fingerprints.")
         return fingerprints
     }
 
-    /** Walks the currently-filtered roster with the detail chevron, collecting each resolved
-     * fingerprint. Unidentified entries are skipped (logged), never guessed. */
-    private fun walkFilteredFingerprints(hardBoundBase: Int?): List<String> {
+    /** A nonempty partition is complete only after every row identifies and the last chevron is disabled. */
+    private fun walkFilteredFingerprints(boundFingerprints: Set<String>): List<String> {
         val fingerprints = mutableListOf<String>()
         val (_, screen) = reader.classifyScreenWithRetries(attempts = 3)
         if (screen.kind != RosterScreenKind.ROSTER_LIST) {
@@ -392,29 +411,26 @@ class VeteranProtectionScanner(private val game: Game) {
         if (detail.kind != RosterScreenKind.UMAMUSUME_DETAILS) {
             throw ProbeAbort(ProtectionScanOutcome.UI_UNEXPECTED, "opening the first filtered card did not produce the Details dialog (saw ${detail.kind})")
         }
-        val hardBound = (hardBoundBase ?: 260) + ENUMERATE_HARD_BOUND_SLACK
-        var seen = 0
-        entryFingerprint(reader.readDetailObservation(bitmap, includeCareerInfo = false, verbose = false))?.let { fingerprints.add(it) }
-        seen++
-        while (seen < hardBound) {
+        while (true) {
+            val fp = entryFingerprint(reader.readDetailObservation(bitmap, includeCareerInfo = false, verbose = false))
+                ?: throw ProbeAbort(ProtectionScanOutcome.UI_UNEXPECTED, "filtered row identity unread")
+            if (fp !in boundFingerprints || fp in fingerprints) throw ProbeAbort(ProtectionScanOutcome.UI_UNEXPECTED, "filtered row is outside the bound roster or repeated")
+            fingerprints.add(fp)
             val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
-            if (classifyChevron(sampler, CHEVRON_NEXT_BOX) == ChevronState.DISABLED) break
+            val chevron = classifyChevron(sampler, CHEVRON_NEXT_BOX)
+            if (chevron == ChevronState.DISABLED) break
+            if (chevron != ChevronState.ENABLED) throw ProbeAbort(ProtectionScanOutcome.UI_UNEXPECTED, "filtered next chevron unread")
+            if (fingerprints.size >= boundFingerprints.size) throw ProbeAbort(ProtectionScanOutcome.UI_UNEXPECTED, "filtered walk exceeded bound roster before reaching the disabled chevron")
             game.tapCoordinate(DETAIL_NEXT_CHEVRON_X.toDouble(), DETAIL_NEXT_CHEVRON_Y.toDouble(), "filtered_next_chevron")
             game.wait(CHEVRON_SETTLE_SECONDS)
             val next = reader.classifyScreenWithRetries(attempts = 3)
             bitmap = next.first
-            if (next.second.kind != RosterScreenKind.UMAMUSUME_DETAILS) break
-            val fp = entryFingerprint(reader.readDetailObservation(bitmap, includeCareerInfo = false, verbose = false))
-            if (fp != null) {
-                if (fp == fingerprints.firstOrNull() && seen >= 2) break // wrapped
-                fingerprints.add(fp)
-            }
-            seen++
+            if (next.second.kind != RosterScreenKind.UMAMUSUME_DETAILS) throw ProbeAbort(ProtectionScanOutcome.UI_UNEXPECTED, "filtered walk left the Details dialog")
         }
         // Close the detail dialog back to the (still filtered) roster list.
         game.tapCoordinate(DETAIL_CLOSE_X.toDouble(), DETAIL_CLOSE_Y.toDouble(), "filtered_detail_close")
         game.wait(CHEVRON_SETTLE_SECONDS)
-        return fingerprints.distinct()
+        return fingerprints
     }
 
     /** Reopens Display Settings from the roster list and clears the filter back to OFF. */
@@ -436,8 +452,11 @@ class VeteranProtectionScanner(private val game: Game) {
             game.wait(NAV_SETTLE_SECONDS)
         } catch (e: InterruptedException) {
             throw e
+        } catch (e: ProbeAbort) {
+            throw e
         } catch (e: Exception) {
             MessageLog.w(TAG, "[PROTECTION-SCAN] Restore path failed: $e. Clear the filter by hand.")
+            throw ProbeAbort(ProtectionScanOutcome.RESTORE_FAILED, "could not restore Filters OFF")
         }
     }
 
@@ -492,6 +511,7 @@ class VeteranProtectionScanner(private val game: Game) {
         filtersOff: Boolean?,
         outcome: ProtectionScanOutcome,
         frame: Bitmap,
+        rosterScanId: String? = null,
     ) {
         val record =
             VeteranProtectionScan(
@@ -514,8 +534,9 @@ class VeteranProtectionScanner(private val game: Game) {
                 appVersion = BuildConfig.VERSION_NAME,
                 screenWidth = frame.width,
                 screenHeight = frame.height,
+                rosterScanId = rosterScanId,
             )
         OutcomeCorpus.append(game.myContext, serializeVeteranProtectionScan(record), OutcomeCorpus.VETERAN_PROTECTION_PATH)
-        MessageLog.i(TAG, "[PROTECTION-SCAN] scanId=$scanId outcome=$outcome (no gesture path). ===== end =====")
+        MessageLog.i(TAG, "[PROTECTION-SCAN] scanId=$scanId outcome=$outcome (no protection filter gestures). ===== end =====")
     }
 }

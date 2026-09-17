@@ -136,6 +136,7 @@ function report(recs: VeteranRetentionRecommendation[], o: Partial<RetentionShad
         schemaVersion: PARENTLAB_RETENTION_SCHEMA_VERSION,
         rosterScanId: "rs-cov-0001",
         protectionScanId: "ps-cov-0001",
+        protectionBinding: null,
         rosterFingerprint: `rs-cov-0001:${recs.length}/${recs.length}`,
         generatedAt: Date.UTC(2026, 7, 29, 12, 0, 0),
         targetProfile: "GENERAL_INHERITANCE",
@@ -552,12 +553,12 @@ describe("white factor domain provenance", () => {
         expect(reason).not.toMatch(/verified|compatible|matches/i)
     })
 
-    test("the coverage schema is v6 while the capacity and retention schemas are unchanged", () => {
+    test("the coverage schema is v6 while capacity stays v1 and retention is v4", () => {
         expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(6)
         expect(build(domain()).schemaVersion).toBe(6)
         expect(build(domain()).capacitySchemaVersion).toBe(PARENTLAB_CAPACITY_SCHEMA_VERSION)
         expect(PARENTLAB_CAPACITY_SCHEMA_VERSION).toBe(1)
-        expect(PARENTLAB_RETENTION_SCHEMA_VERSION).toBe(3)
+        expect(PARENTLAB_RETENTION_SCHEMA_VERSION).toBe(4)
     })
 
     test("output is byte-identical across rebuilds and across semantically equal domains", () => {
@@ -831,13 +832,13 @@ describe("per-Veteran cross-target coverage risk", () => {
         expect(LAST_COPY_RISKS).toEqual(["SOLE_OBSERVED_CARRIER", "SHARED_FULLY_EXPOSED", "NO_EXPOSED_SLOT_OBSERVED", "UNMEASURED"])
     })
 
-    test("the coverage schema is 6 and the sibling schemas are unchanged", () => {
+    test("the coverage schema is 6, capacity is 1, and retention is 4", () => {
         const doc = buildCapacityCoverage(report(crossTargetRecs(), { targetProfile: "MILE_PARENT" }))
         expect(PARENTLAB_CAPACITY_COVERAGE_SCHEMA_VERSION).toBe(6)
         expect(doc.schemaVersion).toBe(6)
         expect(PARENTLAB_CAPACITY_SCHEMA_VERSION).toBe(1)
         expect(doc.capacitySchemaVersion).toBe(1)
-        expect(PARENTLAB_RETENTION_SCHEMA_VERSION).toBe(3)
+        expect(PARENTLAB_RETENTION_SCHEMA_VERSION).toBe(4)
     })
 
     test("an untrusted roster synthesizes no cross-target risk", () => {

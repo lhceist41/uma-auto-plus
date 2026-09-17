@@ -9,6 +9,7 @@
 
 import { ledgerEntry } from "../quarantineLedger.ts"
 import { buildAdvisorSnapshot } from "../quarantineSnapshot.ts"
+import { rosterBindingDigestForFingerprints } from "../roster.ts"
 import type { AdvisorSnapshot, QuarantineLedger } from "../quarantineTypes.ts"
 import { TARGET_PROFILE_IDS } from "../retentionTargets.ts"
 import { PARENTLAB_RETENTION_SCHEMA, PARENTLAB_RETENTION_SCHEMA_VERSION, type ReplacementDifficulty, type RetentionConfidence, type RetentionShadowReport, type RetentionState, type VeteranRetentionRecommendation } from "../retentionTypes.ts"
@@ -16,6 +17,11 @@ import { PARENTLAB_RETENTION_SCHEMA, PARENTLAB_RETENTION_SCHEMA_VERSION, type Re
 export const PROFILES = [...TARGET_PROFILE_IDS]
 export const T0 = Date.UTC(2026, 7, 20, 12, 0, 0)
 export const DAY = 86400000
+export const FP_A = "a".repeat(32)
+export const FP_B = "b".repeat(32)
+export const FP_CAND = "c".repeat(32)
+export const FP_PEER_A = "e".repeat(32)
+export const FP_PEER_B = "f".repeat(32)
 
 export interface VetSpec {
     fp: string
@@ -112,11 +118,13 @@ export interface SnapshotOptions {
 
 export function reportsFor(scanId: string, specs: readonly VetSpec[], options: SnapshotOptions = {}): readonly RetentionShadowReport[] {
     const recs = specs.map(recommendation)
+    const rosterDigest = rosterBindingDigestForFingerprints(recs.map((r) => r.rosterFingerprint as string))
     return (options.profiles ?? PROFILES).map((targetProfile) => ({
         schema: PARENTLAB_RETENTION_SCHEMA,
         schemaVersion: (options.schemaVersion ?? PARENTLAB_RETENTION_SCHEMA_VERSION) as typeof PARENTLAB_RETENTION_SCHEMA_VERSION,
         rosterScanId: scanId,
         protectionScanId: "vp-fixture",
+        protectionBinding: rosterDigest ? { version: 1, protectionScanId: "vp-fixture", rosterScanId: scanId, rosterDigest } : null,
         rosterFingerprint: `${scanId}:${recs.length}/${recs.length}`,
         generatedAt: options.observedAt ?? T0,
         targetProfile,
@@ -153,19 +161,19 @@ export const SHARED_CHARACTER = "Shared Trainee"
 
 export function peers(): VetSpec[] {
     return [
-        { fp: "peer-a", character: SHARED_CHARACTER, factors: [{ factorKey: "stat:SPEED", stars: 3 }] },
-        { fp: "peer-b", character: SHARED_CHARACTER, factors: [{ factorKey: "stat:SPEED", stars: 3 }] },
+        { fp: FP_PEER_A, character: SHARED_CHARACTER, factors: [{ factorKey: "stat:SPEED", stars: 3 }] },
+        { fp: FP_PEER_B, character: SHARED_CHARACTER, factors: [{ factorKey: "stat:SPEED", stars: 3 }] },
     ]
 }
 
 /** The candidate the maturity tests follow: eligible under every profile. */
 export function eligible(overrides: Partial<VetSpec> = {}): VetSpec {
     return {
-        fp: "cand-1",
+        fp: FP_CAND,
         character: SHARED_CHARACTER,
         state: "SAFE_TO_TRANSFER",
         confidence: "HIGH",
-        dominators: ["peer-a"],
+        dominators: [FP_PEER_A],
         replacement: "MODERATE",
         factors: [{ factorKey: "stat:SPEED", stars: 1 }],
         ...overrides,

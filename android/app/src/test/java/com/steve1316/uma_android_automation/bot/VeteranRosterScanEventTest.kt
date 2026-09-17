@@ -80,6 +80,23 @@ class VeteranRosterScanEventTest {
     /** N distinct entries: the rating carries the difference so every fingerprint is unique. */
     private fun distinct(n: Int): List<RosterEntryObservation> = (0 until n).map { observation(rating = 10_000 + it) }
 
+    @Test
+    fun `roster binding digest matches the canonical cross-language vectors and rejects partial identities`() {
+        val base = assemble(distinct(2), list = listState(used = 2))
+        val a = "a".repeat(32)
+        val b = "b".repeat(32)
+        val c = "c".repeat(32)
+        val ab = base.copy(entries = listOf(base.entries[0].copy(rosterFingerprint = a), base.entries[1].copy(rosterFingerprint = b)))
+        assertEquals("40bd14ac2f53ad9195f68b6e8c83ff36", rosterBindingDigest(ab))
+        assertEquals(rosterBindingDigest(ab), rosterBindingDigest(ab.copy(entries = ab.entries.reversed())))
+        assertEquals("99b83f8beea8f1b15ef6a544af7c9296", rosterBindingDigest(ab.copy(entries = listOf(ab.entries[0], ab.entries[1].copy(rosterFingerprint = c)))))
+        assertNull(rosterBindingDigest(ab.copy(entries = listOf(ab.entries[0], ab.entries[1].copy(rosterFingerprint = a)))))
+        assertNull(rosterBindingDigest(ab.copy(entries = listOf(ab.entries[0], ab.entries[1].copy(rosterFingerprint = null)))))
+        assertNull(rosterBindingDigest(ab.copy(entries = listOf(ab.entries[0], ab.entries[1].copy(rosterFingerprint = "INVALID")))))
+        assertNull(rosterBindingDigest(ab.copy(entries = listOf(ab.entries[0], ab.entries[1].copy(scanIndex = 2)))))
+        assertNull(rosterBindingDigest(ab.copy(entries = listOf(ab.entries[0], ab.entries[1].copy(scanIndex = 0)))))
+    }
+
     @Nested
     @DisplayName("identity")
     inner class Identity {

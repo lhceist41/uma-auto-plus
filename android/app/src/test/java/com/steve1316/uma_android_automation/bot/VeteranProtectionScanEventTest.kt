@@ -39,10 +39,17 @@ class VeteranProtectionScanEventTest {
                 appVersion = "1.3.8",
                 screenWidth = 1080,
                 screenHeight = 1920,
+                rosterBindingVersion = 1,
+                rosterScanId = "rs-1",
+                rosterDigest = "a".repeat(32),
             )
         val json = serializeVeteranProtectionScan(record)
         assertEquals("veteran_protection", json.getString("type"))
         assertEquals(257, json.getInt("registeredUsed"))
+        assertEquals(2, json.getInt("schemaVersion"))
+        assertEquals(1, json.getInt("rosterBindingVersion"))
+        assertEquals("rs-1", json.getString("rosterScanId"))
+        assertEquals("a".repeat(32), json.getString("rosterDigest"))
         assertEquals("empty", json.getString("favoritePopulation"))
         assertEquals("empty", json.getString("memoPopulation"))
         assertEquals("disabled", json.getString("favoriteApplyState"))
@@ -112,5 +119,6 @@ class VeteranProtectionScanEventTest {
         assertEquals("unknown", json.getString("favoritePopulation"))
         assertEquals("precondition_failed", json.getString("outcome"))
         assertFalse(json.has("registeredUsed"), "an unread count is omitted, not written as 0")
+        assertFalse(json.has("rosterDigest"), "a failed scan has no usable binding")
     }
 }

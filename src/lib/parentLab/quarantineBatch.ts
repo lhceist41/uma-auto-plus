@@ -141,6 +141,9 @@ export function validateTransferBatch(ledger: QuarantineLedger, snapshot: Adviso
             continue
         }
         batch.push(candidate)
+        if (candidate.blockers.length > 0 || !candidate.eligible || candidate.protectionState !== "not_protected" || candidate.favoriteState !== "not_set") {
+            rejections.push(reject("CANDIDATE_CURRENTLY_INELIGIBLE", key, candidate.blockers, "the latest snapshot does not prove this candidate eligible and unprotected"))
+        }
         if (entry && entry.status !== "MATURE" && entry.status !== "APPROVED") {
             rejections.push(reject("CANDIDATE_NOT_MATURE", key, [entry.status, ...entry.statusReasons], `quarantine status is ${entry.status}, and only a MATURE candidate may be drafted`))
         }

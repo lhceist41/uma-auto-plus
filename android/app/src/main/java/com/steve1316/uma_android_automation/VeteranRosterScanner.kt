@@ -95,7 +95,7 @@ class VeteranRosterScanner(private val game: Game) {
      * turns on the failure-crop diagnostic: it changes nothing about what is read or how a field is
      * decided, only whether the pixels behind an UNRESOLVED field are kept for offline diagnosis.
      */
-    fun runScan(entryLimit: Int, captureEvidence: Boolean = false) {
+    fun runScan(entryLimit: Int, captureEvidence: Boolean = false): AssembledRosterScan {
         val startedAt = System.currentTimeMillis()
         val scanId = "rs-$startedAt-${java.util.UUID.randomUUID().toString().substring(0, 8)}"
         MessageLog.i(
@@ -119,8 +119,7 @@ class VeteranRosterScanner(private val game: Game) {
                 "[ROSTER-SCAN] Precondition failed: expected the Veteran Roster list, saw ${listScreen.kind} " +
                     "(registered OCR='${listScreen.registeredRaw}' title OCR='${listScreen.titleRaw}'). No gesture was dispatched.",
             )
-            finish(scanId, startedAt, RosterListState(null, null, null, null, null), entryLimit, emptyList(), RosterScanTermination.PRECONDITION_FAILED, listBitmap, evidence)
-            return
+            return finish(scanId, startedAt, RosterListState(null, null, null, null, null), entryLimit, emptyList(), RosterScanTermination.PRECONDITION_FAILED, listBitmap, evidence)
         }
 
         val list = reader.readListState(listBitmap, listScreen, verbose = true)
@@ -130,8 +129,7 @@ class VeteranRosterScanner(private val game: Game) {
                 "[ROSTER-SCAN] Precondition failed: registeredUsed=${list.registeredUsed ?: "UNREAD"} filtersOff=${list.filtersOff ?: "UNREAD"}. " +
                     "A scan under an unknown filter state would enumerate a subset and still look complete, so it stops here. No gesture was dispatched.",
             )
-            finish(scanId, startedAt, list, entryLimit, emptyList(), RosterScanTermination.PRECONDITION_FAILED, listBitmap, evidence)
-            return
+            return finish(scanId, startedAt, list, entryLimit, emptyList(), RosterScanTermination.PRECONDITION_FAILED, listBitmap, evidence)
         }
 
         val used = list.registeredUsed
@@ -154,7 +152,7 @@ class VeteranRosterScanner(private val game: Game) {
             }
 
         closeDialogAndVerify()
-        finish(scanId, startedAt, list, entryLimit, observations, termination, lastBitmap, evidence)
+        return finish(scanId, startedAt, list, entryLimit, observations, termination, lastBitmap, evidence)
     }
 
     /**
@@ -335,7 +333,7 @@ class VeteranRosterScanner(private val game: Game) {
         termination: RosterScanTermination,
         frame: Bitmap,
         evidence: RosterEvidenceWriter?,
-    ) {
+    ): AssembledRosterScan {
         val assembled =
             assembleRosterScan(
                 scanId = scanId,
@@ -364,6 +362,7 @@ class VeteranRosterScanner(private val game: Game) {
             MessageLog.i(TAG, "[ROSTER-SCAN] Mean per-entry cost: ${(h.completedAt - h.startedAt) / h.entriesEnumerated}ms")
         }
         MessageLog.i(TAG, "[ROSTER-SCAN] ===== end =====")
+        return assembled
     }
 
     private fun persist(assembled: AssembledRosterScan) {

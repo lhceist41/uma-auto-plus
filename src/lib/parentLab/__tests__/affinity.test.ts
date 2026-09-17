@@ -196,7 +196,8 @@ function build(fixture: Fixture) {
         }),
     )
     const snapshot = buildRosterSnapshots(parseRosterScanRecords([rosterHeader(entries.length), ...entries].join("\n"), "roster_scan.jsonl"))[0]
-    const inspiration = buildInspirationIndex(parseInspirationRecords(captures.join("\n"), "veteran_inspiration.jsonl"))
+    const inspirationHeader = JSON.stringify({ type: "veteran_inspiration_scan", schemaVersion: 2, scanId: ISCAN, snapshotCompatibility: true })
+    const inspiration = buildInspirationIndex(parseInspirationRecords([inspirationHeader, ...captures].join("\n"), "veteran_inspiration.jsonl"))
     const evidence = buildRetentionEvidence(snapshot, inspiration, null)
     const scarcity = buildFactorScarcityIndex(evidence)
     const relations = relationIndex()

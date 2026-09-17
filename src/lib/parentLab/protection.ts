@@ -12,10 +12,10 @@
 // not enumerated proves only that SOME Veteran is inside it, so the rest stay UNKNOWN, and UNKNOWN is
 // treated as protected downstream. Nothing here maps unknown to not-protected.
 
-import type { RosterSnapshot } from "./roster.ts"
+import { rosterBindingDigest, type RosterSnapshot } from "./roster.ts"
 
 export const PARENTLAB_PROTECTION_SCHEMA = "parent_lab_protection" as const
-export const PARENTLAB_PROTECTION_SCHEMA_VERSION = 1 as const
+export const PARENTLAB_PROTECTION_SCHEMA_VERSION = 2 as const
 
 /** A partition's account-wide size class, mirrored from the Kotlin `ProtectionPopulation`. */
 export type ProtectionPopulation = "empty" | "nonempty" | "unknown"
@@ -31,6 +31,9 @@ export type ApplyButtonState = "enabled" | "disabled" | "unknown"
 export interface VeteranProtectionRecord {
     readonly type: "veteran_protection"
     readonly schemaVersion: number
+    readonly rosterBindingVersion: number | null
+    readonly rosterScanId: string | null
+    readonly rosterDigest: string | null
     readonly scanId: string
     readonly startedAt: number | null
     readonly completedAt: number | null
@@ -44,8 +47,8 @@ export interface VeteranProtectionRecord {
     readonly enumerationPerformed: boolean
     /** Fingerprints of favorited Veterans, populated only when a non-empty favorite partition was
      * enumerated. Empty on an account with no favorites. */
-    readonly favoritedFingerprints: readonly string[]
-    readonly memoFingerprints: readonly string[]
+    readonly favoritedFingerprints: unknown
+    readonly memoFingerprints: unknown
     readonly restoredFiltersOff: boolean
     readonly outcome: ProtectionScanOutcome
     readonly app: string | null
@@ -81,13 +84,12 @@ function num(v: unknown): number | null {
     return Number.isFinite(n) ? n : null
 }
 
-function str(v: unknown): string | null {
-    return typeof v === "string" && v.length > 0 ? v : null
+function exactInteger(v: unknown): number | null {
+    return typeof v === "number" && Number.isSafeInteger(v) ? v : null
 }
 
-function stringArray(v: unknown): string[] {
-    if (!Array.isArray(v)) return []
-    return v.filter((x): x is string => typeof x === "string" && x.length > 0)
+function str(v: unknown): string | null {
+    return typeof v === "string" && v.length > 0 ? v : null
 }
 
 function population(v: unknown): ProtectionPopulation {
@@ -129,11 +131,14 @@ export function parseProtectionRecords(text: string, file?: string): ParsedProte
         }
         records.push({
             type: "veteran_protection",
-            schemaVersion: num(obj.schemaVersion) ?? 0,
+            schemaVersion: exactInteger(obj.schemaVersion) ?? 0,
+            rosterBindingVersion: exactInteger(obj.rosterBindingVersion),
+            rosterScanId: str(obj.rosterScanId),
+            rosterDigest: str(obj.rosterDigest),
             scanId,
             startedAt: num(obj.startedAt),
             completedAt: num(obj.completedAt),
-            registeredUsed: num(obj.registeredUsed),
+            registeredUsed: exactInteger(obj.registeredUsed),
             registeredCapacity: num(obj.registeredCapacity),
             filtersOffConfirmed: typeof obj.filtersOffConfirmed === "boolean" ? obj.filtersOffConfirmed : null,
             favoritePopulation: population(obj.favoritePopulation),
@@ -141,8 +146,8 @@ export function parseProtectionRecords(text: string, file?: string): ParsedProte
             memoPopulation: population(obj.memoPopulation),
             memoApplyState: applyState(obj.memoApplyState),
             enumerationPerformed: obj.enumerationPerformed === true,
-            favoritedFingerprints: stringArray(obj.favoritedFingerprints),
-            memoFingerprints: stringArray(obj.memoFingerprints),
+            favoritedFingerprints: obj.favoritedFingerprints,
+            memoFingerprints: obj.memoFingerprints,
             restoredFiltersOff: obj.restoredFiltersOff === true,
             outcome: outcome as ProtectionScanOutcome,
             app: str(obj.app),
@@ -172,13 +177,17 @@ export type ProtectionInventoryDefect =
     | "filters_not_restored"
     | "roster_untrusted"
     | "roster_count_mismatch"
+    | "binding_invalid"
+    | "roster_binding_ineligible"
+    | "partition_invalid"
 
 export interface ProtectionInventory {
     readonly schema: typeof PARENTLAB_PROTECTION_SCHEMA
     readonly schemaVersion: typeof PARENTLAB_PROTECTION_SCHEMA_VERSION
     readonly protectionScanId: string | null
     readonly rosterScanId: string
-    /** The probe and the snapshot describe the same roster (same registered count) and both are trusted. */
+    readonly rosterDigest: string | null
+    /** The probe is complete and bound to this trusted roster's scan ID and content digest. */
     readonly compatible: boolean
     /** Per-fingerprint derived state. Only fingerprints from the snapshot appear. */
     readonly byFingerprint: ReadonlyMap<string, DerivedProtection>
@@ -234,13 +243,23 @@ function memberState<Present extends string, Absent extends string>(
  */
 export function buildProtectionInventory(record: VeteranProtectionRecord | null, snapshot: RosterSnapshot): ProtectionInventory {
     const defects: ProtectionInventoryDefect[] = []
+    const digest = rosterBindingDigest(snapshot)
     if (!record) defects.push("no_protection_record")
     if (record && record.outcome !== "complete") defects.push("probe_not_complete")
     if (record && !record.restoredFiltersOff) defects.push("filters_not_restored")
     if (!snapshot.trustedComplete) defects.push("roster_untrusted")
-    if (record && snapshot.registeredUsed !== null && record.registeredUsed !== null && record.registeredUsed !== snapshot.registeredUsed) {
+    if (digest === null) defects.push("roster_binding_ineligible")
+    if (record && (!Number.isSafeInteger(record.registeredUsed) || record.registeredUsed === null || record.registeredUsed <= 0 || record.registeredUsed !== snapshot.registeredUsed)) {
         defects.push("roster_count_mismatch")
     }
+    if (record && (record.schemaVersion !== 2 || record.rosterBindingVersion !== 1 || record.rosterScanId !== snapshot.scanId || record.rosterDigest !== digest || !/^[0-9a-f]{32}$/.test(record.rosterDigest ?? "") || record.filtersOffConfirmed !== true)) defects.push("binding_invalid")
+    const rosterMembers = new Set(snapshot.entries.map((e) => e.rosterFingerprint))
+    const partitionValid = (pop: ProtectionPopulation, apply: ApplyButtonState, members: unknown): members is string[] => {
+        if (!Array.isArray(members) || !members.every((fp) => typeof fp === "string" && /^[0-9a-f]{32}$/.test(fp) && rosterMembers.has(fp))) return false
+        if (new Set(members).size !== members.length) return false
+        return (pop === "empty" && apply === "disabled" && members.length === 0) || (pop === "nonempty" && apply === "enabled" && members.length > 0 && record?.enumerationPerformed === true)
+    }
+    if (record && (!partitionValid(record.favoritePopulation, record.favoriteApplyState, record.favoritedFingerprints) || !partitionValid(record.memoPopulation, record.memoApplyState, record.memoFingerprints) || record.enumerationPerformed !== (record.favoritePopulation === "nonempty" || record.memoPopulation === "nonempty"))) defects.push("partition_invalid")
     const compatible = defects.length === 0
 
     const byFingerprint = new Map<string, DerivedProtection>()
@@ -252,8 +271,8 @@ export function buildProtectionInventory(record: VeteranProtectionRecord | null,
         let fav: FavoriteState = "unknown"
         let memo: MemoState = "unknown"
         if (compatible && record) {
-            fav = memberState(fp, record.favoritePopulation, record.enumerationPerformed, record.favoritedFingerprints, "favorite", "not_favorite", "unknown")
-            memo = memberState(fp, record.memoPopulation, record.enumerationPerformed, record.memoFingerprints, "has_memo", "no_memo", "unknown")
+            fav = memberState(fp, record.favoritePopulation, record.enumerationPerformed, record.favoritedFingerprints as string[], "favorite", "not_favorite", "unknown")
+            memo = memberState(fp, record.memoPopulation, record.enumerationPerformed, record.memoFingerprints as string[], "has_memo", "no_memo", "unknown")
         }
         const protectionState = protectionFrom(fav, memo)
         byFingerprint.set(fp, { favoriteState: fav, memoState: memo, protectionState })
@@ -274,6 +293,7 @@ export function buildProtectionInventory(record: VeteranProtectionRecord | null,
         schemaVersion: PARENTLAB_PROTECTION_SCHEMA_VERSION,
         protectionScanId: record?.scanId ?? null,
         rosterScanId: snapshot.scanId,
+        rosterDigest: compatible ? digest : null,
         compatible,
         byFingerprint,
         counts,

@@ -1,4 +1,4 @@
-import { buildRosterSnapshots, latestTrustedSnapshot, parseRosterScanRecords, ROSTER_APTITUDE_KEYS } from "../roster.ts"
+import { buildRosterSnapshots, latestTrustedSnapshot, parseRosterScanRecords, rosterBindingDigest, rosterBindingDigestForFingerprints, ROSTER_APTITUDE_KEYS } from "../roster.ts"
 import * as retentionTargets from "../retentionTargets.ts"
 import * as parentLab from "../index.ts"
 
@@ -69,6 +69,31 @@ function snapshotOf(text: string, scanId = "scan-a") {
     if (!found) throw new Error(`no snapshot for ${scanId}`)
     return found
 }
+
+describe("canonical roster binding digest", () => {
+    const a = "a".repeat(32)
+    const b = "b".repeat(32)
+    const c = "c".repeat(32)
+    const bound = (rows: readonly string[]) => snapshotOf([...rows, headerLine("scan-a", { displayedRegisteredUsed: 2, entriesEnumerated: 2, uniqueFingerprints: 2 })].join("\n"))
+
+    it("matches both Kotlin vectors and ignores traversal order", () => {
+        expect(rosterBindingDigestForFingerprints([a, b])).toBe("40bd14ac2f53ad9195f68b6e8c83ff36")
+        expect(rosterBindingDigestForFingerprints([a, c])).toBe("99b83f8beea8f1b15ef6a544af7c9296")
+        expect(rosterBindingDigestForFingerprints([b, a])).toBe(rosterBindingDigestForFingerprints([a, b]))
+        expect(rosterBindingDigest(bound([entryLine("scan-a", 0, { rosterFingerprint: a }), entryLine("scan-a", 1, { rosterFingerprint: b })]))).toBe("40bd14ac2f53ad9195f68b6e8c83ff36")
+    })
+
+    it("rejects repeated, missing, malformed and misplaced rows", () => {
+        expect(rosterBindingDigestForFingerprints([a, a])).toBeNull()
+        expect(rosterBindingDigestForFingerprints([a, null as unknown as string])).toBeNull()
+        expect(rosterBindingDigestForFingerprints([a, "INVALID"])).toBeNull()
+        for (const index of [0, 2, 0.5]) {
+            expect(rosterBindingDigest(bound([entryLine("scan-a", 0, { rosterFingerprint: a }), entryLine("scan-a", index, { rosterFingerprint: b })]))).toBeNull()
+        }
+        expect(rosterBindingDigest(bound([entryLine("scan-a", 0, { rosterFingerprint: a }), entryLine("scan-a", 1, { rosterFingerprint: null })]))).toBeNull()
+        expect(rosterBindingDigest(bound([entryLine("scan-a", 0, { rosterFingerprint: a }), entryLine("scan-a", 1, { rosterFingerprint: b, schemaVersion: 2 })]))).toBeNull()
+    })
+})
 
 describe("parseRosterScanRecords", () => {
     it("parses the header and entry rows the device writes", () => {

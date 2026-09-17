@@ -323,7 +323,7 @@ function main(argv) {
 
         // Reconciliation against the historical library is deliberately not read here: this stage ranks
         // what the account owns now, and a career's history changes none of a Veteran's factors.
-        const evidence = buildRetentionEvidence(snapshot, inspirationIndex, null, inventory.byFingerprint)
+        const evidence = buildRetentionEvidence(snapshot, inspirationIndex, null, inventory)
         const scarcity = buildFactorScarcityIndex(evidence)
         const builds = opts.targets.map((t) => buildTargetBuild(t, relations))
 

@@ -77,6 +77,7 @@ function report(recs: VeteranRetentionRecommendation[], o: Partial<RetentionShad
         schemaVersion: PARENTLAB_RETENTION_SCHEMA_VERSION,
         rosterScanId: "rs-cap-0001",
         protectionScanId: "ps-cap-0001",
+        protectionBinding: null,
         rosterFingerprint: "rs-cap-0001:3/3",
         generatedAt: Date.UTC(2026, 7, 29, 12, 0, 0),
         targetProfile: "GENERAL_INHERITANCE",
