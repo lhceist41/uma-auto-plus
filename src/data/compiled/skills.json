@@ -1271,7 +1271,7 @@
       "condition": "is_finalcorner_laterhalf==1&distance_diff_rate<=50&order==2@is_finalcorner_laterhalf==1&distance_diff_rate<=50",
       "precondition": "distance_rate>=50&order_rate_out20_continue==1@distance_rate>=50&order_rate_out20_continue==1",
       "inherited": true,
-      "tier": null,
+      "tier": 2,
       "upgrade": null,
       "downgrade": null
     },
@@ -1705,7 +1705,7 @@
       "condition": "activate_count_middle>=2",
       "precondition": "",
       "inherited": true,
-      "tier": null,
+      "tier": 1,
       "upgrade": null,
       "downgrade": null
     },
@@ -1831,7 +1831,7 @@
       "condition": "is_last_straight_onetime==1",
       "precondition": "phase>=2&corner!=0&order_rate>=60&is_overtake==1",
       "inherited": true,
-      "tier": null,
+      "tier": 1,
       "upgrade": null,
       "downgrade": null
     },
@@ -2461,7 +2461,7 @@
       "condition": "track_id==10007",
       "precondition": "",
       "inherited": false,
-      "tier": null,
+      "tier": 3,
       "upgrade": null,
       "downgrade": 200072
     },
@@ -2475,7 +2475,7 @@
       "condition": "track_id==10007",
       "precondition": "",
       "inherited": false,
-      "tier": null,
+      "tier": 3,
       "upgrade": 200071,
       "downgrade": 200073
     },
@@ -6647,7 +6647,7 @@
       "condition": "running_style==1",
       "precondition": "",
       "inherited": false,
-      "tier": 1,
+      "tier": 0,
       "upgrade": null,
       "downgrade": 201522
     },
@@ -6661,7 +6661,7 @@
       "condition": "running_style==1",
       "precondition": "",
       "inherited": false,
-      "tier": 1,
+      "tier": 0,
       "upgrade": 201521,
       "downgrade": null
     },
@@ -6675,7 +6675,7 @@
       "condition": "running_style==2",
       "precondition": "",
       "inherited": false,
-      "tier": 1,
+      "tier": 0,
       "upgrade": null,
       "downgrade": 201532
     },
@@ -6689,7 +6689,7 @@
       "condition": "running_style==2",
       "precondition": "",
       "inherited": false,
-      "tier": 1,
+      "tier": 0,
       "upgrade": 201531,
       "downgrade": null
     },
@@ -6703,7 +6703,7 @@
       "condition": "running_style==3",
       "precondition": "",
       "inherited": false,
-      "tier": 1,
+      "tier": 0,
       "upgrade": null,
       "downgrade": 201542
     },
@@ -6717,7 +6717,7 @@
       "condition": "running_style==3",
       "precondition": "",
       "inherited": false,
-      "tier": 1,
+      "tier": 0,
       "upgrade": 201541,
       "downgrade": null
     },
@@ -6731,7 +6731,7 @@
       "condition": "running_style==4",
       "precondition": "",
       "inherited": false,
-      "tier": 1,
+      "tier": 0,
       "upgrade": null,
       "downgrade": 201552
     },
@@ -6745,7 +6745,7 @@
       "condition": "running_style==4",
       "precondition": "",
       "inherited": false,
-      "tier": 1,
+      "tier": 0,
       "upgrade": 201551,
       "downgrade": null
     },
@@ -7207,7 +7207,7 @@
       "condition": "running_style==4&phase_random==1&order_rate>=50",
       "precondition": "",
       "inherited": false,
-      "tier": null,
+      "tier": 0,
       "upgrade": null,
       "downgrade": 202022
     },
@@ -7221,7 +7221,7 @@
       "condition": "running_style==4&phase_random==1&order_rate>=50",
       "precondition": "",
       "inherited": false,
-      "tier": null,
+      "tier": 3,
       "upgrade": 202021,
       "downgrade": null
     },
@@ -8355,7 +8355,7 @@
       "condition": "running_style==2&order>=2&distance_diff_top<=5&distance_rate>=60&phase==1",
       "precondition": "",
       "inherited": false,
-      "tier": null,
+      "tier": 1,
       "upgrade": null,
       "downgrade": 202412
     },
@@ -8383,7 +8383,7 @@
       "condition": "distance_type==4&running_style==3&is_lastspurt==1&order_rate>=40",
       "precondition": "",
       "inherited": false,
-      "tier": null,
+      "tier": 1,
       "upgrade": null,
       "downgrade": 202422
     },
@@ -8411,7 +8411,7 @@
       "condition": "distance_type==3&running_style==2&phase_laterhalf_random==1&distance_diff_top<=10",
       "precondition": "",
       "inherited": false,
-      "tier": null,
+      "tier": 1,
       "upgrade": null,
       "downgrade": 202432
     },

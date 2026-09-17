@@ -6,7 +6,7 @@
     "skillsSchemaVersion": 1,
     "racesSchemaVersion": 1
   },
-  "fingerprint": "c26ca1c7047bef93777c6b569744bb4822ebcb838023f4dd5ede5fe27ea09ab7",
+  "fingerprint": "a023d1429de813a98304cc7e36e9747e8100182f9110657b15979c12dbe9789d",
   "knownProvenance": {
     "generator": "scripts/data-scraper",
     "recordedSourceVersion": null,
@@ -57,7 +57,7 @@
     {
       "family": "skills",
       "path": "src/data/skills.json",
-      "sha256": "f3c0ce1ae5c91e7fbc7d6441365d8f7b7e6a4cdff59869fbdd2009599b74f9ab",
+      "sha256": "070d21ec059fa6a2943b1f86df386d83f350c2cc9e2f45c8693496a1148d7709",
       "recordCount": 695,
       "provenance": {
         "origin": "data-scraper",
@@ -83,7 +83,7 @@
     },
     {
       "path": "src/data/compiled/skills.json",
-      "sha256": "7336f9bb95f80225c27195b032021a24252117e9d49b25c14c332642d1022698",
+      "sha256": "8d6bde3d04130c999f9a5f2a00057f0c3219228e99432fc93b7b5fa563cb58b9",
       "recordCount": 695
     }
   ],
@@ -105,7 +105,7 @@
       },
       {
         "code": "nullFieldPrevalence",
-        "detail": "skills: tier is null on 181/695 records"
+        "detail": "skills: tier is null on 171/695 records"
       },
       {
         "code": "provenanceUnavailable",
