@@ -1,5 +1,7 @@
 package com.steve1316.uma_android_automation.utils
 
+import com.steve1316.uma_android_automation.bot.RosterListState
+
 /**
  * Region geometry and pure parsers for the Veteran Roster list status bar and the read-only
  * `Umamusume Details` dialog (Skills tab header + Career Info block).
@@ -182,11 +184,46 @@ fun parseSortDirection(raw: String): String? {
     }
 }
 
-/** Exact integer Rating, e.g. "10,192" -> 10192. Rejects an implausibly large misread. */
+/** Complete decimal Rating as shown in a pill. OCR debris and broken grouping are never identity. */
 fun parseRating(raw: String): Int? {
-    val digits = raw.filter { it.isDigit() }
-    val value = digits.toIntOrNull() ?: return null
+    val text = raw.trim()
+    if (!Regex("""(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)""").matches(text)) return null
+    val value = text.replace(",", "").toIntOrNull() ?: return null
     return value.takeIf { it in 0..999_999 }
+}
+
+/** Only the current Global intervals verified for Veteran identity. Gaps remain unsupported. */
+fun globalRankForRating(rating: Int): String? =
+    when (rating) {
+        in 1300..1799 -> "E"
+        in 1800..2299 -> "E+"
+        in 6500..8199 -> "B"
+        in 8200..9999 -> "B+"
+        in 10000..12099 -> "A"
+        in 12100..14499 -> "A+"
+        in 14500..15899 -> "S"
+        in 15900..17499 -> "S+"
+        else -> null
+    }
+
+/** A list rating belongs to one visible card; it cannot be carried into the next Details read. */
+data class RosterCardRatingRead(val scanIndex: Int, val raw: String, val rating: Int?, val attemptStatus: String = "read", val failureReason: String? = null)
+
+data class VeteranRankResolution(val rank: String?, val path: String, val rejectReason: String? = null)
+
+fun resolveVeteranRank(
+    visualRank: String?,
+    visualFamily: Char?,
+    detailsRating: Int?,
+): VeteranRankResolution {
+    fun reject(reason: String) = VeteranRankResolution(null, "reject", reason)
+    if (visualRank in setOf("A", "A+", "S", "S+")) {
+        if (visualFamily != visualRank?.first()) return reject("visual_family_mismatch")
+        val numericRank = detailsRating?.let(::globalRankForRating)
+        return if (detailsRating == null || visualRank == numericRank) VeteranRankResolution(visualRank, "visual") else reject("visual_rating_mismatch")
+    }
+    if (visualRank == null && visualFamily in listOf('E', 'B')) return VeteranRankResolution(null, "provisional")
+    return reject("visual_family_unresolved")
 }
 
 /** "Career Record   Races: 18  Wins: 13" -> (18, 13). Rejects wins>races as an impossible read. */
@@ -247,6 +284,34 @@ fun parseDateAcquired(raw: String): String? {
  */
 const val ROSTER_FIRST_CARD_X = 137
 const val ROSTER_FIRST_CARD_Y = 270
+
+/** The first five complete rows of the fixed 1080x1920 roster grid. The sixth is under the status
+ * bar, so it supplies no list evidence. */
+const val ROSTER_VISIBLE_CARD_COUNT = 25
+
+fun rosterCardRatingBox(scanIndex: Int): GlyphBox? =
+    if (scanIndex in 0 until ROSTER_VISIBLE_CARD_COUNT) {
+        val x = 70 + 200 * (scanIndex % 5)
+        val y = 369 + 235 * (scanIndex / 5)
+        GlyphBox(x, y, x + 135, y + 31)
+    } else {
+        null
+    }
+
+fun rosterScanPrerequisitesMet(list: RosterListState): Boolean =
+    list.registeredUsed != null && list.filtersOff == true
+
+fun hybridListEvidenceEligible(list: RosterListState, viewportSupported: Boolean): Boolean =
+    viewportSupported && list.registeredUsed != null && list.registeredUsed > 0 &&
+        list.sortKey == "Rating" && list.sortDirection == "Asc"
+
+/** Sort OCR is optional for enumeration; a known change still invalidates the final list check. */
+fun rosterListBindingStable(before: RosterListState, after: RosterListState?): Boolean =
+    after != null && before.registeredUsed != null && before.registeredCapacity != null &&
+        before.filtersOff == true && after.registeredUsed == before.registeredUsed &&
+        after.registeredCapacity == before.registeredCapacity && after.filtersOff == true &&
+        (before.sortKey == null || after.sortKey == null || before.sortKey == after.sortKey) &&
+        (before.sortDirection == null || after.sortDirection == null || before.sortDirection == after.sortDirection)
 
 /** The detail dialog's next chevron. The glyph pulses horizontally by a few pixels between frames,
  * so this is its rest centre; the classifier below reads a box, not this point. */

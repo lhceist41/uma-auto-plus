@@ -234,7 +234,7 @@ class Trackblazer(game: Game) : Campaign(game) {
      * @return True if any tests were run, false otherwise.
      */
     override fun startTests(): Boolean {
-        var bDidAnyTestsRun = super.startTests()
+        if (super.startTests()) return true
 
         val fnMap: Map<String, () -> Unit> =
             mapOf(
@@ -243,14 +243,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                 "debugMode_startTrackblazerBuyItemsTest" to ::startTrackblazerBuyItemsTest,
             )
 
-        for ((settingName, fn) in fnMap) {
-            if (SettingsHelper.getBooleanSetting("debug", settingName)) {
-                fn()
-                bDidAnyTestsRun = true
-            }
-        }
-
-        return bDidAnyTestsRun
+        return game.diagnosticSelection?.dispatch(fnMap) ?: false
     }
 
     /**

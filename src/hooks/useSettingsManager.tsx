@@ -557,20 +557,23 @@ export const useSettingsManager = () => {
      * list is empty it just clears the snapshots and returns.
      *
      * @returns the entries whose preset could not be resolved (a config error to surface to the
-     *          user), or null if persistence itself failed.
+     *          user), or null if persistence failed or the launch was cancelled.
      */
-    const prepareTraineeRotation = async (): Promise<BuildRotationResult["missing"] | null> => {
+    const prepareTraineeRotation = async (mayPrepare: () => boolean): Promise<BuildRotationResult["missing"] | null> => {
         try {
+            if (!mayPrepare()) return null
             const live = settingsRef.current
             const rq = live.runQueue
             // Always clear stale snapshots first so a disabled or shrunk rotation leaves nothing behind.
             await databaseManager.clearRotationSnapshots()
+            if (!mayPrepare()) return null
             if (!rq?.enableTraineeRotation || !rq.traineeRotation?.length) {
                 return []
             }
             const { rows, missing } = buildRotationSnapshotRows(live, rq.traineeRotation)
             if (rows.length > 0) {
                 await databaseManager.saveSettingsBatch(rows)
+                if (!mayPrepare()) return null
             }
             logWithTimestamp(`[SettingsManager] Prepared ${rq.traineeRotation.length} rotation snapshot(s): ${rows.length} rows, ${missing.length} unresolved.`)
             return missing

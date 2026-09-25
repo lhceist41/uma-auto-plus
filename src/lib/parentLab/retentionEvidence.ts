@@ -14,7 +14,7 @@
 import type { InspirationFactorRecord, VeteranInspirationView } from "./inspiration.ts"
 import type { DerivedProtection, ProtectionInventory } from "./protection.ts"
 import { normalizeJoinName, type RosterMatchStatus, type RosterReconciliation } from "./reconcile.ts"
-import { ROSTER_STAT_KEYS, rosterBindingDigest, type RosterEntryRecord, type RosterSnapshot } from "./roster.ts"
+import { ROSTER_STAT_KEYS, approvedRosterRank, canonicalRosterFingerprint, rosterBindingDigest, type RosterEntryRecord, type RosterSnapshot } from "./roster.ts"
 import { PARENTLAB_RETENTION_SCHEMA, PARENTLAB_RETENTION_SCHEMA_VERSION, type FactorScarcityEntry, type FactorScarcityIndex, type ReplacementDifficulty, type ReplacementSummary, type ScarcityClaim } from "./retentionTypes.ts"
 import type { VeteranLibrary } from "./types.ts"
 
@@ -78,6 +78,7 @@ export interface VeteranEvidence {
 export interface RetentionEvidenceSet {
     readonly snapshot: RosterSnapshot
     readonly protectionInventory: ProtectionInventory | null
+    readonly protectionEvidenceGap: "PROTECTION_EVIDENCE_MISSING" | "PROTECTION_EVIDENCE_INCOMPATIBLE" | null
     readonly veterans: readonly VeteranEvidence[]
     /** Newest observation time across the roster snapshot and the joined captures. Never a wall clock. */
     readonly observedAt: number | null
@@ -142,7 +143,10 @@ export function buildRetentionEvidence(
         const fingerprint = entry.rosterFingerprint
         const capture = fingerprint ? (inspirationIndex.get(fingerprint) ?? null) : null
         if (capture?.observedAt !== null && capture?.observedAt !== undefined && (newest === null || capture.observedAt > newest)) newest = capture.observedAt
-        const captureTrusted = capture !== null && capture.snapshotCompatible && capture.sparkCaptureComplete && capture.selfFactorSetTrusted
+        const identityAgrees = capture !== null && fingerprint !== null && canonicalRosterFingerprint(entry) === fingerprint &&
+            capture.rosterFingerprint === fingerprint && capture.character === entry.character && capture.outfit === entry.outfit &&
+            capture.rank === entry.rank && approvedRosterRank(entry.rating) === capture.rank
+        const captureTrusted = identityAgrees && capture !== null && capture.snapshotCompatible && capture.sparkCaptureComplete && capture.selfFactorSetTrusted
         const match = byScanIndex.get(entry.scanIndex)
         const character = entry.character ? normalizeJoinName(entry.character) : null
         const effectiveEntry = withDerivedProtection(entry, fingerprint && validProtection ? protectionInventory?.byFingerprint.get(fingerprint) : undefined)
@@ -160,7 +164,11 @@ export function buildRetentionEvidence(
             characterOutfitCarriers: character ? (characterOutfitCounts.get(`${character}|${entry.outfit ? normalizeJoinName(entry.outfit) : ""}`) ?? 0) : 0,
         })
     }
-    return { snapshot, protectionInventory: validProtection ? protectionInventory : null, veterans, observedAt: newest }
+    return {
+        snapshot, protectionInventory: validProtection ? protectionInventory : null,
+        protectionEvidenceGap: protectionInventory === null ? "PROTECTION_EVIDENCE_MISSING" : validProtection ? null : "PROTECTION_EVIDENCE_INCOMPATIBLE",
+        veterans, observedAt: newest,
+    }
 }
 
 /**
@@ -229,10 +237,8 @@ export function buildFactorScarcityIndex(evidence: RetentionEvidenceSet): Factor
         capturedTrusted,
         capturedUntrusted,
         coverage,
-        // Complete coverage means every identified roster entry carries a trusted complete capture.
-        // Nothing weaker licenses an account-wide claim, and `identified > 0` keeps an empty roster
-        // from reading as trivially complete.
-        accountWide: identified > 0 && capturedTrusted === identified,
+        // Subset coverage cannot establish account membership when the current roster is incomplete.
+        accountWide: evidence.snapshot.trustedComplete && identified > 0 && capturedTrusted === identified,
         entries,
         unresolvedFactorReads,
     }

@@ -1,56 +1,15 @@
 package com.steve1316.uma_android_automation
 
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import java.io.File
 
-/**
- * Debug-diagnostic arming fail-closed gate.
- *
- * On 2026-08-13 an intended read-only deck-number diagnostic did not arm at runtime, so
- * Campaign.startTests() ran nothing and Game.kt fell through into normal career navigation, which
- * pressed Start Career and spent TP. [DebugTestGate] gives the runtime one canonical answer to "was
- * a diagnostic requested" so Game.kt can log the armed set at session start (operator confirms on
- * Home) and stop FAIL-CLOSED if a diagnostic was requested but no test ran, instead of navigating.
- * The pure resolution is pinned here; source guards prove the registry stays in sync and the wiring
- * stops before navigation.
- */
+/** Registry and call-site guards complement DiagnosticLaunchTest's behavioral coverage. */
 @DisplayName("Debug-test diagnostic gate")
 class DebugTestGateTest {
-    @Nested
-    @DisplayName("resolution (pure)")
-    inner class Resolution {
-        @Test
-        fun `nothing armed means nothing requested`() {
-            assertTrue(DebugTestGate.requested { false }.isEmpty())
-            assertFalse(DebugTestGate.anyRequested { false })
-        }
-
-        @Test
-        fun `an armed key is reported as requested`() {
-            assertEquals(listOf("debugMode_startDeckNumberReadTest"), DebugTestGate.requested { it == "debugMode_startDeckNumberReadTest" })
-            assertTrue(DebugTestGate.anyRequested { it == "debugMode_startDeckNumberReadTest" })
-        }
-
-        @Test
-        fun `requested reports every armed key in registry order`() {
-            val armed = setOf("debugMode_startRainbowDetectionTest", "debugMode_startTemplateMatchingTest")
-            assertEquals(
-                listOf("debugMode_startTemplateMatchingTest", "debugMode_startRainbowDetectionTest"),
-                DebugTestGate.requested { it in armed },
-            )
-        }
-
-        @Test
-        fun `a key outside the registry never counts as requested`() {
-            assertFalse(DebugTestGate.anyRequested { it == "debugMode_notARealTest" })
-        }
-    }
-
     @Nested
     @DisplayName("registry stays in sync (source guard)")
     inner class RegistrySync {
@@ -74,20 +33,18 @@ class DebugTestGateTest {
         private val game by lazy { repoFile("android/app/src/main/java/com/steve1316/uma_android_automation/bot/Game.kt").readText().replace("\r\n", "\n") }
 
         @Test
-        fun `the armed set is resolved and logged before startTests`() {
-            val resolve = game.indexOf("DebugTestGate.requested")
+        fun `the immutable selection is checked before startTests`() {
+            val resolve = game.indexOf("if (diagnosticSelection?.key == null) return null")
             val startTests = game.indexOf("task.startTests()")
-            assertTrue(resolve in 0 until startTests, "the armed diagnostic set must be resolved (for the Home-first log) before startTests")
-            assertTrue(game.contains("[DEBUG-TEST]"), "the armed state is logged so the operator can confirm it on Home")
+            assertTrue(resolve in 0 until startTests, "dispatch must use the frozen selection")
         }
 
         @Test
         fun `a requested-but-unran diagnostic fails closed before normal navigation`() {
-            val startTests = game.indexOf("task.startTests()")
-            val failClosed = game.indexOf("armedDebugTests.isNotEmpty()", startTests)
-            val navigation = game.indexOf("warnOnRacingConfigDrift()", startTests)
-            assertTrue(startTests >= 0 && navigation > startTests)
-            assertTrue(failClosed in startTests until navigation, "the fail-closed gate must run after startTests and before normal navigation")
+            val gate = game.indexOf("runDiagnostic()?.let { return it }")
+            val navigation = game.indexOf("warnOnRacingConfigDrift()", gate)
+            assertTrue(gate >= 0 && navigation > gate)
+            assertTrue(game.contains("check(task.startTests())"), "missing handler must reject")
         }
     }
 

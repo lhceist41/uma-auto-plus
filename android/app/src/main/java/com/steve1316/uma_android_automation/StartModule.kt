@@ -681,6 +681,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     init {
         StartModule.reactContext = reactContext
         StartModule.reactContext?.addActivityEventListener(this)
+        // A request acknowledged by a previous JS instance can no longer be revoked from the UI.
+        DebugTestGate.revokePending()
         Log.d(TAG, "StartModule is now initialized.")
     }
 
@@ -693,6 +695,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     }
 
     override fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == 100 && (resultCode != Activity.RESULT_OK || data == null)) {
+            DebugTestGate.cancel()
+            return
+        }
         if (requestCode == 100 && resultCode == Activity.RESULT_OK) {
             // Start up the MediaProjection service after the user accepts the onscreen prompt.
             reactContext?.startService(
@@ -716,12 +722,31 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      * a configuration nobody verified. Single-use; consumed by the session's verdict.
      */
     @ReactMethod
-    fun setVerifiedLaunchIdentity(revision: Double, hash: String) {
-        com.steve1316.uma_android_automation.bot.LaunchIdentityGate.setExpected(revision.toInt(), hash)
+    fun setVerifiedLaunchIdentity(revision: Double, hash: String, launch: String, promise: Promise) {
+        try {
+            check(!sessionActive.get()) { "A session is already active" }
+            val token = DebugTestGate.prepare(launch)
+            com.steve1316.uma_android_automation.bot.LaunchIdentityGate.setExpected(revision.toInt(), hash)
+            promise.resolve(token)
+        } catch (e: Exception) {
+            promise.reject("LAUNCH_REJECTED", e)
+        }
+    }
+
+    /** Called when the launch choice changes after acknowledgment; resolves whether the request was still pending. */
+    @ReactMethod
+    fun revokeDiagnosticLaunch(launchId: String, promise: Promise) {
+        promise.resolve(DebugTestGate.revoke(launchId))
     }
 
     @ReactMethod
-    fun start() {
+    fun start(launchId: String) {
+        try {
+            DebugTestGate.start(launchId)
+        } catch (e: Exception) {
+            Log.e(TAG, "[DEBUG-TEST] Launch request rejected", e)
+            return
+        }
         if (readyCheck()) {
             // Initialize SQLite settings.
             Log.d(TAG, "Starting SQLite settings initialization...")
@@ -776,6 +801,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             }
 
             startProjection()
+        } else {
+            DebugTestGate.cancel()
         }
     }
 
@@ -874,6 +901,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     /** This is called when the Stop button is pressed and will begin stopping the MediaProjection service. */
     @ReactMethod
     fun stop() {
+        DebugTestGate.cancel()
         // Also signal the queue to stop so it doesn't continue after the current run.
         queueStopRequested = true
         stopProjection()
@@ -1179,13 +1207,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      *
      * @return The TaskResult from Game.start(), or an Error result if an exception occurred.
      */
-    private fun runSingleGame(): TaskResult {
+    private fun runSingleGame(selection: DebugTestGate.Selection? = null): TaskResult {
         var taskResult: TaskResult? = null
 
         val botThread =
             Thread {
                 try {
-                    val entryPoint = Game(context)
+                    val entryPoint = Game(context, selection)
                     taskResult = entryPoint.start()
                 } catch (e: Exception) {
                     EventBus.getDefault().postSticky(ExceptionEvent(e))
@@ -1435,6 +1463,63 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         }
     }
 
+    internal fun dispatchDiagnostic(readSnapshot: () -> Map<String, String>, run: (DebugTestGate.Selection) -> Unit): DebugTestGate.Selection? {
+        var loadedRevision = 0
+        val selection = DebugTestGate.consume {
+            readSnapshot().also { loadedRevision = it["general/settingsRevision"]?.toIntOrNull() ?: 0 }
+        }
+        if (!verifyLaunchIdentity(loadedRevision)) return null
+        if (selection.key != null) run(selection)
+        return selection
+    }
+
+    private fun verifyLaunchIdentity(loadedRevision: Int): Boolean {
+        val expectedIdentity = com.steve1316.uma_android_automation.bot.LaunchIdentityGate.current
+        when (com.steve1316.uma_android_automation.bot.LaunchIdentityGate.verdict(loadedRevision)) {
+            com.steve1316.uma_android_automation.bot.LaunchIdentityGate.Verdict.MISMATCH -> {
+                MessageLog.e(
+                    TAG,
+                    "[START] launch identity mismatch: settings revision $loadedRevision on disk, expected " +
+                        "${expectedIdentity?.revision} (hash ${expectedIdentity?.hash}). A settings write landed after " +
+                        "verification; aborting before any game interaction. Press Start again.",
+                )
+                return false
+            }
+            com.steve1316.uma_android_automation.bot.LaunchIdentityGate.Verdict.PASS -> {
+                MessageLog.i(TAG, "[START] launch identity verified: revision=$loadedRevision hash=${expectedIdentity?.hash}")
+            }
+            com.steve1316.uma_android_automation.bot.LaunchIdentityGate.Verdict.NOT_SET -> {
+                // A mismatch consumes the expectation. Keep later unverified starts blocked until
+                // a fresh UI-verified identity re-arms the gate.
+                if (com.steve1316.uma_android_automation.bot.LaunchIdentityGate.isBlockedAfterMismatch()) {
+                    MessageLog.e(
+                        TAG,
+                        "[START] launch blocked after a prior launch-identity mismatch this session (revision on disk: " +
+                            "$loadedRevision); return to UMA Auto+ and start again from the verified Start Queue.",
+                    )
+                    return false
+                }
+                MessageLog.w(TAG, "[START] session started without a verified launch identity (non-UI entry); revision on disk: $loadedRevision.")
+            }
+        }
+        return true
+    }
+
+    private fun readLaunchSnapshot(): Map<String, String> {
+        val rows = mutableMapOf<String, String>()
+        val dbFile = File(context.filesDir, "SQLite/settings.db")
+        SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY, android.database.DatabaseErrorHandler { }).use { db ->
+            db.rawQuery("SELECT category, key, value FROM settings WHERE category IN ('debug', 'general')", null).use { cursor ->
+                while (cursor.moveToNext()) {
+                    check(!cursor.isNull(2)) { "Null launch setting" }
+                    val key = "${cursor.getString(0)}/${cursor.getString(1)}"
+                    check(rows.put(key, cursor.getString(2)) == null) { "Duplicate launch setting" }
+                }
+            }
+        }
+        return rows
+    }
+
     @Subscribe
     fun onStartEvent(event: StartEvent) {
         if (event.message == "Entry Point ON") {
@@ -1447,6 +1532,20 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             // Released in the finally below regardless of how the session ends.
             Game.acquireWakeLock(context)
             try {
+                // Reset queue control flags at the start of every new session.
+                // Before diagnostic dispatch: Game.wait aborts on a Stop left over from the previous session.
+                queueStopRequested = false
+                queueStopReason = null
+                queueSkipRequested = false
+                gameRecoveryFailed = false
+
+                // BotService has initialized SettingsHelper; read one SQLite snapshot after restoration.
+                val nonUiEntry = com.steve1316.uma_android_automation.bot.LaunchIdentityGate.current == null
+                val launchSelection = dispatchDiagnostic(::readLaunchSnapshot) { selection -> runSingleGame(selection) } ?: return
+                val armedDebugTests = listOfNotNull(launchSelection.key)
+                val debugDiagnosticArmed = armedDebugTests.isNotEmpty()
+                // Dispatch before queue-state writes, rotation preparation or career navigation.
+                if (debugDiagnosticArmed) return
                 // The library's session-end log save doesn't world-read its file the way
                 // writePerCareerLog does, which locks adb triage pulls out of exactly the
                 // segment that holds the between-run navigation and the sparks screens
@@ -1459,12 +1558,6 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 } catch (_: Exception) {
                 }
 
-                // Reset queue control flags at the start of every new session.
-                queueStopRequested = false
-                queueStopReason = null
-                queueSkipRequested = false
-                gameRecoveryFailed = false
-
                 // Reset rotation boundary tracking so the first launched run of this session always
                 // (re)loads its trainee snapshot, even within the same app process as a prior queue.
                 rotationPrevIndex = -1
@@ -1475,47 +1568,6 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
                 // Reset the log stream mute to ensure logs for the new run are broadcasted.
                 LogStreamServer.resetMute()
-
-                // Launch-identity gate: the React Start barrier verified a specific settings
-                // revision on disk and handed it over via setVerifiedLaunchIdentity. Re-read the
-                // revision here -- BEFORE any settings-consuming decision or game interaction --
-                // and abort the session on a mismatch: a write landed in the window between
-                // React's verification and this load, so this configuration was never verified.
-                // Sessions started without an identity (non-UI entries) warn and proceed.
-                var nonUiEntry = false
-                val expectedIdentity = com.steve1316.uma_android_automation.bot.LaunchIdentityGate.current
-                val loadedRevision = SettingsHelper.getIntSetting("general", "settingsRevision", 0)
-                when (com.steve1316.uma_android_automation.bot.LaunchIdentityGate.verdict(loadedRevision)) {
-                    com.steve1316.uma_android_automation.bot.LaunchIdentityGate.Verdict.MISMATCH -> {
-                        MessageLog.e(
-                            TAG,
-                            "[START] launch identity mismatch: settings revision $loadedRevision on disk, expected " +
-                                "${expectedIdentity?.revision} (hash ${expectedIdentity?.hash}). A settings write landed after " +
-                                "verification; aborting before any game interaction. Press Start again.",
-                        )
-                        return
-                    }
-                    com.steve1316.uma_android_automation.bot.LaunchIdentityGate.Verdict.PASS -> {
-                        MessageLog.i(TAG, "[START] launch identity verified: revision=$loadedRevision hash=${expectedIdentity?.hash}")
-                    }
-                    com.steve1316.uma_android_automation.bot.LaunchIdentityGate.Verdict.NOT_SET -> {
-                        // A prior launch-identity MISMATCH poisons this process: the first PLAY aborted, but the
-                        // mismatch consumed the expectation, so a second PLAY reaches NOT_SET and would otherwise
-                        // trust the same stale config that just failed verification. Fail closed until a fresh
-                        // UI-verified Start Queue (setVerifiedLaunchIdentity -> setExpected) re-arms the gate. This
-                        // return runs before any run-settings read, queue advance, or game interaction.
-                        if (com.steve1316.uma_android_automation.bot.LaunchIdentityGate.isBlockedAfterMismatch()) {
-                            MessageLog.e(
-                                TAG,
-                                "[START] launch blocked after a prior launch-identity mismatch this session (revision on disk: " +
-                                    "$loadedRevision); return to UMA Auto+ and start again from the verified Start Queue.",
-                            )
-                            return
-                        }
-                        MessageLog.w(TAG, "[START] session started without a verified launch identity (non-UI entry); revision on disk: $loadedRevision.")
-                        nonUiEntry = true
-                    }
-                }
 
                 // Read queue settings from SQLite.
                 //
@@ -1537,40 +1589,6 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // navigator reconstruction). Sits below the settings read because it needs
                 // totalRuns, and before the first navigator construction, which consumes it.
                 CareerLaunchNavigator.resetTpRestoresForSession(totalRuns)
-
-                // Debug diagnostics are an outer-orchestration mode. When any Debug Settings "Start ...
-                // Test" toggle is armed the session is a single read-only probe: it must run once inside
-                // Game.start() and NEVER trigger a career-launching navigation. StartModule presses Start
-                // Career in two places OUTSIDE Game.start() (the cold-start launch below and the
-                // between-run LAUNCH_NEXT), so the Game.kt fail-closed gate alone can be bypassed by the
-                // queue -- a real career (and its TP) launched before or between diagnostic reads
-                // (2026-08-13, deck-number diagnostic). Resolve intent ONCE, from the same DebugTestGate
-                // registry Game.kt and Campaign.startTests() read, with the same "debug" category -- no
-                // second key list.
-                val armedDebugTests = DebugTestGate.requested { key -> SettingsHelper.getBooleanSetting("debug", key) }
-                val debugDiagnosticArmed = armedDebugTests.isNotEmpty()
-                if (debugDiagnosticArmed) {
-                    // Diagnostic-only session: this is NOT a queue run. Execute exactly one read-only
-                    // diagnostic through the same runSingleGame() -> Game.start() -> startTests() path a
-                    // normal run uses, then end the session. Placed here DELIBERATELY -- after canonical
-                    // intent resolution but BEFORE any queue bookkeeping (the resume-state read and its
-                    // clearQueueState, saveQueueState(PHASE_CAREER), CareerFinalizeGate.beginCareer, the
-                    // rotation snapshot swap, completedRuns, decidePostCareerAction, and the post-loop
-                    // clearQueueState/queueComplete) -- so a pre-existing interrupted queue's resume state
-                    // is neither consumed nor cleared, and no fake PHASE_CAREER record is ever written (a
-                    // process kill mid-diagnostic cannot poison normal resume). The outer finally still
-                    // releases the wake lock and the session latch. The later career-launch gates
-                    // (cold-start suppression, single-shot break) are now unreachable but are kept as
-                    // defense-in-depth in case this branch is ever bypassed.
-                    MessageLog.i(
-                        TAG,
-                        "[DEBUG-TEST] Diagnostic-only session; armed: ${armedDebugTests.joinToString(", ")}. " +
-                            "Running exactly one read-only diagnostic; no career, and queue resume state is left untouched.",
-                    )
-                    val diagnosticResult = runSingleGame()
-                    MessageLog.i(TAG, "[DEBUG-TEST] Diagnostic session ended (${diagnosticResult.code.name}). No queue state was read, saved, or cleared.")
-                    return
-                }
 
                 // Trainee rotation: parse the cycle once, up here so the auto-resume decision below
                 // can distinguish a rotation queue (which must re-enter an interrupted career, never
@@ -1723,13 +1741,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // and drive a career launch first. Probe failures fall through to the old
                 // behavior of starting the run directly.
                 if (debugDiagnosticArmed) {
-                    // Phase 4: a diagnostic is armed, so no career-launching navigation may run here.
-                    // The diagnostic executes read-only inside Game.start() (runSingleGame) below; the
-                    // cold-start launch would press Start Career and spend TP. Skip it entirely.
+                    // Defense in depth: an explicit diagnostic never authorizes a career launch.
                     MessageLog.i(
                         TAG,
                         "[DEBUG-TEST] StartModule launch suppressed; diagnostic armed: ${armedDebugTests.joinToString(", ")}. " +
-                            "No cold-start career navigation; the diagnostic runs read-only inside the run.",
+                            "No cold-start career navigation is allowed.",
                     )
                 } else if (enableRunQueue && startFromRun <= totalRuns && BotService.isRunning && !queueStopRequested) {
                     val scenarioSetting = SettingsHelper.getStringSetting("general", "scenario")
@@ -2127,6 +2143,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             } finally {
                 // Always release the wake lock and the session latch, even on exception or break paths.
                 Game.releaseWakeLock()
+                DebugTestGate.finish()
                 sessionActive.set(false)
                 // Bot execution truthfully ends here, on every exit path (including the early
                 // launch-identity-mismatch returns above). Enqueued through the same FIFO as the

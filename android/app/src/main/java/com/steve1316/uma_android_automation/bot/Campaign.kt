@@ -1060,15 +1060,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startVeteranProtectionScanTest" to ::startVeteranProtectionScanTest,
             )
 
-        var bDidAnyTestsRun = false
-        for ((settingName, fn) in fnMap) {
-            if (SettingsHelper.getBooleanSetting("debug", settingName)) {
-                fn()
-                bDidAnyTestsRun = true
-            }
-        }
-
-        return bDidAnyTestsRun
+        return game.diagnosticSelection?.dispatch(fnMap) ?: false
     }
 
     /**
@@ -1154,8 +1146,9 @@ abstract class Campaign(game: Game) : Task(game) {
      * validation runs - and 0 walks the whole roster.
      */
     open fun startVeteranRosterScanTest() {
-        val limit = SettingsHelper.getIntSetting("debug", "veteranRosterScanLimit", 5)
-        val evidence = SettingsHelper.getBooleanSetting("debug", "veteranRosterScanEvidence", false)
+        val selected = requireNotNull(game.diagnosticSelection)
+        val limit = selected.rosterLimit
+        val evidence = selected.rosterEvidence
         MessageLog.i(
             TAG,
             "\n[TEST] Running read-only Veteran Roster enumeration (entryLimit=${if (limit > 0) limit.toString() else "none"}, evidence=${if (evidence) "on" else "off"})...",
@@ -1186,8 +1179,9 @@ abstract class Campaign(game: Game) : Task(game) {
      * stopped crawl: the walk chevron-advances past that many entries before it starts capturing.
      */
     open fun startVeteranInspirationScanTest() {
-        val limit = SettingsHelper.getIntSetting("debug", "veteranInspirationScanLimit", 1)
-        val startIndex = SettingsHelper.getIntSetting("debug", "veteranInspirationScanStartIndex", 0)
+        val selected = requireNotNull(game.diagnosticSelection)
+        val limit = selected.inspirationLimit
+        val startIndex = selected.inspirationStartIndex
         MessageLog.i(
             TAG,
             "\n[TEST] Running read-only Veteran Inspiration capture (entryLimit=${if (limit > 0) limit.toString() else "none"}, startIndex=$startIndex)...",

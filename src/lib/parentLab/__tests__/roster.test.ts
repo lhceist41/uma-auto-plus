@@ -1,3 +1,4 @@
+import { fixtureFingerprint, fixtureRank } from "./rosterFixtures.ts"
 import { buildRosterSnapshots, latestTrustedSnapshot, parseRosterScanRecords, rosterBindingDigest, rosterBindingDigestForFingerprints, ROSTER_APTITUDE_KEYS } from "../roster.ts"
 import * as retentionTargets from "../retentionTargets.ts"
 import * as parentLab from "../index.ts"
@@ -9,7 +10,7 @@ const APTITUDES = { turf: "A", dirt: "B", sprint: "A", mile: "A", medium: "E", l
 
 function entryLine(scanId: string, scanIndex: number, o: Record<string, unknown> = {}): string {
     const stats = { spd: 949 + scanIndex, sta: 699, pwr: 648, grt: 687, wit: 420 }
-    return JSON.stringify({
+    const record = {
         type: "roster_entry",
         schemaVersion: 1,
         scanId,
@@ -24,12 +25,13 @@ function entryLine(scanId: string, scanIndex: number, o: Record<string, unknown>
         aptitudes: APTITUDES,
         favoriteState: "not_set",
         protectionState: "unknown",
-        rosterFingerprint: `fp-${scanIndex}`,
         readCompleteness: 1,
         identityMultiplicity: 1,
         unresolvedFields: [],
         ...o,
-    })
+    }
+    if (!("rank" in o)) record.rank = fixtureRank(record.rating)!
+    return JSON.stringify({ ...record, rosterFingerprint: "rosterFingerprint" in o ? o.rosterFingerprint : fixtureFingerprint(record) })
 }
 
 function headerLine(scanId: string, o: Record<string, unknown> = {}): string {
@@ -50,7 +52,7 @@ function headerLine(scanId: string, o: Record<string, unknown> = {}): string {
         unidentifiedCount: 0,
         duplicateFingerprintCount: 0,
         countDiscrepancy: 0,
-        terminationReason: "count_reached",
+        terminationReason: (o.displayedRegisteredUsed ?? 3) === 0 ? "empty_list" : "cycle_closed",
         completeness: "trusted_complete",
         app: "2.5.9",
         screenWidth: 1080,
@@ -80,7 +82,7 @@ describe("canonical roster binding digest", () => {
         expect(rosterBindingDigestForFingerprints([a, b])).toBe("40bd14ac2f53ad9195f68b6e8c83ff36")
         expect(rosterBindingDigestForFingerprints([a, c])).toBe("99b83f8beea8f1b15ef6a544af7c9296")
         expect(rosterBindingDigestForFingerprints([b, a])).toBe(rosterBindingDigestForFingerprints([a, b]))
-        expect(rosterBindingDigest(bound([entryLine("scan-a", 0, { rosterFingerprint: a }), entryLine("scan-a", 1, { rosterFingerprint: b })]))).toBe("40bd14ac2f53ad9195f68b6e8c83ff36")
+        expect(rosterBindingDigest(bound([entryLine("scan-a", 0), entryLine("scan-a", 1)]))).toBe(rosterBindingDigestForFingerprints([0, 1].map((i) => JSON.parse(entryLine("scan-a", i)).rosterFingerprint)))
     })
 
     it("rejects repeated, missing, malformed and misplaced rows", () => {
@@ -96,6 +98,67 @@ describe("canonical roster binding digest", () => {
 })
 
 describe("parseRosterScanRecords", () => {
+    it.each([undefined, null, 0, -1, 2, 260.5, "260", true, [260], {}, 2_147_483_648, Number.MAX_SAFE_INTEGER + 1])("withholds roster capacity authority for %p", (capacity) => {
+        const snapshot = snapshotOf(cleanScan("scan-a", { displayedRegisteredCapacity: capacity }))
+        expect(snapshot.defects).toContain("capacity_invalid")
+        expect(snapshot.enumerationComplete).toBe(false)
+        expect(snapshot.trustedComplete).toBe(false)
+        expect(snapshot.entries).toHaveLength(3)
+        expect(snapshot.identityComplete).toBe(true)
+    })
+
+    it.each([3, 260, 2_147_483_647])("accepts producer capacity boundary %i", (capacity) => {
+        expect(snapshotOf(cleanScan("scan-a", { displayedRegisteredCapacity: capacity })).trustedComplete).toBe(true)
+    })
+
+    it.each(["uniqueFingerprints", "unidentifiedCount", "duplicateFingerprintCount", "countDiscrepancy"])("requires exact producer census evidence for %s", (field) => {
+        for (const value of [undefined, null, -1, 0.5, "0", "3", false, [], [3], {}, 2_147_483_648, Number.MAX_SAFE_INTEGER + 1]) {
+            const parsed = parseRosterScanRecords(cleanScan("scan-a", { [field]: value }), "census.jsonl")
+            const snapshot = buildRosterSnapshots(parsed)[0]
+            expect(parsed.scans[0].file).toBe("census.jsonl")
+            expect(snapshot.entries).toHaveLength(3)
+            expect(snapshot.trustedComplete).toBe(false)
+        }
+    })
+
+    it("preserves truthful empty, bounded, duplicate and unread-count census diagnostics", () => {
+        const empty = snapshotOf(headerLine("scan-a", { displayedRegisteredUsed: 0, entriesEnumerated: 0, uniqueFingerprints: 0,
+            identityComplete: false, enumerationComplete: true, completeness: "incomplete" }))
+        expect(empty.enumerationComplete).toBe(true)
+        expect(empty.identityComplete).toBe(false)
+        expect(empty.defects).toEqual(["device_marked_incomplete"])
+        const bounded = snapshotOf([entryLine("scan-a", 0), headerLine("scan-a", { entriesEnumerated: 1, uniqueFingerprints: 1,
+            countDiscrepancy: -2, entryLimit: 1, terminationReason: "entry_limit_reached", completeness: "incomplete" })].join("\n"))
+        expect(bounded.enumerationComplete).toBe(false)
+        expect(bounded.identityComplete).toBe(true)
+        expect(bounded.countDiscrepancy).toBe(-2)
+        expect(bounded.defects).not.toContain("count_discrepancy_mismatch")
+        const duplicate = JSON.parse(entryLine("scan-a", 0))
+        duplicate.scanIndex = 1
+        const repeated = snapshotOf([entryLine("scan-a", 0), JSON.stringify(duplicate), headerLine("scan-a", {
+            displayedRegisteredUsed: 2, entriesEnumerated: 2, uniqueFingerprints: 1, duplicateFingerprintCount: 1,
+            identityComplete: false, enumerationComplete: true, completeness: "incomplete",
+        })].join("\n"))
+        expect(repeated.enumerationComplete).toBe(true)
+        expect(repeated.identityComplete).toBe(false)
+        expect(repeated.defects).not.toContain("identity_census_mismatch")
+        const unread = snapshotOf(headerLine("scan-a", { displayedRegisteredUsed: undefined, displayedRegisteredCapacity: undefined,
+            entriesEnumerated: 0, uniqueFingerprints: 0, countDiscrepancy: undefined, terminationReason: "precondition_failed", completeness: "incomplete" }))
+        expect(unread.countDiscrepancy).toBeNull()
+        expect(unread.defects).not.toContain("count_discrepancy_mismatch")
+        expect(unread.defects).not.toContain("identity_census_mismatch")
+        expect(unread.trustedComplete).toBe(false)
+    })
+
+    it("keeps identity census contradictions distinct from enumeration contradictions", () => {
+        const identity = snapshotOf(cleanScan("scan-a", { unidentifiedCount: 1 }))
+        expect(identity.enumerationComplete).toBe(true)
+        expect(identity.identityComplete).toBe(false)
+        const count = snapshotOf(cleanScan("scan-a", { countDiscrepancy: 1 }))
+        expect(count.enumerationComplete).toBe(false)
+        expect(count.identityComplete).toBe(true)
+    })
+
     it("parses the header and entry rows the device writes", () => {
         const parsed = parseRosterScanRecords(cleanScan(), "roster_scan.jsonl")
         expect(parsed.scans).toHaveLength(1)
@@ -144,7 +207,7 @@ describe("parseRosterScanRecords", () => {
 })
 
 describe("buildRosterSnapshots completeness", () => {
-    it("trusts a scan whose enumerated count matches the account's own used count", () => {
+    it("trusts a cycle-closed scan with the account's full enumerated count", () => {
         const snapshot = snapshotOf(cleanScan())
         expect(snapshot.trustedComplete).toBe(true)
         expect(snapshot.enumerationComplete).toBe(true)
@@ -156,9 +219,8 @@ describe("buildRosterSnapshots completeness", () => {
         expect(snapshot.percentFull).toBe(1.2)
     })
 
-    it("reads a count-complete walk with an unidentified entry as enumeration-complete but not identity-complete", () => {
-        // The split the device now records: the walk covered all three positions and ended at the
-        // count, but one entry did not fingerprint. Enumeration is done; identity is not.
+    it("reads a cycle-closed walk with an unidentified entry as enumeration-complete but not identity-complete", () => {
+        // The walk covered all three positions and closed the cycle, but one entry did not fingerprint.
         const partial = [
             entryLine("scan-a", 0),
             entryLine("scan-a", 1),
@@ -202,7 +264,7 @@ describe("buildRosterSnapshots completeness", () => {
     })
 
     it("does not let a duplicate fingerprint hide a matching count", () => {
-        const dup = [entryLine("scan-a", 0, { rosterFingerprint: "fp-0" }), entryLine("scan-a", 1, { rosterFingerprint: "fp-0" }), entryLine("scan-a", 2), headerLine("scan-a")].join("\n")
+        const dup = [entryLine("scan-a", 0, { rosterFingerprint: JSON.parse(entryLine("scan-a", 0)).rosterFingerprint }), entryLine("scan-a", 1, { rosterFingerprint: JSON.parse(entryLine("scan-a", 0)).rosterFingerprint }), entryLine("scan-a", 2), headerLine("scan-a")].join("\n")
         const snapshot = snapshotOf(dup)
         expect(snapshot.scanCount).toBe(3)
         expect(snapshot.countDiscrepancy).toBe(0)
@@ -213,7 +275,7 @@ describe("buildRosterSnapshots completeness", () => {
     })
 
     it("keeps both positions of a duplicate rather than merging them", () => {
-        const dup = [entryLine("scan-a", 0, { rosterFingerprint: "fp-0" }), entryLine("scan-a", 1, { rosterFingerprint: "fp-0" }), entryLine("scan-a", 2), headerLine("scan-a")].join("\n")
+        const dup = [entryLine("scan-a", 0, { rosterFingerprint: JSON.parse(entryLine("scan-a", 0)).rosterFingerprint }), entryLine("scan-a", 1, { rosterFingerprint: JSON.parse(entryLine("scan-a", 0)).rosterFingerprint }), entryLine("scan-a", 2), headerLine("scan-a")].join("\n")
         expect(snapshotOf(dup).entries.map((e) => e.scanIndex)).toEqual([0, 1, 2])
     })
 
@@ -224,12 +286,12 @@ describe("buildRosterSnapshots completeness", () => {
     })
 
     it("never trusts a scan whose termination is not consistent with reaching the end", () => {
-        for (const reason of ["entry_limit_reached", "hard_bound_reached", "stalled", "wrapped", "unexpected_screen", "precondition_failed"]) {
+        for (const reason of ["count_reached", "chevron_end", "single_card", "empty_list", "entry_limit_reached", "hard_bound_reached", "stalled", "wrapped", "unexpected_screen", "precondition_failed"]) {
             const snapshot = snapshotOf(cleanScan("scan-a", { terminationReason: reason }))
             expect(snapshot.trustedComplete).toBe(false)
             expect(snapshot.defects).toContain("termination_not_at_end")
         }
-        expect(snapshotOf(cleanScan("scan-a", { terminationReason: "chevron_end" })).trustedComplete).toBe(true)
+        expect(snapshotOf(cleanScan("scan-a", { terminationReason: "cycle_closed" })).trustedComplete).toBe(true)
     })
 
     it("never trusts a scan the device itself marked incomplete", () => {

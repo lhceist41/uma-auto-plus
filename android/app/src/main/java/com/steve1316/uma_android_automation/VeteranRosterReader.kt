@@ -59,6 +59,7 @@ import com.steve1316.uma_android_automation.utils.ROSTER_SORT_H
 import com.steve1316.uma_android_automation.utils.ROSTER_SORT_W
 import com.steve1316.uma_android_automation.utils.ROSTER_SORT_X
 import com.steve1316.uma_android_automation.utils.ROSTER_SORT_Y
+import com.steve1316.uma_android_automation.utils.RosterCardRatingRead
 import com.steve1316.uma_android_automation.utils.RosterScreenKind
 import com.steve1316.uma_android_automation.utils.STAT_GRADE_GLYPH_BOXES
 import com.steve1316.uma_android_automation.utils.STAT_LABELS
@@ -85,6 +86,8 @@ import com.steve1316.uma_android_automation.utils.parseSortKey
 import com.steve1316.uma_android_automation.utils.parseStatValue
 import com.steve1316.uma_android_automation.utils.resolveNameOutfit
 import com.steve1316.uma_android_automation.utils.resolveStatValue
+import com.steve1316.uma_android_automation.utils.resolveVeteranRank
+import com.steve1316.uma_android_automation.utils.rosterCardRatingBox
 
 private const val TAG = "[VeteranRosterReader]"
 
@@ -280,6 +283,15 @@ class VeteranRosterReader(
         return RosterListState(screen.registered?.first, screen.registered?.second, filtersOff, sortKey, sortDirection)
     }
 
+    /** A separate OCR of one visible list card, taken before that card is opened. */
+    fun readListCardRating(bitmap: Bitmap, scanIndex: Int): RosterCardRatingRead? {
+        if (bitmap.width != 1080 || bitmap.height != 1920) return null
+        val box = rosterCardRatingBox(scanIndex) ?: return null
+        val raw = ocr(bitmap, box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0, "list_rating_$scanIndex", digitsOnly = true)
+        val rating = parseRating(raw)
+        return RosterCardRatingRead(scanIndex, raw, rating, if (rating == null) "rejected" else "parsed", if (rating == null) "parse_failed" else null)
+    }
+
     /**
      * Every identity field the detail dialog's persistent header carries, plus the Career Info block
      * when [includeCareerInfo] is set and that tab is actually open. The header band sits above the
@@ -287,15 +299,21 @@ class VeteranRosterReader(
      * the operator's tab choice; the Career block does, which is why it is opt-in and why every one
      * of its parsers refuses a crop whose shape does not match.
      */
-    fun readDetailObservation(bitmap: Bitmap, includeCareerInfo: Boolean = true, verbose: Boolean = false): RosterEntryObservation {
+    fun readDetailObservation(
+        bitmap: Bitmap,
+        includeCareerInfo: Boolean = true,
+        verbose: Boolean = false,
+        listRead: RosterCardRatingRead? = null,
+    ): RosterEntryObservation {
         val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
 
         val nameOutfitRaw = ocr(bitmap, DETAIL_NAME_OUTFIT_X, DETAIL_NAME_OUTFIT_Y, DETAIL_NAME_OUTFIT_W, DETAIL_NAME_OUTFIT_H, "name_outfit")
         val identity = resolveNameOutfit(nameOutfitRaw, catalog)
         val rankRead = classifyRankMedalDetailed(sampler)
-        val rank = rankRead.tier
         val ratingRaw = ocr(bitmap, DETAIL_RATING_X, DETAIL_RATING_Y, DETAIL_RATING_W, DETAIL_RATING_H, "rating")
         val rating = parseRating(ratingRaw)
+        val rankResolution = resolveVeteranRank(rankRead.tier, rankRead.family, rating)
+        val rank = rankResolution.rank
 
         if (verbose) {
             MessageLog.i(
@@ -369,6 +387,15 @@ class VeteranRosterReader(
                     rankBestScore = rankRead.bestScore,
                     rankSecondScore = rankRead.secondScore,
                     rankAcceptancePath = rankRead.acceptancePath.name.lowercase(),
+                    rawListRatingOcr = listRead?.raw?.ifEmpty { null },
+                    listRating = listRead?.rating,
+                    detailsRating = rating,
+                    visualRank = rankRead.tier,
+                    rankResolutionPath = rankResolution.path,
+                    rankRejectReason = rankResolution.rejectReason,
+                    listRatingAttemptStatus = listRead?.attemptStatus,
+                    listRatingFailureReason = listRead?.failureReason,
+                    bindingStatus = "not_attempted",
                 ),
         )
     }

@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.uma_android_automation.utils.APTITUDE_ROLES
+import com.steve1316.uma_android_automation.utils.RosterCardRatingRead
 import com.steve1316.uma_android_automation.utils.RosterIdentityEvidence
 import com.steve1316.uma_android_automation.utils.STAT_KEYS
 import com.steve1316.uma_android_automation.utils.rosterFingerprint
@@ -62,7 +63,7 @@ class VeteranRosterScanEventTest {
     private fun assemble(
         observations: List<RosterEntryObservation>,
         list: RosterListState = listState(),
-        termination: RosterScanTermination = RosterScanTermination.COUNT_REACHED,
+        termination: RosterScanTermination = RosterScanTermination.CYCLE_CLOSED,
         entryLimit: Int = 0,
     ) = assembleRosterScan(
         scanId = "scan-1",
@@ -115,6 +116,23 @@ class VeteranRosterScanEventTest {
                     ),
                 )
             assertEquals(expected, entryFingerprint(o))
+        }
+
+        @Test
+        fun `lower rank fingerprints appear only after full-walk binding`() {
+            for ((family, rating, expected) in listOf(Triple('E', 1904, "E+"), Triple('B', 9335, "B+"))) {
+                val observed = observation(rank = null, rating = rating, diagnostics = RosterEntryDiagnostics(rankFamily = family.toString()))
+                assertNull(entryFingerprint(observed))
+                val entries = listOf(1L to observed, 2L to observation(rating = rating + 10_000))
+                val cards = listOf(RosterCardRatingRead(0, rating.toString(), rating))
+                val accepted = finalizeHybridRanks(listState(used = 2), listState(used = 2), RosterScanTermination.CYCLE_CLOSED, 0, entries, cards, true, true)
+                assertEquals(expected, accepted[0].second.rank)
+                assertNotNull(entryFingerprint(accepted[0].second))
+                assertEquals("accepted", accepted[0].second.diagnostics?.bindingStatus)
+                val partial = finalizeHybridRanks(listState(used = 2), listState(used = 2), RosterScanTermination.COUNT_REACHED, 0, entries, cards, true, true)
+                assertNull(partial[0].second.rank)
+                assertNull(entryFingerprint(partial[0].second))
+            }
         }
 
         @Test
@@ -227,7 +245,7 @@ class VeteranRosterScanEventTest {
 
         @Test
         fun `only a termination consistent with reaching the end can be trusted`() {
-            val endLike = setOf(RosterScanTermination.COUNT_REACHED, RosterScanTermination.CHEVRON_END)
+            val endLike = setOf(RosterScanTermination.CYCLE_CLOSED)
             for (reason in RosterScanTermination.entries) {
                 val scan = assemble(distinct(4), list = listState(used = 4), termination = reason).header
                 val expected = if (reason in endLike) RosterScanCompleteness.TRUSTED_COMPLETE else RosterScanCompleteness.INCOMPLETE
@@ -409,6 +427,27 @@ class VeteranRosterScanEventTest {
         }
 
         @Test
+        fun `a resolved hybrid rank persists both rating reads and its path`() {
+            val diagnostics = RosterEntryDiagnostics(
+                rawRatingOcr = "9,335",
+                rawListRatingOcr = "9335",
+                listRating = 9335,
+                detailsRating = 9335,
+                rankFamily = "B",
+                rankResolutionPath = "hybrid",
+                bindingStatus = "accepted",
+            )
+            val entry = assemble(listOf(observation(rank = "B+", rating = 9335, diagnostics = diagnostics)), list = listState(used = 1)).entries.single()
+            val d = serializeRosterScanEntry("scan-1", entry).getJSONObject("diagnostics")
+            assertEquals(9335, d.getInt("listRating"))
+            assertEquals(9335, d.getInt("detailsRating"))
+            assertEquals("B", d.getString("rankFamily"))
+            assertEquals("hybrid", d.getString("rankResolutionPath"))
+            assertEquals("accepted", d.getString("bindingStatus"))
+            assertNotNull(entry.rosterFingerprint)
+        }
+
+        @Test
         fun `an entry with an unresolved immutable field emits the raw reads that explain it`() {
             val entry =
                 assemble(
@@ -462,6 +501,50 @@ class VeteranRosterScanEventTest {
                 ).header
             assertEquals(7, header.evidenceCropCount)
             assertEquals(7, serializeRosterScanHeader(header).getInt("evidenceCropCount"))
+        }
+    }
+
+    @Nested
+    @DisplayName("rank-free pager cycle")
+    inner class PagerCycle {
+        private val a = requireNotNull(rankFreeRosterIdentity(observation(rating = 10_000)))
+        private val b = requireNotNull(rankFreeRosterIdentity(observation(rating = 10_001)))
+        private val c = requireNotNull(rankFreeRosterIdentity(observation(rating = 10_002)))
+
+        @Test
+        fun `three distinct identities then one anchor return closes the cycle`() {
+            assertEquals(RankFreeCycleStep.NEXT, rankFreeCycleStep(listOf(a), b, 3))
+            assertEquals(RankFreeCycleStep.NEXT, rankFreeCycleStep(listOf(a, b), c, 3))
+            assertEquals(RankFreeCycleStep.CLOSED, rankFreeCycleStep(listOf(a, b, c), a, 3))
+            assertEquals(RosterScanCompleteness.TRUSTED_COMPLETE, assemble(distinct(3), list = listState(used = 3)).header.completeness)
+        }
+
+        @Test
+        fun `early anchor non-anchor repeat and stale transition fail`() {
+            assertEquals(RankFreeCycleStep.REJECTED, rankFreeCycleStep(listOf(a, b), a, 3))
+            assertEquals(RankFreeCycleStep.REJECTED, rankFreeCycleStep(listOf(a, b, c), b, 3))
+            assertEquals(RankFreeCycleStep.REJECTED, rankFreeCycleStep(listOf(a), a, 3))
+            assertEquals(RankFreeCycleStep.REJECTED, rankFreeCycleStep(listOf(a, b), null, 3))
+            assertEquals(RankFreeCycleStep.REJECTED, rankFreeCycleStep(listOf(a, a), b, 3))
+        }
+
+        @Test
+        fun `count alone and legacy chevron outcome cannot complete a roster`() {
+            for (reason in listOf(RosterScanTermination.COUNT_REACHED, RosterScanTermination.CHEVRON_END, RosterScanTermination.WRAPPED)) {
+                assertFalse(assemble(distinct(3), list = listState(used = 3), termination = reason).header.trustedForRetention)
+            }
+            assertEquals(RankFreeCycleStep.REJECTED, rankFreeCycleStep(listOf(a, b, c), b, 3))
+        }
+
+        @Test
+        fun `single-card and empty-list rules do not claim a multi-card cycle`() {
+            assertTrue(assemble(listOf(observation()), list = listState(used = 1), termination = RosterScanTermination.CYCLE_CLOSED).header.trustedForRetention)
+            assertFalse(assemble(listOf(observation()), list = listState(used = 1), termination = RosterScanTermination.SINGLE_CARD).header.trustedForRetention)
+            assertFalse(assemble(listOf(observation(character = null)), list = listState(used = 1), termination = RosterScanTermination.SINGLE_CARD).header.trustedForRetention)
+            val empty = assemble(emptyList(), list = listState(used = 0), termination = RosterScanTermination.EMPTY_LIST).header
+            assertTrue(empty.enumerationComplete)
+            assertFalse(empty.trustedForRetention)
+            assertFalse(assemble(distinct(3), list = listState(used = 3), termination = RosterScanTermination.SINGLE_CARD).header.trustedForRetention)
         }
     }
 }

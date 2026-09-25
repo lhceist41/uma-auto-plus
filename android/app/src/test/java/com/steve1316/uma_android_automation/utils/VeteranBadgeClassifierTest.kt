@@ -333,7 +333,7 @@ class VeteranBadgeClassifierTest {
     }
 
     @Nested
-    @DisplayName("Detail dialog chevrons - green population, not a point sample")
+    @DisplayName("Detail dialog chevrons")
     inner class Chevrons {
         @Test
         fun `both fixtures read both chevrons as enabled`() {
@@ -362,8 +362,24 @@ class VeteranBadgeClassifierTest {
         }
 
         @Test
-        fun `an absent chevron classifies disabled instead of unknown`() {
-            assertEquals(ChevronState.DISABLED, classifyChevron(blank, CHEVRON_NEXT_BOX))
+        fun `blank and missing glyphs are unknown in both positions`() {
+            val frame = taiki
+            val missing = SparkPixelSampler { x, y -> frame.argb(x - 80, y) }
+            assertEquals(ChevronState.UNKNOWN, classifyChevron(blank, CHEVRON_NEXT_BOX))
+            assertEquals(ChevronState.UNKNOWN, classifyChevron(blank, CHEVRON_PREV_BOX))
+            assertEquals(ChevronState.UNKNOWN, classifyChevron(missing, CHEVRON_NEXT_BOX))
+        }
+
+        @Test
+        fun `obscured ambiguous and unreadable crops are unknown`() {
+            val obscured = SparkPixelSampler { _, _ -> 0xFF808080.toInt() }
+            val partial = SparkPixelSampler { x, y ->
+                if (y == CHEVRON_NEXT_BOX.y0 && x < CHEVRON_NEXT_BOX.x0 + 40) 0xFF00FF00.toInt() else 0xFFFFFFFF.toInt()
+            }
+            val unreadable = SparkPixelSampler { _, _ -> throw IllegalArgumentException("capture failed") }
+            assertEquals(ChevronState.UNKNOWN, classifyChevron(obscured, CHEVRON_NEXT_BOX))
+            assertEquals(ChevronState.UNKNOWN, classifyChevron(partial, CHEVRON_NEXT_BOX))
+            assertEquals(ChevronState.UNKNOWN, classifyChevron(unreadable, CHEVRON_NEXT_BOX))
         }
     }
 }

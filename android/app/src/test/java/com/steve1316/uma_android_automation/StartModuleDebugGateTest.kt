@@ -39,7 +39,7 @@ class StartModuleDebugGateTest {
         @Test
         fun `StartModule resolves diagnostic intent through DebugTestGate with the debug category`() {
             assertTrue(
-                startModule.contains("DebugTestGate.requested { key -> SettingsHelper.getBooleanSetting(\"debug\", key) }"),
+                startModule.contains("DebugTestGate.consume {") && startModule.contains("dispatchDiagnostic(::readLaunchSnapshot)"),
                 "StartModule must resolve armed diagnostics via the canonical DebugTestGate registry, same as Game.kt",
             )
         }
@@ -119,8 +119,8 @@ class StartModuleDebugGateTest {
     @Nested
     @DisplayName("queue-state neutrality (armed diagnostic must not touch resume state)")
     inner class QueueStateNeutrality {
-        private val resolve = startModule.indexOf("val debugDiagnosticArmed")
-        private val diagRun = startModule.indexOf("val diagnosticResult = runSingleGame()")
+        private val resolve = startModule.indexOf("val selection = DebugTestGate.consume {")
+        private val diagRun = startModule.indexOf("val launchSelection = dispatchDiagnostic(::readLaunchSnapshot)")
         private val loopRun = startModule.indexOf("val result = runSingleGame()")
         private val rotationParse = startModule.indexOf("val rotation = loadRotationConfig()", diagRun)
         private val onStartEvent = startModule.indexOf("fun onStartEvent(event: StartEvent)")
@@ -142,6 +142,7 @@ class StartModuleDebugGateTest {
 
         @Test
         fun `the diagnostic branch reads no saved queue state and writes or clears none`() {
+            assertTrue(diagRun < startModule.indexOf("setRotationSwitchPending(context, false)", onStartEvent))
             assertTrue(diagRun in 0 until firstLoadQueueState, "the diagnostic must execute before the resume-state read (loadQueueState)")
             val branchReturn = startModule.indexOf("return", diagRun)
             val exec = startModule.substring(diagRun, branchReturn)
@@ -167,15 +168,29 @@ class StartModuleDebugGateTest {
     }
 
     @Nested
+    @DisplayName("session control flags (a prior Stop must not abort the next diagnostic)")
+    inner class SessionFlags {
+        @Test
+        fun `every session control flag resets before diagnostic dispatch`() {
+            val session = startModule.indexOf("if (event.message == \"Entry Point ON\")")
+            val dispatch = startModule.indexOf("val launchSelection = dispatchDiagnostic(", session)
+            assertTrue(session >= 0 && dispatch > session, "the session entry and diagnostic dispatch must exist")
+            for (reset in listOf("queueStopRequested = false", "queueStopReason = null", "queueSkipRequested = false", "gameRecoveryFailed = false")) {
+                val at = startModule.indexOf(reset, session)
+                assertTrue(at in session until dispatch, "'$reset' must run before dispatchDiagnostic; Game.wait aborts on a stale Stop flag")
+            }
+        }
+    }
+
+    @Nested
     @DisplayName("inner Game.kt gate preserved (defense-in-depth)")
     inner class InnerGate {
         @Test
         fun `Game start still fails closed when a diagnostic is armed but ran nothing`() {
-            val startTests = game.indexOf("task.startTests()")
-            val failClosed = game.indexOf("armedDebugTests.isNotEmpty()", startTests)
-            val navigation = game.indexOf("warnOnRacingConfigDrift()", startTests)
-            assertTrue(startTests >= 0 && navigation > startTests, "the startTests gate and normal navigation must exist")
-            assertTrue(failClosed in startTests until navigation, "the inner fail-closed gate must run after startTests and before normal navigation")
+            val gate = game.indexOf("runDiagnostic()?.let { return it }")
+            val navigation = game.indexOf("warnOnRacingConfigDrift()", gate)
+            assertTrue(gate >= 0 && navigation > gate, "the terminal diagnostic gate must precede normal navigation")
+            assertTrue(game.contains("check(task.startTests())"), "a missing handler must fail closed")
         }
     }
 

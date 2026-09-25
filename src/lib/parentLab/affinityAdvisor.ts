@@ -212,6 +212,10 @@ export function buildAffinityTargetReport(input: AffinityAdvisorInput, build: Ta
         .sort((a, b) => (a.pairKey < b.pairKey ? -1 : a.pairKey > b.pairKey ? 1 : 0))
 
     const missing = new Set<string>(UNKNOWN_AFFINITY_COMPONENTS)
+    if (input.evidence.protectionEvidenceGap) missing.add(input.evidence.protectionEvidenceGap)
+    for (const gap of ["FAVORITE_STATE_UNKNOWN", "PROTECTION_STATE_UNKNOWN"] as const) {
+        if (candidates.some((candidate) => candidate.gaps.includes(gap))) missing.add(gap)
+    }
     for (const gap of build.gaps) missing.add(`BUILD_${gap}`)
     if (!input.scarcity.accountWide) missing.add("SCARCITY_NOT_ACCOUNT_WIDE")
     if (candidates.some((c) => !c.selfFactorsTrusted)) missing.add("SOME_CANDIDATES_WITHOUT_TRUSTED_FACTORS")

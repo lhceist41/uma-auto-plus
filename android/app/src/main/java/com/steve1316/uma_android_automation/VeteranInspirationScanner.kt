@@ -4,10 +4,15 @@ import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.InspirationScanTermination
 import com.steve1316.uma_android_automation.bot.RosterEntryObservation
+import com.steve1316.uma_android_automation.bot.RosterListState
 import com.steve1316.uma_android_automation.bot.VETERAN_INSPIRATION_SCHEMA_VERSION
 import com.steve1316.uma_android_automation.bot.VeteranInspirationObservation
 import com.steve1316.uma_android_automation.bot.VeteranInspirationScanHeader
 import com.steve1316.uma_android_automation.bot.entryFingerprint
+import com.steve1316.uma_android_automation.bot.walkRosterCycle
+import com.steve1316.uma_android_automation.bot.settledRosterPagerRead
+import com.steve1316.uma_android_automation.bot.RosterScanTermination
+import com.steve1316.uma_android_automation.bot.rankFreeRosterIdentity
 import com.steve1316.uma_android_automation.bot.serializeVeteranInspiration
 import com.steve1316.uma_android_automation.bot.serializeVeteranInspirationScan
 import com.steve1316.uma_android_automation.utils.CHEVRON_NEXT_BOX
@@ -25,6 +30,7 @@ import com.steve1316.uma_android_automation.utils.VeteranFactorDomain
 import com.steve1316.uma_android_automation.utils.VeteranIdentityCatalog
 import com.steve1316.uma_android_automation.utils.classifyChevron
 import com.steve1316.uma_android_automation.utils.deniedZoneAt
+import com.steve1316.uma_android_automation.utils.rosterListBindingStable
 
 private const val TAG = "[VeteranInspirationScanner]"
 
@@ -33,6 +39,7 @@ private const val CHEVRON_SETTLE_SECONDS = 0.6
 
 /** Slack over the account's registered capacity before the walk gives up, matching the roster walk. */
 private const val HARD_BOUND_SLACK = 8
+private const val TRANSITION_CAPTURE_ATTEMPTS = 3
 
 /**
  * Bounded per-Veteran capture attempts. The dominant incomplete-read cause is a transient frame-merge
@@ -61,10 +68,9 @@ private const val MAX_CAPTURE_ATTEMPTS = 3
  * title is re-asserted after every chevron; and an unexpected screen stops the walk where it stands
  * rather than tapping around to recover.
  *
- * The batch is bound to ONE roster state: the `Registered used` count is read before the first entry
- * and again after the last, and a change between them marks the whole batch
- * `snapshotCompatibility:false` rather than letting a mid-capture registration silently shift every
- * later entry's identity.
+ * A full compatible batch reads every rank-free identity, settles one extra transition back to the
+ * first, and verifies the same unfiltered roster state after closing Details. Partial batches retain
+ * their captures without claiming account-wide compatibility.
  */
 class VeteranInspirationScanner(private val game: Game) {
     private val catalog = VeteranIdentityCatalog.loadFromAssets(game.myContext)
@@ -140,7 +146,11 @@ class VeteranInspirationScanner(private val game: Game) {
                 InspirationScanTermination.UNEXPECTED_SCREEN
             }
 
-        val registeredUsedAtEnd = closeDialogAndReadRoster()
+        val afterList = closeDialogAndReadRoster()
+        val registeredUsedAtEnd = afterList?.registeredUsed
+        val pagerCycleClosed = entryLimit == 0 && startIndex == 0 &&
+            termination == InspirationScanTermination.CYCLE_CLOSED
+        val stableList = rosterListBindingStable(list, afterList)
         val header =
             VeteranInspirationScanHeader(
                 schemaVersion = VETERAN_INSPIRATION_SCHEMA_VERSION,
@@ -154,8 +164,10 @@ class VeteranInspirationScanner(private val game: Game) {
                 sortKey = list.sortKey,
                 sortDirection = list.sortDirection,
                 // Unknown is not compatible: an unread post-walk count cannot prove the roster held still.
-                snapshotCompatibility = registeredUsedAtEnd != null && registeredUsedAtEnd == used,
+                snapshotCompatibility = pagerCycleClosed && stableList,
+                pagerCycleClosed = pagerCycleClosed && stableList,
                 entryLimit = entryLimit,
+                startIndex = startIndex,
                 entriesCaptured = observations.size,
                 entriesComplete = observations.count { it.sparkCaptureComplete },
                 terminationReason = termination,
@@ -188,67 +200,59 @@ class VeteranInspirationScanner(private val game: Game) {
         publishFrameSize: (Int, Int) -> Unit,
     ): InspirationScanTermination {
         val walkStart = System.currentTimeMillis()
+        if (used == 0) return InspirationScanTermination.EMPTY_LIST
         safeTap(RosterScreenKind.ROSTER_LIST, ROSTER_FIRST_CARD_X, ROSTER_FIRST_CARD_Y, "veteran_roster_first_card")
         game.wait(CHEVRON_SETTLE_SECONDS)
-
-        // Entries already visited on the roster, capturing or not. Chevron-advancing past the first
-        // [startIndex] resumes a long crawl; every visited entry counts against the roster size and the
-        // hard bound so the walk still terminates against the same fences as a from-scratch run.
-        var visited = 0
-
-        while (true) {
-            val (bitmap, screen) = rosterReader.classifyScreenWithRetries(attempts = 3)
-            publishFrameSize(bitmap.width, bitmap.height)
-            if (screen.kind != RosterScreenKind.UMAMUSUME_DETAILS) {
-                MessageLog.w(
-                    TAG,
-                    "[INSPIRATION-SCAN] Frame at visited=$visited (captured ${observations.size}) is ${screen.kind}: " +
-                        "not the Details dialog (title OCR='${screen.titleRaw}'). Stopping where it stands; no recovery taps are attempted.",
-                )
-                return InspirationScanTermination.UNEXPECTED_SCREEN
-            }
-
-            val skipping = visited < startIndex
-            if (!skipping) {
-                // The identity header sits above the tab strip and stays on screen whichever tab is
-                // active, so the entry's fingerprint is read from the same band the roster walk reads
-                // and is not affected by the Inspiration tab being selected.
-                val identity = rosterReader.readDetailObservation(bitmap, includeCareerInfo = false, verbose = false)
-                val fingerprint = entryFingerprint(identity)
-                captureWithRetries(scanId, visited, fingerprint, identity, walkStart, observations)
-            } else if (visited == 0) {
-                MessageLog.i(TAG, "[INSPIRATION-SCAN] Resuming: chevron-advancing past $startIndex entry(s) before the first capture.")
-            }
-
-            visited++
-            val captured = observations.size
-            if (visited >= used) return InspirationScanTermination.COUNT_REACHED
-            if (entryLimit > 0 && captured >= entryLimit) return InspirationScanTermination.ENTRY_LIMIT_REACHED
-            if (visited >= hardBound) {
-                MessageLog.w(TAG, "[INSPIRATION-SCAN] Hard bound reached at $visited visited entries against a bound of $hardBound.")
-                return InspirationScanTermination.HARD_BOUND_REACHED
-            }
-
-            val current = game.imageUtils.getSourceBitmap()
-            val chevron = classifyChevron(SparkPixelSampler { x, y -> current.getPixel(x, y) }, CHEVRON_NEXT_BOX)
-            if (chevron == ChevronState.DISABLED) {
-                MessageLog.i(TAG, "[INSPIRATION-SCAN] Next chevron classified DISABLED after $visited visited entries: last entry reached.")
-                return InspirationScanTermination.CHEVRON_END
-            }
-            safeTap(RosterScreenKind.UMAMUSUME_DETAILS, DETAIL_NEXT_CHEVRON_X, DETAIL_NEXT_CHEVRON_Y, "veteran_detail_next_chevron")
-            game.wait(CHEVRON_SETTLE_SECONDS)
+        var (bitmap, screen) = rosterReader.classifyScreenWithRetries(attempts = 3)
+        if (screen.kind != RosterScreenKind.UMAMUSUME_DETAILS) return InspirationScanTermination.UNEXPECTED_SCREEN
+        val identity = rosterReader.readDetailObservation(bitmap, includeCareerInfo = false, verbose = false)
+        if (rankFreeRosterIdentity(identity) == null) return InspirationScanTermination.UNEXPECTED_SCREEN
+        val termination = walkRosterCycle(
+            identity, used, hardBound, entryLimit, startIndex,
+            visit = { index, entry ->
+                publishFrameSize(bitmap.width, bitmap.height)
+                if (index >= startIndex) {
+                    captureWithRetries(scanId, index, entryFingerprint(entry), entry, walkStart, observations)
+                } else if (index == 0) {
+                    MessageLog.i(TAG, "[INSPIRATION-SCAN] Resuming: chevron-advancing past $startIndex entry(s) before the first capture.")
+                }
+            },
+            advance = advance@{ previous, _ ->
+                val current = game.imageUtils.getSourceBitmap()
+                val chevron = classifyChevron(SparkPixelSampler { x, y -> current.getPixel(x, y) }, CHEVRON_NEXT_BOX)
+                if (chevron != ChevronState.ENABLED) return@advance null
+                safeTap(RosterScreenKind.UMAMUSUME_DETAILS, DETAIL_NEXT_CHEVRON_X, DETAIL_NEXT_CHEVRON_Y, "veteran_detail_next_chevron")
+                game.wait(CHEVRON_SETTLE_SECONDS)
+                var candidate: RosterEntryObservation? = null
+                for (attempt in 1..TRANSITION_CAPTURE_ATTEMPTS) {
+                    val (nextBitmap, nextScreen) = rosterReader.classifyScreenWithRetries(attempts = 3)
+                    if (nextScreen.kind != RosterScreenKind.UMAMUSUME_DETAILS) return@advance null
+                    val read = rosterReader.readDetailObservation(nextBitmap, includeCareerInfo = false, verbose = false)
+                    if (candidate != null && settledRosterPagerRead(previous, candidate, read, used)) {
+                        bitmap = nextBitmap
+                        return@advance read
+                    }
+                    candidate = read.takeIf { rankFreeRosterIdentity(it) != null }
+                    if (attempt < TRANSITION_CAPTURE_ATTEMPTS) game.wait(CHEVRON_SETTLE_SECONDS)
+                }
+                null
+            },
+        )
+        return when (termination) {
+            RosterScanTermination.CYCLE_CLOSED -> InspirationScanTermination.CYCLE_CLOSED
+            RosterScanTermination.EMPTY_LIST -> InspirationScanTermination.EMPTY_LIST
+            RosterScanTermination.ENTRY_LIMIT_REACHED -> InspirationScanTermination.ENTRY_LIMIT_REACHED
+            RosterScanTermination.HARD_BOUND_REACHED -> InspirationScanTermination.HARD_BOUND_REACHED
+            else -> InspirationScanTermination.UNEXPECTED_SCREEN
         }
     }
 
     /**
      * Captures one parked Veteran, retrying a reliability failure up to [MAX_CAPTURE_ATTEMPTS] times.
      *
-     * Every attempt is appended to the corpus as append-only evidence; nothing is overwritten, and the
-     * offline resolver re-derives the best observation from the whole set by [rosterFingerprint]. The
-     * in-memory [observations] list keeps only the best attempt for this Veteran, so the batch header's
-     * captured/complete counts remain one-per-Veteran. Retrying stops as soon as a read is
-     * [VeteranInspirationObservation.sparkCaptureComplete]: that is the reliability bar, and a complete
-     * read that merely failed to canonicalize a name is not improved by re-OCRing it.
+     * The selected attempt is checkpointed once per traversal index before the batch header. Retry
+     * diagnostics remain in the log; duplicate indexes must never masquerade as a complete census.
+     * Retrying stops when the capture is complete, even if a name remains unresolved.
      */
     private fun captureWithRetries(
         scanId: String,
@@ -270,7 +274,6 @@ class VeteranInspirationScanner(private val game: Game) {
                     rank = identity.rank,
                     verbose = false,
                 )
-            OutcomeCorpus.append(game.myContext, serializeVeteranInspiration(observation), OutcomeCorpus.VETERAN_INSPIRATION_PATH)
             best = betterObservation(best, observation)
             MessageLog.i(
                 TAG,
@@ -291,6 +294,7 @@ class VeteranInspirationScanner(private val game: Game) {
             }
         }
         val chosen = best!!
+        OutcomeCorpus.append(game.myContext, serializeVeteranInspiration(chosen), OutcomeCorpus.VETERAN_INSPIRATION_PATH)
         observations.add(chosen)
         if (!chosen.sparkCaptureComplete) {
             MessageLog.w(
@@ -306,7 +310,7 @@ class VeteranInspirationScanner(private val game: Game) {
      * Deterministically picks the better of two attempts for the same Veteran. A complete read beats an
      * incomplete one; among reads of equal completeness a self-trusted set beats an untrusted one; then
      * more resolved factors, then more factors read; ties keep the incumbent (the earlier attempt). This
-     * only chooses which attempt represents the Veteran in the batch header - the corpus keeps them all.
+     * chooses the one canonical capture persisted for this traversal index.
      */
     private fun betterObservation(current: VeteranInspirationObservation?, candidate: VeteranInspirationObservation): VeteranInspirationObservation {
         if (current == null) return candidate
@@ -326,9 +330,8 @@ class VeteranInspirationScanner(private val game: Game) {
         return current
     }
 
-    /** Closes the dialog and re-reads the roster status bar. Returns the post-walk `Registered used`
-     * count, or null when it could not be read - which is treated as incompatible, never as unchanged. */
-    private fun closeDialogAndReadRoster(): Int? =
+    /** Closes the dialog and re-reads the roster list for the post-walk binding check. */
+    private fun closeDialogAndReadRoster(): RosterListState? =
         try {
             val (_, screen) = rosterReader.classifyScreenWithRetries(attempts = 2)
             if (screen.kind == RosterScreenKind.UMAMUSUME_DETAILS) {
@@ -343,7 +346,7 @@ class VeteranInspirationScanner(private val game: Game) {
                     "[INSPIRATION-SCAN] Post-walk roster state: Registered ${after.registeredUsed ?: "?"}/${after.registeredCapacity ?: "?"} " +
                         "filtersOff=${after.filtersOff ?: "UNREAD"}",
                 )
-                after.registeredUsed
+                after
             } else {
                 MessageLog.w(TAG, "[INSPIRATION-SCAN] Could not re-read the roster list after the walk (saw ${afterScreen.kind}).")
                 null

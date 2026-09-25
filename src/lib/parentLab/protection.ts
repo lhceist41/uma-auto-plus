@@ -3,9 +3,9 @@
 //
 // Protection in this game is DERIVED, never read as its own field: there is no lock concept, only two
 // user-mutable markers that block a Veteran from being released - a favorite icon and a memo. The
-// device probe establishes the account-wide POPULATION of each (empty / non-empty) and, only when a
-// partition is non-empty, which Veterans are in it. This module binds one such probe to a trusted
-// roster snapshot and derives each Veteran's favorite / memo / protection state.
+// device probe establishes the account-wide POPULATION of each (empty / non-empty). A nonempty
+// partition has no member census. This module binds one such probe to a trusted roster snapshot
+// and derives each Veteran's favorite / memo / protection state.
 //
 // The one rule it exists to enforce: a protection state is only ever positive when the evidence can
 // support it. An empty partition proves every Veteran is outside it; a non-empty partition that was
@@ -22,7 +22,7 @@ export type ProtectionPopulation = "empty" | "nonempty" | "unknown"
 
 /** How the device probe ended, mirrored from the Kotlin `ProtectionScanOutcome`. Only "complete" is
  * trustworthy; every other value keeps the whole inventory UNKNOWN. */
-export type ProtectionScanOutcome = "complete" | "precondition_failed" | "ui_unexpected" | "partition_set_failed" | "restore_failed"
+export type ProtectionScanOutcome = "complete" | "nonempty_partition_census_unavailable" | "precondition_failed" | "ui_unexpected" | "partition_set_failed" | "restore_failed" | "invalid"
 
 /** The OK-button reading a population was derived from, kept as raw evidence. */
 export type ApplyButtonState = "enabled" | "disabled" | "unknown"
@@ -42,9 +42,14 @@ export interface VeteranProtectionRecord {
     readonly filtersOffConfirmed: boolean | null
     readonly favoritePopulation: ProtectionPopulation
     readonly favoriteApplyState: ApplyButtonState
+    readonly favoriteBaselineVerified: boolean
+    readonly filterBaselineEvidenceVersion: number | null
+    readonly favoriteBaselineReadings: unknown
     readonly memoPopulation: ProtectionPopulation
     readonly memoApplyState: ApplyButtonState
-    readonly enumerationPerformed: boolean
+    readonly memoBaselineVerified: boolean
+    readonly memoBaselineReadings: unknown
+    readonly enumerationPerformed: boolean | null
     /** Fingerprints of favorited Veterans, populated only when a non-empty favorite partition was
      * enumerated. Empty on an account with no favorites. */
     readonly favoritedFingerprints: unknown
@@ -58,9 +63,14 @@ export interface VeteranProtectionRecord {
     readonly lineNumber?: number
 }
 
+export type ProtectionRecordCandidate =
+    | { readonly kind: "record"; readonly record: VeteranProtectionRecord }
+    | { readonly kind: "malformed"; readonly file?: string; readonly lineNumber: number }
+
 export interface ParsedProtectionRecords {
     readonly records: readonly VeteranProtectionRecord[]
     readonly malformedRecords: number
+    readonly latestCandidate: ProtectionRecordCandidate | null
 }
 
 export type FavoriteState = "favorite" | "not_favorite" | "unknown"
@@ -75,7 +85,7 @@ export interface DerivedProtection {
 }
 
 const POPULATIONS = new Set<ProtectionPopulation>(["empty", "nonempty", "unknown"])
-const OUTCOMES = new Set<ProtectionScanOutcome>(["complete", "precondition_failed", "ui_unexpected", "partition_set_failed", "restore_failed"])
+const OUTCOMES = new Set<ProtectionScanOutcome>(["complete", "nonempty_partition_census_unavailable", "precondition_failed", "ui_unexpected", "partition_set_failed", "restore_failed"])
 const APPLY_STATES = new Set<ApplyButtonState>(["enabled", "disabled", "unknown"])
 
 function num(v: unknown): number | null {
@@ -101,17 +111,18 @@ function applyState(v: unknown): ApplyButtonState {
 }
 
 /**
- * Parses a `veteran_protection` JSONL corpus. Malformed lines are skipped and counted. A record
- * missing its `scanId` or carrying an unrecognised `outcome` is dropped rather than defaulted into
- * something that would read as a valid probe.
+ * Parses a `veteran_protection` JSONL corpus in append order. Every nonblank line remains a candidate,
+ * including malformed JSON, so later unreadable evidence supersedes older negative evidence.
  */
 export function parseProtectionRecords(text: string, file?: string): ParsedProtectionRecords {
     const records: VeteranProtectionRecord[] = []
     let malformedRecords = 0
+    let latestCandidate: ProtectionRecordCandidate | null = null
     const lines = text.split("\n")
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].trim()
         if (!line) continue
+        latestCandidate = { kind: "malformed", file, lineNumber: i }
         let obj: any
         try {
             obj = JSON.parse(line)
@@ -125,49 +136,50 @@ export function parseProtectionRecords(text: string, file?: string): ParsedProte
         }
         const scanId = str(obj.scanId)
         const outcome = String(obj.outcome ?? "")
-        if (!scanId || !OUTCOMES.has(outcome as ProtectionScanOutcome)) {
-            malformedRecords++
-            continue
-        }
-        records.push({
+        const valid = scanId !== null && OUTCOMES.has(outcome as ProtectionScanOutcome)
+        if (!valid) malformedRecords++
+        const record: VeteranProtectionRecord = {
             type: "veteran_protection",
             schemaVersion: exactInteger(obj.schemaVersion) ?? 0,
             rosterBindingVersion: exactInteger(obj.rosterBindingVersion),
             rosterScanId: str(obj.rosterScanId),
             rosterDigest: str(obj.rosterDigest),
-            scanId,
+            scanId: scanId ?? "",
             startedAt: num(obj.startedAt),
             completedAt: num(obj.completedAt),
             registeredUsed: exactInteger(obj.registeredUsed),
-            registeredCapacity: num(obj.registeredCapacity),
+            registeredCapacity: exactInteger(obj.registeredCapacity),
             filtersOffConfirmed: typeof obj.filtersOffConfirmed === "boolean" ? obj.filtersOffConfirmed : null,
             favoritePopulation: population(obj.favoritePopulation),
             favoriteApplyState: applyState(obj.favoriteApplyState),
+            favoriteBaselineVerified: obj.favoriteBaselineVerified === true,
+            filterBaselineEvidenceVersion: exactInteger(obj.filterBaselineEvidenceVersion),
+            favoriteBaselineReadings: obj.favoriteBaselineReadings,
             memoPopulation: population(obj.memoPopulation),
             memoApplyState: applyState(obj.memoApplyState),
-            enumerationPerformed: obj.enumerationPerformed === true,
+            memoBaselineVerified: obj.memoBaselineVerified === true,
+            memoBaselineReadings: obj.memoBaselineReadings,
+            enumerationPerformed: typeof obj.enumerationPerformed === "boolean" ? obj.enumerationPerformed : null,
             favoritedFingerprints: obj.favoritedFingerprints,
             memoFingerprints: obj.memoFingerprints,
             restoredFiltersOff: obj.restoredFiltersOff === true,
-            outcome: outcome as ProtectionScanOutcome,
+            outcome: valid ? (outcome as ProtectionScanOutcome) : "invalid",
             app: str(obj.app),
             screenWidth: num(obj.screenWidth),
             screenHeight: num(obj.screenHeight),
             file,
             lineNumber: i,
-        })
+        }
+        records.push(record)
+        latestCandidate = { kind: "record", record }
     }
-    return { records, malformedRecords }
+    return { records, malformedRecords, latestCandidate }
 }
 
-/** The probe a consumer should trust: the newest COMPLETE one that restored Filters OFF, or null. A
- * newer failed probe never displaces an older good one, and no probe at all beats a wrong one. */
-export function latestTrustedProtectionRecord(parsed: ParsedProtectionRecords): VeteranProtectionRecord | null {
-    return (
-        [...parsed.records]
-            .filter((r) => r.outcome === "complete" && r.restoredFiltersOff)
-            .sort((a, b) => (b.completedAt ?? b.startedAt ?? 0) - (a.completedAt ?? a.startedAt ?? 0))[0] ?? null
-    )
+/** Returns the last protection candidate in this append stream. Its timestamp is diagnostic only;
+ * a later failed, invalid or malformed entry blocks reuse of older empty evidence. */
+export function latestProtectionRecord(parsed: ParsedProtectionRecords): VeteranProtectionRecord | null {
+    return parsed.latestCandidate?.kind === "record" ? parsed.latestCandidate.record : null
 }
 
 /** Why a protection inventory is not usable. Empty when it is. */
@@ -177,6 +189,7 @@ export type ProtectionInventoryDefect =
     | "filters_not_restored"
     | "roster_untrusted"
     | "roster_count_mismatch"
+    | "capacity_invalid"
     | "binding_invalid"
     | "roster_binding_ineligible"
     | "partition_invalid"
@@ -214,28 +227,6 @@ function protectionFrom(fav: FavoriteState, memo: MemoState): DerivedProtectionS
 }
 
 /**
- * Derives one fingerprint's favorite/memo state from a population and its (possibly empty) enumerated
- * set. An empty partition makes every Veteran outside it; a non-empty ENUMERATED partition names its
- * members and the rest are outside; a non-empty un-enumerated partition leaves everyone unknown.
- */
-function memberState<Present extends string, Absent extends string>(
-    fingerprint: string,
-    population: ProtectionPopulation,
-    enumerated: boolean,
-    members: readonly string[],
-    present: Present,
-    absent: Absent,
-    unknown: "unknown",
-): Present | Absent | "unknown" {
-    if (population === "empty") return absent
-    if (population === "nonempty") {
-        if (!enumerated) return unknown
-        return members.includes(fingerprint) ? present : absent
-    }
-    return unknown
-}
-
-/**
  * Binds one protection probe to a trusted roster snapshot and derives every identified Veteran's
  * protection state. When the probe is missing, not complete, did not restore filters, or does not
  * describe the same roster as the snapshot, the inventory is marked incompatible and every state is
@@ -252,14 +243,19 @@ export function buildProtectionInventory(record: VeteranProtectionRecord | null,
     if (record && (!Number.isSafeInteger(record.registeredUsed) || record.registeredUsed === null || record.registeredUsed <= 0 || record.registeredUsed !== snapshot.registeredUsed)) {
         defects.push("roster_count_mismatch")
     }
+    if (record && (record.registeredCapacity === null || !Number.isSafeInteger(record.registeredCapacity) || record.registeredCapacity <= 0 || record.registeredCapacity > 2_147_483_647 ||
+        record.registeredUsed === null || record.registeredCapacity < record.registeredUsed ||
+        record.registeredCapacity !== snapshot.registeredCapacity)) defects.push("capacity_invalid")
     if (record && (record.schemaVersion !== 2 || record.rosterBindingVersion !== 1 || record.rosterScanId !== snapshot.scanId || record.rosterDigest !== digest || !/^[0-9a-f]{32}$/.test(record.rosterDigest ?? "") || record.filtersOffConfirmed !== true)) defects.push("binding_invalid")
-    const rosterMembers = new Set(snapshot.entries.map((e) => e.rosterFingerprint))
-    const partitionValid = (pop: ProtectionPopulation, apply: ApplyButtonState, members: unknown): members is string[] => {
-        if (!Array.isArray(members) || !members.every((fp) => typeof fp === "string" && /^[0-9a-f]{32}$/.test(fp) && rosterMembers.has(fp))) return false
-        if (new Set(members).size !== members.length) return false
-        return (pop === "empty" && apply === "disabled" && members.length === 0) || (pop === "nonempty" && apply === "enabled" && members.length > 0 && record?.enumerationPerformed === true)
-    }
-    if (record && (!partitionValid(record.favoritePopulation, record.favoriteApplyState, record.favoritedFingerprints) || !partitionValid(record.memoPopulation, record.memoApplyState, record.memoFingerprints) || record.enumerationPerformed !== (record.favoritePopulation === "nonempty" || record.memoPopulation === "nonempty"))) defects.push("partition_invalid")
+    const partitionValid = (pop: ProtectionPopulation, apply: ApplyButtonState, members: unknown): boolean =>
+        pop === "empty" && apply === "disabled" && Array.isArray(members) && members.length === 0
+    const dimensions = ["track", "distance", "style", "attribute_sparks", "aptitude_sparks", "unique_sparks", "common_sparks", "favorites", "memo"]
+    const fullNeutral = (value: unknown): boolean => typeof value === "object" && value !== null && !Array.isArray(value) &&
+        Object.keys(value).length === dimensions.length && dimensions.every((name) => (value as Record<string, unknown>)[name] === "neutral")
+    if (record && (record.filterBaselineEvidenceVersion !== 1 || !record.favoriteBaselineVerified || !record.memoBaselineVerified ||
+        !fullNeutral(record.favoriteBaselineReadings) || !fullNeutral(record.memoBaselineReadings) ||
+        !partitionValid(record.favoritePopulation, record.favoriteApplyState, record.favoritedFingerprints) ||
+        !partitionValid(record.memoPopulation, record.memoApplyState, record.memoFingerprints) || record.enumerationPerformed !== false)) defects.push("partition_invalid")
     const compatible = defects.length === 0
 
     const byFingerprint = new Map<string, DerivedProtection>()
@@ -271,17 +267,15 @@ export function buildProtectionInventory(record: VeteranProtectionRecord | null,
         let fav: FavoriteState = "unknown"
         let memo: MemoState = "unknown"
         if (compatible && record) {
-            fav = memberState(fp, record.favoritePopulation, record.enumerationPerformed, record.favoritedFingerprints as string[], "favorite", "not_favorite", "unknown")
-            memo = memberState(fp, record.memoPopulation, record.enumerationPerformed, record.memoFingerprints as string[], "has_memo", "no_memo", "unknown")
+            fav = "not_favorite"
+            memo = "no_memo"
         }
         const protectionState = protectionFrom(fav, memo)
         byFingerprint.set(fp, { favoriteState: fav, memoState: memo, protectionState })
 
-        if (fav === "favorite") counts.favorite++
-        else if (fav === "not_favorite") counts.notFavorite++
+        if (fav === "not_favorite") counts.notFavorite++
         else counts.favoriteUnknown++
-        if (memo === "has_memo") counts.hasMemo++
-        else if (memo === "no_memo") counts.noMemo++
+        if (memo === "no_memo") counts.noMemo++
         else counts.memoUnknown++
         if (protectionState === "protected") counts.protected++
         else if (protectionState === "not_protected") counts.notProtected++

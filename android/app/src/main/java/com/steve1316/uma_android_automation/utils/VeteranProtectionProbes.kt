@@ -9,12 +9,12 @@ package com.steve1316.uma_android_automation.utils
  * partition IN the dialog and reading a single fact the game already computes for it: the game
  * disables the OK/Apply button when the current (un-applied) selection would return zero rows. So the
  * probe reads OK-enabled without ever tapping OK; the applied filter state is never changed and the
- * roster stays Filters: OFF. See validation/parentlab-plr2a-protection for the calibration captures.
+ * roster stays Filters: OFF. A disabled OK reading is usable only after the full dialog verifier has
+ * established a neutral baseline and an enabled complementary selection.
  *
- * All coordinates are 1080x1920, measured live at the deterministic ABSOLUTE-BOTTOM scroll position
- * of the Filter list (Memo is the last section, so scrolling to the bottom pins Favorites and Memo at
- * fixed coordinates). Android-free on purpose: the classifiers take a [SparkPixelSampler] so they are
- * unit-testable against fixture pixels, exactly like the roster badge classifiers.
+ * The favorite/memo coordinates are measured at the 1080x1920 absolute bottom position. The full
+ * verifier reads other sections while traversing the dialog. Pixel classifiers use [SparkPixelSampler]
+ * so a blank or displaced control cannot be accepted as neutral.
  */
 
 // -- Opening / navigating the dialog (roster list is the entry screen) -----------------------------
@@ -94,41 +94,89 @@ val MEMO_NO_CHECKBOX = FilterCheckbox("memo_no", COL2_X, 1492)
 /** Every favorite checkbox (Not Set first), for the baseline all-unselected sanity check. */
 val ALL_FAVORITE_CHECKBOXES: List<FilterCheckbox> = listOf(FAVORITE_NOT_SET_CHECKBOX) + FAVORITE_ICON_CHECKBOXES
 
-// -- Checkbox state classifier: green check = selected, grey check = not selected ------------------
+/** A dimension is neutral only when all its controls, including nested spark choices, were read. */
+enum class VeteranFilterDimension { TRACK, DISTANCE, STYLE, ATTRIBUTE_SPARKS, APTITUDE_SPARKS, UNIQUE_SPARKS, COMMON_SPARKS, FAVORITES, MEMO }
 
-enum class FilterCheckboxState { SELECTED, UNSELECTED }
+enum class FilterControlState { NEUTRAL, ACTIVE, UNKNOWN }
 
-/** Half-width of the sampled square around a checkbox centre. Kept inside the ~72 px box and clear of
- * the coloured favorite icon to its right, so only the checkmark ink is read. */
-const val FILTER_CHECKBOX_SAMPLE_HALF = 22
+enum class FilterDimensionState { NEUTRAL, ACTIVE, UNKNOWN }
 
-/** Colour spread (max channel range) at or above which the checkmark is the saturated green "selected"
- * mark. Measured: a green check reaches spread ~196, a grey check ~8. 40 sits far above the grey
- * noise floor and far below real green. Same idiom as [classifyFavoriteMarker]. */
-const val FILTER_CHECKBOX_SELECTED_SPREAD_MIN = 40
+enum class FilterBaselineState { NEUTRAL_VERIFIED, NOT_NEUTRAL, UNKNOWN }
 
-/**
- * Classifies one filter checkbox by the saturation of its checkmark: a green check is SELECTED, a
- * grey check is UNSELECTED. Never guesses which favorite icon sits beside it - that is irrelevant to
- * whether the box is ticked.
- */
-fun classifyFilterCheckbox(sampler: SparkPixelSampler, cx: Int, cy: Int): FilterCheckboxState {
-    var maxSpread = 0
-    var dy = -FILTER_CHECKBOX_SAMPLE_HALF
-    while (dy <= FILTER_CHECKBOX_SAMPLE_HALF) {
-        var dx = -FILTER_CHECKBOX_SAMPLE_HALF
-        while (dx <= FILTER_CHECKBOX_SAMPLE_HALF) {
-            val argb = sampler.argb(cx + dx, cy + dy)
-            val r = (argb shr 16) and 0xFF
-            val g = (argb shr 8) and 0xFF
-            val b = argb and 0xFF
-            val spread = maxOf(r, g, b) - minOf(r, g, b)
-            if (spread > maxSpread) maxSpread = spread
-            dx += 4
-        }
-        dy += 4
+fun filterBaselineState(readings: Map<VeteranFilterDimension, FilterDimensionState>, unexpectedSection: Boolean = false): FilterBaselineState =
+    when {
+        readings.values.any { it == FilterDimensionState.ACTIVE } -> FilterBaselineState.NOT_NEUTRAL
+        !unexpectedSection && readings.size == VeteranFilterDimension.entries.size &&
+            VeteranFilterDimension.entries.all { readings[it] == FilterDimensionState.NEUTRAL } -> FilterBaselineState.NEUTRAL_VERIFIED
+        else -> FilterBaselineState.UNKNOWN
     }
-    return if (maxSpread >= FILTER_CHECKBOX_SELECTED_SPREAD_MIN) FilterCheckboxState.SELECTED else FilterCheckboxState.UNSELECTED
+
+fun exactFilterTargetState(readings: Map<VeteranFilterDimension, FilterDimensionState>, target: VeteranFilterDimension, unexpectedSection: Boolean = false): Boolean =
+    !unexpectedSection && readings.size == VeteranFilterDimension.entries.size && VeteranFilterDimension.entries.all { dimension ->
+        readings[dimension] == if (dimension == target) FilterDimensionState.ACTIVE else FilterDimensionState.NEUTRAL
+    }
+
+// -- Native checkbox/radio glyphs ---------------------------------------------------------------
+
+private fun light(argb: Int): Int = (((argb shr 16) and 255) + ((argb shr 8) and 255) + (argb and 255)) / 3
+
+private fun green(argb: Int): Boolean {
+    val r = (argb shr 16) and 255
+    val g = (argb shr 8) and 255
+    val b = argb and 255
+    return g >= 105 && g - r >= 20 && g - b >= 35
+}
+
+private fun darkest(sampler: SparkPixelSampler, cx: Int, cy: Int): Int =
+    (-4..4 step 2).minOf { dy -> (-4..4 step 2).minOf { dx -> light(sampler.argb(cx + dx, cy + dy)) } }
+
+/** A blank crop must not look like an unchecked box. The native square has a top rim and darker
+ * bottom shadow in both the normal and dimmed Spark panels. */
+fun hasNativeFilterCheckbox(sampler: SparkPixelSampler, cx: Int, cy: Int): Boolean {
+    val backgroundTop = light(sampler.argb(cx, cy - 45))
+    val backgroundBottom = light(sampler.argb(cx, cy + 46))
+    val topContrast = (-38..-31).maxOf { backgroundTop - light(sampler.argb(cx, cy + it)) }
+    val bottomContrast = (32..40).maxOf { backgroundBottom - light(sampler.argb(cx, cy + it)) }
+    val leftContrast = (-38..-31).maxOf { light(sampler.argb(cx - 45, cy)) - light(sampler.argb(cx + it, cy)) }
+    val rightContrast = (31..38).maxOf { light(sampler.argb(cx + 45, cy)) - light(sampler.argb(cx + it, cy)) }
+    return topContrast >= 12 && bottomContrast >= 35 && leftContrast >= 12 && rightContrast >= 12
+}
+
+fun classifyFilterCheckbox(sampler: SparkPixelSampler, cx: Int, cy: Int): FilterControlState {
+    if (!hasNativeFilterCheckbox(sampler, cx, cy)) return FilterControlState.UNKNOWN
+    var greenInk = 0
+    for (dy in -22..20 step 2) for (dx in -22..22 step 2) {
+        if (green(sampler.argb(cx + dx, cy + dy))) greenInk++
+    }
+    if (greenInk >= 15) return FilterControlState.ACTIVE
+    if (greenInk > 0) return FilterControlState.UNKNOWN
+    val background = light(sampler.argb(cx + 20, cy + 20))
+    val tickPoints = listOf(-16 to 4, -7 to 13, 18 to -13)
+    return if (tickPoints.all { (dx, dy) -> background - darkest(sampler, cx + dx, cy + dy) >= 10 })
+        FilterControlState.NEUTRAL else FilterControlState.UNKNOWN
+}
+
+/** Grade All is the neutral *choice*, but its native radio is visibly selected. */
+fun classifyFilterRadio(sampler: SparkPixelSampler, cx: Int, cy: Int): FilterControlState {
+    val background = light(sampler.argb(cx - 45, cy))
+    val left = background - light(sampler.argb(cx - 35, cy))
+    val right = light(sampler.argb(cx + 45, cy)) - light(sampler.argb(cx + 35, cy))
+    val top = light(sampler.argb(cx, cy - 45)) - light(sampler.argb(cx, cy - 35))
+    val bottom = light(sampler.argb(cx, cy + 45)) - light(sampler.argb(cx, cy + 35))
+    if (listOf(left, right, top, bottom).count { it >= 10 } < 3) return FilterControlState.UNKNOWN
+    var greens = 0
+    var grey = 0
+    for (dy in -10..10 step 2) for (dx in -10..10 step 2) {
+        val pixel = sampler.argb(cx + dx, cy + dy)
+        if (green(pixel)) greens++ else if (light(pixel) in 70..230 &&
+            kotlin.math.abs(((pixel shr 16) and 255) - ((pixel shr 8) and 255)) < 15) grey++
+    }
+    return when {
+        greens >= 20 -> FilterControlState.ACTIVE
+        greens > 0 -> FilterControlState.UNKNOWN
+        grey >= 45 -> FilterControlState.NEUTRAL
+        else -> FilterControlState.UNKNOWN
+    }
 }
 
 // -- OK/Apply button classifier: the enumeration-free population signal ----------------------------
@@ -157,20 +205,28 @@ const val APPLY_DISABLED_GREEN_MAX = 155
  * rather than trusting a reading taken off the wrong screen.
  */
 fun classifyApplyButton(sampler: SparkPixelSampler): ApplyButtonState {
+    var sumR = 0L
     var sumG = 0L
+    var sumB = 0L
     var n = 0
     var y = APPLY_BUTTON_SAMPLE_Y0
     while (y < APPLY_BUTTON_SAMPLE_Y1) {
         var x = APPLY_BUTTON_SAMPLE_X0
         while (x < APPLY_BUTTON_SAMPLE_X1) {
-            sumG += ((sampler.argb(x, y) shr 8) and 0xFF).toLong()
+            val pixel = sampler.argb(x, y)
+            sumR += ((pixel shr 16) and 0xFF).toLong()
+            sumG += ((pixel shr 8) and 0xFF).toLong()
+            sumB += (pixel and 0xFF).toLong()
             n++
             x += 3
         }
         y += 3
     }
     if (n == 0) return ApplyButtonState.UNKNOWN
+    val avgR = (sumR / n).toInt()
     val avgG = (sumG / n).toInt()
+    val avgB = (sumB / n).toInt()
+    if (avgR !in 60..160 || avgB > 70 || avgG - avgR < 30 || avgG - avgB < 75) return ApplyButtonState.UNKNOWN
     return when {
         avgG >= APPLY_ENABLED_GREEN_MIN -> ApplyButtonState.ENABLED
         avgG <= APPLY_DISABLED_GREEN_MAX -> ApplyButtonState.DISABLED
@@ -178,8 +234,9 @@ fun classifyApplyButton(sampler: SparkPixelSampler): ApplyButtonState {
     }
 }
 
-/** The dialog title reads as the Display Settings dialog. Tolerant of OCR noise: either word suffices. */
+/** The dialog title reads as the Display Settings dialog. Tolerant of OCR noise: either word suffices,
+ * or the whole phrase within two edits. */
 fun isDisplaySettingsTitle(titleRaw: String): Boolean {
     val upper = titleRaw.uppercase()
-    return upper.contains("DISPLAY") || upper.contains("SETTING")
+    return upper.contains("DISPLAY") || upper.contains("SETTING") || ocrTextMatches(titleRaw, "DISPLAY SETTINGS")
 }

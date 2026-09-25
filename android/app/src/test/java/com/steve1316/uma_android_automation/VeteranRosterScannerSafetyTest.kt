@@ -32,6 +32,7 @@ class VeteranRosterScannerSafetyTest {
         source.replace(Regex("/\\*.*?\\*/", RegexOption.DOT_MATCHES_ALL), "").replace(Regex("//.*"), "")
 
     private val campaign by lazy { source("android/app/src/main/java/com/steve1316/uma_android_automation/bot/Campaign.kt") }
+    private val launchGate by lazy { source("android/app/src/main/java/com/steve1316/uma_android_automation/DebugTestGate.kt") }
     private val debugUi by lazy { source("src/pages/DebugSettings/index.tsx") }
     private val settingsContext by lazy { source("src/context/BotStateContext.tsx") }
     private val searchConfig by lazy { source("src/data/searchConfig.ts") }
@@ -49,7 +50,7 @@ class VeteranRosterScannerSafetyTest {
             assertTrue(campaign.contains("\"$key\" to ::startVeteranRosterScanTest"), "the fnMap routes the scan key")
             val handler = campaign.substring(campaign.indexOf("open fun startVeteranRosterScanTest("))
             assertTrue(handler.contains("VeteranRosterScanner(game).runScan("), "the handler invokes the scanner")
-            assertTrue(handler.contains("getIntSetting(\"debug\", \"veteranRosterScanLimit\""), "the handler reads the operator's entry limit")
+            assertTrue(handler.contains("val limit = selected.rosterLimit"), "the handler uses the verified immutable entry limit")
         }
 
         @Test
@@ -60,7 +61,8 @@ class VeteranRosterScannerSafetyTest {
             assertTrue(settingsContext.contains("veteranRosterScanLimit: 5,"), "has a default")
             assertTrue(debugUi.contains("veteranRosterScanLimit: value"), "has a Debug Settings control")
             assertTrue(searchConfig.contains("\"veteran-roster-scan-limit\""), "registered in the settings search index")
-            assertTrue(campaign.contains("\"veteranRosterScanLimit\""), "read on the Kotlin side")
+            assertTrue(launchGate.contains("integer(\"veteranRosterScanLimit\", selection.rosterLimit)"), "validated against the native snapshot")
+            assertTrue(campaign.contains("val limit = selected.rosterLimit"), "the validated limit reaches the scanner")
         }
 
         @Test
@@ -69,7 +71,8 @@ class VeteranRosterScannerSafetyTest {
             assertTrue(settingsContext.contains("veteranRosterScanEvidence: false,"), "defaults OFF - it writes PNGs to the device")
             assertTrue(debugUi.contains("veteranRosterScanEvidence: checked"), "has a Debug Settings control")
             assertTrue(searchConfig.contains("\"veteran-roster-scan-evidence\""), "registered in the settings search index")
-            assertTrue(campaign.contains("\"veteranRosterScanEvidence\""), "read on the Kotlin side")
+            assertTrue(launchGate.contains("rows[\"debug/veteranRosterScanEvidence\"] == selection.rosterEvidence.toString()"), "validated against the native snapshot")
+            assertTrue(campaign.contains("val evidence = selected.rosterEvidence"), "the validated evidence setting reaches the scanner")
         }
 
         @Test
@@ -121,6 +124,7 @@ class VeteranRosterScannerSafetyTest {
     @Nested
     @DisplayName("bounded navigation only")
     inner class BoundedNavigation {
+        private val pager = repoFile("android/app/src/main/java/com/steve1316/uma_android_automation/bot/VeteranRosterScanEvent.kt").readText()
         @Test
         fun `every tap goes through the deny-checked helper`() {
             // The one place a gesture leaves this class. If a raw tapCoordinate ever appears outside
@@ -132,7 +136,7 @@ class VeteranRosterScannerSafetyTest {
         }
 
         @Test
-        fun `the only tapped coordinates are the first card, the next chevron and Close`() {
+        fun `only the first list card, next chevron and Close are tapped`() {
             val tapped = Regex("safeTap\\([^,]+, ([A-Z_]+), ([A-Z_]+),").findAll(scanner).map { it.groupValues[1] to it.groupValues[2] }.toSet()
             assertEquals(
                 setOf(
@@ -142,20 +146,54 @@ class VeteranRosterScannerSafetyTest {
                 ),
                 tapped,
             )
+            assertEquals(1, Regex("safeTap\\(RosterScreenKind\\.ROSTER_LIST,").findAll(scanner).count(), "the first card is opened once")
+            assertTrue(scanner.contains("minOf(used, ROSTER_VISIBLE_CARD_COUNT)"), "optional evidence stops at the measured 25-card boundary")
+        }
+
+        @Test
+        fun `optional card OCR cannot abort the ordinary chevron walk`() {
+            val read = scanner.indexOf("reader.readListCardRating(listBitmap, index)")
+            val tap = scanner.indexOf("safeTap(RosterScreenKind.ROSTER_LIST, ROSTER_FIRST_CARD_X")
+            assertTrue(read in 0 until tap, "the one-frame list pre-pass precedes the first tap")
+            val prepass = scanner.substring(scanner.indexOf("val listRatings ="), scanner.indexOf("var lastBitmap ="))
+            assertTrue(prepass.contains("catch (e: Exception)"), "a single card OCR failure is local")
+            assertFalse(prepass.contains("return finish("), "optional evidence cannot end the scan")
+            assertTrue(scanner.contains("rosterListBindingStable(list, afterList)"), "the final list state is checked before persistence")
+        }
+
+        @Test
+        fun `a chevron is tapped once then recaptured until a new Details member is proven`() {
+            val walk = scanner.substring(scanner.indexOf("private fun walk("), scanner.indexOf("private fun appendEntry("))
+            assertTrue(walk.contains("for (attempt in 1..TRANSITION_CAPTURE_ATTEMPTS)"))
+            assertTrue(walk.contains("settledRosterPagerRead(previous, candidate, read, used)"))
+            assertTrue(pager.contains("advance(current, seen.size) ?: return RosterScanTermination.STALLED"))
+            assertEquals(1, Regex("safeTap\\(RosterScreenKind\\.UMAMUSUME_DETAILS, DETAIL_NEXT_CHEVRON_X").findAll(walk).count())
+            assertTrue(pager.contains("rankFreeCycleStep(seen, identity, used)"), "the extra transition decides cycle closure")
+            assertTrue(pager.indexOf("RankFreeCycleStep.CLOSED -> return RosterScanTermination.CYCLE_CLOSED") < pager.indexOf("visit(seen.lastIndex, current)"), "the closure read is not appended")
+            assertTrue(scanner.contains("rosterListBindingStable(list, afterList)"), "the final list state is checked before persistence")
+        }
+
+        @Test
+        fun `an unreadable pre-tap chevron stops before advancing`() {
+            val walk = scanner.substring(scanner.indexOf("private fun walk("), scanner.indexOf("private fun appendEntry("))
+            val unknown = walk.indexOf("if (chevron != ChevronState.ENABLED) return@advance null")
+            val tap = walk.indexOf("safeTap(RosterScreenKind.UMAMUSUME_DETAILS, DETAIL_NEXT_CHEVRON_X")
+            assertTrue(unknown in 0 until tap, "unknown state is rejected before the tap")
         }
 
         @Test
         fun `the walk is bounded by an entry count and a wall clock`() {
             assertTrue(scanner.contains("HARD_BOUND_SLACK"), "the walk carries a hard entry bound over capacity")
             assertTrue(scanner.contains("WALL_CLOCK_BUDGET_MS"), "the walk carries a wall-clock budget")
-            assertTrue(scanner.contains("RosterScanTermination.HARD_BOUND_REACHED"), "both bounds terminate rather than loop")
+            assertTrue(pager.contains("RosterScanTermination.HARD_BOUND_REACHED"), "both bounds terminate rather than loop")
         }
 
         @Test
         fun `the walk terminates on more than one condition`() {
-            for (reason in listOf("COUNT_REACHED", "CHEVRON_END", "WRAPPED", "STALLED", "ENTRY_LIMIT_REACHED", "HARD_BOUND_REACHED", "UNEXPECTED_SCREEN", "PRECONDITION_FAILED")) {
-                assertTrue(scanner.contains("RosterScanTermination.$reason"), "the walk can terminate with $reason")
+            for (reason in listOf("CYCLE_CLOSED", "EMPTY_LIST", "WRAPPED", "STALLED", "ENTRY_LIMIT_REACHED", "HARD_BOUND_REACHED", "UNEXPECTED_SCREEN", "PRECONDITION_FAILED")) {
+                assertTrue((scanner + pager).contains("RosterScanTermination.$reason"), "the walk can terminate with $reason")
             }
+            assertFalse(scanner.contains("RosterScanTermination.CHEVRON_END"))
         }
     }
 
@@ -169,7 +207,8 @@ class VeteranRosterScannerSafetyTest {
         fun `the roster list, the Registered count and Filters OFF are all asserted first`() {
             val head = beforeFirstTap()
             assertTrue(head.contains("listScreen.kind != RosterScreenKind.ROSTER_LIST"), "the roster list is required")
-            assertTrue(head.contains("list.registeredUsed == null || list.filtersOff != true"), "an unread count or an unconfirmed filter state stops the scan")
+            assertTrue(head.contains("!rosterScanPrerequisitesMet(list)"), "an unread count or an unconfirmed filter state stops the scan")
+            assertTrue(head.contains("hybridListEvidenceEligible(list, viewportSupported)"), "sort gates only optional list evidence")
             assertEquals(2, Regex("RosterScanTermination\\.PRECONDITION_FAILED").findAll(head).count(), "both precondition failures record the same terminal reason")
         }
 
@@ -183,10 +222,7 @@ class VeteranRosterScannerSafetyTest {
         @Test
         fun `an unexpected screen stops rather than tapping to recover`() {
             val walk = scanner.substring(scanner.indexOf("private fun walk("))
-            val afterUnexpected = walk.substring(walk.indexOf("not the Details dialog"))
-            val nextTap = afterUnexpected.indexOf("safeTap(")
-            val nextReturn = afterUnexpected.indexOf("return RosterScanTermination.UNEXPECTED_SCREEN")
-            assertTrue(nextReturn >= 0 && (nextTap < 0 || nextReturn < nextTap), "the wrong-screen branch returns before any further tap")
+            assertTrue(walk.contains("if (screen.kind != RosterScreenKind.UMAMUSUME_DETAILS) {"))
         }
     }
 

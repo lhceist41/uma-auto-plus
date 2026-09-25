@@ -15,6 +15,7 @@ import CustomButton from "../../components/CustomButton"
 import { SearchPageProvider } from "../../context/SearchPageContext"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 import SearchableItem from "../../components/SearchableItem"
+import { requestDiagnostic } from "../../lib/diagnosticLaunch"
 
 /**
  * The Debug Settings page.
@@ -68,6 +69,10 @@ const DebugSettings = () => {
      * @param checked The new checked state.
      */
     const handleDebugTestToggle = (key: (typeof debugTestKeys)[number], checked: boolean) => {
+        const superseded = requestDiagnostic(checked ? key : null)
+        // Revoke natively before saving: a delayed, failed, or restored settings write could still match the old
+        // request. If revocation itself fails, stop() cancels every pending request and also ends any active session or queue.
+        if (superseded !== null) NativeModules.StartModule.revokeDiagnosticLaunch(superseded).catch(() => NativeModules.StartModule.stop())
         // Mutual exclusivity: enabling one test sets only it true; disabling clears just that one.
         const nextDebug = checked
             ? {
@@ -82,12 +87,7 @@ const DebugSettings = () => {
 
         bsc.setSettings(nextSettings)
 
-        // A debug diagnostic decides whether the bot runs a read-only test or normal career
-        // navigation, so its toggle MUST be durable the instant it is set. The 500ms debounced
-        // auto-save can be lost to an app restart between here and Start -- the 2026-08-13
-        // deck-number incident: the toggle reverted across a restart, so the bot ran normal
-        // navigation and pressed Start Career, spending TP. Persist it immediately (in addition to
-        // the debounce) so a restart before Start cannot silently disarm the requested diagnostic.
+        // Start verifies persistence separately; saving alone does not acknowledge the request.
         void saveSettingsImmediate(nextSettings)
     }
 

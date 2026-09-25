@@ -1,7 +1,11 @@
 package com.steve1316.uma_android_automation.utils
 
+import com.steve1316.uma_android_automation.bot.RosterListState
+import com.steve1316.uma_android_automation.bot.RosterScanTermination
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
@@ -88,6 +92,16 @@ class VeteranRosterProbesTest {
         }
 
         @Test
+        fun `rating requires a complete decimal with valid grouping`() {
+            assertEquals(1904, parseRating("1,904"))
+            assertEquals(11904, parseRating("11,904"))
+            for (raw in listOf("1O904", "11 904", "abc1904", "1904abc", "1,9O4", "1,90", "01,904", "1904\n11904")) {
+                assertNull(parseRating(raw), raw)
+            }
+            assertNull(globalRankForRating(parseRating("904")!!), "a complete but partial crop has no supported rank")
+        }
+
+        @Test
         fun `stat value parses digits and rejects an implausible read`() {
             assertEquals(949, parseStatValue("949"))
             assertEquals(1164, parseStatValue("1164"))
@@ -98,6 +112,82 @@ class VeteranRosterProbesTest {
             assertNull(parseStatValue("1"))
             assertNull(parseStatValue("4"))
             assertEquals(90, parseStatValue("90"))
+        }
+    }
+
+    @Nested
+    @DisplayName("Bounded Global rank and provisional visual decisions")
+    inner class RankHybrid {
+        @Test
+        fun `only approved intervals including exact edges resolve`() {
+            val cases =
+                mapOf(
+                    1299 to null, 1300 to "E", 1799 to "E", 1800 to "E+", 2299 to "E+", 2300 to null,
+                    6499 to null, 6500 to "B", 8199 to "B", 8200 to "B+", 9999 to "B+",
+                    10000 to "A", 12099 to "A", 12100 to "A+", 14499 to "A+",
+                    14500 to "S", 15899 to "S", 15900 to "S+", 17499 to "S+", 17500 to null,
+                )
+            for ((rating, expected) in cases) assertEquals(expected, globalRankForRating(rating), "$rating")
+        }
+
+        @Test
+        fun `E and B remain unresolved while Details are traversed`() {
+            for ((family, rating) in listOf('E' to 1904, 'B' to 9335)) {
+                val decision = resolveVeteranRank(null, family, rating)
+                assertNull(decision.rank)
+                assertEquals("provisional", decision.path)
+            }
+        }
+
+        @Test
+        fun `unrecognized visual family remains unresolved`() {
+            assertNull(resolveVeteranRank(null, null, 1904).rank)
+        }
+
+        @Test
+        fun `A and S visual decisions remain authoritative only inside their intervals`() {
+            for ((rank, rating) in listOf("A" to 10016, "A+" to 12583, "S" to 14689, "S+" to 15941)) {
+                assertEquals(rank, resolveVeteranRank(rank, rank.first(), rating).rank)
+            }
+            assertNull(resolveVeteranRank("A+", 'A', 10016).rank)
+            assertNull(resolveVeteranRank("S", 'S', 15941).rank)
+            assertEquals("A+", resolveVeteranRank("A+", 'A', null).rank)
+            assertEquals("visual", resolveVeteranRank("A+", 'A', null).path)
+        }
+
+        @Test
+        fun `ordinary scan prerequisites exclude optional sort evidence`() {
+            val unreadable = RosterListState(83, 260, true, null, null)
+            val wrongSort = unreadable.copy(sortKey = "Name", sortDirection = "Desc")
+            val ratingAsc = unreadable.copy(sortKey = "Rating", sortDirection = "Asc")
+            for (state in listOf(unreadable, wrongSort, ratingAsc)) {
+                assertTrue(rosterScanPrerequisitesMet(state))
+            }
+            assertFalse(hybridListEvidenceEligible(unreadable, true))
+            assertFalse(hybridListEvidenceEligible(wrongSort, true))
+            assertTrue(hybridListEvidenceEligible(ratingAsc, true))
+            assertFalse(hybridListEvidenceEligible(ratingAsc, false))
+            assertFalse(rosterScanPrerequisitesMet(unreadable.copy(registeredUsed = null)))
+            assertFalse(rosterScanPrerequisitesMet(unreadable.copy(filtersOff = null)))
+            assertFalse(rosterScanPrerequisitesMet(unreadable.copy(filtersOff = false)))
+        }
+
+        @Test
+        fun `roster state comparison permits unreadable sort but rejects known changes`() {
+            val before = RosterListState(83, 260, true, "Rating", "Asc")
+            assertEquals(true, rosterListBindingStable(before, before.copy()))
+            assertTrue(rosterListBindingStable(before.copy(sortKey = null, sortDirection = null), before.copy(sortKey = null, sortDirection = null)))
+            assertTrue(rosterListBindingStable(before, before.copy(sortKey = null, sortDirection = null)))
+            assertEquals(false, rosterListBindingStable(before, before.copy(registeredUsed = 82)))
+            assertEquals(false, rosterListBindingStable(before, before.copy(sortDirection = "Desc")))
+            assertEquals(false, rosterListBindingStable(before, before.copy(sortKey = "Name")))
+            assertEquals(false, rosterListBindingStable(before, null))
+        }
+
+        @Test
+        fun `blank next chevron remains unknown`() {
+            val blank = SparkPixelSampler { _, _ -> 0xFFFFFFFF.toInt() }
+            assertEquals(ChevronState.UNKNOWN, classifyChevron(blank, CHEVRON_NEXT_BOX))
         }
     }
 
@@ -327,6 +417,13 @@ class VeteranRosterProbesTest {
                 Triple("next_chevron", RosterScreenKind.UMAMUSUME_DETAILS, DETAIL_NEXT_CHEVRON_X to DETAIL_NEXT_CHEVRON_Y),
                 Triple("detail_close", RosterScreenKind.UMAMUSUME_DETAILS, DETAIL_CLOSE_X to DETAIL_CLOSE_Y),
             )
+
+        @Test
+        fun `only fully visible list cards have rating crops`() {
+            assertEquals(GlyphBox(70, 369, 205, 400), rosterCardRatingBox(0))
+            assertEquals(GlyphBox(870, 1309, 1005, 1340), rosterCardRatingBox(24))
+            assertNull(rosterCardRatingBox(25))
+        }
 
         @Test
         fun `every deny zone rejects its own centre`() {

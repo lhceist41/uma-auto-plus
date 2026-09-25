@@ -30,9 +30,9 @@ interface SettingsContextType {
     /**
      * Precomputes and persists the per-trainee settings snapshots for a rotation queue.
      * Returns the entries whose preset could not be resolved (config errors to surface), an
-     * empty array when there is nothing to do, or null if persistence failed.
+     * empty array when there is nothing to do, or null if persistence failed or the launch was cancelled.
      */
-    prepareTraineeRotation: () => Promise<{ index: number; presetKey: string; scenario: string }[] | null>
+    prepareTraineeRotation: (mayPrepare: () => boolean) => Promise<{ index: number; presetKey: string; scenario: string }[] | null>
     /** Whether a save operation is currently in progress. */
     isSaving: boolean
 }

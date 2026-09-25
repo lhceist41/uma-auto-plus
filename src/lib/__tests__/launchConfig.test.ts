@@ -466,9 +466,9 @@ describe("Start-barrier source guards", () => {
     const seq = homeSrc.slice(homeSrc.indexOf("const runStartSequence"), homeSrc.indexOf("const handleButtonPress"))
 
     it("the barrier runs before the identity handoff, which runs before StartModule.start()", () => {
-        const barrierAt = seq.indexOf("flushAndVerifyLaunchConfig()")
+        const barrierAt = seq.indexOf("flushAndVerifyLaunchConfig(target)")
         const handoffAt = seq.indexOf("setVerifiedLaunchIdentity(")
-        const startAt = seq.indexOf("StartModule.start()")
+        const startAt = seq.indexOf("StartModule.start(launchId)")
         expect(barrierAt).toBeGreaterThan(0)
         expect(handoffAt).toBeGreaterThan(barrierAt)
         expect(startAt).toBeGreaterThan(handoffAt)
@@ -477,7 +477,7 @@ describe("Start-barrier source guards", () => {
     it("a blocked barrier hard-returns before StartModule.start()", () => {
         const barrierAt = seq.indexOf("if (!barrier.ok)")
         const returnAt = seq.indexOf("return", barrierAt)
-        const startAt = seq.indexOf("StartModule.start()")
+        const startAt = seq.indexOf("StartModule.start(launchId)")
         expect(returnAt).toBeGreaterThan(barrierAt)
         expect(returnAt).toBeLessThan(startAt)
     })
@@ -487,7 +487,7 @@ describe("Start-barrier source guards", () => {
     })
 
     it("StartModule.start() appears exactly once (one gated launch, single-run or queue)", () => {
-        expect((seq.match(/StartModule\.start\(\)/g) || []).length).toBe(1)
+        expect((seq.match(/StartModule\.start\(launchId\)/g) || []).length).toBe(1)
     })
 
     it("the manager uses the atomic snapshot read-back and fail-closed recovery", () => {

@@ -1,3 +1,4 @@
+import { fixtureFingerprint, fixtureRank } from "./rosterFixtures.ts"
 import { parseCorpus } from "../../outcomeAnalysis.ts"
 import { buildVeteranLibrary } from "../buildVeteranLibrary.ts"
 import { reconcileRoster } from "../reconcile.ts"
@@ -44,7 +45,7 @@ function library(...lines: string[][]) {
 }
 
 function entryLine(scanIndex: number, o: Record<string, unknown> = {}): string {
-    return JSON.stringify({
+    const record = {
         type: "roster_entry",
         schemaVersion: 1,
         scanId: "scan-a",
@@ -59,12 +60,13 @@ function entryLine(scanIndex: number, o: Record<string, unknown> = {}): string {
         aptitudes: { turf: "A", dirt: "B", sprint: "A", mile: "A", medium: "E", long: "G", front: "C", pace: "A", late: "E", end: "G" },
         favoriteState: "not_set",
         protectionState: "unknown",
-        rosterFingerprint: `fp-${scanIndex}`,
         readCompleteness: 1,
         identityMultiplicity: 1,
         unresolvedFields: [],
         ...o,
-    })
+    }
+    if (!("rank" in o)) record.rank = fixtureRank(record.rating)!
+    return JSON.stringify({ ...record, rosterFingerprint: "rosterFingerprint" in o ? o.rosterFingerprint : fixtureFingerprint(record) })
 }
 
 function headerLine(o: Record<string, unknown> = {}): string {
@@ -85,7 +87,7 @@ function headerLine(o: Record<string, unknown> = {}): string {
         unidentifiedCount: 0,
         duplicateFingerprintCount: 0,
         countDiscrepancy: 0,
-        terminationReason: "count_reached",
+        terminationReason: "cycle_closed",
         completeness: "trusted_complete",
         app: "2.5.9",
         screenWidth: 1080,
@@ -178,14 +180,14 @@ describe("reconcileRoster tiering", () => {
 
 describe("reconcileRoster one-to-one assignment", () => {
     it("refuses to hand one historical veteran to two roster entries", () => {
-        const result = reconcileRoster(library(career()), snapshot([entryLine(0), entryLine(1, { rosterFingerprint: "fp-0" })]))
+        const result = reconcileRoster(library(career()), snapshot([entryLine(0), entryLine(1, { rosterFingerprint: JSON.parse(entryLine(0)).rosterFingerprint })]))
         expect(result.entries.map((e) => e.status)).toEqual(["AMBIGUOUS", "AMBIGUOUS"])
         expect(result.entries.every((e) => e.veteranId === null)).toBe(true)
         expect(result.diagnostics.contestedMatches).toBe(2)
     })
 
     it("leaves a contested veteran in the not-in-roster list rather than claiming it", () => {
-        const result = reconcileRoster(library(career()), snapshot([entryLine(0), entryLine(1, { rosterFingerprint: "fp-0" })]))
+        const result = reconcileRoster(library(career()), snapshot([entryLine(0), entryLine(1, { rosterFingerprint: JSON.parse(entryLine(0)).rosterFingerprint })]))
         expect(result.historicalNotInRoster).toHaveLength(1)
         expect(result.counts.historicalNotInRoster).toBe(1)
     })
@@ -218,7 +220,7 @@ describe("reconcileRoster historical absence", () => {
 describe("reconcileRoster determinism", () => {
     it("produces byte-identical output across rebuilds and input orderings", () => {
         const careers = [career({ fans: 1 }), career({ trainee: "King_Halo", fans: 2, ts: Date.UTC(2026, 6, 1) }), career({ trainee: "Symboli_Rudolf", fans: 3, ts: Date.UTC(2026, 6, 2) })]
-        const rows = [entryLine(0), entryLine(1, { character: "King Halo", rosterFingerprint: "fp-1" }), entryLine(2, { character: "Symboli Rudolf", rosterFingerprint: "fp-2" })]
+        const rows = [entryLine(0), entryLine(1, { character: "King Halo" }), entryLine(2, { character: "Symboli Rudolf" })]
         const first = reconcileRoster(library(...careers), snapshot(rows))
         const reordered = reconcileRoster(library(...[...careers].reverse()), snapshot([rows[2], rows[0], rows[1]]))
         expect(JSON.stringify(reordered)).toBe(JSON.stringify(first))

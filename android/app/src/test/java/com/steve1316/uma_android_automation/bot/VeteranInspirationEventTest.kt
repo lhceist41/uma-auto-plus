@@ -379,8 +379,10 @@ class VeteranInspirationEventTest {
                     filtersOff = true,
                     sortKey = "Rating",
                     sortDirection = "Desc",
-                    snapshotCompatibility = end != null && end == start,
+                    snapshotCompatibility = false,
+                    pagerCycleClosed = false,
                     entryLimit = 20,
+            startIndex = 0,
                     entriesCaptured = 20,
                     entriesComplete = 20,
                     terminationReason = InspirationScanTermination.ENTRY_LIMIT_REACHED,
@@ -388,9 +390,20 @@ class VeteranInspirationEventTest {
                     screenWidth = 1080,
                     screenHeight = 1920,
                 )
-            assertTrue(serializeVeteranInspirationScan(header(257, 257)).getBoolean("snapshotCompatibility"))
+            assertFalse(serializeVeteranInspirationScan(header(257, 257)).getBoolean("snapshotCompatibility"))
+            assertFalse(serializeVeteranInspirationScan(header(257, 257)).getBoolean("pagerCycleClosed"))
             assertFalse(serializeVeteranInspirationScan(header(257, 258)).getBoolean("snapshotCompatibility"))
             assertFalse(serializeVeteranInspirationScan(header(257, null)).getBoolean("snapshotCompatibility"), "an unread count is not a matching count")
+            val complete = header(1, 1).copy(
+                snapshotCompatibility = true,
+                pagerCycleClosed = true,
+                entryLimit = 0,
+            startIndex = 0,
+                entriesCaptured = 1,
+                entriesComplete = 1,
+                terminationReason = InspirationScanTermination.CYCLE_CLOSED,
+            )
+            assertTrue(serializeVeteranInspirationScan(complete).getBoolean("pagerCycleClosed"))
         }
     }
 }

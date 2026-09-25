@@ -11,7 +11,8 @@ import { contentHash128 } from "./identity.ts"
 //
 // The one rule this module exists to enforce: a scan is trustworthy only when the walk enumerated
 // exactly as many entries as the account's own `Registered used/capacity` said it owns, under a
-// confirmed Filters: OFF, with every entry identified and no fingerprint repeated. Anything else is
+// confirmed Filters: OFF and a verified pager cycle, with every entry identified and no fingerprint
+// repeated. Anything else is
 // incomplete, and an incomplete snapshot must never be read as "these are the Veterans I own".
 
 /** Library schema discriminator + version for the roster snapshot. Deliberately separate from
@@ -23,6 +24,9 @@ export const PARENTLAB_ROSTER_SCHEMA_VERSION = 1 as const
 export type RosterScanTermination =
     | "count_reached"
     | "chevron_end"
+    | "cycle_closed"
+    | "single_card"
+    | "empty_list"
     | "wrapped"
     | "stalled"
     | "entry_limit_reached"
@@ -120,7 +124,7 @@ export interface RosterScanRecord {
     readonly filtersOff: boolean | null
     readonly sortKey: string | null
     readonly sortDirection: string | null
-    readonly entryLimit: number
+    readonly entryLimit: number | null
     readonly entriesEnumerated: number
     readonly uniqueFingerprints: number
     readonly unidentifiedCount: number
@@ -132,6 +136,7 @@ export interface RosterScanRecord {
     readonly enumerationComplete: boolean | null
     /** Every enumerated entry resolved to a distinct identity. Null on pre-split records. */
     readonly identityComplete: boolean | null
+    readonly trustedForRetention: boolean | null
     readonly completeness: "trusted_complete" | "incomplete"
     /** How many failure-evidence crops the walk wrote. Null on records that predate the field, which
      * is a different fact from a scan that wrote none. */
@@ -148,11 +153,15 @@ export interface ParsedRosterScans {
     readonly entries: readonly RosterEntryRecord[]
     /** Lines that were valid JSON but not a usable roster record. Surfaced, never silently dropped. */
     readonly malformedRecords: number
+    readonly invalidRecords: readonly { scanId: string; type: "roster_scan" | "roster_entry"; lineNumber: number }[]
 }
 
 const TERMINATIONS = new Set<RosterScanTermination>([
     "count_reached",
     "chevron_end",
+    "cycle_closed",
+    "single_card",
+    "empty_list",
     "wrapped",
     "stalled",
     "entry_limit_reached",
@@ -227,13 +236,13 @@ function parseCareerInfo(v: unknown): RosterCareerInfoRecord | null {
 
 /**
  * Parses a roster-scan JSONL corpus into its header and entry records. Malformed lines are skipped
- * and counted, never fatal (interrupted writes, manual edits). A record missing the one field that
- * makes it usable - a `scanId`, or a recognised `terminationReason` on a header - is dropped rather
- * than defaulted into something that would read as a valid scan.
+ * and counted, never fatal (interrupted writes, manual edits). Recognized records with a readable
+ * scan ID retain invalidity attribution so their surviving rows cannot establish scan trust.
  */
 export function parseRosterScanRecords(text: string, file?: string): ParsedRosterScans {
     const scans: RosterScanRecord[] = []
     const entries: RosterEntryRecord[] = []
+    const invalidRecords: { scanId: string; type: "roster_scan" | "roster_entry"; lineNumber: number }[] = []
     let malformedRecords = 0
     const lines = text.split("\n")
     for (let i = 0; i < lines.length; i++) {
@@ -255,7 +264,12 @@ export function parseRosterScanRecords(text: string, file?: string): ParsedRoste
             const termination = String(obj.terminationReason ?? "")
             if (!scanId || !TERMINATIONS.has(termination as RosterScanTermination)) {
                 malformedRecords++
+                if (scanId) invalidRecords.push({ scanId, type: "roster_scan", lineNumber: i })
                 continue
+            }
+            if (obj.countDiscrepancy !== undefined && exactInteger(obj.countDiscrepancy) === null) {
+                malformedRecords++
+                invalidRecords.push({ scanId, type: "roster_scan", lineNumber: i })
             }
             scans.push({
                 type: "roster_scan",
@@ -264,19 +278,20 @@ export function parseRosterScanRecords(text: string, file?: string): ParsedRoste
                 startedAt: num(obj.startedAt),
                 completedAt: num(obj.completedAt),
                 displayedRegisteredUsed: exactInteger(obj.displayedRegisteredUsed),
-                displayedRegisteredCapacity: num(obj.displayedRegisteredCapacity),
+                displayedRegisteredCapacity: exactInteger(obj.displayedRegisteredCapacity),
                 filtersOff: typeof obj.filtersOff === "boolean" ? obj.filtersOff : null,
                 sortKey: str(obj.sortKey),
                 sortDirection: str(obj.sortDirection),
-                entryLimit: num(obj.entryLimit) ?? 0,
-                entriesEnumerated: num(obj.entriesEnumerated) ?? 0,
-                uniqueFingerprints: num(obj.uniqueFingerprints) ?? 0,
-                unidentifiedCount: num(obj.unidentifiedCount) ?? 0,
-                duplicateFingerprintCount: num(obj.duplicateFingerprintCount) ?? 0,
-                countDiscrepancy: num(obj.countDiscrepancy),
+                entryLimit: exactInteger(obj.entryLimit),
+                entriesEnumerated: exactInteger(obj.entriesEnumerated) ?? -1,
+                uniqueFingerprints: exactInteger(obj.uniqueFingerprints) ?? -1,
+                unidentifiedCount: exactInteger(obj.unidentifiedCount) ?? -1,
+                duplicateFingerprintCount: exactInteger(obj.duplicateFingerprintCount) ?? -1,
+                countDiscrepancy: exactInteger(obj.countDiscrepancy),
                 terminationReason: termination as RosterScanTermination,
-                enumerationComplete: typeof obj.enumerationComplete === "boolean" ? obj.enumerationComplete : null,
-                identityComplete: typeof obj.identityComplete === "boolean" ? obj.identityComplete : null,
+                enumerationComplete: obj.enumerationComplete === undefined ? null : obj.enumerationComplete === true,
+                identityComplete: obj.identityComplete === undefined ? null : obj.identityComplete === true,
+                trustedForRetention: obj.trustedForRetention === undefined ? null : obj.trustedForRetention === true,
                 completeness: obj.completeness === "trusted_complete" ? "trusted_complete" : "incomplete",
                 evidenceCropCount: num(obj.evidenceCropCount),
                 app: str(obj.app),
@@ -291,6 +306,7 @@ export function parseRosterScanRecords(text: string, file?: string): ParsedRoste
             const scanIndex = exactInteger(obj.scanIndex)
             if (!scanId || scanIndex === null) {
                 malformedRecords++
+                if (scanId) invalidRecords.push({ scanId, type: "roster_entry", lineNumber: i })
                 continue
             }
             entries.push({
@@ -321,7 +337,7 @@ export function parseRosterScanRecords(text: string, file?: string): ParsedRoste
         }
         malformedRecords++
     }
-    return { scans, entries, malformedRecords }
+return { scans, entries, malformedRecords, invalidRecords }
 }
 
 /** Why a snapshot is not trustworthy. Empty when it is. Each reason is a fact, not a judgement. */
@@ -335,6 +351,16 @@ export type RosterSnapshotDefect =
     | "unidentified_entries"
     | "entry_rows_missing"
     | "termination_not_at_end"
+    | "unsupported_schema"
+    | "invalid_enumeration"
+    | "invalid_indexes"
+    | "duplicate_identities"
+    | "fingerprint_mismatch"
+    | "rank_rating_mismatch"
+    | "attributable_malformed_record"
+    | "capacity_invalid"
+    | "identity_census_mismatch"
+    | "count_discrepancy_mismatch"
 
 /** The derived current-roster snapshot for one scan. Deterministic: same records in, same snapshot
  * out, regardless of input line order. */
@@ -352,7 +378,7 @@ export interface RosterSnapshot {
     readonly filtersOff: boolean | null
     readonly sortKey: string | null
     readonly sortDirection: string | null
-    readonly entryLimit: number
+    readonly entryLimit: number | null
     /** Entry rows actually present for this scan. */
     readonly scanCount: number
     readonly uniqueFingerprints: number
@@ -365,7 +391,7 @@ export interface RosterSnapshot {
     readonly countDiscrepancy: number | null
     readonly terminationReason: RosterScanTermination | null
     /** The walk covered exactly the account's own roster (filters off, count read, every enumerated
-     * position present, ended at a real end) - recomputed from the records here, not taken on the
+     * position present, positive pager cycle) - recomputed from the records here, not taken on the
      * header's word. True even when identity is incomplete: this is the fact a 257/257 count-complete
      * walk carries regardless of how many entries fingerprinted. */
     readonly enumerationComplete: boolean
@@ -385,22 +411,25 @@ export interface RosterSnapshot {
     readonly entries: readonly RosterEntryRecord[]
 }
 
-/** Terminations consistent with having actually reached the end of the roster. */
-const END_TERMINATIONS = new Set<RosterScanTermination>(["count_reached", "chevron_end"])
-
 /** Defects that mean the walk did NOT cover the whole roster. Their absence is enumeration
  * completeness. Kept separate from the identity defects so the two facts never merge again. */
 const ENUMERATION_DEFECTS = new Set<RosterSnapshotDefect>([
+    "attributable_malformed_record",
     "no_header_record",
     "filters_not_confirmed_off",
     "registered_count_unread",
     "count_mismatch",
     "entry_rows_missing",
     "termination_not_at_end",
+    "unsupported_schema",
+    "invalid_enumeration",
+    "invalid_indexes",
+    "capacity_invalid",
+    "count_discrepancy_mismatch",
 ])
 
 /** Defects that mean some enumerated entry did not resolve to a distinct identity. */
-const IDENTITY_DEFECTS = new Set<RosterSnapshotDefect>(["duplicate_fingerprints", "unidentified_entries"])
+const IDENTITY_DEFECTS = new Set<RosterSnapshotDefect>(["duplicate_fingerprints", "unidentified_entries", "duplicate_identities", "fingerprint_mismatch", "rank_rating_mismatch", "identity_census_mismatch"])
 
 /** The `unresolvedFields` tokens the device writes for an identity feeder. Matched exactly, never by
  * prefix: `statGrade_spd` is an auxiliary read and must not be mistaken for the identity `stat_spd`. */
@@ -424,12 +453,37 @@ const IDENTITY_UNRESOLVED_FIELDS = new Set<string>([
  */
 function identityEvidenceComplete(e: RosterEntryRecord): boolean {
     if (e.character === null || e.outfit === null || e.rank === null || e.rating === null) return false
-    if (ROSTER_STAT_KEYS.some((k) => e.stats[k] === null)) return false
+    if (!Number.isSafeInteger(e.rating) || e.rating < 0) return false
+    if (ROSTER_STAT_KEYS.some((k) => !Number.isSafeInteger(e.stats[k]) || e.stats[k]! < 0)) return false
     if (ROSTER_APTITUDE_KEYS.some((k) => !e.aptitudes[k])) return false
     return !e.unresolvedFields.some((f) => IDENTITY_UNRESOLVED_FIELDS.has(f))
 }
 
-function snapshotFor(scanId: string, header: RosterScanRecord | undefined, rows: readonly RosterEntryRecord[]): RosterSnapshot {
+export function approvedRosterRank(rating: number | null): string | null {
+    if (rating === null || !Number.isSafeInteger(rating)) return null
+    for (const [rank, lower, upper] of [
+        ["E", 1300, 1799], ["E+", 1800, 2299], ["B", 6500, 8199], ["B+", 8200, 9999],
+        ["A", 10000, 12099], ["A+", 12100, 14499], ["S", 14500, 15899], ["S+", 15900, 17499],
+    ] as const) {
+        if (rating >= lower && rating <= upper) return rank
+    }
+    return null
+}
+
+function rankFreeIdentity(e: RosterEntryRecord): string | null {
+    if (!identityEvidenceComplete(e)) return null
+    return JSON.stringify([e.character, e.outfit, e.rating, ROSTER_STAT_KEYS.map((k) => e.stats[k]), ROSTER_APTITUDE_KEYS.map((k) => e.aptitudes[k])])
+}
+
+export function canonicalRosterFingerprint(e: RosterEntryRecord): string | null {
+    if (!identityEvidenceComplete(e)) return null
+    return contentHash128(JSON.stringify({
+        v: 1, character: e.character, outfit: e.outfit, rank: e.rank, rating: e.rating,
+        stats: ROSTER_STAT_KEYS.map((k) => e.stats[k]), aptitudes: ROSTER_APTITUDE_KEYS.map((k) => e.aptitudes[k]),
+    }))
+}
+
+function snapshotFor(scanId: string, header: RosterScanRecord | undefined, rows: readonly RosterEntryRecord[], hasInvalidRecords: boolean): RosterSnapshot {
     const entries = [...rows].sort((a, b) => a.scanIndex - b.scanIndex)
     const fingerprints = entries.map((e) => (identityEvidenceComplete(e) ? e.rosterFingerprint : null)).filter((f): f is string => f !== null)
     const uniqueFingerprints = new Set(fingerprints).size
@@ -439,8 +493,24 @@ function snapshotFor(scanId: string, header: RosterScanRecord | undefined, rows:
     const registeredCapacity = header?.displayedRegisteredCapacity ?? null
 
     const defects: RosterSnapshotDefect[] = []
+    if (hasInvalidRecords) defects.push("attributable_malformed_record")
     if (!header) defects.push("no_header_record")
-    if (header && header.completeness !== "trusted_complete") defects.push("device_marked_incomplete")
+    if ((header && header.schemaVersion !== 1) || entries.some((e) => e.schemaVersion !== 1)) defects.push("unsupported_schema")
+    if (registeredCapacity === null || !Number.isSafeInteger(registeredCapacity) || registeredCapacity <= 0 ||
+        registeredCapacity > 2_147_483_647 || (registeredUsed !== null && registeredCapacity < registeredUsed)) defects.push("capacity_invalid")
+    const declaredFingerprints = entries.map((entry) => entry.rosterFingerprint).filter((fp): fp is string => fp !== null)
+    const declaredUnique = new Set(declaredFingerprints).size
+    if (header && (header.uniqueFingerprints !== declaredUnique || header.unidentifiedCount !== entries.length - declaredFingerprints.length ||
+        header.duplicateFingerprintCount !== declaredFingerprints.length - declaredUnique)) defects.push("identity_census_mismatch")
+    if (header && header.countDiscrepancy !== (registeredUsed === null ? null : entries.length - registeredUsed)) defects.push("count_discrepancy_mismatch")
+    if (header && (header.entryLimit !== 0 || !Number.isSafeInteger(registeredUsed) || registeredUsed === null || registeredUsed < 0 ||
+        header.enumerationComplete === false)) defects.push("invalid_enumeration")
+    if (entries.some((e, i) => e.scanId !== scanId || e.scanIndex !== i)) defects.push("invalid_indexes")
+    const identities = entries.map(rankFreeIdentity).filter((key): key is string => key !== null)
+    if (new Set(identities).size !== identities.length) defects.push("duplicate_identities")
+    if (entries.some((e) => e.rosterFingerprint !== null && canonicalRosterFingerprint(e) !== e.rosterFingerprint)) defects.push("fingerprint_mismatch")
+    if (entries.some((e) => e.rank !== null && (approvedRosterRank(e.rating) === null || approvedRosterRank(e.rating) !== e.rank))) defects.push("rank_rating_mismatch")
+    if (header && (header.completeness !== "trusted_complete" || header.identityComplete === false || header.trustedForRetention === false)) defects.push("device_marked_incomplete")
     if (header?.filtersOff !== true) defects.push("filters_not_confirmed_off")
     if (registeredUsed === null) defects.push("registered_count_unread")
     else if (entries.length !== registeredUsed) defects.push("count_mismatch")
@@ -449,7 +519,10 @@ function snapshotFor(scanId: string, header: RosterScanRecord | undefined, rows:
     // The device counts what it read; a missing entry row means the write was truncated even though
     // the walk itself finished, which the header alone would never reveal.
     if (header && entries.length !== header.entriesEnumerated) defects.push("entry_rows_missing")
-    if (header && !END_TERMINATIONS.has(header.terminationReason)) defects.push("termination_not_at_end")
+    if (header && !(
+        (header.terminationReason === "cycle_closed" && registeredUsed !== null && registeredUsed > 0) ||
+        (header.terminationReason === "empty_list" && registeredUsed === 0)
+    )) defects.push("termination_not_at_end")
 
     const observedAt =
         header?.completedAt ?? header?.startedAt ?? entries.reduce<number | null>((max, e) => (e.observedAt !== null && (max === null || e.observedAt > max) ? e.observedAt : max), null)
@@ -471,7 +544,7 @@ function snapshotFor(scanId: string, header: RosterScanRecord | undefined, rows:
         filtersOff: header?.filtersOff ?? null,
         sortKey: header?.sortKey ?? null,
         sortDirection: header?.sortDirection ?? null,
-        entryLimit: header?.entryLimit ?? 0,
+        entryLimit: header?.entryLimit ?? null,
         scanCount: entries.length,
         uniqueFingerprints,
         duplicateFingerprints,
@@ -511,7 +584,8 @@ export function buildRosterSnapshots(parsed: ParsedRosterScans): readonly Roster
         if (!existing || (scan.lineNumber ?? 0) >= (existing.lineNumber ?? 0)) headers.set(scan.scanId, scan)
     }
     const scanIds = new Set<string>([...byScan.keys(), ...headers.keys()])
-    const snapshots = [...scanIds].map((id) => snapshotFor(id, headers.get(id), byScan.get(id) ?? []))
+    const invalidScanIds = new Set(parsed.invalidRecords.map((record) => record.scanId))
+    const snapshots = [...scanIds].map((id) => snapshotFor(id, headers.get(id), byScan.get(id) ?? [], invalidScanIds.has(id)))
     // Newest first; scanId breaks a tie so the order never depends on Set iteration order.
     return snapshots.sort((a, b) => (b.observedAt ?? 0) - (a.observedAt ?? 0) || (a.scanId < b.scanId ? -1 : a.scanId > b.scanId ? 1 : 0))
 }
@@ -531,12 +605,16 @@ export function rosterBindingDigest(snapshot: RosterSnapshot): string | null {
     if (!snapshot.trustedComplete || snapshot.headerSchemaVersion !== 1 || !Number.isSafeInteger(count) || count === null || count <= 0 || count !== snapshot.entries.length) return null
     const indexes = new Set<number>()
     const fingerprints = new Set<string>()
+    const identities = new Set<string>()
     for (const entry of snapshot.entries) {
         if (entry.schemaVersion !== 1 || entry.scanId !== snapshot.scanId || !Number.isSafeInteger(entry.scanIndex) || entry.scanIndex < 0 || entry.scanIndex >= count || indexes.has(entry.scanIndex)) return null
-        const fp = entry.rosterFingerprint
-        if (typeof fp !== "string" || !/^[0-9a-f]{32}$/.test(fp) || fingerprints.has(fp)) return null
+        const identity = rankFreeIdentity(entry)
+        const fp = canonicalRosterFingerprint(entry)
+        if (identity === null || identities.has(identity) || approvedRosterRank(entry.rating) !== entry.rank) return null
+        if (fp === null || fp !== entry.rosterFingerprint || fingerprints.has(fp)) return null
         indexes.add(entry.scanIndex)
         fingerprints.add(fp)
+        identities.add(identity)
     }
     return rosterBindingDigestForFingerprints([...fingerprints])
 }

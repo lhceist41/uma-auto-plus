@@ -374,7 +374,11 @@ fun serializeVeteranInspiration(o: VeteranInspirationObservation): JSONObject =
 /** Why a multi-Veteran Inspiration capture stopped. */
 enum class InspirationScanTermination {
     COUNT_REACHED,
+    CYCLE_CLOSED,
+    SINGLE_CARD,
+    EMPTY_LIST,
     ENTRY_LIMIT_REACHED,
+    /** Legacy diagnostic value; disabled chevrons do not prove Veteran pager completion. */
     CHEVRON_END,
     UNEXPECTED_SCREEN,
     PRECONDITION_FAILED,
@@ -385,11 +389,9 @@ enum class InspirationScanTermination {
  * The header for one batch of Inspiration captures.
  *
  * It binds the batch to ONE current-roster state. The roster's `Registered used` count is read before
- * the first entry and again after the last, and [snapshotCompatibility] is false when they differ:
- * a Veteran registered or released mid-capture shifts every later chevron position, so silently
- * merging the two halves would attach one Veteran's factors to another Veteran's identity. That is a
- * corruption a later stage could not detect, which is why it is decided here and recorded, not
- * inferred afterwards.
+ * the first entry and again after the last. [pagerCycleClosed] requires the distinct full traversal
+ * and return to the anchor; [snapshotCompatibility] also requires stable unfiltered list facts.
+ * Partial batches keep their individual captures without claiming account-wide membership.
  */
 data class VeteranInspirationScanHeader(
     val schemaVersion: Int,
@@ -403,7 +405,9 @@ data class VeteranInspirationScanHeader(
     val sortKey: String?,
     val sortDirection: String?,
     val snapshotCompatibility: Boolean,
+    val pagerCycleClosed: Boolean,
     val entryLimit: Int,
+    val startIndex: Int,
     val entriesCaptured: Int,
     val entriesComplete: Int,
     val terminationReason: InspirationScanTermination,
@@ -426,7 +430,9 @@ fun serializeVeteranInspirationScan(h: VeteranInspirationScanHeader): JSONObject
         h.sortKey?.let { put("sortKey", it) }
         h.sortDirection?.let { put("sortDirection", it) }
         put("snapshotCompatibility", h.snapshotCompatibility)
+        put("pagerCycleClosed", h.pagerCycleClosed)
         put("entryLimit", h.entryLimit)
+        put("startIndex", h.startIndex)
         put("entriesCaptured", h.entriesCaptured)
         put("entriesComplete", h.entriesComplete)
         put("terminationReason", h.terminationReason.name.lowercase())

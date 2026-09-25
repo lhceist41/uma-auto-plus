@@ -70,15 +70,19 @@ class LaunchIdentityGateTest {
             val start = sourceFile("StartModule.kt").readText()
             val onStart = start.indexOf("fun onStartEvent(")
             assertTrue(onStart >= 0)
-            val verdictAt = start.indexOf("LaunchIdentityGate.verdict(", onStart)
+            val dispatchAt = start.indexOf("dispatchDiagnostic(::readLaunchSnapshot)", onStart)
+            val verifyAt = start.indexOf("if (!verifyLaunchIdentity(loadedRevision)) return null")
+            val runAt = start.indexOf("if (selection.key != null) run(selection)")
+            val verdictAt = start.indexOf("LaunchIdentityGate.verdict(")
             // The launch-critical queue settings read is where run consumption begins.
             val queueRead = start.indexOf("SettingsHelper.getBooleanSetting(\"runQueue\", \"enableRunQueue\"", onStart)
             val projection = start.indexOf("startProjection(", onStart)
-            assertTrue(verdictAt in (onStart + 1) until queueRead, "the identity verdict runs before the run settings are read")
+            assertTrue(dispatchAt in (onStart + 1) until queueRead, "gated dispatch runs before the run settings are read")
+            assertTrue(verifyAt in 0 until runAt, "the identity verdict gates diagnostic invocation")
             // A MISMATCH must return (abort) -- there is a `return` between the verdict and any projection.
             val mismatch = start.indexOf("Verdict.MISMATCH", verdictAt)
             val returnAfter = start.indexOf("return", mismatch)
-            assertTrue(mismatch in verdictAt until (if (projection > 0) projection else start.length), "the mismatch branch is handled in onStartEvent")
+            assertTrue(mismatch in verdictAt until (if (projection > 0) projection else start.length), "the mismatch branch is handled by the shared verifier")
             assertTrue(returnAfter > mismatch, "a mismatch aborts the session")
         }
 
@@ -94,7 +98,7 @@ class LaunchIdentityGateTest {
             val start = sourceFile("StartModule.kt").readText().replace("\r\n", "\n")
             val onStart = start.indexOf("fun onStartEvent(")
             assertTrue(onStart >= 0)
-            val notSet = start.indexOf("Verdict.NOT_SET ->", onStart)
+            val notSet = start.indexOf("Verdict.NOT_SET ->")
             assertTrue(notSet > 0, "the NOT_SET branch exists")
             val blockedCheck = start.indexOf("isBlockedAfterMismatch()", notSet)
             assertTrue(blockedCheck in notSet until (notSet + 1200), "the NOT_SET branch checks the sticky latch first")
@@ -109,15 +113,15 @@ class LaunchIdentityGateTest {
         fun `the blocked NOT_SET path emits a high-signal error and keeps the legacy proceed for the unblocked case`() {
             val start = sourceFile("StartModule.kt").readText().replace("\r\n", "\n")
             val notSet = start.indexOf("Verdict.NOT_SET ->")
-            val end = start.indexOf("nonUiEntry = true", notSet)
+            val end = start.indexOf("return true", notSet)
             assertTrue(notSet in 0 until end)
-            val branch = start.substring(notSet, end + "nonUiEntry = true".length)
+            val branch = start.substring(notSet, end + "return true".length)
             assertTrue(branch.contains("MessageLog.e("), "the blocked case logs at error level")
             assertTrue(branch.contains("blocked after a prior launch-identity mismatch"), "the log names the mismatch cause")
             assertTrue(branch.contains("verified Start Queue"), "the log directs the operator back through the UI")
             // The latch check gates the fail-closed return; the legacy warn/proceed still exists for the unblocked NOT_SET.
             assertTrue(branch.indexOf("isBlockedAfterMismatch()") < branch.indexOf("MessageLog.w("), "the latch check precedes the legacy warn")
-            assertTrue(branch.contains("nonUiEntry = true"), "the unblocked NOT_SET still proceeds (legacy trust-disk)")
+            assertTrue(branch.contains("return true"), "the unblocked NOT_SET still proceeds (legacy trust-disk)")
         }
 
         @Test

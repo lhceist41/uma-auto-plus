@@ -1,3 +1,4 @@
+import { fixtureFingerprint } from "./rosterFixtures.ts"
 import {
     ancestorStarSignature,
     buildInspirationIndex,
@@ -30,6 +31,14 @@ function factor(kind: string, name: string, stars: number, rowIndex: number, col
     }
 }
 
+function factorSetFingerprint(factors: readonly ReturnType<typeof factor>[]): string {
+    return factors.map((entry) => entry.factorFingerprint).sort().join("|")
+}
+
+function structuralFactorSetFingerprint(factors: readonly ReturnType<typeof factor>[]): string {
+    return factors.map((entry) => entry.structuralFingerprint).sort().join("|")
+}
+
 const SELF = [
     factor("stat", "Power", 1, 0, "left"),
     factor("aptitude", "Mile", 2, 0, "right"),
@@ -49,24 +58,34 @@ const ANCESTOR_ONE = [
     factor("aptitude", "Pace Chaser", 2, 0, "right"),
 ]
 
+const ROSTER_APTITUDES = { turf: "A", dirt: "B", sprint: "A", mile: "A", medium: "E", long: "G", front: "C", pace: "A", late: "E", end: "G" }
+const inspirationFingerprint = (index: number) => fixtureFingerprint({
+    character: "Taiki Shuttle", outfit: "Wild Frontier", rank: "A", rating: 10192 + index,
+    stats: { spd: 949 + index, sta: 699, pwr: 648, grt: 687, wit: 420 }, aptitudes: ROSTER_APTITUDES,
+})
+
 function entryLine(scanId: string, scanIndex: number, o: Record<string, unknown> = {}): string {
+    const selfFactors = Array.isArray(o.selfFactors) ? o.selfFactors as ReturnType<typeof factor>[] : SELF
+    const blocks = [selfFactors, ANCESTOR_ZERO, ANCESTOR_ONE]
     return JSON.stringify({
         type: "veteran_inspiration",
-        schemaVersion: 1,
+        schemaVersion: 2,
         scanId,
         scanIndex,
         observedAt: 1_700_000_000_000 + scanIndex,
-        rosterFingerprint: `fp-${scanIndex}`,
+        rosterFingerprint: inspirationFingerprint(scanIndex),
         character: "Taiki Shuttle",
         outfit: "Wild Frontier",
         rank: "A",
         selfPortraitObserved: true,
-        selfFactorCount: SELF.length,
-        selfFactorFingerprint: "self-digest",
-        selfFactors: SELF,
+        selfFactorCount: selfFactors.length,
+        selfFactorFingerprint: factorSetFingerprint(selfFactors),
+        selfStructuralFingerprint: structuralFactorSetFingerprint(selfFactors),
+        selfFactorSetTrusted: true,
+        selfFactors,
         legacyAncestors: [
-            { ancestorIndex: 0, portraitObserved: true, factorCount: ANCESTOR_ZERO.length, ancestorFactorFingerprint: "anc0", factors: ANCESTOR_ZERO },
-            { ancestorIndex: 1, portraitObserved: true, factorCount: ANCESTOR_ONE.length, ancestorFactorFingerprint: "anc1", factors: ANCESTOR_ONE },
+            { ancestorIndex: 0, portraitObserved: true, factorCount: ANCESTOR_ZERO.length, ancestorFactorFingerprint: factorSetFingerprint(ANCESTOR_ZERO), ancestorStructuralFingerprint: structuralFactorSetFingerprint(ANCESTOR_ZERO), factorSetTrusted: true, factors: ANCESTOR_ZERO },
+            { ancestorIndex: 1, portraitObserved: true, factorCount: ANCESTOR_ONE.length, ancestorFactorFingerprint: factorSetFingerprint(ANCESTOR_ONE), ancestorStructuralFingerprint: structuralFactorSetFingerprint(ANCESTOR_ONE), factorSetTrusted: true, factors: ANCESTOR_ONE },
         ],
         termination: "reached_bottom",
         sparkCaptureComplete: true,
@@ -85,10 +104,10 @@ function entryLine(scanId: string, scanIndex: number, o: Record<string, unknown>
             deadReckonedFrames: 0,
             scrollbarContentHeight: 1807,
             observedContentHeight: 1795,
-            rowsAccepted: 18,
+            rowsAccepted: blocks.reduce((count, block) => count + new Set(block.map((entry) => entry.rowIndex)).size, 0),
             clippedRowsRejected: 1,
             leadingPartialBlockRows: 0,
-            blocksObserved: 3,
+            blocksObserved: blocks.length,
         },
         ...o,
     })
@@ -97,7 +116,7 @@ function entryLine(scanId: string, scanIndex: number, o: Record<string, unknown>
 function headerLine(scanId: string, o: Record<string, unknown> = {}): string {
     return JSON.stringify({
         type: "veteran_inspiration_scan",
-        schemaVersion: 1,
+        schemaVersion: 2,
         scanId,
         startedAt: 1_700_000_000_000,
         completedAt: 1_700_000_300_000,
@@ -109,10 +128,24 @@ function headerLine(scanId: string, o: Record<string, unknown> = {}): string {
         sortDirection: "Desc",
         snapshotCompatibility: true,
         entryLimit: 20,
+        startIndex: 0,
         entriesCaptured: 2,
         entriesComplete: 2,
         terminationReason: "entry_limit_reached",
         app: "1.3.8",
+        ...o,
+    })
+}
+
+function fullHeader(scanId: string, o: Record<string, unknown> = {}): string {
+    return headerLine(scanId, {
+        registeredUsedAtStart: 1,
+        registeredUsedAtEnd: 1,
+        entryLimit: 0,
+        entriesCaptured: 1,
+        entriesComplete: 1,
+        terminationReason: "cycle_closed",
+        pagerCycleClosed: true,
         ...o,
     })
 }
@@ -133,10 +166,10 @@ function rosterCorpus(count: number): string {
                 rating: 10192 + i,
                 stats: { spd: 949 + i, sta: 699, pwr: 648, grt: 687, wit: 420 },
                 statGrades: {},
-                aptitudes: {},
+                aptitudes: ROSTER_APTITUDES,
                 favoriteState: "not_set",
                 protectionState: "unknown",
-                rosterFingerprint: `fp-${i}`,
+                rosterFingerprint: inspirationFingerprint(i),
                 readCompleteness: 1,
                 identityMultiplicity: 1,
                 unresolvedFields: [],
@@ -161,7 +194,7 @@ function rosterCorpus(count: number): string {
             unidentifiedCount: 0,
             duplicateFingerprintCount: 0,
             countDiscrepancy: 0,
-            terminationReason: "count_reached",
+            terminationReason: count === 0 ? "empty_list" : "cycle_closed",
             enumerationComplete: true,
             identityComplete: true,
             completeness: "trusted_complete",
@@ -175,6 +208,74 @@ function rosterCorpus(count: number): string {
 }
 
 describe("parseInspirationRecords", () => {
+    it("checks canonical marker multiplicity independently of factor and declaration order", () => {
+        const record = JSON.parse(entryLine("s1", 0))
+        for (const ancestor of record.legacyAncestors) {
+            for (const factor of ancestor.factors.slice(0, 2)) {
+                delete factor.canonicalName
+                factor.canonicalPath = "reject"
+                delete factor.factorFingerprint
+                record.unresolvedFields.push(`factorCanonical@${factor.kind}:${factor.rowIndex}:${factor.column}`)
+            }
+            ancestor.factorSetTrusted = false
+            delete ancestor.ancestorFactorFingerprint
+        }
+        const parsed = parseInspirationRecords(JSON.stringify(record)).entries[0]
+        expect(parsed.canonicalDeclarationsConsistent).toBe(true)
+        expect(parsed.sparkCaptureConsistent).toBe(true)
+        expect(parsed.selfFactorContentConsistent).toBe(true)
+        expect(parsed.unresolvedFields).toHaveLength(4)
+        record.selfFactors.reverse()
+        record.legacyAncestors.reverse().forEach((ancestor: Record<string, any>) => ancestor.factors.reverse())
+        record.unresolvedFields.reverse()
+        const reordered = parseInspirationRecords(JSON.stringify(record)).entries[0]
+        expect(reordered.canonicalDeclarationsConsistent).toBe(true)
+        expect(reordered.sparkCaptureConsistent).toBe(true)
+        expect(reordered.selfFactorContentConsistent).toBe(true)
+    })
+
+    it("preserves complete unresolved self reads while requiring their declaration", () => {
+        const record = JSON.parse(entryLine("s1", 0))
+        const factor = record.selfFactors[0]
+        delete factor.canonicalName
+        factor.canonicalPath = "reject"
+        delete factor.factorFingerprint
+        record.selfFactorSetTrusted = false
+        delete record.selfFactorFingerprint
+        record.unresolvedFields = [`factorCanonical@${factor.kind}:${factor.rowIndex}:${factor.column}`]
+        const coherent = parseInspirationRecords(JSON.stringify(record)).entries[0]
+        expect(coherent.canonicalDeclarationsConsistent).toBe(true)
+        expect(coherent.sparkCaptureConsistent).toBe(true)
+        expect(coherent.selfFactorContentConsistent).toBe(true)
+        expect(buildInspirationIndex({ scans: [], entries: [coherent], malformedRecords: 0 }).get(inspirationFingerprint(0))?.selfFactorSetTrusted).toBe(false)
+        record.unresolvedFields = []
+        const missing = parseInspirationRecords(JSON.stringify(record), "missing-marker.jsonl").entries[0]
+        expect(missing.canonicalDeclarationsConsistent).toBe(false)
+        expect(missing.sparkCaptureConsistent).toBe(false)
+        expect(missing.file).toBe("missing-marker.jsonl")
+        expect(missing.selfFactors).toHaveLength(4)
+        factor.displayName = ""
+        record.unresolvedFields = [`factorName@${factor.kind}:${factor.rowIndex}:${factor.column}`]
+        const unread = parseInspirationRecords(JSON.stringify(record)).entries[0]
+        expect(unread.canonicalDeclarationsConsistent).toBe(true)
+        expect(unread.sparkCaptureConsistent).toBe(false)
+    })
+
+    it("trusts a display_alias resolution the Kotlin producer emits, but not an unknown path", () => {
+        const record = JSON.parse(entryLine("s1", 0))
+        record.selfFactors[3].canonicalPath = "display_alias"
+        record.legacyAncestors[0].factors[3].canonicalPath = "display_alias"
+        const alias = parseInspirationRecords(JSON.stringify(record)).entries[0]
+        expect(alias.selfFactorContentConsistent).toBe(true)
+        expect(alias.sparkCaptureConsistent).toBe(true)
+        expect(buildInspirationIndex({ scans: [], entries: [alias], malformedRecords: 0 }).get(inspirationFingerprint(0))?.selfFactorSetTrusted).toBe(true)
+        record.selfFactors[3].canonicalPath = "phonetic"
+        const unknown = parseInspirationRecords(JSON.stringify(record)).entries[0]
+        expect(unknown.selfFactorContentConsistent).toBe(false)
+        expect(unknown.sparkCaptureConsistent).toBe(false)
+        expect(buildInspirationIndex({ scans: [], entries: [unknown], malformedRecords: 0 }).get(inspirationFingerprint(0))?.selfFactorSetTrusted).not.toBe(true)
+    })
+
     it("splits batch headers from per-Veteran entries", () => {
         const parsed = parseInspirationRecords([entryLine("s1", 0), entryLine("s1", 1), headerLine("s1")].join("\n"), "f.jsonl")
         expect(parsed.entries).toHaveLength(2)
@@ -225,8 +326,8 @@ describe("parseInspirationRecords", () => {
 describe("buildInspirationIndex", () => {
     it("keys one view per Veteran by its roster fingerprint", () => {
         const index = buildInspirationIndex(parseInspirationRecords([entryLine("s1", 0), entryLine("s1", 1)].join("\n")))
-        expect([...index.keys()].sort()).toEqual(["fp-0", "fp-1"])
-        expect(index.get("fp-0")!.legacyAncestorFactorCounts).toEqual([4, 2])
+        expect([...index.keys()].sort()).toEqual([inspirationFingerprint(0), inspirationFingerprint(1)].sort())
+        expect(index.get(inspirationFingerprint(0))!.legacyAncestorFactorCounts).toEqual([4, 2])
     })
 
     it("never lets a newer partial read displace an older complete one", () => {
@@ -235,15 +336,15 @@ describe("buildInspirationIndex", () => {
         const complete = entryLine("s1", 0, { observedAt: 1000 })
         const partial = entryLine("s2", 0, { observedAt: 9999, sparkCaptureComplete: false, unresolvedFields: ["contentGap"] })
         const index = buildInspirationIndex(parseInspirationRecords([complete, partial].join("\n")))
-        expect(index.get("fp-0")!.sparkCaptureComplete).toBe(true)
-        expect(index.get("fp-0")!.observedAt).toBe(1000)
+        expect(index.get(inspirationFingerprint(0))!.sparkCaptureComplete).toBe(true)
+        expect(index.get(inspirationFingerprint(0))!.observedAt).toBe(1000)
     })
 
     it("prefers the newest read among equally complete ones", () => {
         const older = entryLine("s1", 0, { observedAt: 1000 })
         const newer = entryLine("s2", 0, { observedAt: 2000 })
         const index = buildInspirationIndex(parseInspirationRecords([older, newer].join("\n")))
-        expect(index.get("fp-0")!.observedAt).toBe(2000)
+        expect(index.get(inspirationFingerprint(0))!.observedAt).toBe(2000)
     })
 
     it("ignores a capture whose own identity did not resolve", () => {
@@ -254,40 +355,52 @@ describe("buildInspirationIndex", () => {
     it("never lets a newer complete-but-untrusted read displace an older complete trusted one", () => {
         // Trust ranks above recency: a self set that canonicalized is an identity, a newer one that did
         // not is a noisier read of the same immutable factors, so it must not win on the clock alone.
-        const trusted = entryLine("s1", 0, { observedAt: 1000, selfFactorSetTrusted: true, selfFactorFingerprint: "good" })
-        const untrusted = entryLine("s2", 0, { observedAt: 9999, selfFactorSetTrusted: false, selfFactorFingerprint: "noisy" })
+        const trusted = entryLine("s1", 0, { observedAt: 1000 })
+        const untrusted = entryLine("s2", 0, { observedAt: 9999, selfFactorSetTrusted: false, selfFactorFingerprint: null })
         const index = buildInspirationIndex(parseInspirationRecords([trusted, untrusted].join("\n")))
-        expect(index.get("fp-0")!.selfFactorSetTrusted).toBe(true)
-        expect(index.get("fp-0")!.selfFactorFingerprint).toBe("good")
+        expect(index.get(inspirationFingerprint(0))!.selfFactorSetTrusted).toBe(true)
+        expect(index.get(inspirationFingerprint(0))!.selfFactorFingerprint).toBe(factorSetFingerprint(SELF))
     })
 
     it("prefers a snapshot-compatible capture over an incompatible newer one", () => {
         // An incompatible batch may have read an identity that a mid-batch registration had shifted, so
         // a clean batch's older read is the more trustworthy attribution.
-        const good = [headerLine("ok", { snapshotCompatibility: true }), entryLine("ok", 0, { observedAt: 1000 })]
+        const good = [fullHeader("ok"), entryLine("ok", 0, { observedAt: 1000 })]
         const bad = [headerLine("shifted", { snapshotCompatibility: false }), entryLine("shifted", 0, { observedAt: 9999 })]
         const index = buildInspirationIndex(parseInspirationRecords([...good, ...bad].join("\n")))
-        expect(index.get("fp-0")!.observedAt).toBe(1000)
+        expect(index.get(inspirationFingerprint(0))!.observedAt).toBe(1000)
+    })
+
+    it("matching counts without cycle proof leave a partial capture individually visible but incompatible", () => {
+        const partial = headerLine("partial", { registeredUsedAtStart: 1, registeredUsedAtEnd: 1, entriesCaptured: 1, entryLimit: 1, snapshotCompatibility: true })
+        const parsed = parseInspirationRecords([partial, entryLine("partial", 0)].join("\n"))
+        expect(parsed.scans[0].pagerCycleClosed).toBe(false)
+        const view = buildInspirationIndex(parsed).get(inspirationFingerprint(0))
+        expect(view).toBeDefined()
+        expect(view?.snapshotCompatible).toBe(false)
+        const full = buildInspirationIndex(parseInspirationRecords([fullHeader("full"), entryLine("full", 0)].join("\n"))).get(inspirationFingerprint(0))
+        expect(full?.snapshotCompatible).toBe(true)
     })
 
     it("still uses an incompatible capture when it is the only evidence for a Veteran", () => {
         const only = [headerLine("shifted", { snapshotCompatibility: false }), entryLine("shifted", 0)]
         const index = buildInspirationIndex(parseInspirationRecords(only.join("\n")))
-        expect(index.get("fp-0")).toBeDefined()
+        expect(index.get(inspirationFingerprint(0))).toBeDefined()
     })
 })
 
 describe("detectInspirationConflicts", () => {
     it("flags a Veteran with two contradicting trusted captures", () => {
-        const a = [headerLine("s1", { snapshotCompatibility: true }), entryLine("s1", 0, { selfFactorSetTrusted: true, selfFactorFingerprint: "A" })]
-        const b = [headerLine("s2", { snapshotCompatibility: true }), entryLine("s2", 0, { selfFactorSetTrusted: true, selfFactorFingerprint: "B" })]
+        const weaker = SELF.slice(0, -1)
+        const a = [fullHeader("s1"), entryLine("s1", 0)]
+        const b = [fullHeader("s2"), entryLine("s2", 0, { selfFactors: weaker })]
         const conflicts = detectInspirationConflicts(parseInspirationRecords([...a, ...b].join("\n")))
-        expect(conflicts.get("fp-0")).toEqual(["A", "B"])
+        expect(conflicts.get(inspirationFingerprint(0))).toEqual([factorSetFingerprint(weaker), factorSetFingerprint(SELF)].sort())
     })
 
     it("does not flag agreeing trusted captures", () => {
-        const a = [headerLine("s1", { snapshotCompatibility: true }), entryLine("s1", 0, { selfFactorSetTrusted: true, selfFactorFingerprint: "A" })]
-        const b = [headerLine("s2", { snapshotCompatibility: true }), entryLine("s2", 0, { selfFactorSetTrusted: true, selfFactorFingerprint: "A" })]
+        const a = [fullHeader("s1"), entryLine("s1", 0)]
+        const b = [fullHeader("s2"), entryLine("s2", 0)]
         const conflicts = detectInspirationConflicts(parseInspirationRecords([...a, ...b].join("\n")))
         expect(conflicts.size).toBe(0)
     })
@@ -295,9 +408,9 @@ describe("detectInspirationConflicts", () => {
     it("ignores an untrusted or incompatible capture when judging conflict", () => {
         // Only compatible, complete, self-trusted reads carry an identity strong enough to contradict
         // another - a noisy or incompatible read is not evidence of a real disagreement.
-        const trusted = [headerLine("s1", { snapshotCompatibility: true }), entryLine("s1", 0, { selfFactorSetTrusted: true, selfFactorFingerprint: "A" })]
-        const untrusted = [headerLine("s2", { snapshotCompatibility: true }), entryLine("s2", 0, { selfFactorSetTrusted: false, selfFactorFingerprint: "B" })]
-        const incompatible = [headerLine("s3", { snapshotCompatibility: false }), entryLine("s3", 0, { selfFactorSetTrusted: true, selfFactorFingerprint: "C" })]
+        const trusted = [fullHeader("s1"), entryLine("s1", 0)]
+        const untrusted = [fullHeader("s2"), entryLine("s2", 0, { selfFactors: SELF.slice(0, -1), selfFactorSetTrusted: false, selfFactorFingerprint: null })]
+        const incompatible = [headerLine("s3", { snapshotCompatibility: false }), entryLine("s3", 0, { selfFactors: SELF.slice(1) })]
         const conflicts = detectInspirationConflicts(parseInspirationRecords([...trusted, ...untrusted, ...incompatible].join("\n")))
         expect(conflicts.size).toBe(0)
     })

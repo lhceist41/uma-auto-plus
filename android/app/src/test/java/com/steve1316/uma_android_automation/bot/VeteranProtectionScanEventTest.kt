@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.uma_android_automation.utils.ApplyButtonState
+import com.steve1316.uma_android_automation.utils.VeteranFilterDimension
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -10,14 +11,18 @@ import org.junit.jupiter.api.Test
 @DisplayName("Veteran protection scan record")
 class VeteranProtectionScanEventTest {
     @Test
-    fun `population maps from the OK-button reading`() {
-        assertEquals(ProtectionPopulation.NONEMPTY, populationFromApply(ApplyButtonState.ENABLED))
-        assertEquals(ProtectionPopulation.EMPTY, populationFromApply(ApplyButtonState.DISABLED))
-        assertEquals(ProtectionPopulation.UNKNOWN, populationFromApply(ApplyButtonState.UNKNOWN))
+    fun `only disabled target with enabled complementary probe proves empty`() {
+        assertEquals(ProtectionPopulation.NONEMPTY, populationFromProvenFilters(ApplyButtonState.ENABLED))
+        assertEquals(ProtectionPopulation.UNKNOWN, populationFromProvenFilters(ApplyButtonState.DISABLED))
+        assertEquals(ProtectionPopulation.UNKNOWN, populationFromProvenFilters(ApplyButtonState.DISABLED, ApplyButtonState.DISABLED))
+        assertEquals(ProtectionPopulation.UNKNOWN, populationFromProvenFilters(ApplyButtonState.DISABLED, ApplyButtonState.UNKNOWN))
+        assertEquals(ProtectionPopulation.EMPTY, populationFromProvenFilters(ApplyButtonState.DISABLED, ApplyButtonState.ENABLED))
+        assertEquals(ProtectionPopulation.UNKNOWN, populationFromProvenFilters(ApplyButtonState.UNKNOWN, ApplyButtonState.ENABLED))
     }
 
     @Test
     fun `a zero-favorite zero-memo probe serializes both populations as empty`() {
+        val neutral = VeteranFilterDimension.entries.associate { it.name.lowercase() to "neutral" }
         val record =
             VeteranProtectionScan(
                 schemaVersion = VETERAN_PROTECTION_SCHEMA_VERSION,
@@ -39,6 +44,12 @@ class VeteranProtectionScanEventTest {
                 appVersion = "1.3.8",
                 screenWidth = 1080,
                 screenHeight = 1920,
+                favoriteBaselineVerified = true,
+                memoBaselineVerified = true,
+                filterBaselineEvidenceVersion = 1,
+                favoriteBaselineReadings = neutral,
+                memoBaselineReadings = neutral,
+                probeDiagnostics = listOf("roster filters, count and sort restored"),
                 rosterBindingVersion = 1,
                 rosterScanId = "rs-1",
                 rosterDigest = "a".repeat(32),
@@ -53,6 +64,12 @@ class VeteranProtectionScanEventTest {
         assertEquals("empty", json.getString("favoritePopulation"))
         assertEquals("empty", json.getString("memoPopulation"))
         assertEquals("disabled", json.getString("favoriteApplyState"))
+        assertTrue(json.getBoolean("favoriteBaselineVerified"))
+        assertTrue(json.getBoolean("memoBaselineVerified"))
+        assertEquals(1, json.getInt("filterBaselineEvidenceVersion"))
+        assertEquals(9, json.getJSONObject("favoriteBaselineReadings").length())
+        assertEquals("neutral", json.getJSONObject("memoBaselineReadings").getString("common_sparks"))
+        assertEquals(1, json.getJSONArray("probeDiagnostics").length())
         assertEquals("complete", json.getString("outcome"))
         assertTrue(json.getBoolean("restoredFiltersOff"))
         assertFalse(json.getBoolean("enumerationPerformed"))
@@ -61,8 +78,8 @@ class VeteranProtectionScanEventTest {
     }
 
     @Test
-    fun `an enumerated non-empty favorite partition serializes its fingerprints`() {
-        val record =
+    fun `either nonempty partition serializes a non-complete record with no member evidence`() {
+        val base =
             VeteranProtectionScan(
                 schemaVersion = VETERAN_PROTECTION_SCHEMA_VERSION,
                 scanId = "vp-2-def",
@@ -75,20 +92,32 @@ class VeteranProtectionScanEventTest {
                 favoriteApplyState = ApplyButtonState.ENABLED,
                 memoPopulation = ProtectionPopulation.EMPTY,
                 memoApplyState = ApplyButtonState.DISABLED,
-                enumerationPerformed = true,
-                favoritedFingerprints = listOf("fp-a", "fp-b"),
+                enumerationPerformed = false,
+                favoritedFingerprints = emptyList(),
                 memoFingerprints = emptyList(),
                 restoredFiltersOff = true,
-                outcome = ProtectionScanOutcome.COMPLETE,
+                outcome = ProtectionScanOutcome.NONEMPTY_PARTITION_CENSUS_UNAVAILABLE,
                 appVersion = "1.3.8",
                 screenWidth = 1080,
                 screenHeight = 1920,
             )
-        val json = serializeVeteranProtectionScan(record)
-        assertEquals("nonempty", json.getString("favoritePopulation"))
-        assertTrue(json.getBoolean("enumerationPerformed"))
-        assertEquals(2, json.getJSONArray("favoritedFingerprints").length())
-        assertEquals("fp-a", json.getJSONArray("favoritedFingerprints").getString(0))
+        for ((favorite, memo) in listOf(
+            ProtectionPopulation.NONEMPTY to ProtectionPopulation.EMPTY,
+            ProtectionPopulation.EMPTY to ProtectionPopulation.NONEMPTY,
+            ProtectionPopulation.NONEMPTY to ProtectionPopulation.NONEMPTY,
+        )) {
+            val record = base.copy(
+                favoritePopulation = favorite,
+                favoriteApplyState = if (favorite == ProtectionPopulation.NONEMPTY) ApplyButtonState.ENABLED else ApplyButtonState.DISABLED,
+                memoPopulation = memo,
+                memoApplyState = if (memo == ProtectionPopulation.NONEMPTY) ApplyButtonState.ENABLED else ApplyButtonState.DISABLED,
+            )
+            val json = serializeVeteranProtectionScan(record)
+            assertEquals("nonempty_partition_census_unavailable", json.getString("outcome"))
+            assertFalse(json.getBoolean("enumerationPerformed"))
+            assertEquals(0, json.getJSONArray("favoritedFingerprints").length())
+            assertEquals(0, json.getJSONArray("memoFingerprints").length())
+        }
     }
 
     @Test
@@ -117,8 +146,11 @@ class VeteranProtectionScanEventTest {
             )
         val json = serializeVeteranProtectionScan(record)
         assertEquals("unknown", json.getString("favoritePopulation"))
+        assertFalse(json.getBoolean("favoriteBaselineVerified"))
+        assertFalse(json.getBoolean("memoBaselineVerified"))
         assertEquals("precondition_failed", json.getString("outcome"))
         assertFalse(json.has("registeredUsed"), "an unread count is omitted, not written as 0")
         assertFalse(json.has("rosterDigest"), "a failed scan has no usable binding")
+        assertFalse(json.has("filterBaselineEvidenceVersion"), "a pre-tap failure has no baseline proof")
     }
 }

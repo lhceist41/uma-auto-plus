@@ -108,6 +108,8 @@ export const CANDIDATE_GAPS = [
     "TARGET_APTITUDE_GRADE_UNREAD",
     /** The scarcity numbers describe the captured subset, not the whole account. */
     "SCARCITY_NOT_ACCOUNT_WIDE",
+    "FAVORITE_STATE_UNKNOWN",
+    "PROTECTION_STATE_UNKNOWN",
 ] as const
 export type CandidateGap = (typeof CANDIDATE_GAPS)[number]
 
@@ -276,6 +278,8 @@ export function buildParentCandidate(evidence: VeteranEvidence, build: TargetBui
     }
 
     const gaps: CandidateGap[] = []
+    if (!["not_set", "favorite"].includes(entry.favoriteState)) gaps.push("FAVORITE_STATE_UNKNOWN")
+    if (!["not_protected", "protected"].includes(entry.protectionState)) gaps.push("PROTECTION_STATE_UNKNOWN")
     if (!evidence.rosterFingerprint) gaps.push("IDENTITY_UNRESOLVED")
     if (!evidence.selfFactors) gaps.push("NO_TRUSTED_FACTOR_CAPTURE")
     if (!entry.character) gaps.push("CHARACTER_UNREAD")

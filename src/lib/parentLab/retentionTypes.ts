@@ -185,7 +185,7 @@ export interface FactorScarcityIndex {
     readonly capturedUntrusted: number
     /** capturedTrusted / identifiedRosterEntries, rounded to four decimals. 0 when nothing identified. */
     readonly coverage: number
-    /** True only at complete coverage. The single flag that licenses an ACCOUNT_UNIQUE claim. */
+    /** Requires a trusted complete current roster and complete capture coverage for ACCOUNT_UNIQUE. */
     readonly accountWide: boolean
     /** Sorted by factorKey, so the index serializes identically across rebuilds. */
     readonly entries: readonly FactorScarcityEntry[]

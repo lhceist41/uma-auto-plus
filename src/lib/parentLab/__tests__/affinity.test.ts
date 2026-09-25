@@ -1,13 +1,16 @@
+import { runParentLabCli } from "./cliFixture.ts"
+import { fixtureFingerprint, fixtureRank } from "./rosterFixtures.ts"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { buildAffinityAdvisorReport, buildAffinityTargetReport } from "../affinityAdvisor.ts"
+import { buildAffinityAdvisorReport, buildAffinityTargetReport, type AffinityAdvisorReport } from "../affinityAdvisor.ts"
 import { buildSuccessionRelationIndex, normalizeCharacterName, pairwiseRelation, parseSuccessionRelationData, resolveCharaId, SuccessionRelationDataError, type SuccessionRelationIndex } from "../affinityData.ts"
 import { AFFINITY_MECHANIC_EVIDENCE, UNKNOWN_AFFINITY_COMPONENTS } from "../affinityEvidence.ts"
 import { buildInspirationIndex, parseInspirationRecords } from "../inspiration.ts"
 import { buildParentCandidates } from "../parentCandidate.ts"
 import { affinityMedianOf, buildParentPair, dominates, enumerateParentPairs, rankParentPairs } from "../parentPairing.ts"
+import { buildProtectionInventory, latestProtectionRecord, parseProtectionRecords } from "../protection.ts"
 import { buildFactorScarcityIndex, buildRetentionEvidence } from "../retentionEvidence.ts"
-import { buildRosterSnapshots, parseRosterScanRecords } from "../roster.ts"
+import { buildRosterSnapshots, parseRosterScanRecords, rosterBindingDigest } from "../roster.ts"
 import { buildTargetBuild } from "../targetBuild.ts"
 
 // Fixtures go through the real ingest paths (roster rows and captures as JSONL, relation data through
@@ -23,6 +26,7 @@ const BETA = "Beta Uma"
 const GAMMA = "Gamma Uma"
 
 const APTITUDES = { turf: "A", dirt: "G", sprint: "C", mile: "A", medium: "A", long: "B", front: "A", pace: "A", late: "B", end: "C" }
+const NEUTRAL_FILTERS = { track: "neutral", distance: "neutral", style: "neutral", attribute_sparks: "neutral", aptitude_sparks: "neutral", unique_sparks: "neutral", common_sparks: "neutral", favorites: "neutral", memo: "neutral" }
 
 /**
  * A small relation payload with known arithmetic:
@@ -82,7 +86,7 @@ function rosterHeader(count: number, o: Record<string, unknown> = {}): string {
         unidentifiedCount: 0,
         duplicateFingerprintCount: 0,
         countDiscrepancy: 0,
-        terminationReason: "count_reached",
+        terminationReason: count === 0 ? "empty_list" : "cycle_closed",
         enumerationComplete: true,
         identityComplete: true,
         completeness: "trusted_complete",
@@ -94,8 +98,11 @@ function rosterHeader(count: number, o: Record<string, unknown> = {}): string {
     })
 }
 
+const rosterFingerprints = new Map<number, string>()
+const rosterRanks = new Map<number, string>()
+
 function rosterEntry(index: number, character: string, o: Record<string, unknown> = {}): string {
-    return JSON.stringify({
+    const record = {
         type: "roster_entry",
         schemaVersion: 1,
         scanId: SCAN,
@@ -117,7 +124,13 @@ function rosterEntry(index: number, character: string, o: Record<string, unknown
         unresolvedFields: [],
         diagnostics: null,
         ...o,
-    })
+    }
+    if (!("rating" in o)) record.rating = 15000 - index
+    if (!("rank" in o)) record.rank = fixtureRank(record.rating)!
+    record.rosterFingerprint = fixtureFingerprint(record)
+    rosterFingerprints.set(index, record.rosterFingerprint)
+    rosterRanks.set(index, record.rank)
+    return JSON.stringify(record)
 }
 
 function factor(kind: string, name: string, stars: number) {
@@ -136,69 +149,92 @@ function factor(kind: string, name: string, stars: number) {
     }
 }
 
+function factorSetFingerprint(factors: readonly ReturnType<typeof factor>[]): string | null {
+    return factors.length === 0 ? null : factors.map((entry) => entry.factorFingerprint).sort().join("|")
+}
+
+function structuralFactorSetFingerprint(factors: readonly ReturnType<typeof factor>[]): string {
+    return factors.map((entry) => entry.structuralFingerprint).sort().join("|")
+}
+
 function ancestor(index: number, factors: ReturnType<typeof factor>[]) {
     return {
         ancestorIndex: index,
         portraitObserved: true,
         rank: null,
         factorCount: factors.length,
-        ancestorFactorFingerprint: `anc:${index}`,
-        ancestorStructuralFingerprint: `ancs:${index}`,
-        factorSetTrusted: true,
-        factors,
+        ancestorFactorFingerprint: factorSetFingerprint(factors),
+        ancestorStructuralFingerprint: structuralFactorSetFingerprint(factors),
+        factorSetTrusted: factors.length > 0,
+        factors: factors.map((entry, rowIndex) => ({ ...entry, rowIndex })),
     }
 }
 
 function capture(index: number, character: string, factors: ReturnType<typeof factor>[], o: Record<string, unknown> = {}): string {
+    const selfFactors = factors.map((entry, rowIndex) => ({ ...entry, rowIndex }))
+    const legacyAncestors = (o.legacyAncestors ?? []) as ReturnType<typeof ancestor>[]
+    const blocks = [selfFactors, ...legacyAncestors.map((entry) => entry.factors)]
     return JSON.stringify({
         type: "veteran_inspiration",
         schemaVersion: 2,
         scanId: ISCAN,
         scanIndex: index,
         observedAt: T,
-        rosterFingerprint: `fp-${index}`,
+        rosterFingerprint: rosterFingerprints.get(index),
         character,
         outfit: `${character} Outfit`,
-        rank: "S",
+        rank: rosterRanks.get(index),
         selfPortraitObserved: true,
         selfFactorCount: factors.length,
-        selfFactorFingerprint: `set:fp-${index}`,
-        selfStructuralFingerprint: `struct:fp-${index}`,
-        selfFactorSetTrusted: true,
-        selfFactors: factors,
-        legacyAncestors: [],
+        selfFactorFingerprint: factorSetFingerprint(factors),
+        selfStructuralFingerprint: structuralFactorSetFingerprint(factors),
+        selfFactorSetTrusted: factors.length > 0,
+        selfFactors,
+        legacyAncestors,
         termination: "reached_bottom",
         sparkCaptureComplete: true,
         screenReadCompleteness: 1,
         unresolvedFields: [],
-        diagnostics: null,
+        diagnostics: {
+            frames: 1, swipes: 0, startedAtTop: true, reachedBottom: true, factorListEndObserved: true,
+            gapFrames: 0, spacingBreaks: 0, alignmentFailures: 0, unsettledFrames: 0, deadReckonedFrames: 0,
+            scrollbarContentHeight: null, observedContentHeight: null,
+            rowsAccepted: blocks.reduce((count, block) => count + new Set(block.map((entry) => entry.rowIndex)).size, 0),
+            clippedRowsRejected: 0, leadingPartialBlockRows: 0, blocksObserved: blocks.length,
+        },
         ...o,
     })
 }
 
 interface Fixture {
     /** One entry per element: character plus its own factors, and optional legacy blocks. */
-    readonly veterans: readonly { character: string; factors: ReturnType<typeof factor>[]; legacy?: ReturnType<typeof factor>[][]; captureTrusted?: boolean; rating?: number }[]
+    readonly veterans: readonly { character: string; factors: ReturnType<typeof factor>[]; legacy?: ReturnType<typeof factor>[][]; captureTrusted?: boolean; rating?: number; rosterFingerprint?: string }[]
     readonly target?: string
     readonly distance?: "sprint" | "mile" | "medium" | "long" | null
     readonly surface?: "turf" | "dirt" | null
     readonly statFactors?: readonly string[] | null
     readonly aptitudeFactors?: readonly string[] | null
     readonly uniqueFactors?: readonly string[] | null
+    readonly protection?: boolean
+    readonly protectionTail?: readonly string[]
 }
 
 function build(fixture: Fixture) {
-    const entries = fixture.veterans.map((v, i) => rosterEntry(i, v.character, v.rating === undefined ? {} : { rating: v.rating }))
+    const entries = fixture.veterans.map((v, i) => rosterEntry(i, v.character, { ...(v.rating === undefined ? {} : { rating: v.rating }), ...(v.rosterFingerprint === undefined ? {} : { rosterFingerprint: v.rosterFingerprint }) }))
     const captures = fixture.veterans.map((v, i) =>
         capture(i, v.character, v.factors, {
             legacyAncestors: (v.legacy ?? []).map((block, j) => ancestor(j, block)),
             ...(v.captureTrusted === false ? { selfFactorSetTrusted: false, selfFactorFingerprint: null } : {}),
+            rosterFingerprint: rosterFingerprints.get(i),
         }),
     )
     const snapshot = buildRosterSnapshots(parseRosterScanRecords([rosterHeader(entries.length), ...entries].join("\n"), "roster_scan.jsonl"))[0]
-    const inspirationHeader = JSON.stringify({ type: "veteran_inspiration_scan", schemaVersion: 2, scanId: ISCAN, snapshotCompatibility: true })
+    const inspirationHeader = JSON.stringify({ type: "veteran_inspiration_scan", schemaVersion: 2, scanId: ISCAN, registeredUsedAtStart: entries.length, registeredUsedAtEnd: entries.length, registeredCapacity: 260, filtersOff: true, entryLimit: 0, startIndex: 0, entriesCaptured: captures.length, entriesComplete: captures.length, terminationReason: "cycle_closed", pagerCycleClosed: true, snapshotCompatibility: true })
     const inspiration = buildInspirationIndex(parseInspirationRecords([inspirationHeader, ...captures].join("\n"), "veteran_inspiration.jsonl"))
-    const evidence = buildRetentionEvidence(snapshot, inspiration, null)
+    const protectionLine = JSON.stringify({ type: "veteran_protection", schemaVersion: 2, rosterBindingVersion: 1, rosterScanId: snapshot.scanId, rosterDigest: rosterBindingDigest(snapshot), scanId: "vp-affinity-test", registeredUsed: snapshot.registeredUsed, registeredCapacity: 260, filtersOffConfirmed: true, favoritePopulation: "empty", favoriteApplyState: "disabled", favoriteBaselineVerified: true, filterBaselineEvidenceVersion: 1, favoriteBaselineReadings: NEUTRAL_FILTERS, memoPopulation: "empty", memoApplyState: "disabled", memoBaselineVerified: true, memoBaselineReadings: NEUTRAL_FILTERS, enumerationPerformed: false, favoritedFingerprints: [], memoFingerprints: [], restoredFiltersOff: true, outcome: "complete" })
+    const protectionRecord = fixture.protection ? latestProtectionRecord(parseProtectionRecords([protectionLine, ...(fixture.protectionTail ?? [])].join("\n"))) : null
+    const inventory = fixture.protection ? buildProtectionInventory(protectionRecord, snapshot) : null
+    const evidence = buildRetentionEvidence(snapshot, inspiration, null, inventory)
     const scarcity = buildFactorScarcityIndex(evidence)
     const relations = relationIndex()
     const targetBuild = buildTargetBuild(
@@ -215,15 +251,167 @@ function build(fixture: Fixture) {
     const candidates = buildParentCandidates(evidence.veterans, targetBuild, scarcity, relations)
     const median = affinityMedianOf(candidates)
     const pairs = enumerateParentPairs(candidates, targetBuild, relations, scarcity, median)
-    return { snapshot, evidence, scarcity, relations, targetBuild, candidates, pairs, median }
+    const sources = {
+        roster: [rosterHeader(entries.length), ...entries].join("\n"),
+        inspiration: [inspirationHeader, ...captures].join("\n"),
+        protection: [protectionLine, ...(fixture.protectionTail ?? [])].join("\n"),
+        relations: JSON.stringify(RELATION_PAYLOAD),
+    }
+    return { snapshot, evidence, scarcity, relations, targetBuild, candidates, pairs, median, sources }
 }
 
 function pairOf(pairs: ReturnType<typeof build>["pairs"], a: number, b: number) {
-    const key = [`fp-${a}`, `fp-${b}`].sort().join("|")
+    const key = [rosterFingerprints.get(a), rosterFingerprints.get(b)].sort().join("|")
     const found = pairs.find((p) => p.pairKey === key)
     if (!found) throw new Error(`no pair ${key}`)
     return found
 }
+
+describe("persisted capture and roster authority", () => {
+    function fixture() {
+        return build({ protection: true, veterans: [
+            { character: ALPHA, factors: [factor("aptitude", "Mile", 2), factor("stat", "Speed", 2)] },
+            { character: BETA, factors: [factor("stat", "Speed", 2)] },
+        ] })
+    }
+
+    function observe(sources: ReturnType<typeof fixture>["sources"]) {
+        const snapshot = buildRosterSnapshots(parseRosterScanRecords(sources.roster))[0]
+        const index = buildInspirationIndex(parseInspirationRecords(sources.inspiration))
+        const evidence = buildRetentionEvidence(snapshot, index, null)
+        const cli = runParentLabCli("affinity", sources, ["--trainee", TARGET, "--distance", "mile", "--surface", "turf", "--json"])
+        expect(cli.error).toBeUndefined()
+        const report: AffinityAdvisorReport = JSON.parse(cli.stdout)
+        return { snapshot, evidence, accountWide: buildFactorScarcityIndex(evidence).accountWide, report }
+    }
+
+    function subject(source: string, mutate: (record: Record<string, any>) => void): string {
+        return source.split("\n").map((line) => {
+            const record = JSON.parse(line)
+            if (record.type === "veteran_inspiration" && record.scanIndex === 0) mutate(record)
+            return JSON.stringify(record)
+        }).join("\n")
+    }
+
+    it.each<[string, (record: Record<string, any>) => void]>([
+        ["completeness", r => { r.screenReadCompleteness = 0 }],
+        ["fingerprint", r => { r.selfFactorFingerprint = "stat:UNRELATED:3" }],
+        ["census", r => { r.diagnostics.rowsAccepted++ }],
+        ["duplicate cell", r => { r.selfFactors[1].rowIndex = r.selfFactors[0].rowIndex; r.selfFactors[1].column = r.selfFactors[0].column }],
+    ])("denies contradictory %s alone and behind favorable captures", (_, mutate) => {
+        const { sources } = fixture()
+        const positive = observe(sources)
+        expect(positive.accountWide).toBe(true)
+        expect(positive.report.coverage.accountWide).toBe(true)
+        expect(positive.report.targets[0].candidates.selfFactorsTrusted).toBe(2)
+        const bad = subject(sources.inspiration, mutate)
+        const inputs = [bad]
+        for (const age of [-100, 100]) {
+            const other = bad.split("\n").map(line => JSON.stringify({ ...JSON.parse(line), scanId: "contradictory-affinity", observedAt: T + age })).join("\n")
+            inputs.push(other + "\n" + sources.inspiration, sources.inspiration + "\n" + other)
+        }
+        for (const inspiration of inputs) {
+            const actual = observe({ ...sources, inspiration })
+            expect(actual.evidence.veterans[0].captureTrusted).toBe(false)
+            expect(actual.evidence.veterans[0].selfFactors).toBeNull()
+            expect(actual.accountWide).toBe(false)
+            expect(actual.report.coverage.accountWide).toBe(false)
+            expect(actual.report.targets[0].candidates.selfFactorsTrusted).toBe(1)
+        }
+    }, 30_000)
+
+    it.each<[string, unknown]>(
+        ["trustedForRetention", "enumerationComplete", "identityComplete"].flatMap(field =>
+            [false, null, "false", "true", 0, 1, [], {}].map((value): [string, unknown] => [field, value])),
+    )("denies supplied roster safety declaration %s = %p", (field, value) => {
+        const { sources } = fixture()
+        const positive = observe(sources)
+        expect(positive.snapshot.trustedComplete).toBe(true)
+        expect(positive.report.coverage.accountWide).toBe(true)
+        const roster = sources.roster.split("\n").map(line => {
+            const record = JSON.parse(line)
+            if (record.type === "roster_scan") {
+                Object.assign(record, { enumerationComplete: true, identityComplete: true, trustedForRetention: true })
+                record[field] = value
+            }
+            return JSON.stringify(record)
+        }).join("\n")
+        const actual = observe({ ...sources, roster })
+        expect(actual.snapshot.trustedComplete).toBe(false)
+        expect(actual.accountWide).toBe(false)
+        expect(actual.report.coverage.accountWide).toBe(false)
+    }, 30_000)
+
+    it.each(["trustedForRetention", "enumerationComplete", "identityComplete", "all"])("preserves omitted legacy roster field %s", (field) => {
+        const { sources } = fixture()
+        const roster = sources.roster.split("\n").map(line => {
+            const record = JSON.parse(line)
+            if (record.type === "roster_scan") {
+                for (const key of ["trustedForRetention", "enumerationComplete", "identityComplete"]) {
+                    if (field === "all" || field === key) delete record[key]
+                    else record[key] = true
+                }
+                record.unrelatedDiagnostic = "unknown"
+            }
+            return JSON.stringify(record)
+        }).join("\n")
+        const actual = observe({ ...sources, roster })
+        expect(actual.snapshot.trustedComplete).toBe(true)
+        expect(actual.accountWide).toBe(true)
+        expect(actual.report.coverage.accountWide).toBe(true)
+    }, 30_000)
+
+    it.each(["partial", "unsupported", "incompatible", "different character", "different outfit", "different rank"])("isolates %s in both age and append orders", (kind) => {
+        const { sources } = fixture()
+        for (const age of [-100, 100]) {
+            const other = sources.inspiration.split("\n").map(line => {
+                const record = JSON.parse(line)
+                record.scanId = "selection-control"
+                record.observedAt = T + age
+                if (kind === "unsupported") record.schemaVersion = 3
+                if (kind === "incompatible" && record.type === "veteran_inspiration_scan") record.snapshotCompatibility = false
+                if (record.type === "veteran_inspiration" && record.scanIndex === 0) {
+                    if (kind === "partial") {
+                        record.sparkCaptureComplete = false
+                        record.screenReadCompleteness = 0.875
+                        record.diagnostics.startedAtTop = false
+                        record.unresolvedFields = ["startedAtTop"]
+                    } else {
+                        record.unresolvedFields = ["factorCanonical@stat:0:left"]
+                        if (kind === "different character") record.character = "Unrelated Character"
+                        if (kind === "different outfit") record.outfit = "Unrelated Outfit"
+                        if (kind === "different rank") record.rank = "E"
+                    }
+                }
+                if (kind === "partial" && record.type === "veteran_inspiration_scan") record.entriesComplete = 1
+                return JSON.stringify(record)
+            }).join("\n")
+            for (const inspiration of [other + "\n" + sources.inspiration, sources.inspiration + "\n" + other]) {
+                const actual = observe({ ...sources, inspiration })
+                expect(actual.evidence.veterans[0].captureTrusted).toBe(true)
+                expect(actual.accountWide).toBe(true)
+                expect(actual.report.coverage.accountWide).toBe(true)
+                expect(actual.report.targets[0].candidates.selfFactorsTrusted).toBe(2)
+            }
+        }
+    }, 30_000)
+})
+
+describe("protection evidence authority", () => {
+    const veterans = [
+        { character: ALPHA, factors: [factor("aptitude", "Mile", 2)], rosterFingerprint: "1".repeat(32) },
+        { character: BETA, factors: [factor("aptitude", "Turf", 2)], rosterFingerprint: "2".repeat(32) },
+    ]
+
+    it("does not give affinity an older empty protection record after a malformed final log entry", () => {
+        const valid = build({ veterans, protection: true })
+        expect(valid.evidence.veterans.every((v) => v.entry.favoriteState === "not_set" && v.entry.protectionState === "not_protected")).toBe(true)
+
+        const malformed = build({ veterans, protection: true, protectionTail: ["{ not json"] })
+        expect(malformed.evidence.protectionInventory).toBeNull()
+        expect(malformed.evidence.veterans.every((v) => v.entry.favoriteState === "unknown" && v.entry.protectionState === "unknown")).toBe(true)
+    })
+})
 
 describe("succession relation data", () => {
     it("collapses punctuation so the roster and the database agree on one character", () => {
@@ -308,7 +496,7 @@ describe("affinity component", () => {
         expect(pair.affinity.knownPointsTotal).toBe(10)
         // The parent-to-parent relation is computable but its inclusion is not decoded, so it stays out.
         expect(pair.parentPairRelationPoints).toBe(1)
-        expect(pair.affinity.known.map((c) => c.points)).toEqual([8, 2])
+        expect(pair.affinity.known.map((c) => c.points).sort((a, b) => a - b)).toEqual([2, 8])
     })
 
     it("leaves the affinity component unresolved rather than guessing when the target is unknown", () => {
@@ -325,8 +513,8 @@ describe("factor relevance", () => {
     it("ranks a target-relevant 3-star pink factor above an unrelated high-rating Veteran", () => {
         const fx = build({
             veterans: [
-                { character: ALPHA, factors: [factor("aptitude", "Mile", 3)], rating: 1000 },
-                { character: BETA, factors: [factor("aptitude", "Long", 3), factor("stat", "Guts", 3)], rating: 40000 },
+                { character: ALPHA, factors: [factor("aptitude", "Mile", 3)], rating: 1300 },
+                { character: BETA, factors: [factor("aptitude", "Long", 3), factor("stat", "Guts", 3)], rating: 17499 },
                 { character: GAMMA, factors: [] },
             ],
         })
@@ -349,7 +537,7 @@ describe("factor relevance", () => {
                 { character: GAMMA, factors: [factor("aptitude", "Mile", 2)] },
                 { character: ALPHA, factors: [factor("aptitude", "Mile", 2)] },
                 { character: BETA, factors: [factor("aptitude", "Turf", 2)] },
-                { character: GAMMA, factors: [] },
+                { character: GAMMA, factors: [factor("stat", "Speed", 1)] },
             ],
         })
         const common = fx.candidates[0].relevance?.aptitude.matched[0]
@@ -437,7 +625,7 @@ describe("pair complementarity", () => {
             ],
         })
         const ranked = rankParentPairs(clear.pairs, 3)
-        expect(ranked.dominantPairKey).toBe("fp-0|fp-1")
+        expect(ranked.dominantPairKey).toBe([rosterFingerprints.get(0), rosterFingerprints.get(1)].sort().join("|"))
     })
 
     it("does not name a winner for a category no pair can differ on", () => {
@@ -534,7 +722,152 @@ describe("advisor document", () => {
     it("builds a pair record without a ranking pass", () => {
         const fx = build({ veterans: [{ character: ALPHA, factors: [factor("aptitude", "Mile", 2)] }, { character: BETA, factors: [factor("aptitude", "Turf", 2)] }] })
         const pair = buildParentPair(fx.candidates[0], fx.candidates[1], fx.targetBuild, fx.relations, fx.scarcity, fx.median)
-        expect(pair.pairKey).toBe("fp-0|fp-1")
+        expect(pair.pairKey).toBe([rosterFingerprints.get(0), rosterFingerprints.get(1)].sort().join("|"))
         expect(pair.explanation).toContain("not the game's affinity total")
     })
+})
+
+describe("production CLI Inspiration trust", () => {
+    it.each<[string, (record: Record<string, any>) => void]>([
+        ["right-only self row", (record) => { record.selfFactors[0].column = "right" }],
+        ["ancestor row gap", (record) => { record.legacyAncestors[0].factors[0].rowIndex = 7 }],
+        ["impossible self stars", (record) => {
+            const entry = record.selfFactors[0]
+            entry.stars = 4
+            entry.factorFingerprint = "aptitude:MILE:4"
+            entry.structuralFingerprint = "aptitude:4"
+            record.selfFactorFingerprint = entry.factorFingerprint
+            record.selfStructuralFingerprint = entry.structuralFingerprint
+        }],
+        ["missing capacity", (record) => { delete record.registeredCapacity }],
+        ["malformed capacity", (record) => { record.registeredCapacity = "260" }],
+    ])("withholds authoritative factors for %s through the shared consumer", (name, mutate) => {
+        const fixture = build({ protection: true, veterans: [
+            { character: ALPHA, factors: [factor("aptitude", "Mile", 2)], legacy: [[factor("stat", "Speed", 1)]] },
+            { character: BETA, factors: [factor("stat", "Speed", 2)] },
+        ] })
+        const args = ["--trainee", TARGET, "--distance", "mile", "--surface", "turf", "--json"]
+        const control = runParentLabCli("affinity", fixture.sources, args)
+        expect(control.error).toBeUndefined()
+        expect(control.status).toBe(0)
+        const positive: AffinityAdvisorReport = JSON.parse(control.stdout)
+        expect(positive.coverage.accountWide).toBe(true)
+        expect(positive.targets[0].candidates.selfFactorsTrusted).toBe(2)
+        const inspiration = fixture.sources.inspiration.split("\n").map((line) => {
+            const record = JSON.parse(line)
+            if (name.includes("capacity") ? record.type === "veteran_inspiration_scan" : record.type === "veteran_inspiration" && record.scanIndex === 0) mutate(record)
+            return JSON.stringify(record)
+        }).join("\n")
+        const evidence = buildRetentionEvidence(fixture.snapshot, buildInspirationIndex(parseInspirationRecords(inspiration)), null)
+        const scarcity = buildFactorScarcityIndex(evidence)
+        const candidates = buildParentCandidates(evidence.veterans, fixture.targetBuild, scarcity, fixture.relations)
+        expect(candidates[0].selfFactorsTrusted).toBe(false)
+        expect(candidates[0].relevance).toBeNull()
+        const result = runParentLabCli("affinity", { ...fixture.sources, inspiration }, args)
+        expect(result.error).toBeUndefined()
+        expect(result.status).toBe(0)
+        const report: AffinityAdvisorReport = JSON.parse(result.stdout)
+        expect(report.coverage.accountWide).toBe(false)
+        expect(report.targets[0].candidates.selfFactorsTrusted).toBe(name.includes("capacity") ? 0 : 1)
+        const parents = report.targets[0].pairs.flatMap((pair) => [pair.parentA, pair.parentB]).filter((parent) => parent.character === ALPHA)
+        expect(parents.length).toBeGreaterThan(0)
+        for (const parent of parents) {
+            expect(parent.selfFactorsTrusted).toBe(false)
+            expect(parent.matchedFactors).toEqual([])
+            expect(parent.gaps).toContain("NO_TRUSTED_FACTOR_CAPTURE")
+        }
+    }, 30_000)
+})
+
+describe("production CLI protection gaps", () => {
+    it("distinguishes verified empty missing and malformed protection in JSON and text without changing scores", () => {
+        const fixture = build({ protection: true, veterans: [
+            { character: ALPHA, factors: [factor("aptitude", "Mile", 2)] },
+            { character: BETA, factors: [factor("stat", "Speed", 2)] },
+            { character: GAMMA, factors: [factor("stat", "Power", 1)] },
+        ] })
+        const { protection, ...withoutProtection } = fixture.sources
+        const variants = [
+            { sources: fixture.sources, gap: null },
+            { sources: withoutProtection, gap: "PROTECTION_EVIDENCE_MISSING" },
+            { sources: { ...fixture.sources, protection: protection + '\n{"type":"veteran_protection"' }, gap: "PROTECTION_EVIDENCE_INCOMPATIBLE" },
+        ]
+        const reports: AffinityAdvisorReport[] = []
+        const output: string[] = []
+        for (const variant of variants) {
+            const args = ["--trainee", TARGET, "--distance", "mile", "--surface", "turf"]
+            const json = runParentLabCli("affinity", variant.sources, [...args, "--json"])
+            expect(json.error).toBeUndefined()
+            expect(json.status).toBe(0)
+            const report: AffinityAdvisorReport = JSON.parse(json.stdout)
+            reports.push(report)
+            const target = report.targets[0]
+            expect(target.pairs.length).toBeGreaterThan(0)
+            if (variant.gap) {
+                expect(target.missingEvidence).toEqual(expect.arrayContaining([variant.gap, "FAVORITE_STATE_UNKNOWN", "PROTECTION_STATE_UNKNOWN"]))
+                expect(target.pairs.every((pair) => pair.gaps.includes("FAVORITE_STATE_UNKNOWN") && pair.gaps.includes("PROTECTION_STATE_UNKNOWN"))).toBe(true)
+            } else {
+                expect(target.missingEvidence).not.toContain("FAVORITE_STATE_UNKNOWN")
+                expect(target.missingEvidence).not.toContain("PROTECTION_STATE_UNKNOWN")
+                expect(target.pairs.every((pair) => !pair.gaps.includes("PROTECTION_STATE_UNKNOWN"))).toBe(true)
+            }
+            const text = runParentLabCli("affinity", variant.sources, args)
+            expect(text.status).toBe(0)
+            if (variant.gap) expect(text.stdout).toContain(variant.gap)
+            else expect(text.stdout).not.toContain("PROTECTION_EVIDENCE_")
+            output.push(text.stdout)
+        }
+        const withoutGaps = (report: AffinityAdvisorReport) => ({
+            ...report,
+            targets: report.targets.map((target) => ({
+                ...target, missingEvidence: [],
+                pairs: target.pairs.map((pair) => ({
+                    ...pair, gaps: [], parentA: { ...pair.parentA, gaps: [] }, parentB: { ...pair.parentB, gaps: [] },
+                })),
+            })),
+        })
+        expect(withoutGaps(reports[1])).toEqual(withoutGaps(reports[0]))
+        expect(withoutGaps(reports[2])).toEqual(withoutGaps(reports[0]))
+        expect(new Set(output).size).toBe(3)
+    }, 30_000)
+})
+describe("persisted declaration authority", () => {
+    it.each(["roster capacity", "roster census", "canonical declaration"])("withholds contradictory %s in consumers and CLI", (name) => {
+        const fixture = build({ protection: true, veterans: [
+            { character: ALPHA, factors: [factor("aptitude", "Mile", 2)], legacy: [[factor("stat", "Speed", 1)], [factor("stat", "Wit", 1)]] },
+            { character: BETA, factors: [factor("stat", "Speed", 2)] },
+        ] })
+        const args = ["--trainee", TARGET, "--distance", "mile", "--surface", "turf", "--json"]
+        const positive = runParentLabCli("affinity", fixture.sources, args)
+        expect(positive.status).toBe(0)
+        expect(JSON.parse(positive.stdout).coverage.accountWide).toBe(true)
+        expect(JSON.parse(positive.stdout).targets[0].candidates.selfFactorsTrusted).toBe(2)
+        const sources = { ...fixture.sources }
+        if (name.startsWith("roster")) sources.roster = sources.roster.split("\n").map((line) => {
+            const record = JSON.parse(line)
+            if (record.type === "roster_scan") {
+                if (name === "roster capacity") record.displayedRegisteredCapacity = "260"
+                else record.unidentifiedCount = 1
+            }
+            return JSON.stringify(record)
+        }).join("\n")
+        else sources.inspiration = sources.inspiration.split("\n").map((line) => {
+            const record = JSON.parse(line)
+            if (record.type === "veteran_inspiration" && record.scanIndex === 0) record.unresolvedFields = ["factorCanonical@aptitude:0:left"]
+            return JSON.stringify(record)
+        }).join("\n")
+        const snapshot = buildRosterSnapshots(parseRosterScanRecords(sources.roster))[0]
+        const evidence = buildRetentionEvidence(snapshot, buildInspirationIndex(parseInspirationRecords(sources.inspiration)), null)
+        const scarcity = buildFactorScarcityIndex(evidence)
+        const candidates = buildParentCandidates(evidence.veterans, fixture.targetBuild, scarcity, fixture.relations)
+        const result = runParentLabCli("affinity", sources, args)
+        expect(result.status).toBe(name === "canonical declaration" ? 0 : 1)
+        const report = JSON.parse(result.stdout)
+        expect({ consumer: scarcity.accountWide, cli: report.coverage.accountWide }).toEqual({ consumer: false, cli: false })
+        if (name === "canonical declaration") {
+            expect(candidates[0].selfFactorsTrusted).toBe(false)
+            expect(candidates[0].relevance).toBeNull()
+            expect(report.targets[0].candidates.selfFactorsTrusted).toBe(1)
+        } else expect(snapshot.trustedComplete).toBe(false)
+    }, 30_000)
 })

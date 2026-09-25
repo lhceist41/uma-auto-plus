@@ -13,9 +13,8 @@ import org.json.JSONObject
  * Protection in this game is DERIVED, never read as its own field: there is no lock concept, only two
  * user-mutable markers that block a release - a favorite icon and a memo. The probe establishes the
  * account-wide POPULATION of each (empty / non-empty) from the game's own "OK disabled when the
- * selection is empty" behaviour, and - only when a partition is non-empty - enumerates which Veterans
- * are in it. When a partition is empty, every Veteran in the trusted roster snapshot is outside it,
- * and that complement is derived offline against the snapshot rather than by re-walking the roster.
+ * selection is empty" behaviour. Only two positively empty partitions can yield COMPLETE. A
+ * nonempty partition remains unknown until a separate filtered-list census is proven.
  */
 const val VETERAN_PROTECTION_SCHEMA_VERSION: Int = 2
 
@@ -25,8 +24,11 @@ enum class ProtectionPopulation { EMPTY, NONEMPTY, UNKNOWN }
 /** How the probe ended. Only COMPLETE is trustworthy; every other value means the derived protection
  * for this snapshot must stay UNKNOWN rather than being read as a positive result. */
 enum class ProtectionScanOutcome {
-    /** Both partitions probed, and any non-empty one enumerated, with filters confirmed restored OFF. */
+    /** Both exact partitions positively empty, with filters confirmed restored OFF. */
     COMPLETE,
+
+    /** A nonempty partition has no independent filtered-list census. */
+    NONEMPTY_PARTITION_CENSUS_UNAVAILABLE,
 
     /** The roster list, its Registered count, or Filters: OFF could not be confirmed before any tap. */
     PRECONDITION_FAILED,
@@ -41,22 +43,21 @@ enum class ProtectionScanOutcome {
     RESTORE_FAILED,
 }
 
-/** Maps a probe's OK-button reading to the partition's population. ENABLED means the partition would
- * return rows (non-empty); DISABLED means zero rows (empty); UNKNOWN never resolves a population. */
-fun populationFromApply(state: ApplyButtonState): ProtectionPopulation =
+/** Called only after the exact target and unrelated filters were positively reread. An empty target
+ * also needs a fresh neutral baseline and an enabled, exact complementary probe. */
+fun populationFromProvenFilters(state: ApplyButtonState, complementary: ApplyButtonState? = null): ProtectionPopulation =
     when (state) {
         ApplyButtonState.ENABLED -> ProtectionPopulation.NONEMPTY
-        ApplyButtonState.DISABLED -> ProtectionPopulation.EMPTY
+        ApplyButtonState.DISABLED -> if (complementary == ApplyButtonState.ENABLED) ProtectionPopulation.EMPTY else ProtectionPopulation.UNKNOWN
         ApplyButtonState.UNKNOWN -> ProtectionPopulation.UNKNOWN
     }
 
 /**
  * One protection probe's durable record.
  *
- * [favoritedFingerprints] and [memoFingerprints] carry per-Veteran identity ONLY for a non-empty
- * partition that was enumerated; an empty partition leaves them empty and the offline reader derives
- * the whole-roster complement from the snapshot. [restoredFiltersOff] is the safety proof that the
- * probe left the roster exactly as it found it.
+ * [favoritedFingerprints] and [memoFingerprints] stay empty for current probes. Only a complete
+ * empty-partition record lets the offline reader derive the whole-roster complement. The restored
+ * filter state is checked after every probe.
  */
 data class VeteranProtectionScan(
     val schemaVersion: Int,
@@ -78,9 +79,15 @@ data class VeteranProtectionScan(
     val appVersion: String,
     val screenWidth: Int,
     val screenHeight: Int,
+    val favoriteBaselineVerified: Boolean = false,
+    val memoBaselineVerified: Boolean = false,
     val rosterBindingVersion: Int? = null,
     val rosterScanId: String? = null,
     val rosterDigest: String? = null,
+    val filterBaselineEvidenceVersion: Int? = null,
+    val favoriteBaselineReadings: Map<String, String> = emptyMap(),
+    val memoBaselineReadings: Map<String, String> = emptyMap(),
+    val probeDiagnostics: List<String> = emptyList(),
 )
 
 /** Serializes the protection scan to its durable `type:"veteran_protection"` record. Every value the
@@ -101,8 +108,14 @@ fun serializeVeteranProtectionScan(s: VeteranProtectionScan): JSONObject =
         s.filtersOffConfirmed?.let { put("filtersOffConfirmed", it) }
         put("favoritePopulation", s.favoritePopulation.name.lowercase())
         put("favoriteApplyState", s.favoriteApplyState.name.lowercase())
+        put("favoriteBaselineVerified", s.favoriteBaselineVerified)
+        s.filterBaselineEvidenceVersion?.let { put("filterBaselineEvidenceVersion", it) }
+        put("favoriteBaselineReadings", JSONObject(s.favoriteBaselineReadings))
         put("memoPopulation", s.memoPopulation.name.lowercase())
         put("memoApplyState", s.memoApplyState.name.lowercase())
+        put("memoBaselineVerified", s.memoBaselineVerified)
+        put("memoBaselineReadings", JSONObject(s.memoBaselineReadings))
+        put("probeDiagnostics", JSONArray().apply { s.probeDiagnostics.forEach { put(it) } })
         put("enumerationPerformed", s.enumerationPerformed)
         put("favoritedFingerprints", JSONArray().apply { s.favoritedFingerprints.forEach { put(it) } })
         put("memoFingerprints", JSONArray().apply { s.memoFingerprints.forEach { put(it) } })

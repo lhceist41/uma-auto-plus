@@ -1,6 +1,8 @@
+import { runParentLabCli } from "./cliFixture.ts"
+import { fixtureFingerprint, fixtureRank } from "./rosterFixtures.ts"
 import { parseCorpus } from "../../outcomeAnalysis.ts"
 import { contentHash128 } from "../identity.ts"
-import { buildProtectionInventory, parseProtectionRecords } from "../protection.ts"
+import { buildProtectionInventory, latestProtectionRecord, parseProtectionRecords } from "../protection.ts"
 import { buildVeteranLibrary } from "../buildVeteranLibrary.ts"
 import { buildCapacityCoverage } from "../capacityCoverage.ts"
 import { buildInspirationIndex, parseInspirationRecords } from "../inspiration.ts"
@@ -22,7 +24,10 @@ const ISCAN = "insp-test-0001"
 const T = Date.UTC(2026, 7, 21, 12, 0, 0)
 
 const APTITUDES = { turf: "A", dirt: "G", sprint: "C", mile: "A", medium: "A", long: "B", front: "A", pace: "A", late: "B", end: "C" }
-const testFingerprint = (label: string) => contentHash128(`retention fixture:${label}`)
+const NEUTRAL_FILTERS = { track: "neutral", distance: "neutral", style: "neutral", attribute_sparks: "neutral", aptitude_sparks: "neutral", unique_sparks: "neutral", common_sparks: "neutral", favorites: "neutral", memo: "neutral" }
+const rosterFingerprints = new Map<string, string>()
+const rosterIdentities = new Map<string, { character: unknown; outfit: unknown; rank: unknown }>()
+const testFingerprint = (label: string) => rosterFingerprints.get(label) ?? contentHash128(`retention fixture:${label}`)
 
 function rosterEntry(o: Record<string, unknown> = {}): string {
     const record: Record<string, unknown> = {
@@ -48,7 +53,14 @@ function rosterEntry(o: Record<string, unknown> = {}): string {
         diagnostics: null,
         ...o,
     }
-    if (typeof record.rosterFingerprint === "string") record.rosterFingerprint = testFingerprint(record.rosterFingerprint)
+    if (!("rating" in o)) record.rating = 15000 - (record.scanIndex as number)
+    if (!("rank" in o)) record.rank = fixtureRank(record.rating as number)
+    if (typeof record.rosterFingerprint === "string") {
+        const label = record.rosterFingerprint
+        record.rosterFingerprint = fixtureFingerprint(record)
+        rosterFingerprints.set(label, record.rosterFingerprint as string)
+        rosterIdentities.set(record.rosterFingerprint as string, { character: record.character, outfit: record.outfit, rank: record.rank })
+    }
     return JSON.stringify(record)
 }
 
@@ -70,7 +82,7 @@ function rosterHeader(count: number, o: Record<string, unknown> = {}): string {
         unidentifiedCount: 0,
         duplicateFingerprintCount: 0,
         countDiscrepancy: 0,
-        terminationReason: "count_reached",
+        terminationReason: count === 0 ? "empty_list" : "cycle_closed",
         enumerationComplete: true,
         identityComplete: true,
         completeness: "trusted_complete",
@@ -98,7 +110,16 @@ function factor(kind: string, name: string, stars: number) {
     }
 }
 
+function factorSetFingerprint(factors: readonly ReturnType<typeof factor>[]): string {
+    return factors.map((entry) => entry.factorFingerprint).sort().join("|")
+}
+
+function structuralFactorSetFingerprint(factors: readonly ReturnType<typeof factor>[]): string {
+    return factors.map((entry) => entry.structuralFingerprint).sort().join("|")
+}
+
 function capture(fingerprint: string, factors: ReturnType<typeof factor>[], o: Record<string, unknown> = {}): string {
+    const selfFactors = factors.map((entry, rowIndex) => ({ ...entry, rowIndex }))
     const record: Record<string, unknown> = {
         type: "veteran_inspiration",
         schemaVersion: 2,
@@ -111,16 +132,22 @@ function capture(fingerprint: string, factors: ReturnType<typeof factor>[], o: R
         rank: "S",
         selfPortraitObserved: true,
         selfFactorCount: factors.length,
-        selfFactorFingerprint: `set:${fingerprint}`,
-        selfStructuralFingerprint: `struct:${fingerprint}`,
+        selfFactorFingerprint: factorSetFingerprint(factors),
+        selfStructuralFingerprint: structuralFactorSetFingerprint(factors),
         selfFactorSetTrusted: true,
-        selfFactors: factors,
+        selfFactors,
         legacyAncestors: [],
         termination: "reached_bottom",
         sparkCaptureComplete: true,
         screenReadCompleteness: 1,
         unresolvedFields: [],
-        diagnostics: null,
+        diagnostics: {
+            frames: 1, swipes: 0, startedAtTop: true, reachedBottom: true, factorListEndObserved: true,
+            gapFrames: 0, spacingBreaks: 0, alignmentFailures: 0, unsettledFrames: 0, deadReckonedFrames: 0,
+            scrollbarContentHeight: null, observedContentHeight: null, rowsAccepted: new Set(selfFactors.map((entry) => entry.rowIndex)).size,
+            clippedRowsRejected: 0, leadingPartialBlockRows: 0, blocksObserved: 1,
+        },
+        ...rosterIdentities.get(testFingerprint(fingerprint)),
         ...o,
     }
     if (typeof record.rosterFingerprint === "string") record.rosterFingerprint = testFingerprint(record.rosterFingerprint)
@@ -145,17 +172,20 @@ interface BuildOptions {
     readonly captureCompatibility?: boolean
     readonly extraInspirationLines?: readonly string[]
     readonly protection?: boolean
+    readonly protectionTail?: readonly string[]
 }
 
 function build(options: BuildOptions) {
     const parsedRoster = parseRosterScanRecords([rosterHeader(options.entries.length), ...options.entries].join("\n"), "roster_scan.jsonl")
     const snapshot = buildRosterSnapshots(parsedRoster)[0]
-    const inspirationHeader = JSON.stringify({ type: "veteran_inspiration_scan", schemaVersion: 2, scanId: ISCAN, snapshotCompatibility: options.captureCompatibility ?? true })
-    const index = buildInspirationIndex(parseInspirationRecords([inspirationHeader, ...(options.captures ?? []), ...(options.extraInspirationLines ?? [])].join("\n"), "veteran_inspiration.jsonl"))
+    const inspirationHeader = JSON.stringify({ type: "veteran_inspiration_scan", schemaVersion: 2, scanId: ISCAN, registeredUsedAtStart: options.entries.length, registeredUsedAtEnd: options.entries.length, registeredCapacity: 260, filtersOff: true, entryLimit: 0, startIndex: 0, entriesCaptured: options.captures?.length ?? 0, entriesComplete: (options.captures ?? []).filter((line) => JSON.parse(line).sparkCaptureComplete).length, terminationReason: "cycle_closed", pagerCycleClosed: (options.captures?.length ?? 0) === options.entries.length && options.captureCompatibility !== false, snapshotCompatibility: options.captureCompatibility ?? true })
+    const captures = (options.captures ?? []).map((line, scanIndex) => JSON.stringify({ ...JSON.parse(line), scanIndex }))
+    const index = buildInspirationIndex(parseInspirationRecords([inspirationHeader, ...captures, ...(options.extraInspirationLines ?? [])].join("\n"), "veteran_inspiration.jsonl"))
     const corpus = parseCorpus((options.careers ?? []).flat().join("\n"), "careers.jsonl")
     const library = buildVeteranLibrary({ outcomes: corpus.outcomes, sparks: corpus.sparks })
     const reconciliation = options.withReconciliation === false ? null : reconcileRoster(library, snapshot)
-    const protectionRecord = options.protection ? parseProtectionRecords(JSON.stringify({ type: "veteran_protection", schemaVersion: 2, rosterBindingVersion: 1, rosterScanId: snapshot.scanId, rosterDigest: rosterBindingDigest(snapshot), scanId: "vp-retention-test", registeredUsed: snapshot.registeredUsed, filtersOffConfirmed: true, favoritePopulation: "empty", favoriteApplyState: "disabled", memoPopulation: "empty", memoApplyState: "disabled", enumerationPerformed: false, favoritedFingerprints: [], memoFingerprints: [], restoredFiltersOff: true, outcome: "complete" })).records[0] : null
+    const protectionLine = JSON.stringify({ type: "veteran_protection", schemaVersion: 2, rosterBindingVersion: 1, rosterScanId: snapshot.scanId, rosterDigest: rosterBindingDigest(snapshot), scanId: "vp-retention-test", registeredUsed: snapshot.registeredUsed, registeredCapacity: 260, filtersOffConfirmed: true, favoritePopulation: "empty", favoriteApplyState: "disabled", favoriteBaselineVerified: true, filterBaselineEvidenceVersion: 1, favoriteBaselineReadings: NEUTRAL_FILTERS, memoPopulation: "empty", memoApplyState: "disabled", memoBaselineVerified: true, memoBaselineReadings: NEUTRAL_FILTERS, enumerationPerformed: false, favoritedFingerprints: [], memoFingerprints: [], restoredFiltersOff: true, outcome: "complete" })
+    const protectionRecord = options.protection ? latestProtectionRecord(parseProtectionRecords([protectionLine, ...(options.protectionTail ?? [])].join("\n"))) : null
     const inventory = options.protection ? buildProtectionInventory(protectionRecord, snapshot) : null
     const evidence = buildRetentionEvidence(snapshot, index, reconciliation, inventory)
     const report = buildRetentionShadowReport({
@@ -165,7 +195,33 @@ function build(options: BuildOptions) {
         profile: TARGET_PROFILES[options.profile ?? "GENERAL_INHERITANCE"],
         manualProtect: new Set((options.manualProtect ?? []).map(testFingerprint)),
     })
-    return { snapshot, evidence, library, reconciliation, report }
+    const sources = {
+        roster: [rosterHeader(options.entries.length), ...options.entries].join("\n"),
+        inspiration: [inspirationHeader, ...captures, ...(options.extraInspirationLines ?? [])].join("\n"),
+        careers: (options.careers ?? []).flat().join("\n"),
+        protection: [protectionLine, ...(options.protectionTail ?? [])].join("\n"),
+    }
+    return { snapshot, evidence, library, reconciliation, report, sources }
+}
+
+function completeInspirationScan(scanId: string, captures: readonly string[]): string {
+    const entries = captures.map((line, scanIndex) => JSON.stringify({ ...JSON.parse(line), scanId, scanIndex }))
+    const header = JSON.stringify({
+        type: "veteran_inspiration_scan", schemaVersion: 2, scanId,
+        registeredUsedAtStart: entries.length, registeredUsedAtEnd: entries.length, registeredCapacity: 260, filtersOff: true,
+        entryLimit: 0, startIndex: 0, entriesCaptured: entries.length,
+        entriesComplete: entries.filter((line) => JSON.parse(line).sparkCaptureComplete).length,
+        terminationReason: "cycle_closed", pagerCycleClosed: true, snapshotCompatibility: true,
+    })
+    return [header, ...entries].join("\n")
+}
+
+function mutateSubjectCapture(source: string, mutate: (record: Record<string, any>) => void): string {
+    return source.split("\n").map((line) => {
+        const record = JSON.parse(line)
+        if (record.type === "veteran_inspiration" && record.scanId === ISCAN && record.scanIndex === 0) mutate(record)
+        return JSON.stringify(record)
+    }).join("\n")
 }
 
 /** Finds the recommendation for a roster fingerprint. */
@@ -278,14 +334,12 @@ describe("PL-R2 scarcity confidence", () => {
             captures: [capture("fp-0", [factor("stat", "Speed", 3)])],
         })
         expect(report.scarcity.accountWide).toBe(false)
-        expect(report.scarcity.coverage).toBeCloseTo(0.05, 4)
+        expect(report.scarcity.coverage).toBe(0)
         const r = forFingerprint(report, "fp-0")
-        // The observation is real, so it still protects - but only as a keep reason, never as an
-        // account-wide uniqueness claim.
-        expect(r.factorValueSummary.scarcestClaim).toBe("OBSERVED_UNIQUE")
+        expect(r.factorValueSummary.scarcestClaim).not.toBe("ACCOUNT_UNIQUE")
         expect(r.hardProtectReasons).not.toContain("OBSERVED_UNIQUE_FACTOR")
         expect(r.gateReasons).toContain("SCARCITY_COVERAGE_INSUFFICIENT")
-        expect(r.state).toBe("KEEP")
+        expect(r.state).toBe("UNKNOWN")
     })
 
     it("makes an account-wide claim once every identified entry has a trusted capture", () => {
@@ -478,6 +532,653 @@ describe("PL-R2 recommendation gates", () => {
         return { ...fixture, protection: true }
     }
 
+    function ancestorBlocks(record: Record<string, any>, count = 2) {
+        record.legacyAncestors = Array.from({ length: count }, (_, ancestorIndex) => ({
+            ancestorIndex, portraitObserved: true, factorCount: record.selfFactors.length,
+            ancestorFactorFingerprint: record.selfFactorFingerprint,
+            ancestorStructuralFingerprint: record.selfStructuralFingerprint,
+            factorSetTrusted: true, factors: record.selfFactors.map((entry: Record<string, any>) => ({ ...entry })),
+        }))
+        record.diagnostics.blocksObserved = count + 1
+        record.diagnostics.rowsAccepted = new Set(record.selfFactors.map((entry: Record<string, any>) => entry.rowIndex)).size * (count + 1)
+    }
+
+    it.each<[string, unknown]>([
+        ["missing", undefined], ["below count", 1], ["fraction", 260.5],
+        ["string", "260"], ["array", [260]], ["outside Int", 2_147_483_648],
+    ])("rejects roster capacity declaration %s through consumers and CLI", (_, capacity) => {
+        const fixture = build(unlockedTrio())
+        const positive = runParentLabCli("retention", fixture.sources, ["--json"])
+        expect(positive.status).toBe(0)
+        expect(forFingerprint(JSON.parse(positive.stdout), "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        const roster = fixture.sources.roster.split("\n").map((line) => {
+            const record = JSON.parse(line)
+            if (record.type === "roster_scan") record.displayedRegisteredCapacity = capacity
+            return JSON.stringify(record)
+        }).join("\n")
+        const snapshot = buildRosterSnapshots(parseRosterScanRecords(roster))[0]
+        const evidence = buildRetentionEvidence(snapshot, buildInspirationIndex(parseInspirationRecords(fixture.sources.inspiration)), fixture.reconciliation)
+        const result = runParentLabCli("retention", { ...fixture.sources, roster }, ["--json"])
+        expect(result.status).toBe(1)
+        const report = JSON.parse(result.stdout)
+        expect({ trusted: snapshot.trustedComplete, consumer: buildFactorScarcityIndex(evidence).accountWide,
+            cli: report.scarcity.accountWide, safe: report.counts.SAFE_TO_TRANSFER }).toEqual({ trusted: false, consumer: false, cli: false, safe: 0 })
+    }, 30_000)
+
+    it.each([3, 260, 2_147_483_647, 2_147_483_648])("checks matching roster/protection capacity %i against producer bounds", (capacity) => {
+        const fixture = build(unlockedTrio())
+        expect(forFingerprint(fixture.report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        const sources = { ...fixture.sources }
+        sources.roster = sources.roster.split("\n").map((line) => {
+            const record = JSON.parse(line)
+            if (record.type === "roster_scan") record.displayedRegisteredCapacity = capacity
+            return JSON.stringify(record)
+        }).join("\n")
+        sources.protection = JSON.stringify({ ...JSON.parse(sources.protection), registeredCapacity: capacity })
+        const snapshot = buildRosterSnapshots(parseRosterScanRecords(sources.roster))[0]
+        const protection = latestProtectionRecord(parseProtectionRecords(sources.protection))
+        const inventory = buildProtectionInventory(protection, snapshot)
+        const valid = capacity <= 2_147_483_647
+        const result = runParentLabCli("retention", sources, ["--json"])
+        expect(result.status).toBe(valid ? 0 : 1)
+        const report = JSON.parse(result.stdout)
+        expect({ trusted: snapshot.trustedComplete, protection: inventory.compatible, accountWide: report.scarcity.accountWide,
+            safe: report.counts.SAFE_TO_TRANSFER }).toEqual({ trusted: valid, protection: valid, accountWide: valid, safe: valid ? 1 : 0 })
+        if (!valid) expect(inventory.defects).toContain("capacity_invalid")
+    }, 30_000)
+
+    it.each(["uniqueFingerprints", "unidentifiedCount", "duplicateFingerprintCount", "countDiscrepancy"])("rejects contradictory roster census %s without header fallback", (field) => {
+        const fixture = build(unlockedTrio())
+        expect(forFingerprint(fixture.report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        const header = JSON.parse(fixture.sources.roster.split("\n")[0])
+        header[field] = 1
+        const roster = `${fixture.sources.roster}\n${JSON.stringify(header)}`
+        const snapshot = buildRosterSnapshots(parseRosterScanRecords(roster))[0]
+        const evidence = buildRetentionEvidence(snapshot, buildInspirationIndex(parseInspirationRecords(fixture.sources.inspiration)), fixture.reconciliation)
+        const result = runParentLabCli("retention", { ...fixture.sources, roster }, ["--json"])
+        expect(result.status).toBe(1)
+        const report = JSON.parse(result.stdout)
+        expect({ trusted: snapshot.trustedComplete, consumer: buildFactorScarcityIndex(evidence).accountWide,
+            cli: report.scarcity.accountWide, safe: report.counts.SAFE_TO_TRANSFER }).toEqual({ trusted: false, consumer: false, cli: false, safe: 0 })
+    }, 30_000)
+
+    function unresolvedAncestor(record: Record<string, any>, index: number) {
+        const ancestor = record.legacyAncestors[index]
+        const factor = ancestor.factors[0]
+        delete factor.canonicalName
+        factor.canonicalPath = "reject"
+        delete factor.factorFingerprint
+        ancestor.factorSetTrusted = false
+        delete ancestor.ancestorFactorFingerprint
+        record.unresolvedFields.push(`factorCanonical@${factor.kind}:${factor.rowIndex}:${factor.column}`)
+    }
+
+    it.each([1, 2])("preserves %i unresolved ancestors sharing coordinates with resolved self factors", (count) => {
+        const fixture = build(unlockedTrio())
+        const inspiration = mutateSubjectCapture(fixture.sources.inspiration, (record) => {
+            ancestorBlocks(record)
+            for (let i = 0; i < count; i++) unresolvedAncestor(record, i)
+            record.selfFactors.reverse()
+            record.legacyAncestors.reverse().forEach((block: Record<string, any>) => block.factors.reverse())
+            record.unresolvedFields.reverse()
+        })
+        const actual = observedCapture(fixture, inspiration)
+        expect(actual.subject.captureTrusted).toBe(true)
+        expect(actual.subject.selfFactors).not.toBeNull()
+        expect(actual.report.scarcity.accountWide).toBe(true)
+        expect(forFingerprint(actual.report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+    }, 30_000)
+
+    it.each<[string, (record: Record<string, any>) => void]>([
+        ["resolved self", (record) => { const f = record.selfFactors[0]; record.unresolvedFields.push(`factorCanonical@${f.kind}:${f.rowIndex}:${f.column}`) }],
+        ["resolved ancestor", (record) => { const f = record.legacyAncestors[0].factors[0]; record.unresolvedFields.push(`factorCanonical@${f.kind}:${f.rowIndex}:${f.column}`) }],
+        ["missing ancestor marker", (record) => { unresolvedAncestor(record, 0); record.unresolvedFields = [] }],
+        ["missing duplicate marker", (record) => { unresolvedAncestor(record, 0); unresolvedAncestor(record, 1); record.unresolvedFields.pop() }],
+        ["extra duplicate marker", (record) => { unresolvedAncestor(record, 0); record.unresolvedFields.push(record.unresolvedFields[0]) }],
+        ["wrong marker location", (record) => { unresolvedAncestor(record, 0); record.unresolvedFields[0] = "factorCanonical@white:99:right" }],
+    ])("rejects canonical declaration contradiction %s including older valid evidence", (_, mutate) => {
+        const fixture = build(unlockedTrio())
+        const control = mutateSubjectCapture(fixture.sources.inspiration, (record) => ancestorBlocks(record))
+        expect(forFingerprint(observedCapture(fixture, control).report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        const changed = mutateSubjectCapture(control, mutate)
+        const older = control.split("\n").map((line) => JSON.stringify({ ...JSON.parse(line), scanId: "older-valid", observedAt: T - 1 })).join("\n")
+        for (const inspiration of [changed, `${older}\n${changed}`]) {
+            const actual = observedCapture(fixture, inspiration)
+            expect(actual.parsed.entries.find((entry) => entry.scanId === ISCAN && entry.scanIndex === 0)?.legacyAncestors).toHaveLength(2)
+            expect(actual.subject.capture).not.toBeNull()
+            expect({ trusted: actual.subject.captureTrusted, factors: actual.subject.selfFactors,
+                consumer: buildFactorScarcityIndex(actual.evidence).accountWide,
+                cli: actual.report.scarcity.accountWide, safe: actual.report.counts.SAFE_TO_TRANSFER }).toEqual({ trusted: false, factors: null, consumer: false, cli: false, safe: 0 })
+            expect(actual.subject.capture?.unresolvedFields).toContain("persistedCompleteness")
+        }
+    }, 30_000)
+
+    function setStars(record: Record<string, any>, ancestor: boolean, stars: number) {
+        const block = ancestor ? record.legacyAncestors[1] : record
+        const factors = ancestor ? block.factors : block.selfFactors
+        const entry = factors[0]
+        entry.stars = stars
+        entry.factorFingerprint = `${entry.kind}:${entry.canonicalName.toUpperCase()}:${stars}`
+        entry.structuralFingerprint = `${entry.kind}:${stars}`
+        block[ancestor ? "ancestorFactorFingerprint" : "selfFactorFingerprint"] = factorSetFingerprint(factors)
+        block[ancestor ? "ancestorStructuralFingerprint" : "selfStructuralFingerprint"] = structuralFactorSetFingerprint(factors)
+    }
+
+    it.each(["older", "newer"])("unrelated canonical contradiction cannot displace valid authority %s", (age) => {
+        const fixture = build(unlockedTrio())
+        const positive = observedCapture(fixture, fixture.sources.inspiration)
+        expect(positive.subject.captureTrusted).toBe(true)
+        expect(forFingerprint(positive.report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        const unrelated = fixture.sources.inspiration.split("\n").map((line) => {
+            const r = JSON.parse(line)
+            r.scanId = "foreign-identity"
+            r.observedAt = age === "older" ? T - 100 : T + 100
+            if (r.type === "veteran_inspiration" && r.scanIndex === 0) {
+                r.character = "Unrelated Character"
+                r.unresolvedFields = ["factorCanonical@stat:0:left"]
+            }
+            return JSON.stringify(r)
+        }).join("\n")
+        const outcomes: boolean[] = []
+        for (const inspiration of [unrelated + "\n" + fixture.sources.inspiration, fixture.sources.inspiration + "\n" + unrelated]) {
+            const actual = observedCapture(fixture, inspiration)
+            outcomes.push(actual.subject.captureTrusted)
+        }
+        expect(outcomes).toEqual([true, true])
+    }, 30_000)
+
+    it.each<[string, unknown]>([
+        ...["trustedForRetention", "enumerationComplete", "identityComplete"].flatMap((field) =>
+            [false, null, "false", "true", 0, 1, [], {}].map((value): [string, unknown] => [field, value])),
+    ])("rejects contrary roster safety declaration %s", (field, value) => {
+        const fixture = build(unlockedTrio())
+        const controlRoster = fixture.sources.roster.split("\n").map(line => {
+            const r = JSON.parse(line)
+            if (r.type === "roster_scan") Object.assign(r, { enumerationComplete: true, identityComplete: true, trustedForRetention: true })
+            return JSON.stringify(r)
+        }).join("\n")
+        const control = runParentLabCli("retention", { ...fixture.sources, roster: controlRoster }, ["--json"])
+        expect(control.status).toBe(0)
+        expect(forFingerprint(JSON.parse(control.stdout), "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        const roster = controlRoster.split("\n").map(line => { const r = JSON.parse(line); if (r.type === "roster_scan") r[field] = value; return JSON.stringify(r) }).join("\n")
+        const snapshot = buildRosterSnapshots(parseRosterScanRecords(roster))[0]
+        const evidence = buildRetentionEvidence(snapshot, buildInspirationIndex(parseInspirationRecords(fixture.sources.inspiration)), fixture.reconciliation)
+        const cli = runParentLabCli("retention", { ...fixture.sources, roster }, ["--json"])
+        const report = JSON.parse(cli.stdout)
+        expect(snapshot.trustedComplete).toBe(false)
+        expect(buildFactorScarcityIndex(evidence).accountWide).toBe(false)
+        expect(report.scarcity.accountWide).toBe(false)
+        expect(report.counts.SAFE_TO_TRANSFER).toBe(0)
+    }, 30_000)
+
+    it.each(["partial", "unsupported", "incompatible"])("selection boundary control %s", (kind) => {
+        const fixture = build(unlockedTrio())
+        const changed = fixture.sources.inspiration.split("\n").map(line => {
+            const r = JSON.parse(line)
+            r.scanId = "selection-control"
+            r.observedAt = T + 100
+            if (kind === "unsupported") r.schemaVersion = 3
+            if (kind === "incompatible" && r.type === "veteran_inspiration_scan") r.snapshotCompatibility = false
+            if (kind === "partial") {
+                if (r.type === "veteran_inspiration_scan") r.entriesComplete = 2
+                if (r.type === "veteran_inspiration" && r.scanIndex === 0) {
+                    r.sparkCaptureComplete = false
+                    r.screenReadCompleteness = 0.875
+                    r.diagnostics.startedAtTop = false
+                    r.unresolvedFields = ["startedAtTop"]
+                }
+            }
+            return JSON.stringify(r)
+        }).join("\n")
+        for (const inspiration of [changed + "\n" + fixture.sources.inspiration, fixture.sources.inspiration + "\n" + changed]) {
+            const actual = observedCapture(fixture, inspiration)
+            expect(actual.subject.captureTrusted).toBe(true)
+            expect(actual.report.scarcity.accountWide).toBe(true)
+        }
+    }, 30_000)
+
+    it.each<[string, (r: Record<string, any>) => void]>([
+        ["contradictory completeness", r => { r.screenReadCompleteness = 0 }],
+        ["contradictory fingerprint", r => { r.selfFactorFingerprint = "stat:UNRELATED:3" }],
+        ["contradictory census", r => { r.diagnostics.rowsAccepted++ }],
+        ["duplicate cell", r => { r.selfFactors[1].rowIndex = r.selfFactors[0].rowIndex; r.selfFactors[1].column = r.selfFactors[0].column }],
+    ])("favorable evidence cannot hide %s", (name, mutate) => {
+        const fixture = build(unlockedTrio())
+        expect(forFingerprint(observedCapture(fixture, fixture.sources.inspiration).report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        const bad = mutateSubjectCapture(fixture.sources.inspiration, mutate)
+        const badOnly = observedCapture(fixture, bad)
+        expect(badOnly.subject.captureTrusted).toBe(false)
+        const outcomes: boolean[] = []
+        for (const age of [-100, 100]) {
+            const other = bad.split("\n").map(line => JSON.stringify({ ...JSON.parse(line), scanId: "contradictory-capture", observedAt: T + age })).join("\n")
+            for (const inspiration of [other + "\n" + fixture.sources.inspiration, fixture.sources.inspiration + "\n" + other]) {
+                const actual = observedCapture(fixture, inspiration)
+                expect(buildFactorScarcityIndex(actual.evidence).accountWide).toBe(false)
+                expect(actual.report.scarcity.accountWide).toBe(false)
+                expect(actual.report.counts.SAFE_TO_TRANSFER).toBe(0)
+                outcomes.push(actual.subject.captureTrusted)
+            }
+        }
+        expect(outcomes).toEqual([false, false, false, false])
+    }, 30_000)
+
+    it.each(["older", "newer"])("matching canonical contradiction blocks both orders %s", (age) => {
+        const fixture = build(unlockedTrio())
+        expect(forFingerprint(observedCapture(fixture, fixture.sources.inspiration).report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        const bad = mutateSubjectCapture(fixture.sources.inspiration, r => { r.unresolvedFields = ["factorCanonical@stat:0:left"] })
+            .split("\n").map(line => JSON.stringify({ ...JSON.parse(line), scanId: "bad-canonical", observedAt: age === "older" ? T - 100 : T + 100 })).join("\n")
+        for (const inspiration of [bad + "\n" + fixture.sources.inspiration, fixture.sources.inspiration + "\n" + bad]) {
+            const actual = observedCapture(fixture, inspiration)
+            expect(actual.subject.captureTrusted).toBe(false)
+            expect(actual.report.scarcity.accountWide).toBe(false)
+            expect(actual.report.counts.SAFE_TO_TRANSFER).toBe(0)
+        }
+    }, 30_000)
+
+    it("single capture fingerprint declaration controls authority", () => {
+        const fixture = build(unlockedTrio())
+        expect(forFingerprint(observedCapture(fixture, fixture.sources.inspiration).report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        const inspiration = mutateSubjectCapture(fixture.sources.inspiration, r => { r.selfFactorFingerprint = "stat:UNRELATED:3" })
+        const actual = observedCapture(fixture, inspiration)
+        expect(actual.subject.captureTrusted).toBe(false)
+        expect(actual.report.scarcity.accountWide).toBe(false)
+        expect(actual.report.counts.SAFE_TO_TRANSFER).toBe(0)
+    }, 30_000)
+
+    it.each(["trustedForRetention", "enumerationComplete", "identityComplete", "all"])("preserves omitted legacy safety declarations %s", (field) => {
+        const fixture = build(unlockedTrio())
+        const roster = fixture.sources.roster.split("\n").map((line) => {
+            const record = JSON.parse(line)
+            if (record.type === "roster_scan") {
+                for (const key of ["trustedForRetention", "enumerationComplete", "identityComplete"]) {
+                    if (field === "all" || key === field) delete record[key]
+                    else record[key] = true
+                }
+                record.unrelatedDiagnostic = { observed: "unknown" }
+            }
+            return JSON.stringify(record)
+        }).join("\n")
+        const snapshot = buildRosterSnapshots(parseRosterScanRecords(roster))[0]
+        expect(snapshot.trustedComplete).toBe(true)
+        const evidence = buildRetentionEvidence(snapshot, buildInspirationIndex(parseInspirationRecords(fixture.sources.inspiration)), fixture.reconciliation)
+        expect(buildFactorScarcityIndex(evidence).accountWide).toBe(true)
+        const cli = runParentLabCli("retention", { ...fixture.sources, roster }, ["--json"])
+        expect(cli.status).toBe(0)
+        const report = JSON.parse(cli.stdout)
+        expect(report.scarcity.accountWide).toBe(true)
+        expect(forFingerprint(report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+    }, 30_000)
+
+    function observedCapture(fixture: ReturnType<typeof build>, inspiration: string) {
+        const parsed = parseInspirationRecords(inspiration)
+        const evidence = buildRetentionEvidence(fixture.snapshot, buildInspirationIndex(parsed), fixture.reconciliation)
+        const subject = evidence.veterans.find((entry) => entry.rosterFingerprint === testFingerprint("fp-subject"))!
+        const result = runParentLabCli("retention", { ...fixture.sources, inspiration }, ["--json"])
+        expect(result.error).toBeUndefined()
+        expect(result.status).toBe(0)
+        const report: RetentionShadowReport = JSON.parse(result.stdout)
+        return { parsed, evidence, subject, report }
+    }
+
+    it.each<[string, (record: Record<string, any>) => void]>([
+        ["self right without left", (record) => { record.selfFactors[0].column = "right" }],
+        ["self row outside contiguous indexes", (record) => { record.selfFactors[0].rowIndex = 99 }],
+        ["duplicate ancestor index", (record) => { record.legacyAncestors[1].ancestorIndex = 0 }],
+        ["ancestor index outside contiguous indexes", (record) => { record.legacyAncestors[1].ancestorIndex = 9 }],
+        ["empty serialized ancestor", (record) => {
+            const block = record.legacyAncestors[0]
+            record.diagnostics.rowsAccepted -= block.factors.length
+            block.factors = []
+            block.factorCount = 0
+            block.factorSetTrusted = false
+            block.ancestorFactorFingerprint = null
+            block.ancestorStructuralFingerprint = ""
+        }],
+        ["ancestor right without left", (record) => { record.legacyAncestors[1].factors[0].column = "right" }],
+        ["ancestor row outside contiguous indexes", (record) => { record.legacyAncestors[0].factors[0].rowIndex = 99 }],
+        ...[false, true].flatMap((ancestor) => [-1, 4].map((stars): [string, (record: Record<string, any>) => void] =>
+            [`${ancestor ? "ancestor" : "self"} stars ${stars}`, (record) => setStars(record, ancestor, stars)])),
+    ])("rejects producer-impossible Inspiration %s through consumers and CLI", (_, mutate) => {
+        const fixture = build(unlockedTrio())
+        const control = mutateSubjectCapture(fixture.sources.inspiration, (record) => ancestorBlocks(record))
+        const positive = observedCapture(fixture, control)
+        expect(positive.subject.captureTrusted).toBe(true)
+        expect(positive.subject.selfFactors).not.toBeNull()
+        expect(positive.report.scarcity.accountWide).toBe(true)
+        expect(forFingerprint(positive.report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+
+        const actual = observedCapture(fixture, mutateSubjectCapture(control, mutate))
+        const rawSubject = actual.parsed.entries.find((entry) => entry.scanIndex === 0)!
+        expect(rawSubject.diagnostics).not.toBeNull()
+        expect(rawSubject.legacyAncestors).toHaveLength(2)
+        expect(actual.subject.capture).not.toBeNull()
+        expect({
+            captureTrusted: actual.subject.captureTrusted, factors: actual.subject.selfFactors,
+            consumerAccountWide: buildFactorScarcityIndex(actual.evidence).accountWide,
+            cliAccountWide: actual.report.scarcity.accountWide, safe: actual.report.counts.SAFE_TO_TRANSFER,
+        }).toEqual({ captureTrusted: false, factors: null, consumerAccountWide: false, cliAccountWide: false, safe: 0 })
+        expect(actual.subject.capture?.unresolvedFields).toContain("persistedCompleteness")
+    }, 30_000)
+
+    it.each<[string, unknown]>([
+        ["missing", undefined], ["below original count", 1], ["null", null], ["zero", 0], ["negative", -1],
+        ["fractional", 3.5], ["numeric string", "260"], ["boolean", true], ["array", [260]], ["object", {}],
+        ["outside producer integer range", 2_147_483_648], ["unsafe integer", Number.MAX_SAFE_INTEGER + 1],
+    ])("rejects producer-impossible Inspiration capacity %s without header fallback", (_, capacity) => {
+        const fixture = build(unlockedTrio())
+        const positive = observedCapture(fixture, fixture.sources.inspiration)
+        expect(positive.evidence.veterans.every((entry) => entry.captureTrusted)).toBe(true)
+        expect(positive.report.scarcity.accountWide).toBe(true)
+        expect(forFingerprint(positive.report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        const header = JSON.parse(fixture.sources.inspiration.split("\n")[0])
+        header.registeredCapacity = capacity
+        const invalidHeader = JSON.stringify(header)
+        const captures = fixture.sources.inspiration.split("\n").slice(1).join("\n")
+        for (const inspiration of [`${invalidHeader}\n${captures}`, `${fixture.sources.inspiration}\n${invalidHeader}`]) {
+            const actual = observedCapture(fixture, inspiration)
+            expect(actual.parsed.scans.length).toBeGreaterThan(0)
+            expect({
+                trusted: actual.evidence.veterans.filter((entry) => entry.captureTrusted).length,
+                factors: actual.evidence.veterans.filter((entry) => entry.selfFactors !== null).length,
+                consumerAccountWide: buildFactorScarcityIndex(actual.evidence).accountWide,
+                cliAccountWide: actual.report.scarcity.accountWide, safe: actual.report.counts.SAFE_TO_TRANSFER,
+            }).toEqual({ trusted: 0, factors: 0, consumerAccountWide: false, cliAccountWide: false, safe: 0 })
+            expect(actual.evidence.veterans.every((entry) => entry.capture !== null && !entry.capture.snapshotCompatible)).toBe(true)
+        }
+    }, 30_000)
+
+    it.each([0, 1, 2, 3])("preserves %i ancestors, row permutations, and star boundaries", (count) => {
+        const fixture = build(unlockedTrio())
+        for (const stars of [0, 3]) {
+            const inspiration = mutateSubjectCapture(fixture.sources.inspiration, (record) => {
+                record.selfFactors.forEach((entry: Record<string, any>, index: number) => {
+                    entry.rowIndex = Math.floor(index / 2)
+                    entry.column = index % 2 === 0 ? "left" : "right"
+                })
+                ancestorBlocks(record, count)
+                setStars(record, false, stars)
+                if (count > 1) setStars(record, true, stars)
+                record.selfFactors.reverse()
+                record.legacyAncestors.reverse().forEach((block: Record<string, any>) => block.factors.reverse())
+            })
+            const actual = observedCapture(fixture, inspiration)
+            expect(actual.subject.captureTrusted).toBe(true)
+            expect(actual.subject.selfFactors).toHaveLength(GENERIC_SUBJECT.length)
+            expect(actual.report.scarcity.accountWide).toBe(true)
+        }
+    }, 30_000)
+
+    it.each([3, 100, 260, 2_147_483_647])("preserves original scan capacity %i independently of current roster capacity", (capacity) => {
+        const fixture = build(unlockedTrio())
+        const lines = fixture.sources.inspiration.split("\n")
+        lines[0] = JSON.stringify({ ...JSON.parse(lines[0]), registeredCapacity: capacity })
+        const actual = observedCapture(fixture, lines.join("\n"))
+        expect(actual.evidence.veterans.every((entry) => entry.captureTrusted)).toBe(true)
+        expect(actual.report.scarcity.accountWide).toBe(true)
+        expect(forFingerprint(actual.report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+    }, 30_000)
+
+    it.each([
+        ["extra claimed self block", false, (record: Record<string, any>) => { record.diagnostics.blocksObserved = 2 }],
+        ["one row for four self factors", false, (record: Record<string, any>) => { record.diagnostics.rowsAccepted = 1 }],
+        ["duplicate self cell", false, (record: Record<string, any>) => { record.selfFactors[1].rowIndex = record.selfFactors[0].rowIndex }],
+        ["extra claimed ancestor block", true, (record: Record<string, any>) => { record.diagnostics.blocksObserved++ }],
+        ["omitted ancestor block census", true, (record: Record<string, any>) => { record.diagnostics.blocksObserved-- }],
+        ["omitted ancestor row census", true, (record: Record<string, any>) => { record.diagnostics.rowsAccepted-- }],
+        ["extra claimed row", true, (record: Record<string, any>) => { record.diagnostics.rowsAccepted++ }],
+        ["factor count used as row census", true, (record: Record<string, any>) => {
+            record.diagnostics.rowsAccepted = record.selfFactors.length + record.legacyAncestors.reduce((count: number, block: Record<string, any>) => count + block.factors.length, 0)
+        }],
+        ["duplicate self left cell in two-column row", true, (record: Record<string, any>) => { record.selfFactors[1].column = "left" }],
+        ["duplicate self right cell in two-column row", true, (record: Record<string, any>) => { record.selfFactors[0].column = "right" }],
+        ["duplicate ancestor left cell", true, (record: Record<string, any>) => { record.legacyAncestors[0].factors[1].column = "left" }],
+        ["duplicate ancestor right cell", true, (record: Record<string, any>) => { record.legacyAncestors[1].factors[0].column = "right" }],
+    ])("rejects Inspiration census or cell contradiction: %s", (_, withAncestors, mutate) => {
+        const fixture = build(unlockedTrio())
+        const control = mutateSubjectCapture(fixture.sources.inspiration, (record) => {
+            if (!withAncestors) return
+            record.selfFactors.forEach((entry: Record<string, any>, index: number) => {
+                entry.rowIndex = Math.floor(index / 2)
+                entry.column = index % 2 === 0 ? "left" : "right"
+            })
+            record.legacyAncestors = [0, 1].map((ancestorIndex) => ({
+                ancestorIndex, portraitObserved: true, factorCount: record.selfFactors.length,
+                ancestorFactorFingerprint: record.selfFactorFingerprint,
+                ancestorStructuralFingerprint: record.selfStructuralFingerprint,
+                factorSetTrusted: true, factors: record.selfFactors.map((entry: Record<string, any>) => ({ ...entry })),
+            }))
+            const blocks = [record.selfFactors, ...record.legacyAncestors.map((block: Record<string, any>) => block.factors)]
+            record.diagnostics.blocksObserved = blocks.length
+            record.diagnostics.rowsAccepted = blocks.reduce((count, block) => count + new Set(block.map((entry: Record<string, any>) => entry.rowIndex)).size, 0)
+        })
+        const reordered = mutateSubjectCapture(control, (record) => {
+            record.selfFactors.reverse()
+            record.legacyAncestors.reverse().forEach((block: Record<string, any>) => block.factors.reverse())
+        })
+        for (const inspiration of [control, reordered]) {
+            const evidence = buildRetentionEvidence(fixture.snapshot, buildInspirationIndex(parseInspirationRecords(inspiration)), fixture.reconciliation)
+            expect(evidence.veterans.find((entry) => entry.rosterFingerprint === testFingerprint("fp-subject"))?.captureTrusted).toBe(true)
+            expect(buildFactorScarcityIndex(evidence).accountWide).toBe(true)
+            const result = runParentLabCli("retention", { ...fixture.sources, inspiration }, ["--json"])
+            expect(result.error).toBeUndefined()
+            expect(result.status).toBe(0)
+            expect(forFingerprint(JSON.parse(result.stdout), "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        }
+
+        const inspiration = mutateSubjectCapture(control, mutate)
+        const parsed = parseInspirationRecords(inspiration)
+        const rawSubject = parsed.entries.find((entry) => entry.scanIndex === 0)!
+        const controlSubject = parseInspirationRecords(control).entries.find((entry) => entry.scanIndex === 0)!
+        expect(rawSubject.selfFactors).toHaveLength(controlSubject.selfFactors.length)
+        expect(rawSubject.legacyAncestors).toHaveLength(controlSubject.legacyAncestors.length)
+        expect(rawSubject.diagnostics).not.toBeNull()
+        const evidence = buildRetentionEvidence(fixture.snapshot, buildInspirationIndex(parsed), fixture.reconciliation)
+        const subject = evidence.veterans.find((entry) => entry.rosterFingerprint === testFingerprint("fp-subject"))!
+
+        const result = runParentLabCli("retention", { ...fixture.sources, inspiration }, ["--json"])
+        expect(result.error).toBeUndefined()
+        expect(result.status).toBe(0)
+        const report: RetentionShadowReport = JSON.parse(result.stdout)
+        expect({
+            completenessConsistent: rawSubject.sparkCaptureConsistent,
+            captureTrusted: subject.captureTrusted,
+            factors: subject.selfFactors,
+            consumerAccountWide: buildFactorScarcityIndex(evidence).accountWide,
+            cliAccountWide: report.scarcity.accountWide,
+            cliCapturedTrusted: report.scarcity.capturedTrusted,
+            cliSafeCount: report.counts.SAFE_TO_TRANSFER,
+        }).toEqual({
+            completenessConsistent: false, captureTrusted: false, factors: null,
+            consumerAccountWide: false, cliAccountWide: false, cliCapturedTrusted: 2, cliSafeCount: 0,
+        })
+        expect(forFingerprint(report, "fp-subject").state).not.toBe("SAFE_TO_TRANSFER")
+    }, 30_000)
+
+    it.each([
+        ["zero completeness score", (record: Record<string, any>) => { record.screenReadCompleteness = 0 }],
+        ["zero rows and blocks", (record: Record<string, any>) => { record.diagnostics.rowsAccepted = 0; record.diagnostics.blocksObserved = 0 }],
+        ["zero rows", (record: Record<string, any>) => { record.diagnostics.rowsAccepted = 0 }],
+        ["zero blocks", (record: Record<string, any>) => { record.diagnostics.blocksObserved = 0 }],
+    ])("rejects contradictory Inspiration %s in retention evidence and the CLI", (_, mutate) => {
+        const fixture = build(unlockedTrio())
+        expect(forFingerprint(fixture.report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        const inspiration = mutateSubjectCapture(fixture.sources.inspiration, mutate)
+        const evidence = buildRetentionEvidence(fixture.snapshot, buildInspirationIndex(parseInspirationRecords(inspiration)), fixture.reconciliation)
+        const subject = evidence.veterans.find((entry) => entry.rosterFingerprint === testFingerprint("fp-subject"))!
+        expect(subject.captureTrusted).toBe(false)
+        expect(subject.selfFactors).toBeNull()
+        expect(buildFactorScarcityIndex(evidence).accountWide).toBe(false)
+
+        const result = runParentLabCli("retention", { ...fixture.sources, inspiration }, ["--json"])
+        expect(result.error).toBeUndefined()
+        expect(result.status).toBe(0)
+        const report: RetentionShadowReport = JSON.parse(result.stdout)
+        expect(report.scarcity.accountWide).toBe(false)
+        expect(report.scarcity.capturedTrusted).toBe(2)
+        expect(report.counts.SAFE_TO_TRANSFER).toBe(0)
+        expect(forFingerprint(report, "fp-subject").state).not.toBe("SAFE_TO_TRANSFER")
+    }, 30_000)
+
+    it.each([
+        ["bound capacity mismatch", (record: Record<string, any>) => { record.registeredCapacity = 261 }],
+        ["string enumeration flag", (record: Record<string, any>) => { record.enumerationPerformed = "true" }],
+        ["missing enumeration flag", (record: Record<string, any>) => { delete record.enumerationPerformed }],
+    ])("rejects contradictory protection %s without older-evidence fallback", (_, mutate) => {
+        const fixture = build(unlockedTrio())
+        expect(forFingerprint(fixture.report, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        const record = JSON.parse(fixture.sources.protection!)
+        mutate(record)
+        const protection = `${fixture.sources.protection}\n${JSON.stringify(record)}`
+        const inventory = buildProtectionInventory(latestProtectionRecord(parseProtectionRecords(protection)), fixture.snapshot)
+        expect(inventory.compatible).toBe(false)
+        expect(inventory.counts.notProtected).toBe(0)
+        expect(inventory.counts.protectionUnknown).toBe(3)
+
+        const result = runParentLabCli("retention", { ...fixture.sources, protection }, ["--json"])
+        expect(result.error).toBeUndefined()
+        expect(result.status).toBe(0)
+        const report: RetentionShadowReport = JSON.parse(result.stdout)
+        expect(report.counts.SAFE_TO_TRANSFER).toBe(0)
+        expect(forFingerprint(report, "fp-subject").state).not.toBe("SAFE_TO_TRANSFER")
+    }, 30_000)
+
+    it("A-10 fails conflicting complete Inspiration captures closed in either record order", () => {
+        const options = unlockedTrio()
+        const fixture = build(options)
+        const conflicting = completeInspirationScan("conflict", [capture("fp-subject", SUBJECT_WITH_UNIQUE), ...options.captures.slice(1)])
+        for (const inspiration of [`${fixture.sources.inspiration}\n${conflicting}`, `${conflicting}\n${fixture.sources.inspiration}`]) {
+            const evidence = buildRetentionEvidence(fixture.snapshot, buildInspirationIndex(parseInspirationRecords(inspiration)), fixture.reconciliation)
+            const subject = evidence.veterans.find((entry) => entry.rosterFingerprint === testFingerprint("fp-subject"))!
+            expect(subject.captureTrusted).toBe(false)
+            expect(subject.selfFactors).toBeNull()
+            expect(buildFactorScarcityIndex(evidence).accountWide).toBe(false)
+
+            const result = runParentLabCli("retention", { ...fixture.sources, inspiration }, ["--json"])
+            expect(result.error).toBeUndefined()
+            expect(result.status).toBe(0)
+            const report: RetentionShadowReport = JSON.parse(result.stdout)
+            expect(report.scarcity.accountWide).toBe(false)
+            expect(report.scarcity.capturedTrusted).toBe(2)
+            expect(report.counts.SAFE_TO_TRANSFER).toBe(0)
+            expect(forFingerprint(report, "fp-subject").state).not.toBe("SAFE_TO_TRANSFER")
+        }
+    }, 30_000)
+
+    it("A-10 preserves rich, weak, and agreeing duplicate controls through the retention CLI", () => {
+        const rich = build(unlockedTrio(SUBJECT_WITH_UNIQUE, STRONGER_NON_COVERING))
+        const richReport: RetentionShadowReport = JSON.parse(runParentLabCli("retention", rich.sources, ["--json"]).stdout)
+        expect(forFingerprint(richReport, "fp-subject").state).toBe("HARD_PROTECT")
+
+        const options = unlockedTrio()
+        const weak = build(options)
+        const weakResult = runParentLabCli("retention", weak.sources, ["--json"])
+        expect(forFingerprint(JSON.parse(weakResult.stdout), "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+
+        const agreeing = `${weak.sources.inspiration}\n${completeInspirationScan("agreeing", options.captures)}`
+        const agreeingResult = runParentLabCli("retention", { ...weak.sources, inspiration: agreeing }, ["--json"])
+        expect(agreeingResult.error).toBeUndefined()
+        const agreeingReport: RetentionShadowReport = JSON.parse(agreeingResult.stdout)
+        expect(agreeingReport.scarcity.accountWide).toBe(true)
+        expect(forFingerprint(agreeingReport, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+    }, 30_000)
+
+    it.each([
+        ["factor row missing kind", (record: Record<string, any>) => { delete record.selfFactors.at(-1).kind }],
+        ["empty asserted factor set", (record: Record<string, any>) => { record.selfFactors = [] }],
+        ["unresolved canonical factor", (record: Record<string, any>) => {
+            delete record.selfFactors.at(-1).canonicalName
+            delete record.selfFactors.at(-1).factorFingerprint
+            record.selfFactors.at(-1).canonicalPath = "reject"
+        }],
+        ["startedAtTop contradiction", (record: Record<string, any>) => {
+            record.diagnostics.startedAtTop = false
+            record.unresolvedFields = ["startedAtTop"]
+        }],
+        ["content gap contradiction", (record: Record<string, any>) => {
+            record.diagnostics.gapFrames = 1
+            record.unresolvedFields = ["contentGap"]
+        }],
+    ])("A-11 rejects %s through parsed evidence and the retention CLI", (_, mutate) => {
+        const fixture = build(unlockedTrio(SUBJECT_WITH_UNIQUE, STRONGER_NON_COVERING))
+        const inspiration = mutateSubjectCapture(fixture.sources.inspiration, mutate)
+        const evidence = buildRetentionEvidence(fixture.snapshot, buildInspirationIndex(parseInspirationRecords(inspiration)), fixture.reconciliation)
+        const subject = evidence.veterans.find((entry) => entry.rosterFingerprint === testFingerprint("fp-subject"))!
+        expect(subject.captureTrusted).toBe(false)
+        expect(subject.selfFactors).toBeNull()
+        expect(buildFactorScarcityIndex(evidence).accountWide).toBe(false)
+
+        const result = runParentLabCli("retention", { ...fixture.sources, inspiration }, ["--json"])
+        expect(result.error).toBeUndefined()
+        expect(result.status).toBe(0)
+        const report: RetentionShadowReport = JSON.parse(result.stdout)
+        expect(report.scarcity.accountWide).toBe(false)
+        expect(report.counts.SAFE_TO_TRANSFER).toBe(0)
+        expect(forFingerprint(report, "fp-subject").state).not.toBe("SAFE_TO_TRANSFER")
+    }, 30_000)
+
+    it("production CLI quarantines a transferable subject when the authoritative tail is malformed", () => {
+        const fixture = build(unlockedTrio())
+        const valid = runParentLabCli("retention", fixture.sources, ["--json"])
+        expect(valid.error).toBeUndefined()
+        expect(valid.status).toBe(0)
+        const clean: RetentionShadowReport = JSON.parse(valid.stdout)
+        expect(forFingerprint(clean, "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+
+        const badSources = { ...fixture.sources, protection: fixture.sources.protection + '\n{"type":"veteran_protection"' }
+        const malformed = runParentLabCli("retention", badSources, ["--json"])
+        expect(malformed.error).toBeUndefined()
+        expect(malformed.status).toBe(0)
+        const rejected: RetentionShadowReport = JSON.parse(malformed.stdout)
+        expect(rejected.counts.SAFE_TO_TRANSFER).toBe(0)
+        const subject = forFingerprint(rejected, "fp-subject")
+        expect(subject.state).toBe("QUARANTINE_TRANSFER")
+        expect(subject.gateReasons).toEqual(expect.arrayContaining(["FAVORITE_STATE_UNKNOWN", "PROTECTION_STATE_UNKNOWN"]))
+        const text = runParentLabCli("retention", badSources)
+        expect(text.status).toBe(0)
+        expect(text.stdout).toContain("QUARANTINE_TRANSFER")
+        expect(text.stdout).toContain("FAVORITE_STATE_UNKNOWN")
+        expect(text.stdout).toContain("PROTECTION_STATE_UNKNOWN")
+    }, 30_000)
+
+    it("production CLI rejects contradictory protection capacity for a transferable subject", () => {
+        const fixture = build(unlockedTrio())
+        const valid = runParentLabCli("retention", fixture.sources, ["--json"])
+        expect(valid.status).toBe(0)
+        expect(forFingerprint(JSON.parse(valid.stdout), "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        const badSources = { ...fixture.sources, protection: JSON.stringify({ ...JSON.parse(fixture.sources.protection), registeredCapacity: 1 }) }
+        const rejected = runParentLabCli("retention", badSources, ["--json"])
+        expect(rejected.error).toBeUndefined()
+        expect(rejected.status).toBe(0)
+        const report: RetentionShadowReport = JSON.parse(rejected.stdout)
+        expect(report.counts.SAFE_TO_TRANSFER).toBe(0)
+        const subject = forFingerprint(report, "fp-subject")
+        expect(subject.state).not.toBe("SAFE_TO_TRANSFER")
+        expect(subject.gateReasons).toEqual(expect.arrayContaining(["FAVORITE_STATE_UNKNOWN", "PROTECTION_STATE_UNKNOWN"]))
+    }, 30_000)
+
+    it.each([["character", "King Halo"], ["outfit", "Other Outfit"], ["rank", "A"]])("production CLI rejects contradictory Inspiration %s for a transferable subject", (field, value) => {
+        const fixture = build(unlockedTrio())
+        const valid = runParentLabCli("retention", fixture.sources, ["--json"])
+        expect(valid.status).toBe(0)
+        expect(forFingerprint(JSON.parse(valid.stdout), "fp-subject").state).toBe("SAFE_TO_TRANSFER")
+        const inspiration = fixture.sources.inspiration.split("\n").map((line) => {
+            const record = JSON.parse(line)
+            if (record.type === "veteran_inspiration" && record.scanIndex === 0) record[field] = value
+            return JSON.stringify(record)
+        }).join("\n")
+        const evidence = buildRetentionEvidence(fixture.snapshot, buildInspirationIndex(parseInspirationRecords(inspiration)), fixture.reconciliation)
+        expect(evidence.veterans[0].captureTrusted).toBe(false)
+        expect(evidence.veterans[0].selfFactors).toBeNull()
+        const result = runParentLabCli("retention", { ...fixture.sources, inspiration }, ["--json"])
+        expect(result.error).toBeUndefined()
+        expect(result.status).toBe(0)
+        const report: RetentionShadowReport = JSON.parse(result.stdout)
+        expect(report.scarcity.accountWide).toBe(false)
+        expect(report.scarcity.capturedTrusted).toBe(2)
+        expect(report.counts.SAFE_TO_TRANSFER).toBe(0)
+        expect(forFingerprint(report, "fp-subject").state).not.toBe("SAFE_TO_TRANSFER")
+    }, 30_000)
+
     it("never trusts an incompatible-only Inspiration batch or makes an account-wide claim from it", () => {
         const result = build({ ...unlockedTrio(), captureCompatibility: false })
         expect(result.evidence.veterans.every((v) => v.capture !== null && !v.captureTrusted && v.selfFactors === null)).toBe(true)
@@ -487,15 +1188,15 @@ describe("PL-R2 recommendation gates", () => {
         expect([...buildAdvisorSnapshot([result.report]).candidates.values()].every((c) => !c.eligible)).toBe(true)
     })
 
-    it("uses only compatible captures in a mixed batch", () => {
+    it("keeps captures visible but untrusted when no batch proves a full cycle", () => {
         const fixture = unlockedTrio()
         const badHeader = JSON.stringify({ type: "veteran_inspiration_scan", schemaVersion: 2, scanId: "bad", snapshotCompatibility: false })
         const result = build({ ...fixture, captures: fixture.captures.slice(0, 2), extraInspirationLines: [badHeader, capture("fp-third", GENERIC_DOMINATOR, { scanId: "bad" }), capture("fp-subject", GENERIC_SUBJECT, { scanId: "bad", observedAt: T + 10000 })] })
-        expect(result.evidence.veterans.map((v) => v.captureTrusted)).toEqual([true, true, false])
-        expect(result.evidence.veterans[0].capture?.scanId).toBe(ISCAN)
+        expect(result.evidence.veterans.map((v) => v.captureTrusted)).toEqual([false, false, false])
+        expect(result.evidence.veterans[0].capture?.scanId).toBe("bad")
         const scarcity = buildFactorScarcityIndex(result.evidence)
-        expect(scarcity.capturedTrusted).toBe(2)
-        expect(scarcity.capturedUntrusted).toBe(1)
+        expect(scarcity.capturedTrusted).toBe(0)
+        expect(scarcity.capturedUntrusted).toBe(3)
         expect(scarcity.accountWide).toBe(false)
         expect(build(unlockedTrio()).report.counts.SAFE_TO_TRANSFER).toBeGreaterThan(0)
     })
@@ -515,6 +1216,14 @@ describe("PL-R2 recommendation gates", () => {
         const subject = forFingerprint(build({ ...gated, protection: false }).report, "fp-subject")
         expect(subject.gateReasons).toEqual(expect.arrayContaining(["PROTECTION_STATE_UNKNOWN", "FAVORITE_STATE_UNKNOWN"]))
         expect(subject.state).toBe("QUARANTINE_TRANSFER")
+    })
+
+    it("does not revive older empty protection evidence after a malformed final log entry", () => {
+        const result = build({ ...unlockedTrio(), protectionTail: ['{"type":"veteran_protection"'] })
+        const subject = forFingerprint(result.report, "fp-subject")
+        expect(result.evidence.protectionInventory).toBeNull()
+        expect(subject.gateReasons).toEqual(expect.arrayContaining(["PROTECTION_STATE_UNKNOWN", "FAVORITE_STATE_UNKNOWN"]))
+        expect(subject.state).not.toBe("SAFE_TO_TRANSFER")
     })
 
     it("withdraws the transfer side entirely when the subject adds unique coverage", () => {

@@ -5,7 +5,8 @@ import { BotStateContext } from "../../context/BotStateContext"
 import { useSettings } from "../../context/SettingsContext"
 import { logWithTimestamp, logErrorWithTimestamp } from "../../lib/logger"
 import { sessionStateReducer, initialSessionState, sessionPhase } from "../../lib/sessionState"
-import { Animated, AppState, DeviceEventEmitter, StyleSheet, TouchableOpacity, View, NativeModules } from "react-native"
+import { Alert, Animated, AppState, DeviceEventEmitter, StyleSheet, TouchableOpacity, View, NativeModules } from "react-native"
+import { acknowledgeDiagnosticRequest, consumeDiagnosticRequest, diagnosticLaunch, diagnosticRequest, requestDiagnostic } from "../../lib/diagnosticLaunch"
 import { Snackbar } from "react-native-paper"
 import { MessageLogContext } from "../../context/MessageLogContext"
 import { useTheme } from "../../context/ThemeContext"
@@ -564,13 +565,31 @@ const Home = () => {
             return
         }
         try {
-            await runStartSequence()
+            let normalConfirmed = false
+            if (diagnosticRequest().key === null && !diagnosticRequest().normalConfirmed) {
+                normalConfirmed = await new Promise<boolean>((resolve) => {
+                    Alert.alert("Start normal automation?", "Normal automation can start careers, run your queue, and spend configured game resources. To run a diagnostic, cancel and select it again in Debug Settings.", [
+                        { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+                        { text: "Start normal automation", onPress: () => resolve(true) },
+                    ], { cancelable: true, onDismiss: () => resolve(false) })
+                })
+                if (!normalConfirmed) return
+                if (diagnosticRequest().key !== null) return
+                requestDiagnostic(null)
+            }
+            await runStartSequence(normalConfirmed)
+        } catch (error) {
+            logErrorWithTimestamp("[START] Diagnostic launch rejected", error)
+            showSnackbar("Could not verify the requested launch. Select the diagnostic again, or cancel it in Debug Settings before normal Start.", "error")
         } finally {
             startGate.end()
         }
     }
 
-    const runStartSequence = async () => {
+    const runStartSequence = async (normalConfirmed = false) => {
+        const target = JSON.parse(JSON.stringify(bsc.settings))
+        const launch = diagnosticLaunch(target, normalConfirmed)
+        const mayLaunch = () => startGate.mayLaunch() && diagnosticRequest().revision === launch.revision && !diagnosticRequest().consumed
         // Check accessibility status first.
         try {
             const status = await StartModule.getAccessibilityStatus()
@@ -593,9 +612,10 @@ const Home = () => {
         // resolved promise never proved the intended values reached disk, so a stalled write once
         // let Start read stale rows and launch the wrong trainee. On any block, do NOT start:
         // surface a retryable error and leave the game untouched.
+        if (!mayLaunch()) return
         logWithTimestamp("[START] launch_barrier_waiting")
         setPresetSaveState("saving")
-        const barrier = await flushAndVerifyLaunchConfig()
+        const barrier = await flushAndVerifyLaunchConfig(target)
         if (!barrier.ok) {
             setPresetSaveState("failed")
             logErrorWithTimestamp(`[START] launch_barrier_blocked stage=${barrier.stage} reason=${barrier.reason}`)
@@ -604,7 +624,7 @@ const Home = () => {
         }
         // A cancel (Stop / preset change / unmount) during the barrier await refuses the launch,
         // even though verification passed -- the user is no longer asking for this run.
-        if (!startGate.mayLaunch()) {
+        if (!mayLaunch()) {
             setPresetSaveState("idle")
             logWithTimestamp("[START] launch cancelled before service start (Stop, preset change, or navigation).")
             return
@@ -614,15 +634,18 @@ const Home = () => {
             `[START] launch_barrier_passed trainee="${barrier.persisted?.trainee}" scenario="${barrier.persisted?.scenario}" objective="${barrier.persisted?.objective}" revision=${barrier.persisted?.revision} hash=${barrier.persisted?.hash}`
         )
 
-        // Precompute the per-trainee rotation snapshots from the just-saved settings. Block start
-        // on an unresolved preset or a persistence failure rather than let the queue hit a switch
-        // boundary it can't satisfy — match-or-stop applies at config time, not just in-game.
+        // Diagnostics leave an interrupted queue's rotation snapshots untouched.
+        // Normal Start prepares snapshots before the queue can reach a switch boundary.
         // These write only Kotlin-owned rot* rows, which are excluded from the verified identity,
         // so they never invalidate the revision the Kotlin gate re-checks.
-        if (bsc.settings.runQueue.enableTraineeRotation) {
+        if (launch.key === null && target.runQueue.enableTraineeRotation) {
             // Mixed scenarios are supported: each snapshot carries its entry's scenario and the
             // navigator pages the Scenario Select carousel to it before confirming the launch.
-            const missing = await prepareTraineeRotation()
+            const missing = await prepareTraineeRotation(mayLaunch)
+            if (!mayLaunch()) {
+                setPresetSaveState("idle")
+                return
+            }
             if (missing === null) {
                 showSnackbar("Failed to prepare trainee rotation snapshots. Not starting.", "error")
                 return
@@ -632,13 +655,13 @@ const Home = () => {
                 showSnackbar(`Rotation has unresolved presets: ${detail}. Fix the rotation list before starting.`, "error")
                 return
             }
-        } else {
+        } else if (launch.key === null) {
             // Rotation off: still clear any stale snapshots so a later enable starts clean.
-            await prepareTraineeRotation()
+            await prepareTraineeRotation(mayLaunch)
         }
 
         // Re-check cancellation after the rotation writes (another await point).
-        if (!startGate.mayLaunch()) {
+        if (!mayLaunch()) {
             setPresetSaveState("idle")
             logWithTimestamp("[START] launch cancelled after rotation prep.")
             return
@@ -647,8 +670,15 @@ const Home = () => {
         // Hand the verified identity (the revision + content hash React just confirmed on disk)
         // to Kotlin. The bot session re-reads the revision and aborts before any game interaction
         // if a write landed in the meantime -- closing the time-of-check to time-of-use window.
-        StartModule.setVerifiedLaunchIdentity(barrier.persisted!.revision, barrier.persisted!.hash)
-        StartModule.start()
+        if (diagnosticRequest().revision !== launch.revision || diagnosticRequest().consumed) return
+        consumeDiagnosticRequest(launch.revision)
+        const launchId = await StartModule.setVerifiedLaunchIdentity(barrier.persisted!.revision, barrier.persisted!.hash, launch.json)
+        if (!startGate.mayLaunch() || diagnosticRequest().revision !== launch.revision) {
+            StartModule.stop()
+            return
+        }
+        acknowledgeDiagnosticRequest(launch.revision, launchId)
+        StartModule.start(launchId)
     }
 
     const handleButtonPress = async () => {

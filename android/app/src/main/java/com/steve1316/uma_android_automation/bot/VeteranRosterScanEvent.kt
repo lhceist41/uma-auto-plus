@@ -1,16 +1,20 @@
 package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.uma_android_automation.utils.APTITUDE_ROLES
+import com.steve1316.uma_android_automation.utils.RosterCardRatingRead
 import com.steve1316.uma_android_automation.utils.RosterIdentityEvidence
+import com.steve1316.uma_android_automation.utils.ROSTER_VISIBLE_CARD_COUNT
 import com.steve1316.uma_android_automation.utils.STAT_KEYS
 import com.steve1316.uma_android_automation.utils.contentHash128
+import com.steve1316.uma_android_automation.utils.globalRankForRating
 import com.steve1316.uma_android_automation.utils.rosterFingerprint
+import com.steve1316.uma_android_automation.utils.rosterListBindingStable
 import org.json.JSONArray
 import org.json.JSONObject
 
 /**
  * The read-only Veteran roster scan record types (`type:"roster_scan"` header + `type:"roster_entry"`
- * rows): one header and N entry rows per chevron walk of the `Umamusume Details` dialog. Pure model,
+ * rows): one header and N entry rows per roster walk through the first card and Details chevrons. Pure model,
  * assembler, and serializer - [com.steve1316.uma_android_automation.VeteranRosterScanner] drives the
  * screen and reads the pixels, this turns the observations into the durable records, and the offline
  * `src/lib/parentLab/roster.ts` reads them back.
@@ -26,16 +30,25 @@ const val ROSTER_SCAN_SCHEMA_VERSION: Int = 1
 /** Why the walk stopped. Recorded verbatim: the reason is what decides whether a short scan is a
  * legitimate bounded run or a failure, and the two must never be confused offline. */
 enum class RosterScanTermination {
-    /** `entriesEnumerated == displayedRegisteredUsed`. The account's own count is the authority. */
+    /** The displayed count was reached without a verified return to the first Details identity. */
     COUNT_REACHED,
 
-    /** The next chevron classified DISABLED, so the walk is standing on the last entry. */
+    /** Legacy diagnostic value; a disabled chevron is not a Veteran pager completion proof. */
     CHEVRON_END,
 
-    /** The newly read entry repeats entry 0's fingerprint at index >= 2: the walk wrapped around. */
+    /** One extra next transition after the complete distinct census returned to its anchor. */
+    CYCLE_CLOSED,
+
+    /** Legacy diagnostic value; one registered Veteran still requires a verified pager cycle. */
+    SINGLE_CARD,
+
+    /** The unfiltered list positively showed zero registered Veterans. */
+    EMPTY_LIST,
+
+    /** The anchor identity returned before the Registered count was covered. */
     WRAPPED,
 
-    /** Three consecutive identical fingerprints: the chevron tap is no longer advancing the dialog. */
+    /** A required advance did not produce a settled new complete identity. */
     STALLED,
 
     /** The operator-set bounded development limit (the 5-entry and 20-entry validation runs). */
@@ -44,10 +57,10 @@ enum class RosterScanTermination {
     /** The hard bound (capacity + slack) fired before any other condition. Always a failure. */
     HARD_BOUND_REACHED,
 
-    /** A capture after a chevron tap was not the Details dialog. The walk stops where it stands. */
+    /** A required Details screen or stable final roster list could not be verified. */
     UNEXPECTED_SCREEN,
 
-    /** A precondition (roster list not found, Registered unreadable, filters not confirmed off)
+    /** A precondition (roster list, Registered count, or Filters OFF unreadable)
      * failed before the first tap. Zero entries, zero gestures. */
     PRECONDITION_FAILED,
 }
@@ -112,6 +125,16 @@ data class RosterEntryDiagnostics(
     val rankSecondScore: Double? = null,
     /** How the rank tier was accepted: "strong", "margin", or "reject" (PL-R1b). */
     val rankAcceptancePath: String? = null,
+    val rawListRatingOcr: String? = null,
+    val listRating: Int? = null,
+    val detailsRating: Int? = null,
+    val visualRank: String? = null,
+    val rankResolutionPath: String? = null,
+    val rankRejectReason: String? = null,
+    val listRatingAttemptStatus: String? = null,
+    val listRatingFailureReason: String? = null,
+    val bindingStatus: String? = null,
+    val bindingRejectReason: String? = null,
 )
 
 /**
@@ -135,6 +158,186 @@ data class RosterEntryObservation(
     val careerInfo: RosterCareerInfoObservation? = null,
     val diagnostics: RosterEntryDiagnostics? = null,
 )
+
+data class RankFreeRosterIdentity(
+    val character: String,
+    val outfit: String,
+    val rating: Int,
+    val stats: List<Int>,
+    val aptitudes: List<String>,
+)
+
+fun rankFreeRosterIdentity(o: RosterEntryObservation): RankFreeRosterIdentity? {
+    if (o.stats.size != STAT_KEYS.size || o.aptitudes.size != APTITUDE_ROLES.size) return null
+    return RankFreeRosterIdentity(
+        o.character ?: return null,
+        o.outfit ?: return null,
+        o.rating ?: return null,
+        o.stats.map { it ?: return null },
+        o.aptitudes.map { it ?: return null },
+    )
+}
+
+enum class RankFreeCycleStep { NEXT, CLOSED, REJECTED }
+
+fun rankFreeCycleStep(seen: List<RankFreeRosterIdentity>, next: RankFreeRosterIdentity?, registeredUsed: Int): RankFreeCycleStep {
+    if (registeredUsed <= 0 || seen.isEmpty() || seen.size > registeredUsed || seen.toSet().size != seen.size || next == null) return RankFreeCycleStep.REJECTED
+    if (seen.size == registeredUsed) return if (next == seen.first()) RankFreeCycleStep.CLOSED else RankFreeCycleStep.REJECTED
+    return if (next !in seen) RankFreeCycleStep.NEXT else RankFreeCycleStep.REJECTED
+}
+
+internal fun walkRosterCycle(
+    first: RosterEntryObservation,
+    used: Int,
+    hardBound: Int,
+    entryLimit: Int,
+    startIndex: Int = 0,
+    budgetExceeded: () -> Boolean = { false },
+    visit: (Int, RosterEntryObservation) -> Unit,
+    advance: (RosterEntryObservation, Int) -> RosterEntryObservation?,
+): RosterScanTermination {
+    if (used == 0) return RosterScanTermination.EMPTY_LIST
+    visit(0, first)
+    val anchor = rankFreeRosterIdentity(first) ?: return RosterScanTermination.STALLED
+    val seen = mutableListOf(anchor)
+    var current = first
+    while (true) {
+        val captured = (seen.size - startIndex).coerceAtLeast(0)
+        if (entryLimit > 0 && captured >= entryLimit) return RosterScanTermination.ENTRY_LIMIT_REACHED
+        if ((seen.size >= hardBound && seen.size < used) || budgetExceeded()) return RosterScanTermination.HARD_BOUND_REACHED
+        val next = advance(current, seen.size) ?: return RosterScanTermination.STALLED
+        val identity = rankFreeRosterIdentity(next)
+        when (rankFreeCycleStep(seen, identity, used)) {
+            RankFreeCycleStep.CLOSED -> return RosterScanTermination.CYCLE_CLOSED
+            RankFreeCycleStep.REJECTED -> return if (identity == anchor) RosterScanTermination.WRAPPED else RosterScanTermination.STALLED
+            RankFreeCycleStep.NEXT -> seen.add(requireNotNull(identity))
+        }
+        current = next
+        visit(seen.lastIndex, current)
+    }
+}
+
+/** Called after a dispatched pager step; only a one-card cycle may settle on the same identity. */
+internal fun settledRosterPagerRead(
+    before: RosterEntryObservation,
+    first: RosterEntryObservation,
+    second: RosterEntryObservation,
+    used: Int,
+): Boolean {
+    val identity = rankFreeRosterIdentity(first) ?: return false
+    if (identity != rankFreeRosterIdentity(second)) return false
+    return if (used == 1) identity == rankFreeRosterIdentity(before) else settledDetailsTransition(before, first, second)
+}
+
+/** A single confirmed field change proves a new Details entry; unread fields prove nothing. */
+fun detailsTransitionProven(before: RosterEntryObservation, after: RosterEntryObservation): Boolean {
+    fun <T> changed(a: T?, b: T?): Boolean = a != null && b != null && a != b
+    return changed(before.character, after.character) || changed(before.outfit, after.outfit) ||
+        changed(before.rating, after.rating) ||
+        before.stats.zip(after.stats).any { (a, b) -> changed(a, b) } ||
+        before.aptitudes.zip(after.aptitudes).any { (a, b) -> changed(a, b) }
+}
+
+/** Two settled reads must agree on a lasting identity change after one chevron tap. */
+fun settledDetailsTransition(before: RosterEntryObservation, first: RosterEntryObservation, second: RosterEntryObservation): Boolean {
+    if (!detailsTransitionProven(before, first) || !detailsTransitionProven(before, second)) return false
+    val firstKey = rankFreeRosterIdentity(first)
+    val secondKey = rankFreeRosterIdentity(second)
+    if (firstKey != null && secondKey != null) return firstKey == secondKey
+    fun <T> conflict(a: T?, b: T?): Boolean = a != null && b != null && a != b
+    fun <T> stableChange(old: T?, a: T?, b: T?): Boolean = old != null && a != null && a == b && a != old
+    val conflicting = conflict(first.character, second.character) || conflict(first.outfit, second.outfit) ||
+        conflict(first.rating, second.rating) ||
+        first.stats.zip(second.stats).any { (a, b) -> conflict(a, b) } ||
+        first.aptitudes.zip(second.aptitudes).any { (a, b) -> conflict(a, b) }
+    if (conflicting) return false
+    return stableChange(before.character, first.character, second.character) ||
+        stableChange(before.outfit, first.outfit, second.outfit) ||
+        stableChange(before.rating, first.rating, second.rating) ||
+        before.stats.zip(first.stats).zip(second.stats).any { (pair, b) -> stableChange(pair.first, pair.second, b) } ||
+        before.aptitudes.zip(first.aptitudes).zip(second.aptitudes).any { (pair, b) -> stableChange(pair.first, pair.second, b) }
+}
+
+data class HybridBindingResult(val status: String, val reason: String? = null, val rank: String? = null)
+
+/** Lower-tier rank is decided only after the entire Details census and final list state are known. */
+fun finalizeHybridRanks(
+    initialList: RosterListState,
+    finalList: RosterListState?,
+    termination: RosterScanTermination,
+    entryLimit: Int,
+    observations: List<Pair<Long, RosterEntryObservation>>,
+    listRatings: List<RosterCardRatingRead>,
+    viewportSupported: Boolean,
+    transitionsProven: Boolean,
+): List<Pair<Long, RosterEntryObservation>> {
+    val entries = observations.map { it.second }
+    val used = initialList.registeredUsed
+    val ratings = entries.map { it.rating }
+    val identities = entries.map(::rankFreeRosterIdentity)
+    val structurallyComplete = used != null && entries.size == used && entryLimit == 0 && transitionsProven &&
+        (used > 0 && termination == RosterScanTermination.CYCLE_CLOSED)
+    val finalStateStable = rosterListBindingStable(initialList, finalList) &&
+        finalList?.sortKey == "Rating" && finalList?.sortDirection == "Asc"
+    val ratingCensusComplete = ratings.all { it != null }
+    val identityCensusDistinct = identities.all { it != null } && identities.filterNotNull().toSet().size == entries.size
+    val firstListRating = listRatings.singleOrNull { it.scanIndex == 0 }?.rating
+    val anchorProven = ratingCensusComplete && firstListRating != null && firstListRating == ratings.firstOrNull() &&
+        ratings.count { it == firstListRating } == 1 && ratings.filterNotNull().minOrNull() == firstListRating
+    val counts = ratings.filterNotNull().groupingBy { it }.eachCount()
+
+    return observations.mapIndexed { index, (time, entry) ->
+        val family = entry.diagnostics?.rankFamily?.singleOrNull()
+        if (entry.rank != null || family !in listOf('E', 'B')) return@mapIndexed time to entry
+        val card = listRatings.singleOrNull { it.scanIndex == index }
+        val result = when {
+            initialList.sortKey != "Rating" || initialList.sortDirection != "Asc" -> HybridBindingResult("not_attempted", "wrong_sort")
+            !viewportSupported -> HybridBindingResult("not_attempted", "unsupported_viewport")
+            !transitionsProven -> HybridBindingResult("rejected", "transition_unproven")
+            !structurallyComplete -> HybridBindingResult("rejected", "terminal_unproven")
+            !finalStateStable -> HybridBindingResult("rejected", "final_state_mismatch")
+            entry.rating == null -> HybridBindingResult("rejected", "details_rating_missing")
+            !ratingCensusComplete -> HybridBindingResult("rejected", "details_census_incomplete")
+            !identityCensusDistinct -> HybridBindingResult("rejected", "identity_census_unproven")
+            counts[entry.rating] != 1 -> HybridBindingResult("rejected", "duplicate_rating")
+            !anchorProven -> HybridBindingResult("rejected", "anchor_unproven")
+            index !in 0 until ROSTER_VISIBLE_CARD_COUNT -> HybridBindingResult("rejected", "list_evidence_missing")
+            card == null -> HybridBindingResult("rejected", "list_evidence_missing")
+            card.rating == null -> HybridBindingResult("rejected", "list_parse_failed")
+            card.rating != entry.rating -> HybridBindingResult("rejected", "list_details_mismatch")
+            else -> {
+                val rank = globalRankForRating(entry.rating)
+                if (rank == null) HybridBindingResult("rejected", "unsupported_interval")
+                else if (rank.first() != family) HybridBindingResult("rejected", "family_mismatch")
+                else HybridBindingResult("accepted", rank = rank)
+            }
+        }
+        val diagnostics = entry.diagnostics?.copy(
+            rankResolutionPath = if (result.rank != null) "hybrid" else "reject",
+            rankRejectReason = result.reason,
+            bindingStatus = result.status,
+            bindingRejectReason = result.reason,
+        )
+        time to entry.copy(rank = result.rank, diagnostics = diagnostics)
+    }
+}
+
+/** A filtered member may reuse a rank only through a unique complete immutable identity join. */
+fun boundFilteredFingerprint(filtered: RosterEntryObservation, roster: AssembledRosterScan): String? {
+    if (!roster.header.trustedForRetention) return null
+    val key = rankFreeRosterIdentity(filtered) ?: return null
+    val candidate = roster.entries.filter { rankFreeRosterIdentity(it.observation) == key }.singleOrNull() ?: return null
+    val trustedRank = candidate.observation.rank ?: return null
+    val visualFamily = filtered.diagnostics?.rankFamily?.singleOrNull()
+    val rankAgrees = when (trustedRank) {
+        "E", "E+", "B", "B+" -> visualFamily == trustedRank.first() && globalRankForRating(key.rating) == trustedRank
+        "A", "A+", "S", "S+" -> filtered.diagnostics?.visualRank == trustedRank && filtered.rank == trustedRank
+        else -> false
+    }
+    if (!rankAgrees) return null
+    val recomputed = entryFingerprint(filtered.copy(rank = trustedRank)) ?: return null
+    return recomputed.takeIf { it == candidate.rosterFingerprint }
+}
 
 /**
  * One assembled entry: the observation plus what can be derived from it and nothing else.
@@ -169,7 +372,7 @@ data class VeteranRosterScan(
     val countDiscrepancy: Int?,
     val terminationReason: RosterScanTermination,
     /** The walk covered exactly the account's own roster: filters confirmed off, the Registered used
-     * count read, that many entries enumerated, and a termination consistent with reaching the end.
+     * count read, that many entries enumerated, and a positive cycle or special-case termination.
      * True even when some of those entries did not identify - enumeration is about coverage, not
      * identity. This is the fact the transfer-analysis bar was hiding when only [completeness] existed. */
     val enumerationComplete: Boolean,
@@ -277,6 +480,7 @@ fun assembleRosterScan(
     screenWidth: Int,
     screenHeight: Int,
     evidenceCropCount: Int = 0,
+    finalStateVerified: Boolean = true,
 ): AssembledRosterScan {
     val fingerprints = observations.map { entryFingerprint(it.second) }
     val multiplicity = fingerprints.filterNotNull().groupingBy { it }.eachCount()
@@ -301,15 +505,21 @@ fun assembleRosterScan(
     val unidentified = fingerprints.count { it == null }
     val duplicates = fingerprints.filterNotNull().size - unique
     val used = list.registeredUsed
-    val terminatedAtEnd = termination == RosterScanTermination.COUNT_REACHED || termination == RosterScanTermination.CHEVRON_END
+    val terminatedAtEnd = when (termination) {
+        RosterScanTermination.CYCLE_CLOSED -> used != null && used > 0
+        RosterScanTermination.SINGLE_CARD -> false
+        RosterScanTermination.EMPTY_LIST -> used == 0
+        else -> false
+    }
     // Two orthogonal facts, never one. Enumeration is about coverage (did the walk visit exactly the
-    // account's own count of positions, under a confirmed filter state, ending at a real end);
+    // account's own count of positions, under a confirmed filter state, with cycle proof);
     // identity is about resolution (did every visited position resolve to a distinct Veteran). The
     // retention verdict needs both, but each is recorded on its own so a count-complete walk with
     // unread fields reads as enumeration-complete rather than being lumped in with a walk that
     // actually missed entries.
-    val enumerationComplete = list.filtersOff == true && used != null && enumerated == used && terminatedAtEnd
-    val identityComplete = enumerated > 0 && unidentified == 0 && duplicates == 0
+    val enumerationComplete = finalStateVerified && list.filtersOff == true && used != null && enumerated == used && terminatedAtEnd
+    val identityComplete = enumerated > 0 && unidentified == 0 && duplicates == 0 &&
+        observations.map { rankFreeRosterIdentity(it.second) }.let { identities -> identities.all { it != null } && identities.filterNotNull().toSet().size == enumerated }
     val trustedForRetention = enumerationComplete && identityComplete
 
     return AssembledRosterScan(
@@ -419,7 +629,7 @@ fun serializeRosterScanEntry(scanId: String, e: RosterScanEntry): JSONObject {
         // accept resolved BELOW the absolute floor, so its scores are the audit trail that lets a
         // strong-vs-margin count and a wrong-margin-decision review happen offline without another walk.
         val marginAccepted = o.diagnostics?.let { it.outfitAcceptancePath == "margin" || it.rankAcceptancePath == "margin" } == true
-        if (identityUnresolved(o).isNotEmpty() || marginAccepted) {
+        if (identityUnresolved(o).isNotEmpty() || marginAccepted || o.diagnostics?.bindingStatus == "accepted") {
             o.diagnostics?.let { d -> put("diagnostics", serializeRosterEntryDiagnostics(d)) }
         }
         put("readCompleteness", e.readCompleteness)
@@ -450,4 +660,14 @@ fun serializeRosterEntryDiagnostics(d: RosterEntryDiagnostics): JSONObject =
         d.rankBestScore?.let { put("rankBestScore", it) }
         d.rankSecondScore?.let { put("rankSecondScore", it) }
         d.rankAcceptancePath?.let { put("rankAcceptancePath", it) }
+        d.rawListRatingOcr?.let { put("rawListRatingOcr", it) }
+        d.listRating?.let { put("listRating", it) }
+        d.detailsRating?.let { put("detailsRating", it) }
+        d.visualRank?.let { put("visualRank", it) }
+        d.rankResolutionPath?.let { put("rankResolutionPath", it) }
+        d.rankRejectReason?.let { put("rankRejectReason", it) }
+        d.listRatingAttemptStatus?.let { put("listRatingAttemptStatus", it) }
+        d.listRatingFailureReason?.let { put("listRatingFailureReason", it) }
+        d.bindingStatus?.let { put("bindingStatus", it) }
+        d.bindingRejectReason?.let { put("bindingRejectReason", it) }
     }

@@ -103,7 +103,7 @@ val APTITUDE_ROLES: List<String> = APTITUDE_GRADE_BOXES.keys.toList()
 /** The circular rank medal region (medal + "RANK" ribbon). */
 val RANK_MEDAL_BOX: GlyphBox = GlyphBox(350, 168, 478, 288)
 
-// -- Detail dialog chevrons: enabled/disabled by counting the chevron's vivid green outline --------
+// -- Detail dialog chevrons: the enabled state has a measured green outline -----------------------
 
 /**
  * The next/prev chevron sample boxes. Deliberately generous rather than a point sample: the glyph
@@ -114,16 +114,13 @@ val RANK_MEDAL_BOX: GlyphBox = GlyphBox(350, 168, 478, 288)
 val CHEVRON_NEXT_BOX: GlyphBox = GlyphBox(1010, 630, 1074, 740)
 val CHEVRON_PREV_BOX: GlyphBox = GlyphBox(6, 630, 70, 740)
 
-/** Whether the chevron is pressable. UNKNOWN is a real answer, not a failure: the walk keeps going
- * on UNKNOWN and lets the account's own Registered count decide the end. */
+/** UNKNOWN includes unreadable and absent glyphs. A disabled state needs its own positive pixel proof. */
 enum class ChevronState { ENABLED, DISABLED, UNKNOWN }
 
 /** Measured on both committed fixtures: 174 and 178 green samples inside the enabled chevron box,
  * and 0 in every control region beside and below it. 60 sits an order of magnitude clear of the
- * background and well under the observed population, so a partially clipped or recoloured chevron
- * still reads ENABLED, while a greyed-out or absent one reads DISABLED. */
+ * background and well under the observed population. */
 const val CHEVRON_ENABLED_MIN_GREEN = 60
-const val CHEVRON_DISABLED_MAX_GREEN = 10
 
 private fun isChevronGreen(argb: Int): Boolean {
     val r = (argb shr 16) and 0xFF
@@ -148,18 +145,16 @@ fun countChevronGreen(sampler: SparkPixelSampler, box: GlyphBox): Int {
     return count
 }
 
-/**
- * The chevron's state from its green population. The DISABLED branch is the one PL-R1 could not
- * capture a fixture for (no last-entry frame existed), so it is written to need positive evidence of
- * an absent chevron; anything in between reports UNKNOWN and the walk continues.
- */
+/** Green proves ENABLED. No committed fixture proves the appearance of a disabled glyph. */
 fun classifyChevron(sampler: SparkPixelSampler, box: GlyphBox = CHEVRON_NEXT_BOX): ChevronState {
-    val green = countChevronGreen(sampler, box)
-    return when {
-        green >= CHEVRON_ENABLED_MIN_GREEN -> ChevronState.ENABLED
-        green <= CHEVRON_DISABLED_MAX_GREEN -> ChevronState.DISABLED
-        else -> ChevronState.UNKNOWN
+    val green = try {
+        countChevronGreen(sampler, box)
+    } catch (e: InterruptedException) {
+        throw e
+    } catch (e: Exception) {
+        return ChevronState.UNKNOWN
     }
+    return if (green >= CHEVRON_ENABLED_MIN_GREEN) ChevronState.ENABLED else ChevronState.UNKNOWN
 }
 
 // -- Colour classification --------------------------------------------------------------------

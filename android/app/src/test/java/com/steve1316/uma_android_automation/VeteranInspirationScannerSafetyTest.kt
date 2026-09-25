@@ -36,6 +36,7 @@ class VeteranInspirationScannerSafetyTest {
     private val scanner by lazy { source("android/app/src/main/java/com/steve1316/uma_android_automation/VeteranInspirationScanner.kt") }
     private val reader by lazy { source("android/app/src/main/java/com/steve1316/uma_android_automation/VeteranInspirationReader.kt") }
     private val campaign by lazy { source("android/app/src/main/java/com/steve1316/uma_android_automation/bot/Campaign.kt") }
+    private val launchGate by lazy { source("android/app/src/main/java/com/steve1316/uma_android_automation/DebugTestGate.kt") }
     private val debugUi by lazy { source("src/pages/DebugSettings/index.tsx") }
     private val settingsContext by lazy { source("src/context/BotStateContext.tsx") }
     private val searchConfig by lazy { source("src/data/searchConfig.ts") }
@@ -64,7 +65,7 @@ class VeteranInspirationScannerSafetyTest {
             assertTrue(readHandler.contains(".debugRead()"))
             val scanHandler = campaign.substring(campaign.indexOf("open fun startVeteranInspirationScanTest("))
             assertTrue(scanHandler.contains("VeteranInspirationScanner(game).runScan("))
-            assertTrue(scanHandler.contains("getIntSetting(\"debug\", \"veteranInspirationScanLimit\""))
+            assertTrue(scanHandler.contains("val limit = selected.inspirationLimit"))
         }
 
         @Test
@@ -75,7 +76,8 @@ class VeteranInspirationScannerSafetyTest {
             assertTrue(settingsContext.contains("veteranInspirationScanLimit: 1,"), "defaults to a single Veteran, not the whole roster")
             assertTrue(debugUi.contains("veteranInspirationScanLimit: value"), "has a Debug Settings control")
             assertTrue(searchConfig.contains("\"veteran-inspiration-scan-limit\""), "registered in the settings search index")
-            assertTrue(campaign.contains("\"veteranInspirationScanLimit\""), "read on the Kotlin side")
+            assertTrue(launchGate.contains("integer(\"veteranInspirationScanLimit\", selection.inspirationLimit)"), "validated against the native snapshot")
+            assertTrue(campaign.contains("val limit = selected.inspirationLimit"), "the validated limit reaches the scanner")
         }
 
         @Test
@@ -84,7 +86,8 @@ class VeteranInspirationScannerSafetyTest {
             assertTrue(settingsContext.contains("veteranInspirationScanStartIndex: 0,"), "defaults to starting from the first Veteran")
             assertTrue(debugUi.contains("veteranInspirationScanStartIndex: value"), "has a Debug Settings control")
             assertTrue(searchConfig.contains("\"veteran-inspiration-scan-start-index\""), "registered in the settings search index")
-            assertTrue(campaign.contains("\"veteranInspirationScanStartIndex\""), "read on the Kotlin side")
+            assertTrue(launchGate.contains("integer(\"veteranInspirationScanStartIndex\", selection.inspirationStartIndex)"), "validated against the native snapshot")
+            assertTrue(campaign.contains("val startIndex = selected.inspirationStartIndex"), "the validated index reaches the scanner")
             assertTrue(campaign.contains(".runScan(limit, startIndex)"), "the start index is passed to the scanner")
         }
 
@@ -145,6 +148,26 @@ class VeteranInspirationScannerSafetyTest {
         }
 
         @Test
+        fun `unknown next chevron stops before the Inspiration walk taps`() {
+            val walk = scanner.substring(scanner.indexOf("private fun walk("), scanner.indexOf("private fun captureWithRetries("))
+            val unknown = walk.indexOf("if (chevron != ChevronState.ENABLED) return@advance null")
+            val tap = walk.indexOf("safeTap(RosterScreenKind.UMAMUSUME_DETAILS, DETAIL_NEXT_CHEVRON_X")
+            assertTrue(unknown in 0 until tap)
+            assertTrue(walk.contains("walkRosterCycle("))
+        }
+
+        @Test
+        fun `every visited position including a skipped prefix has a complete rank-free identity`() {
+            val walk = scanner.substring(scanner.indexOf("private fun walk("), scanner.indexOf("private fun captureWithRetries("))
+            assertTrue(walk.indexOf("if (rankFreeRosterIdentity(identity) == null) return") < walk.indexOf("if (index >= startIndex)"))
+            assertTrue(walk.contains("rankFreeRosterIdentity(it) != null"))
+            assertTrue(walk.contains("settledRosterPagerRead(previous, candidate, read, used)"))
+            assertTrue(walk.contains("RosterScanTermination.CYCLE_CLOSED -> InspirationScanTermination.CYCLE_CLOSED"))
+            assertTrue(walk.contains("identity, used, hardBound, entryLimit, startIndex,"))
+            assertTrue(scanner.contains("entryLimit == 0 && startIndex == 0"))
+        }
+
+        @Test
         fun `the reader taps only the Inspiration tab`() {
             val tapped = Regex("safeTap\\(([A-Z_]+), ([A-Z_]+),").findAll(reader).map { it.groupValues[1] to it.groupValues[2] }.toSet()
             assertEquals(setOf("DETAIL_TAB_INSPIRATION_CX" to "DETAIL_TAB_CY"), tapped)
@@ -185,9 +208,10 @@ class VeteranInspirationScannerSafetyTest {
 
         @Test
         fun `the scanner terminates on more than one condition`() {
-            for (reason in listOf("COUNT_REACHED", "ENTRY_LIMIT_REACHED", "CHEVRON_END", "UNEXPECTED_SCREEN", "HARD_BOUND_REACHED")) {
+            for (reason in listOf("CYCLE_CLOSED", "EMPTY_LIST", "ENTRY_LIMIT_REACHED", "UNEXPECTED_SCREEN", "HARD_BOUND_REACHED")) {
                 assertTrue(scanner.contains("InspirationScanTermination.$reason"), "the walk can terminate with $reason")
             }
+            assertFalse(scanner.contains("InspirationScanTermination.CHEVRON_END"))
         }
     }
 
@@ -214,10 +238,7 @@ class VeteranInspirationScannerSafetyTest {
         @Test
         fun `an unexpected screen stops rather than tapping to recover`() {
             val walk = scanner.substring(scanner.indexOf("private fun walk("))
-            val afterUnexpected = walk.substring(walk.indexOf("not the Details dialog"))
-            val nextTap = afterUnexpected.indexOf("safeTap(")
-            val nextReturn = afterUnexpected.indexOf("return InspirationScanTermination.UNEXPECTED_SCREEN")
-            assertTrue(nextReturn >= 0 && (nextTap < 0 || nextReturn < nextTap), "the wrong-screen branch returns before any further tap")
+            assertTrue(walk.contains("if (nextScreen.kind != RosterScreenKind.UMAMUSUME_DETAILS) return@advance null"))
         }
     }
 
@@ -228,14 +249,17 @@ class VeteranInspirationScannerSafetyTest {
         fun `the Registered count is read before and after the walk`() {
             assertTrue(scanner.contains("registeredUsedAtStart = used"))
             assertTrue(scanner.contains("registeredUsedAtEnd = registeredUsedAtEnd"))
-            assertTrue(scanner.contains("val registeredUsedAtEnd = closeDialogAndReadRoster()"))
+            assertTrue(scanner.contains("val afterList = closeDialogAndReadRoster()"))
+            assertTrue(scanner.contains("val registeredUsedAtEnd = afterList?.registeredUsed"))
         }
 
         @Test
         fun `an unread or changed post-walk count marks the batch incompatible`() {
             // A Veteran registered or released mid-capture shifts every later chevron position, which
             // would attach one Veteran's factors to another Veteran's identity - undetectable later.
-            assertTrue(scanner.contains("snapshotCompatibility = registeredUsedAtEnd != null && registeredUsedAtEnd == used"))
+            assertTrue(scanner.contains("val stableList = rosterListBindingStable(list, afterList)"))
+            assertTrue(scanner.contains("snapshotCompatibility = pagerCycleClosed && stableList"))
+            assertTrue(scanner.contains("entryLimit == 0 && startIndex == 0"))
         }
     }
 
@@ -255,7 +279,7 @@ class VeteranInspirationScannerSafetyTest {
             // The walk checkpoints per entry, so an interrupted batch leaves headerless records that
             // the offline reader treats as partial, rather than nothing at all.
             val walk = scanner.substring(scanner.indexOf("private fun walk("))
-            assertTrue(walk.contains("serializeVeteranInspiration(observation)"), "the entry record is written inside the walk")
+            assertTrue(walk.contains("serializeVeteranInspiration(chosen)"), "the entry record is written inside the walk")
             val runScan = scanner.substring(scanner.indexOf("fun runScan("), scanner.indexOf("private fun walk("))
             assertTrue(runScan.contains("serializeVeteranInspirationScan(header)"), "the header is written after the walk returns")
         }
@@ -282,12 +306,9 @@ class VeteranInspirationScannerSafetyTest {
         }
 
         @Test
-        fun `every attempt is appended, only the best represents the Veteran in the header`() {
-            // Append-only evidence: nothing overwrites a prior read; the offline resolver re-derives the
-            // best by rosterFingerprint. The in-memory list keeps one best attempt per Veteran so the
-            // header's captured/complete counts stay one-per-Veteran.
+        fun `one chosen attempt is appended per traversal index`() {
             val retry = scanner.substring(scanner.indexOf("private fun captureWithRetries("), scanner.indexOf("private fun betterObservation("))
-            assertTrue(retry.contains("OutcomeCorpus.append(") && retry.contains("serializeVeteranInspiration(observation)"), "each attempt is appended as it is read")
+            assertTrue(retry.contains("OutcomeCorpus.append(") && retry.contains("serializeVeteranInspiration(chosen)"), "the chosen entry is checkpointed")
             assertTrue(retry.contains("betterObservation(best, observation)"), "the best attempt is tracked across the loop")
             assertTrue(retry.contains("observations.add(chosen)"), "only the chosen best is added to the per-Veteran list")
         }
@@ -308,7 +329,7 @@ class VeteranInspirationScannerSafetyTest {
             // The start index reuses the same next-chevron tap the capture walk already uses, so it adds
             // no new gesture surface: the tap-set guard above still sees exactly three coordinates.
             assertTrue(scanner.contains("startIndex: Int"), "the walk carries a resume start index")
-            assertTrue(scanner.contains("val skipping = visited < startIndex"), "entries before the start index are skipped")
+            assertTrue(scanner.contains("if (index >= startIndex)"), "entries before the start index are skipped")
         }
     }
 

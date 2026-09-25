@@ -284,7 +284,7 @@ class GrandConcertScenarioTest {
             val game = source("bot/Game.kt")
             assertTrue(game.contains("GrandConcertScenario.KEY -> GrandConcert(this)"), "dispatch entry missing")
             assertTrue(
-                game.contains("GrandConcertScenario.normalizeScenarioKey(SettingsHelper.getStringSetting(\"general\", \"scenario\"))"),
+                game.contains("GrandConcertScenario.normalizeScenarioKey(diagnosticSelection?.scenario ?: SettingsHelper.getStringSetting(\"general\", \"scenario\"))"),
                 "the scenario string must be normalized before dispatch",
             )
         }

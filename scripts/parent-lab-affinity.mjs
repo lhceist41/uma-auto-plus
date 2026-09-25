@@ -30,7 +30,7 @@ import { fileURLToPath } from "node:url"
 import { buildAffinityAdvisorReport, DEFAULT_TOP_PAIRS } from "../src/lib/parentLab/affinityAdvisor.ts"
 import { buildSuccessionRelationIndex, parseSuccessionRelationData } from "../src/lib/parentLab/affinityData.ts"
 import { buildInspirationIndex, parseInspirationRecords } from "../src/lib/parentLab/inspiration.ts"
-import { buildProtectionInventory, latestTrustedProtectionRecord, parseProtectionRecords } from "../src/lib/parentLab/protection.ts"
+import { buildProtectionInventory, latestProtectionRecord, parseProtectionRecords } from "../src/lib/parentLab/protection.ts"
 import { buildRosterSnapshots, latestTrustedSnapshot, parseRosterScanRecords } from "../src/lib/parentLab/roster.ts"
 import { buildRetentionEvidence, buildFactorScarcityIndex } from "../src/lib/parentLab/retentionEvidence.ts"
 import { buildTargetBuild, parseTargetDistance, parseTargetRunningStyle, parseTargetSurface, TARGET_DISTANCES, TARGET_RUNNING_STYLES, TARGET_SURFACES } from "../src/lib/parentLab/targetBuild.ts"
@@ -318,8 +318,8 @@ function main(argv) {
         snapshot = pickSnapshot(snapshots, opts.scanId)
 
         const inspirationIndex = buildInspirationIndex(parseInspirationRecords(readable("--inspiration", opts.inspiration), opts.inspiration))
-        const protectionRecord = opts.protection ? latestTrustedProtectionRecord(parseProtectionRecords(readable("--protection", opts.protection), opts.protection)) : null
-        const inventory = buildProtectionInventory(protectionRecord, snapshot)
+        const protectionRecord = opts.protection ? latestProtectionRecord(parseProtectionRecords(readable("--protection", opts.protection), opts.protection)) : null
+        const inventory = opts.protection ? buildProtectionInventory(protectionRecord, snapshot) : null
 
         // Reconciliation against the historical library is deliberately not read here: this stage ranks
         // what the account owns now, and a career's history changes none of a Veteran's factors.

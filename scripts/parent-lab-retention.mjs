@@ -27,7 +27,7 @@ import { parseCorpus } from "../src/lib/outcomeAnalysis.ts"
 import { buildVeteranLibrary } from "../src/lib/parentLab/buildVeteranLibrary.ts"
 import { buildInspirationIndex, parseInspirationRecords } from "../src/lib/parentLab/inspiration.ts"
 import { parseLineageRecords } from "../src/lib/parentLab/lineage.ts"
-import { buildProtectionInventory, latestTrustedProtectionRecord, parseProtectionRecords } from "../src/lib/parentLab/protection.ts"
+import { buildProtectionInventory, latestProtectionRecord, parseProtectionRecords } from "../src/lib/parentLab/protection.ts"
 import { reconcileRoster } from "../src/lib/parentLab/reconcile.ts"
 import { buildRosterSnapshots, parseRosterScanRecords } from "../src/lib/parentLab/roster.ts"
 import { buildRetentionShadowReport } from "../src/lib/parentLab/retentionAdvisor.ts"
@@ -169,12 +169,12 @@ function renderReport(report, examples) {
     lines.push(`    identified entries    ${s.identifiedRosterEntries}`)
     lines.push(`    trusted captures      ${s.capturedTrusted}  (complete AND every factor name resolved)`)
     lines.push(`    untrusted captures    ${s.capturedUntrusted}`)
-    lines.push(`    coverage              ${(s.coverage * 100).toFixed(1)}%`)
-    lines.push(`    account-wide claims   ${s.accountWide ? "SUPPORTED" : "NOT SUPPORTED at this coverage"}`)
+    lines.push(`    subset coverage       ${(s.coverage * 100).toFixed(1)}%  (identified current rows)`)
+    lines.push(`    account-wide claims   ${s.accountWide ? "SUPPORTED" : "NOT SUPPORTED without trusted complete roster and capture coverage"}`)
     lines.push(`    distinct factors seen ${s.entries.length}  unresolved factor reads ${s.unresolvedFactorReads}`)
     if (!s.accountWide) {
         lines.push(`    A factor seen on one of ${s.capturedTrusted} captured Veterans is NOT a factor that exists once`)
-        lines.push(`    among ${s.identifiedRosterEntries} owned Veterans. No ACCOUNT_UNIQUE claim is made below.`)
+        lines.push(`    across the account. No ACCOUNT_UNIQUE claim is made below.`)
     }
     lines.push("")
     lines.push("  Replacement evidence")
@@ -306,7 +306,7 @@ function main(argv) {
     try {
         parsed = parseRosterScanRecords(readable("--roster", opts.roster), opts.roster)
         if (opts.inspiration) inspirationIndex = buildInspirationIndex(parseInspirationRecords(readable("--inspiration", opts.inspiration), opts.inspiration))
-        if (opts.protection) protectionRecord = latestTrustedProtectionRecord(parseProtectionRecords(readable("--protection", opts.protection), opts.protection))
+        if (opts.protection) protectionRecord = latestProtectionRecord(parseProtectionRecords(readable("--protection", opts.protection), opts.protection))
         const lineageEvents = opts.lineage ? parseLineageRecords(readable("--lineage", opts.lineage), opts.lineage) : []
         if (opts.careers) {
             const corpus = parseCorpus(readable("--careers", opts.careers), opts.careers)
