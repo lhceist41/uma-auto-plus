@@ -533,6 +533,30 @@ internal fun databaseRefusalReport(sessionId: String, appVersion: String, now: L
         exitInfo = null,
     )
 
+/** Endings that played no queue or run: refused starts and diagnostics. */
+internal val NOT_A_RUN_ENDINGS =
+    setOf(
+        SessionEnd.REFUSED_NO_APP_START,
+        SessionEnd.REFUSED_LAUNCH_IDENTITY,
+        SessionEnd.REFUSED_DATABASE_UNHEALTHY,
+        SessionEnd.ROTATION_NOT_PREPARED,
+        SessionEnd.DIAGNOSTIC_ENDED,
+    )
+
+/**
+ * Whether a finished session's report becomes the app's current report. An ending that played no
+ * run never replaces an undismissed report of one, so a stray overlay tap in the morning cannot
+ * erase the overnight summary; it still reaches the history file. A current report that cannot be
+ * read is replaced; one of an ending this version does not know is kept.
+ */
+internal fun replacesLastReport(kind: SessionEnd, current: String?): Boolean {
+    if (kind !in NOT_A_RUN_ENDINGS) return true
+    val existing = current?.let { runCatching { JSONObject(it) }.getOrNull() } ?: return true
+    if (existing.optBoolean("dismissed")) return true
+    val existingKind = SessionEnd.entries.firstOrNull { it.name == existing.optString("kind") } ?: return false
+    return existingKind in NOT_A_RUN_ENDINGS
+}
+
 /**
  * Exit records for this package, or null below API 30, where Android keeps none. [fetch] is only
  * called when the API exists.
@@ -656,7 +680,9 @@ object QueueLedger {
 
     private fun store(context: Context, report: QueueReport) {
         try {
-            write(context, mapOf(KEY_LAST_REPORT to report.lastReportValue()), delete = listOf(KEY_OPEN_SESSION))
+            val current = read(context, listOf(KEY_LAST_REPORT))[KEY_LAST_REPORT]
+            val values = if (replacesLastReport(report.kind, current)) mapOf(KEY_LAST_REPORT to report.lastReportValue()) else emptyMap()
+            write(context, values, delete = listOf(KEY_OPEN_SESSION))
         } catch (e: Exception) {
             Log.w(TAG, "Failed to store the queue report: ${e.message}")
         }

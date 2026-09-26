@@ -27,6 +27,7 @@ import { presetObjectiveOf } from "../../lib/adaptiveSkillPolicy"
 import { presetMoodFloorOf } from "../../lib/moodFloorPolicy"
 import { GRAND_CONCERT_KEY, GRAND_CONCERT_WARNING, isGrandConcert, scenarioCapabilities } from "../../lib/scenarioKey"
 import { presentQueueProgress, type QueueProgressEvent } from "../../lib/queueProgressPresentation"
+import { interruptedBannerReport, lastSessionCardVisible, parseLastSession, type LastSessionView } from "../../lib/queueReportPresentation"
 import { collectPreflightWarnings, readPreflightProbes, shouldShowPreflight, type PreflightItem } from "../../lib/preflightWarnings"
 import { useNavigation } from "@react-navigation/native"
 
@@ -138,6 +139,7 @@ const Home = () => {
     const [showPreflightDialog, setShowPreflightDialog] = useState<boolean>(false)
     const [preflightItems, setPreflightItems] = useState<PreflightItem[]>([])
     const [interruptedQueue, setInterruptedQueue] = useState<{ currentRun: number; totalRuns: number; ageMinutes: number; phase: string } | null>(null)
+    const [lastSession, setLastSession] = useState<LastSessionView | null>(null)
 
     const navigation = useNavigation()
 
@@ -170,6 +172,20 @@ const Home = () => {
             })
             .catch(() => {})
     }, [StartModule])
+
+    /** Re-reads the last session's report, with its words, from Kotlin. Called at the same moments
+     * as the interrupted-queue refresh; Kotlin writes the report before it announces the bot's end. */
+    const refreshLastSession = useCallback(() => {
+        StartModule.getLastQueueReport()
+            .then((payload: unknown) => setLastSession(parseLastSession(payload)))
+            .catch(() => {})
+    }, [StartModule])
+
+    /** Hides the card now, marks the report dismissed in Kotlin (the record is kept), then re-reads. */
+    const dismissLastSession = (sessionId: string) => {
+        setLastSession(null)
+        StartModule.dismissLastQueueReport(sessionId).then(refreshLastSession, refreshLastSession)
+    }
 
     // Single-flight gate for Start: at most one barrier+launch sequence in flight; re-entrant
     // presses are ignored, and a cancel (Stop, preset change, unmount) refuses a launch even if
@@ -233,6 +249,7 @@ const Home = () => {
                 // already rewritten or cleared. Kotlin emits this after the queue session has
                 // made its save/clear decision, so the reread here sees the settled state.
                 refreshInterruptedQueue()
+                refreshLastSession()
             }
         })
 
@@ -263,6 +280,7 @@ const Home = () => {
         getVersion()
         fetchDeviceMetrics()
         refreshInterruptedQueue()
+        refreshLastSession()
 
         return () => {
             mediaProjectionSubscription.remove()
@@ -275,13 +293,19 @@ const Home = () => {
     // screen was backgrounded (e.g. the app was killed and relaunched into a resumed queue).
     useEffect(() => {
         const subscription = AppState.addEventListener("change", (nextState) => {
-            if (nextState === "active") refreshInterruptedQueue()
+            if (nextState === "active") {
+                refreshInterruptedQueue()
+                refreshLastSession()
+            }
         })
         return () => subscription.remove()
-    }, [refreshInterruptedQueue])
+    }, [refreshInterruptedQueue, refreshLastSession])
 
     /** The queue-progress banner's presentation, recomputed only when the underlying event changes. */
     const queueProgressView = useMemo(() => (queueProgress ? presentQueueProgress(queueProgress) : null), [queueProgress])
+
+    /** The last report's reason and end time for the interrupted-queue banner, when the report belongs to that saved queue. */
+    const interruptedReport = useMemo(() => interruptedBannerReport(lastSession, interruptedQueue, Date.now()), [lastSession, interruptedQueue])
 
     /**
      * Checks if the currently selected scenario exists in the available scenarios data.
@@ -863,8 +887,9 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                     }}
                 >
                     <Text style={{ fontSize: 13, color: colors.warningText || "#ffd000", fontWeight: "600", marginBottom: 6 }}>
-                        Queue interrupted at run {interruptedQueue.currentRun} of {interruptedQueue.totalRuns} ({Math.round(interruptedQueue.ageMinutes)} min ago)
+                        Queue interrupted at run {interruptedQueue.currentRun} of {interruptedQueue.totalRuns} ({interruptedReport?.minutesAgo ?? Math.round(interruptedQueue.ageMinutes)} min ago)
                     </Text>
+                    {interruptedReport && <Text style={{ fontSize: 12, color: colors.warningText || "#ffd000", marginBottom: 6 }}>{interruptedReport.reason}</Text>}
                     <Text style={{ fontSize: 12, color: colors.warningText || "#ffd000", marginBottom: 8 }}>
                         {noAutoResumeReason === "queueDisabled"
                             ? "Run Queue is turned off, so this saved run will not resume. Pressing Start plays a single career instead and leaves the saved run alone."
@@ -897,6 +922,51 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                             <Text style={{ fontSize: 12, color: colors.foreground }}>Discard</Text>
                         </TouchableOpacity>
                         <Text style={{ flex: 1, fontSize: 11, color: colors.warningText || "#ffd000", opacity: 0.8 }}>Clears the saved run so the next Start begins fresh.</Text>
+                    </View>
+                </View>
+            )}
+
+            {lastSession && lastSessionCardVisible(lastSession, botRunning, queueProgressView?.isTerminal === true) && (
+                <View
+                    style={{
+                        width: "100%",
+                        paddingHorizontal: 12,
+                        paddingVertical: 10,
+                        marginBottom: 6,
+                        backgroundColor: colors.muted,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                    }}
+                >
+                    <Text style={{ fontSize: 11, color: colors.mutedForeground, marginBottom: 2 }}>Last session</Text>
+                    <Text style={{ fontSize: 14, color: colors.foreground, fontWeight: "600", marginBottom: 4 }}>{lastSession.title}</Text>
+                    <Text style={{ fontSize: 12, color: colors.foreground, marginBottom: 4 }}>{lastSession.reason}</Text>
+                    {lastSession.nextAction && <Text style={{ fontSize: 12, color: colors.foreground, fontWeight: "600", marginBottom: 4 }}>{lastSession.nextAction}</Text>}
+                    {lastSession.progress && <Text style={{ fontSize: 12, color: colors.mutedForeground, marginBottom: 2 }}>{lastSession.progress}</Text>}
+                    {lastSession.runs.map((line, i) => (
+                        <Text key={i} style={{ fontSize: 12, color: colors.mutedForeground }}>
+                            {line}
+                        </Text>
+                    ))}
+                    {lastSession.recoveries && <Text style={{ fontSize: 12, color: colors.mutedForeground, marginTop: 4 }}>{lastSession.recoveries}</Text>}
+                    {lastSession.tpRestores && <Text style={{ fontSize: 12, color: colors.mutedForeground, marginTop: 4 }}>{lastSession.tpRestores}</Text>}
+                    {lastSession.caratsUsed > 0 && (
+                        <View style={{ flexDirection: "row", alignItems: "flex-start", marginTop: 4 }}>
+                            <AlertTriangle size={14} color={colors.warningText || "#ffd000"} style={{ marginRight: 6, marginTop: 2 }} />
+                            <Text style={{ flex: 1, fontSize: 12, color: colors.warningText || "#ffd000", fontWeight: "600" }}>
+                                Carats were spent on {lastSession.caratsUsed === 1 ? "1 TP restore" : `${lastSession.caratsUsed} TP restores`}.
+                            </Text>
+                        </View>
+                    )}
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 }}>
+                        <TouchableOpacity
+                            onPress={() => dismissLastSession(lastSession.sessionId)}
+                            style={{ paddingHorizontal: 14, paddingVertical: 6, backgroundColor: colors.background, borderRadius: 6 }}
+                        >
+                            <Text style={{ fontSize: 12, color: colors.foreground }}>Dismiss</Text>
+                        </TouchableOpacity>
+                        <Text style={{ flex: 1, fontSize: 11, color: colors.mutedForeground }}>Hides this summary. The record of this session stays on this device.</Text>
                     </View>
                 </View>
             )}

@@ -251,7 +251,7 @@ class QueueLedgerWiringTest {
         fun `the bridge reports a dead session before returning the report`() {
             val read = after("fun lastReport(context: Context): String? {", ledgerSource).substringBefore("\n    }\n")
             assertTrue(read.indexOf("reportDeadSessionLocked(context)") in 0 until read.indexOf("read(context, listOf(KEY_LAST_REPORT))"))
-            assertTrue(startModule.contains("promise.resolve(QueueLedger.lastReport(context))"))
+            assertTrue(startModule.contains("promise.resolve(lastReportPayload(QueueLedger.lastReport(context)))"))
             assertTrue(startModule.contains("promise.resolve(QueueLedger.dismissLastReport(context, sessionId))"))
         }
     }

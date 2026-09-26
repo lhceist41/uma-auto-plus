@@ -25,6 +25,23 @@ internal fun queueReportText(report: JSONObject?): ReportText {
     return if (report.optBoolean("errorPosted") && text.title in SUCCESS_TITLES) text.copy(title = "Ended with an error") else text
 }
 
+/**
+ * What the app's bridge returns for the stored report: the report as stored, its words from
+ * [queueReportText], and whether it ended a queue or run. The words are computed on every read and
+ * never stored. A stored value that is not JSON comes back with a null report.
+ */
+internal fun lastReportPayload(raw: String?): String? {
+    if (raw == null) return null
+    val report = runCatching { JSONObject(raw) }.getOrNull()
+    val text = queueReportText(report)
+    val kind = SessionEnd.entries.firstOrNull { it.name == report?.optString("kind") }
+    return JSONObject()
+        .put("report", report ?: JSONObject.NULL)
+        .put("text", JSONObject().put("title", text.title).put("reason", text.reason).put("nextAction", text.nextAction ?: JSONObject.NULL))
+        .put("runEnding", kind != null && kind !in NOT_A_RUN_ENDINGS)
+        .toString()
+}
+
 private val SUCCESS_TITLES = setOf("Queue finished", "Career finished", "Diagnostic ended", "Nothing to resume")
 
 private fun endingText(end: SessionEnd, r: JSONObject): ReportText {

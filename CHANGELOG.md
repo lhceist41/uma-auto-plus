@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- A **Last session** card on Home shows how the bot's last session ended once it has stopped, for example when you open the app the morning after an overnight queue. It shows the outcome, the reason and what to do next (the same words as the notification), how many runs were done and how many of them ended with an error, one line per run with the trainee and how the run ended, how often the bot recovered, and how many TP restores it made with items and with Carats, with any Carats use highlighted. It stays until you dismiss it, including after the app restarts. A start the bot refused, or a diagnostic run, never replaces the summary of a queue or run you have not dismissed yet. The interrupted-queue notice now also shows why the queue stopped, and when that session's summary is available its "min ago" counts from when the session ended.
+
 ### Fixed
 
 - The notification shown when a bot session ends no longer always says "Completed successfully with no errors." It now says how the session actually ended: a finished queue with its run count, a paused or halted queue with what to do before pressing Start again, "Not started" when the bot refuses a start from the overlay button (nothing is spent then), and a stop made by tapping the overlay button, with how many runs were done. A run count also says how many of those runs ended with an error, and after an error the notification never reads as a success. Stopping from the app, or dismissing the overlay button, removes the notification instead of updating it.

@@ -923,12 +923,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     }
 
     /**
-     * The last finished session's report as JSON text, or null. A session that died without writing
-     * one (the process was killed) is turned into a report first, so this also dates and explains it.
+     * The last finished session's report with its player words ([lastReportPayload]) as JSON text,
+     * or null. A session that died without writing one (the process was killed) is turned into a
+     * report first, so this also dates and explains it.
      */
     @ReactMethod
     fun getLastQueueReport(promise: Promise) {
-        promise.resolve(QueueLedger.lastReport(context))
+        promise.resolve(lastReportPayload(QueueLedger.lastReport(context)))
     }
 
     /** Marks the report of [sessionId] dismissed; resolves false when a newer report replaced it. */
