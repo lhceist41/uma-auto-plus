@@ -24,6 +24,10 @@
     <!--Grants permission to download and update the application's Firebase Machine Learning OCR.-->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!--Lets the in-app updater hand a downloaded release to Android's installer. Android still
+        asks the player to allow it once ("Install unknown apps") and to confirm every install.-->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <!--Grants permission to get the device's IP address for the Remote Log Viewer.-->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 

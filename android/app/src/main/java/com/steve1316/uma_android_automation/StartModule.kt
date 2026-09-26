@@ -73,6 +73,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          * until the session's finally releases the latch. */
         private val sessionActive = java.util.concurrent.atomic.AtomicBoolean(false)
 
+        internal fun isSessionActive(): Boolean = sessionActive.get()
+
         /**
          * Human-readable reason for an internal/deliberate queue stop (e.g. the trainee-mismatch guard),
          * or null when the stop is a genuine user Stop. Lets the result and queue logs say WHY the queue

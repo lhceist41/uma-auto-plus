@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- The **Update** button in the Update Available dialog now downloads the right file for your device, checks it against the release, and hands it to Android's installer, so you no longer need the browser: tap Update, then Install in Android's dialog. UMA Auto+ closes while it updates; open it again afterwards. The first time, Android asks you to allow UMA Auto+ to install apps. The update is refused while the bot is running or armed (Start pressed) or while an interrupted queue is saved, and if the download or the install fails you can still open the release page. This works for updates released after this version.
 - A **Last session** card on Home shows how the bot's last session ended once it has stopped, for example when you open the app the morning after an overnight queue. It shows the outcome, the reason and what to do next (the same words as the notification), how many runs were done and how many of them ended with an error, one line per run with the trainee and how the run ended, how often the bot recovered, and how many TP restores it made with items and with Carats, with any Carats use highlighted. It stays until you dismiss it, including after the app restarts. A start the bot refused, or a diagnostic run, never replaces the summary of a queue or run you have not dismissed yet. The interrupted-queue notice now also shows why the queue stopped, and when that session's summary is available its "min ago" counts from when the session ended.
 
 ### Fixed

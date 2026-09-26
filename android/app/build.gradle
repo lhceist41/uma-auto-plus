@@ -108,6 +108,9 @@ android {
         versionName libs.versions.app.versionName.get()
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
+        // Device test of the in-app updater: -PumaUpdateTestTag=v1.5.0 makes a build offer that
+        // release. Empty unless the property is passed, so a normal build never reaches it.
+        buildConfigField "String", "UPDATE_TEST_TAG", "\"${findProperty('umaUpdateTestTag') ?: ''}\""
     }
     signingConfigs {
         debug {

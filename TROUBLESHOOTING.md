@@ -73,6 +73,14 @@ Before replacing an affected plan, use **Settings > Settings Management > Export
 
 On **Racing Plan**, use **Clear** to remove the entire current selection, then pick the required races and dates again. Search, minimum fans, terrain, grade and distance filters limit the visible list; OP and Pre-OP races are excluded. If a wanted race is unavailable, keep your saved copy rather than substitute a different race. **Add All** replaces the entire plan with the currently filtered list, including new priorities; it does not append to your selection or restore the previous schedule. Review the resulting selections and plan check before use. Readable data can still have same-turn conflicts or consecutive-race warnings.
 
+## Updating from inside the app
+
+The **Update** button in the **Update Available** dialog downloads the new release for your device and hands it to Android's installer. Android then shows its own confirmation: tap **Install**. UMA Auto+ closes while it updates; open it again afterwards.
+
+The first time, Android asks you to allow UMA Auto+ to install apps. On that screen, turn on **Allow from this source**, go back, and tap **Continue** in the dialog. If you denied it, open **Android Settings**, then **Apps**, then **UMA Auto+**, then **Install unknown apps** (on some devices it is under **Special app access**), turn it on, then tap **Update** again. You can also use **Open release page** to download the file in your browser instead.
+
+The update is refused while the bot is running, while Start is armed (the overlay button is showing), or while an interrupted queue is saved. Press Stop first, or resume or discard the saved queue on Home.
+
 ## Reporting a bug
 
 A useful report includes a **log file**. The bot writes one per career to:

@@ -19,7 +19,7 @@ A hands-off distribution of [steve1316/uma-android-automation](https://github.co
 - **Decision-engine extensions**, built on steve1316's scoring: a knapsack skill-buying strategy that accounts for upgrade chains, a choice of when mid-career skill buying happens (including an opt-in adaptive mode), single-star race prediction reading, Unity Cup opponent selection from the prediction circles, per-scenario stat caps for the July 2026 rebalance, and Trackblazer-specific tuning.
 - **Smart Borrow.** On queued launches the borrowed friend slot is filled from a curated list of strong cards instead of whatever sits in the top row, skipping picks the game would refuse.
 - **Career results history.** Each finished career records how it ended, the settings it ran under, an estimated overall rank, and the sparks it produced, so preset tuning can be measured across many runs.
-- **Quality of life.** A settings search across every page, named profiles for training settings, queue progress with a skip-run button, signed per-architecture release builds, and an in-app update checker.
+- **Quality of life.** A settings search across every page, named profiles for training settings, queue progress with a skip-run button, signed per-architecture release builds, and an in-app updater that downloads the next release for your device and hands it to Android's installer.
 
 For the version-by-version list, see the [CHANGELOG](CHANGELOG.md). For how any of it works internally, see [HOW_IT_WORKS.md](HOW_IT_WORKS.md).
 
