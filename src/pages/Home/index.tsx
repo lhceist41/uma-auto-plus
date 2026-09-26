@@ -498,7 +498,7 @@ const Home = () => {
         } else {
             setPresetSaveState("failed")
             logErrorWithTimestamp(`[SETTINGS] persistence failed at ${result.stage}: ${result.reason}`)
-            showSnackbar(`Could not save preset "${presetName}": ${result.reason}. Tap the preset again to retry.`, "error")
+            showSnackbar(`Could not save preset "${presetName}". Tap the preset again to retry.`, "error")
         }
     }
 
@@ -643,7 +643,7 @@ const Home = () => {
         if (!barrier.ok) {
             setPresetSaveState("failed")
             logErrorWithTimestamp(`[START] launch_barrier_blocked stage=${barrier.stage} reason=${barrier.reason}`)
-            showSnackbar(`Could not start: ${barrier.reason}. Your preset is kept -- press Start to try again.`, "error")
+            showSnackbar("Could not confirm your settings were saved, so nothing started. Your preset is kept. Press Start to try again.", "error")
             return
         }
         // A cancel (Stop / preset change / unmount) during the barrier await refuses the launch,
@@ -1052,7 +1052,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                 <AlertDialogContent onDismiss={() => setShowNotReadyDialog(false)}>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Not Ready</AlertDialogTitle>
-                        <AlertDialogDescription>A scenario must be selected before starting the bot. Please go to Settings to select a scenario.</AlertDialogDescription>
+                        <AlertDialogDescription>Choose a scenario on Home before starting the bot.</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogAction onPress={() => setShowNotReadyDialog(false)}>

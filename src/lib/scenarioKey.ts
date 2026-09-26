@@ -81,5 +81,7 @@ export const scenarioCapabilities = (_raw: string | null | undefined): ScenarioC
 export const GRAND_CONCERT_WARNING =
     "Grand Concert plays unattended: training, races, events, skills, the Lesson shop, all five concerts, the " +
     "career-end sequence, and the spark selection. Run queues, trainee rotation, and automatic TP restore all work " +
-    "here as they do in the other scenarios. If a Lesson or concert screen ever reaches a state it does not " +
-    "recognize, it stops safely with the career preserved, so you handle that screen in game and press Start to resume."
+    "here as they do in the other scenarios. If the Lesson shop reaches a screen it does not recognize, it backs " +
+    "out safely and tries again later. If a concert screen still is not recognized after a few retries, it stops " +
+    "the run with the career preserved, and the rest of the queue stops with it. Handle that screen in the game, " +
+    "then press Start in UMA Auto+ and tap the overlay button to finish the career."

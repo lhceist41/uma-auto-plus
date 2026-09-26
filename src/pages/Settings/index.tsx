@@ -42,12 +42,13 @@ const TEAM_TRIALS_OPPONENT_PICKS = [
 
 /**
  * The main Settings page of the application.
- * Provides scenario selection, navigation links to sub-settings pages,
- * misc bot configuration options, and settings management (import/export/reset).
+ * Provides navigation links to sub-settings pages, misc bot configuration options, and settings
+ * management (import/export/reset). Scenario selection lives on Home, not here.
  */
 const Settings = () => {
     usePerformanceLogging("Settings")
     const [snackbarOpen, setSnackbarOpen] = useState<boolean>(false)
+    const [snackbarMessage, setSnackbarMessage] = useState<string>("")
     const scrollViewRef = useRef<ScrollView>(null)
 
     const bsc = useContext(BotStateContext)
@@ -76,6 +77,7 @@ const Settings = () => {
     // Callbacks
 
     useEffect(() => {
+        setSnackbarMessage(bsc.readyStatus ? "Scenario selected." : "No scenario selected. Choose one on Home.")
         // Manually set this flag to false as the snackbar autohiding does not set this to false automatically.
         setSnackbarOpen(true)
         setTimeout(() => setSnackbarOpen(false), 2500)
@@ -87,6 +89,7 @@ const Settings = () => {
     const handleResetSettings = async () => {
         const success = await resetSettings()
         if (success) {
+            setSnackbarMessage("Settings reset to defaults.")
             setSnackbarOpen(true)
             setTimeout(() => setSnackbarOpen(false), 2500)
         }
@@ -697,7 +700,7 @@ const Settings = () => {
                 }}
                 style={{ backgroundColor: bsc.readyStatus ? "green" : "red", borderRadius: 10 }}
             >
-                {bsc.readyStatus ? "Bot is ready!" : "Bot is not ready!"}
+                {snackbarMessage}
             </Snackbar>
 
             {/* Reset Settings Dialog */}

@@ -2399,7 +2399,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     promise.resolve("Test message sent successfully!")
                 } catch (e: Exception) {
                     Log.e(TAG, "Discord connection test failed: ${e.message}")
-                    promise.reject("DISCORD_ERROR", "Failed to connect to Discord: ${e.message}")
+                    promise.reject("DISCORD_ERROR", "Could not connect to Discord. Check the bot token and your internet connection.")
                 }
             }
         }.start()

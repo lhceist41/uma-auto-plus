@@ -180,7 +180,7 @@ const RunQueueSettings = () => {
                                     checked={runQueueSettings.stopOnError}
                                     onCheckedChange={(checked) => updateSetting("stopOnError", checked)}
                                     label="Stop Queue on Error"
-                                    description="When enabled, the queue will halt if any run ends in an error or timeout. When disabled (recommended), the queue will skip the failed run and continue to the next one."
+                                    description="When enabled, the queue stops if any run ends in an error or timeout. When disabled (recommended), the queue moves on to the next run after an error or timeout. Either way, the queue stops if a run reaches a breakpoint, needs you to finish a screen by hand, cannot get back to career start, or cannot recover the game."
                                     className="mt-4"
                                 />
 
@@ -189,7 +189,7 @@ const RunQueueSettings = () => {
                                     checked={runQueueSettings.reuseLastLaunchSetup}
                                     onCheckedChange={(checked) => updateSetting("reuseLastLaunchSetup", checked)}
                                     label="Reuse Last Launch Setup"
-                                    description="Reuse the same trainee, support deck, and scenario setup from the previous run. If the game does not offer a reuse option, the queue will stop cleanly."
+                                    description="Keep the game's last trainee, support deck and scenario setup when the bot launches the next career. Needed whenever the bot launches careers itself (run queues, rotation, starting from the game's Home screen). With this off, the bot stops at the support deck screen instead of starting a career."
                                     className="mt-4"
                                 />
 
@@ -233,7 +233,7 @@ const RunQueueSettings = () => {
                                         checked={runQueueSettings.allowCaratsForTpRestore}
                                         onCheckedChange={(checked) => updateSetting("allowCaratsForTpRestore", checked)}
                                         label="Allow Carats for TP Restore"
-                                        description="Carats are paid currency. On by default: when Toughness 30 and Star Fruit have run out, the bot restores TP with Carats, filling with the Max button like the items, so the queue keeps going. Carat restores count toward the same per-session limit. Turn this off to stop instead: a career start ends the queue and says why, and a spark reroll is skipped."
+                                        description="Carats are premium currency (they can be bought with real money). On by default: when Toughness 30 and Star Fruit have run out, the bot restores TP with Carats, filling with the Max button like the items, so the queue keeps going. Carat restores count toward the same per-session limit. Turn this off to stop instead: a career start ends the queue and says why, and a spark reroll is skipped."
                                         className="mt-4"
                                     />
                                 )}
@@ -252,7 +252,7 @@ const RunQueueSettings = () => {
                                     checked={runQueueSettings.enableEventBoost}
                                     onCheckedChange={(checked) => updateSetting("enableEventBoost", checked)}
                                     label="Tick Event Boost (TP Usage x2)"
-                                    description="On the Start Career screen, tick 'Event Boost (TP Usage x2)' so each career earns double event rewards. The TP cost also doubles - the Restore TP with Items option above covers it. Only worth it while a TP event is running; turn this off once the event ends, or you spend double TP for no extra reward."
+                                    description="On the Start Career screen, tick 'Event Boost (TP Usage x2)' so each career earns double event rewards. The TP cost also doubles. Turn on Restore TP with Items if you want the queue to refill TP for it. Only worth it while a TP event is running; turn this off once the event ends, or you spend double TP for no extra reward."
                                     className="mt-4"
                                 />
 

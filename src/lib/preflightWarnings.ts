@@ -87,8 +87,8 @@ export function collectPreflightWarnings(settings: Settings, probes: PreflightPr
         items.push({
             id: "short-screen-timeout",
             kind: "warning",
-            title: "Short screen timeout",
-            text: `Your screen turns off after ${describeTimeout(screen.timeoutMs)}. The bot stops when the screen turns off, so set a longer timeout for long runs.`,
+            title: "Screen timeout is short",
+            text: `Android is set to turn the screen off after ${describeTimeout(screen.timeoutMs)}. If the screen turns off, the bot stops. Some emulators, including MuMu, ignore this setting; on a phone or tablet, set a longer timeout (or keep the screen on while charging) for long runs.`,
         })
     }
 

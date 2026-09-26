@@ -103,7 +103,7 @@ describe("collectPreflightWarnings", () => {
 
         it("warns below 30 minutes and states the real timeout", () => {
             const warning = collectPreflightWarnings(quiet(), withTimeout(2 * 60 * 1000)).find((w) => w.id === "short-screen-timeout")
-            expect(warning?.text).toContain("Your screen turns off after 2 minutes.")
+            expect(warning?.text).toContain("Android is set to turn the screen off after 2 minutes.")
         })
 
         it("stays quiet at 30 minutes or more, or when the device stays on while charging", () => {
