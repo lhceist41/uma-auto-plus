@@ -51,10 +51,12 @@ This project is purely for educational purposes to learn about Android automatio
 
 - An Android device or emulator running Android 7.0 or newer.
 - A supported display configuration. Template matching is calibrated for **1080x1920 at 240 DPI**, or **1080x2340 at 450 DPI** for Samsung phones. On anything else the Home page warns you, detection misfires, and the bot stalls. If your phone cannot be set to one of those, try the `Basic Template Matching Test` under `Settings` > `Debug Tests` to find a working custom scale, or force the display down with the [resolution steps](#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate) below.
-- Tested emulators are Bluestacks 5 (Pie 64-bit, other versions should work) and MuMu, set up as follows:
+- Tested emulators are Bluestacks 5 (Pie 64-bit, other versions should work) and MuMu Player 12.0 (6.5.6.0) running an Android 12 guest, both on **x86_64**. Set either up as follows:
     - Portrait mode forced on always.
     - 4 CPU cores, 4 GB memory, 1080 x 1920 (width x height), 240 DPI. The DPI matters.
     - Bluestacks only: update to the latest version to avoid Uma Musume crashing, and set the predefined profile under `Settings` > `Phone` to a modern high-end phone such as the Samsung Galaxy S22.
+
+  The advanced Veteran Roster Scan and Veteran Inspiration debug tests need the resolution set exactly to 1080x1920; the 1080x2340 Samsung alternative above does not work for them.
 
 > [!IMPORTANT]
 > The in-game graphics need to be set to `Standard` instead of `Basic`.
@@ -98,6 +100,19 @@ This project is purely for educational purposes to learn about Android automatio
 
 > [!TIP]
 > Hitting stops, stuck screens, or "trainee not found"? See **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)**.
+
+# Before your first overnight queue
+
+A single supervised career needs little setup. An unattended run queue is a bigger commitment, so check these first:
+
+- **Accessibility service.** Must be enabled, and Start checks this before every launch. If MuMu or another emulator kills it mid-run, see [the Accessibility recovery steps](TROUBLESHOOTING.md#2-the-emulator-killed-the-accessibility-service-mumu), and grant the one-time repair permission described there so the bot can turn it back on itself.
+- **Screen timeout.** The bot stops if the device screen turns off. Set a long timeout, or set your emulator to stay awake while charging.
+- **Notifications.** On Android 13 or newer, UMA Auto+ does not yet ask for notification permission at first launch (it is declared but not requested at runtime). If you do not see notifications from the app, check Android's app notification settings and enable them by hand.
+- **Restore TP with Items** (Settings > Run Queue). Off by default. With it off, a queue that runs out of TP stops before the next career, keeping the runs it already finished. Turn it on if you want an overnight queue to keep going through a TP shortfall. A separate "Allow Carats for TP Restore" toggle is on by default once you do; turn it off if you would rather the queue stop than spend Carats.
+- **Reuse Last Launch Setup** (Settings > Run Queue). On by default, and needed for the bot to launch a career by itself; if it is off, the bot stops at the support deck screen instead of starting the next run.
+- **Discord alerts** (optional, Settings > Discord). Off by default. Turn this on if you want to hear about a stopped queue away from the device.
+
+Start now checks several of these (Restore TP with Items, Reuse Last Launch Setup, the accessibility repair permission, a short screen timeout, and notifications) before a run queue and warns if something looks likely to end a long run early. The warning never blocks you: you can choose to start anyway.
 
 # Presets
 

@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-26
+
 ### Added
 
 - Presets for **Wonder Acute** and **Nakayama Festa** in all four scenarios. Wonder Acute is built as a dirt Pace Chaser: her URA Finale preset races the Junior dirt calendar to reach the 5000-fan goal her career asks for early in the Classic year, and she carries a turf-aptitude caution for Unity Cup and Trackblazer. Nakayama Festa is built as a Late Surger for Medium races, and because her kit has no recovery skill, her skill plans include Be Still and A Small Breather. Both are research-graded until a full career completes, and skills that need a higher Potential level stay out of their plans for now. The roster is now 300 presets across 74 trainee cards.
@@ -33,6 +35,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Settings import now reports whether it actually succeeded, partly succeeded, or failed, and the preview screen states that your saved profiles will be replaced before you confirm. A failed profile import can no longer leave you with none, and if a profile was selected before the import, the first profile in the file is selected afterwards instead of none.
 - Newly generated default Racing Plans include the turn information the bot needs to read them. Race selection, order and priorities are unchanged, so scheduling conflicts can still appear. Existing saved and imported plans are preserved; see [Racing Plan recovery](TROUBLESHOOTING.md#the-racing-plan-is-missing-information) for older incomplete plans.
 - Stopping the bot from the floating overlay button during the pause between queued runs now ends the queue properly, instead of leaving Home stuck on "Waiting..." for a queue that had already stopped.
+- Settings changed after your first Start in an app session could silently fail to reach the bot, or be lost entirely if the app was closed before you started again: the app and the bot each opened their own copy of the settings database in the same process, and the two could drift apart without warning. This has been happening since version 1.3.0. The app and the bot now share a single settings database connection, so a changed setting always reaches the bot and survives closing the app.
+- Before every Start, the bot now double-checks that the settings it is about to use are the exact ones UMA Auto+ just verified, and refuses to start rather than run on the wrong ones. Nothing is spent when this happens: force stop and reopen UMA Auto+ (re-enabling its accessibility service if it was switched off), then press Start again.
+- If UMA Auto+ ever finds its settings file damaged or unreadable, it now refuses to start instead of risking a run on bad data, and says nothing was spent. The next time you open the app, it checks the file again and restores your settings from the last good backup if it is still damaged; a damaged file is kept next to the current one rather than deleted.
 
 ## [1.4.0] - 2026-08-28
 
@@ -429,6 +434,7 @@ A reliability and content release. The bot survives long queues on MuMu, handles
 
 ---
 
+[1.5.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.3.8...v1.4.0
 [1.3.8]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.8
 [1.3.7]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.7
@@ -439,4 +445,4 @@ A reliability and content release. The bot survives long queues on MuMu, handles
 [1.3.2]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.2
 [1.3.1]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.1
 [1.3.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.0
-[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.4.0...main
+[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.5.0...main

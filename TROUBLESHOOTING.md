@@ -32,6 +32,17 @@ If you use the run queue's trainee rotation and it stops with `Trainee '...' not
 - You actually **own** that trainee — the rotation picks from your in-game roster, not from the preset list.
 - The trainee's name in the rotation matches the in-game name.
 
+### 4. "Start again from UMA Auto+ with an explicit launch choice"
+
+Tapping the floating overlay button by itself cannot start a new automation session. If you see this message, or the app otherwise refuses to resume after only tapping the overlay, open UMA Auto+ and press `Start` there first; the overlay button then finishes setting up automation on the training screen as usual.
+
+### 5. "Not started, and nothing was spent"
+
+UMA Auto+ can refuse a Start rather than risk a career on the wrong settings or a settings file it cannot trust. Either way, nothing is spent and no career is touched.
+
+- **The settings did not reach the bot.** If what the bot is about to use does not match what UMA Auto+ just checked when you pressed Start, it refuses instead of running on the mismatch. This refusal shows no dialog, and the notification can still say the run completed successfully with no errors; check the app's message log for a red line giving the real reason. Force stop UMA Auto+ (Android Settings, Apps, UMA Auto+, Force stop), reopen it, turn its accessibility service back on if it was switched off, then press Start again.
+- **The settings file could not be verified.** If UMA Auto+ cannot safely use its saved settings file, it refuses the same way. If your device's storage is full, free some space first, then force stop and reopen UMA Auto+ as above. Reopening checks the file again and restores it from the last good backup if it is damaged; a damaged file is renamed and kept next to the current one (as `settings.db.corrupt-<time>`) rather than deleted, though reaching it needs a rooted device or a debug build, so it is not something most players can pull themselves. If this message keeps coming back, please report it as a bug with your usual log file attached (see [Reporting a bug](#reporting-a-bug)).
+
 ## Grand Concert
 
 The bot pages the Scenario Select carousel to Grand Concert like any other scenario, so it works with
@@ -41,10 +52,14 @@ career loop: the lessons, all five concerts, and the career-end sequence, which 
 points, buys the career-end skills, handles the spark set, and walks the game back to the home screen
 without you.
 
-If the bot does stop mid-career on a lesson or concert screen it doesn't recognize, it says which
-screen it was looking at and leaves the career untouched. Handle that screen in game, return to the
-career screen, and press Start to resume the same career. Nothing is spent and no career is lost when
-that happens.
+If the Lesson shop shows something it doesn't recognize mid-visit, it backs out to the career screen
+without spending and tries again on a later turn; your career and queue are unaffected.
+
+If a concert screen still isn't recognized after a few retries, the bot stops the run with the career
+untouched, and the rest of the run queue stops with it, because the game holds only one career at a
+time. It names the concert flow and how many attempts it made, not the exact screen. Handle that screen in the game and return to the career
+screen, then press Start in UMA Auto+ and tap the overlay button to finish the same career. Nothing is
+spent when that happens.
 
 ## Skills aren't bought, or the wrong event option is picked
 

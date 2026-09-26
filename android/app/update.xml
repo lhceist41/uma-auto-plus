@@ -1,16 +1,17 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.4.0</latestVersion>
+    <latestVersion>1.5.0</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.4.0 - Grand Concert plays itself, Borrow list scanning gets more reliable, and career-start safety gets tighter
+v1.5.0 - Settings are safe from a hidden database bug, and Start warns you before a risky overnight queue
 
-- New: Grand Concert is automated end to end -- training, races, training events, the Lesson shop's song and technique buying, and all five concerts including the Grand finale, with the right stat caps and a preset for every trainee in the roster. Run queues, trainee rotation, and TP restore all work with it too.
-- New: an advanced, opt-in Build-Aware Launch mode that verifies the live Borrow list, deck, and launch screen before spending TP and refuses to start rather than guess when it cannot confirm the setup -- off by default, alongside an optional Windows companion app for last-resort Borrow-list scroll recovery.
-- Improved: Smart Borrow handles long Borrow lists more reliably -- a stalled scroll is no longer mistaken for the end of the list, the selected card is re-checked immediately before the tap, and recovery after the accessibility service restarts mid-scroll is sturdier.
-- Fixed: the bot now verifies Normal Career mode is selected before pressing the irreversible Start Career button, instead of trusting whichever tab the game last had open.
-- Fixed: settings search now reaches every settings page it points at, including Run Queue, Discord, and Scenario Overrides settings.
-- Fixed: skill tier data is restored after the community source restructured its page, and this release also includes the trainee-selection swipe, spark reroll chooser, and Grass Wonder (Saintly Jade Cleric) improvements.
+- Fixed: a settings-persistence bug present since version 1.3.0. A setting changed after your first Start in an app session could fail to reach the bot, or be lost entirely if you closed the app before starting again -- the app and the bot now share a single settings database connection, so a changed setting always reaches the bot and survives closing the app.
+- Fixed: the bot now refuses to start rather than run on settings that do not match what UMA Auto+ just checked, or on a settings file it cannot verify is safe -- nothing is spent either way, and a damaged file can be restored from its last good backup the next time you open the app.
+- New: Start now warns you before a run queue about setup that can end a long run early (TP restore off, Reuse Last Launch Setup off, the accessibility repair permission missing, a short screen timeout, or notifications off), without ever blocking you from starting anyway.
+- New: presets for Wonder Acute and Nakayama Festa, in all four scenarios. The roster is now 300 presets across 74 trainee cards.
+- New: a plan check on the Racing Plan page that flags unrecognized races, wrong-turn races, double-booked turns, and back-to-back races the bot may not be able to run, before you start a career.
+- Improved: Carats for TP restore are now a separate setting, on by default, instead of always being spent once items run out; a lost connection mid-career is ridden out for up to 20 minutes with growing retry pauses instead of giving up quickly.
+- Fixed: settings import reports whether it actually succeeded, partly succeeded, or failed, and a failed profile import can no longer leave you with none.
 
     </releaseNotes>
   </update>
