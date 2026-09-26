@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import { View, Text, ScrollView, StyleSheet } from "react-native"
+import { View, Text, ScrollView, StyleSheet, Alert } from "react-native"
 import { useNavigation, useRoute, CommonActions } from "@react-navigation/native"
 import { useTheme } from "../../context/ThemeContext"
 import CustomButton from "../../components/CustomButton"
@@ -16,6 +16,15 @@ interface ImportSettingsPreviewParams {
     changes: SettingsChange[]
     /** The file URI of the imported settings JSON file. */
     fileUri: string
+    /** How many profiles the file carries. Confirming replaces every saved profile with these. */
+    profileCount: number
+}
+
+/** Title shown for each possible true outcome of confirming an import (docs/UI_TRUTHFULNESS.md rule 3: these must look different). */
+const RESULT_TITLES: Record<"success" | "partial" | "failure", string> = {
+    success: "Settings Imported",
+    partial: "Settings Partly Imported",
+    failure: "Import Failed",
 }
 
 /**
@@ -30,10 +39,11 @@ const ImportSettingsPreview = () => {
     const route = useRoute()
     const { importSettings } = useSettings()
 
-    // Get the changes and fileUri from navigation params.
-    const params = (route.params as ImportSettingsPreviewParams) || { changes: [], fileUri: "" }
+    // Get the changes, fileUri and profileCount from navigation params.
+    const params = (route.params as ImportSettingsPreviewParams) || { changes: [], fileUri: "", profileCount: 0 }
     const changes = params.changes || []
     const fileUri = params.fileUri || ""
+    const profileCount = params.profileCount || 0
 
     // Group changes by category and return an object with the category as the key and the changes as the value.
     const groupedChanges = useMemo(() => {
@@ -68,6 +78,13 @@ const ImportSettingsPreview = () => {
                     color: colors.mutedForeground,
                     marginBottom: 16,
                     fontWeight: "500",
+                },
+                profileConsequence: {
+                    fontSize: 13,
+                    fontWeight: "700",
+                    color: colors.warningText,
+                    marginHorizontal: 10,
+                    marginBottom: 8,
                 },
                 noChangesContainer: {
                     flex: 1,
@@ -159,21 +176,28 @@ const ImportSettingsPreview = () => {
         [colors]
     )
 
-    /**
-     * Handle the confirm action.
-     * Imports the settings file and resets the stack to `SettingsMain`.
-     */
-    const handleConfirm = async () => {
-        if (fileUri) {
-            await importSettings(fileUri)
-        }
-        // Reset the stack to SettingsMain, removing ImportSettingsPreview from history.
+    /** Reset the stack to `SettingsMain`, removing `ImportSettingsPreview` from history. */
+    const returnToSettings = () => {
         navigation.dispatch(
             CommonActions.reset({
                 index: 0,
                 routes: [{ name: "SettingsMain" }],
             })
         )
+    }
+
+    /**
+     * Handle the confirm action.
+     * Imports the settings file and shows its true result before returning to `SettingsMain`, so a
+     * partial or failed import is never presented as if it fully succeeded.
+     */
+    const handleConfirm = async () => {
+        if (!fileUri) {
+            returnToSettings()
+            return
+        }
+        const result = await importSettings(fileUri)
+        Alert.alert(RESULT_TITLES[result.outcome], result.message, [{ text: "OK", onPress: returnToSettings }])
     }
 
     /**
@@ -192,6 +216,12 @@ const ImportSettingsPreview = () => {
     return (
         <View style={styles.root}>
             <PageHeader title="Import Settings Preview" />
+
+            {profileCount > 0 && (
+                <Text style={styles.profileConsequence}>
+                    Your saved profiles will be replaced by the {profileCount} profile{profileCount !== 1 ? "s" : ""} in this file.
+                </Text>
+            )}
 
             <ScrollView style={styles.content} showsVerticalScrollIndicator={true}>
                 {changes.length === 0 ? (
@@ -240,7 +270,7 @@ const ImportSettingsPreview = () => {
                 <CustomButton onPress={handleCancel} variant="outline">
                     Cancel
                 </CustomButton>
-                {changes.length > 0 && (
+                {(changes.length > 0 || profileCount > 0) && (
                     <CustomButton onPress={handleConfirm} variant={isDark ? "default" : "secondary"}>
                         Confirm Import
                     </CustomButton>

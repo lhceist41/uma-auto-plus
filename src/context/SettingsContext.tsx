@@ -1,6 +1,7 @@
 import React, { createContext, useContext, ReactNode } from "react"
 import { useSettingsManager } from "../hooks/useSettingsManager"
 import { LaunchBarrierResult } from "../lib/launchConfig"
+import { ImportSettingsResult } from "../lib/settingsImport"
 
 /**
  * Context value interface for the Settings provider.
@@ -19,8 +20,8 @@ interface SettingsContextType {
     flushAndVerifyLaunchConfig: (newSettings?: any) => Promise<LaunchBarrierResult>
     /** Loads settings from persistent storage. */
     loadSettings: (skipInitializationCheck?: boolean) => Promise<void>
-    /** Imports settings from a file at the given URI. Returns true on success. */
-    importSettings: (fileUri: string) => Promise<boolean>
+    /** Imports settings from a file at the given URI. Returns the structured outcome (success, partial, or failure). */
+    importSettings: (fileUri: string) => Promise<ImportSettingsResult>
     /** Exports current settings to a file. Returns the file path or null on failure. */
     exportSettings: () => Promise<string | null>
     /** Resets all settings to defaults. Returns true on success. */

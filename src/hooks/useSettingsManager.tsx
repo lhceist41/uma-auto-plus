@@ -10,6 +10,7 @@ import { logWithTimestamp, logErrorWithTimestamp } from "../lib/logger"
 import { deepMerge, convertSettingsToBatch, applyMigrations } from "../lib/settingsUtils"
 import { buildRotationSnapshotRows, BuildRotationResult } from "../lib/rotationSnapshots"
 import { LaunchBarrierResult, launchConfigIdentity, identityFromRows, verifyLaunchConfigPersisted } from "../lib/launchConfig"
+import { performSettingsImport, ImportSettingsResult, ImportedProfile } from "../lib/settingsImport"
 
 /** Flush-stall ceiling for the Start barrier. Generous enough for a healthy write, short
  * enough that a stalled writer surfaces a retryable failure instead of a frozen Start. */
@@ -287,86 +288,91 @@ export const useSettingsManager = () => {
 
     /**
      * Import settings from a JSON file and save to `SQLite`.
+     *
+     * Delegates the sequencing (read, save settings, replace profiles) to the pure, independently
+     * testable `performSettingsImport`, wired to this hook's live database and context. Profiles are
+     * replaced through `databaseManager.replaceAllProfiles`, a single transaction, so a failure there
+     * leaves the previously saved profiles exactly as they were instead of a half-replaced or empty set.
+     *
      * @param fileUri - The URI/path to the JSON settings file.
-     * @returns A promise that resolves with a boolean indicating whether the import was successful.
+     * @returns A promise that resolves with the structured outcome (success, partial, or failure) and a
+     *          player-safe message. Raw error text is logged but never returned.
      */
-    const importSettings = async (fileUri: string): Promise<boolean> => {
+    const importSettings = async (fileUri: string): Promise<ImportSettingsResult> => {
         const endTiming = startTiming("settings_manager_import_settings", "settings")
 
+        setIsSaving(true)
         try {
-            setIsSaving(true)
-
-            // Ensure database is initialized before saving.
-            logWithTimestamp("Ensuring database is initialized before saving...")
-            if (!isSQLiteInitialized) {
-                logWithTimestamp("Database not initialized, triggering initialization...")
-                await databaseManager.initialize()
-            }
-
-            // Check for current active profile name before importing profiles.
-            let previousActiveProfileName: string | null = null
-            try {
-                previousActiveProfileName = await databaseManager.getCurrentProfileName()
-            } catch (error) {
-                logErrorWithTimestamp("[SettingsManager] Error getting current profile name (continuing with import):", error)
-            }
-
-            // Load settings and profiles from JSON file.
-            const { settings: importedSettings, profiles } = await loadFromJSONFile(fileUri)
-
-            // Preserve the current Discord token: export strips it for privacy, so re-importing
-            // your own config would otherwise wipe it.
-            if (importedSettings.discord) {
-                importedSettings.discord.discordToken = settingsRef.current.discord?.discordToken ?? ""
-            }
-            if (importedSettings.debug) {
-                importedSettings.debug.hostInputPairingCode = settingsRef.current.debug?.hostInputPairingCode ?? ""
-            }
-
-            // Save settings to SQLite database.
-            await databaseManager.saveSettingsBatch(convertSettingsToBatch(importedSettings))
-            bsc.setSettings(importedSettings)
-
-            // Import profiles if they exist.
-            if (profiles && Array.isArray(profiles) && profiles.length > 0) {
-                try {
-                    // Delete all existing profiles.
-                    const existingProfiles = await databaseManager.getAllProfiles()
-                    for (const profile of existingProfiles) {
-                        await databaseManager.deleteProfile(profile.id)
+            const result = await performSettingsImport({
+                readFile: async () => {
+                    // Ensure database is initialized before saving.
+                    logWithTimestamp("Ensuring database is initialized before saving...")
+                    if (!isSQLiteInitialized) {
+                        logWithTimestamp("Database not initialized, triggering initialization...")
+                        await databaseManager.initialize()
                     }
-                    logWithTimestamp(`[SettingsManager] Deleted ${existingProfiles.length} existing profiles.`)
 
-                    // Import all profiles from the JSON file.
-                    for (const profile of profiles) {
-                        if (profile.settings?.debug) {
-                            delete profile.settings.debug.hostInputPairingCode
-                        }
-                        await databaseManager.saveProfile({
-                            name: profile.name,
-                            settings: profile.settings,
-                        })
-                    }
-                    logWithTimestamp(`[SettingsManager] Imported ${profiles.length} profiles.`)
+                    const { settings: importedSettings, profiles } = await loadFromJSONFile(fileUri)
 
-                    // If there was a previously active profile and at least one profile was imported, set active profile to the first imported profile.
-                    if (previousActiveProfileName && profiles.length > 0) {
-                        await databaseManager.setCurrentProfileName(profiles[0].name)
-                        logWithTimestamp(`[SettingsManager] Set active profile to first imported profile: ${profiles[0].name}`)
+                    // Preserve the current Discord token: export strips it for privacy, so re-importing
+                    // your own config would otherwise wipe it.
+                    if (importedSettings.discord) {
+                        importedSettings.discord.discordToken = settingsRef.current.discord?.discordToken ?? ""
                     }
-                } catch (profileError) {
-                    logErrorWithTimestamp("[SettingsManager] Error importing profiles (settings import succeeded):", profileError)
-                }
+                    if (importedSettings.debug) {
+                        importedSettings.debug.hostInputPairingCode = settingsRef.current.debug?.hostInputPairingCode ?? ""
+                    }
+
+                    const sanitizedProfiles: ImportedProfile[] | undefined =
+                        profiles && Array.isArray(profiles)
+                            ? profiles.map((profile) => {
+                                  if (profile.settings?.debug) {
+                                      delete profile.settings.debug.hostInputPairingCode
+                                  }
+                                  return { name: profile.name, settings: profile.settings }
+                              })
+                            : undefined
+
+                    return { settings: importedSettings, profiles: sanitizedProfiles }
+                },
+                saveSettings: async (settings) => {
+                    await databaseManager.saveSettingsBatch(convertSettingsToBatch(settings))
+                },
+                applySettings: (settings) => {
+                    bsc.setSettings(settings)
+                },
+                hasActiveProfile: async () => {
+                    try {
+                        return (await databaseManager.getCurrentProfileName()) !== null
+                    } catch (error) {
+                        logErrorWithTimestamp("[SettingsManager] Error getting current profile name (continuing with import):", error)
+                        return false
+                    }
+                },
+                replaceAllProfiles: async (profiles) => {
+                    await databaseManager.replaceAllProfiles(profiles)
+                    logWithTimestamp(`[SettingsManager] Replaced all profiles with ${profiles.length} imported profile(s).`)
+                },
+                setActiveProfileName: async (name) => {
+                    await databaseManager.setCurrentProfileName(name)
+                    logWithTimestamp(`[SettingsManager] Set active profile to first imported profile: ${name}`)
+                },
+            })
+
+            if (result.outcome === "success") {
+                logWithTimestamp("Settings imported successfully.")
+            } else {
+                logErrorWithTimestamp(`Settings import ended with outcome "${result.outcome}": ${result.message}`)
             }
 
-            logWithTimestamp("Settings imported successfully.")
-
-            endTiming({ status: "success", fileUri, profilesImported: profiles?.length || 0 })
-            return true
+            endTiming({ status: result.outcome, fileUri, profilesImported: result.profilesImported })
+            return result
         } catch (error) {
+            // Safety net: performSettingsImport already catches its own steps, so this only fires on a
+            // bug in the wiring above. Never let a raw error escape to the player.
             logErrorWithTimestamp("Error importing settings:", error)
             endTiming({ status: "error", fileUri, error: error instanceof Error ? error.message : String(error) })
-            return false
+            return { outcome: "failure", message: "Something went wrong while importing settings. Your previous settings were not changed.", profilesImported: 0 }
         } finally {
             setIsSaving(false)
         }

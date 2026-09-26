@@ -55,7 +55,7 @@ const Settings = () => {
     const navigation = useNavigation()
 
     const { openDataDirectory, resetSettings } = useSettings()
-    const { handleImportSettings, handleExportSettings, showImportDialog, setShowImportDialog, showResetDialog, setShowResetDialog } = useSettingsFileManager()
+    const { handleImportSettings, handleExportSettings, showResetDialog, setShowResetDialog } = useSettingsFileManager()
 
     const styles = useMemo(
         () =>
@@ -699,25 +699,6 @@ const Settings = () => {
             >
                 {bsc.readyStatus ? "Bot is ready!" : "Bot is not ready!"}
             </Snackbar>
-
-            {/* Restart Dialog */}
-            <AlertDialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-                <AlertDialogContent style={{ backgroundColor: "black" }}>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>
-                            <Text style={{ color: "white" }}>Settings Imported</Text>
-                        </AlertDialogTitle>
-                        <AlertDialogDescription>
-                            <Text style={{ color: "white" }}>Settings have been imported successfully.</Text>
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogAction style={{ backgroundColor: "white" }}>
-                            <Text style={{ color: "black" }}>OK</Text>
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
 
             {/* Reset Settings Dialog */}
             <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>

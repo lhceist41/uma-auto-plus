@@ -1,4 +1,5 @@
 import { useState, useContext } from "react"
+import { Alert } from "react-native"
 import * as DocumentPicker from "expo-document-picker"
 import * as Sharing from "expo-sharing"
 import * as FileSystem from "expo-file-system"
@@ -87,11 +88,12 @@ const deepMerge = <T extends Record<string, any>>(target: T, source: Partial<T>)
  * applying it to app state. Lets the caller preview changes first. Throws on read/parse failure.
  * @param fileUri - URI/path to the JSON settings file.
  */
-const loadFromJSONFile = async (fileUri: string): Promise<Settings> => {
+const loadFromJSONFile = async (fileUri: string): Promise<{ settings: Settings; profileCount: number }> => {
     try {
         const data = await FileSystem.readAsStringAsync(fileUri)
-        const parsed = JSON.parse(data) as Settings
-        return deepMerge(defaultSettings, parsed as Partial<Settings>)
+        const parsed = JSON.parse(data) as Settings & { profiles?: unknown[] }
+        const profileCount = Array.isArray(parsed.profiles) ? parsed.profiles.length : 0
+        return { settings: deepMerge(defaultSettings, parsed as Partial<Settings>), profileCount }
     } catch (error) {
         logErrorWithTimestamp(`Error reading settings from JSON file: ${error}`)
         throw error
@@ -118,45 +120,21 @@ export interface SettingsChange {
  * @returns An object containing the state and functions for managing settings file operations.
  */
 export const useSettingsFileManager = () => {
-    const [showImportDialog, setShowImportDialog] = useState(false)
     const [showResetDialog, setShowResetDialog] = useState(false)
-    const [importPreviewChanges, setImportPreviewChanges] = useState<SettingsChange[]>([])
-    const [pendingImportUri, setPendingImportUri] = useState<string | null>(null)
 
-    const { importSettings, exportSettings } = useSettings()
+    const { exportSettings } = useSettings()
     const bsc = useContext(BotStateContext)
     const navigation = useNavigation()
 
-    /** Clear the import-preview state (pending URI and pending changes). */
-    const clearPreviewState = () => {
-        setPendingImportUri(null)
-        setImportPreviewChanges([])
-    }
-
-    /**
-     * Perform the actual import from `fileUri`, show the success dialog on success, and clear preview state.
-     */
-    const confirmImportSettings = async (fileUri: string) => {
-        if (!fileUri) return
-
-        try {
-            const success = await importSettings(fileUri)
-            if (success) {
-                setShowImportDialog(true)
-            }
-            clearPreviewState()
-        } catch (error) {
-            logErrorWithTimestamp("Error importing settings:", error)
-        }
-    }
-
     /**
      * Load the file, diff it against current settings, format the changes, and navigate to the
-     * preview screen. Runs when the user picks a file, before anything is applied.
+     * preview screen. Runs when the user picks a file, before anything is applied. The preview screen
+     * (not this hook) performs the actual import, so it can show the true result at the point of
+     * confirmation instead of here, before the player has committed to anything.
      */
     const compareAndPreviewSettings = async (fileUri: string) => {
         try {
-            const importedSettings = await loadFromJSONFile(fileUri)
+            const { settings: importedSettings, profileCount } = await loadFromJSONFile(fileUri)
             const changes = compareSettings(bsc.settings, importedSettings)
 
             const formattedChanges = changes.map((change) => ({
@@ -165,19 +143,16 @@ export const useSettingsFileManager = () => {
                 formattedNewValue: formatValue(change.newValue),
             }))
 
-            setPendingImportUri(fileUri)
-            setImportPreviewChanges(formattedChanges)
             ;(navigation as any).navigate("ImportSettingsPreview", {
                 changes: formattedChanges,
                 fileUri: fileUri,
+                profileCount,
             })
         } catch (error) {
             logErrorWithTimestamp("Error comparing settings:", error)
+            Alert.alert("Could Not Read File", "Could not read that file. Make sure it is a UMA Auto+ settings export.")
         }
     }
-
-    /** Cancel the import preview. */
-    const cancelImportPreview = clearPreviewState
 
     /**
      * Open the system document picker for a JSON settings file, then preview the diff instead of
@@ -195,6 +170,7 @@ export const useSettingsFileManager = () => {
             await compareAndPreviewSettings(result.assets[0].uri)
         } catch (error) {
             logErrorWithTimestamp("Error importing settings:", error)
+            Alert.alert("Could Not Read File", "Could not read that file. Make sure it is a UMA Auto+ settings export.")
         }
     }
 
@@ -213,25 +189,10 @@ export const useSettingsFileManager = () => {
         }
     }
 
-    /** Confirm the import using the pending URI held in state. */
-    const confirmPendingImport = async () => {
-        if (pendingImportUri) {
-            await confirmImportSettings(pendingImportUri)
-        }
-    }
-
     return {
         handleImportSettings,
         handleExportSettings,
-        showImportDialog,
-        setShowImportDialog,
         showResetDialog,
         setShowResetDialog,
-        confirmImportSettings,
-        confirmPendingImport,
-        cancelImportPreview,
-        importPreviewChanges,
-        pendingImportUri,
-        clearPreviewState,
     }
 }

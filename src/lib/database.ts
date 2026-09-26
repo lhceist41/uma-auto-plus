@@ -539,37 +539,47 @@ export class DatabaseManager {
                 logWithTimestamp(`[DB] Saving ${settings.length} settings in batch.`)
 
                 await this.db!.runAsync("BEGIN TRANSACTION")
-                const stmt = await this.db!.prepareAsync(
-                    `INSERT OR REPLACE INTO ${this.TABLE_SETTINGS} (category, key, value, updated_at) 
-                     VALUES (?, ?, ?, CURRENT_TIMESTAMP)`
-                )
+                let stmt: SQLite.SQLiteStatement | null = null
+                try {
+                    stmt = await this.db!.prepareAsync(
+                        `INSERT OR REPLACE INTO ${this.TABLE_SETTINGS} (category, key, value, updated_at)
+                         VALUES (?, ?, ?, CURRENT_TIMESTAMP)`
+                    )
 
-                // Execute all settings in batch.
-                for (const setting of settings) {
-                    const valueString = this.serializeValue(setting.value)
-                    await stmt.executeAsync([setting.category, setting.key, valueString])
+                    // Execute all settings in batch.
+                    for (const setting of settings) {
+                        const valueString = this.serializeValue(setting.value)
+                        await stmt.executeAsync([setting.category, setting.key, valueString])
+                    }
+
+                    await this.db!.runAsync("COMMIT")
+
+                    logWithTimestamp(`[DB] Successfully saved ${settings.length} settings in batch.`)
+                } catch (error) {
+                    // Roll back here, inside the operation that still owns the connection: executeWithQueue's
+                    // finally clears isTransactionActive as soon as this callback settles, before a caller's
+                    // own catch could ever see it, so a rollback attempted one level up never actually runs.
+                    try {
+                        await this.db!.runAsync("ROLLBACK")
+                    } catch (rollbackError) {
+                        logErrorWithTimestamp("[DB] Failed to rollback settings batch transaction:", rollbackError)
+                    }
+                    throw error
+                } finally {
+                    if (stmt) {
+                        try {
+                            await stmt.finalizeAsync()
+                        } catch (finalizeError) {
+                            logErrorWithTimestamp("[DB] Failed to finalize settings batch statement:", finalizeError)
+                        }
+                    }
                 }
-
-                // Finalize statement and commit transaction.
-                await stmt.finalizeAsync()
-                await this.db!.runAsync("COMMIT")
-
-                logWithTimestamp(`[DB] Successfully saved ${settings.length} settings in batch.`)
             })
 
             endTiming({ status: "success", settingsCount: settings.length })
         } catch (error) {
             const settingsInfo = settings.length > 0 ? ` (${settings.length} settings: ${settings.map((s) => `${s.category}.${s.key}`).join(", ")})` : " (no settings)"
             logErrorWithTimestamp(`[DB] Failed to save settings batch${settingsInfo}:`, error)
-
-            // Rollback transaction on error.
-            try {
-                if (this.db && this.isTransactionActive) {
-                    await this.db.runAsync("ROLLBACK")
-                }
-            } catch (rollbackError) {
-                logErrorWithTimestamp(`[DB] Failed to rollback transaction${settingsInfo}:`, rollbackError)
-            }
 
             endTiming({ status: "error", settingsCount: settings.length, error: error instanceof Error ? error.message : String(error) })
             throw error
@@ -665,50 +675,60 @@ export class DatabaseManager {
                 logWithTimestamp(`[DB] Saving ${races.length} races using prepared statement.`)
 
                 await this.db!.runAsync("BEGIN TRANSACTION")
-                const stmt = await this.db!.prepareAsync(
-                    `INSERT OR REPLACE INTO ${this.TABLE_RACES} (key, name, date, raceTrack, course, direction, grade, terrain, distanceType, distanceMeters, fans, turnNumber, nameFormatted) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                )
+                let stmt: SQLite.SQLiteStatement | null = null
+                try {
+                    stmt = await this.db!.prepareAsync(
+                        `INSERT OR REPLACE INTO ${this.TABLE_RACES} (key, name, date, raceTrack, course, direction, grade, terrain, distanceType, distanceMeters, fans, turnNumber, nameFormatted)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    )
 
-                // Execute all races in batch using prepared statement.
-                for (const race of races) {
-                    await stmt.executeAsync([
-                        race.key,
-                        race.name,
-                        race.date,
-                        race.raceTrack,
-                        race.course,
-                        race.direction,
-                        race.grade,
-                        race.terrain,
-                        race.distanceType,
-                        race.distanceMeters,
-                        race.fans,
-                        race.turnNumber,
-                        race.nameFormatted,
-                    ])
+                    // Execute all races in batch using prepared statement.
+                    for (const race of races) {
+                        await stmt.executeAsync([
+                            race.key,
+                            race.name,
+                            race.date,
+                            race.raceTrack,
+                            race.course,
+                            race.direction,
+                            race.grade,
+                            race.terrain,
+                            race.distanceType,
+                            race.distanceMeters,
+                            race.fans,
+                            race.turnNumber,
+                            race.nameFormatted,
+                        ])
+                    }
+
+                    await this.db!.runAsync("COMMIT")
+
+                    logWithTimestamp(`[DB] Successfully saved ${races.length} races in batch.`)
+                } catch (error) {
+                    // Roll back here, inside the operation that still owns the connection: executeWithQueue's
+                    // finally clears isTransactionActive as soon as this callback settles, before a caller's
+                    // own catch could ever see it, so a rollback attempted one level up never actually runs.
+                    try {
+                        await this.db!.runAsync("ROLLBACK")
+                    } catch (rollbackError) {
+                        logErrorWithTimestamp("[DB] Failed to rollback races batch transaction:", rollbackError)
+                    }
+                    throw error
+                } finally {
+                    if (stmt) {
+                        try {
+                            await stmt.finalizeAsync()
+                        } catch (finalizeError) {
+                            logErrorWithTimestamp("[DB] Failed to finalize races batch statement:", finalizeError)
+                        }
+                    }
                 }
-
-                // Finalize statement and commit transaction.
-                await stmt.finalizeAsync()
-                await this.db!.runAsync("COMMIT")
-
-                logWithTimestamp(`[DB] Successfully saved ${races.length} races in batch.`)
             })
 
             endTiming({ status: "success", racesCount: races.length })
         } catch (error) {
             const racesInfo = races.length > 0 ? ` (${races.length} races: ${races.map((r) => `${r.name} (turn ${r.turnNumber})`).join(", ")})` : " (no races)"
             logErrorWithTimestamp(`[DB] Failed to save races batch${racesInfo}:`, error)
-
-            // Rollback transaction on error.
-            try {
-                if (this.db && this.isTransactionActive) {
-                    await this.db.runAsync("ROLLBACK")
-                }
-            } catch (rollbackError) {
-                logErrorWithTimestamp(`[DB] Failed to rollback transaction${racesInfo}:`, rollbackError)
-            }
 
             endTiming({ status: "error", racesCount: races.length, error: error instanceof Error ? error.message : String(error) })
             throw error
@@ -759,50 +779,60 @@ export class DatabaseManager {
                 logWithTimestamp(`[DB] Saving ${skills.length} skills using prepared statement.`)
 
                 await this.db!.runAsync("BEGIN TRANSACTION")
-                const stmt = await this.db!.prepareAsync(
-                    `INSERT OR REPLACE INTO ${this.TABLE_SKILLS} (key, skill_id, name_en, desc_en, icon_id, cost, eval_pt, condition, precondition, inherited, community_tier, upgrade, downgrade)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                )
+                let stmt: SQLite.SQLiteStatement | null = null
+                try {
+                    stmt = await this.db!.prepareAsync(
+                        `INSERT OR REPLACE INTO ${this.TABLE_SKILLS} (key, skill_id, name_en, desc_en, icon_id, cost, eval_pt, condition, precondition, inherited, community_tier, upgrade, downgrade)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+                    )
 
-                // Execute all skills in batch using prepared statement.
-                for (const skill of skills) {
-                    await stmt.executeAsync([
-                        skill.key,
-                        skill.skill_id,
-                        skill.name_en,
-                        skill.desc_en,
-                        skill.icon_id,
-                        skill.cost,
-                        skill.eval_pt,
-                        skill.condition,
-                        skill.precondition,
-                        skill.inherited,
-                        skill.community_tier,
-                        skill.upgrade,
-                        skill.downgrade,
-                    ])
+                    // Execute all skills in batch using prepared statement.
+                    for (const skill of skills) {
+                        await stmt.executeAsync([
+                            skill.key,
+                            skill.skill_id,
+                            skill.name_en,
+                            skill.desc_en,
+                            skill.icon_id,
+                            skill.cost,
+                            skill.eval_pt,
+                            skill.condition,
+                            skill.precondition,
+                            skill.inherited,
+                            skill.community_tier,
+                            skill.upgrade,
+                            skill.downgrade,
+                        ])
+                    }
+
+                    await this.db!.runAsync("COMMIT")
+
+                    logWithTimestamp(`[DB] Successfully saved ${skills.length} skills in batch.`)
+                } catch (error) {
+                    // Roll back here, inside the operation that still owns the connection: executeWithQueue's
+                    // finally clears isTransactionActive as soon as this callback settles, before a caller's
+                    // own catch could ever see it, so a rollback attempted one level up never actually runs.
+                    try {
+                        await this.db!.runAsync("ROLLBACK")
+                    } catch (rollbackError) {
+                        logErrorWithTimestamp("[DB] Failed to rollback skills batch transaction:", rollbackError)
+                    }
+                    throw error
+                } finally {
+                    if (stmt) {
+                        try {
+                            await stmt.finalizeAsync()
+                        } catch (finalizeError) {
+                            logErrorWithTimestamp("[DB] Failed to finalize skills batch statement:", finalizeError)
+                        }
+                    }
                 }
-
-                // Finalize statement and commit transaction.
-                await stmt.finalizeAsync()
-                await this.db!.runAsync("COMMIT")
-
-                logWithTimestamp(`[DB] Successfully saved ${skills.length} skills in batch.`)
             })
 
             endTiming({ status: "success", skillsCount: skills.length })
         } catch (error) {
             const skillsInfo = skills.length > 0 ? ` (${skills.length} skills: ${skills.map((s) => `${s.name_en} (id ${s.skill_id})`).join(", ")})` : " (no skills)"
             logErrorWithTimestamp(`[DB] Failed to save skills batch${skillsInfo}:\n`, error)
-
-            // Rollback transaction on error.
-            try {
-                if (this.db && this.isTransactionActive) {
-                    await this.db.runAsync("ROLLBACK")
-                }
-            } catch (rollbackError) {
-                logErrorWithTimestamp(`[DB] Failed to rollback transaction${skillsInfo}:`, rollbackError)
-            }
 
             endTiming({ status: "error", skillsCount: skills.length, error: error instanceof Error ? error.message : String(error) })
             throw error
@@ -1028,6 +1058,74 @@ export class DatabaseManager {
         } catch (error) {
             logErrorWithTimestamp(`[DB] Failed to delete profile ${id}:`, error)
             endTiming({ status: "error", profileId: id, error: error instanceof Error ? error.message : String(error) })
+            throw error
+        }
+    }
+
+    /**
+     * Replace every stored profile with `profiles` in one transaction: the old rows are deleted and the
+     * new ones inserted inside the same `BEGIN`/`COMMIT`, so a reader never observes zero profiles, and a
+     * name shared between an old and a new profile never collides (the old row is already gone within the
+     * same transaction before the new one is inserted). On any failure the transaction rolls back and the
+     * previous profiles are left exactly as they were.
+     * @param profiles - The complete new profile set to store, replacing everything currently saved.
+     * @returns A promise that resolves when the replacement has committed.
+     */
+    async replaceAllProfiles(profiles: { name: string; settings: any }[]): Promise<void> {
+        const endTiming = startTiming("database_replace_all_profiles", "database")
+
+        this.ensureInitialized()
+
+        try {
+            await this.executeWithQueue(async () => {
+                logWithTimestamp(`[DB] Replacing all profiles with ${profiles.length} imported profile(s).`)
+
+                await this.db!.runAsync("BEGIN TRANSACTION")
+                let stmt: SQLite.SQLiteStatement | null = null
+                try {
+                    await this.db!.runAsync(`DELETE FROM ${this.TABLE_PROFILES}`)
+
+                    if (profiles.length > 0) {
+                        stmt = await this.db!.prepareAsync(
+                            `INSERT INTO ${this.TABLE_PROFILES} (name, settings, created_at, updated_at)
+                             VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+                        )
+                        for (const profile of profiles) {
+                            await stmt.executeAsync([profile.name, JSON.stringify(profile.settings)])
+                        }
+                    }
+
+                    await this.db!.runAsync("COMMIT")
+
+                    logWithTimestamp(`[DB] Successfully replaced all profiles with ${profiles.length} imported profile(s).`)
+                } catch (error) {
+                    // Roll back here, inside the operation that still owns the connection: executeWithQueue's
+                    // finally clears isTransactionActive as soon as this callback settles, before a caller's
+                    // own catch could ever see it, so a rollback attempted one level up never actually runs.
+                    // Undoes the DELETE above along with any partial INSERTs, so the old profiles are left
+                    // exactly as they were before this call.
+                    try {
+                        await this.db!.runAsync("ROLLBACK")
+                    } catch (rollbackError) {
+                        logErrorWithTimestamp("[DB] Failed to rollback profile replacement:", rollbackError)
+                    }
+                    throw error
+                } finally {
+                    if (stmt) {
+                        try {
+                            await stmt.finalizeAsync()
+                        } catch (finalizeError) {
+                            logErrorWithTimestamp("[DB] Failed to finalize profile-replacement statement:", finalizeError)
+                        }
+                    }
+                }
+            })
+
+            endTiming({ status: "success", profilesCount: profiles.length })
+        } catch (error) {
+            logErrorWithTimestamp(`[DB] Failed to replace all profiles (${profiles.length} imported profile(s)):`, error)
+
+            endTiming({ status: "error", profilesCount: profiles.length, error: error instanceof Error ? error.message : String(error) })
             throw error
         }
     }
