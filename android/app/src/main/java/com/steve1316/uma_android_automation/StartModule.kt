@@ -1,15 +1,18 @@
 package com.steve1316.uma_android_automation
 
+import android.Manifest
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.database.DatabaseErrorHandler
 import android.database.sqlite.SQLiteDatabase
 import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityManager
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.net.toUri
 import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
@@ -1012,6 +1015,48 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         } catch (e: Exception) {
             Log.e(TAG, "Failed to retrieve accessibility status: ${e.message}")
             promise.reject("ACCESSIBILITY_STATUS_ERROR", "Failed to retrieve accessibility status: ${e.message}")
+        }
+    }
+
+    /**
+     * Whether WRITE_SECURE_SETTINGS is granted (once, over adb). Without it the bot cannot restore
+     * its own accessibility service after an emulator wipes the grant ([Game.ensureAccessibilityService]).
+     * Read-only; used by the Start warnings.
+     */
+    @ReactMethod
+    fun hasSecureSettingsGrant(promise: Promise) {
+        try {
+            promise.resolve(reactApplicationContext.checkSelfPermission(Manifest.permission.WRITE_SECURE_SETTINGS) == PackageManager.PERMISSION_GRANTED)
+        } catch (e: Exception) {
+            promise.reject("SECURE_SETTINGS_GRANT_ERROR", "Failed to read the secure settings grant: ${e.message}")
+        }
+    }
+
+    /**
+     * The screen-off timeout in milliseconds, and whether the device stays awake while charging.
+     * The screen turning off stops a running bot, so the Start warnings flag a short timeout.
+     * Rejects when the timeout setting is missing, so the caller treats it as unknown.
+     */
+    @ReactMethod
+    fun getScreenTimeout(promise: Promise) {
+        try {
+            val resolver = reactApplicationContext.contentResolver
+            val map = Arguments.createMap()
+            map.putDouble("timeoutMs", Settings.System.getInt(resolver, Settings.System.SCREEN_OFF_TIMEOUT).toDouble())
+            map.putBoolean("stayOnWhilePluggedIn", Settings.Global.getInt(resolver, Settings.Global.STAY_ON_WHILE_PLUGGED_IN, 0) != 0)
+            promise.resolve(map)
+        } catch (e: Exception) {
+            promise.reject("SCREEN_TIMEOUT_ERROR", "Failed to read the screen timeout: ${e.message}")
+        }
+    }
+
+    /** Whether this app may post notifications (off by default for new installs on Android 13+). */
+    @ReactMethod
+    fun areNotificationsEnabled(promise: Promise) {
+        try {
+            promise.resolve(NotificationManagerCompat.from(reactApplicationContext).areNotificationsEnabled())
+        } catch (e: Exception) {
+            promise.reject("NOTIFICATIONS_ENABLED_ERROR", "Failed to read the notification setting: ${e.message}")
         }
     }
 

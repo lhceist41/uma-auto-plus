@@ -27,6 +27,7 @@ import { presetObjectiveOf } from "../../lib/adaptiveSkillPolicy"
 import { presetMoodFloorOf } from "../../lib/moodFloorPolicy"
 import { GRAND_CONCERT_KEY, GRAND_CONCERT_WARNING, isGrandConcert, scenarioCapabilities } from "../../lib/scenarioKey"
 import { presentQueueProgress, type QueueProgressEvent } from "../../lib/queueProgressPresentation"
+import { collectPreflightWarnings, readPreflightProbes, shouldShowPreflight, type PreflightItem } from "../../lib/preflightWarnings"
 import { useNavigation } from "@react-navigation/native"
 
 const styles = StyleSheet.create({
@@ -134,6 +135,8 @@ const Home = () => {
     // confirm dialog is shown. Empty list → start proceeds without a prompt.
     const [showAvoidDialog, setShowAvoidDialog] = useState<boolean>(false)
     const [avoidWarnings, setAvoidWarnings] = useState<{ label: string; reason: string }[]>([])
+    const [showPreflightDialog, setShowPreflightDialog] = useState<boolean>(false)
+    const [preflightItems, setPreflightItems] = useState<PreflightItem[]>([])
     const [interruptedQueue, setInterruptedQueue] = useState<{ currentRun: number; totalRuns: number; ageMinutes: number; phase: string } | null>(null)
 
     const navigation = useNavigation()
@@ -586,6 +589,27 @@ const Home = () => {
         }
     }
 
+    /**
+     * Setup warnings for a normal Start (never a diagnostic) that could end a long run early.
+     * Advisory only: it runs before the single-flight gate, "Start anyway" goes straight to
+     * proceedToStart, and a failed probe or check just means no warning for that item.
+     */
+    const startAfterPreflight = async () => {
+        if (diagnosticRequest().key === null) {
+            try {
+                const items = collectPreflightWarnings(bsc.settings, await readPreflightProbes(StartModule))
+                if (shouldShowPreflight(items)) {
+                    setPreflightItems(items)
+                    setShowPreflightDialog(true)
+                    return
+                }
+            } catch (error) {
+                logErrorWithTimestamp("[START] Start warnings could not be checked; starting without them.", error)
+            }
+        }
+        await proceedToStart()
+    }
+
     const runStartSequence = async (normalConfirmed = false) => {
         const target = JSON.parse(JSON.stringify(bsc.settings))
         const launch = diagnosticLaunch(target, normalConfirmed)
@@ -707,7 +731,7 @@ const Home = () => {
             setShowAvoidDialog(true)
             return
         }
-        await proceedToStart()
+        await startAfterPreflight()
     }
 
     /** Gets the appropriate icon component for the SelectButton based on device state. */
@@ -1102,6 +1126,46 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                         <AlertDialogAction
                             onPress={() => {
                                 setShowAvoidDialog(false)
+                                startAfterPreflight()
+                            }}
+                        >
+                            <Text>Start anyway</Text>
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={showPreflightDialog} onOpenChange={setShowPreflightDialog}>
+                <AlertDialogContent onDismiss={() => setShowPreflightDialog(false)}>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Before you start</AlertDialogTitle>
+                        <AlertDialogDescription>These could cut a long run short or hide how it ended. You can start anyway.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <View style={{ gap: 8 }}>
+                        {preflightItems.map((item) => (
+                            <View
+                                key={item.id}
+                                style={{
+                                    paddingHorizontal: 10,
+                                    paddingVertical: 8,
+                                    backgroundColor: item.kind === "warning" ? "rgba(234, 179, 8, 0.15)" : colors.muted,
+                                    borderLeftWidth: 3,
+                                    borderLeftColor: item.kind === "warning" ? "#eab308" : colors.border,
+                                    borderRadius: 6,
+                                }}
+                            >
+                                <Text style={{ fontSize: 13, fontWeight: "700", color: item.kind === "warning" ? "#eab308" : colors.foreground, marginBottom: 2 }}>{item.title}</Text>
+                                <Text style={{ fontSize: 12, color: colors.foreground, lineHeight: 16 }}>{item.text}</Text>
+                            </View>
+                        ))}
+                    </View>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onPress={() => setShowPreflightDialog(false)}>
+                            <Text>Cancel</Text>
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onPress={() => {
+                                setShowPreflightDialog(false)
                                 proceedToStart()
                             }}
                         >
