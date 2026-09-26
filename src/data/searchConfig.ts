@@ -1205,9 +1205,17 @@ const searchConfig: SearchOption[] = [
         id: "run-queue-tp-restore-items",
         title: "Restore TP with Items",
         description:
-            "When the game asks to restore TP between queued runs, refill TP to the max and continue. Priority: Toughness 30, then Star Fruit, then Carats as the last resort. Capped at 10 restores per session.",
+            "When the game asks to restore TP between queued runs or for a spark reroll, restore it and continue: Toughness 30 first, then Star Fruit, then Carats if allowed below, each filling TP with the game's Max button (a single + tap if Max is not found). If Carats are not allowed and the items run out, the restore is declined: a spark reroll is skipped, and a career start stops the queue and says why. At most 10 restores per bot session, or twice the number of queued runs plus 2 if that is more.",
         page: "RunQueueSettings",
         parentId: "run-queue-enable",
+    },
+    {
+        id: "run-queue-tp-restore-carats",
+        title: "Allow Carats for TP Restore",
+        description:
+            "Carats are paid currency. On by default: when Toughness 30 and Star Fruit have run out, the bot restores TP with Carats, filling with the Max button like the items, so the queue keeps going. Carat restores count toward the same per-session limit. Turn this off to stop instead: a career start ends the queue and says why, and a spark reroll is skipped.",
+        page: "RunQueueSettings",
+        parentId: "run-queue-tp-restore-items",
     },
     {
         id: "run-queue-spark-reroll",

@@ -353,11 +353,60 @@ class CareerLaunchNavigator(private val context: Context) {
             "TP restore session cap reached ($count/$max restores this bot session). Item restore is enabled but the session budget is spent, " +
                 "so the restore prompt was declined. All completed runs are saved - pressing Start begins a fresh bot session and re-arms the restore budget."
 
+        /** Failure reason when only Carats could restore TP and `runQueue.allowCaratsForTpRestore`
+         * is off. Pinned by a JVM test so the persisted reason never falls back to the generic
+         * out-of-TP text, which would send triage after the wrong setting. */
+        internal const val TP_RESTORE_CARATS_NOT_ALLOWED_REASON =
+            "TP restore stopped: no Toughness 30 or Star Fruit left, and Carats are not allowed. The restore prompt was declined."
+
+        /** The Recover TP picker's rows, in ladder order. */
+        internal enum class TpRestoreItem(val label: String) {
+            TOUGHNESS_30("Toughness 30"),
+            STAR_FRUIT("Star Fruit"),
+            CARATS("Carats"),
+        }
+
+        /** The ladder's decision for the rows the picker shows. */
+        internal sealed interface TpRestoreRowChoice {
+            data class Use(val item: TpRestoreItem) : TpRestoreRowChoice
+
+            /** Only Carats could still restore TP and the user has not allowed them. */
+            data object CaratsNotAllowed : TpRestoreRowChoice
+
+            data object NoRow : TpRestoreRowChoice
+        }
+
+        /** Item ladder: Toughness 30 (farmed) -> Star Fruit (event stock) -> Carats, and Carats only
+         * while `runQueue.allowCaratsForTpRestore` is on (the default). Turned off, a picker with
+         * only Carats left is declined instead. */
+        internal fun chooseTpRestoreRow(hasToughness30: Boolean, hasStarFruit: Boolean, allowCarats: Boolean, hasCarats: Boolean): TpRestoreRowChoice =
+            when {
+                hasToughness30 -> TpRestoreRowChoice.Use(TpRestoreItem.TOUGHNESS_30)
+                hasStarFruit -> TpRestoreRowChoice.Use(TpRestoreItem.STAR_FRUIT)
+                !allowCarats -> TpRestoreRowChoice.CaratsNotAllowed
+                hasCarats -> TpRestoreRowChoice.Use(TpRestoreItem.CARATS)
+                else -> TpRestoreRowChoice.NoRow
+            }
+
+        /** Whether RECOVER_TP_QUANTITY may finish the restore on the popup it found. With Carats
+         * allowed any Recover TP popup is finished. The popup does not say which item it is for, so
+         * with Carats off only a ladder-opened item popup ([pendingTpRestoreItem]) is finished; an
+         * unknown or Carats popup is cancelled, which spends nothing, and the next restore prompt
+         * re-runs the ladder. */
+        internal fun mayFinishRecoverTpQuantity(restoreWithItems: Boolean, capReached: Boolean, allowCarats: Boolean, pendingItem: TpRestoreItem?): Boolean =
+            restoreWithItems && !capReached && (allowCarats || (pendingItem != null && pendingItem != TpRestoreItem.CARATS))
+
+        /** The item whose quantity popup the ladder opened and has not finished. Companion-held
+         * like the counter, so a fresh navigator's RECOVER_TP_QUANTITY handler still knows it. */
+        @Volatile
+        private var pendingTpRestoreItem: TpRestoreItem? = null
+
         /** Resets the session-scoped TP restore counter and derives the session's cap from the
          * configured queue length. Called when a new bot session starts. */
         internal fun resetTpRestoresForSession(totalRuns: Int = 1) {
             tpRestoresThisSession = 0
             maxTpRestoresThisSession = sessionRestoreCapFor(totalRuns)
+            pendingTpRestoreItem = null
         }
     }
 
@@ -3105,7 +3154,11 @@ class CareerLaunchNavigator(private val context: Context) {
             }
         if (!Regex("\\bTP\\b").containsMatchIn(body.uppercase())) return false
         MessageLog.i(TAG, "[REROLL] Out of TP for the reroll: \"${body.replace("\n", " ").take(70)}\". Restoring with items...")
-        return driveTpRestorePicker(noLocation.x, noLocation.y) == TpRestoreOutcome.RESTORED
+        val outcome = driveTpRestorePicker(noLocation.x, noLocation.y)
+        if (outcome == TpRestoreOutcome.CARATS_NOT_ALLOWED) {
+            MessageLog.w(TAG, "[REROLL] Not restoring for the reroll: $TP_RESTORE_CARATS_NOT_ALLOWED_REASON If TP is still short at the next career start, the queue stops there.")
+        }
+        return outcome == TpRestoreOutcome.RESTORED
     }
 
     /** Re-clicks Reroll Sparks and the spend confirmation after a TP restore. One retry only. */
@@ -3439,11 +3492,13 @@ class CareerLaunchNavigator(private val context: Context) {
      * Default: decline and end the queue gracefully - restoring spends resources, and that
      * decision belongs to the user. With the opt-in `runQueue.enableTpRestoreWithItems`
      * setting, the flow the user specified runs instead: Restore -> pick a row off the item
-     * ladder (Toughness 30, then Star Fruit, then Carats as the last resort) -> quantity ->
-     * OK -> Close -> resume the career start. Every rung Max-fills to the cap (an Event Boost
-     * career costs 60 TP, more than one use covers, and fewer restore round-trips means fewer
-     * chances for the flow to break). Total Carat spend tracks TP consumed either way; Max
-     * just batches it - per the maintainer's explicit request 2026-07-03.
+     * ladder (Toughness 30, then Star Fruit, then Carats while `runQueue.allowCaratsForTpRestore`
+     * is on) -> quantity -> OK -> Close -> resume the career start. Every rung Max-fills to the
+     * cap (an Event Boost career costs 60 TP, more than one use covers, and fewer restore
+     * round-trips means fewer chances for the flow to break). Total Carat spend tracks TP
+     * consumed either way; Max just batches it - per the maintainer's explicit request
+     * 2026-07-03. With Carats turned off, a picker with only Carats left stops the queue with
+     * [TP_RESTORE_CARATS_NOT_ALLOWED_REASON].
      */
     private fun handleTpRestoreDialog(): TransitionResult {
         val restoreWithItems = SettingsHelper.getBooleanSetting("runQueue", "enableTpRestoreWithItems", false)
@@ -3498,52 +3553,62 @@ class CareerLaunchNavigator(private val context: Context) {
                     isRecoverable = false,
                     recommendedAction = "Restore TP manually, then restart the queue. All completed runs are saved.",
                 )
+            TpRestoreOutcome.CARATS_NOT_ALLOWED ->
+                TransitionResult.Failed(
+                    reason = TP_RESTORE_CARATS_NOT_ALLOWED_REASON,
+                    transition = "TP_RESTORE_DIALOG -> RECOVER_TP_PICKER",
+                    isRecoverable = false,
+                    recommendedAction =
+                        "Restock Toughness 30 or Star Fruit, restore TP manually, or turn on \"Allow Carats for TP Restore\" in the Run Queue settings, then restart the queue. " +
+                            "All completed runs are saved.",
+                )
             // Quantity popup never presented OK - leave the screen up and re-detect next tick.
             TpRestoreOutcome.NO_QUANTITY_OK -> TransitionResult.Continue
         }
     }
 
     /** Outcome of driving the Recover TP picker (see [driveTpRestorePicker]). */
-    private enum class TpRestoreOutcome { RESTORED, NO_ROW, NO_QUANTITY_OK }
+    private enum class TpRestoreOutcome { RESTORED, NO_ROW, CARATS_NOT_ALLOWED, NO_QUANTITY_OK }
 
     /**
      * Drives the item-based TP restore from the "Restore TP?" dialog through the Recover TP
      * picker: Restore -> item ladder -> Use -> Max-fill quantity -> OK -> Close. Shared by the
      * career-start restore and the spark reroll's TP-short path - both spend the same items
      * against the same per-session cap. [anchorX]/[anchorY] locate the dialog's No button; the
-     * Restore button sits at a fixed offset to its right. NO_ROW closes the picker before
-     * returning; NO_QUANTITY_OK leaves the screen as-is for the caller to re-detect.
+     * Restore button sits at a fixed offset to its right. NO_ROW and CARATS_NOT_ALLOWED close the
+     * picker before returning; NO_QUANTITY_OK leaves the screen as-is for the caller to re-detect.
      */
     private fun driveTpRestorePicker(anchorX: Double, anchorY: Double): TpRestoreOutcome {
         CoordinateTap.tap(gestureUtils, anchorX + TP_RESTORE_FROM_NO_DX, anchorY, "tp_restore_button")
         waitSafe(1.5)
 
-        // Item ladder: Toughness 30 (farmed) -> Star Fruit (event stock) -> Carats (premium,
-        // last resort). Rows shift up as stocks empty - the game hides depleted item rows
-        // outright - so each rung is anchored by its own template, never by row position.
+        // Rows shift up as stocks empty - the game hides depleted item rows outright - so each
+        // rung is anchored by its own template, never by row position. With Carats turned off the
+        // Carats row is not even located, so it can never be tapped.
+        val allowCarats = SettingsHelper.getBooleanSetting("runQueue", "allowCaratsForTpRestore", true)
         val drinkLocation = IconTpDrink.find(iu).first
         val starFruitLocation = if (drinkLocation == null) IconTpStarFruit.find(iu).first else null
-        val caratsLocation = if (drinkLocation == null && starFruitLocation == null) IconTpCarats.find(iu).first else null
-        val rowLocation = drinkLocation ?: starFruitLocation ?: caratsLocation
-        if (rowLocation == null) {
-            MessageLog.w(TAG, "[NAV] No restore row found in the Recover TP picker (Toughness 30, Star Fruit, or Carats). Closing it.")
-            // The picker uses the wide list-dialog Close - the standard variants left it open on
-            // screen when this branch fired live (2026-07-03).
-            if (!ButtonCloseWide.click(iu) && !ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
-            waitSafe(1.0)
-            return TpRestoreOutcome.NO_ROW
-        }
-        val useCarats = caratsLocation != null
-        val itemName =
-            when {
-                drinkLocation != null -> "Toughness 30"
-                starFruitLocation != null -> "Star Fruit"
-                else -> "Carats"
+        val caratsLocation = if (allowCarats && drinkLocation == null && starFruitLocation == null) IconTpCarats.find(iu).first else null
+        val item =
+            when (val choice = chooseTpRestoreRow(drinkLocation != null, starFruitLocation != null, allowCarats, caratsLocation != null)) {
+                is TpRestoreRowChoice.Use -> choice.item
+                TpRestoreRowChoice.CaratsNotAllowed -> {
+                    MessageLog.w(TAG, "[NAV] No Toughness 30 or Star Fruit stock left and Carats are not allowed. Closing the Recover TP picker without spending.")
+                    closeRecoverTpPicker()
+                    return TpRestoreOutcome.CARATS_NOT_ALLOWED
+                }
+                TpRestoreRowChoice.NoRow -> {
+                    MessageLog.w(TAG, "[NAV] No restore row found in the Recover TP picker (Toughness 30, Star Fruit, or Carats). Closing it.")
+                    closeRecoverTpPicker()
+                    return TpRestoreOutcome.NO_ROW
+                }
             }
-        if (useCarats) {
-            MessageLog.w(TAG, "[NAV] No Toughness 30 or Star Fruit stock left. Max-filling TP with Carats (last resort per the enabled setting).")
+        val rowLocation = drinkLocation ?: starFruitLocation ?: caratsLocation ?: return TpRestoreOutcome.NO_ROW
+        if (item == TpRestoreItem.CARATS) {
+            MessageLog.w(TAG, "[NAV] No Toughness 30 or Star Fruit stock left. Max-filling TP with Carats (allowed by the Carats setting).")
         }
 
+        pendingTpRestoreItem = item
         CoordinateTap.tap(gestureUtils, rowLocation.x + TP_USE_FROM_DRINK_DX, rowLocation.y + TP_USE_FROM_DRINK_DY, "tp_use_button")
         waitSafe(1.2)
 
@@ -3570,43 +3635,60 @@ class CareerLaunchNavigator(private val context: Context) {
         // place - the 07-12 failure completed cleanly when the recovery state re-drove it two
         // minutes later, but by then the reroll window was gone, so the retry has to happen here.
         if (ButtonMax.find(iu).first != null) {
-            MessageLog.w(TAG, "[NAV] Recover TP quantity popup still open after Max+OK ($itemName) - retrying the pair once.")
+            MessageLog.w(TAG, "[NAV] Recover TP quantity popup still open after Max+OK (${item.label}) - retrying the pair once.")
             waitSafe(1.5)
             ButtonMax.click(iu)
             waitSafe(0.6)
             ButtonOk.click(iu)
             waitSafe(1.2)
             if (ButtonMax.find(iu).first != null) {
-                MessageLog.w(TAG, "[NAV] Recover TP quantity popup still open after the retry ($itemName) - the restore did not go through. Re-detecting...")
+                MessageLog.w(TAG, "[NAV] Recover TP quantity popup still open after the retry (${item.label}) - the restore did not go through. Re-detecting...")
                 return TpRestoreOutcome.NO_QUANTITY_OK
             }
         }
         if (!ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
         waitSafe(1.0)
 
+        pendingTpRestoreItem = null
         tpRestoresThisSession++
-        MessageLog.i(TAG, "[NAV] Restored TP with $itemName (restore $tpRestoresThisSession/$maxTpRestoresThisSession this session).")
+        MessageLog.i(TAG, "[NAV] Restored TP with ${item.label} (restore $tpRestoresThisSession/$maxTpRestoresThisSession this session).")
         return TpRestoreOutcome.RESTORED
+    }
+
+    /** Closes the Recover TP picker list. It uses the wide list-dialog Close - the standard
+     * variants left it open on screen when the no-row branch fired live (2026-07-03). */
+    private fun closeRecoverTpPicker() {
+        if (!ButtonCloseWide.click(iu) && !ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
+        waitSafe(1.0)
     }
 
     /**
      * RECOVER_TP_QUANTITY: the Recover TP quantity popup is up on its own - a dispatch death cut
      * a restore short mid-flow, or the queue was started cold on this screen. Finish the restore:
      * Max-fill, OK, verify the popup actually closed, then close the picker list behind it.
-     * Honors the same setting and session cap as the item ladder; when spending is not allowed
-     * the popup is cancelled so the next Start Career's TP prompt can decline cleanly.
+     * Honors the same settings and session cap as the item ladder. With Carats turned off, only a
+     * popup the ladder opened for an item is finished; an unknown one may be for Carats, so it and
+     * a Carats popup are cancelled, which spends nothing, and the next TP prompt re-runs the ladder.
      */
     private fun handleRecoverTpQuantity(): TransitionResult {
         val restoreWithItems = SettingsHelper.getBooleanSetting("runQueue", "enableTpRestoreWithItems", false)
-        if (!restoreWithItems || tpRestoresThisSession >= maxTpRestoresThisSession) {
-            MessageLog.w(
-                TAG,
-                "[NAV] Recover TP quantity popup is up but ${if (!restoreWithItems) "item restore is disabled" else "the session restore cap is reached"}. Cancelling it.",
-            )
+        val allowCarats = SettingsHelper.getBooleanSetting("runQueue", "allowCaratsForTpRestore", true)
+        val capReached = tpRestoresThisSession >= maxTpRestoresThisSession
+        val pendingItem = pendingTpRestoreItem
+        if (!mayFinishRecoverTpQuantity(restoreWithItems, capReached, allowCarats, pendingItem)) {
+            val why =
+                when {
+                    !restoreWithItems -> "item restore is disabled"
+                    capReached -> "the session restore cap is reached"
+                    pendingItem == null -> "Carats are not allowed and it was not opened by this session's restore, so it may be for Carats"
+                    else -> "Carats are not allowed and it is a Carats popup"
+                }
+            MessageLog.w(TAG, "[NAV] Recover TP quantity popup is up but $why. Cancelling it.")
             ButtonCancel.click(iu)
             waitSafe(1.0)
             if (!ButtonCloseWide.click(iu) && !ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
             waitSafe(1.0)
+            pendingTpRestoreItem = null
             return TransitionResult.Continue
         }
         if (!ButtonMax.click(iu)) {
@@ -3625,6 +3707,7 @@ class CareerLaunchNavigator(private val context: Context) {
         waitSafe(0.5)
         if (!ButtonCloseWide.click(iu) && !ButtonClose.click(iu)) ButtonCloseDialog.click(iu)
         waitSafe(1.0)
+        pendingTpRestoreItem = null
         tpRestoresThisSession++
         MessageLog.i(TAG, "[NAV] Restored TP from the quantity popup (restore $tpRestoresThisSession/$maxTpRestoresThisSession this session).")
         return TransitionResult.Continue

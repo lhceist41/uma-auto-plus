@@ -376,9 +376,12 @@ export interface Settings {
         // curated Smart Borrow list. Empty = list order only.
         preferredBorrowName: string
         // When the game asks "Restore TP?" between queued runs, refill TP and continue instead
-        // of ending the queue. Ladder: Toughness 30, then Star Fruit, then Carats as the last
-        // resort - every rung Max-fills to the cap.
+        // of ending the queue. Ladder: Toughness 30, then Star Fruit, then Carats while
+        // allowCaratsForTpRestore below is on - every rung Max-fills to the cap.
         enableTpRestoreWithItems: boolean
+        // Carats are paid currency. On by default: once Toughness 30 and Star Fruit are gone, the
+        // ladder Max-fills with Carats. Off: a picker with only Carats left stops the queue instead.
+        allowCaratsForTpRestore: boolean
         // Tick "Event Boost (TP Usage x2)" on the Final Confirmation screen before each career.
         // Doubles event rewards (and the TP cost) - only worth it while a TP event is live; turn
         // it off once the event ends. The Max TP restore above covers the doubled cost.
@@ -893,6 +896,7 @@ export const defaultSettings: Settings = {
         enableBuildAwareLaunch: false,
         preferredBorrowName: "",
         enableTpRestoreWithItems: false,
+        allowCaratsForTpRestore: true,
         enableEventBoost: false,
         enableSparkReroll: false,
         enableLegacyIncludeGuests: false,
