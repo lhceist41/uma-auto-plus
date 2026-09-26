@@ -24,7 +24,8 @@
         "test:coverage": "jest --coverage",
         "test:kt": "cd android && ./gradlew test",
         "test:hygiene": "node scripts/check-repo-hygiene.mjs",
-        "test:settings-parity": "node scripts/check-settings-parity.mjs"
+        "test:settings-parity": "node scripts/check-settings-parity.mjs",
+        "data:check": "node scripts/generate-veteran-identity-data.mjs --check && node scripts/generate-gc-fan-runtime-data.mjs --check && node scripts/generate-veteran-factor-domain.mjs --check"
     },
     "dependencies": {
         "@expo/vector-icons": "^15.0.3",

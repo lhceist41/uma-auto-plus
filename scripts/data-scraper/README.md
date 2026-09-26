@@ -23,6 +23,22 @@ After any refresh that changes `character_outfits.json` (a new costume, or a new
 
 After any refresh that changes `character_objectives.json` (a new character, or corrected mandatory-race data), first re-run `node scripts/extract-master-route-data.mjs --db <master.mdb>` against a current game install, then regenerate the derived artifacts that read it: `node scripts/compile-master-data.mjs` (offline master-data tooling) and `node scripts/generate-gc-fan-runtime-data.mjs` (the native GC runtime asset). All three have a `--check` flag to detect staleness; the extractor's check exits 3 when the committed fan goals differ from the game's.
 
+After any refresh that changes `skills.json` or `races.json` (new skills, a corrected race), or after a hand-edit to `src/data/scenarios.json`, regenerate the Veteran factor-name domain the Inspiration reader snaps its factor OCR onto: `node scripts/generate-veteran-factor-domain.mjs`. It has a `--check` flag too, and CI runs it.
+
+### Regeneration checklist
+
+A data refresh can silently miss one of these; check all five whenever any `src/data` raw file changes: `characters.json`, `character_outfits.json`, `character_objectives.json`, `skills.json`, `races.json`, `supports.json`, or `scenarios.json`.
+
+| Generator | Reads | `--check` in CI |
+|---|---|---|
+| `generate-veteran-identity-data.mjs` | `characters.json`, `character_outfits.json` | yes |
+| `extract-master-route-data.mjs` | a live game install's `master.mdb` | no (run by hand) |
+| `compile-master-data.mjs` | `skills.json`, `races.json`, and every other raw source | no |
+| `generate-gc-fan-runtime-data.mjs` | `character_objectives.json`, `races.json` | yes |
+| `generate-veteran-factor-domain.mjs` | `skills.json`, `races.json`, `scenarios.json` | yes |
+
+`yarn data:check` runs every `--check` this table marks "yes", in one command; `extract-master-route-data.mjs` and `compile-master-data.mjs` still need running by hand first, since the extractor needs a live game install and the compiler has no CI check to fail closed.
+
 ## Shipping a data refresh
 
 The data JSONs ship inside the JS bundle, so a refresh reaches devices via a normal release:
