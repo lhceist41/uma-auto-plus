@@ -14,7 +14,7 @@ A hands-off distribution of [steve1316/uma-android-automation](https://github.co
 - **Trainee rotation.** Queue several trainees and the bot cycles through them, each run under her own preset, paging the Scenario Select carousel to that trainee's scenario between runs. Off by default.
 - **Built-in presets.** 300 presets: 74 trainee cards, each with a build for all four career scenarios, plus four parent-farming variants. A searchable picker shows per-scenario fit advice, a Validated or Research badge, and starred favorites. Applying a preset sets its scenario with it.
 - **Grand Concert.** The newest career scenario is automated end to end, including its lesson shop and all five concerts. It is still marked experimental in the scenario picker.
-- **Overnight resilience.** The bot keeps the screen awake, restarts the game if it wedges, resumes an interrupted queue, gives up on a stuck run after a time limit you set, stops on an in-game date you schedule, rides out brief connection outages and the daily reset, and repairs its own Accessibility service when an emulator such as MuMu silently kills it mid-run.
+- **Overnight resilience.** During a career the bot restarts the game if it wedges, rides out the daily reset, and rides out a lost connection for up to 20 minutes, retrying with growing pauses, before giving up; these recoveries do not yet cover the pause between queued runs. It also offers to resume an interrupted queue when you press Start in UMA Auto+ within 6 hours (with the same run count), gives up on a stuck run after a time limit you set, stops on an in-game date you schedule, and repairs its own Accessibility service when an emulator such as MuMu silently kills it mid-run. The bot does not keep the screen awake and stops if the device screen turns off, so set a long screen timeout for unattended runs.
 - **Safer career launches.** Start waits until your selected preset is confirmed saved before it launches, so the trainee shown on Home is the trainee that runs. The bot also warns at career start when a trainee's aptitudes or race predictions make a run unlikely to finish, and asks for confirmation before starting a known scenario mismatch.
 - **Decision-engine extensions**, built on steve1316's scoring: a knapsack skill-buying strategy that accounts for upgrade chains, a choice of when mid-career skill buying happens (including an opt-in adaptive mode), single-star race prediction reading, Unity Cup opponent selection from the prediction circles, per-scenario stat caps for the July 2026 rebalance, and Trackblazer-specific tuning.
 - **Smart Borrow.** On queued launches the borrowed friend slot is filled from a curated list of strong cards instead of whatever sits in the top row, skipping picks the game would refuse.
@@ -45,7 +45,7 @@ Upstream improvements are merged in as they land. This fork extends that engine'
 
 # Disclaimer
 
-This project is purely for educational purposes to learn about Android automation and computer vision - basically a fun way to practice coding skills. Any usage is at your own risk. No one will be responsible for anything that happens to you or your own account except for yourself.
+This project is purely for educational purposes to learn about Android automation and computer vision - basically a fun way to practice coding skills. Any usage is at your own risk. No one will be responsible for anything that happens to you or your own account except for yourself. Using third-party tools with the game can lead to item removal or account suspension under its terms of use.
 
 # Requirements
 
@@ -117,7 +117,7 @@ Applying a preset replaces the settings it ships and leaves the rest of your con
 These are off unless you turn them on:
 
 - **Career-end spark reroll.** Spends 30 TP once to redraw a weak spark set, then reads both sets on the game's selection screen and keeps the better one. Anything it cannot verify stops safely for you to finish by hand. It spends TP, so supervise it the first few times.
-- **TP restore between runs.** When the game asks to restore TP mid-queue, refill from Toughness, then Star Fruit, then a Carats refill, instead of ending the queue.
+- **TP restore between runs.** When the game asks to restore TP mid-queue, restore from Toughness 30, then Star Fruit, then Carats, instead of ending the queue. Carats can be turned off in the Run Queue settings.
 - **Event Boost.** Ticks "Event Boost (TP Usage x2)" before each career. Only worth it while a TP event is live.
 - **Trainee rotation** in the run queue, described above.
 - **Build-Aware Launch (advanced).** Verifies the live borrow list, deck and launch screen against what it intended to run before it spends TP, and refuses to start rather than guess. There is no fallback: if it cannot confirm the state, no career starts. It can pair with an optional [Windows companion](tools/host-companion/README.md) that adds one bounded list swipe as a last-resort recovery step and can never select a card or start a career.

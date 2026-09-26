@@ -18,14 +18,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - **Record Decision Data**, a new setting on the Settings page, on by default. The bot keeps a small per-turn record of the decisions it made so a career can be reviewed and improved later. It is stored on your device only and nothing is uploaded, it is independent of Debug Mode (turning it on does not turn on the heavy debug diagnostics), and you can switch it off to keep storage use down.
 
+- Start now warns about setup that can end a long run early: a multi-run queue with Restore TP with Items off, Reuse Last Launch Setup off, the accessibility self-repair permission not granted, a screen timeout under 30 minutes, and notifications turned off for the app. The warnings never block: choose Start anyway to continue. When Discord alerts are off, a tip about them is shown alongside the warnings. Diagnostics skip these warnings.
+
 ### Changed
 
+- Allow Carats for TP Restore, a new Run Queue setting under Restore TP with Items, on by default. As before, once Toughness 30 and Star Fruit run out the bot keeps the queue going by filling TP with Carats. Turn it off to spend no Carats: a career start then ends the queue with a message saying why, and a spark reroll is skipped. The Restore TP with Items description now states the real per-session limit: 10 restores, or twice the number of queued runs plus 2 if that is more.
+- A lost connection mid-career is now ridden out for up to 20 minutes, retrying with growing pauses, instead of giving up after a quick burst of errors or retrying forever. If it does not come back, the run ends as a connection error rather than an unexplained failure, and Download Error now retries the same way. The bot never taps Title Screen on these dialogs. A loading screen that never clears now ends the run after 10 minutes instead of hanging it.
 - The preset documentation is split in two: `PRESETS_GUIDE.md` now covers what a preset does, how to pick one, and what to check when a run does not go the way you expected, while building or editing a preset moved to `docs/PRESET_AUTHORING.md`.
 - Home now distinguishes waiting for the overlay from the bot actually running. The interrupted-queue notice refreshes automatically instead of only on app launch, and its Resume button is replaced with a Discard action plus a warning when your current queue settings would not actually resume the saved run.
 - The queue-progress banner on Home is more truthful: a resumed queue counts the runs finished across the whole queue instead of only this app launch, a stopped queue is reported separately from a completed one, a breakpoint or trainee mismatch shows its own reason inline, and a failure says which run it reached without exposing raw internal error text.
 
 ### Fixed
 
+- Settings import now reports whether it actually succeeded, partly succeeded, or failed, and the preview screen states that your saved profiles will be replaced before you confirm. A failed profile import can no longer leave you with none, and if a profile was selected before the import, the first profile in the file is selected afterwards instead of none.
 - Newly generated default Racing Plans include the turn information the bot needs to read them. Race selection, order and priorities are unchanged, so scheduling conflicts can still appear. Existing saved and imported plans are preserved; see [Racing Plan recovery](TROUBLESHOOTING.md#the-racing-plan-is-missing-information) for older incomplete plans.
 - Stopping the bot from the floating overlay button during the pause between queued runs now ends the queue properly, instead of leaving Home stuck on "Waiting..." for a queue that had already stopped.
 
