@@ -6,6 +6,7 @@ import com.steve1316.automation_library.utils.DiscordUtils
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.MainActivity
+import com.steve1316.uma_android_automation.SessionTally
 import com.steve1316.uma_android_automation.components.ButtonRaceRecommendationsCenterStage
 import com.steve1316.uma_android_automation.components.ButtonRetry
 import com.steve1316.uma_android_automation.components.Checkbox
@@ -498,6 +499,7 @@ open class DialogHandler(val game: Game) {
     private fun handleConnectionError(dialog: DialogInterface) {
         when (val decision = game.connectionBudget.onError()) {
             is ConnectionOutageBudget.Decision.Retry -> {
+                if (decision.attempt == 1) SessionTally.connectionHolds.incrementAndGet()
                 val outageSeconds = decision.elapsedMs / 1000
                 if (decision.waitMs > 0) {
                     MessageLog.w(TAG, "[CONNECTION] ${dialog.title} (attempt ${decision.attempt}, outage ${outageSeconds}s so far). Waiting ${decision.waitMs / 1000}s before Retry.")

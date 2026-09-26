@@ -16,6 +16,7 @@ import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.CareerLaunchNavigator
 import com.steve1316.uma_android_automation.DebugTestGate
 import com.steve1316.uma_android_automation.MainActivity
+import com.steve1316.uma_android_automation.SessionTally
 import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.bot.SkillDatabase
@@ -642,6 +643,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             val restored = if (enabled.isEmpty()) expected else "$enabled:$expected"
             Settings.Secure.putString(myContext.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, restored)
             Settings.Secure.putString(myContext.contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, "1")
+            SessionTally.accessibilityRewrites.incrementAndGet()
             wait(waitForRebind, skipWaitingForLoading = true)
             MessageLog.w(TAG, "[WARN] ensureAccessibilityService:: Accessibility Service grant restored. Gestures should resume.")
             true
@@ -686,6 +688,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             // On: re-add ours so the framework binds a fresh instance with a working gesture dispatcher.
             Settings.Secure.putString(myContext.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, (others + expected).joinToString(":"))
             Settings.Secure.putString(myContext.contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, "1")
+            SessionTally.accessibilityRebinds.incrementAndGet()
             wait(waitForRebind, skipWaitingForLoading = true)
             MessageLog.w(TAG, "[WARN] forceRebindAccessibilityService:: Toggled the Accessibility Service off->on to recover silently-dead gesture dispatch.")
             true
@@ -739,6 +742,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
             MessageLog.w(TAG, "[RECOVERY] Relaunching the game ($GAME_PACKAGE) to recover from an unrecognized/soft-locked screen. The career resumes via Continue Career.")
             myContext.startActivity(launchIntent)
+            SessionTally.gameRelaunches.incrementAndGet()
             wait(waitAfterLaunch, skipWaitingForLoading = true)
             true
         } catch (e: Exception) {

@@ -12,6 +12,7 @@ import com.steve1316.automation_library.utils.SQLiteSettingsManager
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.BuildConfig
 import com.steve1316.uma_android_automation.CareerLaunchNavigator
+import com.steve1316.uma_android_automation.SessionTally
 import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.VeteranInspirationReader
 import com.steve1316.uma_android_automation.VeteranInspirationScanner
@@ -2119,6 +2120,7 @@ abstract class Campaign(game: Game) : Task(game) {
                     "(missing snapshot, different scenario, or duplicate rotation slots). " +
                     "Stopping the queue rather than play a career under the wrong trainee's settings — restart the queue from the game's home screen.",
             )
+            StartModule.queueStopKey = "TRAINEE_MISMATCH"
             StartModule.queueStopReason =
                 "Stopped on trainee mismatch - career was '$inCareer' but the queue loaded the preset for '$target' and the resync onto '$matched' failed. Restart from the home screen."
             StartModule.queueStopRequested = true
@@ -4174,6 +4176,10 @@ abstract class Campaign(game: Game) : Task(game) {
         StartModule.lastCareerEndScenario = scenarioToken
         StartModule.lastCareerEndFp = careerEndFp
         val outcome = classifyCareerOutcome(result.code, careerForceEnded)
+        StartModule.lastCareerEndOutcome = outcome
+        StartModule.lastCareerEndTurn = if (date.dayObserved) date.day else null
+        // Bumped last, after every stash above, so the queue report attributes them to this run only.
+        StartModule.lastCareerEndSeq++
         val quality = classifyCareerQuality(outcome, finaleRaces, finaleRaces1st)
 
         // Stage 3 of the outcome-measurement plan: the same fields as the ledger line, appended
@@ -4814,6 +4820,7 @@ abstract class Campaign(game: Game) : Task(game) {
             navigator.attachLiveGame(game)
             if (navigator.isOnHomeScreen()) {
                 lobbyReentryAttempts++
+                SessionTally.lobbyReentries.incrementAndGet()
                 MessageLog.w(TAG, "[RECOVERY] Detected the game's Home lobby mid-career (likely a daily-reset bounce). Re-entering the in-progress career in place (attempt $lobbyReentryAttempts/$maxLobbyReentryAttempts)...")
                 val result = navigator.navigate(reuseLastLaunchSetup = true, resumeInProgressCareer = true)
                 if (result.success) {

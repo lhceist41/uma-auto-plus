@@ -151,6 +151,8 @@ data class NavigationResult(
     val isRecoverable: Boolean = false,
     val recommendedAction: String = "",
     val screenshotPath: String = "",
+    /** Player-safe cause for the queue report, set only where the player can act on it; "" otherwise. */
+    val reasonKey: String = "",
 )
 
 /**
@@ -986,6 +988,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         failureReason = "Screen detection threw ${e.javaClass.simpleName}: ${e.message}",
                         isRecoverable = false,
                         recommendedAction = "Check that screen capture and the accessibility service are alive, then restart the queue. All completed runs are saved.",
+                        reasonKey = "CAPTURE_OR_ACCESSIBILITY",
                         screenshotPath = captureFailureScreenshot("exception_detect"),
                     )
                 }
@@ -1016,6 +1019,7 @@ class CareerLaunchNavigator(private val context: Context) {
                             failedTransition = "${detectedState.name} -> next screen",
                             isRecoverable = true,
                             recommendedAction = "Manually advance past the current screen and restart the queue.",
+                            reasonKey = "STUCK_ON_SCREEN",
                             screenshotPath = screenshotPath,
                         )
                     }
@@ -1041,6 +1045,7 @@ class CareerLaunchNavigator(private val context: Context) {
                             failedTransition = "TAP_TO_CONTINUE -> next screen",
                             isRecoverable = true,
                             recommendedAction = "Manually advance past the current screen and restart the queue.",
+                            reasonKey = "STUCK_ON_SCREEN",
                             screenshotPath = screenshotPath,
                         )
                     }
@@ -1064,6 +1069,7 @@ class CareerLaunchNavigator(private val context: Context) {
                             failedTransition = "${currentState.name} -> ${detectedState.name}",
                             isRecoverable = true,
                             recommendedAction = "Manually navigate past the current screen loop and restart the queue.",
+                            reasonKey = "STUCK_ON_SCREEN",
                             screenshotPath = screenshotPath,
                         )
                     }
@@ -1104,6 +1110,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         failedTransition = "${currentState.name} -> UNKNOWN",
                         isRecoverable = true,
                         recommendedAction = "Manually navigate to the in-career training screen and restart the queue.",
+                        reasonKey = "STUCK_ON_SCREEN",
                         screenshotPath = screenshotPath,
                     )
                 }
@@ -1161,6 +1168,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         failedTransition = "${currentState.name} -> next screen",
                         isRecoverable = false,
                         recommendedAction = "Check that screen capture and the accessibility service are alive, then restart the queue. All completed runs are saved.",
+                        reasonKey = "CAPTURE_OR_ACCESSIBILITY",
                         screenshotPath = captureFailureScreenshot("exception_handle"),
                     )
                 }
@@ -1182,6 +1190,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         isRecoverable = transitionResult.isRecoverable,
                         recommendedAction = transitionResult.recommendedAction,
                         screenshotPath = screenshotPath,
+                        reasonKey = transitionResult.reasonKey,
                     )
                 }
             }
@@ -1194,6 +1203,7 @@ class CareerLaunchNavigator(private val context: Context) {
             failureReason = "Navigation timed out after $MAX_DETECTION_ATTEMPTS attempts without reaching the training menu.",
             isRecoverable = true,
             recommendedAction = "Manually navigate to the in-career training screen and restart the queue.",
+            reasonKey = "STUCK_ON_SCREEN",
             screenshotPath = screenshotPath,
         )
     }
@@ -1691,6 +1701,7 @@ class CareerLaunchNavigator(private val context: Context) {
             val transition: String,
             val isRecoverable: Boolean = true,
             val recommendedAction: String = "Manually navigate to the in-career training screen and restart the queue.",
+            val reasonKey: String = "",
         ) : TransitionResult()
     }
 
@@ -1864,6 +1875,7 @@ class CareerLaunchNavigator(private val context: Context) {
             reason = reason,
             transition = transition,
             recommendedAction = "Open the career and spend the remaining skill points (or press Finish yourself if the balance is intentional), then restart the queue.",
+            reasonKey = "UNSPENT_SKILL_POINTS",
         )
     }
 
@@ -1944,6 +1956,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         reason = reason,
                         transition = "COMPLETE_CAREER_CONFIRMATION -> POST_RUN_RESULTS",
                         recommendedAction = "Open the career and spend the remaining skill points (or press Finish yourself if the balance is intentional), then restart the queue.",
+                        reasonKey = "UNSPENT_SKILL_POINTS",
                     )
                 }
             }
@@ -2267,6 +2280,7 @@ class CareerLaunchNavigator(private val context: Context) {
             reason = "SPARK_SELECTION blocked: $why",
             transition = transition,
             recommendedAction = "Finish the Spark Selection by hand (keeping the original set is always safe), then restart the queue.",
+            reasonKey = "SPARKS_NEED_HAND",
         )
     }
 
@@ -2817,6 +2831,7 @@ class CareerLaunchNavigator(private val context: Context) {
                             "below the log line). Failed bounded; no TP was spent and the game keeps the rolled set.",
                     transition = "SPARKS_KEEP_CONFIRMATION -> POST_RUN_RESULTS",
                     recommendedAction = "Confirm the Sparks by hand (keeping the rolled set is always safe), then restart the queue.",
+                    reasonKey = "SPARKS_NEED_HAND",
                 )
             },
         ) {
@@ -3154,7 +3169,7 @@ class CareerLaunchNavigator(private val context: Context) {
             }
         if (!Regex("\\bTP\\b").containsMatchIn(body.uppercase())) return false
         MessageLog.i(TAG, "[REROLL] Out of TP for the reroll: \"${body.replace("\n", " ").take(70)}\". Restoring with items...")
-        val outcome = driveTpRestorePicker(noLocation.x, noLocation.y)
+        val outcome = driveTpRestorePicker(noLocation.x, noLocation.y, purpose = "reroll")
         if (outcome == TpRestoreOutcome.CARATS_NOT_ALLOWED) {
             MessageLog.w(TAG, "[REROLL] Not restoring for the reroll: $TP_RESTORE_CARATS_NOT_ALLOWED_REASON If TP is still short at the next career start, the queue stops there.")
         }
@@ -3510,6 +3525,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 transition = "PRE_RUN_CONFIRMATION -> TP_RESTORE_DIALOG",
                 isRecoverable = false,
                 recommendedAction = "TP regenerates over time - restart the queue later, restore TP manually, or enable \"Restore TP with items\" in the Run Queue settings. All completed runs are saved.",
+                reasonKey = "TP_EMPTY",
             )
         }
 
@@ -3531,6 +3547,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 recommendedAction =
                     "Press Start to begin a fresh bot session - the restore budget re-arms and the queue can be run again. " +
                         "If a legitimately configured queue hit this cap, report it: the budget scales with the configured run count and should not run out.",
+                reasonKey = "TP_RESTORE_CAP",
             )
         }
 
@@ -3541,7 +3558,7 @@ class CareerLaunchNavigator(private val context: Context) {
         }
 
         MessageLog.i(TAG, "[NAV] Out of TP. Restoring with items per the enabled setting...")
-        return when (driveTpRestorePicker(noLocation.x, noLocation.y)) {
+        return when (driveTpRestorePicker(noLocation.x, noLocation.y, purpose = "launch")) {
             TpRestoreOutcome.RESTORED -> {
                 MessageLog.i(TAG, "[NAV] Resuming the career start.")
                 TransitionResult.Continue
@@ -3552,6 +3569,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     transition = "TP_RESTORE_DIALOG -> RECOVER_TP_PICKER",
                     isRecoverable = false,
                     recommendedAction = "Restore TP manually, then restart the queue. All completed runs are saved.",
+                    reasonKey = "TP_NO_RESTORE_ITEM",
                 )
             TpRestoreOutcome.CARATS_NOT_ALLOWED ->
                 TransitionResult.Failed(
@@ -3561,6 +3579,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     recommendedAction =
                         "Restock Toughness 30 or Star Fruit, restore TP manually, or turn on \"Allow Carats for TP Restore\" in the Run Queue settings, then restart the queue. " +
                             "All completed runs are saved.",
+                    reasonKey = "TP_CARATS_NOT_ALLOWED",
                 )
             // Quantity popup never presented OK - leave the screen up and re-detect next tick.
             TpRestoreOutcome.NO_QUANTITY_OK -> TransitionResult.Continue
@@ -3578,7 +3597,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * Restore button sits at a fixed offset to its right. NO_ROW and CARATS_NOT_ALLOWED close the
      * picker before returning; NO_QUANTITY_OK leaves the screen as-is for the caller to re-detect.
      */
-    private fun driveTpRestorePicker(anchorX: Double, anchorY: Double): TpRestoreOutcome {
+    private fun driveTpRestorePicker(anchorX: Double, anchorY: Double, purpose: String): TpRestoreOutcome {
         CoordinateTap.tap(gestureUtils, anchorX + TP_RESTORE_FROM_NO_DX, anchorY, "tp_restore_button")
         waitSafe(1.5)
 
@@ -3651,6 +3670,7 @@ class CareerLaunchNavigator(private val context: Context) {
 
         pendingTpRestoreItem = null
         tpRestoresThisSession++
+        SessionTally.recordTpRestore(item.label, purpose)
         MessageLog.i(TAG, "[NAV] Restored TP with ${item.label} (restore $tpRestoresThisSession/$maxTpRestoresThisSession this session).")
         return TpRestoreOutcome.RESTORED
     }
@@ -3709,6 +3729,8 @@ class CareerLaunchNavigator(private val context: Context) {
         waitSafe(1.0)
         pendingTpRestoreItem = null
         tpRestoresThisSession++
+        // The popup can outlive the picker that opened it, so the purpose is not known here.
+        SessionTally.recordTpRestore(pendingItem?.label ?: "unknown", "unknown")
         MessageLog.i(TAG, "[NAV] Restored TP from the quantity popup (restore $tpRestoresThisSession/$maxTpRestoresThisSession this session).")
         return TransitionResult.Continue
     }
@@ -3730,6 +3752,7 @@ class CareerLaunchNavigator(private val context: Context) {
             transition = "SCENARIO_SELECT -> VETERAN_UMAMUSUME_MAX",
             isRecoverable = false,
             recommendedAction = "Open the Veteran Umamusume list in-game and transfer or release some, then restart the queue. All completed runs are saved.",
+            reasonKey = "VETERAN_ROSTER_FULL",
         )
 
     private fun isUmamusumeDetailsScreen(bitmap: Bitmap): Boolean {
@@ -4273,6 +4296,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 reason = "SUPPORT_DECK_SCREEN reached but reuseLastLaunchSetup is disabled. Deck configuration requires manual input.",
                 transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
                 recommendedAction = "Enable 'Reuse Last Launch Setup' or manually configure the deck.",
+                reasonKey = "REUSE_OFF",
             )
         }
 
@@ -4305,6 +4329,7 @@ class CareerLaunchNavigator(private val context: Context) {
                                 "Start Career refused so no TP is spent on the wrong deck.",
                         transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
                         recommendedAction = "Open the Support Formation screen, select Deck $requiredDeck by hand, and restart the queue; or set the required deck to 0 (off) in Run Queue settings.",
+                        reasonKey = "REQUIRED_DECK",
                     )
                 }
             }
@@ -4407,6 +4432,7 @@ class CareerLaunchNavigator(private val context: Context) {
                                 recommendedAction =
                                     "Confirm Deck $requiredDeck is selected on the Support Formation screen and restart the queue; " +
                                         "or set the required deck to 0 (off) in Run Queue settings.",
+                                reasonKey = "REQUIRED_DECK",
                             )
                         }
                         postBorrow != requiredDeck -> {
@@ -4417,6 +4443,7 @@ class CareerLaunchNavigator(private val context: Context) {
                                         "Start Career refused so no TP is spent on the wrong deck.",
                                 transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
                                 recommendedAction = "Re-select Deck $requiredDeck on the Support Formation screen and restart the queue; or set the required deck to 0 (off) in Run Queue settings.",
+                                reasonKey = "REQUIRED_DECK",
                             )
                         }
                         else -> {
@@ -4430,6 +4457,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         reason = "Support Deck $requiredDeck verification is incomplete (pre-borrow=$supportDeckPreBorrowVerified post-borrow=$supportDeckPostBorrowVerified); Start Career refused.",
                         transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
                         recommendedAction = "Restart the queue with Deck $requiredDeck selected on the Support Formation screen, or set the required deck to 0 (off) in Run Queue settings.",
+                        reasonKey = "REQUIRED_DECK",
                     )
                 }
             }
@@ -4438,6 +4466,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     reason = "Start Career was clicked $startCareerClickAttempts times with no screen transition. An empty or invalid deck slot is the usual cause.",
                     transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
                     recommendedAction = "Complete the support deck manually, then restart the queue.",
+                    reasonKey = "DECK_INCOMPLETE",
                 )
             }
             startCareerClickAttempts++
@@ -4541,6 +4570,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     reason = "Build-aware launch reached READY but the active deck is ${launch.deckNumberAtEnd}, not required $requiredDeck; Start Career refused so no TP is spent on the wrong deck.",
                     transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
                     recommendedAction = "Re-select Deck $requiredDeck on the Support Formation screen and restart the queue.",
+                    reasonKey = "REQUIRED_DECK",
                 )
             }
             // The module verified deck integrity + the committed borrow identity, satisfying the same
@@ -4764,6 +4794,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 reason = "Friend slot is empty and the Borrow Card flow failed to fill it after $friendSlotFillAttempts attempts.",
                 transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
                 recommendedAction = "Select a friend support card manually, then restart the queue.",
+                reasonKey = "BORROW_NEEDS_HAND",
             )
         }
         friendSlotFillAttempts++
@@ -4829,6 +4860,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         reason = "No valid borrowed support available: every Borrow Card row in the scanned list is the active trainee's own character, already refused this launch, or blocked by the game.",
                         transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
                         recommendedAction = "Follow more trainers or borrow a card of a different character manually, then restart the queue.",
+                        reasonKey = "BORROW_NEEDS_HAND",
                     )
                 }
                 MessageLog.i(
@@ -4864,6 +4896,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     },
                 transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
                 recommendedAction = "Borrow a card of a different character manually, then restart the queue.",
+                reasonKey = "BORROW_NEEDS_HAND",
             )
         }
         borrowDuplicateReplacements++
@@ -6212,6 +6245,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     else ->
                         "Check that the rotation trainee is one you own and that its inGameName matches the in-game name, or select the trainee manually and restart."
                 },
+            reasonKey = "TRAINEE_NOT_FOUND",
         )
     }
 
@@ -8545,6 +8579,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         "Start Career refused so no TP is spent on an unverified deck.",
                 transition = "PRE_RUN_CONFIRMATION -> CINEMATIC_INTRO",
                 recommendedAction = "Restart the queue from Home so the Support Formation screen selects and verifies Deck $requiredDeck; or set the required deck to 0 (off) in Run Queue settings.",
+                reasonKey = "REQUIRED_DECK",
             )
         }
 

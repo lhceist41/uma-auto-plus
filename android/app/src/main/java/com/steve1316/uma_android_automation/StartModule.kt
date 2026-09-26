@@ -83,6 +83,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         @Volatile
         var queueStopReason: String? = null
 
+        /** Player-safe key for [queueStopReason], set with it: the queue report carries the key, never the prose. */
+        @Volatile
+        var queueStopKey: String? = null
+
         /** Final stat values of the last completed career, snapshotted when the [CAREER_END]
          * ledger line is emitted. The sparks reroll gate reads them after the Campaign instance
          * is gone (the navigator owns the career-end SPARKS screen). */
@@ -104,6 +108,17 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
         @Volatile
         var lastCareerEndFp: String? = null
+
+        /** Outcome label and observed turn (null when no date was read) of the last completed career, stashed with [lastCareerEndTrainee]. */
+        @Volatile
+        var lastCareerEndOutcome: String? = null
+
+        @Volatile
+        var lastCareerEndTurn: Int? = null
+
+        /** Bumped after every career-end stash, so a run can tell its own stash from one a previous run left. */
+        @Volatile
+        var lastCareerEndSeq: Long = 0L
 
         /** When true, the current run should be skipped and the queue should advance. */
         @Volatile
@@ -946,6 +961,21 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         clearQueueState(context)
     }
 
+    /**
+     * The last finished session's report as JSON text, or null. A session that died without writing
+     * one (the process was killed) is turned into a report first, so this also dates and explains it.
+     */
+    @ReactMethod
+    fun getLastQueueReport(promise: Promise) {
+        promise.resolve(QueueLedger.lastReport(context))
+    }
+
+    /** Marks the report of [sessionId] dismissed; resolves false when a newer report replaced it. */
+    @ReactMethod
+    fun dismissLastQueueReport(sessionId: String, promise: Promise) {
+        promise.resolve(QueueLedger.dismissLastReport(context, sessionId))
+    }
+
     /** Skips the current run and advances to the next one in the queue. */
     @ReactMethod
     fun skipQueueRun() {
@@ -1247,6 +1277,18 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         }
     }
 
+    /** Set when the session starts reading its launch snapshot, so a refusal the gate throws before that is told apart from a failed read. */
+    @Volatile
+    private var launchSnapshotReadStarted = false
+
+    /** Set when the launch snapshot read returns; with [launchSnapshotReadStarted] it tells a throw inside the read from the gate's refusals after it. */
+    @Volatile
+    private var launchSnapshotReadFinished = false
+
+    /** Whether the last [runSingleGame] ended by posting an ExceptionEvent, which also stops the service. */
+    @Volatile
+    private var lastRunPostedException = false
+
     /**
      * Runs a single Game instance on a background thread and returns its TaskResult.
      *
@@ -1254,6 +1296,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      */
     private fun runSingleGame(selection: DebugTestGate.Selection? = null): TaskResult {
         var taskResult: TaskResult? = null
+        lastRunPostedException = false
 
         val botThread =
             Thread {
@@ -1262,6 +1305,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     taskResult = entryPoint.start()
                 } catch (e: Exception) {
                     EventBus.getDefault().postSticky(ExceptionEvent(e))
+                    lastRunPostedException = true
                     taskResult =
                         TaskResult.Error(
                             TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
@@ -1427,6 +1471,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 if (!navDone.get()) {
                     // Volatile writes only on this thread (no MessageLog - see above). Setting the
                     // reason first keeps the eventual stop from rendering as "user stop" in the log.
+                    queueStopKey = "NAVIGATION_UNRESPONSIVE"
                     queueStopReason = "Between-run navigation did not respond to the interrupt within the grace period."
                     queueStopRequested = true
                     Log.e(TAG, "[QUEUE] Navigation thread did not respond to the interrupt. Queue stop requested; the stall watchdog is the next net.")
@@ -1464,6 +1509,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         failedTransition = "career launch navigation",
                         isRecoverable = true,
                         recommendedAction = "Check the emulator - the capture pipeline or accessibility service likely died mid-navigation. Restart the queue once the game is stable.",
+                        reasonKey = "NAVIGATION_TIMEOUT",
                     )
                 queueStopRequested || !BotService.isRunning ->
                     NavigationResult(
@@ -1551,6 +1597,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     }
 
     private fun readLaunchSnapshot(): Map<String, String> {
+        launchSnapshotReadStarted = true
         val rows = mutableMapOf<String, String>()
         val dbFile = File(context.filesDir, "SQLite/settings.db")
         SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY, android.database.DatabaseErrorHandler { }).use { db ->
@@ -1562,7 +1609,51 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 }
             }
         }
+        launchSnapshotReadFinished = true
         return rows
+    }
+
+    /** Adds run [run]'s record, with the career-end facts only if this run produced them. */
+    private fun recordRun(ledger: SessionLedger, run: Int, startedAt: Long, careerEndSeqBeforeRun: Long, code: TaskResultCode) {
+        val careerEnd = careerEndForRun(careerEndSeqBeforeRun, CareerEndStash(lastCareerEndSeq, lastCareerEndTrainee, lastCareerEndScenario, lastCareerEndOutcome, lastCareerEndTurn))
+        ledger.addRun(RunRecord(run, startedAt, System.currentTimeMillis(), code.name, careerEnd?.trainee, careerEnd?.scenario, careerEnd?.outcome, careerEnd?.turn))
+        ledger.errorPosted = lastRunPostedException
+        QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
+    }
+
+    /** Records that the session is alive every [QueueLedger.HEARTBEAT_MS], so a later death is dated. */
+    private fun startLedgerHeartbeat(sessionId: String): Thread =
+        Thread {
+            while (true) {
+                try {
+                    Thread.sleep(QueueLedger.HEARTBEAT_MS)
+                } catch (_: InterruptedException) {
+                    return@Thread
+                }
+                QueueLedger.markAlive(context, sessionId)
+            }
+        }.apply {
+            name = "QueueLedgerHeartbeat"
+            isDaemon = true
+            start()
+        }
+
+    /** Classifies how the session ended and stores its report. Never throws, not even an Error: it runs in the session's finally, ahead of the latch release. */
+    private fun writeSessionReport(ledger: SessionLedger) {
+        try {
+            val facts =
+                ledger.facts(
+                    stopRequested = queueStopRequested,
+                    stopByBot = queueStopReason != null,
+                    serviceRunning = BotService.isRunning,
+                    queueStateActive = loadQueueState(context) != null,
+                )
+            val verdict = classifySessionEnd(facts)
+            if (verdict.end == SessionEnd.STOPPED_BY_BOT) ledger.reasonKey = queueStopKey.orEmpty()
+            QueueLedger.finishSession(context, ledger.report(verdict, System.currentTimeMillis()))
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to write the queue report: ${e.message}")
+        }
     }
 
     @Subscribe
@@ -1576,21 +1667,38 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             // doesn't mark the process as 'empty' and SIGKILL it under memory pressure (TRIM_EMPTY).
             // Released in the finally below regardless of how the session ends.
             Game.acquireWakeLock(context)
+            val ledger = SessionLedger(java.util.UUID.randomUUID().toString(), System.currentTimeMillis(), BuildConfig.VERSION_NAME, android.os.Process.myPid())
+            var ledgerHeartbeat: Thread? = null
             try {
                 // Reset queue control flags at the start of every new session.
                 // Before diagnostic dispatch: Game.wait aborts on a Stop left over from the previous session.
                 queueStopRequested = false
                 queueStopReason = null
+                queueStopKey = null
                 queueSkipRequested = false
                 gameRecoveryFailed = false
+                SessionTally.reset()
+                launchSnapshotReadStarted = false
+                launchSnapshotReadFinished = false
 
                 // BotService has initialized SettingsHelper; read one SQLite snapshot after restoration.
                 val nonUiEntry = com.steve1316.uma_android_automation.bot.LaunchIdentityGate.current == null
-                val launchSelection = dispatchDiagnostic(::readLaunchSnapshot) { selection -> runSingleGame(selection) } ?: return
+                val launchSelection = dispatchDiagnostic(::readLaunchSnapshot) { selection -> runSingleGame(selection) }
+                ledger.dispatchReturned = true
+                if (launchSelection == null) {
+                    ledger.launchIdentityRefused = true
+                    return
+                }
                 val armedDebugTests = listOfNotNull(launchSelection.key)
                 val debugDiagnosticArmed = armedDebugTests.isNotEmpty()
                 // Dispatch before queue-state writes, rotation preparation or career navigation.
-                if (debugDiagnosticArmed) return
+                if (debugDiagnosticArmed) {
+                    ledger.diagnosticRan = true
+                    return
+                }
+                // Report a session a previous process lost before this one reads or clears the
+                // resume record, so that report says what was resumable when it died.
+                QueueLedger.reportDeadSession(context)
                 // The library's session-end log save doesn't world-read its file the way
                 // writePerCareerLog does, which locks adb triage pulls out of exactly the
                 // segment that holds the between-run navigation and the sparks screens
@@ -1634,6 +1742,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // navigator reconstruction). Sits below the settings read because it needs
                 // totalRuns, and before the first navigator construction, which consumes it.
                 CareerLaunchNavigator.resetTpRestoresForSession(totalRuns)
+                ledger.queueEnabled = enableRunQueue
+                ledger.totalRuns = totalRuns
 
                 // Trainee rotation: parse the cycle once, up here so the auto-resume decision below
                 // can distinguish a rotation queue (which must re-enter an interrupted career, never
@@ -1654,6 +1764,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 "outside the app (the floating overlay skips the preparation step). Press Start on the " +
                                 "app's Home page instead: it builds the snapshots before launching.",
                         )
+                        ledger.rotationNotPrepared = true
                         return
                     }
                 }
@@ -1709,6 +1820,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 "[RESUME] Saved queue was at its last run (${saved.currentRun}/${saved.totalRuns}); nothing to resume. Treating as complete.",
                             )
                             clearQueueState(context)
+                            ledger.nothingToResume = true
                             return@run totalRuns + 1 // skips the for-loop entirely
                         }
                         MessageLog.w(
@@ -1731,6 +1843,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // Seeded from the persisted state so a resumed queue counts the whole queue,
                 // not just what this process launch played.
                 var completedRuns = priorCompletedRuns
+
+                // The session is now open: a process death from here on is reported at the next
+                // app start, dated by the heartbeat or Android's exit record.
+                ledger.startFromRun = startFromRun
+                ledger.completedRuns = completedRuns
+                QueueLedger.beginSession(context, ledger.sessionId, ledger.openJson())
+                ledgerHeartbeat = startLedgerHeartbeat(ledger.sessionId)
 
                 // Non-null once the queue exits for a reason the user did not ask for. The post-loop
                 // block used to log "Queue finished" and emit queueComplete no matter how the loop
@@ -1771,6 +1890,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     val r = applyRotationForRun(rotation, startFromRun, reuseLastLaunchSetup)
                     if (r == null) {
                         queueHaltReason = "missing rotation snapshot for the first trainee (run $startFromRun)"
+                        ledger.haltEnd = SessionEnd.FIRST_SNAPSHOT_MISSING
                         queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                         queueHaltRun = startFromRun - 1
                         queueStopRequested = true
@@ -1809,6 +1929,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             // ending, same as a Stop during a run.
                             if (navResult.lastDetectedState != "STOPPED") {
                                 queueHaltReason = "cold-start career launch failed before run $startFromRun: ${navResult.failureReason}"
+                                ledger.haltEnd = SessionEnd.LAUNCH_FAILED_BEFORE_RUN
+                                ledger.reasonKey = navResult.reasonKey
                                 queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                                 queueHaltRun = startFromRun - 1
                             }
@@ -1867,6 +1989,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     // career attachment boundary inside Game.start() instead; this loop only
                     // invalidates it below, on any non-COMPLETE result.
 
+                    ledger.currentRun = i
+                    ledger.phase = StartModule.PHASE_CAREER
+                    QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
+                    val runStartedAt = System.currentTimeMillis()
+                    val careerEndSeqBeforeRun = lastCareerEndSeq
+
                     // Run the game.
                     val result = runSingleGame()
 
@@ -1883,6 +2011,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             }
                             else -> result
                         }
+                    recordRun(ledger, i, runStartedAt, careerEndSeqBeforeRun, effectiveResult.code)
 
                     if (enableRunQueue) {
                         sendQueueProgressEvent(i, totalRuns, "completed", effectiveResult.code.name, effectiveResult.message)
@@ -1932,6 +2061,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 MessageLog.e(TAG, "[QUEUE] Run $i hit a breakpoint. Stopping queue: ${effectiveResult.message}")
                             }
                             queueHaltReason = "run $i hit a breakpoint: ${effectiveResult.message}"
+                            ledger.haltEnd = SessionEnd.BREAKPOINT
                             queueHaltResultCode = TaskResultCode.TASK_RESULT_BREAKPOINT_REACHED.name
                             queueHaltDetail = effectiveResult.message
                             queueHaltRun = i
@@ -1948,6 +2078,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 // and leave the game where it is for the user to look at.
                                 MessageLog.e(TAG, "[QUEUE] Run $i stopped because the game could not be recovered. Pausing the queue instead of starting the next run on a dead or foreign screen.")
                                 queueHaltReason = "run $i stopped because the game could not be recovered"
+                                ledger.haltEnd = SessionEnd.GAME_UNRECOVERABLE
                                 queueHaltResultCode = effectiveResult.code.name
                                 queueHaltRun = i
                                 queueHaltCareerInFlight = true
@@ -1956,6 +2087,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             if (stopOnError) {
                                 MessageLog.e(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Stopping queue (stopOnError=true).")
                                 queueHaltReason = "run $i ended with ${effectiveResult.code} and stopOnError is on"
+                                ledger.haltEnd = SessionEnd.STOP_ON_ERROR
                                 queueHaltResultCode = effectiveResult.code.name
                                 queueHaltRun = i
                                 queueHaltCareerInFlight = true
@@ -2019,6 +2151,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         // starting. A kill from here resumes at run i+1 — the finished career i is
                         // not re-played, and (under rotation) i+1's snapshot is the correct one.
                         saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_LAUNCHING)
+                        ledger.completedRuns = completedRuns
+                        ledger.phase = StartModule.PHASE_LAUNCHING
+                        QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
 
                         // Trainee rotation: swap to the next run's trainee (settings + select mode)
                         // before reading the scenario or navigating. Stop the queue if its snapshot
@@ -2027,6 +2162,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         if (nextReuse == null) {
                             sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, "Missing rotation snapshot for the next trainee.")
                             queueHaltReason = "missing rotation snapshot for the trainee after run $i"
+                            ledger.haltEnd = SessionEnd.NEXT_SNAPSHOT_MISSING
                             queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                             queueHaltRun = i
                             break
@@ -2070,6 +2206,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                     // skill points, which is the protection working: halt, never
                                     // auto-continue, and now say so instead of reporting completion.
                                     queueHaltReason = "between-run navigation failed after run $i: ${navResult.failureReason}"
+                                    ledger.haltEnd = SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS
+                                    ledger.reasonKey = navResult.reasonKey
                                     queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                                     queueHaltRun = i
                                 }
@@ -2089,6 +2227,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             // and reports the queue complete.
                             if (!queueStopRequested && BotService.isRunning) {
                                 queueHaltReason = "the wait after run $i was interrupted with no stop requested"
+                                ledger.haltEnd = SessionEnd.WAIT_INTERRUPTED
                                 queueHaltResultCode = TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION.name
                                 queueHaltRun = i
                                 queueHaltCareerInFlight = !isMiscQueue
@@ -2098,6 +2237,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         }
                     }
                 }
+
+                ledger.completedRuns = completedRuns
+                ledger.haltRun = queueHaltRun
+                ledger.haltCareerInFlight = queueHaltCareerInFlight
+                ledger.breakpointDetail = queueHaltDetail
 
                 if (enableRunQueue) {
                     val halt = queueHaltReason
@@ -2185,10 +2329,17 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         }
                     }
                 }
+            } catch (e: Throwable) {
+                // Only records how the session ended; the exception propagates unchanged. Only the
+                // gate's own refusal before dispatch returned counts as a refused launch.
+                if (!ledger.dispatchReturned && isLaunchGateRefusal(e, launchSnapshotReadStarted, launchSnapshotReadFinished)) ledger.launchRefused = true else ledger.unexpectedError = true
+                throw e
             } finally {
                 // Always release the wake lock and the session latch, even on exception or break paths.
                 Game.releaseWakeLock()
                 DebugTestGate.finish()
+                ledgerHeartbeat?.interrupt()
+                writeSessionReport(ledger)
                 sessionActive.set(false)
                 // Bot execution truthfully ends here, on every exit path (including the early
                 // launch-identity-mismatch returns above). Enqueued through the same FIFO as the

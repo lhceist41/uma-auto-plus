@@ -140,6 +140,9 @@ object OutcomeCorpus {
      */
     const val SMART_BORROW_SELECT_PATH = "$OUTCOMES_DIR/smart_borrow_select.jsonl"
 
+    /** One record per bot session: how it ended, per-run facts, recoveries and TP restores. */
+    const val QUEUE_LEDGER_PATH = "$OUTCOMES_DIR/queue_ledger.jsonl"
+
     /**
      * Appends one [record] as a JSON line to [path]. Writing must never disturb the calling
      * path: any failure is swallowed after a MessageLog warning. MessageLog is safe here -
