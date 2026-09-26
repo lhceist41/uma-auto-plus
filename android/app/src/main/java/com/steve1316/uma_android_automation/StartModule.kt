@@ -28,6 +28,7 @@ import com.steve1316.automation_library.utils.DiscordUtils
 import com.steve1316.automation_library.utils.MediaProjectionService
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
+import com.steve1316.automation_library.utils.NotificationUtils
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
 import com.steve1316.uma_android_automation.bot.Game
@@ -174,6 +175,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          * turns false.
          */
         private const val STOP_EVIDENCE_SETTLE_MS: Long = 1500L
+
+        /** Gap after the library's own end notification, so Android does not drop the replacement as a too-fast update. */
+        private const val END_NOTIFICATION_DELAY_MS: Long = 500L
 
         /**
          * Persists the current queue state to SQLite so it can survive app crashes.
@@ -1598,9 +1602,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             start()
         }
 
-    /** Classifies how the session ended and stores its report. Never throws, not even an Error: it runs in the session's finally, ahead of the latch release. */
-    private fun writeSessionReport(ledger: SessionLedger) {
-        try {
+    /**
+     * Classifies how the session ended, stores its report and returns it (null if it could not be
+     * built). Never throws, not even an Error: it runs in the session's finally, ahead of the latch
+     * release.
+     */
+    private fun writeSessionReport(ledger: SessionLedger): QueueReport? {
+        return try {
             val facts =
                 ledger.facts(
                     stopRequested = queueStopRequested,
@@ -1610,9 +1618,42 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 )
             val verdict = classifySessionEnd(facts)
             if (verdict.end == SessionEnd.STOPPED_BY_BOT) ledger.reasonKey = queueStopKey.orEmpty()
-            QueueLedger.finishSession(context, ledger.report(verdict, System.currentTimeMillis()))
+            ledger.report(verdict, System.currentTimeMillis()).also { QueueLedger.finishSession(context, it) }
         } catch (e: Throwable) {
             Log.w(TAG, "Failed to write the queue report: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Replaces the library's end notification, which reads "Completed successfully with no errors."
+     * however the session ended, with how it did end. The library posts its text from
+     * [libraryThread] after the session returns, so a daemon thread waits for that thread to finish
+     * first, and posts only while the capture service that owns the notification is still up and no
+     * new session has started. The app's Stop and the overlay's dismiss stop that service, which
+     * removes the notification, so nothing is posted then; a tap on the overlay's Stop leaves the
+     * service up, and its cleanup posts on the main thread before the session ends. Never throws.
+     */
+    private fun notifySessionEnd(libraryThread: Thread, report: QueueReport?) {
+        try {
+            val text = queueReportText(report?.toJson())
+            Thread {
+                try {
+                    libraryThread.join()
+                    Thread.sleep(END_NOTIFICATION_DELAY_MS)
+                    if (MediaProjectionService.isRunning && !BotService.isRunning) {
+                        NotificationUtils.updateNotification(context, MainActivity::class.java, false, text.body, title = text.title, displayBigText = true)
+                    }
+                } catch (e: Throwable) {
+                    Log.w(TAG, "Failed to update the end notification: ${e.message}")
+                }
+            }.apply {
+                name = "SessionEndNotification"
+                isDaemon = true
+                start()
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to start the end notification update: ${e.message}")
         }
     }
 
@@ -1627,6 +1668,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             // doesn't mark the process as 'empty' and SIGKILL it under memory pressure (TRIM_EMPTY).
             // Released in the finally below regardless of how the session ends.
             Game.acquireWakeLock(context)
+            // The library's thread: it posts its own end notification once this session returns.
+            val libraryThread = Thread.currentThread()
             val ledger = SessionLedger(java.util.UUID.randomUUID().toString(), System.currentTimeMillis(), BuildConfig.VERSION_NAME, android.os.Process.myPid())
             var ledgerHeartbeat: Thread? = null
             try {
@@ -2299,7 +2342,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 Game.releaseWakeLock()
                 DebugTestGate.finish()
                 ledgerHeartbeat?.interrupt()
-                writeSessionReport(ledger)
+                notifySessionEnd(libraryThread, writeSessionReport(ledger))
                 sessionActive.set(false)
                 // Bot execution truthfully ends here, on every exit path (including the early
                 // launch-identity-mismatch returns above). Enqueued through the same FIFO as the

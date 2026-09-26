@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- The notification shown when a bot session ends no longer always says "Completed successfully with no errors." It now says how the session actually ended: a finished queue with its run count, a paused or halted queue with what to do before pressing Start again, "Not started" when the bot refuses a start from the overlay button (nothing is spent then), and a stop made by tapping the overlay button, with how many runs were done. A run count also says how many of those runs ended with an error, and after an error the notification never reads as a success. Stopping from the app, or dismissing the overlay button, removes the notification instead of updating it.
+
 ## [1.5.0] - 2026-09-26
 
 ### Added

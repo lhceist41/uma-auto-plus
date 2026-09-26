@@ -172,9 +172,9 @@ class QueueLedgerWiringTest {
 
         @Test
         fun `the writer classifies and hands the report to the ledger store`() {
-            val writer = after("private fun writeSessionReport(ledger: SessionLedger) {", startModule).substringBefore("\n    }\n")
+            val writer = after("private fun writeSessionReport(ledger: SessionLedger): QueueReport? {", startModule).substringBefore("\n    }\n")
             val classify = writer.indexOf("classifySessionEnd(facts)")
-            val store = writer.indexOf("QueueLedger.finishSession(context, ledger.report(verdict")
+            val store = writer.indexOf("ledger.report(verdict, System.currentTimeMillis()).also { QueueLedger.finishSession(context, it) }")
             assertTrue(classify in 0 until store)
             assertTrue(writer.contains("queueStateActive = loadQueueState(context) != null"))
             assertTrue(writer.contains("stopByBot = queueStopReason != null"))
@@ -183,7 +183,7 @@ class QueueLedgerWiringTest {
 
         @Test
         fun `the writer cannot latch the session, not even on an Error`() {
-            val writer = after("private fun writeSessionReport(ledger: SessionLedger) {", startModule).substringBefore("\n    }\n")
+            val writer = after("private fun writeSessionReport(ledger: SessionLedger): QueueReport? {", startModule).substringBefore("\n    }\n")
             assertTrue(writer.contains("} catch (e: Throwable) {"), "an Error escaping here would skip the latch release")
         }
 
