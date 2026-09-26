@@ -39,6 +39,13 @@ enum class TaskResultCode {
     TASK_RESULT_QUEUE_NAVIGATION_FAILED,
 }
 
+/**
+ * The game could not reach its server within the connection outage budget, or kept loading with
+ * no dialog for too long. An [InterruptedException] so every existing stop path unwinds it; the
+ * main loop reports it as [TaskResultCode.TASK_RESULT_CONNECTION_ERROR].
+ */
+class ConnectionLostException(message: String) : InterruptedException(message)
+
 /** Represents the final result of a task's execution. */
 sealed interface TaskResult {
     val code: TaskResultCode
@@ -69,6 +76,18 @@ sealed interface TaskResult {
 abstract class Task(game: Game) : DialogHandler(game) {
     companion object {
         val TAG: String = "[${MainActivity.loggerTag}]${this::class.simpleName}"
+
+        /**
+         * Result code for an interrupted run. A user Stop or queue skip always wins; otherwise a
+         * lost connection is reported as such instead of as an unhandled exception.
+         */
+        internal fun interruptResultCode(skipRequested: Boolean, stopRequested: Boolean, serviceRunning: Boolean, connectionLost: Boolean): TaskResultCode =
+            when {
+                skipRequested -> TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE
+                stopRequested || !serviceRunning -> TaskResultCode.TASK_RESULT_MANUALLY_STOPPED
+                connectionLost -> TaskResultCode.TASK_RESULT_CONNECTION_ERROR
+                else -> TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION
+            }
     }
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -207,9 +226,12 @@ abstract class Task(game: Game) : DialogHandler(game) {
         val maxIdenticalUnhandledDialogs = 5
         while (System.currentTimeMillis() - startTime < timeoutMs) {
             try {
+                game.connectionBudget.beginIteration()
                 val tmpResult: TaskResult? = process()
                 // process() returned without throwing - forward progress, so reset the recover counter.
                 consecutiveUnhandledDialogs = 0
+                // An iteration with no connection error ends the outage episode.
+                game.connectionBudget.endIterationNormally()
                 // Stop the task if a non-null result is received.
                 if (tmpResult != null) {
                     result = tmpResult
@@ -269,6 +291,8 @@ abstract class Task(game: Game) : DialogHandler(game) {
             }
         }
 
+        // The result is settled; teardown waits (log save, Discord flush) must not re-raise it.
+        game.connectionLostReason = null
         handleTaskEnd(result)
         return result
     }
@@ -302,18 +326,24 @@ abstract class Task(game: Game) : DialogHandler(game) {
                 // A second interrupt while settling changes nothing about attribution.
             }
         }
-        return when {
-            StartModule.queueSkipRequested ->
+        val connectionLost = e is ConnectionLostException || game.connectionLostReason != null
+        return when (interruptResultCode(StartModule.queueSkipRequested, StartModule.queueStopRequested, BotService.isRunning, connectionLost)) {
+            TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE ->
                 TaskResult.Success(
                     TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE,
                     "Run was skipped from the queue controls.",
                 )
-            StartModule.queueStopRequested || !BotService.isRunning ->
+            TaskResultCode.TASK_RESULT_MANUALLY_STOPPED ->
                 // queueStopReason is set by a deliberate internal stop (e.g. the trainee-mismatch guard);
                 // null means a genuine user Stop. Report whichever it actually was instead of always "user".
                 TaskResult.Success(
                     TaskResultCode.TASK_RESULT_MANUALLY_STOPPED,
                     StartModule.queueStopReason ?: "Bot was manually stopped by the user.",
+                )
+            TaskResultCode.TASK_RESULT_CONNECTION_ERROR ->
+                TaskResult.Error(
+                    TaskResultCode.TASK_RESULT_CONNECTION_ERROR,
+                    game.connectionLostReason ?: e.message ?: "The game lost its connection to the server.",
                 )
             else ->
                 TaskResult.Error(

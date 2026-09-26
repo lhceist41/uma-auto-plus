@@ -737,14 +737,8 @@ object DialogConnectionError : DialogInterface {
 
     // This dialog is unique in that there are two versions of it.
     // The dialog can have either a single button ("Title Screen") or
-    // two buttons ("Title Screen" and "Retry").
-    override fun ok(imageUtils: CustomImageUtils, tries: Int): Boolean {
-        if (ButtonRetry.click(imageUtils = imageUtils, tries = tries)) {
-            return true
-        }
-
-        return ButtonTitleScreen.click(imageUtils = imageUtils, tries = tries)
-    }
+    // two buttons ("Title Screen" and "Retry"). ok() taps Retry only:
+    // Title Screen abandons the loaded career, so it is never a fallback.
 }
 
 /** Career */

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import com.steve1316.automation_library.data.SharedData
@@ -28,6 +29,7 @@ import com.steve1316.uma_android_automation.components.ButtonLog
 import com.steve1316.uma_android_automation.components.ButtonRest
 import com.steve1316.uma_android_automation.components.ButtonSkillListFullStats
 import com.steve1316.uma_android_automation.components.ButtonTraining
+import com.steve1316.uma_android_automation.components.DialogUtils
 import com.steve1316.uma_android_automation.components.IconRaceDayRibbon
 import com.steve1316.uma_android_automation.components.LabelConnecting
 import com.steve1316.uma_android_automation.components.LabelNowLoading
@@ -103,25 +105,64 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
     /** True if the currently selected task is a misc (non-career) mode. */
     val isMiscTask: Boolean = task is com.steve1316.uma_android_automation.bot.misc.MiscTask
 
-    /** The maximum number of connection error retry attempts allowed. */
-    internal val maxConnectionErrorRetryAttempts: Int = 3
+    /** This run's connection outage episode (see [ConnectionOutageBudget]). */
+    internal val connectionBudget = ConnectionOutageBudget()
 
-    /** The current number of connection error retry attempts. */
-    internal var connectionErrorRetryAttempts: Int = 0
-
-    /** The timestamp of the last connection error retry. */
-    internal var lastConnectionErrorRetryTimeMs: Long = 0
-
-    /** The cooldown time between connection error retries. */
-    internal val connectionErrorRetryCooldownTimeMs: Long = 10000 // 10 seconds
-
-    /** One extended hold per career when the connection-error ladder exhausts: flakes cluster
-     * around the daily-reset window and pass in minutes, and burning the queue slot for one is
-     * a bad trade (El Condor 2026-07-11: 173k-fan career lost 9 minutes before reset). */
-    internal var connectionErrorExtendedWaitUsed: Boolean = false
+    /** Set once the run has given up on the connection. [wait] re-throws it on every tick, so a
+     * broad catch that swallows the first [ConnectionLostException] cannot keep the run going. */
+    @Volatile
+    internal var connectionLostReason: String? = null
 
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]Game"
+
+        /** How often a long load checks whether an error dialog is actually holding it up. */
+        internal const val LOADING_DIALOG_CHECK_MS: Long = 90_000L
+
+        /** Loading this long with no error dialog is treated as a lost connection. No legitimate
+         * load has been measured anywhere near it; race playback is not a loading screen. */
+        internal const val LOADING_HARD_LIMIT_MS: Long = 10 * 60_000L
+
+        /** Dialogs that can sit under a loading indicator and need the outage handling. */
+        internal val LOADING_ERROR_DIALOGS: Set<String> = setOf("connection_error", "download_error", "session_error")
+
+        internal fun loadingHardLimitMessage(ms: Long): String = "The game kept loading for ${ms / 60_000} minutes with no error dialog. Stopping the run as a connection error."
+
+        /**
+         * Waits while [isLoading] holds. Every [softCheckMs] it asks [handleErrorDialog] whether an
+         * error dialog is holding the load up; a handled dialog restarts the hard window, because
+         * the outage budget owns that case. Loading for [hardLimitMs] with no dialog calls
+         * [onGiveUp] and throws [ConnectionLostException]. Returns only once loading has cleared.
+         */
+        internal fun awaitLoadingCleared(
+            isLoading: () -> Boolean,
+            now: () -> Long,
+            pause: () -> Unit,
+            handleErrorDialog: () -> Boolean,
+            onGiveUp: (String) -> Unit = {},
+            softCheckMs: Long = LOADING_DIALOG_CHECK_MS,
+            hardLimitMs: Long = LOADING_HARD_LIMIT_MS,
+        ) {
+            var windowStart = now()
+            var lastDialogCheck = windowStart
+            while (isLoading()) {
+                val t = now()
+                if (t - lastDialogCheck >= softCheckMs) {
+                    lastDialogCheck = t
+                    if (handleErrorDialog()) {
+                        windowStart = now()
+                        lastDialogCheck = windowStart
+                        continue
+                    }
+                }
+                if (t - windowStart >= hardLimitMs) {
+                    val reason = loadingHardLimitMessage(hardLimitMs)
+                    onGiveUp(reason)
+                    throw ConnectionLostException(reason)
+                }
+                pause()
+            }
+        }
 
         /** Package name of the Umamusume game (Global). The restart net relaunches this. If the JP
          * client (jp.co.cygames.umamusume) is ever targeted this needs to change. */
@@ -341,6 +382,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             if (!BotService.isRunning) {
                 throw InterruptedException()
             }
+            connectionLostReason?.let { throw ConnectionLostException(it) }
 
             // Check queue control flags at safe boundaries.
             if (StartModule.queueStopRequested) {
@@ -364,20 +406,39 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
     }
 
     /**
-     * Waits for the game to finish loading.
+     * Waits for the game to finish loading, within the bounds of [awaitLoadingCleared]: an error
+     * dialog showing under the loading indicator is handled, and loading with no dialog for
+     * [LOADING_HARD_LIMIT_MS] ends the run as a connection error.
      *
      * Note that this function is responsible for dictating how fast the bot will run so adjusting this should be done with caution.
      */
     fun waitForLoading() {
         var loadingCounter = 0
-        while (checkLoading(suppressLogging = loadingCounter % 10 != 0)) {
-            // Avoid an infinite loop by setting the flag to true.
-            wait(waitDelay, skipWaitingForLoading = true)
-            loadingCounter++
-            if (loadingCounter >= 20) {
-                loadingCounter = 0
-            }
-        }
+        awaitLoadingCleared(
+            isLoading = {
+                val loading = checkLoading(suppressLogging = loadingCounter % 10 != 0)
+                loadingCounter = (loadingCounter + 1) % 20
+                loading
+            },
+            now = { SystemClock.elapsedRealtime() },
+            // Avoid an infinite recursion by skipping the loading check inside the pause.
+            pause = { wait(waitDelay, skipWaitingForLoading = true) },
+            handleErrorDialog = { handleLoadingErrorDialog() },
+            onGiveUp = { reason ->
+                MessageLog.e(TAG, "[CONNECTION] $reason")
+                connectionLostReason = reason
+            },
+        )
+    }
+
+    /** Hands a connection, download or session error dialog found under a loading indicator to the
+     * task's dialog handler, which owns the outage budget. Returns true if one was handled. */
+    private fun handleLoadingErrorDialog(): Boolean {
+        val dialog = DialogUtils.getDialog(imageUtils) ?: return false
+        if (dialog.name !in LOADING_ERROR_DIALOGS) return false
+        MessageLog.w(TAG, "[CONNECTION] ${dialog.title} is showing while the game is loading. Handling it.")
+        task.handleDialogs(dialog = dialog)
+        return true
     }
 
     /**

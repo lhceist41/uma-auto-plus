@@ -1,11 +1,13 @@
 package com.steve1316.uma_android_automation.bot
 
+import android.os.SystemClock
 import android.util.Log
 import com.steve1316.automation_library.utils.DiscordUtils
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.components.ButtonRaceRecommendationsCenterStage
+import com.steve1316.uma_android_automation.components.ButtonRetry
 import com.steve1316.uma_android_automation.components.Checkbox
 import com.steve1316.uma_android_automation.components.DialogInterface
 import com.steve1316.uma_android_automation.components.DialogUtils
@@ -30,6 +32,62 @@ sealed class DialogHandlerResult {
 
     /** Indicates that no dialog popups were detected on the screen. */
     data object NoDialogDetected : DialogHandlerResult()
+}
+
+/**
+ * One connection outage, timed on the monotonic clock so a device clock change cannot stretch or
+ * cut it. The episode starts at the first Connection or Download Error and ends after a main-loop
+ * iteration that sees none. Each error gets Retry after a growing pause; once the episode has
+ * lasted [OUTAGE_BUDGET_MS] the run gives up as a connection error.
+ */
+class ConnectionOutageBudget(private val now: () -> Long = { SystemClock.elapsedRealtime() }) {
+    sealed interface Decision {
+        /** Wait [waitMs], then tap Retry. [attempt] counts from 1 within the episode. */
+        data class Retry(val waitMs: Long, val attempt: Int, val elapsedMs: Long) : Decision
+
+        data class GiveUp(val elapsedMs: Long, val attempts: Int) : Decision
+    }
+
+    companion object {
+        /** Outage length the run rides out mid-career. The career is saved server-side, and the
+         * outages seen so far (around the daily reset) passed within minutes; this is an estimate
+         * to tune from how often connection-error endings actually occur. */
+        const val OUTAGE_BUDGET_MS: Long = 20 * 60_000L
+
+        /** Pause before each Retry within an episode: the first is immediate, then it backs off. */
+        val RETRY_BACKOFF_MS: List<Long> = listOf(0L, 30_000L, 60_000L, 120_000L)
+
+        fun backoffFor(attemptIndex: Int): Long = RETRY_BACKOFF_MS[attemptIndex.coerceIn(0, RETRY_BACKOFF_MS.lastIndex)]
+    }
+
+    private var episodeStartMs: Long? = null
+    private var attempts = 0
+    private var errorSeenThisIteration = false
+
+    /** Records one error dialog and decides what to do with it. */
+    fun onError(): Decision {
+        val t = now()
+        val start = episodeStartMs ?: t.also { episodeStartMs = it }
+        errorSeenThisIteration = true
+        val elapsed = t - start
+        if (elapsed >= OUTAGE_BUDGET_MS) return Decision.GiveUp(elapsed, attempts)
+        val wait = minOf(backoffFor(attempts), OUTAGE_BUDGET_MS - elapsed)
+        attempts++
+        return Decision.Retry(wait, attempts, elapsed)
+    }
+
+    /** Called before each main-loop iteration. */
+    fun beginIteration() {
+        errorSeenThisIteration = false
+    }
+
+    /** Called when an iteration returns normally; one without any error ends the episode. */
+    fun endIterationNormally() {
+        if (!errorSeenThisIteration) {
+            episodeStartMs = null
+            attempts = 0
+        }
+    }
 }
 
 /**
@@ -104,36 +162,8 @@ open class DialogHandler(val game: Game) {
 
         when (dialog.name) {
             // Generic Dialogs.
-            "connection_error" -> {
-                val currTime: Long = System.currentTimeMillis()
-
-                // If the cooldown period has lapsed, reset our count.
-                if (currTime - game.lastConnectionErrorRetryTimeMs > game.connectionErrorRetryCooldownTimeMs) {
-                    game.connectionErrorRetryAttempts = 0
-                    game.lastConnectionErrorRetryTimeMs = currTime
-                }
-
-                if (game.connectionErrorRetryAttempts >= game.maxConnectionErrorRetryAttempts) {
-                    if (!game.connectionErrorExtendedWaitUsed) {
-                        // The career is server-saved, so an outage is survivable in place: hold
-                        // once (wait() stays stop-responsive and ticks the watchdog heartbeat),
-                        // then grant the ladder one final full round before giving up.
-                        game.connectionErrorExtendedWaitUsed = true
-                        MessageLog.w(TAG, "[CONNECTION] Max connection error retries reached. Holding 180s for the outage to pass, then retrying one final round (once per career).")
-                        game.wait(180.0)
-                        game.connectionErrorRetryAttempts = 0
-                        game.lastConnectionErrorRetryTimeMs = System.currentTimeMillis()
-                    } else {
-                        if (DiscordUtils.enableDiscordNotifications) {
-                            DiscordUtils.queue.add("```diff\n- ${MessageLog.getSystemTimeString()} Max connection error retry attempts reached. Stopping bot...\n```")
-                        }
-                        throw InterruptedException("Max connection error retry attempts reached. Stopping bot...")
-                    }
-                }
-
-                game.connectionErrorRetryAttempts++
-                dialog.ok(game.imageUtils)
-                game.wait(0.5)
+            "connection_error", "download_error" -> {
+                handleConnectionError(dialog)
             }
 
             "display_settings" -> {
@@ -457,5 +487,40 @@ open class DialogHandler(val game: Game) {
 
         game.wait(0.5)
         return DialogHandlerResult.Handled(dialog)
+    }
+
+    /**
+     * Rides out a Connection or Download Error within the outage budget: Retry only, after the
+     * budget's pause. Title Screen is never tapped mid-career - it abandons the loaded career and
+     * nothing here can navigate back. A dialog with no Retry is left up and keeps counting against
+     * the budget, which ends the run as a connection error.
+     */
+    private fun handleConnectionError(dialog: DialogInterface) {
+        when (val decision = game.connectionBudget.onError()) {
+            is ConnectionOutageBudget.Decision.Retry -> {
+                val outageSeconds = decision.elapsedMs / 1000
+                if (decision.waitMs > 0) {
+                    MessageLog.w(TAG, "[CONNECTION] ${dialog.title} (attempt ${decision.attempt}, outage ${outageSeconds}s so far). Waiting ${decision.waitMs / 1000}s before Retry.")
+                    game.wait(decision.waitMs / 1000.0, skipWaitingForLoading = true)
+                } else {
+                    MessageLog.w(TAG, "[CONNECTION] ${dialog.title} (attempt ${decision.attempt}). Tapping Retry.")
+                }
+                if (!ButtonRetry.click(game.imageUtils)) {
+                    MessageLog.w(TAG, "[CONNECTION] ${dialog.title} shows no Retry button. Leaving it up; the outage budget keeps counting.")
+                }
+                game.wait(0.5)
+            }
+            is ConnectionOutageBudget.Decision.GiveUp -> {
+                val reason =
+                    "The game could not reconnect: ${dialog.title} for ${decision.elapsedMs / 60_000} minutes over ${decision.attempts} retries. " +
+                        "Stopping the run as a connection error."
+                MessageLog.e(TAG, "[CONNECTION] $reason")
+                if (DiscordUtils.enableDiscordNotifications) {
+                    DiscordUtils.queue.add("```diff\n- ${MessageLog.getSystemTimeString()} $reason\n```")
+                }
+                game.connectionLostReason = reason
+                throw ConnectionLostException(reason)
+            }
+        }
     }
 }
