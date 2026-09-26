@@ -52,7 +52,7 @@ object LaunchIdentityGate {
     /**
      * One-shot, process-local validation hook. When armed (only via [LogStreamServer]'s default-off
      * CMD:ARM_LAUNCH_MISMATCH_TEST), the next verdict that has an expected identity is forced to
-     * [Verdict.MISMATCH] BEFORE the real revision comparison and latches [blockedAfterMismatch]
+     * [Verdict.MISMATCH] BEFORE the real comparison and latches [blockedAfterMismatch]
      * exactly as a real mismatch would, so the live overlay can drive the sticky-guard path
      * deterministically. Fail-safe: it can only make a would-be PASS abort, never the reverse.
      * Consumed once, never persisted, and NOT re-armed by [setExpected].
@@ -82,19 +82,21 @@ object LaunchIdentityGate {
     }
 
     /**
-     * Compare the freshly-loaded revision against the expected identity and CONSUME the
-     * expectation (single-use). [Verdict.PASS] and [Verdict.MISMATCH] only occur when an
-     * expectation was set; [Verdict.NOT_SET] means this session was started without one. A
+     * Compare the freshly-loaded revision and settings hash ([identityHash] of the rows the bot
+     * read) against the expected identity and CONSUME the expectation (single-use). Both must
+     * match: the revision alone missed a bot that read an older copy of the settings than the app
+     * had saved and verified, and launched on it. [Verdict.PASS] and [Verdict.MISMATCH] only occur
+     * when an expectation was set; [Verdict.NOT_SET] means this session was started without one. A
      * [Verdict.MISMATCH] also latches [blockedAfterMismatch] so the next unverified start fails closed.
      */
-    fun verdict(loadedRevision: Int): Verdict {
+    fun verdict(loadedRevision: Int, loadedHash: String): Verdict {
         val e = expected ?: return Verdict.NOT_SET
         expected = null
         if (forceMismatchOnceForTest) {
             // Validation hook consumed: force a synthetic MISMATCH before the real comparison and latch
             // the sticky block exactly as a real mismatch would. One-shot (self-clears). The real
-            // revision is deliberately NOT compared here, so the marker below -- not StartModule's
-            // revision-based mismatch log -- is the truthful record of why this launch aborted.
+            // revision and hash are deliberately NOT compared here, so the marker below -- not
+            // StartModule's mismatch log -- is the truthful record of why this launch aborted.
             forceMismatchOnceForTest = false
             blockedAfterMismatch = true
             try {
@@ -103,7 +105,7 @@ object LaunchIdentityGate {
             }
             return Verdict.MISMATCH
         }
-        if (e.revision == loadedRevision) return Verdict.PASS
+        if (e.revision == loadedRevision && e.hash == loadedHash) return Verdict.PASS
         // A mismatch poisons the process: the expectation is now consumed, so the next verdict is
         // NOT_SET, and the caller must fail closed until a fresh UI setExpected re-arms the gate.
         blockedAfterMismatch = true
@@ -127,4 +129,39 @@ object LaunchIdentityGate {
 
     /** A greppable description of the expectation for the session log. */
     fun describe(e: Expected): String = "revision=${e.revision} hash=${e.hash}"
+
+    /** The categories the app's Start check hashes. Must equal LAUNCH_CRITICAL_CATEGORIES in src/lib/launchConfig.ts. */
+    val HASHED_CATEGORIES = setOf("general", "training", "trainingEvent", "skills", "racing", "runQueue")
+
+    /** Rows inside those categories left out of the hash. Must equal LAUNCH_IDENTITY_EXCLUDED_KEYS in src/lib/launchConfig.ts. */
+    val EXCLUDED_KEYS = setOf("general.settingsRevision", "racing.racingPlanData")
+
+    /**
+     * 32-bit FNV-1a over UTF-16 code units, as 8 lowercase hex digits: stableHash in
+     * src/lib/launchConfig.ts. A Kotlin Char is one UTF-16 code unit, like JS charCodeAt, and Int
+     * multiplication wraps exactly like Math.imul.
+     */
+    fun stableHash(input: String): String {
+        var h = 0x811c9dc5.toInt()
+        for (c in input) {
+            h = h xor c.code
+            h *= 0x01000193
+        }
+        return Integer.toHexString(h).padStart(8, '0')
+    }
+
+    /**
+     * The settings identity hash of stored rows keyed "category.key", computed as identityFromRows
+     * in src/lib/launchConfig.ts computes it: the category is the text before the first '.', rows
+     * outside [HASHED_CATEGORIES] and the [EXCLUDED_KEYS] are dropped, and the raw stored values
+     * form "category.key=value" lines, sorted by UTF-16 code unit (Kotlin's String order, the same
+     * as JS's default sort) and joined with newlines.
+     */
+    fun identityHash(rows: Map<String, String>): String {
+        val lines = rows.filter { (rowKey, _) -> rowKey.substringBefore('.') in HASHED_CATEGORIES && rowKey !in EXCLUDED_KEYS }.map { (rowKey, value) -> "$rowKey=$value" }.sorted()
+        return stableHash(lines.joinToString("\n"))
+    }
+
+    /** [identityHash] of the bot's launch snapshot, whose rows are keyed "category/key". */
+    fun snapshotIdentityHash(snapshot: Map<String, String>): String = identityHash(snapshot.mapKeys { (key, _) -> key.replaceFirst('/', '.') })
 }

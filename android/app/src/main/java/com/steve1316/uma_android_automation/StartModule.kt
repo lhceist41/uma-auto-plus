@@ -83,6 +83,18 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         @Volatile
         var queueStopReason: String? = null
 
+        /**
+         * Shown when the settings the bot read differ from the ones the app checked at Start. The
+         * usual cause is a stale second copy of the settings database held for the life of the app
+         * process, so only a full restart of UMA Auto+ clears it; pressing Start again would not.
+         * An enabled accessibility service keeps the process alive after the app is swiped away,
+         * hence the force stop.
+         */
+        const val SETTINGS_NOT_DELIVERED_MESSAGE =
+            "Not started, and nothing was spent: the settings UMA Auto+ checked when you pressed Start did not reach the bot. " +
+                "Force stop UMA Auto+ (Android Settings, Apps, UMA Auto+, Force stop), reopen it, turn its accessibility service back on " +
+                "if it was switched off, then press Start again."
+
         /** Player-safe key for [queueStopReason], set with it: the queue report carries the key, never the prose. */
         @Volatile
         var queueStopKey: String? = null
@@ -1556,23 +1568,28 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
     internal fun dispatchDiagnostic(readSnapshot: () -> Map<String, String>, run: (DebugTestGate.Selection) -> Unit): DebugTestGate.Selection? {
         var loadedRevision = 0
+        var snapshot: Map<String, String> = emptyMap()
         val selection = DebugTestGate.consume {
-            readSnapshot().also { loadedRevision = it["general/settingsRevision"]?.toIntOrNull() ?: 0 }
+            readSnapshot().also {
+                snapshot = it
+                loadedRevision = it["general/settingsRevision"]?.toIntOrNull() ?: 0
+            }
         }
-        if (!verifyLaunchIdentity(loadedRevision)) return null
+        val loadedHash = com.steve1316.uma_android_automation.bot.LaunchIdentityGate.snapshotIdentityHash(snapshot)
+        if (!verifyLaunchIdentity(loadedRevision, loadedHash)) return null
         if (selection.key != null) run(selection)
         return selection
     }
 
-    private fun verifyLaunchIdentity(loadedRevision: Int): Boolean {
+    private fun verifyLaunchIdentity(loadedRevision: Int, loadedHash: String): Boolean {
         val expectedIdentity = com.steve1316.uma_android_automation.bot.LaunchIdentityGate.current
-        when (com.steve1316.uma_android_automation.bot.LaunchIdentityGate.verdict(loadedRevision)) {
+        when (com.steve1316.uma_android_automation.bot.LaunchIdentityGate.verdict(loadedRevision, loadedHash)) {
             com.steve1316.uma_android_automation.bot.LaunchIdentityGate.Verdict.MISMATCH -> {
-                MessageLog.e(
+                MessageLog.e(TAG, "[START] $SETTINGS_NOT_DELIVERED_MESSAGE")
+                MessageLog.i(
                     TAG,
-                    "[START] launch identity mismatch: settings revision $loadedRevision on disk, expected " +
-                        "${expectedIdentity?.revision} (hash ${expectedIdentity?.hash}). A settings write landed after " +
-                        "verification; aborting before any game interaction. Press Start again.",
+                    "[START] launch identity mismatch: the bot read revision $loadedRevision, settings hash $loadedHash; " +
+                        "the app verified revision ${expectedIdentity?.revision}, hash ${expectedIdentity?.hash}. Aborted before any game interaction.",
                 )
                 return false
             }
@@ -1583,11 +1600,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // A mismatch consumes the expectation. Keep later unverified starts blocked until
                 // a fresh UI-verified identity re-arms the gate.
                 if (com.steve1316.uma_android_automation.bot.LaunchIdentityGate.isBlockedAfterMismatch()) {
-                    MessageLog.e(
-                        TAG,
-                        "[START] launch blocked after a prior launch-identity mismatch this session (revision on disk: " +
-                            "$loadedRevision); return to UMA Auto+ and start again from the verified Start Queue.",
-                    )
+                    MessageLog.e(TAG, "[START] $SETTINGS_NOT_DELIVERED_MESSAGE")
+                    MessageLog.i(TAG, "[START] launch blocked after an earlier launch identity mismatch in this process (revision on disk: $loadedRevision).")
                     return false
                 }
                 MessageLog.w(TAG, "[START] session started without a verified launch identity (non-UI entry); revision on disk: $loadedRevision.")
@@ -1601,7 +1615,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         val rows = mutableMapOf<String, String>()
         val dbFile = File(context.filesDir, "SQLite/settings.db")
         SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY, android.database.DatabaseErrorHandler { }).use { db ->
-            db.rawQuery("SELECT category, key, value FROM settings WHERE category IN ('debug', 'general')", null).use { cursor ->
+            // The same rows the app's Start check reads back and hashes (loadSettingsRowsSnapshot), so
+            // the bot can compare its own view of the settings with the one the app verified.
+            db.rawQuery("SELECT category, key, value FROM settings WHERE category NOT GLOB 'rot[0-9]*' AND category != 'queueState'", null).use { cursor ->
                 while (cursor.moveToNext()) {
                     check(!cursor.isNull(2)) { "Null launch setting" }
                     val key = "${cursor.getString(0)}/${cursor.getString(1)}"

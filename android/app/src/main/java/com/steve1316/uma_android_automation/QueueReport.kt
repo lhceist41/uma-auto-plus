@@ -25,7 +25,7 @@ enum class SessionEnd(val clearsQueueState: Boolean = false) {
     /** The start request was refused before any game interaction: not started from the app, or the launch choice no longer matched. */
     REFUSED_NO_APP_START,
 
-    /** Settings changed between the app's verification and the bot reading them. */
+    /** The settings the bot read are not the ones the app checked at Start (changed after the check, or never reached the bot). Nothing was started. */
     REFUSED_LAUNCH_IDENTITY,
 
     /** An explicitly launched diagnostic ran and ended the session. */

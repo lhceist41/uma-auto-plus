@@ -24,7 +24,7 @@ class LaunchIdentityGateTest {
 
     @Test
     fun `no expectation yields NOT_SET (non-UI entry proceeds)`() {
-        assertEquals(LaunchIdentityGate.Verdict.NOT_SET, LaunchIdentityGate.verdict(5))
+        assertEquals(LaunchIdentityGate.Verdict.NOT_SET, revisionVerdict(5))
         assertNull(LaunchIdentityGate.current)
     }
 
@@ -32,28 +32,28 @@ class LaunchIdentityGateTest {
     fun `matching revision passes`() {
         LaunchIdentityGate.setExpected(7, "abcd1234")
         assertEquals("abcd1234", LaunchIdentityGate.current?.hash)
-        assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(7))
+        assertEquals(LaunchIdentityGate.Verdict.PASS, revisionVerdict(7))
     }
 
     @Test
     fun `a revision that moved after verification is a MISMATCH (the TOCTOU window)`() {
         LaunchIdentityGate.setExpected(7, "abcd1234")
-        assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(8))
+        assertEquals(LaunchIdentityGate.Verdict.MISMATCH, revisionVerdict(8))
     }
 
     @Test
     fun `the expectation is single-use -- a stale identity cannot validate a later session`() {
         LaunchIdentityGate.setExpected(7, "h")
-        assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(7))
+        assertEquals(LaunchIdentityGate.Verdict.PASS, revisionVerdict(7))
         // No new setExpected: the next session must not inherit the consumed one.
-        assertEquals(LaunchIdentityGate.Verdict.NOT_SET, LaunchIdentityGate.verdict(7))
+        assertEquals(LaunchIdentityGate.Verdict.NOT_SET, revisionVerdict(7))
     }
 
     @Test
     fun `a MISMATCH also consumes the expectation (no retry validates against the old one)`() {
         LaunchIdentityGate.setExpected(7, "h")
-        assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(9))
-        assertEquals(LaunchIdentityGate.Verdict.NOT_SET, LaunchIdentityGate.verdict(7))
+        assertEquals(LaunchIdentityGate.Verdict.MISMATCH, revisionVerdict(9))
+        assertEquals(LaunchIdentityGate.Verdict.NOT_SET, revisionVerdict(7))
     }
 
     @Test
@@ -71,7 +71,10 @@ class LaunchIdentityGateTest {
             val onStart = start.indexOf("fun onStartEvent(")
             assertTrue(onStart >= 0)
             val dispatchAt = start.indexOf("dispatchDiagnostic(::readLaunchSnapshot)", onStart)
-            val verifyAt = start.indexOf("if (!verifyLaunchIdentity(loadedRevision)) return null")
+            val verifyAt = start.indexOf("if (!verifyLaunchIdentity(loadedRevision, loadedHash)) return null")
+            val hashAt = start.indexOf("val loadedHash = com.steve1316.uma_android_automation.bot.LaunchIdentityGate.snapshotIdentityHash(snapshot)")
+            assertTrue(hashAt in 0 until verifyAt, "the verdict compares the hash of the snapshot the bot just read")
+            assertTrue(start.contains("WHERE category NOT GLOB 'rot[0-9]*' AND category != 'queueState'"), "the bot reads the same rows the app's check reads back")
             val runAt = start.indexOf("if (selection.key != null) run(selection)")
             val verdictAt = start.indexOf("LaunchIdentityGate.verdict(")
             // The launch-critical queue settings read is where run consumption begins.
@@ -117,8 +120,10 @@ class LaunchIdentityGateTest {
             assertTrue(notSet in 0 until end)
             val branch = start.substring(notSet, end + "return true".length)
             assertTrue(branch.contains("MessageLog.e("), "the blocked case logs at error level")
-            assertTrue(branch.contains("blocked after a prior launch-identity mismatch"), "the log names the mismatch cause")
-            assertTrue(branch.contains("verified Start Queue"), "the log directs the operator back through the UI")
+            assertTrue(branch.contains("blocked after an earlier launch identity mismatch"), "the log names the mismatch cause")
+            // A second Start inside the same process reads the same stale settings, so the blocked start
+            // gives the same restart instruction as the mismatch itself.
+            assertTrue(branch.contains("MessageLog.e(TAG, \"[START] \$SETTINGS_NOT_DELIVERED_MESSAGE\")"), "the log tells the player how to recover")
             // The latch check gates the fail-closed return; the legacy warn/proceed still exists for the unblocked NOT_SET.
             assertTrue(branch.indexOf("isBlockedAfterMismatch()") < branch.indexOf("MessageLog.w("), "the latch check precedes the legacy warn")
             assertTrue(branch.contains("return true"), "the unblocked NOT_SET still proceeds (legacy trust-disk)")
@@ -151,20 +156,20 @@ class LaunchIdentityGateTest {
         @Test
         fun `a MISMATCH latches the blocked state`() {
             LaunchIdentityGate.setExpected(7, "h")
-            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(9))
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, revisionVerdict(9))
             assertTrue(LaunchIdentityGate.isBlockedAfterMismatch())
         }
 
         @Test
         fun `a PASS never latches the blocked state`() {
             LaunchIdentityGate.setExpected(7, "h")
-            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.PASS, revisionVerdict(7))
             assertFalse(LaunchIdentityGate.isBlockedAfterMismatch())
         }
 
         @Test
         fun `an ordinary NOT_SET before any mismatch stays unblocked (Scenario D fresh-process legacy entry)`() {
-            assertEquals(LaunchIdentityGate.Verdict.NOT_SET, LaunchIdentityGate.verdict(5))
+            assertEquals(LaunchIdentityGate.Verdict.NOT_SET, revisionVerdict(5))
             assertFalse(LaunchIdentityGate.isBlockedAfterMismatch())
         }
 
@@ -173,18 +178,18 @@ class LaunchIdentityGateTest {
             // UI expected N+1, disk loaded N -> MISMATCH -> blocked; a second PLAY with no new setExpected
             // reaches NOT_SET but the latch is still set, so the caller must refuse (the live incident).
             LaunchIdentityGate.setExpected(8, "h")
-            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, revisionVerdict(7))
             assertTrue(LaunchIdentityGate.isBlockedAfterMismatch())
-            assertEquals(LaunchIdentityGate.Verdict.NOT_SET, LaunchIdentityGate.verdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.NOT_SET, revisionVerdict(7))
             assertTrue(LaunchIdentityGate.isBlockedAfterMismatch())
         }
 
         @Test
         fun `repeated unverified reads stay blocked until a fresh setExpected`() {
             LaunchIdentityGate.setExpected(8, "h")
-            LaunchIdentityGate.verdict(7)
+            revisionVerdict(7)
             repeat(3) {
-                assertEquals(LaunchIdentityGate.Verdict.NOT_SET, LaunchIdentityGate.verdict(7))
+                assertEquals(LaunchIdentityGate.Verdict.NOT_SET, revisionVerdict(7))
                 assertTrue(LaunchIdentityGate.isBlockedAfterMismatch())
             }
         }
@@ -192,31 +197,31 @@ class LaunchIdentityGateTest {
         @Test
         fun `Scenario C -- a fresh UI setExpected clears the block and re-arms verification`() {
             LaunchIdentityGate.setExpected(8, "h")
-            LaunchIdentityGate.verdict(7)
+            revisionVerdict(7)
             assertTrue(LaunchIdentityGate.isBlockedAfterMismatch())
             LaunchIdentityGate.setExpected(9, "h2")
             assertFalse(LaunchIdentityGate.isBlockedAfterMismatch())
-            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(9))
+            assertEquals(LaunchIdentityGate.Verdict.PASS, revisionVerdict(9))
         }
 
         @Test
         fun `Scenario E -- a mismatch after a re-arm latches again`() {
             LaunchIdentityGate.setExpected(8, "h")
-            LaunchIdentityGate.verdict(7)
+            revisionVerdict(7)
             LaunchIdentityGate.setExpected(9, "h2")
             assertFalse(LaunchIdentityGate.isBlockedAfterMismatch())
-            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(8))
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, revisionVerdict(8))
             assertTrue(LaunchIdentityGate.isBlockedAfterMismatch())
         }
 
         @Test
         fun `clear resets the block (process-local reset, standing in for a process restart)`() {
             LaunchIdentityGate.setExpected(8, "h")
-            LaunchIdentityGate.verdict(7)
+            revisionVerdict(7)
             assertTrue(LaunchIdentityGate.isBlockedAfterMismatch())
             LaunchIdentityGate.clear()
             assertFalse(LaunchIdentityGate.isBlockedAfterMismatch())
-            assertEquals(LaunchIdentityGate.Verdict.NOT_SET, LaunchIdentityGate.verdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.NOT_SET, revisionVerdict(7))
             assertFalse(LaunchIdentityGate.isBlockedAfterMismatch())
         }
     }
@@ -227,7 +232,7 @@ class LaunchIdentityGateTest {
         @Test
         fun `the forced hook starts unarmed -- an ordinary verdict is unaffected`() {
             LaunchIdentityGate.setExpected(7, "h")
-            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.PASS, revisionVerdict(7))
         }
 
         @Test
@@ -235,14 +240,14 @@ class LaunchIdentityGateTest {
             LaunchIdentityGate.armForcedMismatchForTest()
             LaunchIdentityGate.setExpected(7, "h")
             // Revisions MATCH (7 == 7): without the hook this is a PASS; the hook forces MISMATCH.
-            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, revisionVerdict(7))
         }
 
         @Test
         fun `a forced MISMATCH latches the sticky block exactly like a real one`() {
             LaunchIdentityGate.armForcedMismatchForTest()
             LaunchIdentityGate.setExpected(7, "h")
-            LaunchIdentityGate.verdict(7)
+            revisionVerdict(7)
             assertTrue(LaunchIdentityGate.isBlockedAfterMismatch())
         }
 
@@ -250,19 +255,19 @@ class LaunchIdentityGateTest {
         fun `the hook self-clears after one use`() {
             LaunchIdentityGate.armForcedMismatchForTest()
             LaunchIdentityGate.setExpected(7, "h")
-            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, revisionVerdict(7))
             // Re-arm the gate (clears the sticky block); a fresh matching launch now PASSes -- the forced
             // flag did not survive its single use.
             LaunchIdentityGate.setExpected(8, "h2")
-            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(8))
+            assertEquals(LaunchIdentityGate.Verdict.PASS, revisionVerdict(8))
         }
 
         @Test
         fun `after a forced mismatch the second unverified verdict is NOT_SET and still blocked`() {
             LaunchIdentityGate.armForcedMismatchForTest()
             LaunchIdentityGate.setExpected(7, "h")
-            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(7))
-            assertEquals(LaunchIdentityGate.Verdict.NOT_SET, LaunchIdentityGate.verdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, revisionVerdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.NOT_SET, revisionVerdict(7))
             assertTrue(LaunchIdentityGate.isBlockedAfterMismatch())
         }
 
@@ -270,20 +275,20 @@ class LaunchIdentityGateTest {
         fun `arming before any expected identity yields NOT_SET and keeps the hook armed`() {
             LaunchIdentityGate.armForcedMismatchForTest()
             // No setExpected yet: the verdict is NOT_SET and must NOT consume the hook.
-            assertEquals(LaunchIdentityGate.Verdict.NOT_SET, LaunchIdentityGate.verdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.NOT_SET, revisionVerdict(7))
             // The retained hook then forces exactly one MISMATCH once a real expected exists.
             LaunchIdentityGate.setExpected(7, "h")
-            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, revisionVerdict(7))
         }
 
         @Test
         fun `the retained hook forces exactly one MISMATCH -- a later launch is normal`() {
             LaunchIdentityGate.armForcedMismatchForTest()
-            LaunchIdentityGate.verdict(9) // NOT_SET, hook retained
+            revisionVerdict(9) // NOT_SET, hook retained
             LaunchIdentityGate.setExpected(9, "h")
-            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(9))
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, revisionVerdict(9))
             LaunchIdentityGate.setExpected(10, "h2")
-            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(10))
+            assertEquals(LaunchIdentityGate.Verdict.PASS, revisionVerdict(10))
         }
 
         @Test
@@ -291,20 +296,20 @@ class LaunchIdentityGateTest {
             LaunchIdentityGate.armForcedMismatchForTest()
             LaunchIdentityGate.clear()
             LaunchIdentityGate.setExpected(7, "h")
-            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.PASS, revisionVerdict(7))
         }
 
         @Test
         fun `an ordinary unarmed PASS is unchanged`() {
             LaunchIdentityGate.setExpected(5, "abc")
-            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(5))
+            assertEquals(LaunchIdentityGate.Verdict.PASS, revisionVerdict(5))
             assertFalse(LaunchIdentityGate.isBlockedAfterMismatch())
         }
 
         @Test
         fun `an ordinary real-revision MISMATCH is unchanged`() {
             LaunchIdentityGate.setExpected(5, "abc")
-            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(6))
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, revisionVerdict(6))
             assertTrue(LaunchIdentityGate.isBlockedAfterMismatch())
         }
 
@@ -312,11 +317,11 @@ class LaunchIdentityGateTest {
         fun `setExpected after a forced mismatch clears the block but does not re-arm the hook`() {
             LaunchIdentityGate.armForcedMismatchForTest()
             LaunchIdentityGate.setExpected(7, "h")
-            LaunchIdentityGate.verdict(7) // forced MISMATCH -> blocked, hook consumed
+            revisionVerdict(7) // forced MISMATCH -> blocked, hook consumed
             LaunchIdentityGate.setExpected(7, "h") // clears the block; must NOT re-arm the hook
             assertFalse(LaunchIdentityGate.isBlockedAfterMismatch())
             // A matching revision now PASSes -- proof the hook was not silently re-armed.
-            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.PASS, revisionVerdict(7))
         }
 
         @Test
@@ -325,9 +330,9 @@ class LaunchIdentityGateTest {
             LaunchIdentityGate.armForcedMismatchForTest()
             LaunchIdentityGate.armForcedMismatchForTest()
             LaunchIdentityGate.setExpected(7, "h")
-            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(7))
+            assertEquals(LaunchIdentityGate.Verdict.MISMATCH, revisionVerdict(7))
             LaunchIdentityGate.setExpected(8, "h2")
-            assertEquals(LaunchIdentityGate.Verdict.PASS, LaunchIdentityGate.verdict(8))
+            assertEquals(LaunchIdentityGate.Verdict.PASS, revisionVerdict(8))
         }
     }
 
@@ -345,3 +350,6 @@ class LaunchIdentityGateTest {
         throw IllegalStateException("could not locate the Kotlin source root from ${System.getProperty("user.dir")}")
     }
 }
+
+/** A verdict where the loaded settings hash is the verified one, so only the revision decides. */
+private fun revisionVerdict(loadedRevision: Int) = LaunchIdentityGate.verdict(loadedRevision, LaunchIdentityGate.current?.hash ?: "")

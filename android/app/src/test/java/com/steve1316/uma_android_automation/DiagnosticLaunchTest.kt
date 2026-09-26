@@ -43,6 +43,9 @@ class DiagnosticLaunchTest {
         put("debug/veteranInspirationScanStartIndex", "2")
     }
 
+    /** The settings hash the app would have verified for [rows]: only general/scenario is hashed there, so it is the same for every case. */
+    private val verified by lazy { LaunchIdentityGate.snapshotIdentityHash(rows()) }
+
     private fun prepare(key: String? = roster, scenario: String = "URA Finale") = DebugTestGate.prepare(payload(key, scenario)).also { DebugTestGate.start(it) }
 
     private fun revoke(token: String): Boolean {
@@ -89,7 +92,7 @@ class DiagnosticLaunchTest {
     @Test
     fun `revocation before the overlay event rejects an old matching snapshot for diagnostic and normal requests`() {
         for (key in listOf(roster, null)) {
-            LaunchIdentityGate.setExpected(10, "verified")
+            LaunchIdentityGate.setExpected(10, verified)
             val token = prepare(key)
             assertTrue(revoke(token))
             val effects = Effects()
@@ -158,7 +161,7 @@ class DiagnosticLaunchTest {
     fun `revision mismatch rejects the actual dispatch chain including other diagnostics and normal Start`() {
         for (key in listOf(roster, "debugMode_startRainbowDetectionTest", null)) {
             for (revision in listOf("9", null, "malformed", "2147483648")) {
-                LaunchIdentityGate.setExpected(10, "verified")
+                LaunchIdentityGate.setExpected(10, verified)
                 prepare(key)
                 val snapshot = rows(key).apply {
                     if (revision == null) remove("general/settingsRevision") else put("general/settingsRevision", revision)
@@ -176,7 +179,7 @@ class DiagnosticLaunchTest {
     @Test
     fun `valid revision dispatches once and consumes identity for every launch kind`() {
         for (key in listOf(roster, "debugMode_startRainbowDetectionTest", null)) {
-            LaunchIdentityGate.setExpected(10, "verified")
+            LaunchIdentityGate.setExpected(10, verified)
             prepare(key)
             val effects = Effects()
             launch(effects) { rows(key) }
@@ -192,8 +195,44 @@ class DiagnosticLaunchTest {
     }
 
     @Test
+    fun `settings the bot read that differ from the ones the app verified refuse every launch kind before anything runs`() {
+        // The app's side of the check: the hash it computed for these rows, taken from the shared vectors.
+        val fixture = JSONObject(java.io.File(repoRoot(), "src/lib/__fixtures__/launchIdentity.json").readText()).getJSONArray("identity")
+        val verifiedCase = (0 until fixture.length()).map { fixture.getJSONObject(it) }.single { it.getString("name") == "launch-critical rows in shuffled order, with a JSON-looking value" }
+        val verifiedRows = verifiedCase.getJSONObject("rows").let { r -> r.keys().asSequence().associate { it.replaceFirst('.', '/') to r.getString(it) } }
+        assertEquals("false", verifiedRows["runQueue/reuseLastLaunchSetup"])
+        for (key in listOf(roster, null)) {
+            val scenario = verifiedRows.getValue("general/scenario")
+            LaunchIdentityGate.setExpected(10, verifiedCase.getString("hash"))
+            prepare(key, scenario)
+            val effects = Effects()
+            launch(effects) { rows(key, scenario) + verifiedRows + ("runQueue/reuseLastLaunchSetup" to "true") }
+            assertEquals(0, effects.chosen + effects.wrong + effects.navigation + effects.queue + effects.career, "launch kind $key")
+            assertTrue(LaunchIdentityGate.isBlockedAfterMismatch())
+            DebugTestGate.finish()
+
+            LaunchIdentityGate.setExpected(10, verifiedCase.getString("hash"))
+            prepare(key, scenario)
+            val matching = Effects()
+            launch(matching) { rows(key, scenario) + verifiedRows }
+            assertEquals(1, if (key == null) matching.navigation else matching.chosen, "launch kind $key proceeds when the settings match")
+            assertFalse(LaunchIdentityGate.isBlockedAfterMismatch())
+            DebugTestGate.finish()
+        }
+    }
+
+    private fun repoRoot(): java.io.File {
+        var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+        repeat(8) {
+            if (java.io.File(dir, "src/lib/__fixtures__/launchIdentity.json").isFile) return dir!!
+            dir = dir?.parentFile
+        }
+        throw AssertionError("repository root not found from the test working directory")
+    }
+
+    @Test
     fun `a mismatch stays blocked until a fresh verified identity rearms dispatch`() {
-        LaunchIdentityGate.setExpected(10, "verified")
+        LaunchIdentityGate.setExpected(10, verified)
         prepare()
         val effects = Effects()
         launch(effects) { rows().apply { put("general/settingsRevision", "9") } }
@@ -202,7 +241,7 @@ class DiagnosticLaunchTest {
         launch(effects) { rows() }
         assertEquals(0, effects.chosen + effects.wrong + effects.navigation + effects.queue + effects.career)
         DebugTestGate.finish()
-        LaunchIdentityGate.setExpected(10, "fresh")
+        LaunchIdentityGate.setExpected(10, verified)
         prepare()
         launch(effects) { rows() }
         assertEquals(1, effects.chosen)
@@ -210,7 +249,7 @@ class DiagnosticLaunchTest {
 
     @Test
     fun `snapshot read failure consumes the request without any handler or fallback`() {
-        LaunchIdentityGate.setExpected(10, "verified")
+        LaunchIdentityGate.setExpected(10, verified)
         prepare()
         val effects = Effects()
         assertThrows(IllegalStateException::class.java) { launch(effects) { error("SQLite read failed") } }
@@ -220,7 +259,7 @@ class DiagnosticLaunchTest {
 
     @Test
     fun `unblocked normal continuation retains the existing default revision and single use gate semantics`() {
-        LaunchIdentityGate.setExpected(0, "default")
+        LaunchIdentityGate.setExpected(0, verified)
         prepare(null)
         val effects = Effects()
         launch(effects) { rows(null).apply { remove("general/settingsRevision") } }

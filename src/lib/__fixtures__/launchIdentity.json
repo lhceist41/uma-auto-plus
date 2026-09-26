@@ -1,0 +1,124 @@
+{
+    "note": "Golden vectors shared by launchIdentityVectors.test.ts (JS) and LaunchIdentityHashTest.kt (Kotlin). Generated from src/lib/launchConfig.ts; both implementations must reproduce every hash.",
+    "categories": ["general", "training", "trainingEvent", "skills", "racing", "runQueue"],
+    "excludedKeys": ["general.settingsRevision", "racing.racingPlanData"],
+    "stableHash": [
+        {
+            "name": "empty string",
+            "input": "",
+            "hash": "811c9dc5"
+        },
+        {
+            "name": "single ASCII letter",
+            "input": "a",
+            "hash": "e40c292c"
+        },
+        {
+            "name": "ASCII word",
+            "input": "foobar",
+            "hash": "bf9cf968"
+        },
+        {
+            "name": "surrogate pair",
+            "input": "\ud83d\udc0e",
+            "hash": "c92e9b92"
+        },
+        {
+            "name": "Japanese text",
+            "input": "\u30a6\u30de\u5a18",
+            "hash": "142adea7"
+        },
+        {
+            "name": "newline-joined lines",
+            "input": "general.a=1\ngeneral.b=2",
+            "hash": "5fd03e25"
+        }
+    ],
+    "identity": [
+        {
+            "name": "launch-critical rows in shuffled order, with a JSON-looking value",
+            "rows": {
+                "runQueue.reuseLastLaunchSetup": "false",
+                "general.scenario": "URA Finale",
+                "racing.racingPlan": "[{\"raceName\":\"Arima Kinen\",\"turn\":72}]",
+                "training.statPrioritization": "[\"Speed\",\"Stamina\",\"Wit\"]",
+                "skills.skillSpendObjective": "sparks",
+                "trainingEvent.enableAutomaticOCRRetry": "true"
+            },
+            "hash": "6e379b0c"
+        },
+        {
+            "name": "the same rows with reuse flipped to true",
+            "rows": {
+                "runQueue.reuseLastLaunchSetup": "true",
+                "general.scenario": "URA Finale",
+                "racing.racingPlan": "[{\"raceName\":\"Arima Kinen\",\"turn\":72}]",
+                "training.statPrioritization": "[\"Speed\",\"Stamina\",\"Wit\"]",
+                "skills.skillSpendObjective": "sparks",
+                "trainingEvent.enableAutomaticOCRRetry": "true"
+            },
+            "hash": "2e39d2df"
+        },
+        {
+            "name": "excluded keys and other categories do not change the hash",
+            "rows": {
+                "runQueue.reuseLastLaunchSetup": "false",
+                "general.scenario": "URA Finale",
+                "racing.racingPlan": "[{\"raceName\":\"Arima Kinen\",\"turn\":72}]",
+                "training.statPrioritization": "[\"Speed\",\"Stamina\",\"Wit\"]",
+                "skills.skillSpendObjective": "sparks",
+                "trainingEvent.enableAutomaticOCRRetry": "true",
+                "general.settingsRevision": "41",
+                "racing.racingPlanData": "{\"big\":\"derived dataset\"}",
+                "debug.enableDebugMode": "true",
+                "misc.currentProfileName": "Night queue",
+                "discord.enableDiscordNotifications": "false"
+            },
+            "sameHashAs": "launch-critical rows in shuffled order, with a JSON-looking value",
+            "hash": "6e379b0c"
+        },
+        {
+            "name": "empty values",
+            "rows": {
+                "general.appliedPresetTrainee": "",
+                "skills.skillSpendMode": "",
+                "runQueue.traineeRotation": "[]"
+            },
+            "hash": "6fcea4f2"
+        },
+        {
+            "name": "no launch-critical rows at all",
+            "rows": {
+                "debug.enableDebugMode": "true",
+                "misc.x": "1"
+            },
+            "hash": "811c9dc5"
+        },
+        {
+            "name": "non-ASCII values and a surrogate pair sorted by UTF-16 code unit",
+            "rows": {
+                "general.x\uff5e": "tilde",
+                "general.x\ud83d\udc0e": "horse",
+                "general.appliedPresetTrainee": "[Special Dreamer] \u30b9\u30da\u30b7\u30e3\u30eb\u30a6\u30a3\u30fc\u30af",
+                "racing.note": "\ud83d\udc0e + caf\u00e9"
+            },
+            "hash": "2a55dd81"
+        },
+        {
+            "name": "a key containing a dot belongs to the category before the first dot",
+            "rows": {
+                "racing.plan.v2": "x",
+                "racingPlan.other": "y"
+            },
+            "hash": "044adbff"
+        },
+        {
+            "name": "category names are case-sensitive",
+            "rows": {
+                "General.scenario": "URA Finale",
+                "RUNQUEUE.reuseLastLaunchSetup": "true"
+            },
+            "hash": "811c9dc5"
+        }
+    ]
+}
