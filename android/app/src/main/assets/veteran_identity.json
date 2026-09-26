@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "outfitSource": "gametora character-cards title_en_gl",
-  "characterCount": 66,
-  "outfitCount": 120,
+  "characterCount": 68,
+  "outfitCount": 122,
   "characters": {
     "Admire Vega": {
       "outfits": [
@@ -230,6 +230,11 @@
         "CODE: ICING"
       ]
     },
+    "Nakayama Festa": {
+      "outfits": [
+        "Desperate Measures"
+      ]
+    },
     "Narita Brian": {
       "outfits": [
         "Maverick",
@@ -371,6 +376,11 @@
       "outfits": [
         "Get to Winning!",
         "Dream Deliverer"
+      ]
+    },
+    "Wonder Acute": {
+      "outfits": [
+        "Butterfly Sting"
       ]
     },
     "Yaeno Muteki": {

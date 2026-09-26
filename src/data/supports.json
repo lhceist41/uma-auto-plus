@@ -386,6 +386,16 @@
         ],
         "(❯❯)\nA Good Friend": [
             "Energy +20\nHomestretch Haste hint +1"
+        ],
+        "(❯)\nOne Should Give Gals Their Care": [
+            "Maximum Energy +4\nEnergy +10\nSkill points +10\nEishin Flash bond +5"
+        ],
+        "(❯❯)\nOne Should Show Umadols Their Utmost": [
+            "Speed +15\nWit +10\nPosition Pilfer hint +1\nEishin Flash bond +5",
+            "Randomly either\n----------\nEnergy +30\nPower +10\nEishin Flash bond +5\n----------\n\n----------\nEnergy +10\nPower +5\nEishin Flash bond +5"
+        ],
+        "(❯❯❯)\nOne Should Share Friends' Hometown Love": [
+            "Randomly either\n----------\nEnergy +10\nSpeed +5\nSkill points +5\nSharp Streak hint +1\nEishin Flash bond +5\n----------\n\n----------\nEnergy +20\nSpeed +10\nSkill points +10\nSharp Streak hint +3\nEishin Flash bond +5"
         ]
     },
     "El Condor Pasa": {
@@ -1107,6 +1117,16 @@
         ],
         "(❯❯)\nThe Place I Wish to Stand": [
             "Energy +30\nMood +1"
+        ],
+        "(❯)\nLet's Use Our Imaginations": [
+            "Energy +15",
+            "Speed +15"
+        ],
+        "(❯❯)\nLet's Read a Story": [
+            "Speed +10\nSkill points +5\nMejiro Ardan bond +5"
+        ],
+        "(❯❯❯)\nLet's Learn Through Immersion": [
+            "Speed +10\nRace Planner hint +1\nMejiro Ardan bond +5"
         ]
     },
     "Mejiro Bright": {
@@ -1399,6 +1419,13 @@
         ],
         "(❯❯❯)\nRivals Know Best": [
             "Energy -10\nSpeed +15\nStamina +15\nSkill points +20\nFirm Course Menace hint +1\nNarita Top Road bond +5"
+        ],
+        "(❯)\nDon't Go Overboard!": [
+            "Energy -5\nStamina +10\nPower +10\nInner Post Proficiency ○ hint +1\nNarita Top Road bond +5",
+            "Energy +10\nSkill points +15\nNarita Top Road bond +5"
+        ],
+        "(❯❯)\nGoing Overboard for You!": [
+            "Stamina +10\nPower +10\nSkill points +15\nNarita Top Road bond +5"
         ]
     },
     "Nice Nature": {
@@ -1498,6 +1525,16 @@
         ],
         "(❯❯)\n\"Happiness? Don't Mind If I Do\" —Oguri Cap": [
             "Power +7\nGuts +7\nSkill points +10\nWet Conditions ○ hint +1\nOguri Cap bond +5"
+        ],
+        "(❯)\nFostering Gratitude": [
+            "Skill points +30\nOguri Cap bond +5"
+        ],
+        "(❯❯)\nCreating Smiles": [
+            "Randomly either\n----------\nEnergy +30\nSpeed +10\nTriple 7s hint +1\nOguri Cap bond +5\n----------\n\n----------\nEnergy +10\nOguri Cap bond +5",
+            "Speed +7\nWit +7\nSkill points +20\nOguri Cap bond +5"
+        ],
+        "(❯❯❯)\nSharing Happiness": [
+            "Randomly either\n----------\n\n----------\n\n----------\nSpeed +10\nWit +10\nSkill points +20\nSolid Strike hint +3\nOguri Cap bond +5\n----------\n\n----------\nSpeed +7\nWit +7\nSkill points +15\nSolid Strike hint +1\nOguri Cap bond +5"
         ]
     },
     "Rice Shower": {
@@ -2114,6 +2151,25 @@
             "Stamina +10\nPower +10\nFast & Furious hint +2\nTamamo Cross bond +5"
         ]
     },
+    "Tanino Gimlet": {
+        "The Euphoria of Destruction!": [
+            "Energy +15\nTanino Gimlet bond +5",
+            "Skill points +30\nTanino Gimlet bond +5"
+        ],
+        "An Electrifying Present!": [
+            "Power +10\nSkill points +5\nTanino Gimlet bond +5",
+            "End Closer Savvy ○ hint +1\nTanino Gimlet bond +5"
+        ],
+        "(❯)\nAs the Great Artists of Yore...": [
+            "Randomly either\n----------\nPower +15\nSkill points +15\nTanino Gimlet bond +5\n----------\n\n----------\nSkill points +10\nTanino Gimlet bond +5"
+        ],
+        "(❯❯)\nAs the Criminal from the North...": [
+            "Randomly either\n----------\nStamina +15\nPower +15\nTanino Gimlet bond +5\n----------\n\n----------\nPower +10\nTanino Gimlet bond +5"
+        ],
+        "(❯❯❯)\nAs Bacchus, God of Wine...": [
+            "Stamina +10\nPower +10\nSturm und Drang hint +1\nTanino Gimlet bond +5"
+        ]
+    },
     "Tazuna Hayakawa": {
         "(❯)\nMilk with a Chance of Apples": [
             "Energy +35\nSpeed +6\nMood +1\nTazuna Hayakawa bond +5"
@@ -2268,25 +2324,6 @@
             "Speed +8\nStamina +8\nPower +8\nCorner Recovery ○ hint +1\nTeam Sirius bond +5"
         ]
     },
-    "Tanino Gimlet": {
-        "The Euphoria of Destruction!": [
-            "Energy +15\nTanino Gimlet bond +5",
-            "Skill points +30\nTanino Gimlet bond +5"
-        ],
-        "An Electrifying Present!": [
-            "Power +10\nSkill points +5\nTanino Gimlet bond +5",
-            "End Closer Savvy ○ hint +1\nTanino Gimlet bond +5"
-        ],
-        "(❯)\nAs the Great Artists of Yore...": [
-            "Randomly either\n----------\nPower +15\nSkill points +15\nTanino Gimlet bond +5\n----------\n\n----------\nSkill points +10\nTanino Gimlet bond +5"
-        ],
-        "(❯❯)\nAs the Criminal from the North...": [
-            "Randomly either\n----------\nStamina +15\nPower +15\nTanino Gimlet bond +5\n----------\n\n----------\nPower +10\nTanino Gimlet bond +5"
-        ],
-        "(❯❯❯)\nAs Bacchus, God of Wine...": [
-            "Stamina +10\nPower +10\nSturm und Drang hint +1\nTanino Gimlet bond +5"
-        ]
-    },
     "Tokai Teio": {
         "My Way, Or...": [
             "Mood +1\nSkill points +15\nTokai Teio bond +5",
@@ -2360,6 +2397,12 @@
         "Helping Out to the MAX!": [
             "Fighter hint +1\nTsurumaru Tsuyoshi bond +5",
             "Guts +15\nTsurumaru Tsuyoshi bond +5"
+        ],
+        "(❯)\nAn Optimistic Outlook!": [
+            "Energy -5\nSpeed +7\nGuts +7\nSkill points +7\nTsurumaru Tsuyoshi bond +5"
+        ],
+        "(❯❯)\nA Strength That's All My Own!": [
+            "Energy -5\nSpeed +10\nPower +10\nGuts +10\nLate Surger Straightaways ○ hint +1\nTsurumaru Tsuyoshi bond +5"
         ]
     },
     "Twin Turbo": {
@@ -2476,6 +2519,15 @@
         ],
         "(❯❯❯)\nYaeno Muteki's Love Song Nightmare": [
             "Randomly either\n----------\nEnergy -10\nSpeed +10\nStamina +10\nPower +20\nIt's On! hint +3\n----------\n\n----------\nEnergy -10\nIt's On! hint +1"
+        ],
+        "(❯)\nFirst, Know Thyself": [
+            "Randomly either\n----------\nSpeed +10\nPower +10\nGuts +10\nHydrate hint +1\nYaeno Muteki bond +5\n----------\n\n----------\nSpeed +5\nPower +5\nGuts +5\nYaeno Muteki bond +5"
+        ],
+        "(❯❯)\nSecond, Know Thy Duty": [
+            "Randomly either\n----------\nSkill points +40\nLeft-Handed ○ hint +3\nYaeno Muteki bond +5\n----------\n\n----------\nSkill points +15\nLeft-Handed ○ hint +1\nYaeno Muteki bond +5"
+        ],
+        "(❯❯❯)\nThird, Show Thy Spirit": [
+            "Randomly either\n----------\nSpeed +7\nPower +7\nGuts +7\nSkill points +15\nKiller Tunes hint +3\n----------\n\n----------\nSpeed +7\nSkill points +15\nKiller Tunes hint +2\n----------\n\n----------\nSkill points +15\nKiller Tunes hint +1"
         ]
     },
     "Yukino Bijin": {

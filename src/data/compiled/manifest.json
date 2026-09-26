@@ -6,7 +6,7 @@
     "skillsSchemaVersion": 1,
     "racesSchemaVersion": 1
   },
-  "fingerprint": "a023d1429de813a98304cc7e36e9747e8100182f9110657b15979c12dbe9789d",
+  "fingerprint": "be347a814ef84598090d35eaa3f7d9b4d0c1b195ad58c787e26ff078732f6d4e",
   "knownProvenance": {
     "generator": "scripts/data-scraper",
     "recordedSourceVersion": null,
@@ -17,8 +17,8 @@
     {
       "family": "objectives",
       "path": "src/data/character_objectives.json",
-      "sha256": "ce354621e78ced243e1080e556d49a60ca2ff2ee4a78b61de140916793e9d5e3",
-      "recordCount": 66,
+      "sha256": "8962cb9366fc478486e523572bc0ad7098351a294e831d83f87f912d6a7f46b1",
+      "recordCount": 68,
       "provenance": {
         "origin": "data-scraper",
         "sourceVersion": null
@@ -27,8 +27,8 @@
     {
       "family": "characters",
       "path": "src/data/characters.json",
-      "sha256": "0b272c1bdd3b98af4e86d482a4ac1f783e7e7ff9e07a3217b7782417d8c9d167",
-      "recordCount": 66,
+      "sha256": "09efd9ecc6d2deea2c78afe26166b82615f5ebcdd31d26e4d1a3a6b12e523ad9",
+      "recordCount": 68,
       "provenance": {
         "origin": "data-scraper",
         "sourceVersion": null
@@ -57,8 +57,8 @@
     {
       "family": "skills",
       "path": "src/data/skills.json",
-      "sha256": "070d21ec059fa6a2943b1f86df386d83f350c2cc9e2f45c8693496a1148d7709",
-      "recordCount": 695,
+      "sha256": "c178080b24c99bcf0d139ed446a08cb513d794f598c3acf97ff0b2ac68fa16a0",
+      "recordCount": 697,
       "provenance": {
         "origin": "data-scraper",
         "sourceVersion": null
@@ -67,7 +67,7 @@
     {
       "family": "supports",
       "path": "src/data/supports.json",
-      "sha256": "ea6eadebb05cada2606b89f632083e01479d16765364129e0731915a121eca6b",
+      "sha256": "faf8ea50a1a487d38d5958b65484004dbb71535556f871ed65b5fdaa6a3efb28",
       "recordCount": 86,
       "provenance": {
         "origin": "data-scraper",
@@ -83,8 +83,8 @@
     },
     {
       "path": "src/data/compiled/skills.json",
-      "sha256": "8d6bde3d04130c999f9a5f2a00057f0c3219228e99432fc93b7b5fa563cb58b9",
-      "recordCount": 695
+      "sha256": "a80e5c9c9c227617509cdb958c600fbcdbe4647c8d161ca628f531135cd16ab7",
+      "recordCount": 697
     }
   ],
   "validation": {
@@ -105,7 +105,7 @@
       },
       {
         "code": "nullFieldPrevalence",
-        "detail": "skills: tier is null on 171/695 records"
+        "detail": "skills: tier is null on 169/697 records"
       },
       {
         "code": "provenanceUnavailable",

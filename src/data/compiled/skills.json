@@ -935,7 +935,7 @@
       "condition": "remain_distance<=400&order_rate>=30&order_rate<=50&popularity>=4@remain_distance<=400&order_rate>=30&order_rate<=50&popularity<4",
       "precondition": "is_finalcorner==1&is_overtake==1@is_finalcorner==1&is_overtake==1",
       "inherited": true,
-      "tier": null,
+      "tier": 2,
       "upgrade": null,
       "downgrade": null
     },
@@ -1369,7 +1369,7 @@
       "condition": "remain_distance>=299&remain_distance<=301&order_rate>=20&order_rate<=40&distance_diff_top<=5&ground_type==2@remain_distance>=299&remain_distance<=301&order_rate>=20&order_rate<=40",
       "precondition": "",
       "inherited": true,
-      "tier": null,
+      "tier": 1,
       "upgrade": null,
       "downgrade": null
     },
@@ -6241,7 +6241,7 @@
       "condition": "running_style==3&straight_random==1",
       "precondition": "",
       "inherited": false,
-      "tier": null,
+      "tier": 0,
       "upgrade": 201382,
       "downgrade": null
     },
@@ -8005,7 +8005,7 @@
       "condition": "ground_type==2&accumulatetime>=5&infront_near_lane_time>=3",
       "precondition": "",
       "inherited": false,
-      "tier": null,
+      "tier": 0,
       "upgrade": null,
       "downgrade": 202302
     },
@@ -8397,7 +8397,7 @@
       "condition": "distance_type==4&running_style==3&is_lastspurt==1&order_rate>=40",
       "precondition": "",
       "inherited": false,
-      "tier": 0,
+      "tier": null,
       "upgrade": 202421,
       "downgrade": null
     },
@@ -8425,7 +8425,7 @@
       "condition": "distance_type==3&running_style==2&phase_laterhalf_random==1&distance_diff_top<=10",
       "precondition": "",
       "inherited": false,
-      "tier": 3,
+      "tier": null,
       "upgrade": 202431,
       "downgrade": null
     },
@@ -8439,7 +8439,7 @@
       "condition": "popularity<=3&random_lot==30@popularity>=4&random_lot==60",
       "precondition": "",
       "inherited": false,
-      "tier": null,
+      "tier": 3,
       "upgrade": null,
       "downgrade": 202442
     },
@@ -8453,7 +8453,7 @@
       "condition": "popularity<=3&random_lot==15@popularity>=4&random_lot==30",
       "precondition": "",
       "inherited": false,
-      "tier": null,
+      "tier": 3,
       "upgrade": 202441,
       "downgrade": null
     },
@@ -9725,6 +9725,34 @@
       "cost": 200,
       "evalPt": 0,
       "condition": "distance_type==2&ground_type==1",
+      "precondition": "",
+      "inherited": false,
+      "tier": null,
+      "upgrade": null,
+      "downgrade": null
+    },
+    {
+      "id": 1200041,
+      "name": "Sprint Race Enthusiast",
+      "desc": "Increase performance in turf sprint races. (Event Exclusive)",
+      "iconId": 10011,
+      "cost": 200,
+      "evalPt": 0,
+      "condition": "distance_type==1&ground_type==1",
+      "precondition": "",
+      "inherited": false,
+      "tier": null,
+      "upgrade": null,
+      "downgrade": null
+    },
+    {
+      "id": 1200051,
+      "name": "Dirt Race Enthusiast",
+      "desc": "Increase performance in medium-distance dirt races. (Event Exclusive)",
+      "iconId": 10041,
+      "cost": 200,
+      "evalPt": 0,
+      "condition": "distance_type==3&ground_type==2",
       "precondition": "",
       "inherited": false,
       "tier": null,

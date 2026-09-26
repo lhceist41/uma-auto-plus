@@ -5,7 +5,8 @@
  *
  * Preset naming convention: outfit-specific presets are "Character (Outfit)"; plain names
  * model the character's base card, whose outfit title comes from characterBaseOutfits.
- * All base-outfit names below were read from the cards' gametora pages on 2026-07-06.
+ * All base-outfit names below were read from the cards' gametora pages on 2026-07-06, except
+ * Nakayama Festa and Wonder Acute, read from the game's master data on 2026-09-26.
  */
 
 /** EN base-card outfit title per character, for presets whose name carries no bracket. */
@@ -31,6 +32,7 @@ export const characterBaseOutfits: Record<string, string> = {
     "Mejiro Palmer": "Line Breakthrough",
     "Mejiro Ryan": "Down the Line",
     "Mihono Bourbon": "MB-19890425",
+    "Nakayama Festa": "Desperate Measures",
     "Narita Taishin": "Nevertheless",
     "Nice Nature": "Poinsettia Ribbon",
     "Nishino Flower": "Layered Petals",
@@ -47,6 +49,7 @@ export const characterBaseOutfits: Record<string, string> = {
     "Tokai Teio": "Peak Joy",
     "Tosen Jordan": "Jokester ☆ Vibes",
     Vodka: "Wild Top Gear",
+    "Wonder Acute": "Butterfly Sting",
 }
 
 /**

@@ -3338,6 +3338,81 @@
         }
       ]
     },
+    "Nakayama Festa": {
+      "fanGoals": [],
+      "mandatoryRaces": [
+        {
+          "turn": 25,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Keisei Hai",
+              "fansNeeded": 1000
+            }
+          ]
+        },
+        {
+          "turn": 31,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Satsuki Sho",
+              "fansNeeded": 4500
+            }
+          ]
+        },
+        {
+          "turn": 34,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Tokyo Yushun (Japanese Derby)",
+              "fansNeeded": 6000
+            }
+          ]
+        },
+        {
+          "turn": 44,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Kikuka Sho",
+              "fansNeeded": 7500
+            }
+          ]
+        },
+        {
+          "turn": 47,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Chunichi Shimbun Hai",
+              "fansNeeded": 1500
+            }
+          ]
+        },
+        {
+          "turn": 60,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Takarazuka Kinen",
+              "fansNeeded": 20000
+            }
+          ]
+        },
+        {
+          "turn": 70,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Japan Cup",
+              "fansNeeded": 25000
+            }
+          ]
+        }
+      ]
+    },
     "Narita Brian": {
       "fanGoals": [],
       "mandatoryRaces": [
@@ -5348,6 +5423,110 @@
             {
               "raceName": "Arima Kinen",
               "fansNeeded": 25000
+            }
+          ]
+        }
+      ]
+    },
+    "Wonder Acute": {
+      "fanGoals": [
+        {
+          "turn": 30,
+          "targetFans": 5000
+        }
+      ],
+      "mandatoryRaces": [
+        {
+          "turn": 37,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Japan Dirt Derby",
+              "fansNeeded": 4000
+            }
+          ]
+        },
+        {
+          "turn": 42,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Sirius Stakes",
+              "fansNeeded": 1000
+            }
+          ]
+        },
+        {
+          "turn": 48,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Tokyo Daishoten",
+              "fansNeeded": 12000
+            }
+          ]
+        },
+        {
+          "turn": 51,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Kawasaki Kinen",
+              "fansNeeded": 12000
+            }
+          ]
+        },
+        {
+          "turn": 57,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Kashiwa Kinen",
+              "fansNeeded": 12000
+            }
+          ]
+        },
+        {
+          "turn": 60,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Teio Sho",
+              "fansNeeded": 12000
+            }
+          ]
+        },
+        {
+          "turn": 69,
+          "isChoice": true,
+          "options": [
+            {
+              "raceName": "JBC Classic",
+              "fansNeeded": 12000
+            },
+            {
+              "raceName": "JBC Classic",
+              "fansNeeded": 12000
+            }
+          ]
+        },
+        {
+          "turn": 71,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Champions Cup",
+              "fansNeeded": 12000
+            }
+          ]
+        },
+        {
+          "turn": 72,
+          "isChoice": false,
+          "options": [
+            {
+              "raceName": "Tokyo Daishoten",
+              "fansNeeded": 12000
             }
           ]
         }

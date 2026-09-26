@@ -12,6 +12,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Presets for **Wonder Acute** and **Nakayama Festa** in all four scenarios. Wonder Acute is built as a dirt Pace Chaser: her URA Finale preset races the Junior dirt calendar to reach the 5000-fan goal her career asks for early in the Classic year, and she carries a turf-aptitude caution for Unity Cup and Trackblazer. Nakayama Festa is built as a Late Surger for Medium races, and because her kit has no recovery skill, her skill plans include Be Still and A Small Breather. Both are research-graded until a full career completes, and skills that need a higher Potential level stay out of their plans for now. The roster is now 300 presets across 74 trainee cards.
+
 - A plan check on the Racing Plan page. Before a career starts it reports what your planned races look like to the bot: races it does not recognise, races planned on a turn they do not run on, more than one race booked on the same turn, and races planned back to back that the bot may not be allowed to run. It also tells you when a saved plan is missing information the bot needs, including older saved defaults. It is read-only and never blocks saving or starting a career, and it does not promise a race will be entered: aptitude, fans and energy are still decided during the career.
 
 - **Record Decision Data**, a new setting on the Settings page, on by default. The bot keeps a small per-turn record of the decisions it made so a career can be reviewed and improved later. It is stored on your device only and nothing is uploaded, it is independent of Debug Mode (turning it on does not turn on the heavy debug diagnostics), and you can switch it off to keep storage use down.

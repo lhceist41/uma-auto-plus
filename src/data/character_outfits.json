@@ -300,7 +300,7 @@
             {
                 "title": "Golden Dream",
                 "cardId": 103402,
-                "releasedEn": null
+                "releasedEn": "2026-09-07"
             }
         ]
     },
@@ -541,6 +541,16 @@
                 "title": "CODE: ICING",
                 "cardId": 102602,
                 "releasedEn": "2026-02-18"
+            }
+        ]
+    },
+    "Nakayama Festa": {
+        "name": "Nakayama Festa",
+        "outfits": [
+            {
+                "title": "Desperate Measures",
+                "cardId": 104901,
+                "releasedEn": "2026-09-15"
             }
         ]
     },
@@ -835,7 +845,7 @@
             {
                 "title": "Raging Thunder",
                 "cardId": 102102,
-                "releasedEn": null
+                "releasedEn": "2026-09-07"
             }
         ]
     },
@@ -896,6 +906,16 @@
                 "title": "Dream Deliverer",
                 "cardId": 103502,
                 "releasedEn": "2026-07-27"
+            }
+        ]
+    },
+    "Wonder Acute": {
+        "name": "Wonder Acute",
+        "outfits": [
+            {
+                "title": "Butterfly Sting",
+                "cardId": 110001,
+                "releasedEn": "2026-09-24"
             }
         ]
     },
