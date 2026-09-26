@@ -24,6 +24,7 @@ public class StartPackage implements ReactPackage {
         List<NativeModule> modules = new ArrayList<>();
 
         modules.add(new StartModule(reactContext));
+        modules.add(new SettingsDatabaseModule(reactContext));
 
         return modules;
     }

@@ -68,10 +68,23 @@ class QueueReportTest {
 
         @Test
         fun `every ending is covered, the process death by its own report builder`() {
-            val covered = cases.keys + SessionEnd.PROCESS_ENDED
+            val covered = cases.keys + SessionEnd.PROCESS_ENDED + SessionEnd.REFUSED_DATABASE_UNHEALTHY
             assertEquals(SessionEnd.entries.toSet(), covered, "a new ending needs its own case here")
             val open = JSONObject().put("sessionId", "s").put("startedAt", 1L).put("phase", StartModule.PHASE_CAREER)
             assertEquals(SessionEnd.PROCESS_ENDED, processEndedReport(open, null, null, resumable = false).kind)
+        }
+
+        @Test
+        fun `a Start refused for the database is its own ending, with nothing run and nothing resumable`() {
+            val report = databaseRefusalReport("sid", "9.9.9", now = 5_000L)
+            val json = JSONObject(report.ledgerLine())
+            assertEquals("REFUSED_DATABASE_UNHEALTHY", json.getString("kind"))
+            assertEquals(5_000L, json.getLong("startedAt"))
+            assertEquals(5_000L, json.getLong("endedAt"))
+            assertEquals(0, json.getJSONArray("runs").length())
+            assertFalse(json.getBoolean("resumable"))
+            assertFalse(json.getBoolean("careerInFlight"))
+            assertEquals("", json.getString("reasonKey"))
         }
 
         @Test

@@ -102,9 +102,11 @@ class RunConfigSnapshotTest {
         @Test
         fun `the settings batch write stays atomic (single transaction, not per-row)`() {
             val db = sourceFile("../../../../../src/lib/database.ts", fromKotlinRoot = false)
-            // saveSettingsBatch must keep exactly one BEGIN/COMMIT around the prepared-statement loop.
-            val batch = db.readText().substringAfter("async saveSettingsBatch(")
-            assertTrue("BEGIN TRANSACTION" in batch && "COMMIT" in batch, "the batch stays wrapped in one transaction")
+            // saveSettingsBatch must send every row in exactly one native transaction call, never a call per row.
+            val batch = db.readText().substringAfter("async saveSettingsBatch(").substringBefore("async loadSetting(")
+            assertEquals(1, Regex("this\\.db!\\.transaction\\(").findAll(batch).count(), "the batch stays one transaction")
+            assertTrue("rows: settings.map(" in batch, "every setting is a row of that one transaction")
+            assertTrue("this.db!.run(" !in batch, "no row is written outside it")
         }
     }
 

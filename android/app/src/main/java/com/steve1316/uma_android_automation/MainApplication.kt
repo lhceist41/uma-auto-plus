@@ -42,6 +42,10 @@ class MainApplication : Application(), ReactApplication {
     override fun onCreate() {
         super.onCreate()
 
+        // Before any service or React Native code can open settings.db: the one shared connection,
+        // and the only point where a damaged file may be repaired.
+        SettingsDatabase.openAtProcessStart(this)
+
         // Best-effort, mode-only self-heal of telemetry files a prior process may have written
         // 0600, so simply opening the app makes decisions/career_state/careers.jsonl adb-pullable
         // again - no bot run and no TP spend. Runs unconditionally at app start and never throws.

@@ -4055,11 +4055,6 @@ available-typed-arrays@^1.0.7:
   dependencies:
     possible-typed-array-names "^1.0.0"
 
-await-lock@^2.2.2:
-  version "2.2.2"
-  resolved "https://registry.npmjs.org/await-lock/-/await-lock-2.2.2.tgz"
-  integrity sha512-aDczADvlvTGajTDjcjpJMqRkOF6Qdz3YbPZm/PyW6tKPkx2hlYBzxMhEywM/tU72HrVZjgl5VCdRuMlA7pZ8Gw==
-
 babel-jest@30.3.0:
   version "30.3.0"
   resolved "https://registry.npmjs.org/babel-jest/-/babel-jest-30.3.0.tgz"
@@ -5840,13 +5835,6 @@ expo-sharing@~14.0.7:
   version "14.0.7"
   resolved "https://registry.npmjs.org/expo-sharing/-/expo-sharing-14.0.7.tgz"
   integrity sha512-t/5tR8ZJNH6tMkHXlF7453UafNIfrpfTG+THN9EMLC4Wsi4bJuESPm3NdmWDg2D4LDALJI/LQo0iEnLAd5Sp4g==
-
-expo-sqlite@~16.0.8:
-  version "16.0.8"
-  resolved "https://registry.npmjs.org/expo-sqlite/-/expo-sqlite-16.0.8.tgz"
-  integrity sha512-xw776gFgH4ZM5oGs0spSLNmkHO/kJ/EuRXGzE4/22yII9EmG84vm7aM/M2aEb8taBTqwhSGYUpkwkRT5YFFmsg==
-  dependencies:
-    await-lock "^2.2.2"
 
 expo-status-bar@~3.0.8:
   version "3.0.8"

@@ -202,7 +202,7 @@ This project is a React Native frontend configured via Expo over a Kotlin and Op
 6. [string-similarity - For comparing string similarities during text detection](https://github.com/rrice/java-string-similarity)
 7. [React Native - Used as the frontend](https://reactnative.dev/)
 8. [Expo - Modern modular frontend](https://expo.dev/)
-9. [SQLite - Local database via expo-sqlite](https://docs.expo.dev/versions/latest/sdk/sqlite/)
+9. [SQLite - Local settings database, through the Android framework](https://developer.android.com/reference/android/database/sqlite/SQLiteDatabase)
 10. [Ktor - For the Remote Log Viewer](https://ktor.io/)
 11. [YOLOv8 - Object detection](https://github.com/ultralytics/ultralytics)
 12. [ONNX Runtime - Lightweight engine for executing the YOLOv8 model](https://onnxruntime.ai/)

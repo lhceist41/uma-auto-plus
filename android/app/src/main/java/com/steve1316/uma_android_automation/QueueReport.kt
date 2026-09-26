@@ -3,7 +3,6 @@ package com.steve1316.uma_android_automation
 import android.app.ActivityManager
 import android.app.ApplicationExitInfo
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
@@ -81,6 +80,9 @@ enum class SessionEnd(val clearsQueueState: Boolean = false) {
 
     /** The app process died mid-session; found at the next app start. */
     PROCESS_ENDED,
+
+    /** Start found the settings database damaged or unopenable and refused before anything ran. */
+    REFUSED_DATABASE_UNHEALTHY,
 }
 
 /**
@@ -506,6 +508,31 @@ internal fun readHeartbeat(dir: File, sessionId: String): Long? =
         null
     }
 
+/** The record of a Start refused because the settings database is unhealthy: nothing ran, so there are no runs and no settings to report. */
+internal fun databaseRefusalReport(sessionId: String, appVersion: String, now: Long): QueueReport =
+    QueueReport(
+        sessionId = sessionId,
+        appVersion = appVersion,
+        startedAt = now,
+        endedAt = now,
+        endedAtSource = "session",
+        kind = SessionEnd.REFUSED_DATABASE_UNHEALTHY,
+        queueEnabled = false,
+        totalRuns = 0,
+        startFromRun = 0,
+        completedRuns = 0,
+        runReached = 0,
+        careerInFlight = false,
+        resumable = false,
+        reasonKey = "",
+        breakpointDetail = null,
+        errorPosted = false,
+        runs = JSONArray(),
+        recoveries = JSONObject(),
+        tpRestores = JSONArray(),
+        exitInfo = null,
+    )
+
 /**
  * Exit records for this package, or null below API 30, where Android keeps none. [fetch] is only
  * called when the API exists.
@@ -542,7 +569,7 @@ object QueueLedger {
         val out = mutableMapOf<String, String>()
         val file = dbFile(context)
         if (!file.exists()) return out
-        SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+        SettingsDatabase.get(context).let { db ->
             db.rawQuery(
                 "SELECT key, value FROM settings WHERE category = ? AND key IN (${keys.joinToString(",") { "?" }})",
                 arrayOf(CATEGORY, *keys.toTypedArray()),
@@ -557,7 +584,7 @@ object QueueLedger {
     private fun write(context: Context, values: Map<String, String>, delete: List<String> = emptyList()) {
         val file = dbFile(context)
         if (!file.exists()) return
-        SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+        SettingsDatabase.get(context).let { db ->
             db.beginTransaction()
             try {
                 for ((key, value) in values) {
@@ -635,6 +662,15 @@ object QueueLedger {
         }
         File(context.filesDir, HEARTBEAT_FILE).delete()
         OutcomeCorpus.append(context, report.toJson(), OutcomeCorpus.QUEUE_LEDGER_PATH)
+    }
+
+    /**
+     * Records a Start refused for an unhealthy settings database in the history file only: writing
+     * the app's current report into a database that just failed its integrity check could make the
+     * damage worse, and the app could not trust what it read back anyway.
+     */
+    fun recordDatabaseRefusal(context: Context, appVersion: String) {
+        OutcomeCorpus.append(context, databaseRefusalReport(java.util.UUID.randomUUID().toString(), appVersion, System.currentTimeMillis()).toJson(), OutcomeCorpus.QUEUE_LEDGER_PATH)
     }
 
     /** Reports a session that died without its report, if one is recorded. */

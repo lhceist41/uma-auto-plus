@@ -7,8 +7,6 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.database.DatabaseErrorHandler
-import android.database.sqlite.SQLiteDatabase
 import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityManager
@@ -84,16 +82,28 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         var queueStopReason: String? = null
 
         /**
-         * Shown when the settings the bot read differ from the ones the app checked at Start. The
-         * usual cause is a stale second copy of the settings database held for the life of the app
-         * process, so only a full restart of UMA Auto+ clears it; pressing Start again would not.
-         * An enabled accessibility service keeps the process alive after the app is swiped away,
-         * hence the force stop.
+         * Shown when the settings the bot read differ from the ones the app checked at Start: a write
+         * landed in between, or the two sides did not see the same data. A full restart of UMA Auto+
+         * clears either, where pressing Start again might not. An enabled accessibility service keeps
+         * the process alive after the app is swiped away, hence the force stop.
          */
         const val SETTINGS_NOT_DELIVERED_MESSAGE =
             "Not started, and nothing was spent: the settings UMA Auto+ checked when you pressed Start did not reach the bot. " +
                 "Force stop UMA Auto+ (Android Settings, Apps, UMA Auto+, Force stop), reopen it, turn its accessibility service back on " +
                 "if it was switched off, then press Start again."
+
+        /**
+         * Shown when Start finds the settings file damaged, replaced, or not openable. The app checks
+         * the file again when its process starts and restores the backup only if the file is damaged;
+         * an enabled accessibility service keeps the process alive after the app is swiped away, hence
+         * the force stop.
+         */
+        const val DATABASE_UNHEALTHY_MESSAGE =
+            "Not started, and nothing was spent: UMA Auto+ could not safely use its saved settings file. " +
+                "If your device's storage is full, free some space first. Then force stop UMA Auto+ (Android Settings, Apps, UMA Auto+, Force stop), " +
+                "reopen it, turn its accessibility service back on if it was switched off, and press Start again. " +
+                "When it opens, it checks the file again and restores it from the last good backup if it is damaged. " +
+                "If this message comes back, please report it as a bug."
 
         /** Player-safe key for [queueStopReason], set with it: the queue report carries the key, never the prose. */
         @Volatile
@@ -173,7 +183,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             try {
                 val dbFile = File(context.filesDir, "SQLite/settings.db")
                 if (!dbFile.exists()) return
-                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
+                val db = SettingsDatabase.get(context)
                 db.execSQL(
                     "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
                     arrayOf("queueState", "active", active.toString()),
@@ -194,7 +204,6 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
                     arrayOf("queueState", "timestamp", System.currentTimeMillis().toString()),
                 )
-                db.close()
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to save queue state: ${e.message}")
             }
@@ -253,19 +262,14 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             try {
                 val dbFile = File(context.filesDir, "SQLite/settings.db")
                 if (!dbFile.exists()) return null
-                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
                 val raw = mutableMapOf<String, String>()
-                try {
-                    db.rawQuery(
-                        "SELECT key, value FROM settings WHERE category = ?",
-                        arrayOf("queueState"),
-                    ).use { cursor ->
-                        while (cursor.moveToNext()) {
-                            raw[cursor.getString(0)] = cursor.getString(1)
-                        }
+                SettingsDatabase.get(context).rawQuery(
+                    "SELECT key, value FROM settings WHERE category = ?",
+                    arrayOf("queueState"),
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        raw[cursor.getString(0)] = cursor.getString(1)
                     }
-                } finally {
-                    db.close()
                 }
                 val active = raw["active"] == "true"
                 if (!active) return null
@@ -439,9 +443,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 if (!dbFile.exists()) {
                     false
                 } else {
-                    SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                        db.rawQuery("SELECT 1 FROM settings WHERE category GLOB ? LIMIT 1", arrayOf("rot${index}_*")).use { it.moveToFirst() }
-                    }
+                    SettingsDatabase.get(context).rawQuery("SELECT 1 FROM settings WHERE category GLOB ? LIMIT 1", arrayOf("rot${index}_*")).use { it.moveToFirst() }
                 }
             } catch (_: Exception) {
                 false
@@ -451,8 +453,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             return try {
                 val dbFile = File(context.filesDir, "SQLite/settings.db")
                 if (!dbFile.exists()) return false
-                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
-                try {
+                val db = SettingsDatabase.get(context)
+                run {
                     val prefix = "rot${index}_"
                     fun readRows(): List<Triple<String, String, String>> {
                         val out = mutableListOf<Triple<String, String, String>>()
@@ -512,8 +514,6 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     }
                     MessageLog.i(TAG, "[ROTATION] Applied snapshot for trainee index $index ($prefix): ${rows.size} settings rows.")
                     true
-                } finally {
-                    db.close()
                 }
             } catch (e: Exception) {
                 MessageLog.e(TAG, "[ROTATION] Failed to apply snapshot for index $index: ${e.message}")
@@ -529,12 +529,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             try {
                 val dbFile = File(context.filesDir, "SQLite/settings.db")
                 if (!dbFile.exists()) return
-                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
-                db.execSQL(
+                SettingsDatabase.get(context).execSQL(
                     "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
                     arrayOf("queueState", "currentTrainee", inGameName),
                 )
-                db.close()
             } catch (e: Exception) {
                 Log.w(TAG, "[ROTATION] Failed to record current trainee: ${e.message}")
             }
@@ -549,12 +547,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             try {
                 val dbFile = File(context.filesDir, "SQLite/settings.db")
                 if (!dbFile.exists()) return
-                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
-                db.execSQL(
+                SettingsDatabase.get(context).execSQL(
                     "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
                     arrayOf("queueState", "currentTraineeExcludes", excludes.joinToString("\n")),
                 )
-                db.close()
             } catch (e: Exception) {
                 Log.w(TAG, "[ROTATION] Failed to record current trainee excludes: ${e.message}")
             }
@@ -571,7 +567,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             try {
                 val dbFile = File(context.filesDir, "SQLite/settings.db")
                 if (!dbFile.exists()) return
-                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
+                val db = SettingsDatabase.get(context)
                 db.execSQL(
                     "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
                     arrayOf("general", "appliedPresetTrainee", inGameName),
@@ -580,7 +576,6 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
                     arrayOf("general", "appliedPresetTraineeExcludes", excludes.joinToString("\n")),
                 )
-                db.close()
             } catch (e: Exception) {
                 Log.w(TAG, "[ROTATION] Failed to record applied-preset trainee: ${e.message}")
             }
@@ -606,12 +601,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             try {
                 val dbFile = File(context.filesDir, "SQLite/settings.db")
                 if (!dbFile.exists()) return
-                val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
-                db.execSQL(
+                SettingsDatabase.get(context).execSQL(
                     "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
                     arrayOf("queueState", key, value),
                 )
-                db.close()
             } catch (e: Exception) {
                 Log.w(TAG, "[ROTATION] Failed to write queueState.$key: ${e.message}")
             }
@@ -812,9 +805,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 }
             }
 
-            // Validate the database and maintain the backup BEFORE anything opens it with
-            // Android's default error handler, which deletes the file outright on corruption.
-            safeguardSettingsDatabase()
+            // Before the foundation's settings helper opens the file: its default error handler
+            // deletes a corrupt database outright. Repair only ever happens at process start.
+            if (!SettingsDatabase.checkBeforeStart(context)) {
+                refuseStartForDatabase()
+                DebugTestGate.cancel()
+                return
+            }
 
             // Initialize the SettingsHelper's connection to the SQLite database.
             // This is required to correctly fetch the flag for enabling the Remote Log Viewer.
@@ -837,73 +834,21 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     }
 
     /**
-     * Backup/restore guard for the settings database, run on every Start press before the
-     * automation library opens it.
-     *
-     * Android's DefaultDatabaseErrorHandler reacts to corruption by deleting the database
-     * file outright (an install force-killing the app mid-write can corrupt it, losing every
-     * setting and seed table). This guard validates the file with a no-op error handler so the
-     * probe itself cannot trigger a wipe, restores the last known-good backup when validation
-     * fails, and refreshes the backup after every successful validation. WAL mode (set on the
-     * React Native side) prevents the corruption; this recovers from whatever slips through anyway.
+     * Refuses a Start because the settings database is damaged or cannot be opened. Nothing has
+     * run yet, so nothing was spent. The player sees why in a dialog, and the refusal is recorded
+     * in the queue ledger's history (not in the database it could not trust).
      */
-    private fun safeguardSettingsDatabase() {
-        val dbFile = File(context.filesDir, "SQLite/settings.db")
-        val backupFile = File(context.filesDir, "SQLite/settings.db.bak")
-        if (!dbFile.exists()) {
-            Log.d(TAG, "Settings database does not exist yet. Nothing to safeguard.")
-            return
-        }
-
-        // A no-op handler: corruption is reported by the validation below, never acted on here.
-        val noopErrorHandler = DatabaseErrorHandler { Log.e(TAG, "Settings database reported corruption during validation.") }
-
-        fun validate(): Boolean =
-            try {
-                SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE, noopErrorHandler).use { db ->
-                    val bIntact: Boolean =
-                        db.rawQuery("PRAGMA integrity_check(1)", null).use { c -> c.moveToFirst() && c.getString(0).equals("ok", ignoreCase = true) }
-                    // A wipe can leave a recreated settings table with the seed tables missing,
-                    // so an intact file is not enough - the data has to be there too.
-                    val bSeeded: Boolean =
-                        bIntact &&
-                            db.rawQuery("SELECT COUNT(*) FROM settings", null).use { c -> c.moveToFirst() && c.getInt(0) > 0 } &&
-                            db.rawQuery("SELECT COUNT(*) FROM skills", null).use { c -> c.moveToFirst() && c.getInt(0) > 0 }
-                    bSeeded
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Settings database failed validation: ${e.message}")
-                false
-            }
-
-        if (validate()) {
-            try {
-                // Checkpoint the WAL so the main file is self-contained before copying it.
-                SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE, noopErrorHandler).use { db ->
-                    db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { c -> c.moveToFirst() }
-                }
-                dbFile.copyTo(backupFile, overwrite = true)
-                Log.d(TAG, "Settings database validated. Backup refreshed (${backupFile.length()} bytes).")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to refresh the settings database backup: ${e.message}")
-            }
-            return
-        }
-
-        if (backupFile.exists()) {
-            Log.e(TAG, "Settings database is unhealthy. Restoring the last known-good backup (${backupFile.length()} bytes)...")
-            try {
-                // Drop journal leftovers so the restored main file is authoritative.
-                File(dbFile.absolutePath + "-wal").delete()
-                File(dbFile.absolutePath + "-shm").delete()
-                File(dbFile.absolutePath + "-journal").delete()
-                backupFile.copyTo(dbFile, overwrite = true)
-                Log.d(TAG, "Settings database restored from backup. Healthy: ${validate()}")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to restore the settings database backup: ${e.message}")
-            }
-        } else {
-            Log.e(TAG, "Settings database is unhealthy and no backup exists yet. Reopen the app so it reseeds before starting the bot.")
+    private fun refuseStartForDatabase() {
+        Log.e(TAG, "[START] Refused: the settings database failed its integrity check (state ${SettingsDatabase.startState.name}).")
+        QueueLedger.recordDatabaseRefusal(context, BuildConfig.VERSION_NAME)
+        MessageLog.e(TAG, "[START] $DATABASE_UNHEALTHY_MESSAGE")
+        val activity = reactApplicationContext.currentActivity ?: return
+        activity.runOnUiThread {
+            AlertDialog.Builder(activity)
+                .setTitle("Not started")
+                .setMessage(DATABASE_UNHEALTHY_MESSAGE)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
         }
     }
 
@@ -1613,8 +1558,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     private fun readLaunchSnapshot(): Map<String, String> {
         launchSnapshotReadStarted = true
         val rows = mutableMapOf<String, String>()
-        val dbFile = File(context.filesDir, "SQLite/settings.db")
-        SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY, android.database.DatabaseErrorHandler { }).use { db ->
+        SettingsDatabase.get(context).let { db ->
             // The same rows the app's Start check reads back and hashes (loadSettingsRowsSnapshot), so
             // the bot can compare its own view of the settings with the one the app verified.
             db.rawQuery("SELECT category, key, value FROM settings WHERE category NOT GLOB 'rot[0-9]*' AND category != 'queueState'", null).use { cursor ->

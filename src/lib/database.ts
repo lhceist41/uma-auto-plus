@@ -1,4 +1,4 @@
-import * as SQLite from "expo-sqlite"
+import { settingsDb, SettingsDb } from "./settingsDb"
 import { startTiming } from "./performanceLogger"
 import { logWithTimestamp, logErrorWithTimestamp } from "./logger"
 
@@ -96,14 +96,13 @@ export interface DatabaseProfile {
  * Stores settings as key-value pairs organized by category for efficient querying.
  */
 export class DatabaseManager {
-    private DATABASE_NAME = "settings.db"
     private STRING_ONLY_SETTINGS = ["racingPlan", "racingPlanData", "discordToken", "discordUserID"]
     private TABLE_SETTINGS = "settings"
     private TABLE_RACES = "races"
     private TABLE_SKILLS = "skills"
     private TABLE_PROFILES = "profiles"
 
-    private db: SQLite.SQLiteDatabase | null = null
+    private db: SettingsDb | null = null
     private isInitializing = false
     private initializationPromise: Promise<void> | null = null
     private isTransactionActive = false
@@ -197,39 +196,30 @@ export class DatabaseManager {
     private async _performInitialization(): Promise<void> {
         try {
             logWithTimestamp("Starting database initialization...")
-            this.db = await SQLite.openDatabaseAsync(this.DATABASE_NAME, {
-                useNewConnection: true,
-            })
+            // The native SettingsDatabase owns the one connection to this file (write-ahead
+            // logging, opened when the app process starts); this side only sends it statements.
+            await settingsDb.open()
+            this.db = settingsDb
             logWithTimestamp("Database opened successfully")
-
-            if (!this.db) {
-                throw new Error("Database object is null after opening")
-            }
-
-            // WAL mode: a force-killed process mid-write corrupted the rollback-journal DB and
-            // Android's default error handler wiped it. journal_mode persists in the DB header,
-            // so the read-mostly Kotlin side (via the automation library) inherits it unchanged.
-            await this.db.execAsync("PRAGMA journal_mode = WAL;")
-            logWithTimestamp("Database journal mode set to WAL.")
 
             // Create settings table.
             logWithTimestamp("Creating settings table...")
-            await this.db.execAsync(`
-                CREATE TABLE IF NOT EXISTS ${this.TABLE_SETTINGS} (
+            await this.db.exec([
+                `CREATE TABLE IF NOT EXISTS ${this.TABLE_SETTINGS} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     category TEXT NOT NULL,
                     key TEXT NOT NULL,
                     value TEXT NOT NULL,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(category, key)
-                )
-            `)
+                )`,
+            ])
             logWithTimestamp("Settings table created successfully.")
 
             // Create races table.
             logWithTimestamp("Creating races table...")
-            await this.db.execAsync(`
-                CREATE TABLE IF NOT EXISTS ${this.TABLE_RACES} (
+            await this.db.exec([
+                `CREATE TABLE IF NOT EXISTS ${this.TABLE_RACES} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     key TEXT UNIQUE NOT NULL,
                     name TEXT NOT NULL,
@@ -244,15 +234,17 @@ export class DatabaseManager {
                     fans INTEGER NOT NULL,
                     turnNumber INTEGER NOT NULL,
                     nameFormatted TEXT NOT NULL
-                )
-            `)
+                )`,
+            ])
             logWithTimestamp("Races table created successfully.")
 
             // Create skills table.
             logWithTimestamp("Creating skills table...")
-            await this.db.execAsync(`
-                DROP TABLE IF EXISTS ${this.TABLE_SKILLS};
-                CREATE TABLE ${this.TABLE_SKILLS} (
+            // Two statements, one call: Android runs only a string's first statement, and exec runs
+            // its elements in one transaction, so the table is never left dropped.
+            await this.db.exec([
+                `DROP TABLE IF EXISTS ${this.TABLE_SKILLS}`,
+                `CREATE TABLE ${this.TABLE_SKILLS} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     key TEXT UNIQUE NOT NULL,
                     skill_id INTEGER NOT NULL,
@@ -267,21 +259,21 @@ export class DatabaseManager {
                     community_tier INTEGER,
                     upgrade INTEGER,
                     downgrade INTEGER
-                )
-            `)
+                )`,
+            ])
             logWithTimestamp("Skills table created successfully.")
 
             // Create profiles table.
             logWithTimestamp("Creating profiles table...")
-            await this.db.execAsync(`
-                CREATE TABLE IF NOT EXISTS ${this.TABLE_PROFILES} (
+            await this.db.exec([
+                `CREATE TABLE IF NOT EXISTS ${this.TABLE_PROFILES} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT UNIQUE NOT NULL,
                     settings TEXT NOT NULL,
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            `)
+                )`,
+            ])
             logWithTimestamp("Profiles table created successfully.")
 
             // Migrate existing profiles from old to new schema.
@@ -289,26 +281,13 @@ export class DatabaseManager {
 
             // Create indexes for faster queries.
             logWithTimestamp("Creating indexes...")
-            await this.db.execAsync(`
-                CREATE INDEX IF NOT EXISTS idx_settings_category_key 
-                ON ${this.TABLE_SETTINGS}(category, key)
-            `)
-            await this.db.execAsync(`
-                CREATE INDEX IF NOT EXISTS idx_races_turn_number 
-                ON ${this.TABLE_RACES}(turnNumber)
-            `)
-            await this.db.execAsync(`
-                CREATE INDEX IF NOT EXISTS idx_races_name_formatted 
-                ON ${this.TABLE_RACES}(nameFormatted)
-            `)
-            await this.db.execAsync(`
-                CREATE INDEX IF NOT EXISTS idx_skills_name_en 
-                ON ${this.TABLE_SKILLS}(name_en)
-            `)
-            await this.db.execAsync(`
-                CREATE INDEX IF NOT EXISTS idx_profiles_name 
-                ON ${this.TABLE_PROFILES}(name)
-            `)
+            await this.db.exec([
+                `CREATE INDEX IF NOT EXISTS idx_settings_category_key ON ${this.TABLE_SETTINGS}(category, key)`,
+                `CREATE INDEX IF NOT EXISTS idx_races_turn_number ON ${this.TABLE_RACES}(turnNumber)`,
+                `CREATE INDEX IF NOT EXISTS idx_races_name_formatted ON ${this.TABLE_RACES}(nameFormatted)`,
+                `CREATE INDEX IF NOT EXISTS idx_skills_name_en ON ${this.TABLE_SKILLS}(name_en)`,
+                `CREATE INDEX IF NOT EXISTS idx_profiles_name ON ${this.TABLE_PROFILES}(name)`,
+            ])
             logWithTimestamp("Indexes created successfully.")
 
             logWithTimestamp("Database initialized successfully.")
@@ -329,7 +308,7 @@ export class DatabaseManager {
         }
 
         try {
-            const tableInfo = await this.db.getAllAsync<{ name: string; type: string }>(`PRAGMA table_info(${this.TABLE_PROFILES})`)
+            const tableInfo = await this.db.query<{ name: string; type: string }>(`PRAGMA table_info(${this.TABLE_PROFILES})`)
             const hasTrainingSettings = tableInfo.some((col) => col.name === "training_settings")
             const hasTrainingStatTarget = tableInfo.some((col) => col.name === "trainingStatTarget_settings")
             const hasSettings = tableInfo.some((col) => col.name === "settings")
@@ -363,15 +342,15 @@ export class DatabaseManager {
         if (!this.db) {
             return
         }
-        await this.db.execAsync(`
-            CREATE TABLE IF NOT EXISTS ${this.TABLE_PROFILES}_new (
+        await this.db.exec([
+            `CREATE TABLE IF NOT EXISTS ${this.TABLE_PROFILES}_new (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE NOT NULL,
                 settings TEXT NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        `)
+            )`,
+        ])
     }
 
     /**
@@ -396,16 +375,16 @@ export class DatabaseManager {
 
         const jsonObjectSql = `json_object(${jsonObjectParts.join(", ")})`
 
-        await this.db.execAsync(`
-            INSERT INTO ${this.TABLE_PROFILES}_new (id, name, settings, created_at, updated_at)
-            SELECT 
-                id, 
-                name, 
+        await this.db.exec([
+            `INSERT INTO ${this.TABLE_PROFILES}_new (id, name, settings, created_at, updated_at)
+            SELECT
+                id,
+                name,
                 ${jsonObjectSql} as settings,
-                created_at, 
+                created_at,
                 updated_at
-            FROM ${this.TABLE_PROFILES}
-        `)
+            FROM ${this.TABLE_PROFILES}`,
+        ])
     }
 
     /**
@@ -416,12 +395,11 @@ export class DatabaseManager {
         if (!this.db) {
             return
         }
-        await this.db.execAsync(`DROP TABLE ${this.TABLE_PROFILES}`)
-        await this.db.execAsync(`ALTER TABLE ${this.TABLE_PROFILES}_new RENAME TO ${this.TABLE_PROFILES}`)
-        await this.db.execAsync(`
-            CREATE INDEX IF NOT EXISTS idx_profiles_name 
-            ON ${this.TABLE_PROFILES}(name)
-        `)
+        await this.db.exec([
+            `DROP TABLE ${this.TABLE_PROFILES}`,
+            `ALTER TABLE ${this.TABLE_PROFILES}_new RENAME TO ${this.TABLE_PROFILES}`,
+            `CREATE INDEX IF NOT EXISTS idx_profiles_name ON ${this.TABLE_PROFILES}(name)`,
+        ])
     }
 
     // ============================================================================
@@ -446,8 +424,8 @@ export class DatabaseManager {
             if (!suppressLogging) {
                 logWithTimestamp(`[DB] Saving setting: ${category}.${key} = ${valueString.substring(0, 100)}...`)
             }
-            await this.db!.runAsync(
-                `INSERT OR REPLACE INTO ${this.TABLE_SETTINGS} (category, key, value, updated_at) 
+            await this.db!.run(
+                `INSERT OR REPLACE INTO ${this.TABLE_SETTINGS} (category, key, value, updated_at)
                  VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
                 [category, key, valueString]
             )
@@ -538,42 +516,16 @@ export class DatabaseManager {
             await this.executeWithQueue(async () => {
                 logWithTimestamp(`[DB] Saving ${settings.length} settings in batch.`)
 
-                await this.db!.runAsync("BEGIN TRANSACTION")
-                let stmt: SQLite.SQLiteStatement | null = null
-                try {
-                    stmt = await this.db!.prepareAsync(
-                        `INSERT OR REPLACE INTO ${this.TABLE_SETTINGS} (category, key, value, updated_at)
-                         VALUES (?, ?, ?, CURRENT_TIMESTAMP)`
-                    )
+                // One native transaction: every row commits, or the whole batch rolls back.
+                await this.db!.transaction([
+                    {
+                        sql: `INSERT OR REPLACE INTO ${this.TABLE_SETTINGS} (category, key, value, updated_at)
+                         VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
+                        rows: settings.map((setting) => [setting.category, setting.key, this.serializeValue(setting.value)]),
+                    },
+                ])
 
-                    // Execute all settings in batch.
-                    for (const setting of settings) {
-                        const valueString = this.serializeValue(setting.value)
-                        await stmt.executeAsync([setting.category, setting.key, valueString])
-                    }
-
-                    await this.db!.runAsync("COMMIT")
-
-                    logWithTimestamp(`[DB] Successfully saved ${settings.length} settings in batch.`)
-                } catch (error) {
-                    // Roll back here, inside the operation that still owns the connection: executeWithQueue's
-                    // finally clears isTransactionActive as soon as this callback settles, before a caller's
-                    // own catch could ever see it, so a rollback attempted one level up never actually runs.
-                    try {
-                        await this.db!.runAsync("ROLLBACK")
-                    } catch (rollbackError) {
-                        logErrorWithTimestamp("[DB] Failed to rollback settings batch transaction:", rollbackError)
-                    }
-                    throw error
-                } finally {
-                    if (stmt) {
-                        try {
-                            await stmt.finalizeAsync()
-                        } catch (finalizeError) {
-                            logErrorWithTimestamp("[DB] Failed to finalize settings batch statement:", finalizeError)
-                        }
-                    }
-                }
+                logWithTimestamp(`[DB] Successfully saved ${settings.length} settings in batch.`)
             })
 
             endTiming({ status: "success", settingsCount: settings.length })
@@ -597,7 +549,7 @@ export class DatabaseManager {
         this.ensureInitialized()
 
         try {
-            const result = await this.db!.getFirstAsync<DatabaseSettings>(`SELECT * FROM ${this.TABLE_SETTINGS} WHERE category = ? AND key = ?`, [category, key])
+            const result = (await this.db!.query<DatabaseSettings>(`SELECT * FROM ${this.TABLE_SETTINGS} WHERE category = ? AND key = ?`, [category, key]))[0] ?? null
 
             if (!result) {
                 endTiming({ status: "not_found", category, key })
@@ -632,7 +584,7 @@ export class DatabaseManager {
             // ownership reason: it is Kotlin-owned live queue state, and loading a bootstrap-time
             // snapshot into Settings let later RN saves clobber it mid-run (convertSettingsToBatch
             // carries the matching serialization gate).
-            const results = await this.db!.getAllAsync<DatabaseSettings>(`SELECT * FROM ${this.TABLE_SETTINGS} WHERE category NOT GLOB 'rot[0-9]*' AND category != 'queueState' ORDER BY category, key`)
+            const results = await this.db!.query<DatabaseSettings>(`SELECT * FROM ${this.TABLE_SETTINGS} WHERE category NOT GLOB 'rot[0-9]*' AND category != 'queueState' ORDER BY category, key`)
 
             const settings: Record<string, Record<string, any>> = {}
             for (const result of results) {
@@ -674,17 +626,12 @@ export class DatabaseManager {
             await this.executeWithQueue(async () => {
                 logWithTimestamp(`[DB] Saving ${races.length} races using prepared statement.`)
 
-                await this.db!.runAsync("BEGIN TRANSACTION")
-                let stmt: SQLite.SQLiteStatement | null = null
-                try {
-                    stmt = await this.db!.prepareAsync(
-                        `INSERT OR REPLACE INTO ${this.TABLE_RACES} (key, name, date, raceTrack, course, direction, grade, terrain, distanceType, distanceMeters, fans, turnNumber, nameFormatted)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                    )
-
-                    // Execute all races in batch using prepared statement.
-                    for (const race of races) {
-                        await stmt.executeAsync([
+                // One native transaction: every row commits, or the whole batch rolls back.
+                await this.db!.transaction([
+                    {
+                        sql: `INSERT OR REPLACE INTO ${this.TABLE_RACES} (key, name, date, raceTrack, course, direction, grade, terrain, distanceType, distanceMeters, fans, turnNumber, nameFormatted)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        rows: races.map((race) => [
                             race.key,
                             race.name,
                             race.date,
@@ -698,31 +645,11 @@ export class DatabaseManager {
                             race.fans,
                             race.turnNumber,
                             race.nameFormatted,
-                        ])
-                    }
+                        ]),
+                    },
+                ])
 
-                    await this.db!.runAsync("COMMIT")
-
-                    logWithTimestamp(`[DB] Successfully saved ${races.length} races in batch.`)
-                } catch (error) {
-                    // Roll back here, inside the operation that still owns the connection: executeWithQueue's
-                    // finally clears isTransactionActive as soon as this callback settles, before a caller's
-                    // own catch could ever see it, so a rollback attempted one level up never actually runs.
-                    try {
-                        await this.db!.runAsync("ROLLBACK")
-                    } catch (rollbackError) {
-                        logErrorWithTimestamp("[DB] Failed to rollback races batch transaction:", rollbackError)
-                    }
-                    throw error
-                } finally {
-                    if (stmt) {
-                        try {
-                            await stmt.finalizeAsync()
-                        } catch (finalizeError) {
-                            logErrorWithTimestamp("[DB] Failed to finalize races batch statement:", finalizeError)
-                        }
-                    }
-                }
+                logWithTimestamp(`[DB] Successfully saved ${races.length} races in batch.`)
             })
 
             endTiming({ status: "success", racesCount: races.length })
@@ -745,7 +672,7 @@ export class DatabaseManager {
         this.ensureInitialized()
 
         try {
-            await this.db!.runAsync(`DELETE FROM ${this.TABLE_RACES}`)
+            await this.db!.run(`DELETE FROM ${this.TABLE_RACES}`)
             logWithTimestamp("[DB] Successfully cleared all races.")
             endTiming({ status: "success" })
         } catch (error) {
@@ -778,17 +705,12 @@ export class DatabaseManager {
             await this.executeWithQueue(async () => {
                 logWithTimestamp(`[DB] Saving ${skills.length} skills using prepared statement.`)
 
-                await this.db!.runAsync("BEGIN TRANSACTION")
-                let stmt: SQLite.SQLiteStatement | null = null
-                try {
-                    stmt = await this.db!.prepareAsync(
-                        `INSERT OR REPLACE INTO ${this.TABLE_SKILLS} (key, skill_id, name_en, desc_en, icon_id, cost, eval_pt, condition, precondition, inherited, community_tier, upgrade, downgrade)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-                    )
-
-                    // Execute all skills in batch using prepared statement.
-                    for (const skill of skills) {
-                        await stmt.executeAsync([
+                // One native transaction: every row commits, or the whole batch rolls back.
+                await this.db!.transaction([
+                    {
+                        sql: `INSERT OR REPLACE INTO ${this.TABLE_SKILLS} (key, skill_id, name_en, desc_en, icon_id, cost, eval_pt, condition, precondition, inherited, community_tier, upgrade, downgrade)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        rows: skills.map((skill) => [
                             skill.key,
                             skill.skill_id,
                             skill.name_en,
@@ -802,31 +724,11 @@ export class DatabaseManager {
                             skill.community_tier,
                             skill.upgrade,
                             skill.downgrade,
-                        ])
-                    }
+                        ]),
+                    },
+                ])
 
-                    await this.db!.runAsync("COMMIT")
-
-                    logWithTimestamp(`[DB] Successfully saved ${skills.length} skills in batch.`)
-                } catch (error) {
-                    // Roll back here, inside the operation that still owns the connection: executeWithQueue's
-                    // finally clears isTransactionActive as soon as this callback settles, before a caller's
-                    // own catch could ever see it, so a rollback attempted one level up never actually runs.
-                    try {
-                        await this.db!.runAsync("ROLLBACK")
-                    } catch (rollbackError) {
-                        logErrorWithTimestamp("[DB] Failed to rollback skills batch transaction:", rollbackError)
-                    }
-                    throw error
-                } finally {
-                    if (stmt) {
-                        try {
-                            await stmt.finalizeAsync()
-                        } catch (finalizeError) {
-                            logErrorWithTimestamp("[DB] Failed to finalize skills batch statement:", finalizeError)
-                        }
-                    }
-                }
+                logWithTimestamp(`[DB] Successfully saved ${skills.length} skills in batch.`)
             })
 
             endTiming({ status: "success", skillsCount: skills.length })
@@ -849,7 +751,7 @@ export class DatabaseManager {
         this.ensureInitialized()
 
         try {
-            await this.db!.runAsync(`DELETE FROM ${this.TABLE_SKILLS}`)
+            await this.db!.run(`DELETE FROM ${this.TABLE_SKILLS}`)
             logWithTimestamp("[DB] Successfully cleared all skills.")
             endTiming({ status: "success" })
         } catch (error) {
@@ -914,9 +816,7 @@ export class DatabaseManager {
         const endTiming = startTiming("database_load_settings_snapshot", "database")
         this.ensureInitialized()
         try {
-            const results = await this.db!.getAllAsync<DatabaseSettings>(
-                `SELECT category, key, value FROM ${this.TABLE_SETTINGS} WHERE category NOT GLOB 'rot[0-9]*' AND category != 'queueState'`
-            )
+            const results = await this.db!.query<DatabaseSettings>(`SELECT category, key, value FROM ${this.TABLE_SETTINGS} WHERE category NOT GLOB 'rot[0-9]*' AND category != 'queueState'`)
             const rows: Record<string, string> = {}
             for (const result of results) {
                 rows[`${result.category}.${result.key}`] = result.value
@@ -943,7 +843,7 @@ export class DatabaseManager {
         this.ensureInitialized()
 
         try {
-            const results = await this.db!.getAllAsync<DatabaseProfile>(`SELECT * FROM ${this.TABLE_PROFILES} ORDER BY name`)
+            const results = await this.db!.query<DatabaseProfile>(`SELECT * FROM ${this.TABLE_PROFILES} ORDER BY name`)
             endTiming({ status: "success", totalProfiles: results.length })
             return results
         } catch (error) {
@@ -964,7 +864,7 @@ export class DatabaseManager {
         this.ensureInitialized()
 
         try {
-            const result = await this.db!.getFirstAsync<DatabaseProfile>(`SELECT * FROM ${this.TABLE_PROFILES} WHERE id = ?`, [id])
+            const result = (await this.db!.query<DatabaseProfile>(`SELECT * FROM ${this.TABLE_PROFILES} WHERE id = ?`, [id]))[0] ?? null
             endTiming({ status: "success", found: !!result })
             return result || null
         } catch (error) {
@@ -991,7 +891,7 @@ export class DatabaseManager {
                 // Update existing profile.
                 logWithTimestamp(`[DB] Updating profile: ${profile.name} (id: ${profile.id})`)
                 try {
-                    await this.db!.runAsync(
+                    await this.db!.run(
                         `UPDATE ${this.TABLE_PROFILES} 
                          SET name = ?, settings = ?, updated_at = CURRENT_TIMESTAMP 
                          WHERE id = ?`,
@@ -1007,7 +907,7 @@ export class DatabaseManager {
                         const existingProfile = await this.getProfile(profile.id)
                         if (existingProfile && existingProfile.name === profile.name) {
                             // Name is the same, just update settings.
-                            await this.db!.runAsync(
+                            await this.db!.run(
                                 `UPDATE ${this.TABLE_PROFILES} 
                                  SET settings = ?, updated_at = CURRENT_TIMESTAMP 
                                  WHERE id = ?`,
@@ -1023,7 +923,7 @@ export class DatabaseManager {
             } else {
                 // Create new profile.
                 logWithTimestamp(`[DB] Creating profile: ${profile.name}`)
-                const result = await this.db!.runAsync(
+                const result = await this.db!.run(
                     `INSERT INTO ${this.TABLE_PROFILES} (name, settings, created_at, updated_at) 
                      VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
                     [profile.name, settingsJson]
@@ -1052,7 +952,7 @@ export class DatabaseManager {
 
         try {
             logWithTimestamp(`[DB] Deleting profile with id: ${id}`)
-            await this.db!.runAsync(`DELETE FROM ${this.TABLE_PROFILES} WHERE id = ?`, [id])
+            await this.db!.run(`DELETE FROM ${this.TABLE_PROFILES} WHERE id = ?`, [id])
             logWithTimestamp(`[DB] Successfully deleted profile with id: ${id}`)
             endTiming({ status: "success", profileId: id })
         } catch (error) {
@@ -1064,7 +964,7 @@ export class DatabaseManager {
 
     /**
      * Replace every stored profile with `profiles` in one transaction: the old rows are deleted and the
-     * new ones inserted inside the same `BEGIN`/`COMMIT`, so a reader never observes zero profiles, and a
+     * new ones inserted inside the same native transaction, so a reader never observes zero profiles, and a
      * name shared between an old and a new profile never collides (the old row is already gone within the
      * same transaction before the new one is inserted). On any failure the transaction rolls back and the
      * previous profiles are left exactly as they were.
@@ -1080,45 +980,18 @@ export class DatabaseManager {
             await this.executeWithQueue(async () => {
                 logWithTimestamp(`[DB] Replacing all profiles with ${profiles.length} imported profile(s).`)
 
-                await this.db!.runAsync("BEGIN TRANSACTION")
-                let stmt: SQLite.SQLiteStatement | null = null
-                try {
-                    await this.db!.runAsync(`DELETE FROM ${this.TABLE_PROFILES}`)
+                // One native transaction: the delete and every insert commit together, or the old
+                // profiles stay exactly as they were.
+                await this.db!.transaction([
+                    { sql: `DELETE FROM ${this.TABLE_PROFILES}`, rows: [[]] },
+                    {
+                        sql: `INSERT INTO ${this.TABLE_PROFILES} (name, settings, created_at, updated_at)
+                         VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+                        rows: profiles.map((profile) => [profile.name, JSON.stringify(profile.settings)]),
+                    },
+                ])
 
-                    if (profiles.length > 0) {
-                        stmt = await this.db!.prepareAsync(
-                            `INSERT INTO ${this.TABLE_PROFILES} (name, settings, created_at, updated_at)
-                             VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-                        )
-                        for (const profile of profiles) {
-                            await stmt.executeAsync([profile.name, JSON.stringify(profile.settings)])
-                        }
-                    }
-
-                    await this.db!.runAsync("COMMIT")
-
-                    logWithTimestamp(`[DB] Successfully replaced all profiles with ${profiles.length} imported profile(s).`)
-                } catch (error) {
-                    // Roll back here, inside the operation that still owns the connection: executeWithQueue's
-                    // finally clears isTransactionActive as soon as this callback settles, before a caller's
-                    // own catch could ever see it, so a rollback attempted one level up never actually runs.
-                    // Undoes the DELETE above along with any partial INSERTs, so the old profiles are left
-                    // exactly as they were before this call.
-                    try {
-                        await this.db!.runAsync("ROLLBACK")
-                    } catch (rollbackError) {
-                        logErrorWithTimestamp("[DB] Failed to rollback profile replacement:", rollbackError)
-                    }
-                    throw error
-                } finally {
-                    if (stmt) {
-                        try {
-                            await stmt.finalizeAsync()
-                        } catch (finalizeError) {
-                            logErrorWithTimestamp("[DB] Failed to finalize profile-replacement statement:", finalizeError)
-                        }
-                    }
-                }
+                logWithTimestamp(`[DB] Successfully replaced all profiles with ${profiles.length} imported profile(s).`)
             })
 
             endTiming({ status: "success", profilesCount: profiles.length })
@@ -1163,7 +1036,7 @@ export class DatabaseManager {
                 await this.saveSetting("misc", "currentProfileName", profileName, true)
             } else {
                 // Delete the setting if profileName is null.
-                await this.db!.runAsync(`DELETE FROM ${this.TABLE_SETTINGS} WHERE category = ? AND key = ?`, ["misc", "currentProfileName"])
+                await this.db!.run(`DELETE FROM ${this.TABLE_SETTINGS} WHERE category = ? AND key = ?`, ["misc", "currentProfileName"])
             }
             endTiming({ status: "success", profileName })
         } catch (error) {
@@ -1183,7 +1056,7 @@ export class DatabaseManager {
     async clearRotationSnapshots(): Promise<void> {
         this.ensureInitialized()
         try {
-            await this.db!.runAsync(`DELETE FROM ${this.TABLE_SETTINGS} WHERE category GLOB 'rot[0-9]*'`)
+            await this.db!.run(`DELETE FROM ${this.TABLE_SETTINGS} WHERE category GLOB 'rot[0-9]*'`)
         } catch (error) {
             logErrorWithTimestamp("[DB] Failed to clear rotation snapshots:", error)
             throw error
