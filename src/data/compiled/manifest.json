@@ -6,7 +6,7 @@
     "skillsSchemaVersion": 1,
     "racesSchemaVersion": 1
   },
-  "fingerprint": "be347a814ef84598090d35eaa3f7d9b4d0c1b195ad58c787e26ff078732f6d4e",
+  "fingerprint": "c6f4319e3b04347ce65af613afd055fdfa0d27b5eecb3a9cc7cedd955b765605",
   "knownProvenance": {
     "generator": "scripts/data-scraper",
     "recordedSourceVersion": null,
@@ -17,7 +17,7 @@
     {
       "family": "objectives",
       "path": "src/data/character_objectives.json",
-      "sha256": "8962cb9366fc478486e523572bc0ad7098351a294e831d83f87f912d6a7f46b1",
+      "sha256": "3accb918f8f815566c848053aadac53dbf2788aa6044dadabcfa028f1a7fd296",
       "recordCount": 68,
       "provenance": {
         "origin": "data-scraper",
@@ -27,7 +27,7 @@
     {
       "family": "characters",
       "path": "src/data/characters.json",
-      "sha256": "09efd9ecc6d2deea2c78afe26166b82615f5ebcdd31d26e4d1a3a6b12e523ad9",
+      "sha256": "01abe82273f04ace0c3df1283807e6dd10c5ff7d3158e2842d1f075bde0edc9b",
       "recordCount": 68,
       "provenance": {
         "origin": "data-scraper",
@@ -37,7 +37,7 @@
     {
       "family": "races",
       "path": "src/data/races.json",
-      "sha256": "878fbabf26d570d9cb938d718d493dc80989e75f2b3ab2282fa595a0f2b2e2c5",
+      "sha256": "7ca4ac4f2d47721ba2360915527030293f1053fe002234b6f9e14c524cf72ca7",
       "recordCount": 402,
       "provenance": {
         "origin": "data-scraper",
@@ -47,7 +47,7 @@
     {
       "family": "scenarios",
       "path": "src/data/scenarios.json",
-      "sha256": "a5aeaebbf37cee0f234deeb0ddb39524def7b519ed47bc22ef97a776fe1b58ad",
+      "sha256": "9834b06a3787a7182b3074b4d127b0abd92384441dc8c80fe33161873ad9f336",
       "recordCount": 4,
       "provenance": {
         "origin": "data-scraper",
@@ -57,7 +57,7 @@
     {
       "family": "skills",
       "path": "src/data/skills.json",
-      "sha256": "c178080b24c99bcf0d139ed446a08cb513d794f598c3acf97ff0b2ac68fa16a0",
+      "sha256": "a29815dc235e4c0d6004eb226f64e92684b0bede72419e9f2ad94c893981ed51",
       "recordCount": 697,
       "provenance": {
         "origin": "data-scraper",
@@ -67,7 +67,7 @@
     {
       "family": "supports",
       "path": "src/data/supports.json",
-      "sha256": "faf8ea50a1a487d38d5958b65484004dbb71535556f871ed65b5fdaa6a3efb28",
+      "sha256": "c68c540040793007e533aa807be3a2b8725e149d8d797fd956fc2571d2999a51",
       "recordCount": 86,
       "provenance": {
         "origin": "data-scraper",

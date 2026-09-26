@@ -8,3 +8,12 @@ src/data/build_budget_data.json text eol=lf
 src/data/compiled/races.json text eol=lf
 src/data/compiled/skills.json text eol=lf
 src/data/compiled/manifest.json text eol=lf
+
+# Raw master-data sources: the compiler records their SHA-256 in compiled/manifest.json, so a
+# CRLF checkout would desync the recorded hash from the committed bytes. Keep them LF too.
+src/data/skills.json text eol=lf
+src/data/races.json text eol=lf
+src/data/characters.json text eol=lf
+src/data/supports.json text eol=lf
+src/data/scenarios.json text eol=lf
+src/data/character_objectives.json text eol=lf
