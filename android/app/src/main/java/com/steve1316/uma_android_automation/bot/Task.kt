@@ -307,6 +307,8 @@ abstract class Task(game: Game) : DialogHandler(game) {
      * give-up as a user quit and discard every remaining run.
      */
     private fun interruptResult(e: InterruptedException): TaskResult {
+        // Taken first, before the settle below: the stall watchdog's interrupt carries no message of its own.
+        val watchdogReason = WatchdogReason.take()
         // Clear the interrupt flag so task teardown (log save, events) is not poisoned by it.
         Thread.interrupted()
         // A user Stop (app button or the projection overlay) interrupts this thread and flips its
@@ -348,7 +350,7 @@ abstract class Task(game: Game) : DialogHandler(game) {
             else ->
                 TaskResult.Error(
                     TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
-                    e.message ?: "Bot was interrupted by an internal watchdog or safety-net, not by the user.",
+                    watchdogReason ?: e.message ?: "Bot was interrupted by an internal watchdog or safety-net, not by the user.",
                 )
         }
     }

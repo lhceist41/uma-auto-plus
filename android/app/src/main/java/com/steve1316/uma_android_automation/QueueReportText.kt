@@ -138,7 +138,14 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
             )
         SessionEnd.PROCESS_ENDED -> {
             val at = if (reached > 0) (if (r.optBoolean("queueEnabled")) " during run $reached of $total" else " during the run") else ""
-            val cause = r.optJSONObject("exitInfo")?.optString("reason")?.let { EXIT_CAUSES[it] }?.let { " $it" }.orEmpty()
+            val exit = r.optJSONObject("exitInfo")
+            val watchdog = exit?.optJSONObject("watchdog")
+            val cause =
+                if (watchdog != null) {
+                    " The bot stopped itself after ${watchdog.optLong("stalledSeconds")} seconds without progress."
+                } else {
+                    exit?.optString("reason")?.let { EXIT_CAUSES[it] }?.let { " $it" }.orEmpty()
+                }
             ReportText("App stopped unexpectedly", "UMA Auto+ stopped unexpectedly$at.$cause", if (resumable) pressStart(true).replaceFirstChar { it.uppercase() } else null)
         }
     }

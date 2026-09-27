@@ -68,10 +68,10 @@ class SparkKeepConfirmationDeadlineTest {
     }
 
     @Test
-    fun `both spark deadlines sit under the stall watchdog timeout`() {
+    fun `both spark deadlines sit under the stall watchdog's first rung`() {
         val keep = constantMs(nav, "SPARK_KEEP_CONFIRM_DEADLINE_MS")
         val ocr = constantMs(nav, "SPARK_OCR_READ_DEADLINE_MS")
-        val watchdog = constantMs(sourceFile("bot/Game.kt").readText(), "HEARTBEAT_TIMEOUT_MS")
+        val watchdog = constantMs(sourceFile("bot/StallWatchdog.kt").readText(), "WATCHDOG_TOGGLE_AT_MS")
         assertTrue(keep < watchdog, "keep deadline ($keep) must beat the stall watchdog ($watchdog) so it recovers first")
         assertTrue(ocr < watchdog, "OCR deadline ($ocr) must beat the stall watchdog ($watchdog)")
         assertTrue(ocr <= keep, "a single OCR read cannot outlast the whole handler it runs inside")

@@ -175,9 +175,10 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         // until the whole emulator appears frozen. To recover automatically, the bot
         // loop updates a heartbeat every time it makes forward progress. A background
         // coroutine watches that heartbeat and, if nothing has moved for
-        // HEARTBEAT_TIMEOUT_MS while the bot is supposedly running, kills the process.
+        // WATCHDOG_KILL_AT_MS while the bot is supposedly running, kills the process.
         // The AccessibilityService is sticky so Android restarts it within ~1 second
-        // and input dispatch unfreezes.
+        // and input dispatch unfreezes. Before the kill it tries the in-process rungs in
+        // StallWatchdog.kt: an accessibility toggle, then interrupting the Game thread.
 
         /** Milliseconds since boot of the last recorded forward progress. */
         @Volatile
@@ -187,11 +188,16 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         @Volatile
         private var watchdogJob: Job? = null
 
-        /**
-         * Kill the process if no heartbeat in this many ms while the bot is running.
-         * Set to 3 minutes so popup animations and dialog chains don't false-trigger.
-         */
-        private const val HEARTBEAT_TIMEOUT_MS: Long = 180_000L
+        /** The thread running the current run's [start], which the watchdog interrupts. */
+        @Volatile
+        private var gameThread: Thread? = null
+
+        /** The application Context for the watchdog's rungs, and whether its accessibility rung is granted. */
+        @Volatile
+        private var watchdogContext: Context? = null
+
+        @Volatile
+        private var watchdogGrant: Boolean = false
 
         /** How often the watchdog checks the heartbeat. */
         private const val WATCHDOG_INTERVAL_MS: Long = 5_000L
@@ -214,39 +220,74 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             heartbeat()
             watchdogJob =
                 CoroutineScope(Dispatchers.Default).launch {
+                    var rungsDone = 0
                     while (isActive) {
                         delay(WATCHDOG_INTERVAL_MS)
                         if (!BotService.isRunning) {
                             // Bot isn't running, reset so we don't fire immediately on resume.
                             heartbeat()
+                            rungsDone = 0
                             continue
                         }
                         val age = System.currentTimeMillis() - lastHeartbeatMs
-                        if (age >= HEARTBEAT_TIMEOUT_MS) {
-                            val msg =
-                                "[WATCHDOG] No bot progress for ${age / 1000}s while BotService.isRunning=true. " +
-                                    "Likely a stalled gesture injector / input-dispatch freeze. Self-restarting process to recover."
-                            Log.e(TAG, msg)
-                            // MessageLog goes on a throwaway thread: its global lock can be the
-                            // exact thing that wedged (EventBus subscribers run inside it), so a
-                            // blocked MessageLog.e here can neuter the watchdog before killProcess.
-                            try {
-                                Thread {
-                                    try {
-                                        MessageLog.e(TAG, msg)
-                                    } catch (_: Throwable) {
-                                    }
-                                }.apply {
-                                    isDaemon = true
-                                    start()
-                                }
-                            } catch (_: Throwable) {
+                        val thread = gameThread
+                        val context = watchdogContext
+                        val rung = decideWatchdogRung(age, rungsDone, thread?.isAlive == true, watchdogGrant)
+                        rungsDone = rungsDoneAfter(rung, rungsDone)
+                        when (rung) {
+                            WatchdogRung.NONE -> {}
+                            WatchdogRung.RESET -> {
+                                Log.i(TAG, "[WATCHDOG] Bot progress resumed after a stall.")
+                                recordWatchdogBreadcrumb(context, WATCHDOG_BREADCRUMB_CLEARED)
                             }
-                            // Give the log line a brief window to flush, then self-terminate.
-                            // AccessibilityService is sticky, Android will restart it.
-                            delay(250)
-                            android.os.Process.killProcess(android.os.Process.myPid())
-                            return@launch
+                            WatchdogRung.RECOVERED -> {
+                                heartbeat()
+                                Log.w(TAG, "[WATCHDOG] The interrupted Game thread has exited; the queue takes the run from here.")
+                                recordWatchdogBreadcrumb(context, WATCHDOG_BREADCRUMB_CLEARED)
+                            }
+                            WatchdogRung.TOGGLE_ACCESSIBILITY -> {
+                                runWatchdogRung("accessibility") {
+                                    val toggled = context != null && toggleAccessibilityForWatchdog(context)
+                                    Log.e(TAG, "[WATCHDOG] No bot progress for ${age / 1000}s. Toggled the Accessibility Service off and on: $toggled.")
+                                    recordWatchdogBreadcrumb(context, encodeWatchdogBreadcrumb(WatchdogRung.TOGGLE_ACCESSIBILITY, age))
+                                }
+                            }
+                            WatchdogRung.SKIP_TOGGLE -> {
+                                Log.e(TAG, "[WATCHDOG] No bot progress for ${age / 1000}s. The accessibility toggle needs WRITE_SECURE_SETTINGS, so it is skipped.")
+                                recordWatchdogBreadcrumb(context, encodeWatchdogBreadcrumb(WatchdogRung.SKIP_TOGGLE, age))
+                            }
+                            WatchdogRung.INTERRUPT_GAME_THREAD -> {
+                                WatchdogReason.set(watchdogInterruptReason(age))
+                                thread?.interrupt()
+                                Log.e(TAG, "[WATCHDOG] No bot progress for ${age / 1000}s. Interrupted the Game thread; only the heartbeat shows whether that worked.")
+                                recordWatchdogBreadcrumb(context, encodeWatchdogBreadcrumb(WatchdogRung.INTERRUPT_GAME_THREAD, age))
+                            }
+                            WatchdogRung.KILL -> {
+                                val msg =
+                                    "[WATCHDOG] No bot progress for ${age / 1000}s while BotService.isRunning=true. " +
+                                        "Likely a stalled gesture injector / input-dispatch freeze. Self-restarting process to recover."
+                                Log.e(TAG, msg)
+                                // MessageLog goes on a throwaway thread: its global lock can be the
+                                // exact thing that wedged (EventBus subscribers run inside it), so a
+                                // blocked MessageLog.e here can neuter the watchdog before killProcess.
+                                try {
+                                    Thread {
+                                        try {
+                                            MessageLog.e(TAG, msg)
+                                        } catch (_: Throwable) {
+                                        }
+                                    }.apply {
+                                        isDaemon = true
+                                        start()
+                                    }
+                                } catch (_: Throwable) {
+                                }
+                                // Give the log line a brief window to flush, then self-terminate.
+                                // AccessibilityService is sticky, Android will restart it.
+                                delay(250)
+                                android.os.Process.killProcess(android.os.Process.myPid())
+                                return@launch
+                            }
                         }
                     }
                 }
@@ -356,6 +397,28 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         startWatchdog()
     }
 
+    /** This run's [GameGeneration] token; 0 for a Game that never starts a run (the navigator's). */
+    @Volatile
+    private var runGeneration = 0
+
+    /**
+     * Makes the calling thread, the run's own, the one the stall watchdog interrupts, and reads the
+     * watchdog's permission here rather than on its thread. Claims this run's generation, so a
+     * leftover thread from an earlier run stops at its next wait or tap.
+     */
+    private fun watchRun() {
+        gameThread = Thread.currentThread()
+        watchdogContext = myContext.applicationContext
+        watchdogGrant = hasSecureSettingsGrant(myContext)
+        WatchdogReason.clear()
+        runGeneration = GameGeneration.claim()
+    }
+
+    /** Stops a thread still running a run the watchdog gave up on before it can tap or keep the heartbeat alive. */
+    private fun checkCurrentRun() {
+        if (GameGeneration.isStale(runGeneration)) throw InterruptedException("This run was replaced by a newer one.")
+    }
+
     // //////////////////////////////////////////////////////////////////////////////////////////////////
     // //////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -374,6 +437,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
 
         var remainingMillis = totalMillis
         while (remainingMillis > 0) {
+            checkCurrentRun()
             // Record forward progress for the stall watchdog. Putting it here means
             // every tick of any wait() call keeps the heartbeat fresh, so the watchdog
             // only fires if we're genuinely stuck outside the wait loop for 45s+
@@ -484,6 +548,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
      * @param ignoreWaiting Flag to ignore checking if the game is busy loading.
      */
     fun tap(x: Double, y: Double, imageName: String? = null, taps: Int = 1, ignoreWaiting: Boolean = false) {
+        checkCurrentRun()
         // Perform the tap.
         gestureUtils.tap(x, y, imageName, taps = taps)
 
@@ -763,6 +828,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
 
     /** Begins automation and returns the task's result. */
     fun start(): TaskResult {
+        watchRun()
         MessageLog.i(TAG, "Started at ${MessageLog.getSystemTimeString()}.")
         val startTime: Long = System.currentTimeMillis()
 

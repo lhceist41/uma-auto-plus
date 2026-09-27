@@ -6,6 +6,11 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
+import com.steve1316.uma_android_automation.bot.WATCHDOG_BREADCRUMB_FILE
+import com.steve1316.uma_android_automation.bot.WATCHDOG_KILL_AT_MS
+import com.steve1316.uma_android_automation.bot.WatchdogBreadcrumb
+import com.steve1316.uma_android_automation.bot.decodeWatchdogBreadcrumb
+import com.steve1316.uma_android_automation.bot.readWatchdogBreadcrumbFile
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import org.json.JSONArray
 import org.json.JSONObject
@@ -414,8 +419,25 @@ internal fun runRecordJson(r: RunRecord): JSONObject =
 internal fun isOrphanedSession(openSessionId: String?, reportedSessionId: String?, liveSessionId: String?): Boolean =
     !openSessionId.isNullOrEmpty() && openSessionId != reportedSessionId && openSessionId != liveSessionId
 
-/** An `ApplicationExitInfo`, reduced to the fields the report uses. */
-internal data class ExitRecord(val pid: Int, val timestamp: Long, val reason: Int, val status: Int)
+/** An `ApplicationExitInfo`, reduced to the fields the report uses; [summary] is its process-state summary. */
+internal data class ExitRecord(val pid: Int, val timestamp: Long, val reason: Int, val status: Int, val summary: String? = null)
+
+/**
+ * The stall-watchdog rung the dead process had taken, when that explains its exit: its exit record's
+ * summary when Android killed it by signal (the watchdog's kill; any other exit reason is not the
+ * watchdog's), or, below API 30 where there is no exit record, the breadcrumb file it left.
+ */
+internal fun watchdogBreadcrumbFor(exit: ExitRecord?, file: WatchdogBreadcrumb?): WatchdogBreadcrumb? =
+    if (exit != null) decodeWatchdogBreadcrumb(exit.summary)?.takeIf { exit.reason == ApplicationExitInfo.REASON_SIGNALED } else file
+
+/** The exit facts the report keeps: the exit record, and the watchdog's stall when it stopped the app. */
+internal fun exitInfoJson(exit: ExitRecord?, watchdog: WatchdogBreadcrumb?): JSONObject? {
+    if (exit == null && watchdog == null) return null
+    val json = JSONObject()
+    if (exit != null) json.put("reason", exitReasonKey(exit.reason)).put("status", exit.status).put("timestamp", exit.timestamp)
+    if (watchdog != null) json.put("watchdog", JSONObject().put("rung", watchdog.rung).put("stalledSeconds", WATCHDOG_KILL_AT_MS / 1000))
+    return json
+}
 
 /**
  * The exit record of the dead session's own process: same pid, and not older than the session
@@ -446,7 +468,7 @@ internal fun exitReasonKey(reason: Int): String =
  * snapshot. The stop time is the exit record's when Android kept one; otherwise the last heartbeat
  * the session wrote, which is as close as the evidence gets after a host or emulator crash.
  */
-internal fun processEndedReport(open: JSONObject, exit: ExitRecord?, lastSeenAt: Long?, resumable: Boolean): QueueReport {
+internal fun processEndedReport(open: JSONObject, exit: ExitRecord?, lastSeenAt: Long?, resumable: Boolean, watchdog: WatchdogBreadcrumb? = null): QueueReport {
     val updatedAt = open.optLong("updatedAt", open.optLong("startedAt"))
     val seen = maxOf(updatedAt, lastSeenAt ?: 0L)
     val phase = open.optString("phase", StartModule.PHASE_CAREER)
@@ -472,7 +494,7 @@ internal fun processEndedReport(open: JSONObject, exit: ExitRecord?, lastSeenAt:
         runs = open.optJSONArray("runs") ?: JSONArray(),
         recoveries = open.optJSONObject("recoveries") ?: JSONObject(),
         tpRestores = open.optJSONArray("tpRestores") ?: JSONArray(),
-        exitInfo = exit?.let { JSONObject().put("reason", exitReasonKey(it.reason)).put("status", it.status).put("timestamp", it.timestamp) },
+        exitInfo = exitInfoJson(exit, watchdog),
     )
 }
 
@@ -697,6 +719,7 @@ object QueueLedger {
             Log.w(TAG, "Failed to store the queue report: ${e.message}")
         }
         File(context.filesDir, HEARTBEAT_FILE).delete()
+        File(context.filesDir, WATCHDOG_BREADCRUMB_FILE).delete()
         OutcomeCorpus.append(context, report.toJson(), OutcomeCorpus.QUEUE_LEDGER_PATH)
     }
 
@@ -725,7 +748,8 @@ object QueueLedger {
             val seen = readHeartbeat(context.filesDir, sessionId)
             val records = exitRecordsFor(Build.VERSION.SDK_INT) { readExitRecords(context) }
             val exit = pickExitRecord(records, deadPid, open.optLong("startedAt"))
-            store(context, processEndedReport(open, exit, seen, resumable = StartModule.loadQueueState(context) != null))
+            val file = if (records == null) readWatchdogBreadcrumbFile(context.filesDir, deadPid, open.optLong("startedAt")) else null
+            store(context, processEndedReport(open, exit, seen, resumable = StartModule.loadQueueState(context) != null, watchdog = watchdogBreadcrumbFor(exit, file)))
         } catch (e: Exception) {
             Log.w(TAG, "Failed to check for a dead session: ${e.message}")
         }
@@ -734,7 +758,7 @@ object QueueLedger {
     @RequiresApi(30)
     private fun readExitRecords(context: Context): List<ExitRecord> {
         val am = context.getSystemService(ActivityManager::class.java) ?: return emptyList()
-        return am.getHistoricalProcessExitReasons(context.packageName, 0, 10).map { ExitRecord(it.pid, it.timestamp, it.reason, it.status) }
+        return am.getHistoricalProcessExitReasons(context.packageName, 0, 10).map { ExitRecord(it.pid, it.timestamp, it.reason, it.status, it.processStateSummary?.toString(Charsets.US_ASCII)) }
     }
 
     /** The app's current report as stored (JSON text), or null. Reports a dead session first. */

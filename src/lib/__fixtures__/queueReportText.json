@@ -1214,6 +1214,51 @@
             }
         },
         {
+            "name": "app stopped by its stall watchdog",
+            "report": {
+                "kind": "PROCESS_ENDED",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 3,
+                "resumable": true,
+                "exitInfo": {
+                    "reason": "SIGNALED",
+                    "status": 9,
+                    "timestamp": 1,
+                    "watchdog": {
+                        "rung": "INTERRUPT_GAME_THREAD",
+                        "stalledSeconds": 180
+                    }
+                }
+            },
+            "text": {
+                "title": "App stopped unexpectedly",
+                "reason": "UMA Auto+ stopped unexpectedly during run 3 of 5. The bot stopped itself after 180 seconds without progress.",
+                "nextAction": "Press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "stall watchdog without an exit record",
+            "report": {
+                "kind": "PROCESS_ENDED",
+                "queueEnabled": false,
+                "totalRuns": 1,
+                "runReached": 1,
+                "resumable": false,
+                "exitInfo": {
+                    "watchdog": {
+                        "rung": "SKIP_TOGGLE",
+                        "stalledSeconds": 180
+                    }
+                }
+            },
+            "text": {
+                "title": "App stopped unexpectedly",
+                "reason": "UMA Auto+ stopped unexpectedly during the run. The bot stopped itself after 180 seconds without progress.",
+                "nextAction": null
+            }
+        },
+        {
             "name": "app died in a single run",
             "report": {
                 "kind": "PROCESS_ENDED",
