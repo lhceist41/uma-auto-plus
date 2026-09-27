@@ -27,8 +27,9 @@ class RunRetryAndResumeTest {
         skipRequested: Boolean = false,
         botRunning: Boolean = true,
         gameRecoveryFailed: Boolean = false,
+        accessibilityHalt: Boolean = false,
         retriesLeft: Int = StartModule.RUN_RETRY_BUDGET,
-    ) = StartModule.decideRunRetry(code, enableRunQueue, miscMode, diagnostic, queueStopRequested, skipRequested, botRunning, gameRecoveryFailed, retriesLeft)
+    ) = StartModule.decideRunRetry(code, enableRunQueue, miscMode, diagnostic, queueStopRequested, skipRequested, botRunning, gameRecoveryFailed, accessibilityHalt, retriesLeft)
 
     @Nested
     @DisplayName("which runs are retried")
@@ -63,6 +64,7 @@ class RunRetryAndResumeTest {
             assertFalse(retry(error, skipRequested = true), "a skip")
             assertFalse(retry(error, botRunning = false), "the service is gone")
             assertFalse(retry(error, gameRecoveryFailed = true), "the game could not be recovered")
+            assertFalse(retry(error, accessibilityHalt = true), "an accessibility repair could not help")
             assertFalse(retry(error, retriesLeft = 0), "the budget is spent")
         }
 
@@ -182,6 +184,7 @@ class RunRetryAndResumeTest {
                 "skipRequested = queueSkipRequested",
                 "botRunning = BotService.isRunning",
                 "gameRecoveryFailed = gameRecoveryFailed",
+                "accessibilityHalt = accessibilityHaltKey != null",
                 "retriesLeft = runRetriesLeft",
             )) {
                 assertTrue(call.contains(arg), arg)

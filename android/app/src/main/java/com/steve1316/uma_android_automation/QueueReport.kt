@@ -88,6 +88,9 @@ enum class SessionEnd(val clearsQueueState: Boolean = false) {
 
     /** Start found the settings database damaged or unopenable and refused before anything ran. */
     REFUSED_DATABASE_UNHEALTHY,
+
+    /** A run stopped for the reason its key names (an accessibility repair that could not help); its career is still in the slot. */
+    RUN_HALTED,
 }
 
 /**
@@ -182,6 +185,13 @@ internal fun careerEndForRun(seqBeforeRun: Long, stash: CareerEndStash): CareerE
 object SessionTally {
     val accessibilityRebinds = AtomicInteger()
     val accessibilityRewrites = AtomicInteger()
+
+    /** Accessibility repairs refused for lack of WRITE_SECURE_SETTINGS. */
+    val accessibilityRepairsRefused = AtomicInteger()
+
+    /** Issued rebinds the stuck ladder outlived: the screen did not change after them. */
+    val accessibilityRebindsWithoutChange = AtomicInteger()
+    val accessibilityStrongToggles = AtomicInteger()
     val gameRelaunches = AtomicInteger()
     val lobbyReentries = AtomicInteger()
     val connectionHolds = AtomicInteger()
@@ -198,6 +208,9 @@ object SessionTally {
     fun reset() {
         accessibilityRebinds.set(0)
         accessibilityRewrites.set(0)
+        accessibilityRepairsRefused.set(0)
+        accessibilityRebindsWithoutChange.set(0)
+        accessibilityStrongToggles.set(0)
         gameRelaunches.set(0)
         lobbyReentries.set(0)
         connectionHolds.set(0)
@@ -208,6 +221,9 @@ object SessionTally {
         JSONObject()
             .put("accessibilityRebinds", accessibilityRebinds.get())
             .put("accessibilityRewrites", accessibilityRewrites.get())
+            .put("accessibilityRepairsRefused", accessibilityRepairsRefused.get())
+            .put("accessibilityRebindsWithoutChange", accessibilityRebindsWithoutChange.get())
+            .put("accessibilityStrongToggles", accessibilityStrongToggles.get())
             .put("gameRelaunches", gameRelaunches.get())
             .put("lobbyReentries", lobbyReentries.get())
             .put("connectionHolds", connectionHolds.get())

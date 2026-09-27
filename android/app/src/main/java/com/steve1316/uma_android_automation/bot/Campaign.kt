@@ -738,6 +738,16 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     private val cutsceneRebindThresholds: Set<Int> = setOf(15, 30)
 
+    /** The rebinds each stuck ladder asked for in its current episode, for its stop reason and the ledger. */
+    private val dialogRebinds = RebindEpisode { SessionTally.accessibilityRebindsWithoutChange.incrementAndGet() }
+    private val cutsceneRebinds = RebindEpisode { SessionTally.accessibilityRebindsWithoutChange.incrementAndGet() }
+    private val unknownScreenRebinds = RebindEpisode { SessionTally.accessibilityRebindsWithoutChange.incrementAndGet() }
+
+    /** Where the dialog-tick and cutscene ladders stop; the run's one stronger toggle moves this out once. */
+    private val dialogTicksBeforeStop: Int = 25
+    private var dialogStopAt: Int = dialogTicksBeforeStop
+    private var cutsceneStopAt: Int = maxCutsceneAdvanceBeforeStop
+
     /** Whether the bot should attempt the crane game. On by default: it spends nothing. */
     protected val enableCraneGameAttempt: Boolean = SettingsHelper.getBooleanSetting("general", "enableCraneGameAttempt", true)
 
@@ -4304,10 +4314,11 @@ abstract class Campaign(game: Game) : Task(game) {
             // gesture-death while a dialog was up previously looped unbounded (taps no-op, the
             // dialog never closes) all the way to the runtime cap.
             if (!game.ensureAccessibilityService()) {
-                throw InterruptedException(
+                val reason =
                     "The Accessibility Service was disabled mid-run and could not be restored automatically. " +
-                        "Re-enable it in the Android settings or grant WRITE_SECURE_SETTINGS (see log).",
-                )
+                        "Re-enable it in the Android settings or grant WRITE_SECURE_SETTINGS (see log)."
+                requestAccessibilityHalt(A11Y_GRANT_MISSING)
+                throw InterruptedException(reason)
             }
 
             // We always check for dialogs first.
@@ -4318,16 +4329,22 @@ abstract class Campaign(game: Game) : Task(game) {
                 // A long dialog streak is that mode's signature here: hard-rebind at the ladder
                 // points, and stop cleanly rather than spin to the runtime cap.
                 if (consecutiveDialogTicks == 13 || consecutiveDialogTicks == 19) {
+                    if (consecutiveDialogTicks == 13) dialogRebinds.start()
                     MessageLog.w(TAG, "[WARN] process:: $consecutiveDialogTicks consecutive dialog ticks without progress - forcing an accessibility service rebind.")
-                    game.forceRebindAccessibilityService()
-                } else if (consecutiveDialogTicks >= 25) {
-                    throw InterruptedException(
-                        "Dialog handling made no progress for $consecutiveDialogTicks ticks - gestures are likely dead and could not be revived.",
-                    )
+                    dialogRebinds.record(game.forceRebindAccessibilityService())
+                } else if (consecutiveDialogTicks >= dialogStopAt) {
+                    dialogRebinds.closeLast()
+                    if (shouldTryStrongToggle(dialogRebinds, game.strongToggleUsed)) {
+                        dialogRebinds.record(game.strongToggleAccessibilityService())
+                        dialogStopAt = consecutiveDialogTicks + STRONG_TOGGLE_GRACE_TICKS
+                        return null
+                    }
+                    stopForStuckInput(dialogRebinds, "Dialog handling made no progress for $consecutiveDialogTicks ticks - gestures are likely dead and could not be revived.")
                 }
                 return null
             }
             consecutiveDialogTicks = 0
+            dialogStopAt = dialogTicksBeforeStop
 
             if (handleMainScreen()) {
                 consecutiveUnknownScreenCount = 0
@@ -4769,6 +4786,12 @@ abstract class Campaign(game: Game) : Task(game) {
         }
     }
 
+    /** Stops a stuck-input ladder: halting the queue with its accessibility reason when it asked for rebinds, as a plain stop otherwise. */
+    private fun stopForStuckInput(episode: RebindEpisode, message: String): Nothing {
+        episode.stopKey()?.let { requestAccessibilityHalt(it) }
+        throw InterruptedException(message)
+    }
+
     private fun recoverFromUnknownScreen(count: Int) {
         if (count == 1) {
             // First unrecognized tick: clear the notification shade in case it is covering the
@@ -4785,19 +4808,30 @@ abstract class Campaign(game: Game) : Task(game) {
         // distinct `skip` template and misses this pill. Bounded by maxCutsceneAdvanceBeforeStop so a
         // truly frozen cutscene still stops, with defensive rebinds in case dispatch silently died.
         if (isEventCutsceneSkipPillVisible()) {
-            if (count >= maxCutsceneAdvanceBeforeStop) {
-                game.imageUtils.saveBitmap(filename = "event_cutscene_stuck", fullRes = true)
-                throw InterruptedException(
-                    "Bot stuck advancing an event cutscene for $count consecutive cycles. Stopping. " +
-                        "A screenshot was saved to the temp folder as event_cutscene_stuck.",
-                )
+            if (count >= cutsceneStopAt) {
+                cutsceneRebinds.closeLast()
+                if (shouldTryStrongToggle(cutsceneRebinds, game.strongToggleUsed)) {
+                    cutsceneRebinds.record(game.strongToggleAccessibilityService())
+                    cutsceneStopAt = count + STRONG_TOGGLE_GRACE_TICKS
+                } else {
+                    game.imageUtils.saveBitmap(filename = "event_cutscene_stuck", fullRes = true)
+                    stopForStuckInput(
+                        cutsceneRebinds,
+                        "Bot stuck advancing an event cutscene for $count consecutive cycles. Stopping. " +
+                            "A screenshot was saved to the temp folder as event_cutscene_stuck.",
+                    )
+                }
             }
             if (count in cutsceneRebindThresholds) {
+                if (count == cutsceneRebindThresholds.min()) {
+                    cutsceneRebinds.start()
+                    cutsceneStopAt = maxCutsceneAdvanceBeforeStop
+                }
                 MessageLog.w(
                     TAG,
                     "[WARN] recoverFromUnknownScreen:: Event cutscene not advancing after $count taps - forcing an Accessibility Service rebind in case gesture dispatch died.",
                 )
-                game.forceRebindAccessibilityService()
+                cutsceneRebinds.record(game.forceRebindAccessibilityService())
             }
             MessageLog.i(TAG, "[MISC] Event cutscene intro detected (Skip pill present); tapping to advance the dialogue toward the choices (tap $count).")
             game.tap(540.0, 1300.0, taps = 1)
@@ -4841,11 +4875,12 @@ abstract class Campaign(game: Game) : Task(game) {
         // the screen, resetting the counter. Falls through to the stop below if it cannot help (e.g.
         // WRITE_SECURE_SETTINGS missing), so there is no new dead-end.
         if (count in gestureRebindThresholds) {
+            if (count == gestureRebindThresholds.min()) unknownScreenRebinds.start()
             MessageLog.w(
                 TAG,
                 "[WARN] recoverFromUnknownScreen:: Stuck for $count cycles - forcing an Accessibility Service rebind in case gesture dispatch died silently.",
             )
-            game.forceRebindAccessibilityService()
+            unknownScreenRebinds.record(game.forceRebindAccessibilityService())
         }
 
         // Last resort before the stop: relaunch the game. The gesture rebinds above cover MuMu's
@@ -4859,6 +4894,7 @@ abstract class Campaign(game: Game) : Task(game) {
         // the next attempt. The career is server-saved and resumes via the lobby re-entry path
         // (Continue Career) once a game screen is back.
         if (shouldRelaunchGame(count, gameRestartThreshold, gameRestartAttemptsThisEpisode, maxGameRestartAttempts, careerScreenObservedThisTask)) {
+            unknownScreenRebinds.closeLast()
             gameRestartAttemptsThisEpisode++
             MessageLog.w(
                 TAG,
@@ -4900,6 +4936,7 @@ abstract class Campaign(game: Game) : Task(game) {
         }
 
         if (count >= maxUnknownScreenBeforeStop) {
+            unknownScreenRebinds.closeLast()
             game.imageUtils.saveBitmap(filename = "unknown_screen_stuck", fullRes = true)
             // If a relaunch was tried this episode and a game screen still never came back, the game
             // could not be recovered to a state the bot can drive (it crashed/was killed, or a live
@@ -4914,10 +4951,13 @@ abstract class Campaign(game: Game) : Task(game) {
                         "attempt(s); the bot is on an unrecognized screen. Pausing the queue.",
                 )
             }
-            throw InterruptedException(
+            val reason =
                 "Bot stuck on an unrecognized screen for $count consecutive cycles. Stopping. " +
-                    "A screenshot was saved to the temp folder as unknown_screen_stuck.",
-            )
+                    "A screenshot was saved to the temp folder as unknown_screen_stuck."
+            // An unrecognized screen may be the game's fault, so issued rebinds prove nothing about
+            // input here; a refused one does prove the bot could not try its input repair.
+            if (unknownScreenRebinds.refused > 0 && !StartModule.gameRecoveryFailed) requestAccessibilityHalt(A11Y_GRANT_MISSING)
+            throw InterruptedException(reason)
         }
 
         // Award/ceremony screens (the first-time trophy popup after a finals win, ending cards)

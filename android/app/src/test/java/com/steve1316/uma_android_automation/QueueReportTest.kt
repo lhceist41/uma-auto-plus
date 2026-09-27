@@ -52,6 +52,7 @@ class QueueReportTest {
                 SessionEnd.SERVICE_ENDED to queue.copy(serviceRunning = false),
                 SessionEnd.BREAKPOINT to queue.copy(haltEnd = SessionEnd.BREAKPOINT, haltCareerInFlight = true),
                 SessionEnd.GAME_UNRECOVERABLE to queue.copy(haltEnd = SessionEnd.GAME_UNRECOVERABLE, haltCareerInFlight = true),
+                SessionEnd.RUN_HALTED to queue.copy(haltEnd = SessionEnd.RUN_HALTED, haltCareerInFlight = true),
                 SessionEnd.STOP_ON_ERROR to queue.copy(haltEnd = SessionEnd.STOP_ON_ERROR, haltCareerInFlight = true),
                 SessionEnd.NEXT_SNAPSHOT_MISSING to queue.copy(haltEnd = SessionEnd.NEXT_SNAPSHOT_MISSING),
                 SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS to queue.copy(haltEnd = SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS),

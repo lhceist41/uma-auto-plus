@@ -301,7 +301,7 @@ describe("Home wiring", () => {
         expect(botEnd).toContain("refreshInterruptedQueue()\n                refreshLastSession()")
         const foreground = home.slice(home.indexOf('if (nextState === "active") {'), home.indexOf("return () => subscription.remove()"))
         expect(foreground).toContain("refreshLastSession()")
-        expect(home).toContain("}, [refreshInterruptedQueue, refreshLastSession])")
+        expect(home).toContain("}, [refreshInterruptedQueue, refreshLastSession, refreshSecureSettingsGrant])")
     })
 
     it("shows the card by the pure rule, hands over from the end banner, and states the dismiss consequence at the control", () => {

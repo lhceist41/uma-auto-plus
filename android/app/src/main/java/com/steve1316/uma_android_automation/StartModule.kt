@@ -161,6 +161,14 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         var gameRecoveryFailed: Boolean = false
 
         /**
+         * Set by a run whose accessibility repair could not help (A11Y_GRANT_MISSING or
+         * A11Y_INPUT_DEAD). The run is not replayed and the queue halts after it, keeping the saved
+         * queue so Start continues it once MuMu is restarted or the grant given. Reset every session.
+         */
+        @Volatile
+        var accessibilityHaltKey: String? = null
+
+        /**
          * Wall-clock budget for one between-run navigation. Normal navigation (career summary
          * through deck setup to the training menu, cinematic included) takes 2-5 minutes; a
          * navigate() call that hasn't returned by this deadline is wedged below the FSM loop,
@@ -441,8 +449,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          * Whether a queue run that just ended with [resultCode] is played again as the same run. Its
          * career is still in the slot, and moving on would let the next run finish it under the next
          * run's number. Within the [RUN_RETRY_BUDGET] (the run loop asks once per run), and never for
-         * a stop, a skip, a dead service, a game that could not be recovered, a diagnostic, or the
-         * career-less misc modes.
+         * a stop, a skip, a dead service, a game that could not be recovered, an accessibility halt,
+         * a diagnostic, or the career-less misc modes.
          *
          * Pure: unit tested in RunRetryAndResumeTest.
          */
@@ -455,6 +463,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             skipRequested: Boolean,
             botRunning: Boolean,
             gameRecoveryFailed: Boolean,
+            accessibilityHalt: Boolean,
             retriesLeft: Int,
         ): Boolean =
             resultCode in RETRYABLE_RUN_RESULTS &&
@@ -465,6 +474,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 !skipRequested &&
                 botRunning &&
                 !gameRecoveryFailed &&
+                !accessibilityHalt &&
                 retriesLeft > 0
 
         /**
@@ -1736,6 +1746,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 queueStopKey = null
                 queueSkipRequested = false
                 gameRecoveryFailed = false
+                accessibilityHaltKey = null
                 SessionTally.reset()
                 launchSnapshotReadStarted = false
                 launchSnapshotReadFinished = false
@@ -2062,6 +2073,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             skipRequested = queueSkipRequested,
                             botRunning = BotService.isRunning,
                             gameRecoveryFailed = gameRecoveryFailed,
+                            accessibilityHalt = accessibilityHaltKey != null,
                             retriesLeft = runRetriesLeft,
                         )
                     if (retried) {
@@ -2158,6 +2170,20 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 MessageLog.e(TAG, "[QUEUE] Run $i stopped because the game could not be recovered. Pausing the queue instead of starting the next run on a dead or foreign screen.")
                                 queueHaltReason = "run $i stopped because the game could not be recovered"
                                 ledger.haltEnd = SessionEnd.GAME_UNRECOVERABLE
+                                queueHaltResultCode = effectiveResult.code.name
+                                queueHaltRun = i
+                                queueHaltCareerInFlight = true
+                                break
+                            }
+                            val accessibilityKey = accessibilityHaltKey
+                            if (accessibilityKey != null) {
+                                // The accessibility repair could not help (no grant, or taps stayed dead), so the next
+                                // run would fail the same way. Pause regardless of stopOnError, keeping the saved queue
+                                // for a Start after MuMu is restarted or the grant given.
+                                MessageLog.e(TAG, "[QUEUE] Run $i stopped because its accessibility repair could not help ($accessibilityKey). Pausing the queue.")
+                                queueHaltReason = "run $i stopped because its accessibility repair could not help ($accessibilityKey)"
+                                ledger.haltEnd = SessionEnd.RUN_HALTED
+                                ledger.reasonKey = accessibilityKey
                                 queueHaltResultCode = effectiveResult.code.name
                                 queueHaltRun = i
                                 queueHaltCareerInFlight = true

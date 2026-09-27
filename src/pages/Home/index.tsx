@@ -29,6 +29,7 @@ import { GRAND_CONCERT_KEY, GRAND_CONCERT_WARNING, isGrandConcert, scenarioCapab
 import { presentQueueProgress, type QueueProgressEvent } from "../../lib/queueProgressPresentation"
 import { interruptedBannerReport, lastSessionCardVisible, parseLastSession, type LastSessionView } from "../../lib/queueReportPresentation"
 import { collectPreflightWarnings, readPreflightProbes, shouldShowPreflight, type PreflightItem } from "../../lib/preflightWarnings"
+import { accessibilityRepairStatus } from "../../lib/accessibilityRepairStatus"
 import { useNavigation } from "@react-navigation/native"
 
 const styles = StyleSheet.create({
@@ -140,6 +141,8 @@ const Home = () => {
     const [preflightItems, setPreflightItems] = useState<PreflightItem[]>([])
     const [interruptedQueue, setInterruptedQueue] = useState<{ currentRun: number; totalRuns: number; ageMinutes: number; phase: string } | null>(null)
     const [lastSession, setLastSession] = useState<LastSessionView | null>(null)
+    // The self-repair grant as last read: undefined until the first read, null when the probe failed.
+    const [secureSettingsGrant, setSecureSettingsGrant] = useState<boolean | null | undefined>(undefined)
 
     const navigation = useNavigation()
 
@@ -179,6 +182,13 @@ const Home = () => {
         StartModule.getLastQueueReport()
             .then((payload: unknown) => setLastSession(parseLastSession(payload)))
             .catch(() => {})
+    }, [StartModule])
+
+    /** Re-reads whether the bot may repair its own accessibility service. Called on mount and on every return to the app. */
+    const refreshSecureSettingsGrant = useCallback(() => {
+        readPreflightProbes(StartModule)
+            .then((probes) => setSecureSettingsGrant(probes.secureSettingsGranted))
+            .catch(() => setSecureSettingsGrant(null))
     }, [StartModule])
 
     /** Hides the card now, marks the report dismissed in Kotlin (the record is kept), then re-reads. */
@@ -281,6 +291,7 @@ const Home = () => {
         fetchDeviceMetrics()
         refreshInterruptedQueue()
         refreshLastSession()
+        refreshSecureSettingsGrant()
 
         return () => {
             mediaProjectionSubscription.remove()
@@ -296,10 +307,13 @@ const Home = () => {
             if (nextState === "active") {
                 refreshInterruptedQueue()
                 refreshLastSession()
+                refreshSecureSettingsGrant()
             }
         })
         return () => subscription.remove()
-    }, [refreshInterruptedQueue, refreshLastSession])
+    }, [refreshInterruptedQueue, refreshLastSession, refreshSecureSettingsGrant])
+
+    const repairStatus = useMemo(() => (secureSettingsGrant === undefined ? null : accessibilityRepairStatus(secureSettingsGrant, Application.applicationId)), [secureSettingsGrant])
 
     /** The queue-progress banner's presentation, recomputed only when the underlying event changes. */
     const queueProgressView = useMemo(() => (queueProgress ? presentQueueProgress(queueProgress) : null), [queueProgress])
@@ -960,6 +974,29 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                         </TouchableOpacity>
                         <Text style={{ flex: 1, fontSize: 11, color: colors.mutedForeground }}>Hides this summary. The record of this session stays on this device.</Text>
                     </View>
+                </View>
+            )}
+
+            {repairStatus && (
+                <View
+                    style={{
+                        width: "100%",
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        marginBottom: 6,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        backgroundColor: colors.background,
+                    }}
+                >
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: repairStatus.state === "missing" ? colors.warningText || "#ffd000" : colors.foreground }}>{repairStatus.title}</Text>
+                    <Text style={{ fontSize: 12, color: colors.mutedForeground, marginTop: 2 }}>{repairStatus.text}</Text>
+                    {repairStatus.command && (
+                        <Text selectable style={{ fontSize: 11, fontFamily: "monospace", color: colors.foreground, marginTop: 4 }}>
+                            {repairStatus.command}
+                        </Text>
+                    )}
                 </View>
             )}
 

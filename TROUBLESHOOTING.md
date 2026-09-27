@@ -20,7 +20,9 @@ The bot can heal this on its own, but only if it's allowed to re-enable the serv
 adb shell pm grant com.lhceist41.uma_auto_plus android.permission.WRITE_SECURE_SETTINGS
 ```
 
-Run it from a PC with `adb`, or from the device itself using **aShell You + Shizuku** (the same tools used for the resolution steps in the README). Without this grant, the bot can't recover when the emulator kills the service, and unattended runs will stop the first time it happens.
+Run it from a PC with `adb`, or from the device itself using **aShell You + Shizuku** (the same tools used for the resolution steps in the README). Without this grant, the bot can't recover when the emulator kills the service, and unattended runs will stop the first time it happens. Home shows whether the permission is granted.
+
+MuMu can also leave the service switched on while the bot's taps silently stop landing. No fix from inside the app is known for that: when restarting the service changes nothing, the bot stops the queue and says its taps stopped having any effect. Restart MuMu (or the device), then press Start again.
 
 > [!TIP]
 > On MuMu, turning off background resource throttling and any "smart" power-saving makes the service death much rarer in the first place.

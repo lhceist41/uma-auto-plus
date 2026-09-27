@@ -55,7 +55,7 @@ class QueueLedgerWiringTest {
         @Test
         fun `each queueHaltReason assignment records its ending right beside it`() {
             val sites = Regex("queueHaltReason = \"").findAll(session).map { it.range.first }.toList()
-            assertEquals(8, sites.size, "the halt sites")
+            assertEquals(9, sites.size, "the halt sites")
             val ends =
                 sites.map { site ->
                     val block = session.substring(site, session.indexOf('\n', session.indexOf('\n', site) + 1))
@@ -69,6 +69,7 @@ class QueueLedgerWiringTest {
                     "LAUNCH_FAILED_BEFORE_RUN",
                     "BREAKPOINT",
                     "GAME_UNRECOVERABLE",
+                    "RUN_HALTED",
                     "STOP_ON_ERROR",
                     "NEXT_SNAPSHOT_MISSING",
                     "NAVIGATION_FAILED_BETWEEN_RUNS",
@@ -76,7 +77,7 @@ class QueueLedgerWiringTest {
                 ),
                 ends.toSet(),
             )
-            assertEquals(8, ends.toSet().size, "each halt site is a different ending")
+            assertEquals(9, ends.toSet().size, "each halt site is a different ending")
         }
 
         @Test
@@ -331,11 +332,16 @@ class QueueLedgerWiringTest {
 
         @Test
         fun `the reason keys are the player-safe set`() {
-            val keys = Regex("reasonKey = \"(\\w+)\"").findAll(navigator).map { it.groupValues[1] }.toSet()
+            val literal = Regex("reasonKey = \"(\\w+)\"").findAll(navigator).map { it.groupValues[1] }.toSet()
+            // Stuck failures take their key from navigatorStuckKey, whose three outcomes AccessibilityRepairTest pins.
+            val stuck = if (navigator.contains("reasonKey = navigatorStuckKey(")) setOf("STUCK_ON_SCREEN", "A11Y_GRANT_MISSING", "A11Y_INPUT_DEAD") else emptySet()
+            val keys = literal + stuck
             assertEquals(
                 setOf(
                     "CAPTURE_OR_ACCESSIBILITY",
                     "STUCK_ON_SCREEN",
+                    "A11Y_GRANT_MISSING",
+                    "A11Y_INPUT_DEAD",
                     "UNSPENT_SKILL_POINTS",
                     "SPARKS_NEED_HAND",
                     "TP_EMPTY",

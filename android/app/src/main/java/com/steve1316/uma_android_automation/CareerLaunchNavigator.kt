@@ -10,6 +10,7 @@ import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
 import com.steve1316.uma_android_automation.bot.ConnectionOutageBudget
+import com.steve1316.uma_android_automation.bot.navigatorStuckKey
 import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.FinalizeVerdict
 import com.steve1316.uma_android_automation.bot.Game
@@ -608,6 +609,12 @@ class CareerLaunchNavigator(private val context: Context) {
     private var betweenRunConnectionBudget = ConnectionOutageBudget()
     private var navigationStartedAtMs: Long = 0L
 
+    // The accessibility repairs this navigation asked for, which decide its stuck-failure reason
+    // (navigatorStuckKey). Reset per navigate().
+    private var navRepairRefused = false
+    private var stuckScreenRebindIssued = false
+    private var tapScreenRebindIssued = false
+
     // --- Cold-start Trainee Select liveness (2026-08-10) ---
     // True while THIS launch still owes a roster verification: rotation is on, or a single-run target
     // is armed, and a career is actually being launched (not a finalize-to-home pass). It gates the
@@ -806,6 +813,9 @@ class CareerLaunchNavigator(private val context: Context) {
         navigationStartedAtMs = System.currentTimeMillis()
         betweenRunConnectionBudget = ConnectionOutageBudget()
         pendingBetweenRunDialog = null
+        navRepairRefused = false
+        stuckScreenRebindIssued = false
+        tapScreenRebindIssued = false
         autoFillAlreadyDone = false
         skipToggleAlreadyDone = false
         legacyAutoSelectAlreadyDone = false
@@ -931,7 +941,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // navigator crosses. The in-career loop self-heals every tick but this navigator does not,
         // so a kill here would silently stop every tap from landing. Rebind once before we start
         // driving the FSM; cheap when the service is alive.
-        tempGame?.ensureAccessibilityService()
+        checkAccessibility()
 
         var currentState = LaunchScreenState.POST_RUN_RESULTS
         var consecutiveUnknowns = 0
@@ -992,7 +1002,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     if (!exceptionRecoveryUsed) {
                         exceptionRecoveryUsed = true
                         MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} during screen detection: ${e.message}. Force-rebinding the accessibility service and retrying once.")
-                        tempGame?.forceRebindAccessibilityService()
+                        rebindAccessibility()
                         // The rebind may have fixed whatever wedged the FSM, so grant fresh attempts -
                         // carrying stale stuck/progress counters into recovery would fail it early.
                         stuckInStateCount = 0
@@ -1029,7 +1039,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     // the counter, so this only fires when clicks demonstrably do nothing.
                     if (stuckInStateCount == STUCK_STATE_REBIND_AT) {
                         MessageLog.w(TAG, "[NAV] $detectedState repeated $STUCK_STATE_REBIND_AT times with no effect from clicks; force-rebinding the accessibility service.")
-                        tempGame?.forceRebindAccessibilityService()
+                        stuckScreenRebindIssued = rebindAccessibility()
                     }
                     if (stuckInStateCount >= MAX_STUCK_ITERATIONS) {
                         val screenshotPath = captureFailureScreenshot("stuck_in_${detectedState.name}")
@@ -1040,7 +1050,7 @@ class CareerLaunchNavigator(private val context: Context) {
                             failedTransition = "${detectedState.name} -> next screen",
                             isRecoverable = true,
                             recommendedAction = "Manually advance past the current screen and restart the queue.",
-                            reasonKey = "STUCK_ON_SCREEN",
+                            reasonKey = navigatorStuckKey(navRepairRefused, stuckScreenRebindIssued),
                             screenshotPath = screenshotPath,
                         )
                     }
@@ -1055,7 +1065,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     tapToContinueCount++
                     if (tapToContinueCount == TAP_TO_CONTINUE_REBIND_AT) {
                         MessageLog.w(TAG, "[NAV] TAP_TO_CONTINUE not advancing after $TAP_TO_CONTINUE_REBIND_AT taps; force-rebinding accessibility service.")
-                        tempGame?.forceRebindAccessibilityService()
+                        tapScreenRebindIssued = rebindAccessibility()
                     }
                     if (tapToContinueCount >= MAX_TAP_TO_CONTINUE_ITERATIONS) {
                         val screenshotPath = captureFailureScreenshot("stuck_in_TAP_TO_CONTINUE")
@@ -1066,7 +1076,7 @@ class CareerLaunchNavigator(private val context: Context) {
                             failedTransition = "TAP_TO_CONTINUE -> next screen",
                             isRecoverable = true,
                             recommendedAction = "Manually advance past the current screen and restart the queue.",
-                            reasonKey = "STUCK_ON_SCREEN",
+                            reasonKey = navigatorStuckKey(navRepairRefused, tapScreenRebindIssued),
                             screenshotPath = screenshotPath,
                         )
                     }
@@ -1091,7 +1101,7 @@ class CareerLaunchNavigator(private val context: Context) {
                             failedTransition = "${currentState.name} -> ${detectedState.name}",
                             isRecoverable = true,
                             recommendedAction = "Manually navigate past the current screen loop and restart the queue.",
-                            reasonKey = "STUCK_ON_SCREEN",
+                            reasonKey = navigatorStuckKey(navRepairRefused, rebindIssuedOnThisScreen = false),
                             screenshotPath = screenshotPath,
                         )
                     }
@@ -1132,7 +1142,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         failedTransition = "${currentState.name} -> UNKNOWN",
                         isRecoverable = true,
                         recommendedAction = "Manually navigate to the in-career training screen and restart the queue.",
-                        reasonKey = "STUCK_ON_SCREEN",
+                        reasonKey = navigatorStuckKey(navRepairRefused, rebindIssuedOnThisScreen = false),
                         screenshotPath = screenshotPath,
                     )
                 }
@@ -1145,9 +1155,9 @@ class CareerLaunchNavigator(private val context: Context) {
                 // second on, MuMu's nastier "enabled-but-dispatch-dead" mode is likely, so force a
                 // hard off->on rebind that the string check can't see.
                 if (consecutiveUnknowns >= 2) {
-                    tempGame?.forceRebindAccessibilityService()
+                    rebindAccessibility()
                 } else {
-                    tempGame?.ensureAccessibilityService()
+                    checkAccessibility()
                 }
                 waitSafe(2.0)
                 continue
@@ -1174,7 +1184,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     if (!exceptionRecoveryUsed) {
                         exceptionRecoveryUsed = true
                         MessageLog.w(TAG, "[NAV] ${e.javaClass.simpleName} while handling $currentState: ${e.message}. Force-rebinding the accessibility service and retrying once.")
-                        tempGame?.forceRebindAccessibilityService()
+                        rebindAccessibility()
                         // Fresh attempts post-rebind, mirroring the detection catch.
                         stuckInStateCount = 0
                         tapToContinueCount = 0
@@ -1228,7 +1238,7 @@ class CareerLaunchNavigator(private val context: Context) {
             failureReason = "Navigation timed out after $MAX_DETECTION_ATTEMPTS attempts without reaching the training menu.",
             isRecoverable = true,
             recommendedAction = "Manually navigate to the in-career training screen and restart the queue.",
-            reasonKey = "STUCK_ON_SCREEN",
+            reasonKey = navigatorStuckKey(navRepairRefused, rebindIssuedOnThisScreen = false),
             screenshotPath = screenshotPath,
         )
     }
@@ -1837,6 +1847,18 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.w(TAG, "[NAV] ${dialog.title} shows none of its buttons; re-detecting.")
         }
         return TransitionResult.Continue
+    }
+
+    /** Re-checks the accessibility service, restoring it if the emulator wiped it; a refusal (no grant) is recorded. */
+    private fun checkAccessibility() {
+        if (tempGame?.ensureAccessibilityService() == false) navRepairRefused = true
+    }
+
+    /** Force-rebinds the accessibility service; returns whether the rebind was issued, recording a refusal. */
+    private fun rebindAccessibility(): Boolean {
+        val issued = tempGame?.forceRebindAccessibilityService() ?: return false
+        if (!issued) navRepairRefused = true
+        return issued
     }
 
     /** The in-career loading templates, as `Game.checkLoading` reads them. */

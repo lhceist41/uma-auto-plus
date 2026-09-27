@@ -522,6 +522,54 @@
             }
         },
         {
+            "name": "halted in a run: taps stopped landing",
+            "report": {
+                "kind": "RUN_HALTED",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 3,
+                "resumable": true,
+                "reasonKey": "A11Y_INPUT_DEAD"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped during run 3 of 5: its taps stopped having any effect, even after it restarted its accessibility service.",
+                "nextAction": "Restart MuMu or the device, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "halted in a run: no self-repair permission",
+            "report": {
+                "kind": "RUN_HALTED",
+                "queueEnabled": true,
+                "totalRuns": 3,
+                "runReached": 1,
+                "resumable": true,
+                "reasonKey": "A11Y_GRANT_MISSING"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped during run 1 of 3: its accessibility service needed a repair, and UMA Auto+ does not have the permission to repair it.",
+                "nextAction": "Grant the self-repair permission shown on Home, and turn the accessibility service back on if it is off, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "halted in a run, saved queue gone",
+            "report": {
+                "kind": "RUN_HALTED",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 3,
+                "resumable": false,
+                "reasonKey": "A11Y_INPUT_DEAD"
+            },
+            "text": {
+                "title": "Queue stopped",
+                "reason": "The queue stopped during run 3 of 5: its taps stopped having any effect, even after it restarted its accessibility service.",
+                "nextAction": "Restart MuMu or the device, then press Start in UMA Auto+."
+            }
+        },
+        {
             "name": "bot stop after errored runs",
             "report": {
                 "kind": "STOPPED_BY_BOT",
@@ -1133,6 +1181,38 @@
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: the game opened a Carat purchase or age check, which the bot never touches.",
                 "nextAction": "Close it in the game, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "between runs: A11Y_GRANT_MISSING",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "A11Y_GRANT_MISSING"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: its accessibility service needed a repair, and UMA Auto+ does not have the permission to repair it.",
+                "nextAction": "Grant the self-repair permission shown on Home, and turn the accessibility service back on if it is off, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "between runs: A11Y_INPUT_DEAD",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "A11Y_INPUT_DEAD"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: its taps stopped having any effect, even after it restarted its accessibility service.",
+                "nextAction": "Restart MuMu or the device, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {

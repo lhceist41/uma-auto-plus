@@ -1883,7 +1883,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
             for (buyPass in 1..maxBuyPasses) {
                 // Heal a wiped Accessibility grant between passes - the most common mid-buy failure
                 // (the emulator drops the service and every tap/swipe silently stops registering).
-                game.ensureAccessibilityService()
+                if (!game.ensureAccessibilityService()) {
+                    MessageLog.e(TAG, "[SKILLS] The Accessibility Service is off and cannot be restored without WRITE_SECURE_SETTINGS; skill taps in this pass will not land.")
+                }
                 var entriesSeenThisPass = 0
                 skillList.parseSkillListEntries { currentList: SkillList, entry: SkillListEntry, point: Point ->
                     entriesSeenThisPass++
@@ -1984,7 +1986,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         }
 
         // The commit must land on working input - heal the grant one more time if needed.
-        game.ensureAccessibilityService()
+        if (!game.ensureAccessibilityService()) {
+            MessageLog.e(TAG, "[SKILLS] The Accessibility Service is off and cannot be restored without WRITE_SECURE_SETTINGS; the purchase commit below cannot land.")
+        }
         val committed: Boolean = skillList.confirmAndExit()
         if (!committed) {
             MessageLog.e(TAG, "[ERROR] start:: Purchase commit could not be verified - selections may still be pending on the Learn screen.")

@@ -104,6 +104,10 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
                 "The game stopped responding at run $reached and could not be restarted.",
                 "Open the game and check it, then ${pressStart(resumable)}",
             )
+        SessionEnd.RUN_HALTED -> {
+            val why = keyText(key)
+            ReportText(haltTitle(resumable), "The queue stopped during run $reached of $total: ${why.reason}", why.next(resumable))
+        }
         SessionEnd.STOP_ON_ERROR ->
             ReportText(
                 haltTitle(resumable),
@@ -236,6 +240,12 @@ internal val REPORT_REASON_KEYS =
         "CONNECTION_LOST" to KeyText("the game lost its connection to its server and did not reconnect in time.", "Check the device's internet connection and clear the error in the game"),
         "DOWNLOAD_FAILED" to KeyText("the game could not finish downloading its data.", "Check the device's internet connection and let the game finish its download"),
         "SESSION_EXPIRED" to KeyText("the game ended its session and needs to go back to its title screen.", "Tap Title Screen in the game and wait for its home screen"),
+        "A11Y_GRANT_MISSING" to
+            KeyText(
+                "its accessibility service needed a repair, and UMA Auto+ does not have the permission to repair it.",
+                "Grant the self-repair permission shown on Home, and turn the accessibility service back on if it is off",
+            ),
+        "A11Y_INPUT_DEAD" to KeyText("its taps stopped having any effect, even after it restarted its accessibility service.", "Restart MuMu or the device"),
         "PURCHASE_PROMPT" to KeyText("the game opened a Carat purchase or age check, which the bot never touches.", "Close it in the game"),
     )
 

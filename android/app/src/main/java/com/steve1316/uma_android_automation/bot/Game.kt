@@ -180,9 +180,17 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         // and input dispatch unfreezes. Before the kill it tries the in-process rungs in
         // StallWatchdog.kt: an accessibility toggle, then interrupting the Game thread.
 
-        /** Milliseconds since boot of the last recorded forward progress. */
+        /**
+         * The watchdog's clock: monotonic, so a device clock change can neither trip a rung or the
+         * kill on a healthy run nor hide a stall. Replaced only by tests. The queue ledger's own
+         * heartbeat file stays on the wall clock, since it must survive a reboot.
+         */
         @Volatile
-        private var lastHeartbeatMs: Long = System.currentTimeMillis()
+        internal var watchdogClock: () -> Long = { SystemClock.elapsedRealtime() }
+
+        /** [watchdogClock] milliseconds of the last recorded forward progress. */
+        @Volatile
+        private var lastHeartbeatMs: Long = watchdogClock()
 
         /** The watchdog coroutine job, or null if not running. */
         @Volatile
@@ -207,8 +215,11 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
          * (e.g., every tick of [wait]). Cheap, just a volatile store.
          */
         fun heartbeat() {
-            lastHeartbeatMs = System.currentTimeMillis()
+            lastHeartbeatMs = watchdogClock()
         }
+
+        /** How long ago the last heartbeat was, on [watchdogClock]. */
+        internal fun heartbeatAgeMs(): Long = watchdogClock() - lastHeartbeatMs
 
         /**
          * Start the watchdog. Idempotent: if already running, does nothing. Runs for
@@ -229,7 +240,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                             rungsDone = 0
                             continue
                         }
-                        val age = System.currentTimeMillis() - lastHeartbeatMs
+                        val age = heartbeatAgeMs()
                         val thread = gameThread
                         val context = watchdogContext
                         val rung = decideWatchdogRung(age, rungsDone, thread?.isAlive == true, watchdogGrant)
@@ -713,6 +724,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             MessageLog.w(TAG, "[WARN] ensureAccessibilityService:: Accessibility Service grant restored. Gestures should resume.")
             true
         } catch (e: SecurityException) {
+            SessionTally.accessibilityRepairsRefused.incrementAndGet()
             MessageLog.e(
                 TAG,
                 "[ERROR] ensureAccessibilityService:: Cannot restore the Accessibility Service - WRITE_SECURE_SETTINGS is not granted. " +
@@ -758,6 +770,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             MessageLog.w(TAG, "[WARN] forceRebindAccessibilityService:: Toggled the Accessibility Service off->on to recover silently-dead gesture dispatch.")
             true
         } catch (e: SecurityException) {
+            SessionTally.accessibilityRepairsRefused.incrementAndGet()
             MessageLog.e(
                 TAG,
                 "[ERROR] forceRebindAccessibilityService:: Cannot toggle the Accessibility Service - WRITE_SECURE_SETTINGS is not granted. " +
@@ -765,6 +778,44 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             )
             false
         }
+    }
+
+    /** Whether this run has used its one [strongToggleAccessibilityService]. */
+    var strongToggleUsed: Boolean = false
+        private set
+
+    /**
+     * A stronger accessibility toggle than [forceRebindAccessibilityService]: turns accessibility off
+     * globally for 3 s, then back on with this app's entry present. Untested live, so it is tried once
+     * per run, only after two rebinds changed nothing, and the ladder that asked for it stops a few
+     * ticks later if taps did not come back. The re-enable sits in a finally so a stop during the
+     * pause cannot leave accessibility switched off.
+     *
+     * @return True if the toggle was issued, false if WRITE_SECURE_SETTINGS is missing.
+     */
+    fun strongToggleAccessibilityService(): Boolean {
+        strongToggleUsed = true
+        val expected = "${myContext.packageName}/com.steve1316.automation_library.utils.MyAccessibilityService"
+        val resolver = myContext.contentResolver
+        try {
+            Settings.Secure.putString(resolver, Settings.Secure.ACCESSIBILITY_ENABLED, "0")
+        } catch (e: SecurityException) {
+            SessionTally.accessibilityRepairsRefused.incrementAndGet()
+            MessageLog.e(TAG, "[A11Y] The stronger accessibility toggle needs WRITE_SECURE_SETTINGS, which is not granted.")
+            return false
+        }
+        try {
+            wait(3.0, skipWaitingForLoading = true)
+        } finally {
+            val current = Settings.Secure.getString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
+            val services = current.split(':').filter { it.isNotEmpty() && !it.equals(expected, ignoreCase = true) } + expected
+            Settings.Secure.putString(resolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, services.joinToString(":"))
+            Settings.Secure.putString(resolver, Settings.Secure.ACCESSIBILITY_ENABLED, "1")
+        }
+        SessionTally.accessibilityStrongToggles.incrementAndGet()
+        MessageLog.w(TAG, "[A11Y] Two accessibility rebinds changed nothing, so accessibility was turned off for 3 s and back on (once per run). The next ticks show whether taps came back.")
+        wait(3.0, skipWaitingForLoading = true)
+        return true
     }
 
     /**
@@ -885,8 +936,8 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         // The emulator can wipe the Accessibility grant even while idle - without it no gesture
         // lands. Verify (and restore if possible) before doing anything else.
         if (!ensureAccessibilityService()) {
-            return TaskResult.Error(
-                TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
+            return accessibilityHaltResult(
+                A11Y_GRANT_MISSING,
                 "The Accessibility Service is disabled and could not be restored automatically. Re-enable it in the Android settings or grant WRITE_SECURE_SETTINGS (see log).",
             )
         }
