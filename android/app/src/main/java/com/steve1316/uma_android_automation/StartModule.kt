@@ -2653,6 +2653,17 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     }
 
     /**
+     * The Remote Log Viewer's access code for this session, or null while the viewer is not running.
+     * Only the Debug page shows it; it is never logged or saved.
+     *
+     * @param promise The React Native promise that resolves with the code or null.
+     */
+    @ReactMethod
+    fun getRemoteLogViewerAccessCode(promise: Promise) {
+        promise.resolve(LogStreamServer.accessCode)
+    }
+
+    /**
      * Sends the message back to the Javascript frontend along with its event name to be listened on.
      *
      * @param eventName The name of the event to be picked up on as defined in the developer's JS frontend.

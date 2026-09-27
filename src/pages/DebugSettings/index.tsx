@@ -1,5 +1,6 @@
-import { useMemo, useContext, useRef, useState, useEffect } from "react"
+import { useMemo, useContext, useRef, useState, useEffect, useCallback } from "react"
 import { View, Text, ScrollView, StyleSheet, NativeModules, Linking, AppState, AppStateStatus, TextInput } from "react-native"
+import { useFocusEffect } from "@react-navigation/native"
 import { useTheme } from "../../context/ThemeContext"
 import { BotStateContext } from "../../context/BotStateContext"
 import { useSettings } from "../../context/SettingsContext"
@@ -137,6 +138,8 @@ const DebugSettings = () => {
     }
 
     const [deviceIp, setDeviceIp] = useState<string>("<phone-ip>")
+    // The viewer's per-Start access code. Kept in this page's state only, never in settings.
+    const [viewerAccessCode, setViewerAccessCode] = useState<string | null>(null)
     const [accessibilityStatus, setAccessibilityStatus] = useState<{ enabled: boolean; active: boolean } | null>(null)
     const [isRefreshing, setIsRefreshing] = useState(false)
 
@@ -174,6 +177,15 @@ const DebugSettings = () => {
         }
     }, [bsc.settings.debug.enableRemoteLogViewer])
 
+    const refreshViewerAccessCode = useCallback(() => {
+        NativeModules.StartModule.getRemoteLogViewerAccessCode()
+            .then((code: string | null) => setViewerAccessCode(code ?? null))
+            .catch(() => setViewerAccessCode(null))
+    }, [])
+
+    // The code is new at every Start, so read it again whenever the page is shown.
+    useFocusEffect(refreshViewerAccessCode)
+
     useEffect(() => {
         checkAccessibilityStatus()
 
@@ -181,13 +193,14 @@ const DebugSettings = () => {
         const subscription = AppState.addEventListener("change", (nextAppState: AppStateStatus) => {
             if (nextAppState === "active") {
                 checkAccessibilityStatus()
+                refreshViewerAccessCode()
             }
         })
 
         return () => {
             subscription.remove()
         }
-    }, [])
+    }, [refreshViewerAccessCode])
 
     const styles = useMemo(
         () =>
@@ -351,7 +364,7 @@ const DebugSettings = () => {
 
                             <Separator style={{ marginVertical: 16 }} />
 
-                            <CustomTitle title="Remote Log Viewer" description="Stream logs in real-time to a browser on your local network. Both devices must be on the same WiFi." />
+                            <CustomTitle title="Remote Log Viewer" description="Watch the bot's log live in a browser on this device, or on a computer connected over ADB." />
 
                             <CustomCheckbox
                                 searchId="settings-enable-remote-log-viewer"
@@ -363,7 +376,7 @@ const DebugSettings = () => {
                                     })
                                 }}
                                 label="Enable Remote Log Viewer"
-                                description="Starts an HTTP server on this device when the bot runs. Open the URL shown below in a browser on your computer to view logs in real-time."
+                                description="Starts a log viewer on this device when the bot runs. To open it on a computer, use the adb forward command below, then the localhost address."
                             />
 
                             <View style={bsc.settings.debug.enableRemoteLogViewer ? {} : { display: "none" }}>
@@ -397,8 +410,8 @@ const DebugSettings = () => {
                                 <InfoContainer>
                                     <View>
                                         <Text style={styles.infoDescription}>
-                                            📡 The Remote Log Viewer is bound to the device&apos;s loopback interface for safety — the log and screenshots are served with no authentication, so it is
-                                            not exposed on the network. Reach it from your computer over adb:
+                                            📡 The Remote Log Viewer is bound to the device&apos;s loopback interface, so it is not exposed on the network, and it asks for the access code below. Reach
+                                            it from your computer over adb:
                                         </Text>
                                         <Text style={[styles.infoLabel, { marginTop: 8 }]}>
                                             adb forward tcp:{bsc.settings.debug.remoteLogViewerPort} tcp:{bsc.settings.debug.remoteLogViewerPort}
@@ -410,6 +423,14 @@ const DebugSettings = () => {
                                         >
                                             http://localhost:{bsc.settings.debug.remoteLogViewerPort}
                                         </Text>
+                                        <Text style={[styles.infoDescription, { marginTop: 8 }]}>Access code (it changes each time you press Start):</Text>
+                                        {viewerAccessCode ? (
+                                            <Text selectable style={[styles.infoLabel, { marginTop: 8 }]}>
+                                                {viewerAccessCode}
+                                            </Text>
+                                        ) : (
+                                            <Text style={[styles.infoDescription, { marginTop: 8 }]}>It appears here after you press Start.</Text>
+                                        )}
                                         <Text style={[styles.infoDescription, { marginTop: 8 }]}>
                                             The device&apos;s own IP ({deviceIp}) is no longer used to reach the viewer directly. For a physical device, connect it over USB (or adb over the same
                                             network) first; the first connection may take a moment to establish.

@@ -137,7 +137,7 @@ These are off unless you turn them on:
 - **Trainee rotation** in the run queue, described above.
 - **Build-Aware Launch (advanced).** Verifies the live borrow list, deck and launch screen against what it intended to run before it spends TP, and refuses to start rather than guess. There is no fallback: if it cannot confirm the state, no career starts. It can pair with an optional [Windows companion](tools/host-companion/README.md) that adds one bounded list swipe as a last-resort recovery step and can never select a card or start a career.
 - **Support-card dating schedule.** With a Group support card in the deck, takes recreation outings on the turns that advance the card's outing chain.
-- **Remote Log Viewer** for watching progress from a browser on your PC, **screen recording** for capturing a problem, and the **YOLOv8 stat-gain detector** for reading training gains with an on-device vision model instead of template matching.
+- **Remote Log Viewer** for watching the bot's log from a browser on your PC over ADB (`adb forward`), **screen recording** for capturing a problem, and the **YOLOv8 stat-gain detector** for reading training gains with an on-device vision model instead of template matching.
 
 **Record Decision Data** is on by default: the bot keeps a small per-turn record of its decisions so a career can be reviewed later. It is stored on your device only, nothing is uploaded, and it is independent of Debug Mode. Turn it off to minimize storage use.
 

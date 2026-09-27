@@ -15,6 +15,8 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.ApplicationCallPipeline
+import io.ktor.server.application.call
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.cio.CIOApplicationEngine
@@ -27,7 +29,9 @@ import io.ktor.server.routing.routing
 import io.ktor.server.websocket.DefaultWebSocketServerSession
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.webSocket
+import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
+import io.ktor.websocket.close
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +39,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.greenrobot.eventbus.EventBus
 import org.greenrobot.eventbus.Subscribe
 import org.greenrobot.eventbus.ThreadMode
@@ -44,6 +49,8 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.net.NetworkInterface
+import java.security.MessageDigest
+import java.security.SecureRandom
 import java.text.SimpleDateFormat
 import java.util.Collections
 import java.util.Date
@@ -52,11 +59,15 @@ import java.util.concurrent.CopyOnWriteArraySet
 import java.util.regex.Pattern
 
 /**
- * Embedded WebSocket server that streams MessageLog entries in real-time to any browser on the local network. Built on Ktor Server CIO.
+ * Embedded WebSocket server that streams MessageLog entries in real-time to a browser on this device, or on a computer over adb forward. Built on Ktor Server CIO.
  *
  * When running, the server serves:
  * - HTTP GET "/" → the log viewer HTML page (from assets).
- * - WebSocket "/" → real-time log message streaming.
+ * - WebSocket "/" → real-time log message streaming, after the client's first frame `AUTH:<code>` is answered with `AUTH_OK`.
+ *
+ * Loopback is not private on Android: any installed app with the INTERNET permission can connect. So every
+ * route requires a loopback Host, and everything that carries data or accepts a command requires the
+ * per-session [accessCode], which is shown only on the app's Debug page.
  */
 object LogStreamServer {
     private const val TAG: String = "${SharedData.loggerTag}LogStreamServer"
@@ -74,6 +85,29 @@ object LogStreamServer {
     @Volatile
     var isRunning = false
         private set
+
+    /**
+     * This session's access code, new at every server start. Shown only on the Debug page: never log it
+     * (MessageLog is what the viewer streams), and never write it to settings or files.
+     */
+    @Volatile
+    var accessCode: String? = null
+        private set
+
+    /** Letters and digits without the look-alikes 0/o and 1/l, so the code can be typed from the device's screen. */
+    private const val ACCESS_CODE_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"
+
+    private const val ACCESS_CODE_LENGTH = 16
+
+    private const val ACCESS_CODE_HEADER = "X-Access-Code"
+
+    private const val AUTH_PREFIX = "AUTH:"
+
+    /** WebSocket close code for a missing or wrong access code (4000-4999 are application codes). */
+    private const val AUTH_FAILED_CLOSE_CODE: Short = 4401
+
+    /** How long a new WebSocket client has to send its `AUTH:` frame. */
+    private const val AUTH_TIMEOUT_MS = 10_000L
 
     /** Mute flag to stop broadcasting logs after a run concludes. */
     @Volatile
@@ -304,9 +338,9 @@ object LogStreamServer {
      * @param call The Ktor application call to respond to.
      * @param context The application context used for accessing assets.
      */
-    private suspend fun serveLogViewerHtml(call: ApplicationCall, context: Context) {
+    private suspend fun serveLogViewerHtml(call: ApplicationCall, context: Context?) {
         try {
-            val htmlStream = context.assets.open("log_viewer.html")
+            val htmlStream = context?.assets?.open("log_viewer.html") ?: throw IOException("no application context")
             val html = htmlStream.bufferedReader().use { it.readText() }
             call.respondText(html, ContentType.Text.Html)
         } catch (e: IOException) {
@@ -319,6 +353,39 @@ object LogStreamServer {
         }
     }
 
+    /** A new random access code from a secure source. */
+    internal fun newAccessCode(): String {
+        val random = SecureRandom()
+        return String(CharArray(ACCESS_CODE_LENGTH) { ACCESS_CODE_ALPHABET[random.nextInt(ACCESS_CODE_ALPHABET.length)] })
+    }
+
+    /** Whether [provided] is this session's access code, compared in constant time. False while no session runs. */
+    internal fun accessCodeMatches(provided: String?): Boolean {
+        val expected = accessCode ?: return false
+        return provided != null && MessageDigest.isEqual(expected.toByteArray(), provided.toByteArray())
+    }
+
+    /**
+     * Whether a request's Host header names this server on loopback. A DNS-rebinding page reaches
+     * 127.0.0.1 under its own domain, so it fails here even while adb forward is active.
+     */
+    internal fun isAllowedHost(host: String?, port: Int): Boolean = host != null && (host.equals("localhost:$port", ignoreCase = true) || host == "127.0.0.1:$port")
+
+    /**
+     * Accepts the session only if its first frame is `AUTH:<code>` with this session's code, answering `AUTH_OK`.
+     * Otherwise, or with no frame within [AUTH_TIMEOUT_MS], closes with [AUTH_FAILED_CLOSE_CODE] having sent nothing.
+     */
+    private suspend fun authenticate(session: DefaultWebSocketServerSession): Boolean {
+        val frame = withTimeoutOrNull(AUTH_TIMEOUT_MS) { session.incoming.receiveCatching().getOrNull() }
+        val text = (frame as? Frame.Text)?.readText()
+        if (text != null && text.startsWith(AUTH_PREFIX) && accessCodeMatches(text.substring(AUTH_PREFIX.length))) {
+            session.send(Frame.Text("AUTH_OK"))
+            return true
+        }
+        session.close(CloseReason(AUTH_FAILED_CLOSE_CODE, ""))
+        return false
+    }
+
     /**
      * Handles an individual WebSocket session lifecycle.
      *
@@ -328,6 +395,12 @@ object LogStreamServer {
      */
     private suspend fun handleWebSocketSession(session: DefaultWebSocketServerSession) {
         Log.d(TAG, "[DEBUG] WebSocket client connection initiated.")
+
+        // No history, live line, image or command before the access code.
+        if (!authenticate(session)) {
+            Log.w(TAG, "[WARN] handleWebSocketSession:: Closed a WebSocket client without the access code.")
+            return
+        }
 
         // Enqueue the registration action to the background worker.
         actionChannel?.send(LogAction.NewClient(session))
@@ -815,127 +888,29 @@ object LogStreamServer {
 
         try {
             applicationContext = context.applicationContext
-            serverScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-            actionChannel = Channel(Channel.UNLIMITED)
-
-            // Start the core log worker that serializes all history syncs and live broadcasts.
-            serverScope?.launch {
-                actionChannel?.let { channel ->
-                    for (action in channel) {
-                        when (action) {
-                            is LogAction.NewClient -> {
-                                handleNewClientAction(action.session)
-                            }
-
-                            is LogAction.Broadcast -> {
-                                handleBroadcastAction(action.message)
-                            }
-
-                            is LogAction.Clear -> {
-                                handleClearAction()
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Bind to loopback only: the viewer serves the full log + on-demand screenshots with no
-            // auth, so binding 0.0.0.0 exposed them to the whole LAN. Reach it from a dev machine
-            // with: adb forward tcp:<port> tcp:<port>, then open http://localhost:<port>.
-            server =
-                embeddedServer(CIO, host = "127.0.0.1", port = port) {
-                    // Install the WebSockets plugin with default configuration.
-                    install(WebSockets)
-
-                    routing {
-                        // Serve the main log viewer HTML application.
-                        get("/") {
-                            serveLogViewerHtml(call, context)
-                        }
-                        get("/index.html") {
-                            serveLogViewerHtml(call, context)
-                        }
-
-                        // Provide a health check endpoint for monitoring the server status.
-                        get("/health") {
-                            call.respondText("""{"status":"ok"}""", ContentType.Application.Json)
-                        }
-
-                        // Serve the full message log for download.
-                        get("/logs/download") {
-                            try {
-                                val fullLogs = MessageLog.getMessageLogCopy().joinToString("\n")
-
-                                // Name the download exactly the way MessageLog.saveLogToFile() names a log
-                                // saved on the device, so a tool that reads saved-log filenames (the Event
-                                // Log Visualizer) can also parse a browser-downloaded log (from upstream 73c59f405).
-                                val datePart =
-                                    SimpleDateFormat(
-                                        "yyyy-MM-dd HH_mm_ss",
-                                        Locale.getDefault(),
-                                    ).format(Date())
-                                val prefix = MessageLog.logFileNamePrefix
-                                val suffix = MessageLog.logFileNameSuffix
-                                val fileName =
-                                    if (prefix.isEmpty() && suffix.isEmpty()) {
-                                        "log @ $datePart"
-                                    } else {
-                                        listOfNotNull(prefix.takeIf { it.isNotEmpty() }, datePart, suffix.takeIf { it.isNotEmpty() }).joinToString("_")
-                                    }
-
-                                call.response.header(
-                                    HttpHeaders.ContentDisposition,
-                                    "attachment; filename=\"$fileName.txt\"",
-                                )
-                                call.respondText(fullLogs, ContentType.Text.Plain)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "[ERROR] /logs/download:: Failed to generate log download: ${e.message}")
-                                call.respondText(
-                                    "Failed to generate log download.",
-                                    ContentType.Text.Plain,
-                                    HttpStatusCode.InternalServerError,
-                                )
-                            }
-                        }
-
-                        // Handle WebSocket connections on root path (matches the HTML client).
-                        webSocket("/") {
-                            // Loopback blocks the LAN, but a page in the user's browser can still open a
-                            // WebSocket to localhost (WS isn't same-origin gated), so a malicious site could
-                            // read the log + screenshots via CSRF/DNS-rebinding. Allow only a missing Origin
-                            // (bundled viewer / non-browser clients) or a localhost Origin; drop the rest.
-                            val origin = call.request.headers["Origin"]
-                            if (origin != null && !Regex("^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?$").matches(origin)) {
-                                Log.w(TAG, "[WARN] LogStreamServer:: Rejected WebSocket connection from disallowed Origin: $origin")
-                                return@webSocket
-                            }
-                            handleWebSocketSession(this)
-                        }
-                    }
-                }
-
-            // Start the server without blocking the calling thread.
-            server?.start(wait = false)
-            isRunning = true
+            launchServer(port)
 
             // Register with EventBus to receive real-time log messages.
             if (!EventBus.getDefault().isRegistered(this)) {
                 EventBus.getDefault().register(this)
             }
 
-            // Determine and log the device IP address for easy access.
-            val ip = getDeviceIpAddress(context)
-            Log.i(TAG, "[LogStreamServer] Log stream server started on http://$ip:$port")
+            Log.i(TAG, "[LogStreamServer] Log stream server started on this device at http://localhost:$port")
 
             // Populate the initial buffer from existing logs so late-joining clients see the history.
             populateBuffer(MessageLog.getMessageLogCopy())
 
             Log.d(TAG, "[DEBUG] start:: LogStreamServer registered with EventBus: ${EventBus.getDefault().isRegistered(this)}")
-            MessageLog.i(TAG, "[INFO] Remote Log Viewer started at http://$ip:$port")
+            MessageLog.i(
+                TAG,
+                "[INFO] Remote Log Viewer started on this device at http://localhost:$port. From a computer: adb forward tcp:$port tcp:$port, then open http://localhost:$port. " +
+                    "It asks for the access code shown on the app's Debug page.",
+            )
         } catch (e: Exception) {
             // Handle cases where the server fails to start.
             MessageLog.e(TAG, "[ERROR] start:: Failed to start Remote Log Viewer: ${e.message}")
             isRunning = false
+            accessCode = null
             serverScope?.cancel()
             serverScope = null
             actionChannel?.close()
@@ -943,9 +918,134 @@ object LogStreamServer {
         }
     }
 
+    /**
+     * Creates this session's access code, the log worker and the loopback server. Split from [start] so
+     * tests can run the real routes without an Android context.
+     *
+     * @param port The network port number to listen on.
+     */
+    internal fun launchServer(port: Int) {
+        accessCode = newAccessCode()
+        serverScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        actionChannel = Channel(Channel.UNLIMITED)
+
+        // Start the core log worker that serializes all history syncs and live broadcasts.
+        serverScope?.launch {
+            actionChannel?.let { channel ->
+                for (action in channel) {
+                    when (action) {
+                        is LogAction.NewClient -> {
+                            handleNewClientAction(action.session)
+                        }
+
+                        is LogAction.Broadcast -> {
+                            handleBroadcastAction(action.message)
+                        }
+
+                        is LogAction.Clear -> {
+                            handleClearAction()
+                        }
+                    }
+                }
+            }
+        }
+
+        // Bind to loopback only: the viewer serves the full log and on-demand screenshots, so it must never be
+        // exposed to the LAN. Reach it from a dev machine with: adb forward tcp:<port> tcp:<port>, then open
+        // http://localhost:<port>.
+        server =
+            embeddedServer(CIO, host = "127.0.0.1", port = port) {
+                // Install the WebSockets plugin with default configuration.
+                install(WebSockets)
+
+                // Every route, the WebSocket upgrade included, answers only a loopback Host with this port.
+                intercept(ApplicationCallPipeline.Plugins) {
+                    if (!isAllowedHost(call.request.headers[HttpHeaders.Host], port)) {
+                        call.respondText("Forbidden", ContentType.Text.Plain, HttpStatusCode.Forbidden)
+                        finish()
+                    }
+                }
+
+                routing {
+                    // Serve the main log viewer HTML application.
+                    get("/") {
+                        serveLogViewerHtml(call, applicationContext)
+                    }
+                    get("/index.html") {
+                        serveLogViewerHtml(call, applicationContext)
+                    }
+
+                    // Provide a health check endpoint for monitoring the server status.
+                    get("/health") {
+                        call.respondText("""{"status":"ok"}""", ContentType.Application.Json)
+                    }
+
+                    // Serve the full message log for download.
+                    get("/logs/download") {
+                        if (!accessCodeMatches(call.request.headers[ACCESS_CODE_HEADER])) {
+                            call.respondText("Unauthorized", ContentType.Text.Plain, HttpStatusCode.Unauthorized)
+                            return@get
+                        }
+                        try {
+                            val fullLogs = MessageLog.getMessageLogCopy().joinToString("\n")
+
+                            // Name the download exactly the way MessageLog.saveLogToFile() names a log
+                            // saved on the device, so a tool that reads saved-log filenames (the Event
+                            // Log Visualizer) can also parse a browser-downloaded log (from upstream 73c59f405).
+                            val datePart =
+                                SimpleDateFormat(
+                                    "yyyy-MM-dd HH_mm_ss",
+                                    Locale.getDefault(),
+                                ).format(Date())
+                            val prefix = MessageLog.logFileNamePrefix
+                            val suffix = MessageLog.logFileNameSuffix
+                            val fileName =
+                                if (prefix.isEmpty() && suffix.isEmpty()) {
+                                    "log @ $datePart"
+                                } else {
+                                    listOfNotNull(prefix.takeIf { it.isNotEmpty() }, datePart, suffix.takeIf { it.isNotEmpty() }).joinToString("_")
+                                }
+
+                            call.response.header(
+                                HttpHeaders.ContentDisposition,
+                                "attachment; filename=\"$fileName.txt\"",
+                            )
+                            call.respondText(fullLogs, ContentType.Text.Plain)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "[ERROR] /logs/download:: Failed to generate log download: ${e.message}")
+                            call.respondText(
+                                "Failed to generate log download.",
+                                ContentType.Text.Plain,
+                                HttpStatusCode.InternalServerError,
+                            )
+                        }
+                    }
+
+                    // Handle WebSocket connections on root path (matches the HTML client).
+                    webSocket("/") {
+                        // Loopback blocks the LAN, but a page in the user's browser can still open a
+                        // WebSocket to localhost (WS isn't same-origin gated), so a malicious site could
+                        // read the log + screenshots via CSRF/DNS-rebinding. Allow only a missing Origin
+                        // (bundled viewer / non-browser clients) or a localhost Origin; drop the rest.
+                        val origin = call.request.headers["Origin"]
+                        if (origin != null && !Regex("^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?$").matches(origin)) {
+                            Log.w(TAG, "[WARN] LogStreamServer:: Rejected WebSocket connection from disallowed Origin: $origin")
+                            return@webSocket
+                        }
+                        handleWebSocketSession(this)
+                    }
+                }
+            }
+
+        // Start the server without blocking the calling thread.
+        server?.start(wait = false)
+        isRunning = true
+    }
+
     /** Stops the log streaming server, clears the buffer, and unregisters from EventBus. */
     fun stop() {
         if (!isRunning) return
+        accessCode = null
 
         try {
             // Unregister to stop receiving log events.

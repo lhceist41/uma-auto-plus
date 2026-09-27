@@ -1677,6 +1677,9 @@
             let reconnectInterval = null
             const maxReconnectDelay = 30000
 
+            // The session's access code from the app's Debug Settings page. Memory only: a reload asks again.
+            let accessCode = null
+
             // Condensation state.
             let isCondensing = true
             const condensationLimit = 13
@@ -1737,7 +1740,20 @@
             /**
              * Initializes the WebSocket connection and sets up event handlers.
              */
-            function connect() {
+            function connect(codeRejected) {
+                if (!accessCode) {
+                    const entered = prompt(
+                        (codeRejected ? "That access code was not accepted. It changes each time you press Start.\n\n" : "") +
+                            "Enter the access code shown in UMA Auto+ under Debug Settings > Remote Log Viewer."
+                    )
+                    accessCode = entered ? entered.trim() : null
+                    if (!accessCode) {
+                        setStatus("disconnected", "Access code needed")
+                        footerInfo.textContent = "Reload the page to enter the access code."
+                        return
+                    }
+                }
+
                 if (reconnectAttempts > 0) {
                     setStatus("connecting", "Reconnecting in 5...")
                 } else {
@@ -1754,19 +1770,23 @@
                 ws = new WebSocket(wsUrl)
 
                 ws.onopen = function () {
-                    if (reconnectInterval) clearInterval(reconnectInterval)
-                    setStatus("connected")
-                    reconnectAttempts = 0
-                    footerInfo.textContent = "Connected to " + location.host
-
-                    // Clear the display on a fresh connection. This removes logs from
-                    // a previous run, and prevents duplicate logs from being appended
-                    // when the server resyncs the history buffer over this new connection.
-                    clearDisplay()
+                    // The server sends nothing until the first frame carries the access code.
+                    setStatus("connecting", "Checking access code...")
+                    ws.send("AUTH:" + accessCode)
                 }
 
                 ws.onmessage = function (event) {
-                    if (event.data === "HISTORY_DONE") {
+                    if (event.data === "AUTH_OK") {
+                        if (reconnectInterval) clearInterval(reconnectInterval)
+                        setStatus("connected")
+                        reconnectAttempts = 0
+                        footerInfo.textContent = "Connected to " + location.host
+
+                        // Clear the display on a fresh connection. This removes logs from
+                        // a previous run, and prevents duplicate logs from being appended
+                        // when the server resyncs the history buffer over this new connection.
+                        clearDisplay()
+                    } else if (event.data === "HISTORY_DONE") {
                         // History sync is finished. Process all buffered messages.
                         isSyncing = false
                         appendBatchMessages(syncingBuffer)
@@ -1809,8 +1829,14 @@
                     }
                 }
 
-                ws.onclose = function () {
+                ws.onclose = function (event) {
                     setStatus("disconnected")
+                    if (event.code === 4401) {
+                        // A wrong code, or one from an earlier Start: ask again.
+                        accessCode = null
+                        connect(true)
+                        return
+                    }
                     scheduleReconnect()
                 }
 
@@ -2824,7 +2850,7 @@
                 const datePart = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")
 
                 // Prefer the server-side download for full, non-truncated logs.
-                fetch("/logs/download")
+                fetch("/logs/download", { headers: { "X-Access-Code": accessCode || "" } })
                     .then((response) => {
                         if (!response.ok) throw new Error("Server download failed")
                         return response.blob()

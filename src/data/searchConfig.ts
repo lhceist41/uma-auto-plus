@@ -852,7 +852,8 @@ const searchConfig: SearchOption[] = [
     {
         id: "settings-enable-remote-log-viewer",
         title: "Enable Remote Log Viewer",
-        description: "Starts an HTTP server on this device when the bot runs. Open the URL shown in a browser on your computer to view logs in real-time. Both devices must be on the same WiFi.",
+        description:
+            "Starts a log viewer on this device when the bot runs. It can be opened only on this device, or on a computer connected to it over ADB: run the adb forward command shown on this page, then open the localhost address in your browser.",
         page: "DebugSettings",
     },
     {

@@ -193,3 +193,24 @@ describe("searchConfig validation", () => {
         expect(searchConfig.length).toBeGreaterThanOrEqual(50)
     })
 })
+
+describe("Remote Log Viewer copy", () => {
+    const page = fs.readFileSync(path.join(PAGES_DIR, "DebugSettings", "index.tsx"), "utf8")
+    const searchText = searchConfig.find((item) => item.id === "settings-enable-remote-log-viewer")?.description ?? ""
+
+    it("says the viewer is reached on the device or over ADB, never over Wi-Fi", () => {
+        // The server binds to loopback only, so a same-network browser cannot reach it.
+        for (const text of [searchText, page]) {
+            expect(text).not.toMatch(/wi-?fi|local network/i)
+        }
+        expect(searchText).toMatch(/adb forward/)
+        expect(searchText).toMatch(/localhost/)
+    })
+
+    it("shows the access code from the running viewer and keeps it out of settings and storage", () => {
+        expect(page).toContain("NativeModules.StartModule.getRemoteLogViewerAccessCode()")
+        expect(page).not.toMatch(/served with no authentication/)
+        const writes = page.split("\n").filter((line) => /setSettings|saveSettings|Storage|writeAsString/.test(line))
+        expect(writes.filter((line) => /AccessCode/.test(line))).toEqual([])
+    })
+})
