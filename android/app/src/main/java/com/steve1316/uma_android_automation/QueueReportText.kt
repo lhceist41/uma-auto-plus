@@ -49,7 +49,9 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
     val done = r.optInt("completedRuns")
     val reached = r.optInt("runReached")
     val resumable = r.optBoolean("resumable")
-    val lastCode = r.optJSONArray("runs")?.let { runs -> runs.optJSONObject(runs.length() - 1)?.optString("resultCode") }
+    val lastRun = r.optJSONArray("runs")?.let { runs -> runs.optJSONObject(runs.length() - 1) }
+    val lastCode = lastRun?.optString("resultCode")
+    val lastRetried = lastRun?.optBoolean("retried") == true
     val key = r.optString("reasonKey")
     return when (end) {
         SessionEnd.REFUSED_NO_APP_START ->
@@ -69,25 +71,24 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
         SessionEnd.DIAGNOSTIC_ENDED -> ReportText("Diagnostic ended", "The diagnostic run ended.", null)
         SessionEnd.NOTHING_TO_RESUME -> ReportText("Nothing to resume", "The saved queue had already reached its last run, so there was nothing left to resume.", null)
         SessionEnd.COMPLETED -> {
-            val errors = errorNote(r)
-            val summary = if (done >= total) (if (total == 1) "The run is done$errors." else "All $total runs are done$errors.") else "$done of ${runs(total)} are done$errors."
-            ReportText(if (done >= total) "Queue finished" else "Queue ended", summary, null)
+            val summary = if (done >= total) (if (total == 1) "The run is done." else "All $total runs are done.") else "$done of ${runs(total)} are done."
+            ReportText(if (done >= total) "Queue finished" else "Queue ended", summary + errorSentence(r), null)
         }
         SessionEnd.SINGLE_RUN_ENDED -> singleRunText(lastCode)
-        SessionEnd.STOPPED_BY_USER -> ReportText("Queue stopped", "You stopped the queue with $done of ${runs(total)} done${errorNote(r)}.", null)
+        SessionEnd.STOPPED_BY_USER -> ReportText("Queue stopped", "You stopped the queue with $done of ${runs(total)} done." + errorSentence(r), null)
         SessionEnd.STOPPED_BY_BOT -> {
             val why = keyText(key)
-            ReportText("Queue stopped", "The bot stopped the queue with $done of ${runs(total)} done${errorNote(r)}: ${why.reason}", why.next(false))
+            ReportText("Queue stopped", "The bot stopped the queue with $done of ${runs(total)} done: ${why.reason}" + errorSentence(r), why.next(false))
         }
         SessionEnd.SERVICE_ENDED ->
             if (r.optBoolean("errorPosted")) {
                 ReportText(
                     "Stopped by an error",
-                    "The bot stopped after an unexpected error at run $reached, with $done of ${runs(total)} done${errorNote(r)}.",
+                    "The bot stopped after an unexpected error at run $reached, with $done of ${runs(total)} done." + errorSentence(r),
                     "Press Start in UMA Auto+ to run the queue again.",
                 )
             } else {
-                ReportText("Queue stopped", "The bot was stopped with $done of ${runs(total)} done${errorNote(r)}.", null)
+                ReportText("Queue stopped", "The bot was stopped with $done of ${runs(total)} done." + errorSentence(r), null)
             }
         SessionEnd.BREAKPOINT -> {
             val detail = r.optString("breakpointDetail").takeUnless { r.isNull("breakpointDetail") || it.isBlank() }
@@ -106,7 +107,7 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
         SessionEnd.STOP_ON_ERROR ->
             ReportText(
                 haltTitle(resumable),
-                "Run $reached ${runErrorPhrase(lastCode)}, and Stop Queue on Error is on.",
+                "Run $reached ${runErrorPhrase(lastCode)}${if (lastRetried) " again after a retry" else ""}, and Stop Queue on Error is on.",
                 pressStart(resumable).replaceFirstChar { it.uppercase() },
             )
         SessionEnd.FIRST_SNAPSHOT_MISSING, SessionEnd.NEXT_SNAPSHOT_MISSING ->
@@ -156,23 +157,27 @@ private fun singleRunText(code: String?): ReportText =
 private fun runs(n: Int) = if (n == 1) "1 run" else "$n runs"
 
 /**
- * A run that ended with an error while the queue carried on still counts as done, so every count of
- * done runs says how many of them errored. The report's runs are this session's only, which a
- * resumed queue has to say.
+ * Done counts only finished careers, so every count of done runs is followed by how many runs ended
+ * with an error instead. The report's runs are this session's only, which a resumed queue has to say.
  */
-private fun errorNote(r: JSONObject): String {
+private fun errorSentence(r: JSONObject): String {
     val errors = r.optJSONArray("runs")?.let { runs -> (0 until runs.length()).count { runs.optJSONObject(it)?.optString("resultCode") in RUN_ERROR_CODES } } ?: 0
     return when {
         errors == 0 -> ""
-        r.optInt("startFromRun") > 1 -> " ($errors since the queue resumed ended with an error)"
-        else -> " ($errors ended with an error)"
+        r.optInt("startFromRun") > 1 -> " ${runs(errors)} since the queue resumed ended with an error."
+        else -> " ${runs(errors)} ended with an error."
     }
 }
 
 private fun haltTitle(resumable: Boolean) = if (resumable) "Queue paused" else "Queue stopped"
 
-/** Resumable endings keep the resume record, which Start honors for 6 hours (`QUEUE_STATE_STALE_MS`). */
-private fun pressStart(resumable: Boolean) = if (resumable) "press Start in UMA Auto+ within 6 hours to continue the queue." else "press Start in UMA Auto+."
+/**
+ * Resumable endings keep the resume record, which Start honors for 24 hours
+ * (`QUEUE_STATE_STALE_MS`) while Run Queue is on with the same number of runs. The words carry
+ * those conditions, so they agree with the Home banner when changed settings rule a resume out.
+ */
+private fun pressStart(resumable: Boolean) =
+    if (resumable) "press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue." else "press Start in UMA Auto+."
 
 private val RUN_ERROR_CODES = setOf("TASK_RESULT_UNHANDLED_EXCEPTION", "TASK_RESULT_CONNECTION_ERROR", "TASK_RESULT_TIMED_OUT", "TASK_RESULT_QUEUE_NAVIGATION_FAILED")
 

@@ -74,13 +74,14 @@ describe("parseLastSession: runs done", () => {
         expect(view({ queueEnabled: true, totalRuns: 1, completedRuns: 0 }).progress).toBe("0 of 1 run done")
     })
 
-    it("says how many of the done runs ended with an error", () => {
+    it("says how many runs ended with an error, apart from the done count", () => {
         const runs = [run(1, "TASK_RESULT_COMPLETE"), run(2, "TASK_RESULT_TIMED_OUT"), run(3, "TASK_RESULT_CONNECTION_ERROR"), run(4, "TASK_RESULT_MANUALLY_STOPPED")]
-        expect(view({ queueEnabled: true, totalRuns: 5, completedRuns: 3, startFromRun: 1, runs }).progress).toBe("3 of 5 runs done (2 ended with an error)")
-        expect(view({ queueEnabled: true, totalRuns: 5, completedRuns: 4, startFromRun: 3, runs: [run(3, "TASK_RESULT_UNHANDLED_EXCEPTION")] }).progress).toBe(
-            "4 of 5 runs done (1 since the queue resumed ended with an error)"
+        expect(view({ queueEnabled: true, totalRuns: 5, completedRuns: 1, startFromRun: 1, runs }).progress).toBe("1 of 5 runs done; 2 ended with an error")
+        expect(view({ queueEnabled: true, totalRuns: 5, completedRuns: 2, startFromRun: 3, runs: [run(3, "TASK_RESULT_UNHANDLED_EXCEPTION")] }).progress).toBe(
+            "2 of 5 runs done; 1 since the queue resumed ended with an error"
         )
-        expect(view({ queueEnabled: true, totalRuns: 5, completedRuns: 2, runs: [run(1, "TASK_RESULT_QUEUE_NAVIGATION_FAILED")] }).progress).toBe("2 of 5 runs done (1 ended with an error)")
+        expect(view({ queueEnabled: true, totalRuns: 5, completedRuns: 2, runs: [run(1, "TASK_RESULT_QUEUE_NAVIGATION_FAILED")] }).progress).toBe("2 of 5 runs done; 1 ended with an error")
+        expect(view({ queueEnabled: true, totalRuns: 5, completedRuns: 3, runs }).progress).not.toContain("(")
     })
 
     it("has no count for a single run or a count it cannot read", () => {
@@ -91,6 +92,17 @@ describe("parseLastSession: runs done", () => {
 })
 
 describe("parseLastSession: one line per run", () => {
+    it("says a run was retried only when its record says so", () => {
+        const runs = [
+            run(1, "TASK_RESULT_COMPLETE", { trainee: "Special Week", retried: true }),
+            run(2, "TASK_RESULT_TIMED_OUT", { retried: true }),
+            run(3, "TASK_RESULT_COMPLETE", { retried: false }),
+            run(4, "TASK_RESULT_COMPLETE", { retried: "true" }),
+            run(5, "TASK_RESULT_COMPLETE"),
+        ]
+        expect(view({ runs }).runs).toEqual(["Run 1: Special Week, Completed after a retry", "Run 2: Error after a retry", "Run 3: Completed", "Run 4: Completed", "Run 5: Completed"])
+    })
+
     it("labels each run by how it ended", () => {
         const runs = [
             run(1, "TASK_RESULT_COMPLETE", { trainee: "Special Week", outcome: "COMPLETED" }),
@@ -298,6 +310,12 @@ describe("Home wiring", () => {
         const control = home.slice(home.indexOf("onPress={() => dismissLastSession(lastSession.sessionId)}"), home.indexOf("Hides this summary."))
         expect(control).toContain(">Dismiss</Text>")
         expect(control.length).toBeLessThan(600)
+    })
+
+    it("predicts the resume the way Kotlin does: a career in flight is re-entered, rotation or not", () => {
+        const memo = home.slice(home.indexOf("const noAutoResumeReason"), home.indexOf("\n    }, [", home.indexOf("const noAutoResumeReason")))
+        expect(memo).toContain('const nextRun = interruptedQueue.phase === "career" ? interruptedQueue.currentRun : interruptedQueue.currentRun + 1')
+        expect(memo).not.toContain("enableTraineeRotation")
     })
 
     it("gives the interrupted banner the report's reason and its end time", () => {

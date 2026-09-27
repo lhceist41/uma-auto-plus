@@ -142,7 +142,11 @@ internal fun classifySessionEnd(facts: SessionEndFacts): SessionEndVerdict {
     return SessionEndVerdict(end, resumable = !end.clearsQueueState && facts.queueStateActive, careerInFlight = careerInFlight)
 }
 
-/** One played run. Career facts are null unless this run itself produced the career-end record. */
+/**
+ * One played run. Career facts are null unless this run itself produced the career-end record.
+ * [retried] is true when the run ended with an error once and was played again; [resultCode] is
+ * how the second attempt ended.
+ */
 internal data class RunRecord(
     val run: Int,
     val startedAt: Long,
@@ -152,6 +156,7 @@ internal data class RunRecord(
     val scenario: String?,
     val outcome: String?,
     val turn: Int?,
+    val retried: Boolean = false,
 )
 
 /** The career-end facts `Campaign.careerEndLedgerLine` stashed, with the sequence number it bumped. */
@@ -398,6 +403,7 @@ internal fun runRecordJson(r: RunRecord): JSONObject =
         .put("scenario", r.scenario ?: JSONObject.NULL)
         .put("outcome", r.outcome ?: JSONObject.NULL)
         .put("turn", r.turn ?: JSONObject.NULL)
+        .put("retried", r.retried)
 
 /**
  * Whether a stored open-session record belongs to a session that died without writing its report.
@@ -533,7 +539,10 @@ internal fun databaseRefusalReport(sessionId: String, appVersion: String, now: L
         exitInfo = null,
     )
 
-/** Endings that played no queue or run: refused starts and diagnostics. */
+/**
+ * Endings that played no queue or run: refused starts, diagnostics, and a Start that found its
+ * saved queue already at its end.
+ */
 internal val NOT_A_RUN_ENDINGS =
     setOf(
         SessionEnd.REFUSED_NO_APP_START,
@@ -541,6 +550,7 @@ internal val NOT_A_RUN_ENDINGS =
         SessionEnd.REFUSED_DATABASE_UNHEALTHY,
         SessionEnd.ROTATION_NOT_PREPARED,
         SessionEnd.DIAGNOSTIC_ENDED,
+        SessionEnd.NOTHING_TO_RESUME,
     )
 
 /**

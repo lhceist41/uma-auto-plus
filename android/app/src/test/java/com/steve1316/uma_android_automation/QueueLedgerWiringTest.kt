@@ -280,17 +280,17 @@ class QueueLedgerWiringTest {
         fun `each run refreshes the open record and remembers the stash sequence before it plays`() {
             val refresh = session.indexOf("ledger.currentRun = i")
             val seq = session.indexOf("val careerEndSeqBeforeRun = lastCareerEndSeq")
-            val run = session.indexOf("val result = runSingleGame()")
+            val run = session.indexOf("var result = runSingleGame()")
             assertTrue(refresh in 0 until run && seq in refresh until run)
             assertTrue(session.substring(refresh, run).contains("QueueLedger.refreshOpenSession("))
         }
 
         @Test
         fun `each run is recorded before any branch can leave the loop`() {
-            val record = session.indexOf("recordRun(ledger, i, runStartedAt, careerEndSeqBeforeRun, effectiveResult.code)")
+            val record = session.indexOf("recordRun(ledger, i, runStartedAt, careerEndSeqBeforeRun, effectiveResult.code, retried)")
             val evaluate = session.indexOf("when (effectiveResult.code) {")
             assertTrue(record in session.indexOf("val effectiveResult =") until evaluate)
-            assertFalse(session.substring(session.indexOf("val result = runSingleGame()"), record).contains("break"))
+            assertFalse(session.substring(session.indexOf("var result = runSingleGame()"), record).contains("break"))
         }
 
         @Test
@@ -314,8 +314,8 @@ class QueueLedgerWiringTest {
 
         @Test
         fun `the launching phase refreshes the open record too`() {
-            val launching = after("saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_LAUNCHING)")
-            val next = launching.lineSequence().drop(1).take(3).joinToString("\n")
+            val launching = after("saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns)")
+            val next = launching.lineSequence().drop(1).take(4).joinToString("\n")
             assertTrue(next.contains("ledger.phase = StartModule.PHASE_LAUNCHING") && next.contains("QueueLedger.refreshOpenSession("), next)
         }
     }

@@ -56,9 +56,9 @@ class PriorCompletedRunsTest {
     }
 
     @Test
-    fun `a non-rotation queue that abandons its interrupted run on resume is never over-reported`() {
-        // PHASE_CAREER at the last run (non-rotation resume skips rather than re-enters): the
-        // abandoned run must not be counted as done, so the truthful ceiling is totalRuns - 1.
+    fun `a queue halted mid-career on its last run is never over-reported before it is re-entered`() {
+        // PHASE_CAREER at the last run: the resume re-enters run 6, which counts only once it
+        // finishes, so the truthful ceiling before that is totalRuns - 1.
         assertEquals(5, StartModule.priorCompletedRunsFor(StartModule.PHASE_CAREER, 6))
     }
 
@@ -78,7 +78,8 @@ class PriorCompletedRunsTest {
         @Test
         fun `the resume block derives the prior count from the saved phase and run`() {
             assertTrue(
-                startModule.contains("priorCompletedRuns = priorCompletedRunsFor(saved.phase, saved.currentRun)"),
+                startModule.contains("val plan = resumePlanFor(saved.phase, saved.currentRun, saved.completedRuns)") &&
+                    startModule.contains("priorCompletedRuns = plan.priorCompletedRuns"),
                 "the resume block must derive the prior count from the persisted state, not recompute it inline",
             )
         }

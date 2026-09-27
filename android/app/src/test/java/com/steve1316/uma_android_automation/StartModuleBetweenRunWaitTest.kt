@@ -265,7 +265,7 @@ class StartModuleBetweenRunWaitTest {
     inner class ResumeRecord {
         @Test
         fun `the launch record is saved before the wait can be interrupted`() {
-            val save = startModule.indexOf("saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_LAUNCHING)")
+            val save = startModule.indexOf("saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns)")
             val waitCall = startModule.indexOf("if (!interruptibleWait(delayBetweenRuns)) {")
             assertTrue(save in 0 until waitCall, "run i's launch record must already be on disk when the wait starts")
         }

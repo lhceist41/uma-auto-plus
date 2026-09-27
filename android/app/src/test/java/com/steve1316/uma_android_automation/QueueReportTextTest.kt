@@ -138,7 +138,7 @@ class QueueReportTextTest {
         }
 
         @Test
-        fun `every count of done runs says how many of them ended with an error`() {
+        fun `every count of done runs is followed by how many runs ended with an error`() {
             val errorCodes = setOf("TASK_RESULT_UNHANDLED_EXCEPTION", "TASK_RESULT_CONNECTION_ERROR", "TASK_RESULT_TIMED_OUT", "TASK_RESULT_QUEUE_NAVIGATION_FAILED")
             val count = Regex("\\bruns? (are )?done|The run is done")
             var counted = 0
@@ -148,7 +148,8 @@ class QueueReportTextTest {
                 counted++
                 val runs = report.getJSONArray("runs")
                 val errored = runs.length() == 1 && runs.getJSONObject(0).getString("resultCode") in errorCodes
-                assertEquals(errored, reason.contains("(1 ended with an error)"), "${report.getString("kind")}: $reason")
+                assertEquals(errored, reason.endsWith(" 1 run ended with an error."), "${report.getString("kind")}: $reason")
+                assertFalse(reason.contains("(1 ended with an error)"), "errored runs are not part of the done count")
             }
             assertTrue(counted > 0)
         }
@@ -170,8 +171,22 @@ class QueueReportTextTest {
                 if (kind.clearsQueueState || kind in neverResumed || kind.name.startsWith("REFUSED")) continue
                 val text = queueReportText(report)
                 assertEquals("Queue paused".takeIf { kind != SessionEnd.PROCESS_ENDED } ?: "App stopped unexpectedly", text.title)
-                assertTrue(text.nextAction!!.contains("within 6 hours to continue the queue"), "$kind: ${text.nextAction}")
+                assertTrue(text.nextAction!!.contains("within 24 hours, with Run Queue on and the same number of runs, to continue the queue"), "$kind: ${text.nextAction}")
             }
+        }
+
+        @Test
+        fun `a retry is stated only when the run record says it happened`() {
+            for (report in sweep()) {
+                val text = queueReportText(report)
+                assertFalse("${text.reason} ${text.nextAction}".contains("retry"), "no run in the sweep was retried: ${report.getString("kind")}")
+            }
+            val halt = { retried: Boolean ->
+                JSONObject().put("kind", "STOP_ON_ERROR").put("runReached", 2).put("resumable", true).put("queueEnabled", true).put("totalRuns", 5)
+                    .put("runs", JSONArray().put(JSONObject().put("run", 2).put("resultCode", "TASK_RESULT_TIMED_OUT").put("retried", retried)))
+            }
+            assertEquals("Run 2 timed out again after a retry, and Stop Queue on Error is on.", queueReportText(halt(true)).reason)
+            assertEquals("Run 2 timed out, and Stop Queue on Error is on.", queueReportText(halt(false)).reason)
         }
 
         @Test

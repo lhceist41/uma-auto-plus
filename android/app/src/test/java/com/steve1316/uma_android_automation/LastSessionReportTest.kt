@@ -89,7 +89,7 @@ class LastSessionReportTest {
         private val runEndings = SessionEnd.entries.filter { it !in NOT_A_RUN_ENDINGS }
 
         @Test
-        fun `the endings that played no run are the refusals and the diagnostic`() {
+        fun `the endings that played no run are the refusals, the diagnostic and nothing to resume`() {
             assertEquals(
                 setOf(
                     SessionEnd.REFUSED_NO_APP_START,
@@ -97,9 +97,18 @@ class LastSessionReportTest {
                     SessionEnd.REFUSED_DATABASE_UNHEALTHY,
                     SessionEnd.ROTATION_NOT_PREPARED,
                     SessionEnd.DIAGNOSTIC_ENDED,
+                    SessionEnd.NOTHING_TO_RESUME,
                 ),
                 NOT_A_RUN_ENDINGS,
             )
+        }
+
+        @Test
+        fun `a morning Start with nothing to resume keeps the overnight summary`() {
+            for (overnight in listOf(SessionEnd.BREAKPOINT, SessionEnd.STOP_ON_ERROR, SessionEnd.PROCESS_ENDED, SessionEnd.COMPLETED)) {
+                assertFalse(replacesLastReport(SessionEnd.NOTHING_TO_RESUME, report(overnight.name)), "over $overnight")
+                assertTrue(replacesLastReport(SessionEnd.NOTHING_TO_RESUME, report(overnight.name, dismissed = true)), "over dismissed $overnight")
+            }
         }
 
         @Test

@@ -82,7 +82,7 @@ class StartModuleDebugGateTest {
     @Nested
     @DisplayName("single-shot: no LAUNCH_NEXT, no career-end nav (LAUNCH_NEXT bypass)")
     inner class SingleShot {
-        private val runGame = startModule.indexOf("val result = runSingleGame()")
+        private val runGame = startModule.indexOf("var result = runSingleGame()")
         private val singleShot = startModule.indexOf("[DEBUG-TEST] Diagnostic run complete")
         private val decide = startModule.indexOf("decidePostCareerAction(", runGame)
         private val launchNext = startModule.indexOf("navigateWithDeadline(nextReuse", decide)
@@ -121,7 +121,7 @@ class StartModuleDebugGateTest {
     inner class QueueStateNeutrality {
         private val resolve = startModule.indexOf("val selection = DebugTestGate.consume {")
         private val diagRun = startModule.indexOf("val launchSelection = dispatchDiagnostic(::readLaunchSnapshot)")
-        private val loopRun = startModule.indexOf("val result = runSingleGame()")
+        private val loopRun = startModule.indexOf("var result = runSingleGame()")
         private val rotationParse = startModule.indexOf("val rotation = loadRotationConfig()", diagRun)
         private val onStartEvent = startModule.indexOf("fun onStartEvent(event: StartEvent)")
         private val firstLoadQueueState = startModule.indexOf("loadQueueState(context)", onStartEvent)

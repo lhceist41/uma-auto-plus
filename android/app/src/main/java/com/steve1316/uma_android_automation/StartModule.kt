@@ -185,7 +185,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          * Persists the current queue state to SQLite so it can survive app crashes.
          * Writes directly to the settings database using INSERT OR REPLACE.
          */
-        fun saveQueueState(context: Context, active: Boolean, currentRun: Int = 0, totalRuns: Int = 0, phase: String = PHASE_CAREER) {
+        fun saveQueueState(context: Context, active: Boolean, currentRun: Int = 0, totalRuns: Int = 0, phase: String = PHASE_CAREER, completedRuns: Int? = null) {
             try {
                 val dbFile = File(context.filesDir, "SQLite/settings.db")
                 if (!dbFile.exists()) return
@@ -206,6 +206,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
                     arrayOf("queueState", "phase", phase),
                 )
+                if (completedRuns != null) {
+                    db.execSQL(
+                        "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
+                        arrayOf("queueState", "completedRuns", completedRuns.toString()),
+                    )
+                }
                 db.execSQL(
                     "INSERT OR REPLACE INTO settings (category, key, value) VALUES (?, ?, ?)",
                     arrayOf("queueState", "timestamp", System.currentTimeMillis().toString()),
@@ -231,6 +237,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          * @property ageMs Milliseconds between when the state was persisted and now.
          * @property phase What was in flight: [PHASE_CAREER] (playing `currentRun`) or
          *           [PHASE_LAUNCHING] (`currentRun` done, launching `currentRun + 1`).
+         * @property completedRuns Careers the queue had finished when this was saved, or null for a
+         *           state saved before the count was persisted.
          */
         data class QueueState(
             val active: Boolean,
@@ -238,10 +246,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             val totalRuns: Int,
             val ageMs: Long,
             val phase: String,
+            val completedRuns: Int? = null,
         )
 
-        /** Stale queue state older than this is ignored. 6 hours matches the UI-side check. */
-        private const val QUEUE_STATE_STALE_MS: Long = 6 * 60 * 60 * 1000L
+        /**
+         * Saved queue state older than this is ignored. A day, so a queue interrupted overnight can
+         * still be resumed the next morning; the Home banner reads the same state through
+         * [loadQueueState], so it cannot disagree.
+         */
+        private const val QUEUE_STATE_STALE_MS: Long = 24 * 60 * 60 * 1000L
 
         /**
          * Queue phase persisted next to the run number so a rotation resume can tell what the
@@ -292,7 +305,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // than skip. A redundant re-run is harmless; skipping the wrong way is the bug.
                 val phase = raw["phase"] ?: PHASE_CAREER
 
-                return QueueState(active, currentRun, totalRuns, ageMs, phase)
+                return QueueState(active, currentRun, totalRuns, ageMs, phase, raw["completedRuns"]?.toIntOrNull())
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to load queue state: ${e.message}")
                 return null
@@ -391,14 +404,67 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          * to Home, not 3/6 (this-session-only count, the 2026-07-28 undercount).
          *
          * PHASE_LAUNCHING means currentRun's career had already finished (it counts). PHASE_CAREER
-         * means currentRun was still in flight when interrupted; the resume logic either re-enters
-         * it (rotation) or abandons it (single trainee), so it never counts as already done.
+         * means currentRun was still in flight when interrupted; the resume re-enters it, so it
+         * never counts as already done. This is the most the saved position can prove; a state that
+         * saved its own count ([QueueState.completedRuns]) is trusted up to this ceiling.
          *
          * Pure: no Android, no settings reads. Unit tested without standing up the module (see
          * PriorCompletedRunsTest).
          */
         fun priorCompletedRunsFor(phase: String, currentRun: Int): Int =
             if (phase == PHASE_LAUNCHING) currentRun else currentRun - 1
+
+        /** Where a resumed queue starts and how many of its careers are already finished. */
+        data class ResumePlan(val startFromRun: Int, val priorCompletedRuns: Int)
+
+        /**
+         * A resume re-enters `currentRun` whenever its career was in flight ([PHASE_CAREER]),
+         * rotation or not: that career still occupies the game's single slot, so starting the next
+         * run would only finish it under the next run's number (and, in a rotation, the next
+         * trainee's preset). After a launch boundary ([PHASE_LAUNCHING]) the next run starts.
+         */
+        fun resumePlanFor(phase: String, currentRun: Int, savedCompletedRuns: Int?): ResumePlan {
+            val ceiling = priorCompletedRunsFor(phase, currentRun)
+            val prior = savedCompletedRuns?.coerceIn(0, ceiling) ?: ceiling
+            return ResumePlan(if (phase == PHASE_CAREER) currentRun else currentRun + 1, prior)
+        }
+
+        /** Retries a queue may spend per Start: enough to ride out a one-off error, too few to loop on a career that keeps failing. */
+        const val RUN_RETRY_BUDGET = 2
+
+        /** Endings that leave the run's career unfinished in the game's slot after an error inside it. */
+        private val RETRYABLE_RUN_RESULTS =
+            setOf(TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION, TaskResultCode.TASK_RESULT_CONNECTION_ERROR, TaskResultCode.TASK_RESULT_TIMED_OUT)
+
+        /**
+         * Whether a queue run that just ended with [resultCode] is played again as the same run. Its
+         * career is still in the slot, and moving on would let the next run finish it under the next
+         * run's number. Within the [RUN_RETRY_BUDGET] (the run loop asks once per run), and never for
+         * a stop, a skip, a dead service, a game that could not be recovered, a diagnostic, or the
+         * career-less misc modes.
+         *
+         * Pure: unit tested in RunRetryAndResumeTest.
+         */
+        fun decideRunRetry(
+            resultCode: TaskResultCode,
+            enableRunQueue: Boolean,
+            miscMode: Boolean,
+            diagnostic: Boolean,
+            queueStopRequested: Boolean,
+            skipRequested: Boolean,
+            botRunning: Boolean,
+            gameRecoveryFailed: Boolean,
+            retriesLeft: Int,
+        ): Boolean =
+            resultCode in RETRYABLE_RUN_RESULTS &&
+                enableRunQueue &&
+                !miscMode &&
+                !diagnostic &&
+                !queueStopRequested &&
+                !skipRequested &&
+                botRunning &&
+                !gameRecoveryFailed &&
+                retriesLeft > 0
 
         /**
          * Reads the trainee-rotation config from settings. Returns a disabled config when rotation
@@ -1581,9 +1647,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     }
 
     /** Adds run [run]'s record, with the career-end facts only if this run produced them. */
-    private fun recordRun(ledger: SessionLedger, run: Int, startedAt: Long, careerEndSeqBeforeRun: Long, code: TaskResultCode) {
+    private fun recordRun(ledger: SessionLedger, run: Int, startedAt: Long, careerEndSeqBeforeRun: Long, code: TaskResultCode, retried: Boolean) {
         val careerEnd = careerEndForRun(careerEndSeqBeforeRun, CareerEndStash(lastCareerEndSeq, lastCareerEndTrainee, lastCareerEndScenario, lastCareerEndOutcome, lastCareerEndTurn))
-        ledger.addRun(RunRecord(run, startedAt, System.currentTimeMillis(), code.name, careerEnd?.trainee, careerEnd?.scenario, careerEnd?.outcome, careerEnd?.turn))
+        ledger.addRun(RunRecord(run, startedAt, System.currentTimeMillis(), code.name, careerEnd?.trainee, careerEnd?.scenario, careerEnd?.outcome, careerEnd?.turn, retried))
         ledger.errorPosted = lastRunPostedException
         QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
     }
@@ -1786,16 +1852,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // --- Layer 4: auto-resume after process death ---
                 // If a queue was running when the previous process was killed (TRIM_EMPTY,
                 // watchdog self-restart, etc.), SQLite still has queueState.active=true with
-                // the run number that was in flight. Skip past that run and pick up the next
-                // one. Only applies when queueing is currently enabled AND the saved totalRuns
+                // the run number that was in flight. Re-enter that run if its career was in
+                // flight, else start the next one. Only applies when queueing is currently enabled AND the saved totalRuns
                 // matches the current setting. If the user changed queue config after the
                 // crash, the saved state is no longer applicable and we ignore it.
-                // Runs already completed before this process started, per the persisted queue
-                // state. PHASE_LAUNCHING means currentRun's career had already finished (it
-                // counts); PHASE_CAREER means currentRun was still in flight when interrupted, and
-                // the resume logic below either re-enters it or abandons it, so it does not count
-                // either way. Feeds completedRuns below so a queue resumed at run 4 of 6 that goes
-                // on to finish runs 4-6 reports 6/6 completed, not 3/6 (2026-07-28 undercount).
+                // Careers already finished before this process started, per the persisted queue
+                // state (resumePlanFor). Feeds completedRuns below so a queue resumed at run 4 of 6
+                // that goes on to finish runs 4-6 reports 6/6 completed, not 3/6 (2026-07-28 undercount).
                 var priorCompletedRuns = 0
 
                 val startFromRun: Int =
@@ -1810,16 +1873,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             clearQueueState(context)
                             return@run 1
                         }
-                        // Phase-aware resume for rotation. A rotation queue killed mid-career must
-                        // re-enter that SAME run so the in-flight trainee finishes under her own
-                        // preset — resuming at currentRun+1 would load the next trainee's snapshot
-                        // onto the running career. A kill at the launch boundary (career done,
-                        // launching the next) resumes at currentRun+1 as usual. Non-rotation queues
-                        // keep the original "skip the interrupted run" behavior: same trainee either
-                        // way, and not re-entering a possibly-wedged career is the safer default.
-                        val reEnter = rotation.enabled && saved.phase == PHASE_CAREER
-                        val next = if (reEnter) saved.currentRun else saved.currentRun + 1
-                        priorCompletedRuns = priorCompletedRunsFor(saved.phase, saved.currentRun)
+                        val plan = resumePlanFor(saved.phase, saved.currentRun, saved.completedRuns)
+                        val reEnter = saved.phase == PHASE_CAREER
+                        val next = plan.startFromRun
+                        priorCompletedRuns = plan.priorCompletedRuns
                         if (next > totalRuns) {
                             MessageLog.i(
                                 TAG,
@@ -1945,6 +2002,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     }
                 }
 
+                var runRetriesLeft = RUN_RETRY_BUDGET
                 for (i in startFromRun..totalRuns) {
                     // Check stop flag before starting each run.
                     if (queueStopRequested || !BotService.isRunning) {
@@ -1967,7 +2025,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         LogStreamServer.resetMute()
                         // Persist queue state so it can survive crashes. Phase CAREER: run i's
                         // career is about to play, so a kill here resumes by re-entering run i.
-                        saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_CAREER)
+                        saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_CAREER, completedRuns = completedRuns)
                         sendQueueProgressEvent(i, totalRuns, "starting")
                         MessageLog.i(TAG, "\n[QUEUE] ========================================")
                         MessageLog.i(TAG, "[QUEUE] Starting run $i of $totalRuns")
@@ -2001,8 +2059,36 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     val runStartedAt = System.currentTimeMillis()
                     val careerEndSeqBeforeRun = lastCareerEndSeq
 
-                    // Run the game.
-                    val result = runSingleGame()
+                    // Run the game. An errored run whose career is still in the slot is played once
+                    // more as this same run: the saved phase stays CAREER, the rotation snapshot is
+                    // unchanged, and Game.start() re-enters the career without treating it as
+                    // finished. Moving on instead would let the next run finish this career.
+                    var result = runSingleGame()
+                    val runScenario = SettingsHelper.getStringSetting("general", "scenario")
+                    val retried =
+                        decideRunRetry(
+                            resultCode = result.code,
+                            enableRunQueue = enableRunQueue,
+                            miscMode = runScenario == "Daily Races" || runScenario == "Team Trials",
+                            diagnostic = debugDiagnosticArmed,
+                            queueStopRequested = queueStopRequested,
+                            skipRequested = queueSkipRequested,
+                            botRunning = BotService.isRunning,
+                            gameRecoveryFailed = gameRecoveryFailed,
+                            retriesLeft = runRetriesLeft,
+                        )
+                    if (retried) {
+                        runRetriesLeft--
+                        MessageLog.w(TAG, "[QUEUE] Run $i ended with ${result.code} while its career was in progress. Playing run $i once more ($runRetriesLeft retries left this Start).")
+                        SparkRerollGate.invalidate("run result ${result.code.name}, run $i retried")
+                        CareerFinalizeGate.beginCareer(
+                            nonce = java.util.UUID.randomUUID().toString().substring(0, 8),
+                            queueRun = i,
+                            nowMs = System.currentTimeMillis(),
+                        )
+                        sendQueueProgressEvent(i, totalRuns, "starting")
+                        result = runSingleGame()
+                    }
 
                     // Determine the effective result considering queue flags.
                     val effectiveResult =
@@ -2017,7 +2103,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             }
                             else -> result
                         }
-                    recordRun(ledger, i, runStartedAt, careerEndSeqBeforeRun, effectiveResult.code)
+                    recordRun(ledger, i, runStartedAt, careerEndSeqBeforeRun, effectiveResult.code, retried)
 
                     if (enableRunQueue) {
                         sendQueueProgressEvent(i, totalRuns, "completed", effectiveResult.code.name, effectiveResult.message)
@@ -2048,16 +2134,16 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 MessageLog.i(TAG, "[QUEUE] ${queueStopReason ?: "User stopped the bot"}. Exiting queue.")
                                 break
                             }
-                            completedRuns++
                         }
+                        // completedRuns counts finished careers only. A skipped, errored or
+                        // breakpointed run is in the ledger's run records with its own result.
                         TaskResultCode.TASK_RESULT_COMPLETE -> {
                             completedRuns++
                         }
                         TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE -> {
-                            completedRuns++
+                            MessageLog.i(TAG, "[QUEUE] Run $i was skipped; it is not counted as a finished career.")
                         }
                         TaskResultCode.TASK_RESULT_BREAKPOINT_REACHED -> {
-                            completedRuns++
                             // Breakpoints stop the queue, and that part is not negotiable: the game
                             // has a single career slot, so the preserved career blocks every later
                             // run whether the breakpoint was user-set (skill-point threshold, a
@@ -2099,8 +2185,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 queueHaltCareerInFlight = true
                                 break
                             } else {
-                                MessageLog.w(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Continuing queue (stopOnError=false).")
-                                completedRuns++
+                                MessageLog.w(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Continuing queue (stopOnError=false); the run is recorded as errored.")
                             }
                         }
                     }
@@ -2153,12 +2238,18 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             break
                         }
 
-                        // Phase LAUNCHING: run i's career is done and the launch of run i+1 is
-                        // starting. A kill from here resumes at run i+1 — the finished career i is
-                        // not re-played, and (under rotation) i+1's snapshot is the correct one.
-                        saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_LAUNCHING)
+                        // Phase LAUNCHING only after a finished career: run i is done and the launch
+                        // of run i+1 is starting, so a kill from here resumes at run i+1 and (under
+                        // rotation) i+1's snapshot is the correct one. A run that ended without
+                        // finishing its career (skipped, or errored with Stop Queue on Error off)
+                        // leaves that career in the slot: the saved phase stays CAREER for run i, so
+                        // a kill resumes by re-entering it under run i's own snapshot.
+                        val careerFinished = effectiveResult.code == TaskResultCode.TASK_RESULT_COMPLETE
+                        if (careerFinished) {
+                            saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns)
+                            ledger.phase = StartModule.PHASE_LAUNCHING
+                        }
                         ledger.completedRuns = completedRuns
-                        ledger.phase = StartModule.PHASE_LAUNCHING
                         QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
 
                         // Trainee rotation: swap to the next run's trainee (settings + select mode)
@@ -2171,6 +2262,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             ledger.haltEnd = SessionEnd.NEXT_SNAPSHOT_MISSING
                             queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                             queueHaltRun = i
+                            queueHaltCareerInFlight = !careerFinished
                             break
                         }
 
@@ -2192,11 +2284,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         } else {
                             MessageLog.i(TAG, "[QUEUE] Navigating back to career start for next run...")
 
-                            // The career this pass starts from is finished and already recorded, so
-                            // no campaign is coming back for its end screens. Without this the Grand
-                            // Concert Complete Career screen routes to the campaign and navigation
-                            // reports success without having launched anything.
-                            val navResult = navigateWithDeadline(nextReuse, previousCareerComplete = true)
+                            // A finished career is already recorded, so no campaign is coming back for
+                            // its end screens: without saying so the Grand Concert Complete Career
+                            // screen routes to the campaign and navigation reports success without
+                            // having launched anything. An unfinished one must not be claimed
+                            // finished; the next run carries on with it.
+                            val navResult = navigateWithDeadline(nextReuse, previousCareerComplete = careerFinished)
 
                             if (!navResult.success) {
                                 logNavigationFailure(navResult)
@@ -2216,6 +2309,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                     ledger.reasonKey = navResult.reasonKey
                                     queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                                     queueHaltRun = i
+                                    queueHaltCareerInFlight = !careerFinished
                                 }
                                 break
                             }

@@ -357,20 +357,12 @@ const Home = () => {
         if (!interruptedQueue) return null
         if (!bsc.settings.runQueue.enableRunQueue) return "queueDisabled"
         if (bsc.settings.runQueue.totalRuns !== interruptedQueue.totalRuns) return "totalsDiffer"
-        // Kotlin re-enters the saved run itself only for a rotation queue killed mid-career, so
-        // that trainee finishes under her own preset; every other saved state resumes at the run
-        // after it. When that next run is past the end, Kotlin clears the state and reports the
-        // queue complete without playing a career.
-        const reEntersSavedRun = bsc.settings.runQueue.enableTraineeRotation && bsc.settings.runQueue.traineeRotation.length > 0 && interruptedQueue.phase === "career"
-        const nextRun = reEntersSavedRun ? interruptedQueue.currentRun : interruptedQueue.currentRun + 1
+        // Kotlin re-enters the saved run whenever its career was in flight (resumePlanFor), rotation
+        // or not; after a finished career it starts the next run. When that next run is past the
+        // end, Kotlin clears the state and reports that there was nothing to resume.
+        const nextRun = interruptedQueue.phase === "career" ? interruptedQueue.currentRun : interruptedQueue.currentRun + 1
         return nextRun > interruptedQueue.totalRuns ? "noRunLeft" : null
-    }, [
-        interruptedQueue,
-        bsc.settings.runQueue.enableRunQueue,
-        bsc.settings.runQueue.totalRuns,
-        bsc.settings.runQueue.enableTraineeRotation,
-        bsc.settings.runQueue.traineeRotation,
-    ])
+    }, [interruptedQueue, bsc.settings.runQueue.enableRunQueue, bsc.settings.runQueue.totalRuns])
 
     /**
      * Action label for the center button: what pressing it will do, not which scenario is

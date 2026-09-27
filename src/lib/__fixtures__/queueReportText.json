@@ -108,7 +108,7 @@
                 "kind": "COMPLETED",
                 "queueEnabled": true,
                 "totalRuns": 3,
-                "completedRuns": 3,
+                "completedRuns": 1,
                 "startFromRun": 1,
                 "runs": [
                     {
@@ -126,8 +126,8 @@
                 ]
             },
             "text": {
-                "title": "Queue finished",
-                "reason": "All 3 runs are done (2 ended with an error).",
+                "title": "Queue ended",
+                "reason": "1 of 3 runs are done. 2 runs ended with an error.",
                 "nextAction": null
             }
         },
@@ -137,18 +137,19 @@
                 "kind": "COMPLETED",
                 "queueEnabled": true,
                 "totalRuns": 1,
-                "completedRuns": 1,
+                "completedRuns": 0,
                 "startFromRun": 1,
                 "runs": [
                     {
                         "run": 1,
-                        "resultCode": "TASK_RESULT_TIMED_OUT"
+                        "resultCode": "TASK_RESULT_TIMED_OUT",
+                        "retried": true
                     }
                 ]
             },
             "text": {
-                "title": "Queue finished",
-                "reason": "The run is done (1 ended with an error).",
+                "title": "Queue ended",
+                "reason": "0 of 1 run are done. 1 run ended with an error.",
                 "nextAction": null
             }
         },
@@ -158,7 +159,7 @@
                 "kind": "COMPLETED",
                 "queueEnabled": true,
                 "totalRuns": 5,
-                "completedRuns": 5,
+                "completedRuns": 4,
                 "startFromRun": 4,
                 "runs": [
                     {
@@ -172,8 +173,8 @@
                 ]
             },
             "text": {
-                "title": "Queue finished",
-                "reason": "All 5 runs are done (1 since the queue resumed ended with an error).",
+                "title": "Queue ended",
+                "reason": "4 of 5 runs are done. 1 run since the queue resumed ended with an error.",
                 "nextAction": null
             }
         },
@@ -183,7 +184,7 @@
                 "kind": "COMPLETED",
                 "queueEnabled": true,
                 "totalRuns": 5,
-                "completedRuns": 3,
+                "completedRuns": 2,
                 "startFromRun": 1,
                 "runs": [
                     {
@@ -202,7 +203,7 @@
             },
             "text": {
                 "title": "Queue ended",
-                "reason": "3 of 5 runs are done (1 ended with an error).",
+                "reason": "2 of 5 runs are done. 1 run ended with an error.",
                 "nextAction": null
             }
         },
@@ -442,7 +443,7 @@
                 "kind": "SERVICE_ENDED",
                 "queueEnabled": true,
                 "totalRuns": 5,
-                "completedRuns": 3,
+                "completedRuns": 2,
                 "runReached": 3,
                 "errorPosted": true,
                 "runs": [
@@ -462,7 +463,7 @@
             },
             "text": {
                 "title": "Stopped by an error",
-                "reason": "The bot stopped after an unexpected error at run 3, with 3 of 5 runs done (1 ended with an error).",
+                "reason": "The bot stopped after an unexpected error at run 3, with 2 of 5 runs done. 1 run ended with an error.",
                 "nextAction": "Press Start in UMA Auto+ to run the queue again."
             }
         },
@@ -472,7 +473,7 @@
                 "kind": "STOPPED_BY_USER",
                 "queueEnabled": true,
                 "totalRuns": 5,
-                "completedRuns": 2,
+                "completedRuns": 1,
                 "startFromRun": 1,
                 "runs": [
                     {
@@ -491,7 +492,7 @@
             },
             "text": {
                 "title": "Queue stopped",
-                "reason": "You stopped the queue with 2 of 5 runs done (1 ended with an error).",
+                "reason": "You stopped the queue with 1 of 5 runs done. 1 run ended with an error.",
                 "nextAction": null
             }
         },
@@ -501,7 +502,7 @@
                 "kind": "STOPPED_BY_USER",
                 "queueEnabled": true,
                 "totalRuns": 5,
-                "completedRuns": 3,
+                "completedRuns": 2,
                 "startFromRun": 3,
                 "runs": [
                     {
@@ -516,7 +517,7 @@
             },
             "text": {
                 "title": "Queue stopped",
-                "reason": "You stopped the queue with 3 of 5 runs done (1 since the queue resumed ended with an error).",
+                "reason": "You stopped the queue with 2 of 5 runs done. 1 run since the queue resumed ended with an error.",
                 "nextAction": null
             }
         },
@@ -526,7 +527,7 @@
                 "kind": "STOPPED_BY_BOT",
                 "queueEnabled": true,
                 "totalRuns": 4,
-                "completedRuns": 2,
+                "completedRuns": 0,
                 "startFromRun": 1,
                 "reasonKey": "TRAINEE_MISMATCH",
                 "runs": [
@@ -546,7 +547,7 @@
             },
             "text": {
                 "title": "Queue stopped",
-                "reason": "The bot stopped the queue with 2 of 4 runs done (2 ended with an error): the trainee in the career was not the one the rotation expected.",
+                "reason": "The bot stopped the queue with 0 of 4 runs done: the trainee in the career was not the one the rotation expected. 2 runs ended with an error.",
                 "nextAction": "Check the rotation list, return the game to its home screen, then press Start in UMA Auto+."
             }
         },
@@ -556,7 +557,7 @@
                 "kind": "SERVICE_ENDED",
                 "queueEnabled": true,
                 "totalRuns": 5,
-                "completedRuns": 2,
+                "completedRuns": 1,
                 "runReached": 3,
                 "startFromRun": 1,
                 "runs": [
@@ -576,7 +577,7 @@
             },
             "text": {
                 "title": "Queue stopped",
-                "reason": "The bot was stopped with 2 of 5 runs done (1 ended with an error).",
+                "reason": "The bot was stopped with 1 of 5 runs done. 1 run ended with an error.",
                 "nextAction": null
             }
         },
@@ -593,7 +594,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "Run 2 stopped at a breakpoint: Skill points reached the threshold.",
-                "nextAction": "Finish that screen in the game, then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Finish that screen in the game, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -624,7 +625,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The game stopped responding at run 3 and could not be restarted.",
-                "nextAction": "Open the game and check it, then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Open the game and check it, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -649,7 +650,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "Run 2 timed out, and Stop Queue on Error is on.",
-                "nextAction": "Press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -670,7 +671,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "Run 2 lost its connection to the game server, and Stop Queue on Error is on.",
-                "nextAction": "Press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -693,6 +694,80 @@
                 "title": "Queue stopped",
                 "reason": "Run 2 ended with an unexpected error, and Stop Queue on Error is on.",
                 "nextAction": "Press Start in UMA Auto+."
+            }
+        },
+        {
+            "name": "stop on error after a retry",
+            "report": {
+                "kind": "STOP_ON_ERROR",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_COMPLETE"
+                    },
+                    {
+                        "run": 2,
+                        "resultCode": "TASK_RESULT_TIMED_OUT",
+                        "retried": true
+                    }
+                ]
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "Run 2 timed out again after a retry, and Stop Queue on Error is on.",
+                "nextAction": "Press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "stop on error after a retry, connection",
+            "report": {
+                "kind": "STOP_ON_ERROR",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": false,
+                "runs": [
+                    {
+                        "run": 2,
+                        "resultCode": "TASK_RESULT_CONNECTION_ERROR",
+                        "retried": true
+                    }
+                ]
+            },
+            "text": {
+                "title": "Queue stopped",
+                "reason": "Run 2 lost its connection to the game server again after a retry, and Stop Queue on Error is on.",
+                "nextAction": "Press Start in UMA Auto+."
+            }
+        },
+        {
+            "name": "queue finished with a retried run",
+            "report": {
+                "kind": "COMPLETED",
+                "queueEnabled": true,
+                "totalRuns": 2,
+                "completedRuns": 2,
+                "startFromRun": 1,
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_COMPLETE",
+                        "retried": true
+                    },
+                    {
+                        "run": 2,
+                        "resultCode": "TASK_RESULT_COMPLETE"
+                    }
+                ]
+            },
+            "text": {
+                "title": "Queue finished",
+                "reason": "All 2 runs are done.",
+                "nextAction": null
             }
         },
         {
@@ -721,7 +796,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped because the saved setup for the next trainee in the rotation was missing.",
-                "nextAction": "Press Start in UMA Auto+ within 6 hours to continue the queue. Start prepares the rotation's trainee setups before launching."
+                "nextAction": "Press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue. Start prepares the rotation's trainee setups before launching."
             }
         },
         {
@@ -753,7 +828,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped before run 3 of 5: the support deck for the next career could not be set up.",
-                "nextAction": "Set up the deck in the game (or change Required Support Deck), then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Set up the deck in the game (or change Required Support Deck), then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -769,7 +844,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: TP ran out.",
-                "nextAction": "Wait for TP to refill, or turn on Restore TP with Items in Run Queue Settings, then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Wait for TP to refill, or turn on Restore TP with Items in Run Queue Settings, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -785,7 +860,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: it reached its limit of TP restores for one Start.",
-                "nextAction": "Press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -801,7 +876,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: no TP restore item was found.",
-                "nextAction": "Restore TP by hand, then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Restore TP by hand, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -817,7 +892,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: no Toughness 30 or Star Fruit was left, and Carats are not allowed for TP restores.",
-                "nextAction": "Restock Toughness 30 or Star Fruit, restore TP by hand, or turn on Allow Carats for TP Restore in Run Queue Settings, then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Restock Toughness 30 or Star Fruit, restore TP by hand, or turn on Allow Carats for TP Restore in Run Queue Settings, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -833,7 +908,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: your Veteran list is full.",
-                "nextAction": "Transfer or release Veterans in the game, then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Transfer or release Veterans in the game, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -849,7 +924,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: the career ended with skill points left, so the bot did not press Finish.",
-                "nextAction": "Spend the points (or press Finish yourself), then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Spend the points (or press Finish yourself), then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -865,7 +940,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: the Spark selection needs you.",
-                "nextAction": "Finish the Spark selection in the game (keeping the original set is always safe), then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Finish the Spark selection in the game (keeping the original set is always safe), then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -881,7 +956,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: Reuse Last Launch Setup is off, so the next career could not be set up.",
-                "nextAction": "Turn on Reuse Last Launch Setup in Run Queue Settings, or set up the career by hand, then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Turn on Reuse Last Launch Setup in Run Queue Settings, or set up the career by hand, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -897,7 +972,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: the support deck for the next career could not be set up.",
-                "nextAction": "Set up the deck in the game (or change Required Support Deck), then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Set up the deck in the game (or change Required Support Deck), then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -913,7 +988,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: the support deck for the next career could not be set up.",
-                "nextAction": "Set up the deck in the game (or change Required Support Deck), then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Set up the deck in the game (or change Required Support Deck), then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -929,7 +1004,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: the support deck for the next career could not be set up.",
-                "nextAction": "Set up the deck in the game (or change Required Support Deck), then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Set up the deck in the game (or change Required Support Deck), then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -945,7 +1020,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: the bot lost screen capture or its accessibility service.",
-                "nextAction": "Check that both are on, then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Check that both are on, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -961,7 +1036,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: it reached a screen it could not get past.",
-                "nextAction": "Open the game and clear the screen it stopped on, then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Open the game and clear the screen it stopped on, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -977,7 +1052,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: the next trainee in the rotation was not found on the trainee list.",
-                "nextAction": "Check the rotation list, or pick the trainee by hand, then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Check the rotation list, or pick the trainee by hand, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -993,7 +1068,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: getting to the next career took too long.",
-                "nextAction": "Check that the game is responding, then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Check that the game is responding, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -1009,7 +1084,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: it reached a screen it could not get past.",
-                "nextAction": "Open the game and clear the screen it stopped on, then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Open the game and clear the screen it stopped on, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -1025,7 +1100,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: it reached a screen it could not get past.",
-                "nextAction": "Open the game and clear the screen it stopped on, then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Open the game and clear the screen it stopped on, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -1040,7 +1115,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped while waiting after run 3 (often because the screen turned off).",
-                "nextAction": "Set a longer screen timeout, then press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Set a longer screen timeout, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -1071,7 +1146,7 @@
             "text": {
                 "title": "App stopped unexpectedly",
                 "reason": "UMA Auto+ stopped unexpectedly during run 3 of 5. Android closed it to free memory.",
-                "nextAction": "Press Start in UMA Auto+ within 6 hours to continue the queue."
+                "nextAction": "Press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {

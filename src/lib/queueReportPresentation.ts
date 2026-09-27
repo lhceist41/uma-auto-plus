@@ -69,17 +69,17 @@ function runLines(runs: unknown): string[] {
         if (n === 0) return []
         const trainee = typeof run.trainee === "string" ? run.trainee.trim() : ""
         const who = trainee.length > 0 && trainee.length <= 40 ? `${trainee}, ` : ""
-        return [`Run ${n}: ${who}${runLabel(run.resultCode, run.outcome)}`]
+        return [`Run ${n}: ${who}${runLabel(run.resultCode, run.outcome)}${run.retried === true ? " after a retry" : ""}`]
     })
 }
 
-/** "N of M runs done", with the runs of this session that ended with an error and still count as done. */
+/** "N of M runs done" (finished careers only), then how many runs of this session ended with an error. */
 function progressLine(report: Record<string, unknown>): string | null {
     const total = count(report.totalRuns)
     if (report.queueEnabled !== true || total === 0 || typeof report.completedRuns !== "number" || !Number.isInteger(report.completedRuns) || report.completedRuns < 0) return null
     const runs = Array.isArray(report.runs) ? report.runs.filter(isRecord) : []
     const errors = runs.filter((run) => typeof run.resultCode === "string" && RUN_ERROR_CODES.has(run.resultCode)).length
-    const note = errors === 0 ? "" : count(report.startFromRun) > 1 ? ` (${errors} since the queue resumed ended with an error)` : ` (${errors} ended with an error)`
+    const note = errors === 0 ? "" : count(report.startFromRun) > 1 ? `; ${errors} since the queue resumed ended with an error` : `; ${errors} ended with an error`
     return `${report.completedRuns} of ${plural(total, "run", "runs")} done${note}`
 }
 
