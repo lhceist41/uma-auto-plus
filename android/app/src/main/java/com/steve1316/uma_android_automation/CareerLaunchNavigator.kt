@@ -243,6 +243,10 @@ class CareerLaunchNavigator(private val context: Context) {
         private const val MAX_TAP_TO_CONTINUE_ITERATIONS = 30
         private const val TAP_TO_CONTINUE_REBIND_AT = 18
 
+        /** The title while the game logs in is exempt the same way, up to the come-back limit, with one
+         * force-rebind partway: a title whose taps never land is the same dispatch-death signature. */
+        private const val TITLE_LOGIN_REBIND_AT = 20
+
         /** Force-rebind partway through a stuck-in-KNOWN-state episode too: identical detection
          * every tick while every click changes nothing is the same dead-gesture-dispatch signature
          * the unknown-state and TAP_TO_CONTINUE paths already self-heal (2026-07-11: the Recover TP
@@ -639,6 +643,7 @@ class CareerLaunchNavigator(private val context: Context) {
     private var navRepairRefused = false
     private var stuckScreenRebindIssued = false
     private var tapScreenRebindIssued = false
+    private var titleScreenRebindIssued = false
 
     // --- Cold-start Trainee Select liveness (2026-08-10) ---
     // True while THIS launch still owes a roster verification: rotation is on, or a single-run target
@@ -855,6 +860,7 @@ class CareerLaunchNavigator(private val context: Context) {
         navRepairRefused = false
         stuckScreenRebindIssued = false
         tapScreenRebindIssued = false
+        titleScreenRebindIssued = false
         trainingSelectionBackPressed = false
         autoFillAlreadyDone = false
         skipToggleAlreadyDone = false
@@ -1132,6 +1138,10 @@ class CareerLaunchNavigator(private val context: Context) {
                 }
                 if (titleLoggingIn) {
                     titleLoginLooks++
+                    if (titleLoginLooks == TITLE_LOGIN_REBIND_AT) {
+                        MessageLog.w(TAG, "[NAV] The title screen is still up after $TITLE_LOGIN_REBIND_AT looks; force-rebinding the accessibility service in case its taps stopped landing.")
+                        titleScreenRebindIssued = rebindAccessibility()
+                    }
                     if (titleLoginLooks >= BetweenRunRecovery.COMING_BACK_UNKNOWN_LIMIT) {
                         val screenshotPath = captureFailureScreenshot("stuck_on_TITLE_SCREEN")
                         return NavigationResult(
@@ -1141,7 +1151,7 @@ class CareerLaunchNavigator(private val context: Context) {
                             failedTransition = "TITLE_SCREEN -> next screen",
                             isRecoverable = true,
                             recommendedAction = "Open the game and check it, then restart the queue.",
-                            reasonKey = navigatorStuckKey(navRepairRefused, rebindIssuedOnThisScreen = false),
+                            reasonKey = navigatorStuckKey(navRepairRefused, titleScreenRebindIssued),
                             screenshotPath = screenshotPath,
                         )
                     }

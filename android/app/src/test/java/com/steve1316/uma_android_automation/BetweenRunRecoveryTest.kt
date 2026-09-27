@@ -364,8 +364,15 @@ class BetweenRunRecoveryTest {
             assertEquals(2, count(navigate, "detectedState != LaunchScreenState.TAP_TO_CONTINUE &&\n                    !titleLoggingIn &&\n"))
             // Bounded by the come-back limit instead, and by the navigation deadline around it.
             val bound = navigate.substring(navigate.indexOf("if (titleLoggingIn) {"))
-            assertTrue(bound.startsWith("if (titleLoggingIn) {\n                    titleLoginLooks++\n                    if (titleLoginLooks >= BetweenRunRecovery.COMING_BACK_UNKNOWN_LIMIT) {"))
-            assertTrue(bound.substringBefore("} else {\n                    titleLoginLooks = 0").contains("reasonKey = navigatorStuckKey(navRepairRefused, rebindIssuedOnThisScreen = false),"))
+            assertTrue(bound.startsWith("if (titleLoggingIn) {\n                    titleLoginLooks++\n"))
+            // One force-rebind partway, for a title whose taps stopped landing, and the stop carries whether it was issued.
+            val rebind = bound.indexOf("if (titleLoginLooks == TITLE_LOGIN_REBIND_AT) {")
+            assertTrue(rebind in 0 until bound.indexOf("if (titleLoginLooks >= BetweenRunRecovery.COMING_BACK_UNKNOWN_LIMIT) {"))
+            assertTrue(bound.substring(rebind).contains("titleScreenRebindIssued = rebindAccessibility()\n"))
+            assertTrue(navigator.contains("private const val TITLE_LOGIN_REBIND_AT = 20\n"))
+            assertTrue(20 < BetweenRunRecovery.COMING_BACK_UNKNOWN_LIMIT)
+            assertTrue(bound.substringBefore("} else {\n                    titleLoginLooks = 0").contains("reasonKey = navigatorStuckKey(navRepairRefused, titleScreenRebindIssued),"))
+            assertTrue(navigate.indexOf("titleScreenRebindIssued = false") in 0 until navigate.indexOf("for (attempt in 0 until MAX_DETECTION_ATTEMPTS)"))
         }
 
         @Test

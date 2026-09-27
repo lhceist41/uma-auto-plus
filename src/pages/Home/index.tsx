@@ -117,6 +117,8 @@ const Home = () => {
     // separate from `botRunning` (BotService actually executing), so a status derived from one
     // can never misrepresent the other. See src/lib/sessionState.ts.
     const [session, dispatchSession] = useReducer(sessionStateReducer, initialSessionState)
+    // Counts the live projection and bot events, so a native read older than one of them is dropped.
+    const liveSessionEvents = useRef(0)
     const armed = session.armed
     const botRunning = session.botRunning
     const phase = sessionPhase(session)
@@ -184,6 +186,21 @@ const Home = () => {
             .catch(() => {})
     }, [StartModule])
 
+    /** Re-reads whether Start is armed and the bot is running from Kotlin, so Start/Stop is right
+     * after this screen was re-created while armed. Called on mount and on every return to the app. */
+    const refreshSessionState = useCallback(() => {
+        const eventsBefore = liveSessionEvents.current
+        StartModule.getSessionState()
+            .then((state: any) => {
+                // A live event that arrived while the read was in flight is newer than the read.
+                if (liveSessionEvents.current !== eventsBefore) return
+                if (state && typeof state.armed === "boolean" && typeof state.botRunning === "boolean") {
+                    dispatchSession({ type: "NATIVE_STATE", armed: state.armed, botRunning: state.botRunning })
+                }
+            })
+            .catch(() => {})
+    }, [StartModule])
+
     /** Re-reads whether the bot may repair its own accessibility service. Called on mount and on every return to the app. */
     const refreshSecureSettingsGrant = useCallback(() => {
         readPreflightProbes(StartModule)
@@ -243,10 +260,12 @@ const Home = () => {
 
     useEffect(() => {
         const mediaProjectionSubscription = DeviceEventEmitter.addListener("MediaProjectionService", (data) => {
+            liveSessionEvents.current++
             dispatchSession({ type: data["message"] === "Running" ? "PROJECTION_RUNNING" : "PROJECTION_NOT_RUNNING" })
         })
 
         const botServiceSubscription = DeviceEventEmitter.addListener("BotService", (data) => {
+            liveSessionEvents.current++
             if (data["message"] === "Running") {
                 mlc.setMessageLog([])
                 dispatchSession({ type: "BOT_RUNNING" })
@@ -289,6 +308,7 @@ const Home = () => {
 
         getVersion()
         fetchDeviceMetrics()
+        refreshSessionState()
         refreshInterruptedQueue()
         refreshLastSession()
         refreshSecureSettingsGrant()
@@ -312,6 +332,14 @@ const Home = () => {
         })
         return () => subscription.remove()
     }, [refreshInterruptedQueue, refreshLastSession, refreshSecureSettingsGrant])
+
+    // Start/Stop follows the native armed and running state on every return to the app too.
+    useEffect(() => {
+        const subscription = AppState.addEventListener("change", (nextState) => {
+            if (nextState === "active") refreshSessionState()
+        })
+        return () => subscription.remove()
+    }, [refreshSessionState])
 
     const repairStatus = useMemo(() => (secureSettingsGrant === undefined ? null : accessibilityRepairStatus(secureSettingsGrant, Application.applicationId)), [secureSettingsGrant])
 
@@ -387,7 +415,7 @@ const Home = () => {
         // Pressing the button always Stops while armed, regardless of whether the bot itself has
         // started yet -- but the label must not claim the bot is running before it actually is,
         // nor keep claiming it after a natural end.
-        if (phase === "armed") return "Waiting for overlay..."
+        if (phase === "armed") return "Stop · Waiting for overlay"
         if (phase === "running" || phase === "ended") return "Stop"
         // While the selected preset is being persisted, the launch is gated (handleButtonPress
         // ignores the press) and the label says so, so a user cannot launch a not-yet-saved preset.

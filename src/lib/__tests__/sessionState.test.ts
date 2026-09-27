@@ -91,3 +91,32 @@ describe("sessionStateReducer additional invariants", () => {
         expect(state).toEqual(initialSessionState)
     })
 })
+
+describe("sessionStateReducer native state (a re-created Home)", () => {
+    const native = (armed: boolean, botRunning: boolean): SessionEvent => ({ type: "NATIVE_STATE", armed, botRunning })
+
+    it("a Home created while armed shows the armed phase, so Stop is offered", () => {
+        const state = sessionStateReducer(initialSessionState, native(true, false))
+        expect(state).toEqual({ armed: true, botRunning: false, endedSinceArm: false })
+        expect(sessionPhase(state)).toBe("armed")
+    })
+
+    it("a Home created while the bot runs shows it running", () => {
+        expect(sessionPhase(sessionStateReducer(initialSessionState, native(true, true)))).toBe("running")
+    })
+
+    it("nothing armed on the native side resets a Home that still thought it was armed or running", () => {
+        expect(sessionStateReducer(run([PROJECTION_RUNNING, BOT_RUNNING]), native(false, false))).toEqual(initialSessionState)
+        expect(sessionStateReducer(run([PROJECTION_RUNNING]), native(false, false))).toEqual(initialSessionState)
+    })
+
+    it("a run that ended while Home was away shows as ended, and an earlier end is kept", () => {
+        expect(sessionPhase(sessionStateReducer(run([PROJECTION_RUNNING, BOT_RUNNING]), native(true, false)))).toBe("ended")
+        expect(sessionPhase(sessionStateReducer(run([PROJECTION_RUNNING, BOT_RUNNING, BOT_NOT_RUNNING]), native(true, false)))).toBe("ended")
+    })
+
+    it("a new run seen by the native side clears an old end", () => {
+        const state = sessionStateReducer(run([PROJECTION_RUNNING, BOT_RUNNING, BOT_NOT_RUNNING]), native(true, true))
+        expect(state).toEqual({ armed: true, botRunning: true, endedSinceArm: false })
+    })
+})

@@ -187,5 +187,7 @@ internal fun installStatusStop(status: Int): UpdateStop? =
 
 internal const val CHECKING_TEXT = "Finding the download for your device..."
 internal const val OPENING_INSTALLER_TEXT = "Opening Android's installer..."
-internal const val NEEDS_PERMISSION_TEXT = "Allow UMA Auto+ to install updates: turn on \"Allow from this source\", then come back and tap Continue."
+internal const val NEEDS_PERMISSION_TEXT =
+    "UMA Auto+ needs your permission to install updates. Tap Open settings, turn on \"Allow from this source\" on Android's Install unknown apps screen, " +
+        "then come back and tap Continue. Nothing is downloaded until you do."
 internal const val HANDED_TO_ANDROID_TEXT = "Confirm the update in Android's dialog. UMA Auto+ closes while it updates; open it again afterwards."

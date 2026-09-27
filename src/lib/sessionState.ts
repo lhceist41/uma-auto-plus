@@ -22,7 +22,12 @@ export const initialSessionState: SessionState = {
     endedSinceArm: false,
 }
 
-export type SessionEvent = { type: "PROJECTION_RUNNING" } | { type: "PROJECTION_NOT_RUNNING" } | { type: "BOT_RUNNING" } | { type: "BOT_NOT_RUNNING" }
+export type SessionEvent =
+    | { type: "PROJECTION_RUNNING" }
+    | { type: "PROJECTION_NOT_RUNNING" }
+    | { type: "BOT_RUNNING" }
+    | { type: "BOT_NOT_RUNNING" }
+    | { type: "NATIVE_STATE"; armed: boolean; botRunning: boolean }
 
 /**
  * Advances [state] by one semantic event. Deterministic and idempotent: duplicate or
@@ -51,6 +56,14 @@ export function sessionStateReducer(state: SessionState, event: SessionEvent): S
             // whole session, changes nothing.
             if (!state.botRunning) return state
             return { ...state, botRunning: false, endedSinceArm: true }
+
+        case "NATIVE_STATE":
+            // The native flags are the truth. Home's state starts idle each time its activity is
+            // created and misses any event sent while it was gone, so an activity re-created while
+            // armed showed Start with the overlay still up. A run that was showing as running and
+            // is no longer running ended meanwhile.
+            if (!event.armed) return initialSessionState
+            return { armed: true, botRunning: event.botRunning, endedSinceArm: !event.botRunning && (state.endedSinceArm || state.botRunning) }
     }
 }
 

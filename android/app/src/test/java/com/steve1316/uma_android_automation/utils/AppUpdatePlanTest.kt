@@ -307,6 +307,22 @@ class AppUpdatePlanTest {
         }
 
         @Test
+        fun `the permission step names its button and Android's screen, and comes before any download`() {
+            for (words in listOf("Open settings", "Allow from this source", "Install unknown apps", "tap Continue", "Nothing is downloaded until you do.")) {
+                assertTrue(NEEDS_PERMISSION_TEXT.contains(words), words)
+            }
+            // The words describe the real order: the permission is asked before the release lookup and any download.
+            var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+            val path = "android/app/src/main/java/com/steve1316/uma_android_automation/utils/AppUpdateChecker.kt"
+            while (dir != null && !java.io.File(dir, path).isFile) dir = dir.parentFile
+            val checker = java.io.File(dir, path).readText().replace("\r\n", "\n")
+            val start = checker.substring(checker.indexOf("private fun start() {"))
+            val permission = start.indexOf("!activity.packageManager.canRequestPackageInstalls()) return@launch showNeedsPermission()")
+            assertTrue(permission in 0 until start.indexOf("fetchRelease(target)"))
+            assertTrue(permission < start.indexOf("downloadAsset("))
+        }
+
+        @Test
         fun `every stop after the download began says nothing changed`() {
             val beforeDownload =
                 setOf(

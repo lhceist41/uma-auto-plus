@@ -49,7 +49,7 @@ UMA Auto+ can refuse a Start rather than risk a career on the wrong settings or 
 
 When the game sits idle for a long time, for example overnight, it ends its session and shows a **Session Error** whose only button is Title Screen. Between runs, the bot taps Title Screen itself only when no career is in progress: you pressed Start with the game on its home screen and the queue was not resuming a career, or the previous career finished and the game got back to its home screen. It then taps through the title screen, closes the notices the game shows after logging in, and launches the career. It does this once per launch, and a second Session Error stops the queue. With a career in progress the queue stops with "the game ended its session and needs to go back to its title screen": tap Title Screen in the game, wait for its home screen, then press Start in UMA Auto+.
 
-In the same no-career situation, if the bot cannot recognise the game's screen, it reopens the game once and starts the launch again from the title screen. If the game still shows nothing the bot knows, the queue stops with "the game showed a screen the bot could not recognise, and reopening the game did not bring it back": open the game, check what it shows, then press Start in UMA Auto+.
+In the same no-career situation, if the bot cannot recognise the game's screen, it brings the game back to the front once (starting it again if it had closed) and starts the launch over. If the game still shows nothing the bot knows, the queue stops with "the game showed a screen the bot could not recognise, and reopening the game did not bring it back": open the game, check what it shows, then press Start in UMA Auto+.
 
 The title screen is recognised only at 1080×1920. Neither recovery has been seen working on a device yet.
 
@@ -87,7 +87,7 @@ On **Racing Plan**, use **Clear** to remove the entire current selection, then p
 
 The **Update** button in the **Update Available** dialog downloads the new release for your device and hands it to Android's installer. Android then shows its own confirmation: tap **Install**. UMA Auto+ closes while it updates; open it again afterwards.
 
-The first time, Android asks you to allow UMA Auto+ to install apps. On that screen, turn on **Allow from this source**, go back, and tap **Continue** in the dialog. If you denied it, open **Android Settings**, then **Apps**, then **UMA Auto+**, then **Install unknown apps** (on some devices it is under **Special app access**), turn it on, then tap **Update** again. You can also use **Open release page** to download the file in your browser instead.
+The first time, before anything is downloaded, the dialog asks you to allow UMA Auto+ to install apps: tap **Open settings**, turn on **Allow from this source** on Android's **Install unknown apps** screen, go back, and tap **Continue** in the dialog. If you denied it, open **Android Settings**, then **Apps**, then **UMA Auto+**, then **Install unknown apps** (on some devices it is under **Special app access**), turn it on, then tap **Update** again. You can also use **Open release page** to download the file in your browser instead.
 
 The update is refused while the bot is running, while Start is armed (the overlay button is showing), or while an interrupted queue is saved. Press Stop first, or resume or discard the saved queue on Home.
 

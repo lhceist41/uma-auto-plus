@@ -1020,6 +1020,20 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         promise.resolve(map)
     }
 
+    /**
+     * Whether Start is armed (the capture service is up) and whether the bot is running, from the
+     * same flags the update guard reads. Home starts from idle each time its activity is created, so
+     * it reads these on mount and on return to the foreground: an activity re-created while armed
+     * otherwise showed Start with the overlay still up.
+     */
+    @ReactMethod
+    fun getSessionState(promise: Promise) {
+        val map = Arguments.createMap()
+        map.putBoolean("armed", MediaProjectionService.isRunning)
+        map.putBoolean("botRunning", BotService.isRunning)
+        promise.resolve(map)
+    }
+
     /** Clears any persisted interrupted queue state. */
     @ReactMethod
     fun clearInterruptedQueueState() {

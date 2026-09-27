@@ -67,6 +67,16 @@ class EndNotificationTest {
     }
 
     @Test
+    fun `the library still posts its notification under id 1, the id the notifier removes`() {
+        // NotificationUtils.NOTIFICATION_ID is private in the library; a version that moved it would leave the stale post again.
+        val owner = com.steve1316.automation_library.utils.NotificationUtils::class.java
+        val field = (listOf(owner) + owner.declaredClasses).firstNotNullOf { c -> c.declaredFields.firstOrNull { it.name == "NOTIFICATION_ID" } }
+        field.isAccessible = true
+        assertEquals(1, field.getInt(null))
+        assertTrue(startModule.contains("private const val LIBRARY_NOTIFICATION_ID = 1\n"))
+    }
+
+    @Test
     fun `the notifier removes only the library's notification, after the join`() {
         val start = startModule.indexOf("private fun notifySessionEnd(libraryThread: Thread, report: QueueReport?) {")
         val notifier = startModule.substring(start, startModule.indexOf("\n    }\n", start))

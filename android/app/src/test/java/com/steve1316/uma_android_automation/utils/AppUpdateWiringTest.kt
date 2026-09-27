@@ -186,4 +186,20 @@ class AppUpdateWiringTest {
         val xml = source("android/app/update.xml")
         assertEquals(listOf("latestVersion", "url", "releaseNotes"), Regex("<(\\w+)>").findAll(xml).map { it.groupValues[1] }.filter { it !in setOf("AppUpdater", "update") }.toList())
     }
+
+    @Test
+    fun `Home shows Stop from the same flags the refusal reads, after a re-created screen too`() {
+        // "Press Stop in UMA Auto+" must point at a button that says Stop whenever the capture service is up.
+        val bridge = source("$main/java/com/steve1316/uma_android_automation/StartModule.kt").substringAfter("fun getSessionState(promise: Promise) {").substringBefore("\n    }\n")
+        assertTrue(bridge.contains("map.putBoolean(\"armed\", MediaProjectionService.isRunning)"))
+        assertTrue(bridge.contains("map.putBoolean(\"botRunning\", BotService.isRunning)"))
+        val home = source("src/pages/Home/index.tsx")
+        assertEquals(2, Regex("refreshSessionState\\(\\)").findAll(home).count(), "read on mount and on every return to the app")
+        assertTrue(home.contains("dispatchSession({ type: \"NATIVE_STATE\", armed: state.armed, botRunning: state.botRunning })"))
+        // A live projection or bot event newer than the read wins over it.
+        assertEquals(2, Regex("liveSessionEvents\\.current\\+\\+").findAll(home).count())
+        assertTrue(home.contains("if (liveSessionEvents.current !== eventsBefore) return"))
+        assertTrue(home.contains("if (phase === \"armed\") return \"Stop · Waiting for overlay\""))
+        assertTrue(home.contains("if (phase === \"running\" || phase === \"ended\") return \"Stop\""))
+    }
 }

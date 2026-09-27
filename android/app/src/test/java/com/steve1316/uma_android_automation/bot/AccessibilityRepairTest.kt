@@ -322,12 +322,13 @@ class AccessibilityRepairTest {
 
         @Test
         fun `the navigator gives its stuck failures the repair reason and keeps gestureUtils a getter`() {
-            assertEquals(2, Regex("navigatorStuckKey\\(navRepairRefused, (stuck|tap)ScreenRebindIssued\\)").findAll(navigator).count())
-            assertEquals(5, Regex("navigatorStuckKey\\(navRepairRefused, rebindIssuedOnThisScreen = false\\)").findAll(navigator).count())
+            assertEquals(3, Regex("navigatorStuckKey\\(navRepairRefused, (stuck|tap|title)ScreenRebindIssued\\)").findAll(navigator).count())
+            assertEquals(4, Regex("navigatorStuckKey\\(navRepairRefused, rebindIssuedOnThisScreen = false\\)").findAll(navigator).count())
             assertTrue(navigator.contains("stuckScreenRebindIssued = rebindAccessibility()"))
             assertTrue(navigator.contains("tapScreenRebindIssued = rebindAccessibility()"))
+            assertTrue(navigator.contains("titleScreenRebindIssued = rebindAccessibility()"))
             val reset = body(navigator, "    fun navigate(")
-            for (field in listOf("navRepairRefused = false", "stuckScreenRebindIssued = false", "tapScreenRebindIssued = false")) {
+            for (field in listOf("navRepairRefused = false", "stuckScreenRebindIssued = false", "tapScreenRebindIssued = false", "titleScreenRebindIssued = false")) {
                 assertTrue(reset.indexOf(field) in 0 until reset.indexOf("for (attempt in 0 until MAX_DETECTION_ATTEMPTS)"), field)
             }
             assertTrue(game.contains("val gestureUtils: MyAccessibilityService get() = MyAccessibilityService.getInstance()"))
