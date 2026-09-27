@@ -226,6 +226,10 @@ internal val REPORT_REASON_KEYS =
         "NAVIGATION_TIMEOUT" to KeyText("getting to the next career took too long.", "Check that the game is responding"),
         "NAVIGATION_UNRESPONSIVE" to KeyText("getting to the next career stopped responding.", "Check that the game is responding"),
         "TRAINEE_MISMATCH" to KeyText("the trainee in the career was not the one the rotation expected.", "Check the rotation list, return the game to its home screen"),
+        "CONNECTION_LOST" to KeyText("the game lost its connection to its server and did not reconnect in time.", "Check the device's internet connection and clear the error in the game"),
+        "DOWNLOAD_FAILED" to KeyText("the game could not finish downloading its data.", "Check the device's internet connection and let the game finish its download"),
+        "SESSION_EXPIRED" to KeyText("the game ended its session and needs to go back to its title screen.", "Tap Title Screen in the game and wait for its home screen"),
+        "PURCHASE_PROMPT" to KeyText("the game opened a Carat purchase or age check, which the bot never touches.", "Close it in the game"),
     )
 
 private val DECK_TEXT get() = KeyText("the support deck for the next career could not be set up.", "Set up the deck in the game (or change Required Support Deck)")

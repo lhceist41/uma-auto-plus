@@ -166,7 +166,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
          * navigate() call that hasn't returned by this deadline is wedged below the FSM loop,
          * where its own per-iteration bail-outs can never fire.
          */
-        private const val NAV_DEADLINE_MS: Long = 10 * 60 * 1000L
+        internal const val NAV_DEADLINE_MS: Long = 10 * 60 * 1000L
 
         /** How long after the deadline interrupt to wait before escalating to a queue stop. */
         private const val NAV_INTERRUPT_GRACE_MS: Long = 60 * 1000L

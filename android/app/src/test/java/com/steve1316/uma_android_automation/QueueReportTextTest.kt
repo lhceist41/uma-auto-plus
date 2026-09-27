@@ -103,6 +103,7 @@ class QueueReportTextTest {
         fun `the mapped keys are exactly the keys the bot sets`() {
             val set = mutableSetOf<String>()
             set += Regex("reasonKey = \"(\\w+)\"").findAll(source("$main/CareerLaunchNavigator.kt")).map { it.groupValues[1] }
+            set += Regex("reasonKey = \"(\\w+)\"").findAll(source("$main/BetweenRunDialogs.kt")).map { it.groupValues[1] }
             val startModule = source("$main/StartModule.kt")
             set += Regex("reasonKey = \"(\\w+)\"").findAll(startModule).map { it.groupValues[1] }
             set += Regex("queueStopKey = \"(\\w+)\"").findAll(startModule).map { it.groupValues[1] }

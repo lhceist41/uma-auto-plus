@@ -3,11 +3,13 @@ package com.steve1316.uma_android_automation
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.os.SystemClock
 import com.steve1316.automation_library.utils.BotService
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
+import com.steve1316.uma_android_automation.bot.ConnectionOutageBudget
 import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.FinalizeVerdict
 import com.steve1316.uma_android_automation.bot.Game
@@ -521,6 +523,14 @@ class CareerLaunchNavigator(private val context: Context) {
          * cold on this screen) is finished instead of wedging. */
         RECOVER_TP_QUANTITY,
 
+        /** A titled game dialog from [BetweenRunDialog] (Notices, a connection error, ...), handled
+         * by title instead of counting as an unknown screen. */
+        DIALOG_HANDLED,
+
+        /** The game's own loading or "Connecting" screen (the in-career waitForLoading templates),
+         * such as the reconnect after a Retry: waited out without a tap, never an unknown screen. */
+        GAME_LOADING,
+
         /** Screen could not be identified by any detector. */
         UNKNOWN,
     }
@@ -591,6 +601,12 @@ class CareerLaunchNavigator(private val context: Context) {
     // campaign's umamusume_details handler, which reads the real in-career name and runs
     // verifyRotationTrainee.
     private var careerLaunchInitiated: Boolean = false
+
+    // The dialog detectScreenState saw for DIALOG_HANDLED, and the outage it belongs to. A new
+    // budget per navigate(); the start time bounds retries by StartModule's navigation deadline.
+    private var pendingBetweenRunDialog: BetweenRunDialog? = null
+    private var betweenRunConnectionBudget = ConnectionOutageBudget()
+    private var navigationStartedAtMs: Long = 0L
 
     // --- Cold-start Trainee Select liveness (2026-08-10) ---
     // True while THIS launch still owes a roster verification: rotation is on, or a single-run target
@@ -787,6 +803,9 @@ class CareerLaunchNavigator(private val context: Context) {
         )
 
         // Reset session-scoped flags for this navigation run.
+        navigationStartedAtMs = System.currentTimeMillis()
+        betweenRunConnectionBudget = ConnectionOutageBudget()
+        pendingBetweenRunDialog = null
         autoFillAlreadyDone = false
         skipToggleAlreadyDone = false
         legacyAutoSelectAlreadyDone = false
@@ -942,6 +961,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     recommendedAction = "Restart the queue when ready.",
                 )
             }
+            betweenRunConnectionBudget.beginIteration()
 
             // Detect current screen state. The FSM previously caught only InterruptedException, so
             // capture death (getSourceBitmap throws IllegalStateException after failed captures) or
@@ -999,7 +1019,8 @@ class CareerLaunchNavigator(private val context: Context) {
                 // This is different from normal progress where POST_RUN_RESULTS may repeat across many screens.
                 if (detectedState == currentState &&
                     detectedState != LaunchScreenState.ACTIVE_TRAINING_MENU &&
-                    detectedState != LaunchScreenState.TAP_TO_CONTINUE
+                    detectedState != LaunchScreenState.TAP_TO_CONTINUE &&
+                    !isConnectionRideOut(detectedState, pendingBetweenRunDialog)
                 ) {
                     stuckInStateCount++
                     // Dead gesture dispatch wedges a KNOWN state exactly like this: the same
@@ -1057,7 +1078,8 @@ class CareerLaunchNavigator(private val context: Context) {
                 if (seenStates.add(detectedState)) {
                     iterationsWithoutProgress = 0
                 } else if (detectedState != LaunchScreenState.ACTIVE_TRAINING_MENU &&
-                    detectedState != LaunchScreenState.TAP_TO_CONTINUE
+                    detectedState != LaunchScreenState.TAP_TO_CONTINUE &&
+                    !isConnectionRideOut(detectedState, pendingBetweenRunDialog)
                 ) {
                     iterationsWithoutProgress++
                     if (iterationsWithoutProgress >= progressBailThreshold) {
@@ -1172,6 +1194,9 @@ class CareerLaunchNavigator(private val context: Context) {
                         screenshotPath = captureFailureScreenshot("exception_handle"),
                     )
                 }
+            // A recognised screen with no connection error ends the outage; the reconnect's loading
+            // screen and unknown frames leave it running.
+            if (currentState != LaunchScreenState.GAME_LOADING) betweenRunConnectionBudget.endIterationNormally()
 
             when (transitionResult) {
                 is TransitionResult.Success -> {
@@ -1432,6 +1457,15 @@ class CareerLaunchNavigator(private val context: Context) {
             }
         }
 
+        // Titled game dialogs between runs (BetweenRunDialog). MUST precede the generic chain below,
+        // whose Close/OK would otherwise tap Notices or Date Changed blind, and the menu-bar Home
+        // fallback. Any other title falls through unchanged. After Start Career the campaign's
+        // DialogHandler owns dialogs (the hand-off below), so this stays off then.
+        readBetweenRunDialog(careerLaunchInitiated, { DialogUtils.check(iu, sourceBitmap = bitmap) }, { DialogUtils.getTitle(iu, bitmap) })?.let {
+            pendingBetweenRunDialog = it
+            return LaunchScreenState.DIALOG_HANDLED
+        }
+
         // POST_RUN_RESULTS - generic post-run / between-screens dialog with Next, OK, Confirm,
         // or Close (wide or compact-pill style) as the primary advance button. This is the most
         // common state during between-run navigation (10-20 iterations per career), so we check it early.
@@ -1617,36 +1651,16 @@ class CareerLaunchNavigator(private val context: Context) {
             return LaunchScreenState.ACTIVE_TRAINING_MENU
         }
 
-        // The "Follow Trainer" prompt (Auto-Fill borrowed a support card from a trainer you hadn't used
-        // before) can pop anywhere in the post-run / launch flow with no rule to its timing, and it
-        // matches none of the discriminators above. Before careerLaunchInitiated is set it would otherwise
-        // fall straight to UNKNOWN and, after MAX_CONSECUTIVE_UNKNOWNS, stall the queue. It is a pure
-        // nuisance dialog with no navigational meaning: dismiss it with Cancel (close() clicks the first
-        // button, ButtonCancel) and re-detect — the next detection lands on the real underlying screen.
-        // (When careerLaunchInitiated is true the block above already hands it to the campaign's
-        // DialogHandler, which Cancels it the same way.)
-        if (DialogUtils.check(iu, sourceBitmap = bitmap)) {
-            val dialogTitle =
-                try {
-                    DialogUtils.getTitle(iu, bitmap)
-                } catch (e: InterruptedException) {
-                    throw e
-                } catch (_: Exception) {
-                    null
-                }
-            if (dialogTitle == DialogFollowTrainer.title) {
-                MessageLog.i(TAG, "[NAV] Follow Trainer prompt detected; tapping Cancel to dismiss and continue.")
-                DialogFollowTrainer.close(iu)
-                return LaunchScreenState.UNKNOWN
-            }
-        }
-
         // Reskin-resilient home fallback: every home anchor above is lobby chrome (ButtonCareerHome
         // at the top of the chain, the nav-bar last resort), and event skins restyle chrome - the
         // July 2026 patch already pushed Auto-Select below its match threshold, and the 2026-07-14
         // anniversary reskins the home screen outright. Deep probes only, so normal navigation is
         // byte-identical; these looser detectors (0.55-confidence text crop, then OCR) are safe here
         // precisely because every known screen was already ruled out above.
+        if (gameLoading(bitmap)) {
+            return LaunchScreenState.GAME_LOADING
+        }
+
         if (deepHomeProbe) {
             if (ButtonCareerHomeText.check(iu, sourceBitmap = bitmap)) {
                 MessageLog.i(TAG, "[NAV] Deep home probe: CAREER text-crop matched after every other screen check missed -> HOME_SCREEN.")
@@ -1740,6 +1754,8 @@ class CareerLaunchNavigator(private val context: Context) {
             LaunchScreenState.PRE_RUN_CONFIRMATION -> handlePreRunConfirmation()
             LaunchScreenState.TP_RESTORE_DIALOG -> handleTpRestoreDialog()
             LaunchScreenState.RECOVER_TP_QUANTITY -> handleRecoverTpQuantity()
+            LaunchScreenState.DIALOG_HANDLED -> handleBetweenRunDialog()
+            LaunchScreenState.GAME_LOADING -> handleGameLoading()
             LaunchScreenState.SUPPORT_DECK_SCREEN -> handleSupportDeckScreen(reuseLastLaunchSetup, autoFillSupports)
             LaunchScreenState.CINEMATIC_INTRO -> handleCinematicIntro()
             LaunchScreenState.HOME_SCREEN ->
@@ -1788,6 +1804,70 @@ class CareerLaunchNavigator(private val context: Context) {
                 TransitionResult.Continue
             }
         }
+    }
+
+    /**
+     * DIALOG_HANDLED: acts on the [BetweenRunDialog] detection saw, as [planBetweenRunDialog]
+     * decides, pressing only the step's own taps. A connection Retry waits out the budget's pause
+     * first; a dialog without Retry (Title Screen only) is left up and keeps counting against it.
+     */
+    private fun handleBetweenRunDialog(): TransitionResult {
+        val dialog = pendingBetweenRunDialog ?: return TransitionResult.Continue
+        pendingBetweenRunDialog = null
+        val msBeforeDeadline = StartModule.NAV_DEADLINE_MS - (System.currentTimeMillis() - navigationStartedAtMs)
+        val step = planBetweenRunDialog(dialog, betweenRunConnectionBudget::onError, msBeforeDeadline)
+        if (step is BetweenRunDialogStep.Fail) {
+            MessageLog.e(TAG, "[NAV] ${dialog.title} dialog between runs; stopping the queue (${step.reasonKey}). Nothing was tapped.")
+            return TransitionResult.Failed(
+                reason = "${dialog.title} dialog between runs.",
+                transition = "DIALOG_HANDLED -> ${dialog.name}",
+                recommendedAction = "Deal with the ${dialog.title} dialog in the game, then restart the queue.",
+                reasonKey = step.reasonKey,
+            )
+        }
+        if (step is BetweenRunDialogStep.Retry) {
+            if (step.attempt == 1) SessionTally.connectionHolds.incrementAndGet()
+            MessageLog.w(TAG, "[CONNECTION] ${dialog.title} between runs (attempt ${step.attempt}). Waiting ${step.waitMs / 1000}s before Retry.")
+            waitSafe(step.waitMs / 1000.0)
+            if (!BotService.isRunning || StartModule.queueStopRequested) return TransitionResult.Continue
+        } else {
+            MessageLog.i(TAG, "[NAV] ${dialog.title} dialog between runs; dismissing it.")
+        }
+        if (step.taps.none { it.click(iu) }) {
+            MessageLog.w(TAG, "[NAV] ${dialog.title} shows none of its buttons; re-detecting.")
+        }
+        return TransitionResult.Continue
+    }
+
+    /** The in-career loading templates, as `Game.checkLoading` reads them. */
+    private fun gameLoading(bitmap: Bitmap): Boolean = LabelConnecting.check(iu, sourceBitmap = bitmap) || LabelNowLoading.check(iu, sourceBitmap = bitmap)
+
+    /**
+     * GAME_LOADING: waits out the game's loading screen in this one step, tapping nothing, until it
+     * clears, a dialog banner comes up (handled on the next look) or the bot stops. Loading that
+     * outlasts [betweenRunLoadingLimitMs] stops the queue as a lost connection.
+     */
+    private fun handleGameLoading(): TransitionResult {
+        MessageLog.i(TAG, "[NAV] The game is loading; waiting for it without tapping.")
+        val msBeforeDeadline = StartModule.NAV_DEADLINE_MS - (System.currentTimeMillis() - navigationStartedAtMs)
+        val fail =
+            waitOutBetweenRunLoading(
+                isLoading = {
+                    BotService.isRunning &&
+                        !StartModule.queueStopRequested &&
+                        iu.getSourceBitmap().let { !DialogUtils.check(iu, sourceBitmap = it) && gameLoading(it) }
+                },
+                now = { SystemClock.elapsedRealtime() },
+                pause = { waitSafe(1.0) },
+                limitMs = betweenRunLoadingLimitMs(msBeforeDeadline),
+            ) ?: return TransitionResult.Continue
+        MessageLog.e(TAG, "[CONNECTION] The game kept loading between runs; stopping the queue (${fail.reasonKey}). Nothing was tapped.")
+        return TransitionResult.Failed(
+            reason = "The game kept loading between runs.",
+            transition = "GAME_LOADING -> next screen",
+            recommendedAction = "Check the device's internet connection and the game, then restart the queue.",
+            reasonKey = fail.reasonKey,
+        )
     }
 
     // ////////////////////////////////////////////////////////////////////////////

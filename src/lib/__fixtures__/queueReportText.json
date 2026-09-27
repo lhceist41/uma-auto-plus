@@ -1072,6 +1072,70 @@
             }
         },
         {
+            "name": "between runs: CONNECTION_LOST",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "CONNECTION_LOST"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: the game lost its connection to its server and did not reconnect in time.",
+                "nextAction": "Check the device's internet connection and clear the error in the game, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "between runs: DOWNLOAD_FAILED",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "DOWNLOAD_FAILED"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: the game could not finish downloading its data.",
+                "nextAction": "Check the device's internet connection and let the game finish its download, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "between runs: SESSION_EXPIRED",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "SESSION_EXPIRED"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: the game ended its session and needs to go back to its title screen.",
+                "nextAction": "Tap Title Screen in the game and wait for its home screen, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "between runs: PURCHASE_PROMPT",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "PURCHASE_PROMPT"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: the game opened a Carat purchase or age check, which the bot never touches.",
+                "nextAction": "Close it in the game, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
             "name": "between runs: no key",
             "report": {
                 "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
