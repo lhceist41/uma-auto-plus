@@ -886,10 +886,10 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                         paddingHorizontal: 12,
                         paddingVertical: 10,
                         marginBottom: 6,
-                        backgroundColor: colors.warningBg || "#3d2e00",
+                        backgroundColor: colors.warningBg,
                         borderRadius: 8,
                         borderWidth: 1,
-                        borderColor: colors.warningBorder || "#665200",
+                        borderColor: colors.warningBorder,
                     }}
                 >
                     <Text style={{ fontSize: 13, color: colors.warningText, fontWeight: "600", marginBottom: 6 }}>

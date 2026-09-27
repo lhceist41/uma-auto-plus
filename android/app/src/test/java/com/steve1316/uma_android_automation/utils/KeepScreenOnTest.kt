@@ -110,6 +110,34 @@ class KeepScreenOnTest {
     }
 
     @Nested
+    @DisplayName("reporting a failed hold")
+    inner class HoldFailureReport {
+        @Test
+        fun `a failed hold invokes the callback`() {
+            var invoked = 0
+            holdAndReportFailure(hold = { false }, onHoldFailed = { invoked++ })
+            assertEquals(1, invoked)
+        }
+
+        @Test
+        fun `a successful hold never invokes the callback`() {
+            var invoked = 0
+            holdAndReportFailure(hold = { true }, onHoldFailed = { invoked++ })
+            assertEquals(0, invoked)
+        }
+
+        @Test
+        fun `no callback is fine on a failed hold`() {
+            assertDoesNotThrow { holdAndReportFailure(hold = { false }, onHoldFailed = null) }
+        }
+
+        @Test
+        fun `a throwing callback does not escape`() {
+            assertDoesNotThrow { holdAndReportFailure(hold = { false }, onHoldFailed = { throw RuntimeException("boom") }) }
+        }
+    }
+
+    @Nested
     @DisplayName("wiring")
     inner class Wiring {
         private val main = "android/app/src/main/java/com/steve1316/uma_android_automation"

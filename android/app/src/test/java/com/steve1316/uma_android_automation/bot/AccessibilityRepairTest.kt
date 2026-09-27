@@ -282,6 +282,8 @@ class AccessibilityRepairTest {
             val block = start.substring(start.lastIndexOf("if (accessibilityKey != null) {", halt), start.indexOf("break", halt))
             assertTrue(block.contains("ledger.reasonKey = accessibilityKey"))
             assertTrue(block.contains("queueHaltCareerInFlight = i > startFromRun || coldStartConfirmedCareer"))
+            val unrecoverableBlock = start.substring(start.lastIndexOf("if (gameRecoveryFailed) {", unrecoverable), start.indexOf("break", unrecoverable))
+            assertTrue(unrecoverableBlock.contains("queueHaltCareerInFlight = i > startFromRun || coldStartConfirmedCareer"), "the GAME_UNRECOVERABLE site uses the same confirmed-career expression, not an unconditional true")
             assertTrue(start.contains("gameRecoveryFailed = false\n                accessibilityHaltKey = null"), "reset with the other session flags")
         }
 

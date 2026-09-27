@@ -1721,6 +1721,21 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         }
     }
 
+    /**
+     * Logs a failed keep-screen-on hold from a short daemon thread, never the main looper the
+     * [KeepScreenOn.start] callback itself runs on: MessageLog holds a single process-wide lock, and
+     * the UI thread must never be the one waiting on it.
+     */
+    private fun logKeepScreenOnHoldFailure() {
+        Thread {
+            MessageLog.w(TAG, "[START] Could not keep the screen on; the screen timeout can stop this session.")
+        }.apply {
+            name = "KeepScreenOnFailedLog"
+            isDaemon = true
+            start()
+        }
+    }
+
     @Subscribe
     fun onStartEvent(event: StartEvent) {
         if (event.message == "Entry Point ON") {
@@ -1738,7 +1753,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             var ledgerHeartbeat: Thread? = null
             try {
                 // Removed in the finally, so every exit releases the screen.
-                if (!KeepScreenOn.start(context, onHoldFailed = { MessageLog.w(TAG, "[START] Could not keep the screen on; the screen timeout can stop this session.") })) {
+                if (!KeepScreenOn.start(context, onHoldFailed = { logKeepScreenOnHoldFailure() })) {
                     MessageLog.w(TAG, "[START] UMA Auto+ cannot draw over other apps, so it cannot keep the screen on; the screen timeout can stop this session.")
                 }
                 // Reset queue control flags at the start of every new session.
@@ -2011,7 +2026,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             coldStartConfirmedCareer = true
                         }
                     } else if (coldStartNavigator != null) {
-                        // Not on Home: the game already has a career on the training menu.
+                        // Not confirmed on Home: assume a career already exists, as the unconditional
+                        // true this replaced always did. isOnHomeScreen() == false does not prove the
+                        // training menu specifically - it also covers a screen the probe did not
+                        // recognize - but it is still evidence against an empty Home lobby.
                         coldStartConfirmedCareer = true
                     }
                 }

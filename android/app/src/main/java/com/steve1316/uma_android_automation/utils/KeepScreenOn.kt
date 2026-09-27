@@ -36,7 +36,10 @@ internal object KeepScreenOn {
      * adds nothing. The window is actually added later, on the main looper, so a failed add cannot
      * be reflected in this method's own return value; [onHoldFailed] runs then, on the main looper,
      * if it happens, so the caller (session code) can log it there instead of this utility reaching
-     * into MessageLog itself.
+     * into MessageLog itself. [onHoldFailed] runs inside this method's own try, so a throwing
+     * callback cannot crash the main looper; it should still do its own logging off that thread
+     * (for example from a short daemon thread), since the main looper must never wait on
+     * MessageLog's lock.
      */
     fun start(context: Context, onHoldFailed: (() -> Unit)? = null): Boolean {
         val app = context.applicationContext
@@ -44,7 +47,7 @@ internal object KeepScreenOn {
             if (!Settings.canDrawOverlays(app)) return false
             main.post {
                 val current = hold ?: screenHoldFor(app).also { hold = it }
-                if (!current.hold()) onHoldFailed?.invoke()
+                holdAndReportFailure(current::hold, onHoldFailed)
             }
             true
         } catch (e: Exception) {
@@ -65,6 +68,22 @@ internal object KeepScreenOn {
         val windowManager = app.getSystemService(WindowManager::class.java)
         val view = View(app)
         return ScreenHold(attach = { windowManager.addView(view, keepScreenOnParams()) }, detach = { windowManager.removeView(view) })
+    }
+}
+
+/**
+ * Runs [hold]; if it returns false, runs [onHoldFailed], catching anything it throws so a failing
+ * caller-supplied callback can never escape onto whatever thread this runs on (the main looper,
+ * called from [KeepScreenOn.start]). Pure apart from its two functional parameters, so this is unit
+ * tested directly instead of through the main looper.
+ */
+internal fun holdAndReportFailure(hold: () -> Boolean, onHoldFailed: (() -> Unit)?) {
+    if (!hold()) {
+        try {
+            onHoldFailed?.invoke()
+        } catch (e: Exception) {
+            Log.w("KeepScreenOn", "onHoldFailed threw: ${e.javaClass.simpleName}")
+        }
     }
 }
 
