@@ -21,6 +21,7 @@ import { useSettings } from "../../context/SettingsContext"
 import { useSettingsFileManager } from "../../hooks/useSettingsFileManager"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 import { DATING_SCHEDULE_PRESETS } from "../../lib/datingSchedule"
+import { snackbarBackgroundColor, snackbarMessageFor } from "../../lib/settingsSnackbar"
 
 // The Daily Races and Team Trials tasks match on the persisted strings themselves, so these
 // tables hold the exact values DailyRaceTask/TeamTrialsTask accept. Selecting through them keeps
@@ -48,7 +49,13 @@ const TEAM_TRIALS_OPPONENT_PICKS = [
 const Settings = () => {
     usePerformanceLogging("Settings")
     const [snackbarOpen, setSnackbarOpen] = useState<boolean>(false)
-    const [snackbarMessage, setSnackbarMessage] = useState<string>("")
+    const [snackbarKind, setSnackbarKind] = useState<"ready" | "not-ready" | "reset">("ready")
+    // A reset can itself flip readyStatus (from no scenario selected to the Trackblazer default),
+    // which would otherwise re-fire the readyStatus effect below and overwrite the reset
+    // confirmation with "Scenario selected." within the same couple of seconds. Set right before a
+    // reset and consumed by that effect if it fires because of this reset; cleared shortly after
+    // either way so it never swallows a later, unrelated readyStatus change.
+    const skipNextReadyStatusMessage = useRef(false)
     const scrollViewRef = useRef<ScrollView>(null)
 
     const bsc = useContext(BotStateContext)
@@ -77,7 +84,11 @@ const Settings = () => {
     // Callbacks
 
     useEffect(() => {
-        setSnackbarMessage(bsc.readyStatus ? "Scenario selected." : "No scenario selected. Choose one on Home.")
+        if (skipNextReadyStatusMessage.current) {
+            skipNextReadyStatusMessage.current = false
+            return
+        }
+        setSnackbarKind(bsc.readyStatus ? "ready" : "not-ready")
         // Manually set this flag to false as the snackbar autohiding does not set this to false automatically.
         setSnackbarOpen(true)
         setTimeout(() => setSnackbarOpen(false), 2500)
@@ -87,12 +98,17 @@ const Settings = () => {
      * Reset the settings to their default values.
      */
     const handleResetSettings = async () => {
+        skipNextReadyStatusMessage.current = true
         const success = await resetSettings()
         if (success) {
-            setSnackbarMessage("Settings reset to defaults.")
+            setSnackbarKind("reset")
             setSnackbarOpen(true)
             setTimeout(() => setSnackbarOpen(false), 2500)
         }
+        // Consumed above if this reset changed readyStatus; otherwise this just clears an unused guard.
+        setTimeout(() => {
+            skipNextReadyStatusMessage.current = false
+        }, 0)
     }
 
     //////////////////////////////////////////////////
@@ -698,9 +714,9 @@ const Settings = () => {
                         setSnackbarOpen(false)
                     },
                 }}
-                style={{ backgroundColor: bsc.readyStatus ? "green" : "red", borderRadius: 10 }}
+                style={{ backgroundColor: snackbarBackgroundColor(snackbarKind), borderRadius: 10 }}
             >
-                {snackbarMessage}
+                {snackbarMessageFor(snackbarKind)}
             </Snackbar>
 
             {/* Reset Settings Dialog */}

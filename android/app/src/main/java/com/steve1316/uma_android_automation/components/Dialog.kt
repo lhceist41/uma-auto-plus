@@ -123,9 +123,12 @@ object DialogUtils {
      *
      * @param imageUtils The CustomImageUtils instance used to find the dialog.
      * @param bitmap Optional bitmap to use when looking for a dialog. If not specified, a screenshot will be taken and used instead.
+     * @param logOnMiss Whether an unmatched title logs at ERROR. The between-run read hits this on
+     * every unlisted banner it sees, once per tick, so it passes false to keep that noise out of the
+     * log without changing what happens in-career, where an ERROR here is still worth a look.
      * @return The text of the dialog's title bar if one was found, else NULL.
      */
-    fun getTitle(imageUtils: CustomImageUtils, bitmap: Bitmap? = null): String? {
+    fun getTitle(imageUtils: CustomImageUtils, bitmap: Bitmap? = null, logOnMiss: Boolean = true): String? {
         val bitmap: Bitmap = bitmap ?: imageUtils.getSourceBitmap()
         var templateBitmap: Bitmap? = null
         var titleLocation: Point? = null
@@ -241,7 +244,11 @@ object DialogUtils {
                 return DialogTrophyWon.title
             }
 
-            MessageLog.e(TAG, "[ERROR] getTitle:: Failed to match any dialogs to the extracted title: $text")
+            if (logOnMiss) {
+                MessageLog.e(TAG, "[ERROR] getTitle:: Failed to match any dialogs to the extracted title: $text")
+            } else {
+                MessageLog.v(TAG, "[INFO] getTitle:: Failed to match any dialogs to the extracted title: $text")
+            }
             return null
         }
 

@@ -320,7 +320,7 @@ class BetweenRunDialogsTest {
 
         @Test
         fun `the dialog is read before the generic advance buttons and the menu-bar Home fallback`() {
-            val read = detect.indexOf("readBetweenRunDialog(careerLaunchInitiated, { DialogUtils.check(iu, sourceBitmap = bitmap) }, { DialogUtils.getTitle(iu, bitmap) })")
+            val read = detect.indexOf("readBetweenRunDialog(careerLaunchInitiated, { DialogUtils.check(iu, sourceBitmap = bitmap) }, { DialogUtils.getTitle(iu, bitmap, logOnMiss = false) })")
             assertTrue(read >= 0)
             assertTrue(read < detect.indexOf("if (ButtonNext.check(iu, sourceBitmap = bitmap) ||"))
             assertTrue(read < detect.indexOf("ButtonMenuBarHomeSelected.check(iu, sourceBitmap = bitmap)"))

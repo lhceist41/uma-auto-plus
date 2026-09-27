@@ -1471,7 +1471,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // whose Close/OK would otherwise tap Notices or Date Changed blind, and the menu-bar Home
         // fallback. Any other title falls through unchanged. After Start Career the campaign's
         // DialogHandler owns dialogs (the hand-off below), so this stays off then.
-        readBetweenRunDialog(careerLaunchInitiated, { DialogUtils.check(iu, sourceBitmap = bitmap) }, { DialogUtils.getTitle(iu, bitmap) })?.let {
+        readBetweenRunDialog(careerLaunchInitiated, { DialogUtils.check(iu, sourceBitmap = bitmap) }, { DialogUtils.getTitle(iu, bitmap, logOnMiss = false) })?.let {
             pendingBetweenRunDialog = it
             return LaunchScreenState.DIALOG_HANDLED
         }

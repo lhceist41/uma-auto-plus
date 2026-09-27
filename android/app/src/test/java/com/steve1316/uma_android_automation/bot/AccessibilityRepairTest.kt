@@ -281,7 +281,7 @@ class AccessibilityRepairTest {
             assertTrue(unrecoverable in 0 until halt && halt < onError, "$unrecoverable $halt $onError")
             val block = start.substring(start.lastIndexOf("if (accessibilityKey != null) {", halt), start.indexOf("break", halt))
             assertTrue(block.contains("ledger.reasonKey = accessibilityKey"))
-            assertTrue(block.contains("queueHaltCareerInFlight = true"))
+            assertTrue(block.contains("queueHaltCareerInFlight = i > startFromRun || coldStartConfirmedCareer"))
             assertTrue(start.contains("gameRecoveryFailed = false\n                accessibilityHaltKey = null"), "reset with the other session flags")
         }
 

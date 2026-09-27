@@ -24,6 +24,12 @@ describe("presentQueueProgress", () => {
         expect(p.isTerminal).toBe(false)
     })
 
+    it("presents a run being retried, distinctly from a fresh start", () => {
+        const p = presentQueueProgress({ currentRun: 2, totalRuns: 6, status: "retrying" })
+        expect(p).toEqual({ kind: "running", title: "Run 2/6 - Retrying...", isTerminal: false })
+        expect(p.title).not.toBe(presentQueueProgress({ currentRun: 2, totalRuns: 6, status: "starting" }).title)
+    })
+
     it("presents an intermediate run completing with a safe resultCode label, not the raw message", () => {
         const p = presentQueueProgress({
             currentRun: 3,

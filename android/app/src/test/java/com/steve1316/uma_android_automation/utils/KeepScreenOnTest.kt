@@ -44,8 +44,8 @@ class KeepScreenOnTest {
         }
 
         @Test
-        fun `touches still reach the game below on Android 12 and newer`() {
-            assertTrue(params.alpha > 0f && params.alpha <= 0.8f, "at most the default maximum obscuring opacity: ${params.alpha}")
+        fun `touches still reach the game below on Android 12 and newer, with margin below the default threshold`() {
+            assertTrue(params.alpha > 0f && params.alpha <= 0.1f, "small and positive, well under the default maximum obscuring opacity of 0.8: ${params.alpha}")
         }
 
         @Test
@@ -118,7 +118,7 @@ class KeepScreenOnTest {
 
         @Test
         fun `the permission is checked before anything is posted, and the window is only touched on the main looper`() {
-            val start = keeper.substringAfter("fun start(context: Context): Boolean {").substringBefore("\n    }\n")
+            val start = keeper.substringAfter("fun start(context: Context, onHoldFailed: (() -> Unit)? = null): Boolean {").substringBefore("\n    }\n")
             val check = start.indexOf("if (!Settings.canDrawOverlays(app)) return false")
             assertTrue(check in 0 until start.indexOf("main.post {"))
             assertTrue(keeper.substringAfter("fun stop() {").substringBefore("\n    }\n").contains("main.post { hold?.release() }"))
@@ -137,7 +137,7 @@ class KeepScreenOnTest {
         fun `the session holds the screen from its first statement and releases it in the finally`() {
             val session = startModule.substring(startModule.indexOf("fun onStartEvent(event: StartEvent)"))
             val tryAt = session.indexOf("\n            try {\n")
-            val add = session.indexOf("if (!KeepScreenOn.start(context)) {")
+            val add = session.indexOf("if (!KeepScreenOn.start(context, onHoldFailed = {")
             assertTrue(add > tryAt && session.substring(tryAt, add).count { it == '\n' } <= 3, "the first statement inside the session try")
             assertTrue(session.substring(add).substringBefore("\n                }\n").contains("MessageLog.w(TAG, \"[START] UMA Auto+ cannot draw over other apps"))
             val finallyAt = session.indexOf("\n            } finally {\n")

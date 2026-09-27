@@ -3,7 +3,7 @@
  * Home actually renders.
  *
  * The producer emits a small set of status strings (`starting`, `resuming`, `navigating`,
- * `waiting`, the per-run `completed`, and the terminal `queueComplete` / `queueStopped` /
+ * `waiting`, `retrying`, the per-run `completed`, and the terminal `queueComplete` / `queueStopped` /
  * `queueHalted` / `queueFailed`) plus an optional `resultCode` (a `TaskResultCode` name) and an
  * optional `message`. Whether `message` is safe to show depends on the status: the terminal
  * statuses carry a dev-authored sentence or a breakpoint's own description, while the per-run
@@ -67,6 +67,8 @@ export function presentQueueProgress(event: QueueProgressEvent): QueueProgressPr
             return { kind: "running", title: `Run ${currentRun}/${totalRuns} - Navigating...`, isTerminal: false }
         case "waiting":
             return { kind: "running", title: `Run ${currentRun}/${totalRuns} - Waiting...`, isTerminal: false }
+        case "retrying":
+            return { kind: "running", title: `Run ${currentRun}/${totalRuns} - Retrying...`, isTerminal: false }
         case "completed": {
             const label = (event.resultCode && PER_RUN_LABEL_BY_RESULT_CODE[event.resultCode]) || DEFAULT_PER_RUN_LABEL
             return { kind: "running", title: `Run ${currentRun}/${totalRuns} - ${label}`, isTerminal: false }

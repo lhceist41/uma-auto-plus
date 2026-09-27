@@ -31,14 +31,20 @@ internal object KeepScreenOn {
     /** Main looper only. */
     private var hold: ScreenHold? = null
 
-    /** Adds the window unless the overlay permission is missing, in which case it returns false and adds nothing. */
-    fun start(context: Context): Boolean {
+    /**
+     * Adds the window unless the overlay permission is missing, in which case it returns false and
+     * adds nothing. The window is actually added later, on the main looper, so a failed add cannot
+     * be reflected in this method's own return value; [onHoldFailed] runs then, on the main looper,
+     * if it happens, so the caller (session code) can log it there instead of this utility reaching
+     * into MessageLog itself.
+     */
+    fun start(context: Context, onHoldFailed: (() -> Unit)? = null): Boolean {
         val app = context.applicationContext
         return try {
             if (!Settings.canDrawOverlays(app)) return false
             main.post {
                 val current = hold ?: screenHoldFor(app).also { hold = it }
-                current.hold()
+                if (!current.hold()) onHoldFailed?.invoke()
             }
             true
         } catch (e: Exception) {
@@ -96,9 +102,11 @@ internal class ScreenHold(private val attach: () -> Unit, private val detach: ()
 
 /**
  * Android 12+ passes touches through a window of another app only when its opacity is at most
- * InputManager's maximum obscuring opacity, 0.8 by default. The pixel draws nothing either way.
+ * InputManager's maximum obscuring opacity, 0.8 by default. The pixel draws nothing either way,
+ * so a small positive value gives the same invisible pixel with margin: 0.8 sits exactly on the
+ * default threshold, which an OEM or a developer can lower via Settings.Global, leaving no room.
  */
-internal const val KEEP_SCREEN_ON_ALPHA = 0.8f
+internal const val KEEP_SCREEN_ON_ALPHA = 0.1f
 
 internal fun keepScreenOnParams(sdkInt: Int = Build.VERSION.SDK_INT): WindowManager.LayoutParams =
     WindowManager.LayoutParams().apply {

@@ -1736,7 +1736,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             var ledgerHeartbeat: Thread? = null
             try {
                 // Removed in the finally, so every exit releases the screen.
-                if (!KeepScreenOn.start(context)) {
+                if (!KeepScreenOn.start(context, onHoldFailed = { MessageLog.w(TAG, "[START] Could not keep the screen on; the screen timeout can stop this session.") })) {
                     MessageLog.w(TAG, "[START] UMA Auto+ cannot draw over other apps, so it cannot keep the screen on; the screen timeout can stop this session.")
                 }
                 // Reset queue control flags at the start of every new session.
@@ -1942,6 +1942,14 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // not, and telling the operator to go clear a slot that is already empty sends them
                 // looking for the wrong thing.
                 var queueHaltCareerInFlight = false
+                // True once a career is actually confirmed to exist: the cold-start probe below
+                // found the game already off the Home screen (an existing career), or launched one
+                // itself. Run queues always reach this before the first run's own Game.start(), so a
+                // run past the first one also has it, from a prior run's own launch. A diagnostic or
+                // misc-mode run never probes at all, and neither does a plain single run with the
+                // queue disabled, so those stay false rather than claim a slot that was never
+                // actually confirmed.
+                var coldStartConfirmedCareer = false
 
                 // Rotation cycle parsed above (before the resume block). The cold-start snapshot for
                 // the first launched run is applied just below, before the home-screen probe reads
@@ -1996,7 +2004,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 queueHaltRun = startFromRun - 1
                             }
                             queueStopRequested = true
+                        } else {
+                            coldStartConfirmedCareer = true
                         }
+                    } else if (coldStartNavigator != null) {
+                        // Not on Home: the game already has a career on the training menu.
+                        coldStartConfirmedCareer = true
                     }
                 }
 
@@ -2085,7 +2098,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             queueRun = i,
                             nowMs = System.currentTimeMillis(),
                         )
-                        sendQueueProgressEvent(i, totalRuns, "starting")
+                        sendQueueProgressEvent(i, totalRuns, "retrying")
                         result = runSingleGame()
                     }
 
@@ -2172,7 +2185,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 ledger.haltEnd = SessionEnd.GAME_UNRECOVERABLE
                                 queueHaltResultCode = effectiveResult.code.name
                                 queueHaltRun = i
-                                queueHaltCareerInFlight = true
+                                queueHaltCareerInFlight = i > startFromRun || coldStartConfirmedCareer
                                 break
                             }
                             val accessibilityKey = accessibilityHaltKey
@@ -2186,7 +2199,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 ledger.reasonKey = accessibilityKey
                                 queueHaltResultCode = effectiveResult.code.name
                                 queueHaltRun = i
-                                queueHaltCareerInFlight = true
+                                queueHaltCareerInFlight = i > startFromRun || coldStartConfirmedCareer
                                 break
                             }
                             if (stopOnError) {

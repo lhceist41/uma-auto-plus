@@ -892,11 +892,11 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                         borderColor: colors.warningBorder || "#665200",
                     }}
                 >
-                    <Text style={{ fontSize: 13, color: colors.warningText || "#ffd000", fontWeight: "600", marginBottom: 6 }}>
+                    <Text style={{ fontSize: 13, color: colors.warningText, fontWeight: "600", marginBottom: 6 }}>
                         Queue interrupted at run {interruptedQueue.currentRun} of {interruptedQueue.totalRuns} ({interruptedReport?.minutesAgo ?? Math.round(interruptedQueue.ageMinutes)} min ago)
                     </Text>
-                    {interruptedReport && <Text style={{ fontSize: 12, color: colors.warningText || "#ffd000", marginBottom: 6 }}>{interruptedReport.reason}</Text>}
-                    <Text style={{ fontSize: 12, color: colors.warningText || "#ffd000", marginBottom: 8 }}>
+                    {interruptedReport && <Text style={{ fontSize: 12, color: colors.warningText, marginBottom: 6 }}>{interruptedReport.reason}</Text>}
+                    <Text style={{ fontSize: 12, color: colors.warningText, marginBottom: 8 }}>
                         {noAutoResumeReason === "queueDisabled"
                             ? "Run Queue is turned off, so this saved run will not resume. Pressing Start plays a single career instead and leaves the saved run alone."
                             : noAutoResumeReason === "totalsDiffer"
@@ -907,8 +907,8 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                     </Text>
                     {noAutoResumeReason !== null && (
                         <View style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: 8 }}>
-                            <AlertTriangle size={14} color={colors.warningText || "#ffd000"} style={{ marginRight: 6, marginTop: 2 }} />
-                            <Text style={{ flex: 1, fontSize: 12, color: colors.warningText || "#ffd000" }}>
+                            <AlertTriangle size={14} color={colors.warningText} style={{ marginRight: 6, marginTop: 2 }} />
+                            <Text style={{ flex: 1, fontSize: 12, color: colors.warningText }}>
                                 {noAutoResumeReason === "queueDisabled"
                                     ? "Run Queue is currently disabled."
                                     : noAutoResumeReason === "totalsDiffer"
@@ -927,7 +927,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                         >
                             <Text style={{ fontSize: 12, color: colors.foreground }}>Discard</Text>
                         </TouchableOpacity>
-                        <Text style={{ flex: 1, fontSize: 11, color: colors.warningText || "#ffd000", opacity: 0.8 }}>Clears the saved run so the next Start begins fresh.</Text>
+                        <Text style={{ flex: 1, fontSize: 11, color: colors.warningText, opacity: 0.8 }}>Clears the saved run so the next Start begins fresh.</Text>
                     </View>
                 </View>
             )}
@@ -959,8 +959,8 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                     {lastSession.tpRestores && <Text style={{ fontSize: 12, color: colors.mutedForeground, marginTop: 4 }}>{lastSession.tpRestores}</Text>}
                     {lastSession.caratsUsed > 0 && (
                         <View style={{ flexDirection: "row", alignItems: "flex-start", marginTop: 4 }}>
-                            <AlertTriangle size={14} color={colors.warningText || "#ffd000"} style={{ marginRight: 6, marginTop: 2 }} />
-                            <Text style={{ flex: 1, fontSize: 12, color: colors.warningText || "#ffd000", fontWeight: "600" }}>
+                            <AlertTriangle size={14} color={colors.warningText} style={{ marginRight: 6, marginTop: 2 }} />
+                            <Text style={{ flex: 1, fontSize: 12, color: colors.warningText, fontWeight: "600" }}>
                                 Carats were spent on {lastSession.caratsUsed === 1 ? "1 TP restore" : `${lastSession.caratsUsed} TP restores`}.
                             </Text>
                         </View>
@@ -990,7 +990,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                         backgroundColor: colors.background,
                     }}
                 >
-                    <Text style={{ fontSize: 12, fontWeight: "600", color: repairStatus.state === "missing" ? colors.warningText || "#ffd000" : colors.foreground }}>{repairStatus.title}</Text>
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: repairStatus.state === "missing" ? colors.warningText : colors.foreground }}>{repairStatus.title}</Text>
                     <Text style={{ fontSize: 12, color: colors.mutedForeground, marginTop: 2 }}>{repairStatus.text}</Text>
                     {repairStatus.command && (
                         <Text selectable style={{ fontSize: 11, fontFamily: "monospace", color: colors.foreground, marginTop: 4 }}>
