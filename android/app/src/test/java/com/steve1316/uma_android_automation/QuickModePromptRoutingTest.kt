@@ -58,7 +58,7 @@ class QuickModePromptRoutingTest {
                 "a second emission point would bypass the guard",
             )
             val emit = nav.indexOf("return LaunchScreenState.QUICK_MODE_PROMPT")
-            val guard = nav.lastIndexOf("isLaunchQuickModePrompt(resumeInProgressCareerMode, skipToggleAlreadyDone)", emit)
+            val guard = nav.lastIndexOf("isLaunchQuickModePrompt(resumeInProgressCareerMode || careerInFlightMode, skipToggleAlreadyDone)", emit)
             assertTrue(guard in (emit - 200) until emit, "the emission is guarded by the routing decision")
             val pillVisible = nav.lastIndexOf("if (skipState.pillVisible) {", emit)
             assertTrue(pillVisible in (emit - 400) until guard, "a frame with no pill never reaches the decision")

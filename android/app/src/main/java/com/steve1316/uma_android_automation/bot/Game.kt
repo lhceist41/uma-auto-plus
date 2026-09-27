@@ -25,6 +25,7 @@ import com.steve1316.uma_android_automation.bot.campaigns.GrandConcert
 import com.steve1316.uma_android_automation.bot.campaigns.Trackblazer
 import com.steve1316.uma_android_automation.bot.campaigns.UnityCup
 import com.steve1316.uma_android_automation.bot.campaigns.UraFinale
+import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCompleteCareer
 import com.steve1316.uma_android_automation.components.ButtonLog
 import com.steve1316.uma_android_automation.components.ButtonRest
@@ -38,6 +39,8 @@ import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkill
 import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPointsV2
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.ProgressTracker
+import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.TrainingSelectionProbe
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -55,8 +58,11 @@ import kotlin.intArrayOf
  * Main driver for bot activity and navigation.
  *
  * @property myContext The Android [Context] for the application.
+ * @property careerInFlight True when this run re-enters a career already in the game's slot (the
+ *   queue's resumed in-flight career, or a run played again after an error), so its start never
+ *   reads a Skip pill as the launch Quick Mode prompt.
  */
-class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Selection? = null) {
+class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Selection? = null, val careerInFlight: Boolean = false) {
     /** The current Android notification message to display. */
     var notificationMessage: String = ""
 
@@ -164,6 +170,16 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                 }
                 pause()
             }
+        }
+
+        /**
+         * Presses the game's Back once on the positively identified Training selection screen and
+         * reports whether the training menu came back. It presses nothing on any other screen.
+         */
+        internal fun backOutOfTrainingSelection(onTrainingSelection: () -> Boolean, pressBack: () -> Boolean, settle: () -> Unit, onTrainingMenu: () -> Boolean): Boolean {
+            if (!onTrainingSelection() || !pressBack()) return false
+            settle()
+            return onTrainingMenu()
         }
 
         /** Package name of the Umamusume game (Global). The restart net relaunches this. If the JP
@@ -613,6 +629,12 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         }
     }
 
+    /** True on the in-career Training selection screen ([TrainingSelectionProbe]). */
+    private fun isOnTrainingSelection(): Boolean {
+        val bitmap = imageUtils.getSourceBitmap()
+        return TrainingSelectionProbe.isTrainingSelection(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)
+    }
+
     /**
      * Checks if the bot is currently on the in-career main screen (a normal training turn OR a
      * mandatory race day). Kept in sync with the CareerLaunchNavigator's ACTIVE_TRAINING_MENU
@@ -958,6 +980,15 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         // the game's Home Screen and have their own state machines to navigate from
         // there to their target mode. The user is expected to have the game open on
         // the Home Screen (or any screen with the bottom nav visible) when starting.
+        //
+        // A stop, crash or restart during the training analysis leaves the career on the Training
+        // selection screen, whose Skip pill the navigator would read as the launch Quick Mode prompt
+        // (2026-09-27: two pill taps, then body taps until the run failed). The game's Back returns to
+        // the training menu there, as the training handler's own back-out does.
+        val onTrainingSelection = !isMiscTask && isOnTrainingSelection()
+        if (onTrainingSelection && backOutOfTrainingSelection(::isOnTrainingSelection, { ButtonBack.click(imageUtils) }, { wait(1.0) }, ::isOnTrainingMenu)) {
+            MessageLog.i(TAG, "[INFO] Bot started on the Training selection screen. Pressed Back to return to the training menu.")
+        }
         if (!isMiscTask && !isOnTrainingMenu()) {
             if (isOnCareerEndScreen()) {
                 // Started on a career-end screen (End screen or the Learn skill list). The
@@ -980,7 +1011,13 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                 if (expectedTrainee.isNotBlank()) {
                     MessageLog.i(TAG, "[INFO] Single-run launch will verify Trainee Select against '$expectedTrainee' (applied preset).")
                 }
-                val navResult = navigator.navigate(reuseSetup, singleRunTrainee = expectedTrainee, singleRunTraineeExcludes = expectedExcludes)
+                val navResult =
+                    navigator.navigate(
+                        reuseSetup,
+                        singleRunTrainee = expectedTrainee,
+                        singleRunTraineeExcludes = expectedExcludes,
+                        careerInFlight = careerInFlight || onTrainingSelection,
+                    )
                 if (!navResult.success) {
                     MessageLog.e(TAG, "[INFO] Auto-navigation failed: ${navResult.failureReason}")
                     MessageLog.e(TAG, "[INFO] Last state: ${navResult.lastDetectedState}, transition: ${navResult.failedTransition}")

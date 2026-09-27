@@ -323,7 +323,7 @@ class AccessibilityRepairTest {
         @Test
         fun `the navigator gives its stuck failures the repair reason and keeps gestureUtils a getter`() {
             assertEquals(2, Regex("navigatorStuckKey\\(navRepairRefused, (stuck|tap)ScreenRebindIssued\\)").findAll(navigator).count())
-            assertEquals(3, Regex("navigatorStuckKey\\(navRepairRefused, rebindIssuedOnThisScreen = false\\)").findAll(navigator).count())
+            assertEquals(4, Regex("navigatorStuckKey\\(navRepairRefused, rebindIssuedOnThisScreen = false\\)").findAll(navigator).count())
             assertTrue(navigator.contains("stuckScreenRebindIssued = rebindAccessibility()"))
             assertTrue(navigator.contains("tapScreenRebindIssued = rebindAccessibility()"))
             val reset = body(navigator, "    fun navigate(")

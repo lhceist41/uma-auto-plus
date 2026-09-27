@@ -67,6 +67,7 @@ import com.steve1316.uma_android_automation.utils.PersistentSkipStateLog
 import com.steve1316.uma_android_automation.utils.pillVisible
 import com.steve1316.uma_android_automation.utils.PostCareerScreenProbes
 import com.steve1316.uma_android_automation.utils.TitleScreenProbe
+import com.steve1316.uma_android_automation.utils.TrainingSelectionProbe
 import com.steve1316.uma_android_automation.utils.ProgressEvent
 import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.QuickModeGeometry
@@ -538,6 +539,10 @@ class CareerLaunchNavigator(private val context: Context) {
         /** The game's title screen ("TAP TO START") between runs, pixel-probed ([TitleScreenProbe]). */
         TITLE_SCREEN,
 
+        /** The in-career Training selection screen, pixel-probed ([TrainingSelectionProbe]): a
+         * career left there by a stop or restart. Its Skip pill is never the launch prompt. */
+        TRAINING_SELECTION_SCREEN,
+
         /** Screen could not be identified by any detector. */
         UNKNOWN,
     }
@@ -596,6 +601,14 @@ class CareerLaunchNavigator(private val context: Context) {
      * lobby re-entry), not to launch a new one. No launch Quick Mode prompt exists on that path, so
      * the skip-maxing handler stays unreachable there however the pill reads. Set per navigate(). */
     private var resumeInProgressCareerMode: Boolean = false
+
+    /** True when the queue re-enters a career already in the game's slot (Game.start's
+     * careerInFlight): a Skip pill is then never the launch Quick Mode prompt. Unlike
+     * [resumeInProgressCareerMode] it changes nothing else. Set per navigate(). */
+    private var careerInFlightMode: Boolean = false
+
+    // Session-scoped: the game's Back was pressed on the Training selection screen this navigation.
+    private var trainingSelectionBackPressed = false
 
     private val skipStateLog = PersistentSkipStateLog(TAG, "launch")
 
@@ -807,6 +820,8 @@ class CareerLaunchNavigator(private val context: Context) {
      *   Mode prompt is coming and the skip-maxing handler must stay unreachable.
      * @param coldStartOnHome If true, the queue's cold Start found the game on Home and re-enters no
      *   interrupted career, so no career is in flight ([BetweenRunRecovery]).
+     * @param careerInFlight If true, the queue re-enters a career already in the game's slot, so no
+     *   launch Quick Mode prompt is coming ([careerInFlightMode]).
      * @return A [NavigationResult] indicating success or failure with diagnostics.
      */
     fun navigate(
@@ -817,6 +832,7 @@ class CareerLaunchNavigator(private val context: Context) {
         previousCareerComplete: Boolean = false,
         resumeInProgressCareer: Boolean = false,
         coldStartOnHome: Boolean = false,
+        careerInFlight: Boolean = false,
     ): NavigationResult {
         val autoFillSupports = SettingsHelper.getBooleanSetting("runQueue", "autoFillSupports", false)
         MessageLog.i(
@@ -839,6 +855,7 @@ class CareerLaunchNavigator(private val context: Context) {
         navRepairRefused = false
         stuckScreenRebindIssued = false
         tapScreenRebindIssued = false
+        trainingSelectionBackPressed = false
         autoFillAlreadyDone = false
         skipToggleAlreadyDone = false
         legacyAutoSelectAlreadyDone = false
@@ -891,6 +908,7 @@ class CareerLaunchNavigator(private val context: Context) {
         finalizeToHomeMode = finalizeToHome
         previousCareerCompleteMode = previousCareerComplete
         resumeInProgressCareerMode = resumeInProgressCareer
+        careerInFlightMode = careerInFlight
         // Resolve the trainee THIS launch must roster-verify. The queue launch paths (StartModule's
         // cold-start and between-run navigate() calls) pass a blank singleRunTrainee, so a queued
         // rotation-off run would otherwise arm no target and tap through Trainee Select onto the
@@ -1173,6 +1191,7 @@ class CareerLaunchNavigator(private val context: Context) {
                                     previousCareerComplete,
                                     resumeInProgressCareer,
                                     coldStartOnHome,
+                                    careerInFlight,
                                 )
                             }
                             return gameUnrecoverable(currentState, "The game could not be relaunched after $unknownLimit unrecognised screens.")
@@ -1265,7 +1284,16 @@ class CareerLaunchNavigator(private val context: Context) {
                     waitSafe(1.5)
                 }
                 is TransitionResult.StartLaunchOver -> {
-                    return startLaunchOver(reuseLastLaunchSetup, finalizeToHome, singleRunTrainee, singleRunTraineeExcludes, previousCareerComplete, resumeInProgressCareer, coldStartOnHome)
+                    return startLaunchOver(
+                        reuseLastLaunchSetup,
+                        finalizeToHome,
+                        singleRunTrainee,
+                        singleRunTraineeExcludes,
+                        previousCareerComplete,
+                        resumeInProgressCareer,
+                        coldStartOnHome,
+                        careerInFlight,
+                    )
                 }
                 is TransitionResult.Failed -> {
                     val screenshotPath = captureFailureScreenshot("failed_${currentState.name}")
@@ -1308,9 +1336,10 @@ class CareerLaunchNavigator(private val context: Context) {
         previousCareerComplete: Boolean,
         resumeInProgressCareer: Boolean,
         coldStartOnHome: Boolean,
+        careerInFlight: Boolean,
     ): NavigationResult {
         restartingLaunch = true
-        return navigate(reuseLastLaunchSetup, finalizeToHome, singleRunTrainee, singleRunTraineeExcludes, previousCareerComplete, resumeInProgressCareer, coldStartOnHome)
+        return navigate(reuseLastLaunchSetup, finalizeToHome, singleRunTrainee, singleRunTraineeExcludes, previousCareerComplete, resumeInProgressCareer, coldStartOnHome, careerInFlight)
     }
 
     /** The stop after the one relaunch did not bring back a screen the navigator knows. */
@@ -1685,6 +1714,12 @@ class CareerLaunchNavigator(private val context: Context) {
         // into a RUNNING career starts with the latch false, so its first in-career cutscene pill
         // read as the launch prompt and took the two blind pill taps, walking an already-maxed pill
         // back toward Off. No Quick Mode prompt follows such a call at all.
+        //
+        // The Training selection screen shows the same pill. A career left there is not launching, so
+        // it is recognised first and backed out of, never taken for the prompt or body-tapped.
+        if (isTrainingSelection(bitmap)) {
+            return LaunchScreenState.TRAINING_SELECTION_SCREEN
+        }
         val skipState =
             classifyPersistentSkip(
                 offPillMatched = { ButtonSkipOff.check(iu, sourceBitmap = bitmap) },
@@ -1693,10 +1728,10 @@ class CareerLaunchNavigator(private val context: Context) {
             )
         skipStateLog.record(skipState)
         if (skipState.pillVisible) {
-            if (isLaunchQuickModePrompt(resumeInProgressCareerMode, skipToggleAlreadyDone)) {
+            if (isLaunchQuickModePrompt(resumeInProgressCareerMode || careerInFlightMode, skipToggleAlreadyDone)) {
                 return LaunchScreenState.QUICK_MODE_PROMPT
             }
-            val reason = if (resumeInProgressCareerMode) "career resume in progress" else "skip already maxed"
+            val reason = if (resumeInProgressCareerMode || careerInFlightMode) "career resume in progress" else "skip already maxed"
             MessageLog.i(TAG, "[NAV] Skip pill with $reason -> TAP_TO_CONTINUE (in-career tap-to-continue screen).")
             return LaunchScreenState.TAP_TO_CONTINUE
         }
@@ -1860,6 +1895,7 @@ class CareerLaunchNavigator(private val context: Context) {
             LaunchScreenState.DIALOG_HANDLED -> handleBetweenRunDialog()
             LaunchScreenState.GAME_LOADING -> handleGameLoading()
             LaunchScreenState.TITLE_SCREEN -> handleTitleScreen()
+            LaunchScreenState.TRAINING_SELECTION_SCREEN -> handleTrainingSelectionScreen()
             LaunchScreenState.SUPPORT_DECK_SCREEN -> handleSupportDeckScreen(reuseLastLaunchSetup, autoFillSupports)
             LaunchScreenState.CINEMATIC_INTRO -> handleCinematicIntro()
             LaunchScreenState.HOME_SCREEN ->
@@ -1967,6 +2003,34 @@ class CareerLaunchNavigator(private val context: Context) {
         CoordinateTap.tap(gestureUtils, TitleScreenProbe.TAP_TO_START_X, TitleScreenProbe.TAP_TO_START_Y, "title_tap_to_start")
         betweenRunRecovery.tappedToStart(now)
         waitSafe(3.0)
+        return TransitionResult.Continue
+    }
+
+    /** True when [bitmap] is the in-career Training selection screen ([TrainingSelectionProbe]). */
+    private fun isTrainingSelection(bitmap: Bitmap): Boolean =
+        TrainingSelectionProbe.isTrainingSelection(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)
+
+    /**
+     * TRAINING_SELECTION_SCREEN: presses the game's Back once per navigation, which returns to the
+     * training menu (seen live 2026-09-27). Never the Skip pill or a body tap. Still there after that
+     * Back, the navigation stops.
+     */
+    private fun handleTrainingSelectionScreen(): TransitionResult {
+        if (trainingSelectionBackPressed) {
+            return TransitionResult.Failed(
+                reason = "Still on the Training selection screen after pressing Back.",
+                transition = "TRAINING_SELECTION_SCREEN -> ACTIVE_TRAINING_MENU",
+                recommendedAction = "Press Back in the game to return to the training menu, then restart the queue.",
+                reasonKey = navigatorStuckKey(navRepairRefused, rebindIssuedOnThisScreen = false),
+            )
+        }
+        MessageLog.i(TAG, "[NAV] Training selection screen: a career is in progress. Pressing Back to return to the training menu.")
+        if (ButtonBack.click(iu)) {
+            trainingSelectionBackPressed = true
+        } else {
+            MessageLog.w(TAG, "[NAV] No Back button found on the Training selection screen; re-detecting.")
+        }
+        waitSafe(1.0)
         return TransitionResult.Continue
     }
 

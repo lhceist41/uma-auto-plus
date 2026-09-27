@@ -1313,6 +1313,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     @Volatile
     private var lastRunPostedException = false
 
+    /** Set just before [runSingleGame] when that run re-enters a career already in the game's slot; the call consumes it. */
+    @Volatile
+    private var nextRunCareerInFlight = false
+
     /**
      * Runs a single Game instance on a background thread and returns its TaskResult.
      *
@@ -1321,11 +1325,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     private fun runSingleGame(selection: DebugTestGate.Selection? = null): TaskResult {
         var taskResult: TaskResult? = null
         lastRunPostedException = false
+        val careerInFlight = nextRunCareerInFlight.also { nextRunCareerInFlight = false }
 
         val botThread =
             Thread {
                 try {
-                    val entryPoint = Game(context, selection)
+                    val entryPoint = Game(context, selection, careerInFlight)
                     taskResult = entryPoint.start()
                 } catch (e: Exception) {
                     EventBus.getDefault().postSticky(ExceptionEvent(e))
@@ -2100,6 +2105,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     // more as this same run: the saved phase stays CAREER, the rotation snapshot is
                     // unchanged, and Game.start() re-enters the career without treating it as
                     // finished. Moving on instead would let the next run finish this career.
+                    // A resumed in-flight career and a run played again are both still in the slot.
+                    nextRunCareerInFlight = i == startFromRun && resumeReEntersCareer
                     var result = runSingleGame()
                     val runScenario = SettingsHelper.getStringSetting("general", "scenario")
                     val retried =
@@ -2125,6 +2132,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             nowMs = System.currentTimeMillis(),
                         )
                         sendQueueProgressEvent(i, totalRuns, "retrying")
+                        nextRunCareerInFlight = true
                         result = runSingleGame()
                     }
 
