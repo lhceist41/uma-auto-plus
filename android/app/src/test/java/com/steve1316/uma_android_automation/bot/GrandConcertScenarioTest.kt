@@ -442,7 +442,7 @@ class GrandConcertScenarioTest {
         fun `the queue tells the navigator when the previous career is already finished`() {
             val start = source("StartModule.kt")
             assertTrue(
-                start.contains("navigateWithDeadline(nextReuse, previousCareerComplete = careerFinished)"),
+                start.contains("navigateWithDeadline(nextReuse, previousCareerComplete = careerFinished, careerInFlight = !careerFinished)"),
                 "the between-run navigation must declare that the previous career is complete when it is",
             )
             // The cold-start pass must NOT claim it: a career launched there is driven by a campaign

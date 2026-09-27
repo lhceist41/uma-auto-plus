@@ -150,6 +150,7 @@ class KeepScreenOnTest {
             val check = start.indexOf("if (!Settings.canDrawOverlays(app)) return false")
             assertTrue(check in 0 until start.indexOf("main.post {"))
             assertTrue(keeper.substringAfter("fun stop() {").substringBefore("\n    }\n").contains("main.post { hold?.release() }"))
+            assertTrue(start.substringAfter("main.post {").contains("holdAndReportFailure(current::hold, onHoldFailed)"), "the hold and its failure report run on the main looper")
             assertEquals(2, Regex("main\\.post \\{").findAll(keeper).count())
             assertEquals(1, Regex("addView\\(").findAll(keeper).count())
             assertEquals(1, Regex("removeView\\(").findAll(keeper).count())
@@ -171,6 +172,8 @@ class KeepScreenOnTest {
             val finallyAt = session.indexOf("\n            } finally {\n")
             val release = session.indexOf("KeepScreenOn.stop()")
             assertTrue(release > finallyAt && release < session.indexOf("sessionActive.set(false)"), "released in the finally, before the latch opens")
+            val holdFailureLog = startModule.substringAfter("private fun logKeepScreenOnHoldFailure() {").substringBefore("\n    }\n")
+            assertTrue(holdFailureLog.trimStart().startsWith("Thread {") && holdFailureLog.contains("isDaemon = true"), "the failure is logged from a daemon thread, never the main looper")
             assertEquals(1, Regex("KeepScreenOn\\.start\\(").findAll(startModule).count())
             assertEquals(1, Regex("KeepScreenOn\\.stop\\(").findAll(startModule).count())
         }

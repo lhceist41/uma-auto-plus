@@ -357,6 +357,18 @@ class BetweenRunRecoveryTest {
         }
 
         @Test
+        fun `the title while the game logs in is a bounded wait, not a stuck screen`() {
+            val navigate = body(navigator, "fun navigate(")
+            assertTrue(navigate.contains("val titleLoggingIn = detectedState == LaunchScreenState.TITLE_SCREEN && betweenRunRecovery.gameComingBack\n"))
+            // Exempt from the stuck-screen rebind and stop and from the no-progress stop, like a cutscene or a connection ride-out.
+            assertEquals(2, count(navigate, "detectedState != LaunchScreenState.TAP_TO_CONTINUE &&\n                    !titleLoggingIn &&\n"))
+            // Bounded by the come-back limit instead, and by the navigation deadline around it.
+            val bound = navigate.substring(navigate.indexOf("if (titleLoggingIn) {"))
+            assertTrue(bound.startsWith("if (titleLoggingIn) {\n                    titleLoginLooks++\n                    if (titleLoginLooks >= BetweenRunRecovery.COMING_BACK_UNKNOWN_LIMIT) {"))
+            assertTrue(bound.substringBefore("} else {\n                    titleLoginLooks = 0").contains("reasonKey = navigatorStuckKey(navRepairRefused, rebindIssuedOnThisScreen = false),"))
+        }
+
+        @Test
         fun `the title handler taps only the TAP TO START text, and only after the cooldown`() {
             val handler = body(navigator, "private fun handleTitleScreen(")
             assertFalse(Regex("\\.click\\(|findAndTapImage|\\.close\\(|\\.ok\\(|Button[A-Z]").containsMatchIn(handler))
@@ -376,12 +388,13 @@ class BetweenRunRecoveryTest {
         @Test
         fun `only the queue's cold Start that re-enters no career counts as career-free`() {
             assertEquals(1, count(startModule, "coldStartOnHome = !resumeReEntersCareer"))
-            assertTrue(startModule.contains("val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator, coldStartOnHome = !resumeReEntersCareer)"))
+            assertTrue(startModule.contains("val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator, coldStartOnHome = !resumeReEntersCareer, careerInFlight = resumeReEntersCareer)"))
             assertTrue(startModule.contains("val reEnter = saved.phase == PHASE_CAREER\n                        resumeReEntersCareer = reEnter"))
             assertEquals(1, count(startModule, "resumeReEntersCareer = reEnter"))
             assertTrue(startModule.indexOf("var resumeReEntersCareer = false") in 0 until startModule.indexOf("resumeReEntersCareer = reEnter"))
-            assertTrue(startModule.contains("val navResult = navigateWithDeadline(nextReuse, previousCareerComplete = careerFinished)"))
-            assertTrue(startModule.contains("navigator.navigate(reuseLastLaunchSetup, finalizeToHome, previousCareerComplete = previousCareerComplete, coldStartOnHome = coldStartOnHome)"))
+            assertTrue(startModule.contains("val navResult = navigateWithDeadline(nextReuse, previousCareerComplete = careerFinished, careerInFlight = !careerFinished)"))
+            val passOn = "previousCareerComplete = previousCareerComplete, coldStartOnHome = coldStartOnHome, careerInFlight = careerInFlight)"
+            assertTrue(startModule.contains("navigator.navigate(reuseLastLaunchSetup, finalizeToHome, $passOn"))
         }
     }
 }

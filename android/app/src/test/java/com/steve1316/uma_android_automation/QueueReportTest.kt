@@ -164,6 +164,34 @@ class QueueReportTest {
             val own = CareerEndStash(seq = 5, trainee = "Silence_Suzuka", scenario = "Unity_Cup", outcome = "WIN", turn = 78)
             assertEquals(own, careerEndForRun(seqBeforeRun = 4, stash = own))
         }
+
+        @Test
+        fun `the run keeps its stored identifier and adds the name as the game shows it`() {
+            val named = runRecordJson(RunRecord(1, 1_100L, 2_000L, "TASK_RESULT_MANUALLY_STOPPED", "El_Condor_Pasa", "URA_Finale", "INCOMPLETE", 4, traineeName = "El Condor Pasa"))
+            assertEquals("El_Condor_Pasa", named.getString("trainee"))
+            assertEquals("El Condor Pasa", named.getString("traineeName"))
+            // A name that was never read adds nothing, so older readers see the record as before.
+            assertFalse(runRecordJson(RunRecord(1, 1_100L, 2_000L, "TASK_RESULT_COMPLETE", null, null, null, null)).has("traineeName"))
+        }
+
+        @Test
+        fun `the career end stashes the shown name beside the identifier, and each run takes both`() {
+            fun source(relative: String): String {
+                var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+                val path = "android/app/src/main/java/com/steve1316/uma_android_automation/$relative"
+                repeat(8) {
+                    if (java.io.File(dir, path).isFile) return java.io.File(dir, path).readText().replace("\r\n", "\n")
+                    dir = dir?.parentFile
+                }
+                throw AssertionError("$path not found")
+            }
+            val campaign = source("bot/Campaign.kt")
+            assertTrue(campaign.contains("val resolvedName = shownName.ifEmpty { \"unknown\" }.replace(\" \", \"_\")"), "the identifier is derived exactly as before")
+            assertTrue(campaign.contains("StartModule.lastCareerEndTrainee = resolvedName\n        StartModule.lastCareerEndTraineeName = shownName.ifEmpty { null }\n"))
+            val startModule = source("StartModule.kt")
+            assertTrue(startModule.contains("lastCareerEndTurn, lastCareerEndTraineeName)"))
+            assertTrue(startModule.contains("careerEnd?.turn, retried, progress, careerEnd?.traineeName)"))
+        }
     }
 
     @Nested

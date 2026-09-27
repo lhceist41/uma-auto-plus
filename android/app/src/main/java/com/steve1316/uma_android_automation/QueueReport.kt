@@ -167,10 +167,12 @@ internal data class RunRecord(
     val retried: Boolean = false,
     /** The run window's detect-only progress measurements ([com.steve1316.uma_android_automation.utils.ProgressTracker.endWindow]): keys and numbers. */
     val progress: JSONObject? = null,
+    /** [trainee] as the game shows the name, for the Home card; [trainee] stays the stored identifier. */
+    val traineeName: String? = null,
 )
 
 /** The career-end facts `Campaign.careerEndLedgerLine` stashed, with the sequence number it bumped. */
-internal data class CareerEndStash(val seq: Long, val trainee: String?, val scenario: String?, val outcome: String?, val turn: Int?)
+internal data class CareerEndStash(val seq: Long, val trainee: String?, val scenario: String?, val outcome: String?, val turn: Int?, val traineeName: String? = null)
 
 /**
  * The career-end facts belonging to a run, or null. The stash outlives its run on purpose (the
@@ -428,6 +430,7 @@ internal fun runRecordJson(r: RunRecord): JSONObject =
         .put("turn", r.turn ?: JSONObject.NULL)
         .put("retried", r.retried)
         .apply { r.progress?.let { put("progress", it) } }
+        .apply { r.traineeName?.let { put("traineeName", it) } }
 
 /**
  * Whether a stored open-session record belongs to a session that died without writing its report.

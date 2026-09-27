@@ -1,3 +1,5 @@
+import charactersData from "../data/characters.json"
+
 /**
  * Turns the bridge's last-session payload (StartModule.kt `getLastQueueReport`, built by
  * QueueReportText.kt `lastReportPayload`) into what Home's "Last session" card renders.
@@ -62,12 +64,24 @@ function runLabel(resultCode: unknown, outcome: unknown): string {
     return RUN_LABEL_BY_RESULT_CODE[resultCode] ?? "Outcome unknown"
 }
 
+const CHARACTER_NAMES = Object.keys(charactersData)
+
+/**
+ * The trainee as the game shows the name. A run carries it as `traineeName`; an older report has only
+ * the stored identifier (spaces made underscores), matched back to the character data or else shown as it is.
+ */
+function traineeName(run: Record<string, unknown>): string {
+    if (typeof run.traineeName === "string" && run.traineeName.trim().length > 0) return run.traineeName.trim()
+    const id = typeof run.trainee === "string" ? run.trainee.trim() : ""
+    return CHARACTER_NAMES.find((name) => name.replace(/ /g, "_") === id) ?? id
+}
+
 function runLines(runs: unknown): string[] {
     if (!Array.isArray(runs)) return []
     return runs.filter(isRecord).flatMap((run) => {
         const n = count(run.run)
         if (n === 0) return []
-        const trainee = typeof run.trainee === "string" ? run.trainee.trim() : ""
+        const trainee = traineeName(run)
         const who = trainee.length > 0 && trainee.length <= 40 ? `${trainee}, ` : ""
         return [`Run ${n}: ${who}${runLabel(run.resultCode, run.outcome)}${run.retried === true ? " after a retry" : ""}`]
     })

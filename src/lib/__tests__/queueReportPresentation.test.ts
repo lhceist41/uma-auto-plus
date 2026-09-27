@@ -144,6 +144,26 @@ describe("parseLastSession: one line per run", () => {
         expect(view({ runs }).runs).toEqual(["Run 1: Completed", "Run 2: Completed", "Run 3: Completed", "Run 4: Outcome unknown"])
         expect(view({ runs: "none" }).runs).toEqual([])
     })
+
+    it("shows the trainee as the game names her, never the stored identifier", () => {
+        const runs = [
+            run(1, "TASK_RESULT_MANUALLY_STOPPED", { trainee: "El_Condor_Pasa", traineeName: "El Condor Pasa" }),
+            // An older report has only the identifier: it is matched back to the character data.
+            run(2, "TASK_RESULT_COMPLETE", { trainee: "El_Condor_Pasa" }),
+            // A name the character data does not know is shown as stored, never rewritten.
+            run(3, "TASK_RESULT_COMPLETE", { trainee: "Somebody_New" }),
+            run(4, "TASK_RESULT_COMPLETE", { trainee: "El_Condor_Pasa", traineeName: "   " }),
+            // The carried name wins even where the character data has no entry.
+            run(5, "TASK_RESULT_COMPLETE", { trainee: "Somebody_New", traineeName: "Somebody New" }),
+        ]
+        expect(view({ runs }).runs).toEqual([
+            "Run 1: El Condor Pasa, Stopped",
+            "Run 2: El Condor Pasa, Completed",
+            "Run 3: Somebody_New, Completed",
+            "Run 4: El Condor Pasa, Completed",
+            "Run 5: Somebody New, Completed",
+        ])
+    })
 })
 
 describe("parseLastSession: recoveries", () => {

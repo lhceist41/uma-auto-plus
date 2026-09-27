@@ -272,7 +272,7 @@ class QueueLedgerWiringTest {
         fun `the session opens after the resume decision, before the first launch`() {
             val resume = session.indexOf("var completedRuns = priorCompletedRuns")
             val open = session.indexOf("QueueLedger.beginSession(context, ledger.sessionId, ledger.openJson())")
-            val coldStart = session.indexOf("val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator, coldStartOnHome = !resumeReEntersCareer)")
+            val coldStart = session.indexOf("val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator, coldStartOnHome = !resumeReEntersCareer, careerInFlight = resumeReEntersCareer)")
             assertTrue(open in resume until coldStart)
             assertTrue(session.indexOf("ledgerHeartbeat = startLedgerHeartbeat(ledger.sessionId)", open) in open until coldStart)
         }
@@ -297,7 +297,8 @@ class QueueLedgerWiringTest {
         @Test
         fun `a run takes career facts only through the sequence check`() {
             val recordRun = after("private fun recordRun(", startModule).substringBefore("\n    }\n")
-            assertTrue(recordRun.contains("careerEndForRun(careerEndSeqBeforeRun, CareerEndStash(lastCareerEndSeq,"))
+            assertTrue(recordRun.contains("val stash = CareerEndStash(lastCareerEndSeq,"))
+            assertTrue(recordRun.contains("val careerEnd = careerEndForRun(careerEndSeqBeforeRun, stash)"))
             assertTrue(recordRun.contains("careerEnd?.trainee, careerEnd?.scenario, careerEnd?.outcome, careerEnd?.turn"), "the record takes career facts only from the checked stash")
         }
 

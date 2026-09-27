@@ -125,6 +125,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         @Volatile
         var lastCareerEndTrainee: String? = null
 
+        /** The same trainee as the game shows the name ("El Condor Pasa"), for player-facing text; null when unread. */
+        @Volatile
+        var lastCareerEndTraineeName: String? = null
+
         /** Scenario token and config-arm fingerprint of the last completed career, snapshotted
          * alongside [lastCareerEndTrainee] at [CAREER_END] so the navigator's sparks corpus records
          * carry the SAME fp/scenario as that career's outcome record. Snapshotting (not recomputing
@@ -190,6 +194,26 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
         /** Gap after the library's own end notification, so Android does not drop the replacement as a too-fast update. */
         private const val END_NOTIFICATION_DELAY_MS: Long = 500L
+
+        /** The foundation library's notification id (a private constant there, so repeated here). */
+        private const val LIBRARY_NOTIFICATION_ID = 1
+
+        /**
+         * What the end notifier does once the library's thread, whose cleanup posts "Completed
+         * successfully with no errors." last, has finished. With the capture service up, it shows how
+         * the session ended. With the service gone (the app's Stop, the overlay's dismiss), that late
+         * post would stay as a false standalone notification, so it is removed. The service can also go
+         * down right after the update, before its own cancel-all, so the update is checked again and
+         * removed then. A new session's notification is never touched.
+         */
+        internal fun finishEndNotification(captureRunning: () -> Boolean, sessionRunning: () -> Boolean, update: () -> Unit, remove: () -> Unit) {
+            if (sessionRunning()) return
+            if (captureRunning()) {
+                update()
+                if (captureRunning() || sessionRunning()) return
+            }
+            remove()
+        }
 
         /**
          * Persists the current queue state to SQLite so it can survive app crashes.
@@ -1466,6 +1490,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         finalizeToHome: Boolean = false,
         previousCareerComplete: Boolean = false,
         coldStartOnHome: Boolean = false,
+        careerInFlight: Boolean = false,
     ): NavigationResult {
         val navDone = java.util.concurrent.atomic.AtomicBoolean(false)
         // Set true ONLY when the deadline thread itself interrupts the queue thread. The catch
@@ -1512,7 +1537,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         deadlineThread.start()
 
         return try {
-            navigator.navigate(reuseLastLaunchSetup, finalizeToHome, previousCareerComplete = previousCareerComplete, coldStartOnHome = coldStartOnHome)
+            navigator.navigate(reuseLastLaunchSetup, finalizeToHome, previousCareerComplete = previousCareerComplete, coldStartOnHome = coldStartOnHome, careerInFlight = careerInFlight)
         } catch (e: InterruptedException) {
             // Clear the interrupt flag so queue teardown (log saving, events) is not poisoned.
             Thread.interrupted()
@@ -1648,9 +1673,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
     /** Adds run [run]'s record, with the career-end facts only if this run produced them. */
     private fun recordRun(ledger: SessionLedger, run: Int, startedAt: Long, careerEndSeqBeforeRun: Long, code: TaskResultCode, retried: Boolean) {
-        val careerEnd = careerEndForRun(careerEndSeqBeforeRun, CareerEndStash(lastCareerEndSeq, lastCareerEndTrainee, lastCareerEndScenario, lastCareerEndOutcome, lastCareerEndTurn))
+        val stash = CareerEndStash(lastCareerEndSeq, lastCareerEndTrainee, lastCareerEndScenario, lastCareerEndOutcome, lastCareerEndTurn, lastCareerEndTraineeName)
+        val careerEnd = careerEndForRun(careerEndSeqBeforeRun, stash)
         val progress = ProgressTracker.endWindow()
-        ledger.addRun(RunRecord(run, startedAt, System.currentTimeMillis(), code.name, careerEnd?.trainee, careerEnd?.scenario, careerEnd?.outcome, careerEnd?.turn, retried, progress))
+        ledger.addRun(
+            RunRecord(run, startedAt, System.currentTimeMillis(), code.name, careerEnd?.trainee, careerEnd?.scenario, careerEnd?.outcome, careerEnd?.turn, retried, progress, careerEnd?.traineeName),
+        )
         ledger.errorPosted = lastRunPostedException
         QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
     }
@@ -1697,12 +1725,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
     /**
      * Replaces the library's end notification, which reads "Completed successfully with no errors."
-     * however the session ended, with how it did end. The library posts its text from
+     * however the session ended, with how it did end, or removes it. The library posts its text from
      * [libraryThread] after the session returns, so a daemon thread waits for that thread to finish
-     * first, and posts only while the capture service that owns the notification is still up and no
-     * new session has started. The app's Stop and the overlay's dismiss stop that service, which
-     * removes the notification, so nothing is posted then; a tap on the overlay's Stop leaves the
-     * service up, and its cleanup posts on the main thread before the session ends. Never throws.
+     * first; [finishEndNotification] then updates it while the capture service is still up (a tap on
+     * the overlay's Stop), and removes it once the service is gone (the app's Stop, the overlay's
+     * dismiss), whose cancel-all can run before that late post. Never throws.
      */
     private fun notifySessionEnd(libraryThread: Thread, report: QueueReport?) {
         try {
@@ -1711,9 +1738,12 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 try {
                     libraryThread.join()
                     Thread.sleep(END_NOTIFICATION_DELAY_MS)
-                    if (MediaProjectionService.isRunning && !BotService.isRunning) {
-                        NotificationUtils.updateNotification(context, MainActivity::class.java, false, text.body, title = text.title, displayBigText = true)
-                    }
+                    finishEndNotification(
+                        captureRunning = { MediaProjectionService.isRunning },
+                        sessionRunning = { BotService.isRunning },
+                        update = { NotificationUtils.updateNotification(context, MainActivity::class.java, false, text.body, title = text.title, displayBigText = true) },
+                        remove = { NotificationManagerCompat.from(context).cancel(LIBRARY_NOTIFICATION_ID) },
+                    )
                 } catch (e: Throwable) {
                     Log.w(TAG, "Failed to update the end notification: ${e.message}")
                 }
@@ -2018,7 +2048,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     if (coldStartNavigator != null && coldStartNavigator.isOnHomeScreen()) {
                         MessageLog.i(TAG, "[QUEUE] Game is on the home screen. Launching a career for run $startFromRun...")
                         sendQueueProgressEvent(startFromRun, totalRuns, "navigating")
-                        val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator, coldStartOnHome = !resumeReEntersCareer)
+                        val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator, coldStartOnHome = !resumeReEntersCareer, careerInFlight = resumeReEntersCareer)
                         if (!navResult.success) {
                             logNavigationFailure(navResult)
                             // A user Stop mid-navigation is a clean cancellation, not a navigation
@@ -2044,6 +2074,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     }
                 }
 
+                // True when the previous run left its career in the slot (not finished), so the next
+                // run carries it on rather than launching. Read once, by that next run.
+                var previousRunLeftCareer = false
                 var runRetriesLeft = RUN_RETRY_BUDGET
                 for (i in startFromRun..totalRuns) {
                     // Check stop flag before starting each run.
@@ -2105,8 +2138,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     // more as this same run: the saved phase stays CAREER, the rotation snapshot is
                     // unchanged, and Game.start() re-enters the career without treating it as
                     // finished. Moving on instead would let the next run finish this career.
-                    // A resumed in-flight career and a run played again are both still in the slot.
-                    nextRunCareerInFlight = i == startFromRun && resumeReEntersCareer
+                    // A resumed in-flight career, a run played again, and a career the previous run
+                    // left unfinished are all still in the slot.
+                    nextRunCareerInFlight = (i == startFromRun && resumeReEntersCareer) || previousRunLeftCareer
+                    previousRunLeftCareer = false
                     var result = runSingleGame()
                     val runScenario = SettingsHelper.getStringSetting("general", "scenario")
                     val retried =
@@ -2311,6 +2346,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         }
                         ledger.completedRuns = completedRuns
                         QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
+                        previousRunLeftCareer = !careerFinished
 
                         // Trainee rotation: swap to the next run's trainee (settings + select mode)
                         // before reading the scenario or navigating. Stop the queue if its snapshot
@@ -2349,7 +2385,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             // screen routes to the campaign and navigation reports success without
                             // having launched anything. An unfinished one must not be claimed
                             // finished; the next run carries on with it.
-                            val navResult = navigateWithDeadline(nextReuse, previousCareerComplete = careerFinished)
+                            val navResult = navigateWithDeadline(nextReuse, previousCareerComplete = careerFinished, careerInFlight = !careerFinished)
 
                             if (!navResult.success) {
                                 logNavigationFailure(navResult)

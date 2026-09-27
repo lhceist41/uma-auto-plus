@@ -143,14 +143,31 @@ class ResumeTrainingSelectionTest {
         }
 
         @Test
-        fun `the queue marks exactly the resumed in-flight run and a run played again`() {
-            assertTrue(startModule.contains("nextRunCareerInFlight = i == startFromRun && resumeReEntersCareer\n                    var result = runSingleGame()"))
+        fun `the queue marks exactly the resumed in-flight run, a run played again and a run after an unfinished career`() {
+            // Read once by the next run and cleared, so no later launch can inherit it.
+            val mark = "nextRunCareerInFlight = (i == startFromRun && resumeReEntersCareer) || previousRunLeftCareer\n"
+            assertTrue(startModule.contains(mark + "                    previousRunLeftCareer = false\n                    var result = runSingleGame()"))
+            // An unfinished career is the one the loop already treats as left in the slot.
+            val careerFinished = startModule.indexOf("val careerFinished = effectiveResult.code == TaskResultCode.TASK_RESULT_COMPLETE\n")
+            assertTrue(startModule.indexOf("previousRunLeftCareer = !careerFinished\n") in careerFinished until startModule.indexOf("navigateWithDeadline(nextReuse,"))
+            assertEquals(3, count(startModule, "previousRunLeftCareer = "), "its false start, the clear on reading and the per-run update only")
             assertTrue(startModule.contains("nextRunCareerInFlight = true\n                        result = runSingleGame()"))
             assertEquals(1, count(startModule, "var result = runSingleGame()"))
             val run = body(startModule, "private fun runSingleGame(")
             assertTrue(run.contains("val careerInFlight = nextRunCareerInFlight.also { nextRunCareerInFlight = false }"), "consumed by one run only")
             assertTrue(run.contains("val entryPoint = Game(context, selection, careerInFlight)"))
             assertEquals(5, count(startModule, "nextRunCareerInFlight"), "declaration, the two marks and the consume (read and clear)")
+        }
+
+        @Test
+        fun `the resumed cold start and the pass after an unfinished career carry the flag, and only to the pill decision`() {
+            assertTrue(startModule.contains("navigateWithDeadline(coldStartReuse, coldStartNavigator, coldStartOnHome = !resumeReEntersCareer, careerInFlight = resumeReEntersCareer)"))
+            assertTrue(startModule.contains("navigateWithDeadline(nextReuse, previousCareerComplete = careerFinished, careerInFlight = !careerFinished)"))
+            assertTrue(startModule.contains("coldStartOnHome = coldStartOnHome, careerInFlight = careerInFlight)"), "navigateWithDeadline passes it on")
+            // The no-career recovery, the relaunch and the title probe never read it.
+            val recovery = "BetweenRunRecovery(coldStartOnHome, previousCareerComplete, finalizeToHome, campaignOwnsCareer = resumeInProgressCareer || liveGameAttached)"
+            assertTrue(navigator.contains("betweenRunRecovery = $recovery"))
+            assertFalse(Regex("careerInFlight(Mode)?\\b").containsMatchIn(source("BetweenRunRecovery.kt")))
         }
     }
 }

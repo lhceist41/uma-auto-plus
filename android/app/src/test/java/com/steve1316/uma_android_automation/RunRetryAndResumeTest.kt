@@ -155,7 +155,7 @@ class RunRetryAndResumeTest {
         @Test
         fun `no navigation claims an unfinished career is finished`() {
             assertFalse(startModule.contains("previousCareerComplete = true"))
-            assertTrue(loop.contains("navigateWithDeadline(nextReuse, previousCareerComplete = careerFinished)"))
+            assertTrue(loop.contains("navigateWithDeadline(nextReuse, previousCareerComplete = careerFinished, careerInFlight = !careerFinished)"))
         }
 
         @Test

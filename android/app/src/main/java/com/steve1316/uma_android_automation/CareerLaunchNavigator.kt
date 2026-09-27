@@ -989,6 +989,8 @@ class CareerLaunchNavigator(private val context: Context) {
         var stuckInStateCount = 0
         // TAP_TO_CONTINUE's own counter (it is exempt from stuckInStateCount). Resets on any other state.
         var tapToContinueCount = 0
+        // Looks at the title while the game logs in after the tap (exempt from stuckInStateCount).
+        var titleLoginLooks = 0
         // Secondary bail-out: total iterations since the last time we made meaningful progress
         // (i.e. reached a state we hadn't seen yet OR actually advanced to a new state). The
         // per-state `stuckInStateCount` resets whenever the detected state changes, so a screen
@@ -1066,11 +1068,15 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.i(TAG, "[NAV] Attempt $attempt: Detected state = $detectedState (previous = $currentState)")
 
             if (detectedState != LaunchScreenState.UNKNOWN) {
+                // The title stays up while the game logs in after "TAP TO START" (or downloads data):
+                // a wait, not a stuck screen. Its own count below bounds it.
+                val titleLoggingIn = detectedState == LaunchScreenState.TITLE_SCREEN && betweenRunRecovery.gameComingBack
                 // Track if we're stuck in the same state (e.g. POST_RUN_RESULTS clicking but not advancing).
                 // This is different from normal progress where POST_RUN_RESULTS may repeat across many screens.
                 if (detectedState == currentState &&
                     detectedState != LaunchScreenState.ACTIVE_TRAINING_MENU &&
                     detectedState != LaunchScreenState.TAP_TO_CONTINUE &&
+                    !titleLoggingIn &&
                     !isConnectionRideOut(detectedState, pendingBetweenRunDialog)
                 ) {
                     stuckInStateCount++
@@ -1124,6 +1130,24 @@ class CareerLaunchNavigator(private val context: Context) {
                 } else {
                     tapToContinueCount = 0
                 }
+                if (titleLoggingIn) {
+                    titleLoginLooks++
+                    if (titleLoginLooks >= BetweenRunRecovery.COMING_BACK_UNKNOWN_LIMIT) {
+                        val screenshotPath = captureFailureScreenshot("stuck_on_TITLE_SCREEN")
+                        return NavigationResult(
+                            success = false,
+                            lastDetectedState = detectedState.name,
+                            failureReason = "The title screen stayed up for $titleLoginLooks looks after the tap.",
+                            failedTransition = "TITLE_SCREEN -> next screen",
+                            isRecoverable = true,
+                            recommendedAction = "Open the game and check it, then restart the queue.",
+                            reasonKey = navigatorStuckKey(navRepairRefused, rebindIssuedOnThisScreen = false),
+                            screenshotPath = screenshotPath,
+                        )
+                    }
+                } else {
+                    titleLoginLooks = 0
+                }
                 // Progress counter: resets only when we enter a state we haven't seen this
                 // navigation session yet. Just oscillating between known states does NOT reset.
                 if (seenStates.add(detectedState)) {
@@ -1131,6 +1155,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     ProgressTracker.noteProgress(ProgressEvent.NAV_NEW_STATE)
                 } else if (detectedState != LaunchScreenState.ACTIVE_TRAINING_MENU &&
                     detectedState != LaunchScreenState.TAP_TO_CONTINUE &&
+                    !titleLoggingIn &&
                     !isConnectionRideOut(detectedState, pendingBetweenRunDialog)
                 ) {
                     iterationsWithoutProgress++

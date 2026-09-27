@@ -417,7 +417,7 @@ const ProfileManagerModal: React.FC<ProfileManagerModalProps> = ({
                                                             value={profileName}
                                                             onChangeText={setProfileName}
                                                             onSubmitEditing={handleUpdateProfile}
-                                                            style={[styles.profileNameInput, { color: colors.foreground, backgroundColor: colors.background || "#ffffff" }]}
+                                                            style={[styles.profileNameInput, { color: colors.foreground, backgroundColor: colors.background }]}
                                                             autoFocus
                                                         />
                                                     ) : (

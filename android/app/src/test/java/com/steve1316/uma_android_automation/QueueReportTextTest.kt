@@ -274,7 +274,8 @@ class QueueReportTextTest {
         fun `the notifier waits for the library's thread before it writes`() {
             val join = notifier.indexOf("libraryThread.join()")
             val sleep = notifier.indexOf("Thread.sleep(END_NOTIFICATION_DELAY_MS)")
-            val guard = notifier.indexOf("if (MediaProjectionService.isRunning && !BotService.isRunning) {")
+            val indent = "\n                        "
+            val guard = notifier.indexOf("finishEndNotification(${indent}captureRunning = { MediaProjectionService.isRunning },${indent}sessionRunning = { BotService.isRunning },")
             val post = notifier.indexOf("NotificationUtils.updateNotification(context, MainActivity::class.java, false, text.body, title = text.title, displayBigText = true)")
             assertTrue(join in 0 until sleep && sleep < guard && guard < post, "join $join, sleep $sleep, guard $guard, post $post")
             assertTrue(notifier.contains("val text = queueReportText(report?.toJson())"))

@@ -461,7 +461,8 @@ class BetweenRunDialogsTest {
         fun `a ride-out counts toward neither the stuck-screen rebind nor the no-progress limit`() {
             val loop = body(navigator, "fun navigate(")
             val indent = "\n                    "
-            val exemption = "${indent}detectedState != LaunchScreenState.TAP_TO_CONTINUE &&$indent!isConnectionRideOut(detectedState, pendingBetweenRunDialog)\n                ) {"
+            val rideOut = "!isConnectionRideOut(detectedState, pendingBetweenRunDialog)\n                ) {"
+            val exemption = "${indent}detectedState != LaunchScreenState.TAP_TO_CONTINUE &&$indent!titleLoggingIn &&$indent$rideOut"
             val stuck = "if (detectedState == currentState &&${indent}detectedState != LaunchScreenState.ACTIVE_TRAINING_MENU &&$exemption"
             val progress = "} else if (detectedState != LaunchScreenState.ACTIVE_TRAINING_MENU &&$exemption"
             assertTrue(loop.contains(stuck))

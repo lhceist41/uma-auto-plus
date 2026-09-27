@@ -4163,10 +4163,8 @@ abstract class Campaign(game: Game) : Task(game) {
      * understate the finale rewards (~+40 per stat, large fan injection) — trust `turn`/`result` then.
      */
     override fun careerEndLedgerLine(result: TaskResult): String {
-        val resolvedName =
-            trainee.name.ifEmpty {
-                SettingsHelper.getStringSetting("misc", "currentProfileName").ifEmpty { "unknown" }
-            }.replace(" ", "_")
+        val shownName = trainee.name.ifEmpty { SettingsHelper.getStringSetting("misc", "currentProfileName") }
+        val resolvedName = shownName.ifEmpty { "unknown" }.replace(" ", "_")
         val scenarioToken = game.scenario.ifEmpty { "unknown" }.replace(" ", "_")
         val st = trainee.stats
         // Snapshot for the career-end SPARKS screen: the reroll gate reads the final stat values
@@ -4180,6 +4178,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 "Wit" to st.wit,
             )
         StartModule.lastCareerEndTrainee = resolvedName
+        StartModule.lastCareerEndTraineeName = shownName.ifEmpty { null }
         // Snapshot the same config-arm fingerprint + scenario the career-end record below carries, so
         // the SPARKS records the navigator appends later join to this exact career/arm directly (not
         // only positionally). Computed once here and reused for the record - never recomputed from
