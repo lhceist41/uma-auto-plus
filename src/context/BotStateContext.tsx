@@ -462,7 +462,7 @@ export const defaultSettings: Settings = {
         // Existing installs keep their last-used scenario (SQLite takes precedence over defaults).
         scenario: "Trackblazer",
         enablePopupCheck: false,
-        enableCraneGameAttempt: false,
+        enableCraneGameAttempt: true,
         enableStopBeforeFinals: false,
         enableStopAtDate: false,
         stopAtDates: ["Senior January Early"],

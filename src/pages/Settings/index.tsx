@@ -473,7 +473,7 @@ const Settings = () => {
                         })
                     }}
                     label="Enable Crane Game Attempt"
-                    description="When enabled, the bot will attempt to complete the crane game. By default, the bot will stop when it is detected."
+                    description="When enabled, the bot will attempt to complete the crane game, which spends nothing. On by default; turn it off to stop the run when it is detected instead."
                     className="mt-4"
                 />
 

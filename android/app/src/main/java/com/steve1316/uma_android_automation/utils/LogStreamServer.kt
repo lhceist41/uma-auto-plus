@@ -866,16 +866,26 @@ object LogStreamServer {
                             try {
                                 val fullLogs = MessageLog.getMessageLogCopy().joinToString("\n")
 
-                                // Set headers to trigger a file download in the browser.
+                                // Name the download exactly the way MessageLog.saveLogToFile() names a log
+                                // saved on the device, so a tool that reads saved-log filenames (the Event
+                                // Log Visualizer) can also parse a browser-downloaded log (from upstream 73c59f405).
                                 val datePart =
                                     SimpleDateFormat(
-                                        "yyyy-MM-dd-HH-mm-ss",
+                                        "yyyy-MM-dd HH_mm_ss",
                                         Locale.getDefault(),
                                     ).format(Date())
+                                val prefix = MessageLog.logFileNamePrefix
+                                val suffix = MessageLog.logFileNameSuffix
+                                val fileName =
+                                    if (prefix.isEmpty() && suffix.isEmpty()) {
+                                        "log @ $datePart"
+                                    } else {
+                                        listOfNotNull(prefix.takeIf { it.isNotEmpty() }, datePart, suffix.takeIf { it.isNotEmpty() }).joinToString("_")
+                                    }
 
                                 call.response.header(
                                     HttpHeaders.ContentDisposition,
-                                    "attachment; filename=\"uaa_logs_$datePart.txt\"",
+                                    "attachment; filename=\"$fileName.txt\"",
                                 )
                                 call.respondText(fullLogs, ContentType.Text.Plain)
                             } catch (e: Exception) {

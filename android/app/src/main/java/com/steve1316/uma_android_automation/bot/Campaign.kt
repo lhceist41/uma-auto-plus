@@ -738,8 +738,8 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     private val cutsceneRebindThresholds: Set<Int> = setOf(15, 30)
 
-    /** Whether the bot should attempt the crane game. */
-    protected val enableCraneGameAttempt: Boolean = SettingsHelper.getBooleanSetting("general", "enableCraneGameAttempt")
+    /** Whether the bot should attempt the crane game. On by default: it spends nothing. */
+    protected val enableCraneGameAttempt: Boolean = SettingsHelper.getBooleanSetting("general", "enableCraneGameAttempt", true)
 
     /** Whether the bot should check for a skill point threshold. */
     protected val enableSkillPointCheck: Boolean = SettingsHelper.getBooleanSetting("skills", "enableSkillPointCheck")
