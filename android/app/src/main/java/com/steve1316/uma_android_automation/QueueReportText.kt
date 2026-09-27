@@ -240,6 +240,7 @@ internal val REPORT_REASON_KEYS =
         "CONNECTION_LOST" to KeyText("the game lost its connection to its server and did not reconnect in time.", "Check the device's internet connection and clear the error in the game"),
         "DOWNLOAD_FAILED" to KeyText("the game could not finish downloading its data.", "Check the device's internet connection and let the game finish its download"),
         "SESSION_EXPIRED" to KeyText("the game ended its session and needs to go back to its title screen.", "Tap Title Screen in the game and wait for its home screen"),
+        "GAME_UNRECOVERABLE" to KeyText("the game showed a screen the bot could not recognise, and reopening the game did not bring it back.", "Open the game and check it"),
         "A11Y_GRANT_MISSING" to
             KeyText(
                 "its accessibility service needed a repair, and UMA Auto+ does not have the permission to repair it.",

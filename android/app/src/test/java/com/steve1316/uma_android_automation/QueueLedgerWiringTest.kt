@@ -272,7 +272,7 @@ class QueueLedgerWiringTest {
         fun `the session opens after the resume decision, before the first launch`() {
             val resume = session.indexOf("var completedRuns = priorCompletedRuns")
             val open = session.indexOf("QueueLedger.beginSession(context, ledger.sessionId, ledger.openJson())")
-            val coldStart = session.indexOf("val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator)")
+            val coldStart = session.indexOf("val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator, coldStartOnHome = !resumeReEntersCareer)")
             assertTrue(open in resume until coldStart)
             assertTrue(session.indexOf("ledgerHeartbeat = startLedgerHeartbeat(ledger.sessionId)", open) in open until coldStart)
         }
@@ -354,6 +354,7 @@ class QueueLedgerWiringTest {
                     "DECK_INCOMPLETE",
                     "BORROW_NEEDS_HAND",
                     "TRAINEE_NOT_FOUND",
+                    "GAME_UNRECOVERABLE",
                 ),
                 keys,
             )

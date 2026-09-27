@@ -880,6 +880,22 @@
             }
         },
         {
+            "name": "launch failed before the first run: game not recovered",
+            "report": {
+                "kind": "LAUNCH_FAILED_BEFORE_RUN",
+                "queueEnabled": true,
+                "totalRuns": 2,
+                "runReached": 0,
+                "resumable": false,
+                "reasonKey": "GAME_UNRECOVERABLE"
+            },
+            "text": {
+                "title": "Queue stopped",
+                "reason": "The queue stopped before run 1 of 2: the game showed a screen the bot could not recognise, and reopening the game did not bring it back.",
+                "nextAction": "Open the game and check it, then press Start in UMA Auto+."
+            }
+        },
+        {
             "name": "between runs: TP_EMPTY",
             "report": {
                 "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
@@ -1165,6 +1181,22 @@
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: the game ended its session and needs to go back to its title screen.",
                 "nextAction": "Tap Title Screen in the game and wait for its home screen, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "between runs: GAME_UNRECOVERABLE",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "GAME_UNRECOVERABLE"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: the game showed a screen the bot could not recognise, and reopening the game did not bring it back.",
+                "nextAction": "Open the game and check it, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {

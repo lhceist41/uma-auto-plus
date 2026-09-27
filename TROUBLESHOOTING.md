@@ -45,6 +45,14 @@ UMA Auto+ can refuse a Start rather than risk a career on the wrong settings or 
 - **The settings did not reach the bot.** If what the bot is about to use does not match what UMA Auto+ just checked when you pressed Start, it refuses instead of running on the mismatch. This refusal shows no dialog: the notification reads "Not started" and gives the reason, and the app's message log has the same line in red. Force stop UMA Auto+ (Android Settings, Apps, UMA Auto+, Force stop), reopen it, turn its accessibility service back on if it was switched off, then press Start again.
 - **The settings file could not be verified.** If UMA Auto+ cannot safely use its saved settings file, it refuses the same way. If your device's storage is full, free some space first, then force stop and reopen UMA Auto+ as above. Reopening checks the file again and restores it from the last good backup if it is damaged; a damaged file is renamed and kept next to the current one (as `settings.db.corrupt-<time>`) rather than deleted, though reaching it needs a rooted device or a debug build, so it is not something most players can pull themselves. If this message keeps coming back, please report it as a bug with your usual log file attached (see [Reporting a bug](#reporting-a-bug)).
 
+### 6. "The game ended its session" or "reopening the game did not bring it back"
+
+When the game sits idle for a long time, for example overnight, it ends its session and shows a **Session Error** whose only button is Title Screen. Between runs, the bot taps Title Screen itself only when no career is in progress: you pressed Start with the game on its home screen and the queue was not resuming a career, or the previous career finished and the game got back to its home screen. It then taps through the title screen, closes the notices the game shows after logging in, and launches the career. It does this once per launch, and a second Session Error stops the queue. With a career in progress the queue stops with "the game ended its session and needs to go back to its title screen": tap Title Screen in the game, wait for its home screen, then press Start in UMA Auto+.
+
+In the same no-career situation, if the bot cannot recognise the game's screen, it reopens the game once and starts the launch again from the title screen. If the game still shows nothing the bot knows, the queue stops with "the game showed a screen the bot could not recognise, and reopening the game did not bring it back": open the game, check what it shows, then press Start in UMA Auto+.
+
+The title screen is recognised only at 1080×1920. Neither recovery has been seen working on a device yet.
+
 ## Grand Concert
 
 The bot pages the Scenario Select carousel to Grand Concert like any other scenario, so it works with

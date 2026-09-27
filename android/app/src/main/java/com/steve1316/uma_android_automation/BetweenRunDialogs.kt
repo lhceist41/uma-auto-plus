@@ -9,6 +9,7 @@ import com.steve1316.uma_android_automation.components.ButtonCloseWide
 import com.steve1316.uma_android_automation.components.ButtonInterface
 import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.components.ButtonRetry
+import com.steve1316.uma_android_automation.components.ButtonTitleScreen
 
 /**
  * The titled game dialogs the career-launch navigator handles itself between runs, by the title
@@ -53,7 +54,8 @@ internal fun readBetweenRunDialog(careerLaunchInitiated: Boolean, bannerUp: () -
 
 /**
  * What the navigator does about one [BetweenRunDialog]. [taps] are the only controls a step may
- * press, first match wins: Close, OK, Cancel or Retry, never a spend, a launch or Title Screen.
+ * press, first match wins: Close, OK, Cancel, Retry, or Title Screen on a Session Error with no
+ * career in flight; never a spend or a launch.
  */
 internal sealed class BetweenRunDialogStep(val taps: List<ButtonInterface>) {
     /** The wide list-dialog Close first, as `DialogNotices.close` does. */
@@ -63,6 +65,9 @@ internal sealed class BetweenRunDialogStep(val taps: List<ButtonInterface>) {
 
     /** Cancel, as `DialogFollowTrainer.close` does. */
     data object CancelFollowTrainer : BetweenRunDialogStep(listOf(ButtonCancel))
+
+    /** Title Screen on a Session Error, only with no career in flight ([BetweenRunRecovery.mayTapTitleScreen]). */
+    data object ReturnToTitle : BetweenRunDialogStep(listOf(ButtonTitleScreen))
 
     /** Wait [waitMs], then Retry. [attempt] counts from 1 within the outage. */
     data class Retry(val waitMs: Long, val attempt: Int) : BetweenRunDialogStep(listOf(ButtonRetry))
@@ -81,16 +86,22 @@ internal const val CONNECTION_DEADLINE_MARGIN_MS = 60_000L
  * The step for [dialog]. A connection or download error is ridden out like one mid-career, on the
  * same [ConnectionOutageBudget] rules ([onConnectionError] records the error), but only while the
  * wait still fits before the navigation deadline, [msBeforeDeadline] from now. A session error
- * needs the game's title screen and the purchase screens spend real money, so those stop.
+ * needs the game's title screen: Title Screen when [mayReturnToTitle], else a stop. The purchase
+ * screens spend real money, so those stop.
  */
-internal fun planBetweenRunDialog(dialog: BetweenRunDialog, onConnectionError: () -> ConnectionOutageBudget.Decision, msBeforeDeadline: Long): BetweenRunDialogStep =
+internal fun planBetweenRunDialog(
+    dialog: BetweenRunDialog,
+    onConnectionError: () -> ConnectionOutageBudget.Decision,
+    msBeforeDeadline: Long,
+    mayReturnToTitle: Boolean = false,
+): BetweenRunDialogStep =
     when (dialog) {
         BetweenRunDialog.NOTICES -> BetweenRunDialogStep.CloseNotices
         BetweenRunDialog.DATE_CHANGED -> BetweenRunDialogStep.ConfirmDateChanged
         BetweenRunDialog.FOLLOW_TRAINER -> BetweenRunDialogStep.CancelFollowTrainer
         BetweenRunDialog.CONNECTION_ERROR -> retryOrFail(onConnectionError(), msBeforeDeadline) ?: BetweenRunDialogStep.Fail(reasonKey = "CONNECTION_LOST")
         BetweenRunDialog.DOWNLOAD_ERROR -> retryOrFail(onConnectionError(), msBeforeDeadline) ?: BetweenRunDialogStep.Fail(reasonKey = "DOWNLOAD_FAILED")
-        BetweenRunDialog.SESSION_ERROR -> BetweenRunDialogStep.Fail(reasonKey = "SESSION_EXPIRED")
+        BetweenRunDialog.SESSION_ERROR -> if (mayReturnToTitle) BetweenRunDialogStep.ReturnToTitle else BetweenRunDialogStep.Fail(reasonKey = "SESSION_EXPIRED")
         BetweenRunDialog.PURCHASE_CARATS, BetweenRunDialog.AGE_CONFIRMATION -> BetweenRunDialogStep.Fail(reasonKey = "PURCHASE_PROMPT")
     }
 

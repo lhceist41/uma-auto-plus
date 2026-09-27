@@ -1460,6 +1460,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         navigator: CareerLaunchNavigator = CareerLaunchNavigator(context),
         finalizeToHome: Boolean = false,
         previousCareerComplete: Boolean = false,
+        coldStartOnHome: Boolean = false,
     ): NavigationResult {
         val navDone = java.util.concurrent.atomic.AtomicBoolean(false)
         // Set true ONLY when the deadline thread itself interrupts the queue thread. The catch
@@ -1506,7 +1507,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         deadlineThread.start()
 
         return try {
-            navigator.navigate(reuseLastLaunchSetup, finalizeToHome, previousCareerComplete = previousCareerComplete)
+            navigator.navigate(reuseLastLaunchSetup, finalizeToHome, previousCareerComplete = previousCareerComplete, coldStartOnHome = coldStartOnHome)
         } catch (e: InterruptedException) {
             // Clear the interrupt flag so queue teardown (log saving, events) is not poisoned.
             Thread.interrupted()
@@ -1876,6 +1877,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // state (resumePlanFor). Feeds completedRuns below so a queue resumed at run 4 of 6
                 // that goes on to finish runs 4-6 reports 6/6 completed, not 3/6 (2026-07-28 undercount).
                 var priorCompletedRuns = 0
+                // True when the resume re-enters a career that was in flight: the cold start below then
+                // has a career in the slot, so the navigator may not treat it as a career-free Start.
+                var resumeReEntersCareer = false
 
                 val startFromRun: Int =
                     run {
@@ -1891,6 +1895,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         }
                         val plan = resumePlanFor(saved.phase, saved.currentRun, saved.completedRuns)
                         val reEnter = saved.phase == PHASE_CAREER
+                        resumeReEntersCareer = reEnter
                         val next = plan.startFromRun
                         priorCompletedRuns = plan.priorCompletedRuns
                         if (next > totalRuns) {
@@ -2008,7 +2013,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     if (coldStartNavigator != null && coldStartNavigator.isOnHomeScreen()) {
                         MessageLog.i(TAG, "[QUEUE] Game is on the home screen. Launching a career for run $startFromRun...")
                         sendQueueProgressEvent(startFromRun, totalRuns, "navigating")
-                        val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator)
+                        val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator, coldStartOnHome = !resumeReEntersCareer)
                         if (!navResult.success) {
                             logNavigationFailure(navResult)
                             // A user Stop mid-navigation is a clean cancellation, not a navigation

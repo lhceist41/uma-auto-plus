@@ -7,6 +7,7 @@ import com.steve1316.uma_android_automation.components.ButtonClose
 import com.steve1316.uma_android_automation.components.ButtonCloseWide
 import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.components.ButtonRetry
+import com.steve1316.uma_android_automation.components.ButtonTitleScreen
 import com.steve1316.uma_android_automation.components.DialogAgeConfirmation
 import com.steve1316.uma_android_automation.components.DialogConnectionError
 import com.steve1316.uma_android_automation.components.DialogDateChanged
@@ -137,6 +138,20 @@ class BetweenRunDialogsTest {
             assertEquals(BetweenRunDialogStep.Fail("PURCHASE_PROMPT"), plan(BetweenRunDialog.PURCHASE_CARATS))
             assertEquals(BetweenRunDialogStep.Fail("PURCHASE_PROMPT"), plan(BetweenRunDialog.AGE_CONFIRMATION))
             for (dialog in failing) assertTrue(plan(dialog).taps.isEmpty(), "$dialog")
+        }
+
+        @Test
+        fun `a Session Error taps Title Screen only when the navigation allows it, and nothing else ever does`() {
+            val allowed = planBetweenRunDialog(BetweenRunDialog.SESSION_ERROR, nothing, StartModule.NAV_DEADLINE_MS, mayReturnToTitle = true)
+            assertEquals(BetweenRunDialogStep.ReturnToTitle, allowed)
+            assertEquals(listOf(ButtonTitleScreen), allowed.taps)
+            val retry = { ConnectionOutageBudget.Decision.Retry(30_000L, 1, 5_000L) }
+            for (dialog in BetweenRunDialog.entries - BetweenRunDialog.SESSION_ERROR) {
+                for (mayReturnToTitle in listOf(true, false)) {
+                    val step = planBetweenRunDialog(dialog, retry, StartModule.NAV_DEADLINE_MS, mayReturnToTitle)
+                    assertFalse(ButtonTitleScreen in step.taps, "$dialog")
+                }
+            }
         }
 
         @Test
@@ -365,10 +380,18 @@ class BetweenRunDialogsTest {
             assertTrue(handler.indexOf("if (step is BetweenRunDialogStep.Fail)") in 0 until taps)
             assertTrue(handler.contains("StartModule.NAV_DEADLINE_MS - (System.currentTimeMillis() - navigationStartedAtMs)"))
             assertTrue(handler.indexOf("waitSafe(step.waitMs / 1000.0)") in 0 until taps, "the budget's pause comes before Retry")
+            // Title Screen is planned only through the no-career check, and the launch starts over only once it landed.
+            assertTrue(handler.contains("planBetweenRunDialog(dialog, betweenRunConnectionBudget::onError, msBeforeDeadline, betweenRunRecovery.mayTapTitleScreen(careerLaunchInitiated))"))
+            val landed =
+                "} else if (step is BetweenRunDialogStep.ReturnToTitle) {\n            betweenRunRecovery.tappedTitleScreen()\n" +
+                    "            waitSafe(3.0)\n            return TransitionResult.StartLaunchOver\n        }"
+            assertTrue(handler.indexOf(landed) > handler.indexOf("if (step.taps.none { it.click(iu) }) {"))
+            assertEquals(1, Regex("TransitionResult\\.StartLaunchOver").findAll(handler).count())
+            assertEquals(1, Regex("tappedTitleScreen\\(").findAll(navigator).count())
         }
 
         @Test
-        fun `the navigator never uses the in-career dialog handler, the connection dialog's ok or Title Screen`() {
+        fun `the navigator never uses the in-career dialog handler, the connection dialog's ok or Title Screen outside the planned step`() {
             for (banned in listOf("DialogConnectionError.ok", "handleDialogs(", "ButtonTitleScreen", "DialogDownloadError.ok")) {
                 assertFalse(navigator.contains(banned), banned)
             }
@@ -378,7 +401,14 @@ class BetweenRunDialogsTest {
         fun `the allowlist names no spend or launch control`() {
             val allowlist = source("$main/BetweenRunDialogs.kt")
             val controls = Regex("\\b(Button|Label|Dialog)[A-Z]\\w*").findAll(allowlist).map { it.value }.toSet() - setOf("ButtonInterface", "DialogHandler", "DialogUtils")
-            assertEquals(setOf("ButtonCancel", "ButtonClose", "ButtonCloseWide", "ButtonOk", "ButtonRetry", "DialogNotices", "DialogFollowTrainer"), controls)
+            assertEquals(setOf("ButtonCancel", "ButtonClose", "ButtonCloseWide", "ButtonOk", "ButtonRetry", "ButtonTitleScreen", "DialogNotices", "DialogFollowTrainer"), controls)
+            val titleScreen = allowlist.lines().filter { it.contains("ButtonTitleScreen") }
+            assertEquals(
+                listOf("import com.steve1316.uma_android_automation.components.ButtonTitleScreen", "    data object ReturnToTitle : BetweenRunDialogStep(listOf(ButtonTitleScreen))"),
+                titleScreen,
+            )
+            assertTrue(allowlist.contains("BetweenRunDialog.SESSION_ERROR -> if (mayReturnToTitle) BetweenRunDialogStep.ReturnToTitle else BetweenRunDialogStep.Fail(reasonKey = \"SESSION_EXPIRED\")"))
+            assertEquals(1, Regex("BetweenRunDialogStep\\.ReturnToTitle").findAll(allowlist).count())
         }
 
         @Test

@@ -51,7 +51,7 @@ class StartModulePreLoopQueueHaltTest {
 
     /** The `!navResult.success` arm of the cold-start career launch. */
     private val coldStartFailure by lazy {
-        val site = preLoop.indexOf("val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator)")
+        val site = preLoop.indexOf("val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator, coldStartOnHome = !resumeReEntersCareer)")
         assertTrue(site >= 0, "the cold-start launch site must exist")
         preLoop.substring(site)
     }
@@ -81,7 +81,7 @@ class StartModulePreLoopQueueHaltTest {
             val run = startModule.indexOf("var queueHaltRun = 0")
             val inFlight = startModule.indexOf("var queueHaltCareerInFlight = false")
             val rotationSite = startModule.indexOf("val r = applyRotationForRun(rotation, startFromRun, reuseLastLaunchSetup)")
-            val coldStartSite = startModule.indexOf("val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator)")
+            val coldStartSite = startModule.indexOf("val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator, coldStartOnHome = !resumeReEntersCareer)")
             assertTrue(reason >= 0 && run >= 0 && inFlight >= 0, "all three halt fields must exist")
             assertTrue(rotationSite > 0 && coldStartSite > rotationSite, "both pre-loop failure sites must exist, in order")
             assertTrue(reason < rotationSite, "queueHaltReason must be in scope at the rotation snapshot site")

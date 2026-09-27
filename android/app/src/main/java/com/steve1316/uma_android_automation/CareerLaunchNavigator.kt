@@ -66,6 +66,7 @@ import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.PersistentSkipStateLog
 import com.steve1316.uma_android_automation.utils.pillVisible
 import com.steve1316.uma_android_automation.utils.PostCareerScreenProbes
+import com.steve1316.uma_android_automation.utils.TitleScreenProbe
 import com.steve1316.uma_android_automation.utils.ProgressEvent
 import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.QuickModeGeometry
@@ -534,6 +535,9 @@ class CareerLaunchNavigator(private val context: Context) {
          * such as the reconnect after a Retry: waited out without a tap, never an unknown screen. */
         GAME_LOADING,
 
+        /** The game's title screen ("TAP TO START") between runs, pixel-probed ([TitleScreenProbe]). */
+        TITLE_SCREEN,
+
         /** Screen could not be identified by any detector. */
         UNKNOWN,
     }
@@ -610,6 +614,12 @@ class CareerLaunchNavigator(private val context: Context) {
     private var pendingBetweenRunDialog: BetweenRunDialog? = null
     private var betweenRunConnectionBudget = ConnectionOutageBudget()
     private var navigationStartedAtMs: Long = 0L
+
+    // Title Screen, the title tap and the one relaunch for this navigation. Kept, with the deadline and
+    // the outage budget, when the launch starts over from the title screen ([restartingLaunch]).
+    private var betweenRunRecovery = BetweenRunRecovery(coldStartOnHome = false, previousCareerComplete = false, finalizeToHome = false, campaignOwnsCareer = true)
+    private var restartingLaunch = false
+    private var liveGameAttached = false
 
     // The accessibility repairs this navigation asked for, which decide its stuck-failure reason
     // (navigatorStuckKey). Reset per navigate().
@@ -744,6 +754,7 @@ class CareerLaunchNavigator(private val context: Context) {
     fun attachLiveGame(game: Game) {
         tempGame = game
         imageUtils = game.imageUtils
+        liveGameAttached = true
     }
 
     /**
@@ -794,6 +805,8 @@ class CareerLaunchNavigator(private val context: Context) {
      * @param resumeInProgressCareer If true, this call re-enters a career that is already running
      *   (the in-career loop's lobby re-entry) instead of launching a new one, so no launch Quick
      *   Mode prompt is coming and the skip-maxing handler must stay unreachable.
+     * @param coldStartOnHome If true, the queue's cold Start found the game on Home and re-enters no
+     *   interrupted career, so no career is in flight ([BetweenRunRecovery]).
      * @return A [NavigationResult] indicating success or failure with diagnostics.
      */
     fun navigate(
@@ -803,6 +816,7 @@ class CareerLaunchNavigator(private val context: Context) {
         singleRunTraineeExcludes: String = "",
         previousCareerComplete: Boolean = false,
         resumeInProgressCareer: Boolean = false,
+        coldStartOnHome: Boolean = false,
     ): NavigationResult {
         val autoFillSupports = SettingsHelper.getBooleanSetting("runQueue", "autoFillSupports", false)
         MessageLog.i(
@@ -811,9 +825,16 @@ class CareerLaunchNavigator(private val context: Context) {
                 if (singleRunTrainee.isNotBlank()) ", singleRunTrainee=$singleRunTrainee" else "",
         )
 
-        // Reset session-scoped flags for this navigation run.
-        navigationStartedAtMs = System.currentTimeMillis()
-        betweenRunConnectionBudget = ConnectionOutageBudget()
+        // Reset session-scoped flags for this navigation run. A launch that starts over from the title
+        // screen resets everything else below, as a fresh call would, so no latch from the abandoned
+        // pass (Start Career, Auto-Select, the deck checks) can skip a check on the new one.
+        if (restartingLaunch) {
+            restartingLaunch = false
+        } else {
+            navigationStartedAtMs = System.currentTimeMillis()
+            betweenRunConnectionBudget = ConnectionOutageBudget()
+            betweenRunRecovery = BetweenRunRecovery(coldStartOnHome, previousCareerComplete, finalizeToHome, campaignOwnsCareer = resumeInProgressCareer || liveGameAttached)
+        }
         pendingBetweenRunDialog = null
         navRepairRefused = false
         stuckScreenRebindIssued = false
@@ -1118,6 +1139,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 if (detectedState == LaunchScreenState.HOME_SCREEN) {
                     launchFlowEntered = true
                 }
+                betweenRunRecovery.onScreen(detectedState)
                 // Latch once the launch has provably passed Start Career: PRE_RUN_CONFIRMATION and the
                 // in-career states only occur after the Start Career click, and the "Umamusume Details"
                 // card shown right after them must NOT be tested for Trainee Select. BUT a launch that
@@ -1137,12 +1159,33 @@ class CareerLaunchNavigator(private val context: Context) {
                 }
             } else {
                 consecutiveUnknowns++
-                if (consecutiveUnknowns >= MAX_CONSECUTIVE_UNKNOWNS) {
+                val unknownLimit = betweenRunRecovery.unknownScreenLimit(MAX_CONSECUTIVE_UNKNOWNS)
+                if (consecutiveUnknowns >= unknownLimit) {
+                    when (betweenRunRecovery.onUnknownScreenLimit(careerLaunchInitiated)) {
+                        UnknownScreenLimitStep.RELAUNCH -> {
+                            MessageLog.w(TAG, "[NAV] No screen recognised after $unknownLimit attempts, with no career in progress. Relaunching the game once and starting this launch over.")
+                            if (tempGame?.restartGame() == true) {
+                                return startLaunchOver(
+                                    reuseLastLaunchSetup,
+                                    finalizeToHome,
+                                    singleRunTrainee,
+                                    singleRunTraineeExcludes,
+                                    previousCareerComplete,
+                                    resumeInProgressCareer,
+                                    coldStartOnHome,
+                                )
+                            }
+                            return gameUnrecoverable(currentState, "The game could not be relaunched after $unknownLimit unrecognised screens.")
+                        }
+                        UnknownScreenLimitStep.GAME_UNRECOVERABLE ->
+                            return gameUnrecoverable(currentState, "No screen recognised after $unknownLimit attempts, even after relaunching the game.")
+                        UnknownScreenLimitStep.STOP -> Unit
+                    }
                     val screenshotPath = captureFailureScreenshot("unknown_state")
                     return NavigationResult(
                         success = false,
                         lastDetectedState = currentState.name,
-                        failureReason = "Could not identify the current screen after $MAX_CONSECUTIVE_UNKNOWNS consecutive attempts. No known buttons or UI elements matched.",
+                        failureReason = "Could not identify the current screen after $unknownLimit consecutive attempts. No known buttons or UI elements matched.",
                         failedTransition = "${currentState.name} -> UNKNOWN",
                         isRecoverable = true,
                         recommendedAction = "Manually navigate to the in-career training screen and restart the queue.",
@@ -1151,14 +1194,16 @@ class CareerLaunchNavigator(private val context: Context) {
                     )
                 }
                 // Wait and retry detection - do NOT tap blindly.
-                MessageLog.w(TAG, "[NAV] Unknown screen state ($consecutiveUnknowns/$MAX_CONSECUTIVE_UNKNOWNS). Waiting before retry...")
+                MessageLog.w(TAG, "[NAV] Unknown screen state ($consecutiveUnknowns/$unknownLimit). Waiting before retry...")
                 // An UNKNOWN screen is the exact signature of a dead accessibility service (taps stop
                 // landing, so the game never advances to a recognised screen). Rebind before retrying
                 // rather than burning all attempts against a service that will never respond. The
                 // first unknown does the cheap string check (catches the grant being wiped); from the
                 // second on, MuMu's nastier "enabled-but-dispatch-dead" mode is likely, so force a
-                // hard off->on rebind that the string check can't see.
-                if (consecutiveUnknowns >= 2) {
+                // hard off->on rebind that the string check can't see. Not while the game loads its way
+                // back through its title: no tap is waiting to land then, and its splash screens are
+                // unknown by design.
+                if (consecutiveUnknowns >= 2 && !betweenRunRecovery.gameComingBack) {
                     rebindAccessibility()
                 } else {
                     checkAccessibility()
@@ -1219,6 +1264,9 @@ class CareerLaunchNavigator(private val context: Context) {
                 is TransitionResult.Continue -> {
                     waitSafe(1.5)
                 }
+                is TransitionResult.StartLaunchOver -> {
+                    return startLaunchOver(reuseLastLaunchSetup, finalizeToHome, singleRunTrainee, singleRunTraineeExcludes, previousCareerComplete, resumeInProgressCareer, coldStartOnHome)
+                }
                 is TransitionResult.Failed -> {
                     val screenshotPath = captureFailureScreenshot("failed_${currentState.name}")
                     return NavigationResult(
@@ -1246,6 +1294,37 @@ class CareerLaunchNavigator(private val context: Context) {
             screenshotPath = screenshotPath,
         )
     }
+
+    /**
+     * Starts this launch over after the game went back to its title screen (Title Screen or a
+     * relaunch): a fresh [navigate] with the same arguments that keeps this navigation's deadline,
+     * outage budget and [betweenRunRecovery]. Each of those is spent once, so this nests at most twice.
+     */
+    private fun startLaunchOver(
+        reuseLastLaunchSetup: Boolean,
+        finalizeToHome: Boolean,
+        singleRunTrainee: String,
+        singleRunTraineeExcludes: String,
+        previousCareerComplete: Boolean,
+        resumeInProgressCareer: Boolean,
+        coldStartOnHome: Boolean,
+    ): NavigationResult {
+        restartingLaunch = true
+        return navigate(reuseLastLaunchSetup, finalizeToHome, singleRunTrainee, singleRunTraineeExcludes, previousCareerComplete, resumeInProgressCareer, coldStartOnHome)
+    }
+
+    /** The stop after the one relaunch did not bring back a screen the navigator knows. */
+    private fun gameUnrecoverable(lastState: LaunchScreenState, reason: String): NavigationResult =
+        NavigationResult(
+            success = false,
+            lastDetectedState = lastState.name,
+            failureReason = reason,
+            failedTransition = "${lastState.name} -> UNKNOWN",
+            isRecoverable = false,
+            recommendedAction = "Open the game and check it, then restart the queue.",
+            reasonKey = "GAME_UNRECOVERABLE",
+            screenshotPath = captureFailureScreenshot("game_unrecoverable"),
+        )
 
     // ////////////////////////////////////////////////////////////////////////////
     // Screen Detection
@@ -1478,6 +1557,13 @@ class CareerLaunchNavigator(private val context: Context) {
         readBetweenRunDialog(careerLaunchInitiated, { DialogUtils.check(iu, sourceBitmap = bitmap) }, { DialogUtils.getTitle(iu, bitmap, logOnMiss = false) })?.let {
             pendingBetweenRunDialog = it
             return LaunchScreenState.DIALOG_HANDLED
+        }
+
+        // The game's title screen between runs (after Title Screen, a relaunch, or the game going back
+        // to it by itself). No template matches it, so it used to be an unknown screen. Never under a
+        // dialog banner: the tap goes to the middle of the screen.
+        if (!careerLaunchInitiated && !resumeInProgressCareerMode && !liveGameAttached && isTitleScreen(bitmap) && !DialogUtils.check(iu, sourceBitmap = bitmap)) {
+            return LaunchScreenState.TITLE_SCREEN
         }
 
         // POST_RUN_RESULTS - generic post-run / between-screens dialog with Next, OK, Confirm,
@@ -1723,6 +1809,9 @@ class CareerLaunchNavigator(private val context: Context) {
         /** Transition was performed. Re-detect to find the next state. */
         object Continue : TransitionResult()
 
+        /** The game went back to its title screen: start the launch over ([startLaunchOver]). */
+        object StartLaunchOver : TransitionResult()
+
         /** Navigation failed and cannot continue. */
         data class Failed(
             val reason: String,
@@ -1770,6 +1859,7 @@ class CareerLaunchNavigator(private val context: Context) {
             LaunchScreenState.RECOVER_TP_QUANTITY -> handleRecoverTpQuantity()
             LaunchScreenState.DIALOG_HANDLED -> handleBetweenRunDialog()
             LaunchScreenState.GAME_LOADING -> handleGameLoading()
+            LaunchScreenState.TITLE_SCREEN -> handleTitleScreen()
             LaunchScreenState.SUPPORT_DECK_SCREEN -> handleSupportDeckScreen(reuseLastLaunchSetup, autoFillSupports)
             LaunchScreenState.CINEMATIC_INTRO -> handleCinematicIntro()
             LaunchScreenState.HOME_SCREEN ->
@@ -1829,7 +1919,7 @@ class CareerLaunchNavigator(private val context: Context) {
         val dialog = pendingBetweenRunDialog ?: return TransitionResult.Continue
         pendingBetweenRunDialog = null
         val msBeforeDeadline = StartModule.NAV_DEADLINE_MS - (System.currentTimeMillis() - navigationStartedAtMs)
-        val step = planBetweenRunDialog(dialog, betweenRunConnectionBudget::onError, msBeforeDeadline)
+        val step = planBetweenRunDialog(dialog, betweenRunConnectionBudget::onError, msBeforeDeadline, betweenRunRecovery.mayTapTitleScreen(careerLaunchInitiated))
         if (step is BetweenRunDialogStep.Fail) {
             MessageLog.e(TAG, "[NAV] ${dialog.title} dialog between runs; stopping the queue (${step.reasonKey}). Nothing was tapped.")
             return TransitionResult.Failed(
@@ -1844,12 +1934,39 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.w(TAG, "[CONNECTION] ${dialog.title} between runs (attempt ${step.attempt}). Waiting ${step.waitMs / 1000}s before Retry.")
             waitSafe(step.waitMs / 1000.0)
             if (!BotService.isRunning || StartModule.queueStopRequested) return TransitionResult.Continue
+        } else if (step is BetweenRunDialogStep.ReturnToTitle) {
+            MessageLog.w(TAG, "[NAV] ${dialog.title} dialog between runs with no career in progress; tapping Title Screen and starting this launch over from the title screen.")
         } else {
             MessageLog.i(TAG, "[NAV] ${dialog.title} dialog between runs; dismissing it.")
         }
         if (step.taps.none { it.click(iu) }) {
             MessageLog.w(TAG, "[NAV] ${dialog.title} shows none of its buttons; re-detecting.")
+        } else if (step is BetweenRunDialogStep.ReturnToTitle) {
+            betweenRunRecovery.tappedTitleScreen()
+            waitSafe(3.0)
+            return TransitionResult.StartLaunchOver
         }
+        return TransitionResult.Continue
+    }
+
+    /** True when [bitmap] is the game's title screen ([TitleScreenProbe]). */
+    private fun isTitleScreen(bitmap: Bitmap): Boolean = TitleScreenProbe.isTitleScreen(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)
+
+    /**
+     * TITLE_SCREEN: taps "TAP TO START", then waits while the title stays up as the game logs in
+     * ([BetweenRunRecovery.mayTapToStart]). The tap lands on the text, clear of the menu button.
+     */
+    private fun handleTitleScreen(): TransitionResult {
+        val now = SystemClock.elapsedRealtime()
+        if (!betweenRunRecovery.mayTapToStart(now)) {
+            MessageLog.i(TAG, "[NAV] The title screen is still up after the tap; waiting for the game to log in.")
+            waitSafe(2.0)
+            return TransitionResult.Continue
+        }
+        MessageLog.i(TAG, "[NAV] Title screen between runs; tapping to start the game.")
+        CoordinateTap.tap(gestureUtils, TitleScreenProbe.TAP_TO_START_X, TitleScreenProbe.TAP_TO_START_Y, "title_tap_to_start")
+        betweenRunRecovery.tappedToStart(now)
+        waitSafe(3.0)
         return TransitionResult.Continue
     }
 
