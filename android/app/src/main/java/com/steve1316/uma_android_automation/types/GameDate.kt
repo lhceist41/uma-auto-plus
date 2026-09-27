@@ -8,6 +8,8 @@ import com.steve1316.uma_android_automation.types.DateMonth
 import com.steve1316.uma_android_automation.types.DatePhase
 import com.steve1316.uma_android_automation.types.DateYear
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
+import com.steve1316.uma_android_automation.utils.ProgressEvent
+import com.steve1316.uma_android_automation.utils.ProgressTracker
 
 /**
  * Represents the Game's date in the training scenario.
@@ -520,6 +522,7 @@ class GameDate {
      * @return True if the date was updated successfully, false otherwise.
      */
     fun update(imageUtils: CustomImageUtils, scenario: String? = null, isOnMainScreen: Boolean = false): Boolean {
+        val dayBefore = day
         // First try to detect if we're in the Finale season.
         val (finalsDay, cachedDayString) = getFinalsDay(imageUtils, isOnMainScreen = isOnMainScreen, scenario = scenario)
         if (finalsDay != null) {
@@ -534,6 +537,7 @@ class GameDate {
             // Update our internal turn number and derived components.
             updateDay(tmpDate.day)
         }
+        if (day != dayBefore) ProgressTracker.noteProgress(ProgressEvent.DATE_CHANGE)
         return true
     }
 }

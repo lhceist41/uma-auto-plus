@@ -90,6 +90,8 @@ import com.steve1316.uma_android_automation.types.TrackSurface
 import com.steve1316.uma_android_automation.types.Trainee
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.PersistentSkipStateLog
+import com.steve1316.uma_android_automation.utils.ProgressEvent
+import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.pillVisible
 import com.steve1316.uma_android_automation.utils.classifyPersistentSkip
 import com.steve1316.uma_android_automation.utils.ScrollList
@@ -4190,6 +4192,7 @@ abstract class Campaign(game: Game) : Task(game) {
         StartModule.lastCareerEndTurn = if (date.dayObserved) date.day else null
         // Bumped last, after every stash above, so the queue report attributes them to this run only.
         StartModule.lastCareerEndSeq++
+        if (outcome != "INCOMPLETE") ProgressTracker.noteProgress(ProgressEvent.CAREER_END)
         val quality = classifyCareerQuality(outcome, finaleRaces, finaleRaces1st)
 
         // Stage 3 of the outcome-measurement plan: the same fields as the ledger line, appended

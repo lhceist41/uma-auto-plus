@@ -40,6 +40,7 @@ import com.steve1316.uma_android_automation.bot.shouldClearSparkTransactionForRu
 import com.steve1316.uma_android_automation.bot.shouldClearVerdictForRunResult
 import com.steve1316.uma_android_automation.utils.KeepScreenOn
 import com.steve1316.uma_android_automation.utils.LogStreamServer
+import com.steve1316.uma_android_automation.utils.ProgressTracker
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.Kord
 import kotlinx.coroutines.runBlocking
@@ -1642,7 +1643,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     /** Adds run [run]'s record, with the career-end facts only if this run produced them. */
     private fun recordRun(ledger: SessionLedger, run: Int, startedAt: Long, careerEndSeqBeforeRun: Long, code: TaskResultCode, retried: Boolean) {
         val careerEnd = careerEndForRun(careerEndSeqBeforeRun, CareerEndStash(lastCareerEndSeq, lastCareerEndTrainee, lastCareerEndScenario, lastCareerEndOutcome, lastCareerEndTurn))
-        ledger.addRun(RunRecord(run, startedAt, System.currentTimeMillis(), code.name, careerEnd?.trainee, careerEnd?.scenario, careerEnd?.outcome, careerEnd?.turn, retried))
+        val progress = ProgressTracker.endWindow()
+        ledger.addRun(RunRecord(run, startedAt, System.currentTimeMillis(), code.name, careerEnd?.trainee, careerEnd?.scenario, careerEnd?.outcome, careerEnd?.turn, retried, progress))
         ledger.errorPosted = lastRunPostedException
         QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
     }
@@ -1748,6 +1750,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 gameRecoveryFailed = false
                 accessibilityHaltKey = null
                 SessionTally.reset()
+                ProgressTracker.beginWindow()
                 launchSnapshotReadStarted = false
                 launchSnapshotReadFinished = false
 

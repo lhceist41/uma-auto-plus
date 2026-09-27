@@ -66,6 +66,8 @@ import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.PersistentSkipStateLog
 import com.steve1316.uma_android_automation.utils.pillVisible
 import com.steve1316.uma_android_automation.utils.PostCareerScreenProbes
+import com.steve1316.uma_android_automation.utils.ProgressEvent
+import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.QuickModeGeometry
 import com.steve1316.uma_android_automation.utils.QuickModeOption
 import com.steve1316.uma_android_automation.utils.RosterScanPolicy
@@ -1087,6 +1089,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 // navigation session yet. Just oscillating between known states does NOT reset.
                 if (seenStates.add(detectedState)) {
                     iterationsWithoutProgress = 0
+                    ProgressTracker.noteProgress(ProgressEvent.NAV_NEW_STATE)
                 } else if (detectedState != LaunchScreenState.ACTIVE_TRAINING_MENU &&
                     detectedState != LaunchScreenState.TAP_TO_CONTINUE &&
                     !isConnectionRideOut(detectedState, pendingBetweenRunDialog)
@@ -1106,6 +1109,7 @@ class CareerLaunchNavigator(private val context: Context) {
                         )
                     }
                 }
+                if (detectedState != currentState) ProgressTracker.noteProgress(ProgressEvent.SCREEN_CHANGE)
                 currentState = detectedState
                 consecutiveUnknowns = 0
                 // Once Home is seen we are past any post-career-results screens and into the

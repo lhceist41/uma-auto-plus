@@ -11,6 +11,7 @@ import com.steve1316.automation_library.utils.MyAccessibilityService
 import com.steve1316.uma_android_automation.bot.DialogHandler
 import com.steve1316.uma_android_automation.bot.DialogHandlerResult
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
+import com.steve1316.uma_android_automation.utils.ProgressTracker
 import org.opencv.core.Point
 
 /**
@@ -176,6 +177,7 @@ interface BaseComponentInterface {
      */
     fun tap(x: Double, y: Double, imageName: String? = null, taps: Int = 1) {
         MyAccessibilityService.getInstance().tap(x, y, imageName, taps = taps)
+        ProgressTracker.noteAction()
     }
 }
 

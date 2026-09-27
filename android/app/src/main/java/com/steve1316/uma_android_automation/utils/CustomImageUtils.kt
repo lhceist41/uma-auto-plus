@@ -126,6 +126,9 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
     override var customScale: Double =
         SettingsHelper.getStringSetting("debug", "templateMatchCustomScale").toDoubleOrNull() ?: 1.0
 
+    /** The library's capture, sampled for the detect-only frozen-frame measure ([ProgressTracker.noteCapture]). */
+    override fun getSourceBitmap(saveImage: Boolean): Bitmap = super.getSourceBitmap(saveImage).also { ProgressTracker.noteCapture(it) }
+
     /** Maximum allowed value for a single stat. */
     private val manualStatCap: Int = SettingsHelper.getIntSetting("training", "manualStatCap")
 

@@ -37,6 +37,7 @@ import com.steve1316.uma_android_automation.components.LabelNowLoading
 import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPoints
 import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkillPointsV2
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
+import com.steve1316.uma_android_automation.utils.ProgressTracker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -300,6 +301,8 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                                 return@launch
                             }
                         }
+                        // Detect-only, after the rung has acted: how long progress had been missing (lock-free).
+                        if (rung == WatchdogRung.TOGGLE_ACCESSIBILITY || rung == WatchdogRung.SKIP_TOGGLE || rung == WatchdogRung.INTERRUPT_GAME_THREAD) ProgressTracker.noteWatchdogRung()
                     }
                 }
         }
@@ -562,6 +565,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         checkCurrentRun()
         // Perform the tap.
         gestureUtils.tap(x, y, imageName, taps = taps)
+        ProgressTracker.noteAction()
 
         // Mark forward progress for the watchdog. If the gesture injector deadlocked
         // the call above would have blocked past the watchdog threshold and we'd

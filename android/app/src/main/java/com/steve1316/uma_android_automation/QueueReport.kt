@@ -165,6 +165,8 @@ internal data class RunRecord(
     val outcome: String?,
     val turn: Int?,
     val retried: Boolean = false,
+    /** The run window's detect-only progress measurements ([com.steve1316.uma_android_automation.utils.ProgressTracker.endWindow]): keys and numbers. */
+    val progress: JSONObject? = null,
 )
 
 /** The career-end facts `Campaign.careerEndLedgerLine` stashed, with the sequence number it bumped. */
@@ -425,6 +427,7 @@ internal fun runRecordJson(r: RunRecord): JSONObject =
         .put("outcome", r.outcome ?: JSONObject.NULL)
         .put("turn", r.turn ?: JSONObject.NULL)
         .put("retried", r.retried)
+        .apply { r.progress?.let { put("progress", it) } }
 
 /**
  * Whether a stored open-session record belongs to a session that died without writing its report.
