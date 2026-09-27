@@ -1,5 +1,5 @@
 import type { Settings } from "../../context/BotStateContext"
-import { collectPreflightWarnings, describeTimeout, readPreflightProbes, shouldShowPreflight, SHORT_SCREEN_TIMEOUT_MS, type PreflightProbes } from "../preflightWarnings"
+import { collectPreflightWarnings, readPreflightProbes, shouldShowPreflight, type PreflightProbes } from "../preflightWarnings"
 
 /**
  * A setup that raises nothing: every probe healthy, Discord on, a single run. Built from just the
@@ -20,10 +20,9 @@ const quiet = (): Settings =>
     }) as unknown as Settings
 const healthy: PreflightProbes = {
     secureSettingsGranted: true,
-    screenTimeout: { timeoutMs: 60 * 60 * 1000, stayOnWhilePluggedIn: false },
     notificationsEnabled: true,
 }
-const unknown: PreflightProbes = { secureSettingsGranted: null, screenTimeout: null, notificationsEnabled: null }
+const unknown: PreflightProbes = { secureSettingsGranted: null, notificationsEnabled: null }
 const ids = (s: Settings, p: PreflightProbes) => collectPreflightWarnings(s, p).map((w) => w.id)
 
 describe("collectPreflightWarnings", () => {
@@ -99,20 +98,13 @@ describe("collectPreflightWarnings", () => {
     })
 
     describe("screen timeout", () => {
-        const withTimeout = (timeoutMs: number, stayOnWhilePluggedIn = false): PreflightProbes => ({ ...healthy, screenTimeout: { timeoutMs, stayOnWhilePluggedIn } })
-
-        it("warns below 30 minutes and states the real timeout", () => {
-            const warning = collectPreflightWarnings(quiet(), withTimeout(2 * 60 * 1000)).find((w) => w.id === "short-screen-timeout")
-            expect(warning?.text).toContain("Android is set to turn the screen off after 2 minutes.")
-        })
-
-        it("stays quiet at 30 minutes or more, or when the device stays on while charging", () => {
-            expect(ids(quiet(), withTimeout(SHORT_SCREEN_TIMEOUT_MS))).not.toContain("short-screen-timeout")
-            expect(ids(quiet(), withTimeout(2 * 60 * 1000, true))).not.toContain("short-screen-timeout")
-        })
-
-        it("treats a non-positive timeout as unknown", () => {
-            expect(ids(quiet(), withTimeout(0))).not.toContain("short-screen-timeout")
+        it("never warns about it: a running session keeps the screen on", () => {
+            const s = quiet()
+            s.runQueue.enableRunQueue = true
+            s.runQueue.totalRuns = 10
+            s.runQueue.enableTpRestoreWithItems = true
+            const items = collectPreflightWarnings(s, healthy)
+            expect(items.some((item) => /screen|timeout/i.test(`${item.title} ${item.text}`))).toBe(false)
         })
     })
 
@@ -153,22 +145,20 @@ describe("shouldShowPreflight", () => {
     })
 })
 
-describe("describeTimeout", () => {
-    it("uses minutes, singular where it should, and seconds under a minute", () => {
-        expect(describeTimeout(60_000)).toBe("1 minute")
-        expect(describeTimeout(10 * 60_000)).toBe("10 minutes")
-        expect(describeTimeout(15_000)).toBe("15 seconds")
-    })
-})
-
 describe("readPreflightProbes", () => {
     it("passes healthy probe values through", async () => {
         const probes = await readPreflightProbes({
             hasSecureSettingsGrant: async () => true,
-            getScreenTimeout: async () => ({ timeoutMs: 120_000, stayOnWhilePluggedIn: false }),
             areNotificationsEnabled: async () => false,
         })
-        expect(probes).toEqual({ secureSettingsGranted: true, screenTimeout: { timeoutMs: 120_000, stayOnWhilePluggedIn: false }, notificationsEnabled: false })
+        expect(probes).toEqual({ secureSettingsGranted: true, notificationsEnabled: false })
+    })
+
+    it("no longer reads the screen timeout, even from a module that still offers it", async () => {
+        const getScreenTimeout = jest.fn(async () => ({ timeoutMs: 120_000, stayOnWhilePluggedIn: false }))
+        const module = { hasSecureSettingsGrant: async () => true, areNotificationsEnabled: async () => true, getScreenTimeout }
+        expect(await readPreflightProbes(module)).toEqual({ secureSettingsGranted: true, notificationsEnabled: true })
+        expect(getScreenTimeout).not.toHaveBeenCalled()
     })
 
     it("turns a rejected, missing, or malformed probe into unknown", async () => {
@@ -176,7 +166,7 @@ describe("readPreflightProbes", () => {
             hasSecureSettingsGrant: async () => {
                 throw new Error("probe failed")
             },
-            getScreenTimeout: async () => ({ timeoutMs: "soon" }) as never,
+            areNotificationsEnabled: async () => "yes" as never,
         })
         expect(probes).toEqual(unknown)
         expect(await readPreflightProbes(undefined)).toEqual(unknown)

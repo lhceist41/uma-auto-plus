@@ -128,7 +128,7 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
             ReportText(
                 haltTitle(resumable),
                 "The queue stopped while waiting after run $reached (often because the screen turned off).",
-                "Set a longer screen timeout, then ${pressStart(resumable)}",
+                "Leave the screen on while the bot runs (pressing the power button stops it), then ${pressStart(resumable)}",
             )
         SessionEnd.ENDED_WITH_ERROR ->
             ReportText(

@@ -1115,7 +1115,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped while waiting after run 3 (often because the screen turned off).",
-                "nextAction": "Set a longer screen timeout, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+                "nextAction": "Leave the screen on while the bot runs (pressing the power button stops it), then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {

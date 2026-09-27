@@ -38,6 +38,7 @@ import com.steve1316.uma_android_automation.bot.TaskResult
 import com.steve1316.uma_android_automation.bot.TaskResultCode
 import com.steve1316.uma_android_automation.bot.shouldClearSparkTransactionForRunResult
 import com.steve1316.uma_android_automation.bot.shouldClearVerdictForRunResult
+import com.steve1316.uma_android_automation.utils.KeepScreenOn
 import com.steve1316.uma_android_automation.utils.LogStreamServer
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.Kord
@@ -1092,24 +1093,6 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         }
     }
 
-    /**
-     * The screen-off timeout in milliseconds, and whether the device stays awake while charging.
-     * The screen turning off stops a running bot, so the Start warnings flag a short timeout.
-     * Rejects when the timeout setting is missing, so the caller treats it as unknown.
-     */
-    @ReactMethod
-    fun getScreenTimeout(promise: Promise) {
-        try {
-            val resolver = reactApplicationContext.contentResolver
-            val map = Arguments.createMap()
-            map.putDouble("timeoutMs", Settings.System.getInt(resolver, Settings.System.SCREEN_OFF_TIMEOUT).toDouble())
-            map.putBoolean("stayOnWhilePluggedIn", Settings.Global.getInt(resolver, Settings.Global.STAY_ON_WHILE_PLUGGED_IN, 0) != 0)
-            promise.resolve(map)
-        } catch (e: Exception) {
-            promise.reject("SCREEN_TIMEOUT_ERROR", "Failed to read the screen timeout: ${e.message}")
-        }
-    }
-
     /** Whether this app may post notifications (off by default for new installs on Android 13+). */
     @ReactMethod
     fun areNotificationsEnabled(promise: Promise) {
@@ -1742,6 +1725,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             val ledger = SessionLedger(java.util.UUID.randomUUID().toString(), System.currentTimeMillis(), BuildConfig.VERSION_NAME, android.os.Process.myPid())
             var ledgerHeartbeat: Thread? = null
             try {
+                // Removed in the finally, so every exit releases the screen.
+                if (!KeepScreenOn.start(context)) {
+                    MessageLog.w(TAG, "[START] UMA Auto+ cannot draw over other apps, so it cannot keep the screen on; the screen timeout can stop this session.")
+                }
                 // Reset queue control flags at the start of every new session.
                 // Before diagnostic dispatch: Game.wait aborts on a Stop left over from the previous session.
                 queueStopRequested = false
@@ -2437,6 +2424,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             } finally {
                 // Always release the wake lock and the session latch, even on exception or break paths.
                 Game.releaseWakeLock()
+                KeepScreenOn.stop()
                 DebugTestGate.finish()
                 ledgerHeartbeat?.interrupt()
                 notifySessionEnd(libraryThread, writeSessionReport(ledger))
