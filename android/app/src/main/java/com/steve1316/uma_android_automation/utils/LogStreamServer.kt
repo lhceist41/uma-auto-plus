@@ -37,11 +37,13 @@ import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -979,6 +981,30 @@ object LogStreamServer {
     }
 
     /**
+     * Runs every action from [channel] in order until it closes. A failing action is reported and skipped,
+     * because an exception escaping here would end the worker and leave the unlimited channel growing until
+     * stop. The report goes to android.util.Log only: a MessageLog line would come straight back into this
+     * channel. Cancellation still ends the loop, so stop() works.
+     *
+     * @param channel The worker's action channel.
+     * @param handle Runs one action.
+     */
+    internal suspend fun <T> drainActions(
+        channel: ReceiveChannel<T>,
+        handle: suspend (T) -> Unit,
+    ) {
+        for (action in channel) {
+            try {
+                handle(action)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "[ERROR] drainActions:: Skipped a log worker action after ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
+    }
+
+    /**
      * Enqueues a log message for sequential processing.
      *
      * @param message The log message to broadcast.
@@ -1092,7 +1118,7 @@ object LogStreamServer {
         // Start the core log worker that serializes all history syncs and live broadcasts.
         serverScope?.launch {
             actionChannel?.let { channel ->
-                for (action in channel) {
+                drainActions(channel) { action ->
                     when (action) {
                         is LogAction.NewClient -> {
                             handleNewClientAction(action.session)

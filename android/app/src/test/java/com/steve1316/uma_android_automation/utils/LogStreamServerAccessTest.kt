@@ -3,6 +3,8 @@ package com.steve1316.uma_android_automation.utils
 import com.steve1316.automation_library.events.JSEvent
 import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.bot.LaunchIdentityGate
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -550,6 +552,26 @@ class LogStreamServerAccessTest {
             assertEquals(emptyList<String>(), lines.filterIndexed { i, _ -> positions[i] < 0 }, "every line logged before the client joined is in its history")
             assertEquals(positions.sorted(), positions, "in the order they were logged")
         }
+    }
+
+    @Test
+    fun `a failing log action is skipped and the worker keeps draining the next ones`() {
+        val channel = Channel<Int>(Channel.UNLIMITED)
+        (1..4).forEach { channel.trySend(it) }
+        channel.close()
+        val handled = mutableListOf<Int>()
+        runBlocking {
+            LogStreamServer.drainActions(channel) { action ->
+                if (action == 2) throw IllegalStateException("a broken line")
+                handled.add(action)
+            }
+        }
+        assertEquals(listOf(1, 3, 4), handled)
+
+        val server = sourceFile("utils/LogStreamServer.kt").readText().replace("\r\n", "\n")
+        assertTrue(server.contains("actionChannel?.let { channel ->\n                drainActions(channel) { action ->"), "the log worker drains through the guarded loop")
+        val guard = server.substring(server.indexOf("internal suspend fun <T> drainActions("), server.indexOf("fun broadcast("))
+        assertFalse(guard.contains("MessageLog."), "a worker failure is never reported through MessageLog, which feeds this channel")
     }
 
     @Test
