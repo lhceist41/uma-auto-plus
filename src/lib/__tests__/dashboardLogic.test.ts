@@ -259,7 +259,7 @@ test('buildCells: lit cells get the "on" colour, the rest stay off', () => {
 
 test('buildRunRow: the producer\'s six run states map to the design labels', () => {
   const done = logic.buildRunRow({ n: 1, trainee: 'El Condor Pasa', scenario: 'URA Finale', state: 'done', rank: 'A', estScore: 10757, fans: 221054 }, false, '#E8B84B');
-  assert.equal(done.result, 'RANK A');
+  assert.equal(done.result, 'EST. A');
   assert.equal(done.gateBg, '#F2F2EE');
   const running = logic.buildRunRow({ n: 2, state: 'running' }, true, '#E8B84B');
   assert.equal(running.result, 'RUNNING');
@@ -278,6 +278,19 @@ test('buildRunRow: the producer\'s six run states map to the design labels', () 
 test('buildRunRow: an unrecognised state fails closed to WAITING, not a guessed result', () => {
   const row = logic.buildRunRow({ n: 3, state: 'somethingNew' }, false, '#E8B84B');
   assert.equal(row.result, 'WAITING');
+});
+
+test('describeFinale says how many finale races were raced, never a count of the scenario\'s three', () => {
+  assert.equal(logic.describeFinale({ won: 3, of: 3 }), '3 of 3 raced');
+  assert.equal(logic.describeFinale({ won: 0, of: 1 }), '0 of 1 raced');
+  assert.equal(logic.describeFinale(null), null);
+  assert.equal(logic.describeFinale({ won: 'x', of: 1 }), null);
+});
+
+test('the slip and the banner call the rank an estimate', () => {
+  const app = fs.readFileSync(path.join(ASSETS_DIR, 'dashboard', 'app.js'), 'utf8');
+  assert.ok(app.includes("'rc-details-rank-label', 'EST. RANK'"));
+  assert.ok(!app.includes("'rc-details-rank-label', 'RANK'"));
 });
 
 test('describeTpRestores and describeRecoveries compose from the actual sub-counts', () => {
@@ -448,7 +461,7 @@ test('viewModel: between runs, with and without a just-finished run', () => {
   assert.equal(withLastRank.badge.text, 'BETWEEN RUNS');
   assert.equal(withLastRank.badge.lampLit, false);
   assert.equal(withLastRank.banner.headline, 'LAUNCHING RUN 3');
-  assert.match(withLastRank.banner.body, /Run 2 finished with rank B/);
+  assert.match(withLastRank.banner.body, /Run 2 finished with an estimated rank of B/);
   // The NOW block hides; the queue and session stay.
   assert.deepEqual(withLastRank.blocks, { nowVisible: false, queueVisible: true, sessionVisible: true, dimmed: false });
 
@@ -470,7 +483,7 @@ for (const key of ['completed', 'navigating', 'waiting']) {
     );
     assert.equal(vm.phase, 'between');
     assert.equal(vm.banner.headline, 'LAUNCHING RUN 3');
-    assert.equal(vm.banner.body, 'Run 2 finished with rank B. The bot is starting the next run.');
+    assert.equal(vm.banner.body, 'Run 2 finished with an estimated rank of B. The bot is starting the next run.');
   });
 }
 
@@ -505,7 +518,7 @@ test('between-runs banner after the last run: no run to launch, and no claim tha
     connectedNow()
   );
   assert.equal(vm.banner.headline, 'BETWEEN RUNS');
-  assert.equal(vm.banner.body, 'Run 4 finished with rank S.');
+  assert.equal(vm.banner.body, 'Run 4 finished with an estimated rank of S.');
 });
 
 test('viewModel: every terminal key gets its badge from the key table, never inferred from run counts', () => {

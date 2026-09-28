@@ -242,7 +242,7 @@ class QueueReportTest {
         fun `a run with a result and kept sparks round-trips through the stored record`() {
             val record =
                 RunRecord(1, 1_100L, 2_000L, "TASK_RESULT_COMPLETE", "El_Condor_Pasa", "URA_Finale", "COMPLETED", 75)
-                    .copy(result = finished, sparks = kept, sparksNote = "kept the original set after one reroll")
+                    .copy(result = finished, sparks = kept, sparksNote = "rerolled once, kept the original sparks")
             val stored = JSONObject(open(JSONArray().put(runRecordJson(record))).toString())
             val run = processEndedReport(stored, null, null, resumable = false).toJson().getJSONArray("runs").getJSONObject(0)
             assertEquals("A", run.getString("rank"))
@@ -254,7 +254,7 @@ class QueueReportTest {
                 canonical(JSONArray("""[{"name":"Power","type":"stat","stars":1},{"name":"Turf","type":"aptitude","stars":2},{"name":"Tokyo Yushun","type":"other","stars":3}]""")),
                 canonical(run.getJSONArray("sparks")),
             )
-            assertEquals("kept the original set after one reroll", run.getString("sparksNote"))
+            assertEquals("rerolled once, kept the original sparks", run.getString("sparksNote"))
             assertEquals(canonical(JSONObject(runRecordJson(record).toString())), canonical(run))
         }
 
@@ -296,8 +296,8 @@ class QueueReportTest {
             assertNull(sparksNoteFor(false, null))
             assertNull(sparksNoteFor(false, SparkSetSide.ORIGINAL), "no reroll, nothing to say")
             assertNull(sparksNoteFor(true, null), "a reroll with no chosen side says nothing it cannot back")
-            assertEquals("kept the original set after one reroll", sparksNoteFor(true, SparkSetSide.ORIGINAL))
-            assertEquals("kept the rerolled set after one reroll", sparksNoteFor(true, SparkSetSide.REROLLED))
+            assertEquals("rerolled once, kept the original sparks", sparksNoteFor(true, SparkSetSide.ORIGINAL))
+            assertEquals("rerolled once, kept the new sparks", sparksNoteFor(true, SparkSetSide.REROLLED))
         }
 
         @Test
@@ -322,13 +322,13 @@ class QueueReportTest {
             l.addRun(RunRecord(1, 1_100L, 2_000L, "TASK_RESULT_COMPLETE", "Special_Week", "URA_Finale", "COMPLETED", 75, result = finished))
             l.addRun(RunRecord(2, 2_100L, 3_000L, "TASK_RESULT_COMPLETE", "El_Condor_Pasa", "URA_Finale", "COMPLETED", 75))
             assertNull(l.attachSparks(3, CareerEndSparks(9, kept, null)), "no record for run 3")
-            val updated = l.attachSparks(1, CareerEndSparks(9, kept, "kept the rerolled set after one reroll"))!!
+            val updated = l.attachSparks(1, CareerEndSparks(9, kept, "rerolled once, kept the new sparks"))!!
             assertEquals(kept, updated.sparks)
             assertEquals(finished, updated.result, "the result stays")
             val runs = l.openJson(now = 4_000L).getJSONArray("runs")
             assertEquals(2, runs.length())
             assertEquals(3, runs.getJSONObject(0).getJSONArray("sparks").length())
-            assertEquals("kept the rerolled set after one reroll", runs.getJSONObject(0).getString("sparksNote"))
+            assertEquals("rerolled once, kept the new sparks", runs.getJSONObject(0).getString("sparksNote"))
             assertFalse(runs.getJSONObject(1).has("sparks"))
         }
 

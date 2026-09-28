@@ -262,7 +262,7 @@
     var resultLabel = null;
     var resultColor = '#7D8A99';
     if (run.state === 'done' && run.rank) {
-      resultLabel = 'RANK ' + run.rank;
+      resultLabel = 'EST. ' + run.rank;
       resultColor = '#F1D48A';
     } else if (run.state === 'running') {
       resultLabel = 'RUNNING';
@@ -312,6 +312,13 @@
     if (r.lobby) parts.push(r.lobby + (r.lobby === 1 ? ' lobby re-entry' : ' lobby re-entries'));
     if (r.connection) parts.push(r.connection + (r.connection === 1 ? ' connection hold' : ' connection holds'));
     return parts.length ? parts.join(' · ') : 'none yet';
+  }
+
+  // finale.of counts the finale races the bot ran, not the scenario's three,
+  // so a career that ended early reads "0 of 1 raced", never "0 of 3".
+  function describeFinale(f) {
+    if (!f || !Number.isFinite(f.won) || !Number.isFinite(f.of)) return null;
+    return f.won + ' of ' + f.of + ' raced';
   }
 
   // A null/absent tpRestores, or a non-finite items/carats (a malformed or
@@ -409,7 +416,7 @@
       // (which is usually a run that has not started yet).
       var lastRun = status && Array.isArray(status.runs) ? status.runs.filter(function (r) { return r.state === 'done'; }).pop() : null;
       var body = (lastRun && lastRun.rank)
-        ? ('Run ' + lastRun.n + ' finished with rank ' + lastRun.rank + '.' + (nextRun ? ' The bot is starting the next run.' : ''))
+        ? ('Run ' + lastRun.n + ' finished with an estimated rank of ' + lastRun.rank + '.' + (nextRun ? ' The bot is starting the next run.' : ''))
         : 'The bot is between runs.';
       var meta = '';
       if (status && status.lastProgressAt != null && Number.isFinite(status.sentAt) && receivedAt != null) {
@@ -522,6 +529,7 @@
     buildRunRow: buildRunRow,
     describeTpRestores: describeTpRestores,
     describeRecoveries: describeRecoveries,
+    describeFinale: describeFinale,
     totalTpRestores: totalTpRestores,
     totalRecoveries: totalRecoveries,
     viewModel: viewModel,

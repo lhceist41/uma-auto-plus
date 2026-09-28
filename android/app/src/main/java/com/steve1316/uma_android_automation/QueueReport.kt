@@ -221,8 +221,8 @@ internal fun keptSpark(row: SparkRowFact): KeptSpark {
 internal fun sparksNoteFor(rerolled: Boolean, kept: SparkSetSide?): String? =
     when {
         !rerolled || kept == null -> null
-        kept == SparkSetSide.ORIGINAL -> "kept the original set after one reroll"
-        else -> "kept the rerolled set after one reroll"
+        kept == SparkSetSide.ORIGINAL -> "rerolled once, kept the original sparks"
+        else -> "rerolled once, kept the new sparks"
     }
 
 /** The kept sparks belonging to the run whose career end had sequence [runCareerEndSeq], or null (no career end, or sparks from another career). */

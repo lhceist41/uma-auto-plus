@@ -600,7 +600,7 @@
       var top = el('div', 'rc-details-top');
       var rankBadge = el('div', 'rc-details-rank-badge');
       var rankInner = el('div', 'rc-details-rank-inner');
-      rankInner.appendChild(el('span', 'rc-details-rank-label', 'RANK'));
+      rankInner.appendChild(el('span', 'rc-details-rank-label', 'EST. RANK'));
       rankInner.appendChild(el('span', 'rc-details-rank-value', run.rank != null ? run.rank : '–'));
       rankBadge.appendChild(rankInner);
       top.appendChild(rankBadge);
@@ -617,7 +617,7 @@
       var strip = el('div', 'rc-details-strip');
       strip.appendChild(detailsStripCell('EST. SCORE', L.naText(run.estScore, L.formatNumber(run.estScore))));
       strip.appendChild(detailsStripCell('FANS', L.naText(run.fans, L.formatNumber(run.fans))));
-      strip.appendChild(detailsStripCell('FINALE', run.finale ? (run.finale.won + ' of ' + run.finale.of) : 'not available'));
+      strip.appendChild(detailsStripCell('FINALE WINS', L.describeFinale(run.finale) || 'not available'));
       body.appendChild(strip);
 
       var finalsBlock = el('div', 'rc-details-finals-head');

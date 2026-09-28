@@ -221,6 +221,17 @@ class LogStreamServerAccessTest {
     }
 
     @Test
+    fun `the viewer makes no request off the device and inserts no server text as HTML`() {
+        val page = File(kotlinRoot().parentFile.parentFile.parentFile.parentFile, "assets/log_viewer.html").readText().replace("\r\n", "\n")
+        assertFalse(page.contains("http://") || page.contains("https://"), "every asset comes from the device")
+        assertTrue(page.contains("/dashboard/fonts/jetbrains-mono/jetbrains-mono-latin-wght-normal.woff2"), "the monospace font is the one the dashboard ships")
+        for (name in listOf("showTooltip", "createLogEntry")) {
+            val body = page.substringAfter("function $name(").substringBefore("\n            /**")
+            assertTrue(body.isNotBlank() && !body.contains("innerHTML") && !body.contains("insertAdjacentHTML"), "$name writes text nodes only")
+        }
+    }
+
+    @Test
     fun `a client that sends nothing is closed with 4401 when the auth time runs out`() {
         LogStreamServer.authTimeoutMs = 300
         try {

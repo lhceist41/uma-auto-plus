@@ -118,7 +118,7 @@ class StatusBoardTest {
             assertTrue(errored.has(key) && errored.isNull(key), "a run with no result sends $key as null")
         }
 
-        StatusBoard.runUpdated(first.copy(sparks = listOf(KeptSpark("Power", "stat", 1), KeptSpark("Kikuka Sho", "other", 3)), sparksNote = "kept the original set after one reroll"))
+        StatusBoard.runUpdated(first.copy(sparks = listOf(KeptSpark("Power", "stat", 1), KeptSpark("Kikuka Sho", "other", 3)), sparksNote = "rerolled once, kept the original sparks"))
         runs = status().getJSONArray("runs")
         assertEquals(listOf("done", "errored", "next"), (0 until runs.length()).map { runs.getJSONObject(it).getString("state") }, "the update replaces the run, never adds one")
         val sparks = runs.getJSONObject(0).getJSONArray("sparks")
@@ -127,7 +127,7 @@ class StatusBoardTest {
         assertEquals("Kikuka Sho", sparks.getJSONObject(1).getString("name"))
         assertEquals("other", sparks.getJSONObject(1).getString("type"))
         assertEquals(3, sparks.getJSONObject(1).getInt("stars"))
-        assertEquals("kept the original set after one reroll", runs.getJSONObject(0).getString("sparksNote"))
+        assertEquals("rerolled once, kept the original sparks", runs.getJSONObject(0).getString("sparksNote"))
         assertEquals("UG4", runs.getJSONObject(0).getString("rank"), "the result stays")
 
         StatusBoard.runUpdated(record(7, "TASK_RESULT_COMPLETE"))
@@ -307,6 +307,41 @@ class StatusBoardTest {
             "connectionHolds" -> SessionTally.connectionHolds
             else -> error("decide whether the Home card adds up $key, and whether the dashboard does")
         }
+
+    @Test
+    fun `the goal name shows only for a classified race, and stays while the deadline is unchanged`() {
+        StatusBoard.reset(900L)
+        turn()
+
+        fun goalName() = status().getJSONObject("career").getJSONObject("goal").let { if (it.isNull("name")) null else it.getString("name") }
+        StatusBoard.goal(10, 2, 3_000L)
+        assertEquals(null, goalName(), "no name without a classified goal text")
+        StatusBoard.goal(10, 2, 3_100L, name = "Satsuki Sho")
+        assertEquals("Satsuki Sho", goalName())
+        StatusBoard.goal(11, 1, 3_200L)
+        assertEquals("Satsuki Sho", goalName(), "the same deadline keeps its name")
+        StatusBoard.goal(12, 5, 3_300L)
+        assertEquals(null, goalName(), "a new deadline has no name until it is classified")
+
+        val produce = kotlinSource("bot/Campaign.kt").substringAfter("private fun produceGoalSnapshotIfDue(").substringBefore("\n    }\n")
+        val classified = produce.indexOf("if (kind == GoalKind.RACE) {")
+        val named = produce.indexOf("StatusBoard.goal(date.day, turnsRemaining, name = raceName)")
+        assertTrue(named > classified && classified >= 0, "the name comes only from the classified race")
+    }
+
+    @Test
+    fun `the skills, infirmary, shop and Trackblazer training screens publish what the bot is doing`() {
+        val campaign = kotlinSource("bot/Campaign.kt")
+        assertTrue(campaign.substringAfter("open fun handleSkillListScreen(").substringBefore("\n    }\n").contains("StatusBoard.action(\"skills\", null)"))
+        val injury = campaign.substringAfter("open fun checkInjury(").substringBefore("\n    }\n").lines()
+        val published = injury.indices.filter { injury[it].contains("StatusBoard.action(\"infirmary\", null)") }
+        assertEquals(2, published.size, "the forced attempt and the ordinary heal")
+        for (i in published) assertTrue(injury[i + 1].contains("if (ButtonInfirmary.click("), "published right before the tap")
+        val trackblazer = kotlinSource("bot/campaigns/Trackblazer.kt")
+        assertTrue(trackblazer.substringAfter("fun openShop(").substringBefore("\n    }\n").contains("StatusBoard.action(\"shop\", null)"))
+        val fastPath = trackblazer.substringAfter("override fun executeAction(action: MainScreenAction").substringBefore("\n    }\n")
+        assertTrue(fastPath.indexOf("StatusBoard.action(\"training\", null)") in 0 until fastPath.indexOf("handleTrackblazerTraining()"), "the fast path that skips the base action publishes its own")
+    }
 
     @Test
     fun `Home reads the retained queue progress on mount and on every return to the app`() {

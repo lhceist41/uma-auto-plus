@@ -4,10 +4,13 @@
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>UAA - Remote Log Viewer</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
         <style>
+            @font-face {
+                font-family: "JetBrains Mono";
+                src: url("/dashboard/fonts/jetbrains-mono/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
+                font-weight: 100 800;
+                font-display: swap;
+            }
             :root {
                 --bg-primary: #0a0a0f;
                 --bg-secondary: #12121a;
@@ -31,7 +34,7 @@
                 --status-connecting: #f59e0b;
                 --scrollbar-thumb: #333350;
                 --scrollbar-track: #0a0a0f;
-                --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+                --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
                 --radius: 8px;
                 --transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -1497,14 +1500,35 @@
             /**
              * Shows the custom tooltip with the given content.
              */
-            function showTooltip(event, title, content) {
-                const target = event.currentTarget
-                let html = `<div class="tooltip-title">${title}</div>`
-                html += `<div class="tooltip-content">${content}</div>`
-                
-                tooltip.innerHTML = html
+            function showTooltip(event, title, rows) {
+                tooltip.textContent = ""
+                const titleEl = document.createElement("div")
+                titleEl.className = "tooltip-title"
+                titleEl.textContent = title
+                const column = document.createElement("div")
+                column.style.cssText = "display: flex; flex-direction: column; gap: 4px;"
+                rows.forEach(function (row) {
+                    const rowEl = document.createElement("div")
+                    rowEl.className = "tooltip-row"
+                    const labelEl = document.createElement("span")
+                    labelEl.className = "tooltip-label"
+                    labelEl.textContent = row[0]
+                    rowEl.appendChild(labelEl)
+                    if (row.length > 1) {
+                        const valueEl = document.createElement("span")
+                        valueEl.className = "tooltip-value"
+                        valueEl.textContent = String(row[1])
+                        rowEl.appendChild(valueEl)
+                    }
+                    column.appendChild(rowEl)
+                })
+                const content = document.createElement("div")
+                content.className = "tooltip-content"
+                content.appendChild(column)
+                tooltip.appendChild(titleEl)
+                tooltip.appendChild(content)
                 tooltip.classList.add("visible")
-                
+
                 updateTooltipPosition(event)
             }
 
@@ -1519,20 +1543,8 @@
              * Shows a specific tooltip for the training action counter.
              */
             function showTrainingTooltip(event) {
-                let content = '<div style="display: flex; flex-direction: column; gap: 4px;">'
                 const stats = ["Speed", "Stamina", "Power", "Guts", "Wit"]
-                
-                stats.forEach(stat => {
-                    const count = trainingBreakdown[stat] || 0
-                    content += `
-                        <div class="tooltip-row">
-                            <span class="tooltip-label">${stat}</span>
-                            <span class="tooltip-value">${count}</span>
-                        </div>`
-                })
-                
-                content += "</div>"
-                showTooltip(event, "Training Breakdown", content)
+                showTooltip(event, "Training Breakdown", stats.map(stat => [stat, trainingBreakdown[stat] || 0]))
             }
 
             /**
@@ -1540,34 +1552,20 @@
              */
             function showSimpleTooltip(event, title) {
                 const count = event.currentTarget.querySelector(".stat-value").textContent
-                const content = `
-                    <div class="tooltip-row">
-                        <span class="tooltip-label">Total actions</span>
-                        <span class="tooltip-value">${count}</span>
-                    </div>`
-                showTooltip(event, title, content)
+                showTooltip(event, title, [["Total actions", count]])
             }
 
             /**
              * Shows a specific tooltip for the race action counter.
              */
             function showRaceTooltip(event) {
-                let content = '<div style="display: flex; flex-direction: column; gap: 4px;">'
                 const grades = ["Finale", "G1", "G2", "G3", "OP", "Pre-OP", "Maiden", "Mandatory", "Standalone"]
-                
-                let found = false
+                const rows = []
                 grades.forEach(grade => {
                     const count = raceBreakdown[grade] || 0
-                    if (count > 0) {
-                        found = true
-                        content += `
-                            <div class="tooltip-row">
-                                <span class="tooltip-label">${grade}</span>
-                                <span class="tooltip-value">${count}</span>
-                            </div>`
-                    }
+                    if (count > 0) rows.push([grade, count])
                 })
-                
+
                 // Show "Other" if there are any unrecognized grades.
                 let otherCount = 0
                 for (const [grade, count] of Object.entries(raceBreakdown)) {
@@ -1575,61 +1573,26 @@
                         otherCount += count
                     }
                 }
-                if (otherCount > 0) {
-                    found = true
-                    content += `
-                        <div class="tooltip-row">
-                            <span class="tooltip-label">Other</span>
-                            <span class="tooltip-value">${otherCount}</span>
-                        </div>`
-                }
-                
-                if (!found) {
-                    content += '<div class="tooltip-row"><span class="tooltip-label">No races yet</span></div>'
-                }
-                
-                content += "</div>"
-                showTooltip(event, "Race Grade Breakdown", content)
+                if (otherCount > 0) rows.push(["Other", otherCount])
+
+                if (rows.length === 0) rows.push(["No races yet"])
+                showTooltip(event, "Race Grade Breakdown", rows)
             }
 
             /**
              * Shows a specific tooltip for the mood recovery action counter.
              */
             function showMoodTooltip(event) {
-                let content = '<div style="display: flex; flex-direction: column; gap: 4px;">'
                 const types = ["Recreation", "Date", "Summer"]
-                
-                types.forEach(type => {
-                    const count = moodBreakdown[type] || 0
-                    content += `
-                        <div class="tooltip-row">
-                            <span class="tooltip-label">${type}</span>
-                            <span class="tooltip-value">${count}</span>
-                        </div>`
-                })
-                
-                content += "</div>"
-                showTooltip(event, "Mood Recovery Breakdown", content)
+                showTooltip(event, "Mood Recovery Breakdown", types.map(type => [type, moodBreakdown[type] || 0]))
             }
 
             /**
              * Shows a specific tooltip for the energy recovery action counter.
              */
             function showEnergyTooltip(event) {
-                let content = '<div style="display: flex; flex-direction: column; gap: 4px;">'
                 const types = ["Rest", "Date", "Summer"]
-                
-                types.forEach(type => {
-                    const count = energyBreakdown[type] || 0
-                    content += `
-                        <div class="tooltip-row">
-                            <span class="tooltip-label">${type}</span>
-                            <span class="tooltip-value">${count}</span>
-                        </div>`
-                })
-                
-                content += "</div>"
-                showTooltip(event, "Energy Recovery Breakdown", content)
+                showTooltip(event, "Energy Recovery Breakdown", types.map(type => [type, energyBreakdown[type] || 0]))
             }
 
             /**
@@ -2122,19 +2085,24 @@
                 entry.className = "log-entry level-" + parsed.level.toLowerCase()
                 entry.dataset.level = parsed.level
 
-                var html = ""
+                var addPart = function (className, text) {
+                    var part = document.createElement("span")
+                    part.className = className
+                    part.textContent = text
+                    entry.appendChild(part)
+                }
                 if (parsed.newline) {
-                    html += parsed.newline
+                    entry.appendChild(document.createTextNode(parsed.newline))
                 }
                 if (parsed.timestamp) {
-                    html += '<span class="log-timestamp">' + escapeHtml(parsed.timestamp) + "</span> "
+                    addPart("log-timestamp", parsed.timestamp)
+                    entry.appendChild(document.createTextNode(" "))
                 }
                 if (parsed.level) {
-                    html += '<span class="level-tag">[' + escapeHtml(parsed.level) + "]</span> "
+                    addPart("level-tag", "[" + parsed.level + "]")
+                    entry.appendChild(document.createTextNode(" "))
                 }
-                html += '<span class="log-text">' + escapeHtml(parsed.message) + "</span>"
-
-                entry.innerHTML = html
+                addPart("log-text", parsed.message)
 
                 // Apply current filters.
                 if (!activeFilters.has(parsed.level)) {

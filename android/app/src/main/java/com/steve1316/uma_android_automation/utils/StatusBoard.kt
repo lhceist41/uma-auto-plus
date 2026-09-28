@@ -36,6 +36,7 @@ internal object StatusBoard {
         val mood: String? = null,
         val moodAt: Long? = null,
         val goalDueTurn: Int? = null,
+        val goalName: String? = null,
         val goalAt: Long? = null,
         val actionKind: String? = null,
         val actionDetail: String? = null,
@@ -120,14 +121,22 @@ internal object StatusBoard {
         now: Long = System.currentTimeMillis(),
     ) = publish { it.copy(career = (it.career ?: Career()).copy(actionKind = kind, actionDetail = detail, actionAt = now)) }
 
-    /** The goal countdown the bot read on [turn] anyway, as the absolute turn it falls on. */
+    /**
+     * The goal countdown the bot read on [turn] anyway, as the absolute turn it falls on. [name] is the
+     * race name only when the goal text was already classified; it stays while the deadline is unchanged.
+     */
     fun goal(
         turn: Int,
         turnsLeft: Int,
         now: Long = System.currentTimeMillis(),
+        name: String? = null,
     ) {
         if (turnsLeft < 0) return
-        publish { it.copy(career = (it.career ?: Career()).copy(goalDueTurn = turn + turnsLeft, goalAt = now)) }
+        publish {
+            val career = it.career ?: Career()
+            val due = turn + turnsLeft
+            it.copy(career = career.copy(goalDueTurn = due, goalAt = now, goalName = name ?: career.goalName.takeIf { career.goalDueTurn == due }))
+        }
     }
 
     fun raceRun() = publish { it.copy(career = (it.career ?: Career()).copy(racesRun = (it.career?.racesRun ?: 0) + 1)) }
@@ -264,7 +273,7 @@ internal object StatusBoard {
             .put("action", if (c.actionKind == null) JSONObject.NULL else stamp(c.actionAt) { put("kind", c.actionKind).put("detail", c.actionDetail ?: JSONObject.NULL) })
             .put("date", if (c.turn == null) JSONObject.NULL else stamp(c.dateAt) { put("year", c.year ?: JSONObject.NULL).put("label", c.dateLabel ?: JSONObject.NULL).put("turn", c.turn) })
             .put("course", courseJson(c.scenario) ?: JSONObject.NULL)
-            .put("goal", if (c.goalDueTurn == null) JSONObject.NULL else stamp(c.goalAt) { put("name", JSONObject.NULL).put("dueTurn", c.goalDueTurn) })
+            .put("goal", if (c.goalDueTurn == null) JSONObject.NULL else stamp(c.goalAt) { put("name", c.goalName ?: JSONObject.NULL).put("dueTurn", c.goalDueTurn) })
             .put(
                 "stats",
                 if (stats == null) {

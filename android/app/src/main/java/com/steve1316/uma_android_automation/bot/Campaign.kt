@@ -2416,6 +2416,7 @@ abstract class Campaign(game: Game) : Task(game) {
                             "[INJURY] Infirmary button reads disabled but negative status (${statuses.joinToString(", ")}) has persisted for " +
                                 "$turnsWithPersistentNegativeStatus turns. Forcing one infirmary attempt in case the disabled read is wrong.",
                         )
+                        StatusBoard.action("infirmary", null)
                         if (ButtonInfirmary.click(game.imageUtils)) {
                             game.wait(game.dialogWaitDelay)
                             ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
@@ -2441,6 +2442,7 @@ abstract class Campaign(game: Game) : Task(game) {
 
             false -> {
                 MessageLog.v(TAG, "[INJURY] Injury detected. Attempting to heal...")
+                StatusBoard.action("infirmary", null)
                 if (ButtonInfirmary.click(game.imageUtils, sourceBitmap = sourceBitmap)) {
                     game.wait(game.dialogWaitDelay)
                     ButtonOk.click(game.imageUtils, region = game.imageUtils.regionMiddle)
@@ -3000,6 +3002,7 @@ abstract class Campaign(game: Game) : Task(game) {
      * @return True if the skill purchasing process was successful, false otherwise.
      */
     open fun handleSkillListScreen(skillPlanName: String? = null, trigger: SkillCheckTrigger? = null): Boolean {
+        StatusBoard.action("skills", null)
         MessageLog.v(TAG, "[SKILLS] Beginning process to purchase skills...")
         return skillPlan.start(skillPlanName, trigger)
     }
@@ -3846,6 +3849,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 val (kind, raceName) = classifyGoalText(text, goalRaceNameCandidates)
                 if (kind == GoalKind.RACE) {
                     MessageLog.i(TAG, "[SKILLS] Critical race '$raceName' in $turnsRemaining turn(s) from goal OCR.")
+                    StatusBoard.goal(date.day, turnsRemaining, name = raceName)
                 }
                 GoalDeadlineSnapshot(date.day, turnsRemaining, text, kind, raceName)
             }

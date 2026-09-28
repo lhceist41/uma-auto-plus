@@ -1036,6 +1036,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                         super.executeAction(action, bIsScheduledRaceDay)
                     } else {
                         MessageLog.i(TAG, "[TRACKBLAZER] Decision made to train.")
+                        StatusBoard.action("training", null)
                         handleTrackblazerTraining()
                         bHasCheckedDateThisTurn = false
                         // Shadow-only: this fast path advances the turn without super.executeAction, so the
@@ -1094,6 +1095,7 @@ class Trackblazer(game: Game) : Campaign(game) {
      * @return True if the shop was opened successfully, false otherwise.
      */
     fun openShop(tries: Int = 5): Boolean {
+        StatusBoard.action("shop", null)
         // Already on the Training Items screen; nothing to open. ButtonTrainingItems also matches
         // the Main screen's round quick-access button on some devices (99%+ confidence in a device
         // capture), and the false "already open" made updateShopCoins read the Main screen's stat
