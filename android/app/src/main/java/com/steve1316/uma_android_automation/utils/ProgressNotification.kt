@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.utils
 
+import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.postsProgressLine
 import com.steve1316.uma_android_automation.progressLineDue
 import com.steve1316.uma_android_automation.progressLineText
@@ -41,7 +42,15 @@ internal object ProgressNotification {
         val status = s.statusKey ?: "running"
         if (!postsProgressLine(status) || !captureRunning()) return
         val date = s.career?.let { c -> listOfNotNull(c.year, c.dateLabel).joinToString(" ").ifEmpty { null } }
-        val text = progressLineText(status, s.runCurrent, s.runTotal, date, runRecorded = s.runs.any { it.run == s.runCurrent })
+        val text =
+            progressLineText(
+                status,
+                s.runCurrent,
+                s.runTotal,
+                date,
+                runRecorded = s.runs.any { it.run == s.runCurrent },
+                pausePending = StartModule.stopAfterCareerRequested,
+            )
         if (!progressLineDue(text, lastText, now, lastPostAt)) return
         lastText = text
         lastPostAt = now

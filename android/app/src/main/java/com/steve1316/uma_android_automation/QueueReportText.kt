@@ -198,19 +198,25 @@ internal fun statusLabel(key: String?): String = STATUS_LABELS[key] ?: "Working"
  * The notification's line while a session runs, e.g. "Run 2 of 4, Classic Year Late January". [date]
  * is the game date the bot last read, or null. [runRecorded] is whether [run] is already among the
  * session's finished runs: only then does a between-runs line say it ended (the queue also sends the
- * run about to start, e.g. its first run on a cold start). Built from the status key and numbers only:
- * never a queue event's message, a TP amount or a time estimate.
+ * run about to start, e.g. its first run on a cold start). [pausePending] is whether "Stop after this
+ * career" is requested: a running line then ends with [PAUSE_PENDING]. Built from the status key and
+ * numbers only: never a queue event's message, a TP amount or a time estimate.
  */
-internal fun progressLineText(status: String?, run: Int?, total: Int?, date: String?, runRecorded: Boolean = false): String {
+internal fun progressLineText(status: String?, run: Int?, total: Int?, date: String?, runRecorded: Boolean = false, pausePending: Boolean = false): String {
     val label = statusLabel(status)
     val position = if (run != null && total != null && run > 0 && total > 0) "run $run of $total" else null
-    return when {
-        label == BETWEEN_RUNS && position != null -> if (runRecorded) "$label: $position ended" else "$label: starting $position"
-        status == "running" -> listOfNotNull(position?.replaceFirstChar(Char::uppercase), date ?: label).joinToString(", ")
-        position != null -> "${position.replaceFirstChar(Char::uppercase)}, $label"
-        else -> label
-    }
+    val line =
+        when {
+            label == BETWEEN_RUNS && position != null -> if (runRecorded) "$label: $position ended" else "$label: starting $position"
+            status == "running" -> listOfNotNull(position?.replaceFirstChar(Char::uppercase), date ?: label).joinToString(", ")
+            position != null -> "${position.replaceFirstChar(Char::uppercase)}, $label"
+            else -> label
+        }
+    return if (pausePending && status == "running") "$line. $PAUSE_PENDING" else line
 }
+
+/** Ends the running line while "Stop after this career" is requested; gone again once it is cancelled. */
+internal const val PAUSE_PENDING = "Pausing after this career."
 
 /** The line is posted only for a live or between-runs key, or an unknown one; never before the overlay tap or once the queue has ended. */
 internal fun postsProgressLine(status: String?): Boolean = status != "armed" && statusLabel(status) != NOT_RUNNING

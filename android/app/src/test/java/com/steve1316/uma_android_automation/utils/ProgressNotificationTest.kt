@@ -2,6 +2,7 @@ package com.steve1316.uma_android_automation.utils
 
 import com.steve1316.uma_android_automation.RunRecord
 import com.steve1316.uma_android_automation.STATUS_LABELS
+import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.postsProgressLine
 import com.steve1316.uma_android_automation.progressLineDue
 import com.steve1316.uma_android_automation.progressLineText
@@ -30,6 +31,30 @@ class ProgressNotificationTest {
     fun stop() {
         ProgressNotification.end()
         StatusBoard.reset()
+        StartModule.stopAfterCareerRequested = false
+    }
+
+    @Test
+    fun `a requested pause is named on the running line only`() {
+        assertEquals(
+            "Run 1 of 3, Classic Year Early January. Pausing after this career.",
+            progressLineText("running", 1, 3, "Classic Year Early January", pausePending = true),
+        )
+        assertEquals("Run 1 of 3, Classic Year Early January", progressLineText("running", 1, 3, "Classic Year Early January", pausePending = false))
+        assertEquals("Between runs: run 1 of 3 ended", progressLineText("completed", 1, 3, null, runRecorded = true, pausePending = true))
+        assertEquals("Run 1 of 3, The bot is not running", progressLineText("stoppedAfterCareer", 1, 3, null, pausePending = true))
+    }
+
+    @Test
+    fun `the pause clause follows the request, including a cancel, under the same throttle`() {
+        StatusBoard.queueProgress(1, 3, "starting", "{}", 0L)
+        careerTurn(day = 25)
+        StartModule.stopAfterCareerRequested = true
+        ProgressNotification.refresh(now = 1_000L)
+        StartModule.stopAfterCareerRequested = false
+        ProgressNotification.refresh(now = 10_000L)
+        ProgressNotification.refresh(now = 31_000L)
+        assertEquals(listOf("Run 1 of 3, Classic Year Early January. Pausing after this career.", "Run 1 of 3, Classic Year Early January"), posts)
     }
 
     @Test
