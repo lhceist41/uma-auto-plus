@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from "react"
+import { useSyncExternalStore } from "react"
 import * as FileSystem from "expo-file-system"
 
 /**
@@ -12,40 +12,46 @@ interface UiPrefs {
      * Favorites used to be keyed by character, which starred every outfit of a trainee at
      * once - wrong for accounts that do not own every outfit variant. */
     favoritePresets: string[]
+    /** The app version whose "What's new" dialog was already seen, or that a fresh install started on. */
+    whatsNewSeenVersion: string | null
 }
 
 const PREFS_FILE = FileSystem.documentDirectory + "uiPrefs.json"
 
-let prefs: UiPrefs = { favoritePresets: [] }
-let loadStarted = false
+let prefs: UiPrefs = { favoritePresets: [], whatsNewSeenVersion: null }
+let loadPromise: Promise<void> | null = null
 const listeners = new Set<() => void>()
 
 const emit = () => listeners.forEach((listener) => listener())
 
 /** Loads prefs from disk once; concurrent callers share the same in-flight load. */
-const ensureLoaded = () => {
-    if (loadStarted) return
-    loadStarted = true
-    FileSystem.getInfoAsync(PREFS_FILE)
+const ensureLoaded = (): Promise<void> => {
+    if (loadPromise) return loadPromise
+    loadPromise = FileSystem.getInfoAsync(PREFS_FILE)
         .then((info) => (info.exists ? FileSystem.readAsStringAsync(PREFS_FILE) : "{}"))
         .then((raw) => {
             const parsed = JSON.parse(raw)
             // Migration: the legacy key stored bare character names, which happen to equal the
             // base outfit's preset name, so carrying them over keeps the base-outfit star lit.
             const stored = Array.isArray(parsed.favoritePresets) ? parsed.favoritePresets : parsed.favoriteCharacters
-            if (Array.isArray(stored)) {
-                prefs = { favoritePresets: stored.filter((c: unknown) => typeof c === "string") }
-                emit()
+            prefs = {
+                favoritePresets: Array.isArray(stored) ? stored.filter((c: unknown) => typeof c === "string") : prefs.favoritePresets,
+                whatsNewSeenVersion: typeof parsed.whatsNewSeenVersion === "string" ? parsed.whatsNewSeenVersion : prefs.whatsNewSeenVersion,
             }
+            emit()
         })
         .catch((e) => {
             // A corrupt or unreadable prefs file falls back to defaults; favorites are recoverable state.
             console.warn(`[UiPrefs] Failed to load ${PREFS_FILE}: ${e}`)
         })
+    return loadPromise
 }
 
-const persist = () => {
-    FileSystem.writeAsStringAsync(PREFS_FILE, JSON.stringify(prefs)).catch((e) => {
+/** Writes after the load, so a save can never replace fields that were not read yet. */
+const persist = () => ensureLoaded().then(() => FileSystem.writeAsStringAsync(PREFS_FILE, JSON.stringify(prefs)))
+
+const persistQuietly = () => {
+    persist().catch((e) => {
         console.warn(`[UiPrefs] Failed to save ${PREFS_FILE}: ${e}`)
     })
 }
@@ -68,14 +74,29 @@ export function useFavoritePresets(): [string[], (presetName: string) => void] {
     ensureLoaded()
     const favorites = useSyncExternalStore(subscribe, getFavorites)
 
-    const toggleFavorite = useCallback((presetName: string) => {
-        const current = prefs.favoritePresets
-        prefs = {
-            favoritePresets: current.includes(presetName) ? current.filter((c) => c !== presetName) : [...current, presetName],
-        }
-        emit()
-        persist()
-    }, [])
+    return [favorites, toggleFavoritePreset]
+}
 
-    return [favorites, toggleFavorite]
+/** Stars or unstars a preset, keeping every other stored preference. */
+export function toggleFavoritePreset(presetName: string) {
+    const current = prefs.favoritePresets
+    prefs = {
+        ...prefs,
+        favoritePresets: current.includes(presetName) ? current.filter((c) => c !== presetName) : [...current, presetName],
+    }
+    emit()
+    persistQuietly()
+}
+
+/** The app version whose "What's new" dialog was already seen, or null when none is stored. */
+export function loadWhatsNewSeenVersion(): Promise<string | null> {
+    return ensureLoaded().then(() => prefs.whatsNewSeenVersion)
+}
+
+/** Remembers that the player has seen (or a fresh install started on) this version. Rejects when the write fails. */
+export function saveWhatsNewSeenVersion(version: string): Promise<void> {
+    return ensureLoaded().then(() => {
+        prefs = { ...prefs, whatsNewSeenVersion: version }
+        return persist()
+    })
 }

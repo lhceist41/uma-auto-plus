@@ -19,6 +19,8 @@ import PageHeader from "../../components/PageHeader"
 import { usePerformanceLogging } from "../../hooks/usePerformanceLogging"
 import SelectButton from "../../components/SelectButton"
 import PresetPicker from "../../components/PresetPicker"
+import WhatsNewDialog from "../../components/WhatsNewDialog"
+import { useWhatsNew } from "../../hooks/useWhatsNew"
 import { avoidAdvisoryFor, characterPresets, trainerAdvisories } from "../../data/characterPresets"
 import { bumpSettingsRevision, createSingleFlight } from "../../lib/launchConfig"
 import { presetCharacter, presetOutfit } from "../../data/presetMeta"
@@ -121,6 +123,9 @@ const Home = () => {
     const liveSessionEvents = useRef(0)
     const armed = session.armed
     const botRunning = session.botRunning
+    // True once the native session state has been read, so the What's new dialog never opens over a bot that is already running.
+    const [sessionKnown, setSessionKnown] = useState<boolean>(false)
+    const whatsNew = useWhatsNew(armed || botRunning, sessionKnown)
     const phase = sessionPhase(session)
     const [showNotReadyDialog, setShowNotReadyDialog] = useState<boolean>(false)
     const [snackbarOpen, setSnackbarOpen] = useState<boolean>(false)
@@ -196,6 +201,7 @@ const Home = () => {
                 if (liveSessionEvents.current !== eventsBefore) return
                 if (state && typeof state.armed === "boolean" && typeof state.botRunning === "boolean") {
                     dispatchSession({ type: "NATIVE_STATE", armed: state.armed, botRunning: state.botRunning })
+                    setSessionKnown(true)
                 }
             })
             .catch(() => {})
@@ -1185,6 +1191,8 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
             <View style={styles.contentContainer}>
                 <MessageLog />
             </View>
+
+            <WhatsNewDialog content={armed || botRunning ? null : whatsNew.content} onClose={whatsNew.dismiss} />
 
             <AlertDialog open={showNotReadyDialog} onOpenChange={setShowNotReadyDialog}>
                 <AlertDialogContent onDismiss={() => setShowNotReadyDialog(false)}>
