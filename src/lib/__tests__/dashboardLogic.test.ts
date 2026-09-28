@@ -457,6 +457,57 @@ test('viewModel: between runs, with and without a just-finished run', () => {
   assert.equal(noRunYet.banner.body, 'The bot is between runs.');
 });
 
+// The producer keeps run.current on the just-finished run for completed,
+// navigating and waiting; runs[] marks the run that is actually next.
+const done = (n, rank) => ({ n, trainee: 'El Condor Pasa', scenario: 'URA Finale', state: 'done', rank });
+const upcoming = (n, state) => ({ n, trainee: null, scenario: null, state });
+
+for (const key of ['completed', 'navigating', 'waiting']) {
+  test(`between-runs banner for ${key}: names the next run, not the one that just finished`, () => {
+    const vm = logic.viewModel(
+      statusWith({ statusKey: key, run: { current: 2, total: 4 }, runs: [done(1, 'A'), done(2, 'B'), upcoming(3, 'next'), upcoming(4, 'waiting')] }),
+      connectedNow()
+    );
+    assert.equal(vm.phase, 'between');
+    assert.equal(vm.banner.headline, 'LAUNCHING RUN 3');
+    assert.equal(vm.banner.body, 'Run 2 finished with rank B. The bot is starting the next run.');
+  });
+}
+
+test('between-runs banner for starting: the next run is the one starting', () => {
+  const vm = logic.viewModel(
+    statusWith({ statusKey: 'starting', run: { current: 3, total: 4 }, runs: [done(1, 'A'), done(2, 'B'), upcoming(3, 'next'), upcoming(4, 'waiting')] }),
+    connectedNow()
+  );
+  assert.equal(vm.banner.headline, 'LAUNCHING RUN 3');
+});
+
+test('between-runs banner for resuming: the first run of the resumed queue', () => {
+  const vm = logic.viewModel(
+    statusWith({ statusKey: 'resuming', run: { current: 3, total: 4 }, runs: [upcoming(3, 'next'), upcoming(4, 'waiting')] }),
+    connectedNow()
+  );
+  assert.equal(vm.banner.headline, 'LAUNCHING RUN 3');
+  assert.equal(vm.banner.body, 'The bot is between runs.');
+});
+
+test('between-runs banner for retrying: the run played again', () => {
+  const vm = logic.viewModel(
+    statusWith({ statusKey: 'retrying', run: { current: 2, total: 4 }, runs: [done(1, 'A'), upcoming(2, 'next'), upcoming(3, 'waiting'), upcoming(4, 'waiting')] }),
+    connectedNow()
+  );
+  assert.equal(vm.banner.headline, 'LAUNCHING RUN 2');
+});
+
+test('between-runs banner after the last run: no run to launch, and no claim that one is starting', () => {
+  const vm = logic.viewModel(
+    statusWith({ statusKey: 'completed', run: { current: 4, total: 4 }, runs: [done(1, 'A'), done(2, 'B'), done(3, 'A'), done(4, 'S')] }),
+    connectedNow()
+  );
+  assert.equal(vm.banner.headline, 'BETWEEN RUNS');
+  assert.equal(vm.banner.body, 'Run 4 finished with rank S.');
+});
+
 test('viewModel: every terminal key gets its badge from the key table, never inferred from run counts', () => {
   const cases = [
     ['queueComplete', 'FINISHED', 'neutral'],

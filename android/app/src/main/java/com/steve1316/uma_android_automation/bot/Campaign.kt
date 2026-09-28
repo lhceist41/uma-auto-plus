@@ -19,6 +19,7 @@ import com.steve1316.uma_android_automation.VeteranInspirationScanner
 import com.steve1316.uma_android_automation.VeteranProtectionScanner
 import com.steve1316.uma_android_automation.VeteranRosterReader
 import com.steve1316.uma_android_automation.VeteranRosterScanner
+import com.steve1316.uma_android_automation.careerResultAtEnd
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonCareerEndSkills
@@ -4211,6 +4212,16 @@ abstract class Campaign(game: Game) : Task(game) {
         val outcome = classifyCareerOutcome(result.code, careerForceEnded)
         StartModule.lastCareerEndOutcome = outcome
         StartModule.lastCareerEndTurn = if (date.dayObserved) date.day else null
+        StartModule.lastCareerEndResult =
+            careerResultAtEnd(
+                outcome,
+                trainee.estimatedRank?.rankLabel,
+                trainee.estimatedRank?.totalScore,
+                trainee.fans,
+                finaleRaces,
+                finaleRaces1st,
+                listOf(st.speed, st.stamina, st.power, st.guts, st.wit),
+            )
         // Bumped last, after every stash above, so the queue report attributes them to this run only.
         StartModule.lastCareerEndSeq++
         if (outcome != "INCOMPLETE") ProgressTracker.noteProgress(ProgressEvent.CAREER_END)

@@ -1,5 +1,7 @@
 package com.steve1316.uma_android_automation.utils
 
+import com.steve1316.uma_android_automation.CareerResult
+import com.steve1316.uma_android_automation.KeptSpark
 import com.steve1316.uma_android_automation.QueueReport
 import com.steve1316.uma_android_automation.RunRecord
 import com.steve1316.uma_android_automation.SessionEnd
@@ -84,7 +86,52 @@ class StatusBoardTest {
         for (leak in listOf("raw exception text", "secret", "message", "resultCode", "tpSpent", "tp_spent", "resultCode")) {
             assertFalse(text.contains(leak), "STATUS must not carry $leak")
         }
-        assertEquals(setOf("n", "trainee", "scenario", "state", "startedAt", "endedAt", "words"), keysOf(s.getJSONArray("runs").getJSONObject(0)))
+        assertEquals(
+            setOf("n", "trainee", "scenario", "state", "rank", "estScore", "fans", "finale", "finalStats", "sparks", "sparksNote", "startedAt", "endedAt", "words"),
+            keysOf(s.getJSONArray("runs").getJSONObject(0)),
+        )
+    }
+
+    @Test
+    fun `a finished run carries its result and, once read, its kept sparks, with the contract's names and types`() {
+        StatusBoard.reset(900L)
+        val result = CareerResult("UG4", 18432, 221054, 2, 3, listOf(1248, null, 816, 395, 438))
+        val first = record(1, "TASK_RESULT_COMPLETE", "El_Condor_Pasa").copy(result = result)
+        StatusBoard.runRecorded(first)
+        StatusBoard.runRecorded(record(2, "TASK_RESULT_UNHANDLED_EXCEPTION"))
+        StatusBoard.queueProgress(2, 3, "completed", "{}", 1_000L)
+
+        var runs = status().getJSONArray("runs")
+        val done = runs.getJSONObject(0)
+        assertEquals("UG4", done.getString("rank"), "the producer's own rank label")
+        assertEquals(18432, done.getInt("estScore"))
+        assertEquals(221054, done.getInt("fans"))
+        assertEquals(2, done.getJSONObject("finale").getInt("won"))
+        assertEquals(3, done.getJSONObject("finale").getInt("of"))
+        val finalStats = done.getJSONObject("finalStats")
+        assertEquals(setOf("speed", "stamina", "power", "guts", "wit"), keysOf(finalStats))
+        assertEquals(1248, finalStats.getInt("speed"))
+        assertTrue(finalStats.isNull("stamina"), "an unread final stat is null")
+        assertTrue(done.isNull("sparks") && done.isNull("sparksNote"), "sparks are not read yet")
+        val errored = runs.getJSONObject(1)
+        for (key in listOf("rank", "estScore", "fans", "finale", "finalStats", "sparks", "sparksNote")) {
+            assertTrue(errored.has(key) && errored.isNull(key), "a run with no result sends $key as null")
+        }
+
+        StatusBoard.runUpdated(first.copy(sparks = listOf(KeptSpark("Power", "stat", 1), KeptSpark("Kikuka Sho", "other", 3)), sparksNote = "kept the original set after one reroll"))
+        runs = status().getJSONArray("runs")
+        assertEquals(listOf("done", "errored", "next"), (0 until runs.length()).map { runs.getJSONObject(it).getString("state") }, "the update replaces the run, never adds one")
+        val sparks = runs.getJSONObject(0).getJSONArray("sparks")
+        assertEquals(2, sparks.length())
+        assertEquals(setOf("name", "type", "stars"), keysOf(sparks.getJSONObject(0)))
+        assertEquals("Kikuka Sho", sparks.getJSONObject(1).getString("name"))
+        assertEquals("other", sparks.getJSONObject(1).getString("type"))
+        assertEquals(3, sparks.getJSONObject(1).getInt("stars"))
+        assertEquals("kept the original set after one reroll", runs.getJSONObject(0).getString("sparksNote"))
+        assertEquals("UG4", runs.getJSONObject(0).getString("rank"), "the result stays")
+
+        StatusBoard.runUpdated(record(7, "TASK_RESULT_COMPLETE"))
+        assertEquals(3, status().getJSONArray("runs").length(), "an update for a run never recorded is ignored")
     }
 
     @Test

@@ -6,6 +6,10 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
+import com.steve1316.uma_android_automation.bot.SparkRowFact
+import com.steve1316.uma_android_automation.bot.SparkRowKind
+import com.steve1316.uma_android_automation.bot.SparkSetSide
+import com.steve1316.uma_android_automation.bot.SparkWhiteClass
 import com.steve1316.uma_android_automation.bot.WATCHDOG_BREADCRUMB_FILE
 import com.steve1316.uma_android_automation.bot.WATCHDOG_KILL_AT_MS
 import com.steve1316.uma_android_automation.bot.WatchdogBreadcrumb
@@ -169,10 +173,60 @@ internal data class RunRecord(
     val progress: JSONObject? = null,
     /** [trainee] as the game shows the name, for the Home card; [trainee] stays the stored identifier. */
     val traineeName: String? = null,
+    val result: CareerResult? = null,
+    /** The kept spark set, attached after the career-end flow read it; null when it was not read. */
+    val sparks: List<KeptSpark>? = null,
+    val sparksNote: String? = null,
 )
 
+/**
+ * A finished career's result as the bot computed it at its end. A value the bot did not read is
+ * null. [finalStats] is speed, stamina, power, guts, wit. [finaleOf] counts the finale races the
+ * bot saw, not the scenario's total.
+ */
+internal data class CareerResult(val rank: String?, val estScore: Int?, val fans: Int?, val finaleWon: Int?, val finaleOf: Int?, val finalStats: List<Int?>?)
+
+/** One kept spark; [type] is `stat`, `aptitude`, `unique`, `skill` or `other`. */
+internal data class KeptSpark(val name: String, val type: String, val stars: Int)
+
+/** The kept sparks the career-end flow recorded, tagged with the career-end sequence they followed. */
+internal data class CareerEndSparks(val seq: Long, val sparks: List<KeptSpark>, val note: String?)
+
 /** The career-end facts `Campaign.careerEndLedgerLine` stashed, with the sequence number it bumped. */
-internal data class CareerEndStash(val seq: Long, val trainee: String?, val scenario: String?, val outcome: String?, val turn: Int?, val traineeName: String? = null)
+internal data class CareerEndStash(val seq: Long, val trainee: String?, val scenario: String?, val outcome: String?, val turn: Int?, val traineeName: String? = null, val result: CareerResult? = null)
+
+/**
+ * The result of a career that ended, or null for one that did not (a stop or error mid-career:
+ * its stats and rank are not final). A stat of -1 is unread. Fans of 1 are not taken as a read:
+ * 1 is both the trainee's default and every career's starting count.
+ */
+internal fun careerResultAtEnd(outcome: String, rankLabel: String?, estScore: Int?, fans: Int, finaleRaces: Int, finaleWins: Int, stats: List<Int>): CareerResult? {
+    if (outcome == "INCOMPLETE") return null
+    val finalStats = stats.map { v -> v.takeIf { it >= 0 } }.takeIf { list -> list.any { it != null } }
+    val finale = finaleRaces > 0
+    return CareerResult(rankLabel, estScore, fans.takeIf { it > 1 }, finaleWins.takeIf { finale }, finaleRaces.takeIf { finale }, finalStats)
+}
+
+/** A spark row as the dashboard types it. A white row is a skill spark only when the skill catalog knew its name; race, scenario and unreadable whites are `other`. */
+internal fun keptSpark(row: SparkRowFact): KeptSpark {
+    val type =
+        when (row.kind) {
+            SparkRowKind.WHITE -> if (row.whiteClass == SparkWhiteClass.SKILL) "skill" else "other"
+            else -> row.kind.wire
+        }
+    return KeptSpark(row.name, type, row.stars)
+}
+
+/** Says which set was kept when the career's sparks were rerolled; null when they were not. */
+internal fun sparksNoteFor(rerolled: Boolean, kept: SparkSetSide?): String? =
+    when {
+        !rerolled || kept == null -> null
+        kept == SparkSetSide.ORIGINAL -> "kept the original set after one reroll"
+        else -> "kept the rerolled set after one reroll"
+    }
+
+/** The kept sparks belonging to the run whose career end had sequence [runCareerEndSeq], or null (no career end, or sparks from another career). */
+internal fun sparksForRun(runCareerEndSeq: Long?, stash: CareerEndSparks?): CareerEndSparks? = stash?.takeIf { runCareerEndSeq != null && it.seq == runCareerEndSeq }
 
 /**
  * The career-end facts belonging to a run, or null. The stash outlives its run on purpose (the
@@ -348,6 +402,17 @@ internal class SessionLedger(val sessionId: String, val startedAt: Long, val app
         runs.add(record)
     }
 
+    /** Adds [kept] to the latest record of [run], returning the updated record, or null when [run] has none. */
+    @Synchronized
+    fun attachSparks(
+        run: Int,
+        kept: CareerEndSparks,
+    ): RunRecord? {
+        val index = runs.indexOfLast { it.run == run }
+        if (index < 0) return null
+        return runs[index].copy(sparks = kept.sparks, sparksNote = kept.note).also { runs[index] = it }
+    }
+
     @Synchronized
     private fun runsJson(): JSONArray = JSONArray().also { arr -> runs.forEach { arr.put(runRecordJson(it)) } }
 
@@ -431,6 +496,31 @@ internal fun runRecordJson(r: RunRecord): JSONObject =
         .put("retried", r.retried)
         .apply { r.progress?.let { put("progress", it) } }
         .apply { r.traineeName?.let { put("traineeName", it) } }
+        .apply {
+            // Additive and present only when known, so records written before these keys read the same.
+            r.result?.let { result ->
+                result.rank?.let { put("rank", it) }
+                result.estScore?.let { put("estScore", it) }
+                result.fans?.let { put("fans", it) }
+                finaleJson(result)?.let { put("finale", it) }
+                finalStatsJson(result)?.let { put("finalStats", it) }
+            }
+            r.sparks?.let { put("sparks", sparksJson(it)) }
+            r.sparksNote?.let { put("sparksNote", it) }
+        }
+
+internal fun finaleJson(result: CareerResult): JSONObject? {
+    val won = result.finaleWon ?: return null
+    val of = result.finaleOf ?: return null
+    return JSONObject().put("won", won).put("of", of)
+}
+
+internal fun finalStatsJson(result: CareerResult): JSONObject? {
+    val stats = result.finalStats ?: return null
+    return JSONObject().apply { listOf("speed", "stamina", "power", "guts", "wit").forEachIndexed { i, name -> put(name, stats.getOrNull(i) ?: JSONObject.NULL) } }
+}
+
+internal fun sparksJson(sparks: List<KeptSpark>): JSONArray = JSONArray().also { arr -> sparks.forEach { arr.put(JSONObject().put("name", it.name).put("type", it.type).put("stars", it.stars)) } }
 
 /**
  * Whether a stored open-session record belongs to a session that died without writing its report.

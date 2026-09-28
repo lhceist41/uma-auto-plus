@@ -401,13 +401,15 @@
     }
 
     if (phase === 'between') {
-      var run = status && status.run;
-      var headline = run ? ('LAUNCHING RUN ' + naText(run.current)) : 'BETWEEN RUNS';
+      // run.current is the just-finished run until `starting`, so name the
+      // producer's `next` run; none (the last run is finalizing) says so plainly.
+      var nextRun = status && Array.isArray(status.runs) ? status.runs.filter(function (r) { return r.state === 'next'; })[0] : null;
+      var headline = nextRun ? ('LAUNCHING RUN ' + naText(nextRun.n)) : 'BETWEEN RUNS';
       // The most recently *finished* run, not simply the last array entry
       // (which is usually a run that has not started yet).
       var lastRun = status && Array.isArray(status.runs) ? status.runs.filter(function (r) { return r.state === 'done'; }).pop() : null;
       var body = (lastRun && lastRun.rank)
-        ? ('Run ' + lastRun.n + ' finished with rank ' + lastRun.rank + '. The bot is starting the next run.')
+        ? ('Run ' + lastRun.n + ' finished with rank ' + lastRun.rank + '.' + (nextRun ? ' The bot is starting the next run.' : ''))
         : 'The bot is between runs.';
       var meta = '';
       if (status && status.lastProgressAt != null && Number.isFinite(status.sentAt) && receivedAt != null) {

@@ -297,9 +297,11 @@ class QueueLedgerWiringTest {
         @Test
         fun `a run takes career facts only through the sequence check`() {
             val recordRun = after("private fun recordRun(", startModule).substringBefore("\n    }\n")
-            assertTrue(recordRun.contains("val stash = CareerEndStash(lastCareerEndSeq,"))
+            assertTrue(recordRun.contains("val stash =\n            CareerEndStash(lastCareerEndSeq,"))
             assertTrue(recordRun.contains("val careerEnd = careerEndForRun(careerEndSeqBeforeRun, stash)"))
-            assertTrue(recordRun.contains("careerEnd?.trainee, careerEnd?.scenario, careerEnd?.outcome, careerEnd?.turn"), "the record takes career facts only from the checked stash")
+            val careerFacts = listOf("trainee", "scenario", "outcome", "turn").joinToString("") { "                careerEnd?.$it,\n" }
+            assertTrue(recordRun.contains(careerFacts), "the record takes career facts only from the checked stash")
+            assertTrue(recordRun.contains("                careerEnd?.result,\n"), "and its result")
         }
 
         @Test
@@ -307,7 +309,7 @@ class QueueLedgerWiringTest {
             val ledgerLine = after("override fun careerEndLedgerLine(result: TaskResult): String {", campaign).substringBefore("val record =")
             val bump = ledgerLine.indexOf("StartModule.lastCareerEndSeq++")
             assertTrue(bump > 0)
-            for (stash in listOf("lastCareerEndTrainee =", "lastCareerEndScenario =", "lastCareerEndFp =", "lastCareerEndOutcome =", "lastCareerEndTurn =")) {
+            for (stash in listOf("lastCareerEndTrainee =", "lastCareerEndScenario =", "lastCareerEndFp =", "lastCareerEndOutcome =", "lastCareerEndTurn =", "lastCareerEndResult =")) {
                 val at = ledgerLine.indexOf("StartModule.$stash")
                 assertTrue(at in 0 until bump, "$stash must be written before the sequence moves")
             }

@@ -1,6 +1,10 @@
 package com.steve1316.uma_android_automation
 
 import android.app.ApplicationExitInfo
+import com.steve1316.uma_android_automation.bot.SparkRowFact
+import com.steve1316.uma_android_automation.bot.SparkRowKind
+import com.steve1316.uma_android_automation.bot.SparkSetSide
+import com.steve1316.uma_android_automation.bot.SparkWhiteClass
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -189,8 +193,167 @@ class QueueReportTest {
             assertTrue(campaign.contains("val resolvedName = shownName.ifEmpty { \"unknown\" }.replace(\" \", \"_\")"), "the identifier is derived exactly as before")
             assertTrue(campaign.contains("StartModule.lastCareerEndTrainee = resolvedName\n        StartModule.lastCareerEndTraineeName = shownName.ifEmpty { null }\n"))
             val startModule = source("StartModule.kt")
-            assertTrue(startModule.contains("lastCareerEndTurn, lastCareerEndTraineeName)"))
-            assertTrue(startModule.contains("careerEnd?.turn, retried, progress, careerEnd?.traineeName)"))
+            assertTrue(startModule.contains("lastCareerEndTurn, lastCareerEndTraineeName, lastCareerEndResult)"))
+            val recordTail = listOf("careerEnd?.turn,", "retried,", "progress,", "careerEnd?.traineeName,", "careerEnd?.result,").joinToString("") { "                $it\n" }
+            assertTrue(startModule.contains(recordTail))
+        }
+    }
+
+    @Nested
+    @DisplayName("career result and kept sparks on the run")
+    inner class CareerResults {
+        private val finished = CareerResult("A", 10757, 221054, 3, 3, listOf(1248, 508, 816, 395, 438))
+        private val kept = listOf(KeptSpark("Power", "stat", 1), KeptSpark("Turf", "aptitude", 2), KeptSpark("Tokyo Yushun", "other", 3))
+
+        /** A stored run exactly as the previous version wrote it: none of the result keys. */
+        private val oldStoredRun =
+            """{"run":1,"startedAt":1100,"endedAt":2000,"resultCode":"TASK_RESULT_COMPLETE","trainee":"El_Condor_Pasa","scenario":"URA_Finale","outcome":"COMPLETED","turn":75,"retried":false,"traineeName":"El Condor Pasa"}"""
+
+        private fun open(runs: JSONArray) =
+            JSONObject()
+                .put("sessionId", "s")
+                .put("appVersion", "1.6.0")
+                .put("startedAt", 1_000L)
+                .put("updatedAt", 2_000L)
+                .put("queueEnabled", true)
+                .put("totalRuns", 2)
+                .put("startFromRun", 1)
+                .put("completedRuns", 1)
+                .put("currentRun", 2)
+                .put("phase", StartModule.PHASE_LAUNCHING)
+                .put("runs", runs)
+
+        @Test
+        fun `a stored run without the result keys reads back unchanged, with no result, and the same words`() {
+            val report = processEndedReport(JSONObject(open(JSONArray().put(JSONObject(oldStoredRun))).toString()), null, null, resumable = false)
+            val run = report.toJson().getJSONArray("runs").getJSONObject(0)
+            assertEquals(canonical(JSONObject(oldStoredRun)), canonical(run))
+            for (key in listOf("rank", "estScore", "fans", "finale", "finalStats", "sparks", "sparksNote")) assertFalse(run.has(key), key)
+            // A result-less record is still written byte-for-byte the way the previous version wrote it.
+            val same = RunRecord(1, 1_100L, 2_000L, "TASK_RESULT_COMPLETE", "El_Condor_Pasa", "URA_Finale", "COMPLETED", 75, traineeName = "El Condor Pasa")
+            assertEquals(canonical(JSONObject(oldStoredRun)), canonical(JSONObject(runRecordJson(same).toString())))
+            // The words never depend on the new keys.
+            val withResult = runRecordJson(same.copy(result = finished, sparks = kept, sparksNote = "n"))
+            val newer = processEndedReport(open(JSONArray().put(withResult)), null, null, resumable = false)
+            assertEquals(queueReportText(report.toJson()), queueReportText(newer.toJson()))
+        }
+
+        @Test
+        fun `a run with a result and kept sparks round-trips through the stored record`() {
+            val record =
+                RunRecord(1, 1_100L, 2_000L, "TASK_RESULT_COMPLETE", "El_Condor_Pasa", "URA_Finale", "COMPLETED", 75)
+                    .copy(result = finished, sparks = kept, sparksNote = "kept the original set after one reroll")
+            val stored = JSONObject(open(JSONArray().put(runRecordJson(record))).toString())
+            val run = processEndedReport(stored, null, null, resumable = false).toJson().getJSONArray("runs").getJSONObject(0)
+            assertEquals("A", run.getString("rank"))
+            assertEquals(10757, run.getInt("estScore"))
+            assertEquals(221054, run.getInt("fans"))
+            assertEquals(canonical(JSONObject("""{"won":3,"of":3}""")), canonical(run.getJSONObject("finale")))
+            assertEquals(canonical(JSONObject("""{"speed":1248,"stamina":508,"power":816,"guts":395,"wit":438}""")), canonical(run.getJSONObject("finalStats")))
+            assertEquals(
+                canonical(JSONArray("""[{"name":"Power","type":"stat","stars":1},{"name":"Turf","type":"aptitude","stars":2},{"name":"Tokyo Yushun","type":"other","stars":3}]""")),
+                canonical(run.getJSONArray("sparks")),
+            )
+            assertEquals("kept the original set after one reroll", run.getString("sparksNote"))
+            assertEquals(canonical(JSONObject(runRecordJson(record).toString())), canonical(run))
+        }
+
+        @Test
+        fun `only a career that ended has a result, and unread values stay out`() {
+            assertNull(careerResultAtEnd("INCOMPLETE", "B", 9000, 50_000, 0, 0, listOf(600, 300, 400, 300, 300)), "a stop mid-career has no final result")
+            assertEquals(finished, careerResultAtEnd("COMPLETED", "A", 10757, 221054, 3, 3, listOf(1248, 508, 816, 395, 438)))
+            val partial = careerResultAtEnd("FORCE_END", null, null, 1, 0, 0, listOf(-1, 300, -1, -1, -1))!!
+            assertNull(partial.rank)
+            assertNull(partial.estScore)
+            assertNull(partial.fans, "1 fan is the default, not a read")
+            assertNull(partial.finaleWon)
+            assertNull(partial.finaleOf, "no finale race seen")
+            assertEquals(listOf(null, 300, null, null, null), partial.finalStats)
+            assertNull(careerResultAtEnd("COMPLETED", null, null, 2, 0, 0, List(5) { -1 })!!.finalStats, "no stat read at all")
+            assertEquals(2, careerResultAtEnd("COMPLETED", null, null, 2, 3, 2, List(5) { -1 })!!.fans)
+            val lost = careerResultAtEnd("COMPLETED", null, null, 2, 3, 2, List(5) { -1 })!!
+            assertEquals(2 to 3, lost.finaleWon to lost.finaleOf)
+        }
+
+        @Test
+        fun `spark types follow the bot's rows, and a white is a skill only when the catalog knew it`() {
+            fun type(
+                kind: SparkRowKind,
+                white: SparkWhiteClass? = null,
+            ) = keptSpark(SparkRowFact("x", 2, kind, white)).type
+            assertEquals("stat", type(SparkRowKind.STAT))
+            assertEquals("aptitude", type(SparkRowKind.APTITUDE))
+            assertEquals("unique", type(SparkRowKind.UNIQUE))
+            assertEquals("skill", type(SparkRowKind.WHITE, SparkWhiteClass.SKILL))
+            assertEquals("other", type(SparkRowKind.WHITE, SparkWhiteClass.RACE))
+            assertEquals("other", type(SparkRowKind.WHITE, SparkWhiteClass.UNKNOWN))
+            assertEquals("other", type(SparkRowKind.WHITE, null))
+            assertEquals(KeptSpark("x", "stat", 2), keptSpark(SparkRowFact("x", 2, SparkRowKind.STAT)))
+        }
+
+        @Test
+        fun `the note names the kept set only after a reroll`() {
+            assertNull(sparksNoteFor(false, null))
+            assertNull(sparksNoteFor(false, SparkSetSide.ORIGINAL), "no reroll, nothing to say")
+            assertNull(sparksNoteFor(true, null), "a reroll with no chosen side says nothing it cannot back")
+            assertEquals("kept the original set after one reroll", sparksNoteFor(true, SparkSetSide.ORIGINAL))
+            assertEquals("kept the rerolled set after one reroll", sparksNoteFor(true, SparkSetSide.REROLLED))
+        }
+
+        @Test
+        fun `a run that died before its career end inherits neither the previous result nor its sparks`() {
+            val previous = CareerEndStash(seq = 4, trainee = "Special_Week", scenario = "URA_Finale", outcome = "COMPLETED", turn = 75, result = finished)
+            val careerEnd = careerEndForRun(seqBeforeRun = 4, stash = previous)
+            assertNull(careerEnd)
+            val record =
+                RunRecord(2, 1_100L, 2_000L, "TASK_RESULT_UNHANDLED_EXCEPTION", careerEnd?.trainee, careerEnd?.scenario, careerEnd?.outcome, careerEnd?.turn)
+                    .copy(result = careerEnd?.result)
+            assertNull(record.result)
+            val previousSparks = CareerEndSparks(seq = 4, sparks = kept, note = null)
+            assertNull(sparksForRun(careerEnd?.seq, previousSparks), "no career end, no sparks")
+            assertNull(sparksForRun(5, previousSparks), "sparks from another career's end")
+            assertEquals(previousSparks, sparksForRun(4, previousSparks))
+            assertEquals(finished, careerEndForRun(seqBeforeRun = 3, stash = previous)?.result, "the run that wrote the stash takes its result")
+        }
+
+        @Test
+        fun `kept sparks reach the run's record and its open snapshot, and only that run`() {
+            val l = SessionLedger("s", 1_000L, "1.6.0", 1)
+            l.addRun(RunRecord(1, 1_100L, 2_000L, "TASK_RESULT_COMPLETE", "Special_Week", "URA_Finale", "COMPLETED", 75, result = finished))
+            l.addRun(RunRecord(2, 2_100L, 3_000L, "TASK_RESULT_COMPLETE", "El_Condor_Pasa", "URA_Finale", "COMPLETED", 75))
+            assertNull(l.attachSparks(3, CareerEndSparks(9, kept, null)), "no record for run 3")
+            val updated = l.attachSparks(1, CareerEndSparks(9, kept, "kept the rerolled set after one reroll"))!!
+            assertEquals(kept, updated.sparks)
+            assertEquals(finished, updated.result, "the result stays")
+            val runs = l.openJson(now = 4_000L).getJSONArray("runs")
+            assertEquals(2, runs.length())
+            assertEquals(3, runs.getJSONObject(0).getJSONArray("sparks").length())
+            assertEquals("kept the rerolled set after one reroll", runs.getJSONObject(0).getString("sparksNote"))
+            assertFalse(runs.getJSONObject(1).has("sparks"))
+        }
+
+        @Test
+        fun `the career end stashes the result before the sequence moves, and the sparks follow the kept set only`() {
+            fun source(relative: String): String {
+                var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+                val path = "android/app/src/main/java/com/steve1316/uma_android_automation/$relative"
+                repeat(8) {
+                    if (java.io.File(dir, path).isFile) return java.io.File(dir, path).readText().replace("\r\n", "\n")
+                    dir = dir?.parentFile
+                }
+                throw AssertionError("$path not found")
+            }
+            val campaign = source("bot/Campaign.kt")
+            val stashed = campaign.indexOf("StartModule.lastCareerEndResult =")
+            assertTrue(stashed > 0 && stashed < campaign.indexOf("StartModule.lastCareerEndSeq++"), "the result is stashed before the sequence bump")
+            val startModule = source("StartModule.kt")
+            val attachAfterNavigation = Regex("""navigateWithDeadline\([^\n]*\)\n\s*attachCareerEndSparks\(ledger, i, runCareerEndSeq\)""")
+            assertEquals(2, attachAfterNavigation.findAll(startModule).count(), "sparks attach after the finalize and after the between-run navigation")
+            assertTrue(startModule.contains("val runCareerEndSeq = recordRun("))
+            val navigator = source("CareerLaunchNavigator.kt")
+            val keptOnly = "if (phase == \"kept\") {\n            val tx = SparkRerollGate.transaction\n            StartModule.lastCareerEndSparks = CareerEndSparks(StartModule.lastCareerEndSeq,"
+            assertTrue(navigator.contains(keptOnly))
+            assertEquals(1, Regex("StartModule.lastCareerEndSparks =").findAll(navigator).count())
         }
     }
 

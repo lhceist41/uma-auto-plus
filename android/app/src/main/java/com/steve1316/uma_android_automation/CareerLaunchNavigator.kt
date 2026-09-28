@@ -3791,6 +3791,10 @@ class CareerLaunchNavigator(private val context: Context) {
             return
         }
         MessageLog.i(TAG, "[SPARKS] ${phase.replaceFirstChar { it.uppercase() }} set: " + rows.joinToString(" | ") { "${it.name} ${it.stars}-star (${it.kind.wire})" })
+        if (phase == "kept") {
+            val tx = SparkRerollGate.transaction
+            StartModule.lastCareerEndSparks = CareerEndSparks(StartModule.lastCareerEndSeq, rows.map(::keptSpark), sparksNoteFor(tx?.rerolledRead != null, tx?.winner))
+        }
         runCatching {
             val record = JSONObject()
             record.put("type", "sparks")

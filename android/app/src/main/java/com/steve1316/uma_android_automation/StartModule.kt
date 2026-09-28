@@ -148,6 +148,14 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         @Volatile
         var lastCareerEndTurn: Int? = null
 
+        /** Rank, score, fans, finale and final stats of the last career that ended, stashed with [lastCareerEndTrainee]; null for a career stopped mid-way. */
+        @Volatile
+        internal var lastCareerEndResult: CareerResult? = null
+
+        /** The kept sparks the career-end flow last recorded, tagged with [lastCareerEndSeq] as it stood then. */
+        @Volatile
+        internal var lastCareerEndSparks: CareerEndSparks? = null
+
         /** Bumped after every career-end stash, so a run can tell its own stash from one a previous run left. */
         @Volatile
         var lastCareerEndSeq: Long = 0L
@@ -1698,16 +1706,42 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         return rows
     }
 
-    /** Adds run [run]'s record, with the career-end facts only if this run produced them. */
-    private fun recordRun(ledger: SessionLedger, run: Int, startedAt: Long, careerEndSeqBeforeRun: Long, code: TaskResultCode, retried: Boolean) {
-        val stash = CareerEndStash(lastCareerEndSeq, lastCareerEndTrainee, lastCareerEndScenario, lastCareerEndOutcome, lastCareerEndTurn, lastCareerEndTraineeName)
+    /**
+     * Adds run [run]'s record, with the career-end facts only if this run produced them. Returns the
+     * sequence of this run's career end, or null when it had none.
+     */
+    private fun recordRun(ledger: SessionLedger, run: Int, startedAt: Long, careerEndSeqBeforeRun: Long, code: TaskResultCode, retried: Boolean): Long? {
+        val stash =
+            CareerEndStash(lastCareerEndSeq, lastCareerEndTrainee, lastCareerEndScenario, lastCareerEndOutcome, lastCareerEndTurn, lastCareerEndTraineeName, lastCareerEndResult)
         val careerEnd = careerEndForRun(careerEndSeqBeforeRun, stash)
         val progress = ProgressTracker.endWindow()
         val record =
-            RunRecord(run, startedAt, System.currentTimeMillis(), code.name, careerEnd?.trainee, careerEnd?.scenario, careerEnd?.outcome, careerEnd?.turn, retried, progress, careerEnd?.traineeName)
+            RunRecord(
+                run,
+                startedAt,
+                System.currentTimeMillis(),
+                code.name,
+                careerEnd?.trainee,
+                careerEnd?.scenario,
+                careerEnd?.outcome,
+                careerEnd?.turn,
+                retried,
+                progress,
+                careerEnd?.traineeName,
+                careerEnd?.result,
+            )
         ledger.addRun(record)
         StatusBoard.runRecorded(record)
         ledger.errorPosted = lastRunPostedException
+        QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
+        return careerEnd?.seq
+    }
+
+    /** The career-end flow reads the sparks after [recordRun]: adds the kept set to run [run] when it followed that run's own career end. */
+    private fun attachCareerEndSparks(ledger: SessionLedger, run: Int, runCareerEndSeq: Long?) {
+        val kept = sparksForRun(runCareerEndSeq, lastCareerEndSparks) ?: return
+        val record = ledger.attachSparks(run, kept) ?: return
+        StatusBoard.runUpdated(record)
         QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
     }
 
@@ -2213,7 +2247,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             }
                             else -> result
                         }
-                    recordRun(ledger, i, runStartedAt, careerEndSeqBeforeRun, effectiveResult.code, retried)
+                    val runCareerEndSeq = recordRun(ledger, i, runStartedAt, careerEndSeqBeforeRun, effectiveResult.code, retried)
 
                     if (enableRunQueue) {
                         sendQueueProgressEvent(i, totalRuns, "completed", effectiveResult.code.name, effectiveResult.message)
@@ -2346,6 +2380,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     if (postCareerAction == PostCareerAction.FINALIZE_TO_HOME) {
                         MessageLog.i(TAG, "[QUEUE] Career complete. Finishing the career-end flow through to the home screen...")
                         val finalizeResult = navigateWithDeadline(reuseLastLaunchSetup, finalizeToHome = true)
+                        attachCareerEndSparks(ledger, i, runCareerEndSeq)
                         if (finalizeResult.success) {
                             MessageLog.i(TAG, "[QUEUE] Career-end flow finished; the game is parked on the home screen.")
                         } else {
@@ -2415,6 +2450,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             // having launched anything. An unfinished one must not be claimed
                             // finished; the next run carries on with it.
                             val navResult = navigateWithDeadline(nextReuse, previousCareerComplete = careerFinished, careerInFlight = !careerFinished)
+                            attachCareerEndSparks(ledger, i, runCareerEndSeq)
 
                             if (!navResult.success) {
                                 logNavigationFailure(navResult)

@@ -3,9 +3,12 @@ package com.steve1316.uma_android_automation.utils
 import com.steve1316.uma_android_automation.QueueReport
 import com.steve1316.uma_android_automation.ReportText
 import com.steve1316.uma_android_automation.RunRecord
+import com.steve1316.uma_android_automation.finalStatsJson
+import com.steve1316.uma_android_automation.finaleJson
 import com.steve1316.uma_android_automation.queueReportText
 import com.steve1316.uma_android_automation.runEndedWithError
 import com.steve1316.uma_android_automation.runWords
+import com.steve1316.uma_android_automation.sparksJson
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.atomic.AtomicReference
@@ -132,6 +135,13 @@ internal object StatusBoard {
     /** A run finished: it joins the list and the next career starts empty. */
     fun runRecorded(record: RunRecord) = publish { it.copy(runs = it.runs + record, career = null) }
 
+    /** A recorded run gained facts after it ended (its kept sparks): replaces its latest entry. */
+    fun runUpdated(record: RunRecord) =
+        publish { s ->
+            val index = s.runs.indexOfLast { it.run == record.run }
+            if (index < 0) s else s.copy(runs = s.runs.toMutableList().also { it[index] = record })
+        }
+
     /** The session's words, from the same [queueReportText] as the notification and Home. Never throws. */
     fun sessionEnded(report: QueueReport?) {
         val words = runCatching { queueReportText(report?.toJson()) }.getOrNull()
@@ -201,12 +211,20 @@ internal object StatusBoard {
     ): JSONArray {
         val runs = JSONArray()
         for (r in s.runs) {
+            val result = r.result
             runs.put(
                 JSONObject()
                     .put("n", r.run)
                     .put("trainee", displayName(r) ?: JSONObject.NULL)
                     .put("scenario", r.scenario ?: JSONObject.NULL)
                     .put("state", runState(r.resultCode))
+                    .put("rank", result?.rank ?: JSONObject.NULL)
+                    .put("estScore", result?.estScore ?: JSONObject.NULL)
+                    .put("fans", result?.fans ?: JSONObject.NULL)
+                    .put("finale", result?.let(::finaleJson) ?: JSONObject.NULL)
+                    .put("finalStats", result?.let(::finalStatsJson) ?: JSONObject.NULL)
+                    .put("sparks", r.sparks?.let(::sparksJson) ?: JSONObject.NULL)
+                    .put("sparksNote", r.sparksNote ?: JSONObject.NULL)
                     .put("startedAt", r.startedAt)
                     .put("endedAt", r.endedAt)
                     .put("words", runWords(r.resultCode)?.let { JSONObject().put("reason", it) } ?: JSONObject.NULL),

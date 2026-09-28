@@ -218,7 +218,7 @@ class ProgressTrackerTest {
         fun `each recorded run closes its window, and a session starts a fresh one`() {
             val start = source("$main/StartModule.kt")
             assertTrue(start.contains("val progress = ProgressTracker.endWindow()\n        val record =\n            RunRecord("))
-            assertTrue(start.contains("careerEnd?.turn, retried, progress, careerEnd?.traineeName)\n        ledger.addRun(record)"))
+            assertTrue(start.contains("                progress,\n                careerEnd?.traineeName,\n                careerEnd?.result,\n            )\n        ledger.addRun(record)"))
             assertTrue(start.contains("SessionTally.reset()\n                ProgressTracker.beginWindow()"))
         }
     }
