@@ -166,14 +166,6 @@ object IconSkillTitleX : ComponentInterface {
     override val template = Template("components/icon/skill_title_x")
 }
 
-object IconRaceListTopLeft : ComponentInterface {
-    override val template = Template("components/icon/race_list_top_left", region = Region.leftHalf)
-}
-
-object IconRaceListBottomRight : ComponentInterface {
-    override val template = Template("components/icon/race_list_bottom_right", region = Region.rightHalf)
-}
-
 object IconOneFreePerDayTooltip : ComponentInterface {
     override val template = Template("components/icon/one_free_per_day_tooltip", region = Region.middle)
 }

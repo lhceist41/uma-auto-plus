@@ -273,11 +273,6 @@ object LabelDailyPrograms : ComponentInterface {
     override val template = Template("components/label/daily_programs", region = Region.middle)
 }
 
-/** Header on the Daily Legend Races grid screen. */
-object LabelDailyLegendRaces : ComponentInterface {
-    override val template = Template("components/label/daily_legend_races", region = Region.topHalf)
-}
-
 /** "Race Details" header on the Daily Races pre-race confirmation screen (with Multi-Race toggle + Race!). */
 object LabelRaceDetails : ComponentInterface {
     override val template = Template("components/label/race_details_header", region = Region.topHalf)
@@ -315,16 +310,6 @@ object LabelCongratulations : ComponentInterface {
  * qualifier banners - used by the finale-result win capture in Racing.finalizeRaceResults. */
 object LabelFirstPlace : ComponentInterface {
     override val template = Template("components/label/first_place", region = Region.topHalf)
-}
-
-/** "Recover TP" header on the TP recharge popup. */
-object LabelRecoverTP : ComponentInterface {
-    override val template = Template("components/label/recover_tp", region = Region.topHalf)
-}
-
-/** "Recover RP" header on the RP recharge popup. */
-object LabelRecoverRP : ComponentInterface {
-    override val template = Template("components/label/recover_rp", region = Region.topHalf)
 }
 
 /**
