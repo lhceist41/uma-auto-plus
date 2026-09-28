@@ -157,7 +157,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
     private val enablePrioritizeSkillHints: Boolean = SettingsHelper.getBooleanSetting("training", "enablePrioritizeSkillHints")
 
     /** Whether to weight training scores by the OCR-detected training level (1-5) of the priority-list stats. */
-    internal val enableTrainingLevelWeighting: Boolean = SettingsHelper.getBooleanSetting("training", "enableTrainingLevelWeighting", false)
+    internal val enableTrainingLevelWeighting: Boolean = SettingsHelper.getBooleanSetting("training", "enableTrainingLevelWeighting", true)
 
     /** Cached screen location of the Energy label, used as the anchor for training level OCR. Resolved lazily on first use, reused for the rest of the bot session. */
     private var cachedEnergyLocation: Point? = null
@@ -166,7 +166,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
     private val enableTrainingAnalysisValidation: Boolean = SettingsHelper.getBooleanSetting("training", "enableTrainingAnalysisValidation")
 
     /** The minimum stat gain required for using a Good-Luck Charm. */
-    private val minStatGainForCharm = SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerMinStatGainForCharm", 30)
+    private val minStatGainForCharm = SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerMinStatGainForCharm", 25)
 
     /** Map of current stat targets. */
     private var statTargets: Map<StatName, Int> = emptyMap()
@@ -3164,7 +3164,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         ButtonBack.click(game.imageUtils)
                         game.wait(1.0)
                         if (campaign.checkMainScreen()) {
-                            campaign.recoverEnergy()
+                            if (campaign.recoverEnergy()) campaign.decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "Wit training button not found.")
                             advanced = true
                         } else {
                             MessageLog.w(TAG, "[WARN] handleTraining:: Could not head back to the Main screen in order to recover energy.")
@@ -3181,7 +3181,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                         } else {
                             MessageLog.v(TAG, "[TRAINING] Will recover energy due to either failure chance was high enough to do so or no failure chances were detected via OCR.")
                         }
-                        campaign.recoverEnergy()
+                        if (campaign.recoverEnergy()) campaign.decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "No training worth taking this turn.")
                         advanced = true
                     } else {
                         MessageLog.w(TAG, "[WARN] handleTraining:: Could not head back to the Main screen in order to recover energy.")

@@ -5,6 +5,7 @@ import android.util.Log
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.Campaign
+import com.steve1316.uma_android_automation.bot.DecisionTracer
 import com.steve1316.uma_android_automation.bot.DialogHandlerResult
 import com.steve1316.uma_android_automation.bot.EnteredRace
 import com.steve1316.uma_android_automation.bot.Game
@@ -189,7 +190,7 @@ class Trackblazer(game: Game) : Campaign(game) {
      * Megaphones) refuse to fire if main-stat gain is below this floor. Avoids wasting items on
      * low-return turns where the mood multiplier caps the gain.
      */
-    private val lowMainStatGainItemFloor: Int = SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerLowMainStatGainItemFloor", 20)
+    private val lowMainStatGainItemFloor: Int = SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerLowMainStatGainItemFloor", 15)
 
     /**
      * Per-tier minimum selected-training main-stat gain required before each megaphone is spent. Unlike
@@ -206,7 +207,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         )
 
     /** The frequency to check the shop after a race. */
-    private val shopCheckFrequency: Int = SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerShopCheckFrequency", 3)
+    private val shopCheckFrequency: Int = SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerShopCheckFrequency", 1)
 
     /** Tracks the number of days since the last race for shop check frequency. */
     private var shopCheckCounter: Int = 0
@@ -351,6 +352,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                     MessageLog.i(TAG, "[TRACKBLAZER] Quick-use items were purchased. Navigating and queuing for usage...")
                     val usedItems = shopList.useSpecificItems(quickUseItemsOnly, bUseAll = true, reason = "Quick-use after purchase.")
                     usedItems.forEach { useInventoryItem(it.first) }
+                    traceItemsUsed(usedItems)
 
                     // This clicks the "Confirm Use" button on the "Exchange Complete" dialog.
                     if (result.dialog.ok(game.imageUtils)) {
@@ -944,6 +946,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                     }
                     if (itemsUsed.isNotEmpty()) {
                         confirmAndCloseItemDialog(itemsUsed.size)
+                        traceItemsUsed(itemsUsed)
                     } else {
                         ButtonClose.click(game.imageUtils)
                         game.wait(game.dialogWaitDelay)
@@ -1436,6 +1439,22 @@ class Trackblazer(game: Game) : Campaign(game) {
     }
 
     /**
+     * Records the items just used on the decision trace. The Good-Luck Charm and the Reset Whistle
+     * have their own records, so they are not listed twice.
+     *
+     * @param items The used items with the reason for each.
+     */
+    private fun traceItemsUsed(items: List<Pair<String, String>>) {
+        for ((name, reason) in items) {
+            when (name) {
+                "Good-Luck Charm" -> decisionTracer?.recordCharmGate(queued = true)
+                "Reset Whistle" -> Unit
+                else -> decisionTracer?.recordItemDecision(name, DecisionTracer.ItemVerdict.USED, reason)
+            }
+        }
+    }
+
+    /**
      * Confirms the usage of items and closes the Training Items dialog.
      *
      * @param itemsUsedCount The number of items used during this pass to determine the animation delay.
@@ -1597,6 +1616,7 @@ class Trackblazer(game: Game) : Campaign(game) {
 
             if (whistleGateBlocks) {
                 // Whistle usage was skipped such that trainingSelected stays null and the existing recovery branch below fires.
+                decisionTracer?.recordWhistleOutcome(DecisionTracer.WhistleVerdict.BLOCKED, "Mood ${trainee.mood} with most trainings below the main-gain floor.")
             } else if (hasWhistle) {
                 MessageLog.i(TAG, "[TRACKBLAZER] No suitable training found. Using Reset Whistle.")
                 if (shopList.openTrainingItemsDialog()) {
@@ -1647,20 +1667,24 @@ class Trackblazer(game: Game) : Campaign(game) {
                             else ->
                                 MessageLog.i(TAG, "[TRACKBLAZER] Reset Whistle re-analysis selected: $trainingSelected.")
                         }
+                        decisionTracer?.recordWhistleOutcome(DecisionTracer.WhistleVerdict.USED, "No suitable training found.", postRollSelection = trainingSelected)
 
                         // Perform another consolidated item usage pass if needed after shuffle.
                         useItems(trainee, trainingSelected)
                     } else {
                         MessageLog.i(TAG, "[TRACKBLAZER] No Reset Whistles found in inventory.")
+                        decisionTracer?.recordWhistleOutcome(DecisionTracer.WhistleVerdict.NOT_IN_INVENTORY, "None found in the items dialog.")
                         ButtonClose.click(game.imageUtils)
                         game.wait(game.dialogWaitDelay, skipWaitingForLoading = true)
                     }
                 }
             } else {
                 MessageLog.i(TAG, "[TRACKBLAZER] No suitable training found and no Reset Whistles in cached inventory or all are disabled.")
+                decisionTracer?.recordWhistleOutcome(DecisionTracer.WhistleVerdict.NOT_IN_INVENTORY, "None in the inventory.")
             }
         } else if (training.needsEnergyRecovery && trainingSelected == null) {
             MessageLog.i(TAG, "[TRACKBLAZER] Skipping Reset Whistle as energy recovery is needed, not a training re-roll.")
+            decisionTracer?.recordWhistleOutcome(DecisionTracer.WhistleVerdict.NOT_ELIGIBLE, "Energy recovery is needed, not a re-roll.")
         }
 
         // Final Training Execution.
@@ -1681,10 +1705,10 @@ class Trackblazer(game: Game) : Campaign(game) {
                 if (checkMainScreen()) {
                     if (trainee.mood == Mood.AWFUL || (trainee.mood <= Mood.NORMAL && trainee.energy >= 20)) {
                         MessageLog.i(TAG, "[TRACKBLAZER] Mood is ${trainee.mood}. Attempting to recover mood.")
-                        recoverMood()
+                        if (recoverMood()) decisionTracer?.recordRecoveryExecuted("RECOVER_MOOD", "No suitable training; mood ${trainee.mood}.")
                     } else {
                         MessageLog.i(TAG, "[TRACKBLAZER] Energy is ${trainee.energy}%. Attempting to recover energy.")
-                        recoverEnergy()
+                        if (recoverEnergy()) decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "No suitable training; energy ${trainee.energy}%.")
                     }
                     // Shadow-only: a recovery action advances the turn.
                     advanced = true
@@ -1717,10 +1741,10 @@ class Trackblazer(game: Game) : Campaign(game) {
                     if (checkMainScreen()) {
                         if (trainee.mood == Mood.AWFUL || (trainee.mood <= Mood.NORMAL && trainee.energy >= 20)) {
                             MessageLog.i(TAG, "[TRACKBLAZER] Mood is ${trainee.mood}. Attempting to recover mood.")
-                            recoverMood()
+                            if (recoverMood()) decisionTracer?.recordRecoveryExecuted("RECOVER_MOOD", "Cannot force $forcedStat training ($reason).")
                         } else {
                             MessageLog.i(TAG, "[TRACKBLAZER] Energy is ${trainee.energy}%. Attempting to recover energy.")
-                            recoverEnergy()
+                            if (recoverEnergy()) decisionTracer?.recordRecoveryExecuted("RECOVER_ENERGY", "Cannot force $forcedStat training ($reason).")
                         }
                         // Shadow-only: a recovery action advances the turn.
                         advanced = true
@@ -1853,6 +1877,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                 if (itemsUsed.isNotEmpty()) {
                     MessageLog.i(TAG, "[TRACKBLAZER] Queued ${itemsUsed.size} race items for $grade ($fans fans). Confirming usage.")
                     confirmAndCloseItemDialog(itemsUsed.size)
+                    traceItemsUsed(itemsUsed)
                     bUsedHammerToday = true
                 } else {
                     if (ButtonClose.click(game.imageUtils)) {
@@ -2092,6 +2117,7 @@ class Trackblazer(game: Game) : Campaign(game) {
 
         if (itemsUsedCount > 0 && !bDryRun) {
             confirmAndCloseItemDialog(itemsUsedCount)
+            traceItemsUsed(itemsUsedWithReasons)
         } else if (!bDryRun) {
             if (ButtonClose.click(game.imageUtils, tries = 30)) {
                 game.wait(game.dialogWaitDelay)
@@ -2177,6 +2203,7 @@ class Trackblazer(game: Game) : Campaign(game) {
                     TAG,
                     "[TRACKBLAZER] Skipping Good-Luck Charm: mood=${trainee.mood}, selected $trainingSelected main gain ($selectedMainGain) below floor ($lowMainStatGainItemFloor). Conserving Charm for a higher-gain turn.",
                 )
+                decisionTracer?.recordCharmGate(queued = false, blockingGate = "main gain below the item floor")
                 return null
             }
             val reason = "Setting training failure chance to 0%."

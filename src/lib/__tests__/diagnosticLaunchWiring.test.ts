@@ -293,7 +293,7 @@ function rotationManager(h: ReturnType<typeof harness>, afterClear = () => {}, a
     return { clear, write, prepare }
 }
 
-function persistenceBarrier(h: ReturnType<typeof harness>, afterRead = () => {}) {
+function persistenceBarrier(h: ReturnType<typeof harness>, afterRead = () => {}, database: Record<string, unknown> = {}) {
     let rows: Record<string, unknown> = {}
     return callback("src/hooks/useSettingsManager.tsx", "flushAndVerifyLaunchConfig", {
         useCallback: (fn: unknown) => fn, startTiming: () => jest.fn(), settingsRef: { get current() { return h.bsc.settings } },
@@ -306,6 +306,7 @@ function persistenceBarrier(h: ReturnType<typeof harness>, afterRead = () => {})
             },
             loadSettingsRowsSnapshot: async () => { afterRead(); return rows },
             failStalledWriter: jest.fn(),
+            ...database,
         },
     })
 }
@@ -328,6 +329,28 @@ test.each([false, true])("unchanged normal intent runs the actual persistence an
     if (enabled) expect(rotation.write.mock.calls[0][0].length).toBeGreaterThan(0)
     expect(h.start).toHaveBeenCalledTimes(1)
     expect(JSON.stringify(h.bsc.settings)).toBe(original)
+})
+
+test.each([
+    [
+        "a failed write",
+        {
+            saveSettingsBatch: async () => {
+                throw new Error("disk I/O")
+            },
+        },
+    ],
+    ["a stale read-back", { saveSettingsBatch: async () => {}, loadSettingsRowsSnapshot: async () => ({}) }],
+])("the real persistence barrier blocks Home's Start on %s", async (_case, database) => {
+    const h = harness()
+    const rotation = rotationManager(h)
+    h.bindings.flushAndVerifyLaunchConfig = persistenceBarrier(h, () => {}, database)
+    await callback("src/pages/Home/index.tsx", "runStartSequence", h.bindings)(true)
+    expect(h.start).not.toHaveBeenCalled()
+    expect(h.bindings.StartModule.setVerifiedLaunchIdentity).not.toHaveBeenCalled()
+    expect(rotation.clear).not.toHaveBeenCalled()
+    expect(h.bindings.setPresetSaveState).toHaveBeenLastCalledWith("failed")
+    expect(h.bindings.showSnackbar).toHaveBeenCalledWith("Could not confirm your settings were saved, so nothing started. Your preset is kept. Press Start to try again.", "error")
 })
 
 test.each(["reselection", "cancellation", "Stop"])("invalidated normal intent has no later effects across awaits: %s", async (action) => {

@@ -837,7 +837,7 @@ abstract class Campaign(game: Game) : Task(game) {
     /** The list of date strings at which the bot should stop. */
     protected val stopAtDates: List<String> =
         run {
-            val json = SettingsHelper.getStringSetting("general", "stopAtDates", "[]")
+            val json = SettingsHelper.getStringSetting("general", "stopAtDates", "[\"Senior January Early\"]")
             try {
                 org.json.JSONArray(json).let { arr ->
                     (0 until arr.length()).map { arr.getString(it) }
@@ -859,7 +859,7 @@ abstract class Campaign(game: Game) : Task(game) {
     /** The set of 1-indexed career turns (1-72) pinned for regular recreation outings. */
     protected val recreationTurns: Set<Int> =
         run {
-            val json = SettingsHelper.getStringSetting("general", "recreationTurns", "[]")
+            val json = SettingsHelper.getStringSetting("general", "recreationTurns", "[29,35,43,47,52,55,58]")
             try {
                 org.json.JSONArray(json).let { arr -> (0 until arr.length()).map { arr.getInt(it) }.toSet() }
             } catch (_: Exception) {
@@ -868,7 +868,7 @@ abstract class Campaign(game: Game) : Task(game) {
         }
 
     /** The single career turn pinned for the final outing / Pure Passion activation, or a non-positive value when unset. */
-    protected val purePassionTurn: Int = SettingsHelper.getIntSetting("general", "purePassionTurn", 60)
+    protected val purePassionTurn: Int = SettingsHelper.getIntSetting("general", "purePassionTurn", -1)
 
     /** The total outings in the active support card's recreation chain (Team Sirius 7, Heirs to the Throne 5). */
     protected val recreationTotalOutings: Int = SettingsHelper.getIntSetting("general", "recreationTotalOutings", 7)

@@ -839,7 +839,7 @@ class CareerLaunchNavigator(private val context: Context) {
         coldStartOnHome: Boolean = false,
         careerInFlight: Boolean = false,
     ): NavigationResult {
-        val autoFillSupports = SettingsHelper.getBooleanSetting("runQueue", "autoFillSupports", false)
+        val autoFillSupports = SettingsHelper.getBooleanSetting("runQueue", "autoFillSupports", true)
         MessageLog.i(
             TAG,
             "[NAV] Starting between-run navigation. reuseLastLaunchSetup=$reuseLastLaunchSetup, autoFillSupports=$autoFillSupports, finalizeToHome=$finalizeToHome" +

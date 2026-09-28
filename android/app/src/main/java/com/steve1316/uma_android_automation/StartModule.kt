@@ -1941,8 +1941,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // Grand Concert like any other scenario, so a queue can launch the next career.
                 // The gate is therefore gone and the queue, trainee rotation and TP restore all
                 // honour the user's stored settings here as they do elsewhere.
-                val enableRunQueue = SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", false)
-                val totalRuns = if (enableRunQueue) SettingsHelper.getIntSetting("runQueue", "totalRuns", 2) else 1
+                val enableRunQueue = SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", true)
+                val totalRuns = if (enableRunQueue) SettingsHelper.getIntSetting("runQueue", "totalRuns", 5) else 1
                 val delayBetweenRuns = SettingsHelper.getIntSetting("runQueue", "delayBetweenRunsSeconds", 15)
                 val stopOnError = SettingsHelper.getBooleanSetting("runQueue", "stopOnError", false)
                 val reuseLastLaunchSetup = SettingsHelper.getBooleanSetting("runQueue", "reuseLastLaunchSetup", true)

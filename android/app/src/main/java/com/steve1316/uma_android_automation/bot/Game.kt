@@ -1026,7 +1026,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                 // once left El Condor preselected while Rudolf's preset was applied - this launch
                 // path would have run her career under his settings (2026-07-09, twice). Queue
                 // runs keep their rotation-managed targeting and pass no expectation.
-                val singleRun = !SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", false)
+                val singleRun = !SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", true)
                 val expectedTrainee = if (singleRun) SettingsHelper.getStringSetting("general", "appliedPresetTrainee") else ""
                 val expectedExcludes = if (singleRun) SettingsHelper.getStringSetting("general", "appliedPresetTraineeExcludes") else ""
                 if (expectedTrainee.isNotBlank()) {
@@ -1079,7 +1079,7 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         // redraw (2026-07-19). Misc tasks are not careers and never arm.
         if (!isMiscTask) {
             val queueRun =
-                if (SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", false)) {
+                if (SettingsHelper.getBooleanSetting("runQueue", "enableRunQueue", true)) {
                     SettingsHelper.getIntSetting("queueState", "currentRun", 0)
                 } else {
                     null

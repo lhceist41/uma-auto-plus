@@ -283,24 +283,6 @@ export async function verifyLaunchConfigPersisted(deps: LaunchBarrierDeps): Prom
 }
 
 /**
- * Orchestrate a gated Start: run the barrier, launch only on success, report a block otherwise.
- * Kept separate from React so "launches exactly once, only when verified" is directly testable.
- */
-export async function runStartBarrier(opts: {
-    verify: () => Promise<LaunchBarrierResult>
-    launch: () => void | Promise<void>
-    onBlocked: (result: LaunchBarrierResult) => void
-}): Promise<LaunchBarrierResult> {
-    const result = await opts.verify()
-    if (result.ok) {
-        await opts.launch()
-    } else {
-        opts.onBlocked(result)
-    }
-    return result
-}
-
-/**
  * A single-flight gate for the Start button: at most one barrier+launch sequence in flight,
  * re-entrant presses are rejected until it settles, and a cancelled gate (Stop pressed,
  * screen unmounted, preset changed) refuses the launch even if the in-flight barrier later

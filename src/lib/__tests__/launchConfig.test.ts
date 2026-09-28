@@ -6,7 +6,6 @@ import {
     identityFromRows,
     launchConfigIdentity,
     launchConfigIdentitiesMatch,
-    runStartBarrier,
     storageForm,
     verifyLaunchConfigPersisted,
 } from "../launchConfig"
@@ -235,17 +234,21 @@ describe("verifyLaunchConfigPersisted (Start barrier)", () => {
         })
     }
 
-    it("2+8: waits for the ACTUAL commit, then launches exactly once", async () => {
+    // Home's Start runs this barrier and launches only on ok; diagnosticLaunchWiring.test.ts drives
+    // that real path, so these cases pin the barrier's own verdicts.
+    it("2+8: waits for the ACTUAL commit before it verifies", async () => {
         const intended = makeSettings({ revision: 2, objective: "sparks" })
         const store = fakeStore(storedRows(makeSettings({ revision: 1, objective: "rank" })))
         const timers = fakeTimers()
-        let launches = 0
-        const p = runStartBarrier({ verify: () => runBarrier(store, intended, timers), launch: () => { launches += 1 }, onBlocked: () => {} })
+        let settled = false
+        const p = runBarrier(store, intended, timers).then((r) => {
+            settled = true
+            return r
+        })
         await Promise.resolve()
-        expect(launches).toBe(0)
+        expect(settled).toBe(false)
         store.release()
         expect((await p).ok).toBe(true)
-        expect(launches).toBe(1)
     })
 
     it("3: a delayed writer cannot be overtaken -- readback runs only after flush resolves", async () => {
@@ -259,18 +262,16 @@ describe("verifyLaunchConfigPersisted (Start barrier)", () => {
         expect((await verify).ok).toBe(true)
     })
 
-    it("3-COMMIT: a rejected flush (COMMIT failure) blocks at flush, never launches", async () => {
+    it("3-COMMIT: a rejected flush (COMMIT failure) blocks at flush", async () => {
         const intended = makeSettings({ revision: 2 })
         const store = fakeStore(storedRows(makeSettings({ revision: 1 })))
         const timers = fakeTimers()
-        let launches = 0
-        const p = runStartBarrier({ verify: () => runBarrier(store, intended, timers), launch: () => { launches += 1 }, onBlocked: () => {} })
+        const p = runBarrier(store, intended, timers)
         await Promise.resolve()
         store.failFlush(new Error("COMMIT failed: disk I/O"))
         const r = await p
         expect(r.ok).toBe(false)
         expect(r.stage).toBe("flush")
-        expect(launches).toBe(0)
     })
 
     it("4-7: a persisted config that differs from intended blocks at verify (never launches)", async () => {
@@ -322,12 +323,11 @@ describe("verifyLaunchConfigPersisted (Start barrier)", () => {
         expect(r.persisted?.objective).toBe("sparks")
     })
 
-    it("4-STALL: a stalled writer times out into a visible failure, recovers, zero launches", async () => {
+    it("4-STALL: a stalled writer times out into a visible failure and recovers", async () => {
         const intended = makeSettings({ revision: 2 })
         const store = fakeStore(storedRows(makeSettings({ revision: 1 })))
         const timers = fakeTimers()
-        let launches = 0
-        const p = runStartBarrier({ verify: () => runBarrier(store, intended, timers), launch: () => { launches += 1 }, onBlocked: () => {} })
+        const p = runBarrier(store, intended, timers)
         await Promise.resolve()
         timers.advance(TIMEOUT + 1)
         const result = await p
@@ -335,7 +335,6 @@ describe("verifyLaunchConfigPersisted (Start barrier)", () => {
         expect(result.stage).toBe("flush")
         expect(result.reason).toMatch(/stall/i)
         expect(store.wasRecovered()).toBe(true)
-        expect(launches).toBe(0)
     })
 
     it("13: retry after writer recovery launches the intended preset", async () => {
@@ -367,17 +366,15 @@ describe("verifyLaunchConfigPersisted (Start barrier)", () => {
         expect(result.persisted?.revision).toBe(3)
     })
 
-    it("16/20: the exact incident -- McQueen on disk, Super Creek intended, delayed persist; blocked until it lands, McQueen never launches", async () => {
+    it("16/20: the exact incident -- McQueen on disk, Super Creek intended, delayed persist; blocked until it lands", async () => {
         const superCreek = makeSettings({ trainee: "Super Creek", revision: 2, objective: "sparks" })
         const mcQueenRows = storedRows(makeSettings({ trainee: "[Frontline Elegance] Mejiro McQueen", revision: 1, objective: "rank" }))
         const store = fakeStore(mcQueenRows)
         const timers = fakeTimers()
-        let launched = false
-        const first = runStartBarrier({ verify: () => runBarrier(store, superCreek, timers), launch: () => { launched = true }, onBlocked: () => {} })
+        const first = runBarrier(store, superCreek, timers)
         await Promise.resolve()
         timers.advance(TIMEOUT + 1)
         expect((await first).ok).toBe(false)
-        expect(launched).toBe(false)
 
         const store2 = fakeStore(mcQueenRows)
         const timers2 = fakeTimers()

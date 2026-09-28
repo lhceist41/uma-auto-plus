@@ -1187,12 +1187,11 @@ object DialogOptions : DialogInterface {
     override val name: String = "options"
     override val title: String = "Options"
     override val closeButton = null
-    override val okButton: BaseComponentInterface = ButtonSave
-    override val buttons: List<BaseComponentInterface> =
-        listOf(
-            ButtonCancel,
-            ButtonSave,
-        )
+
+    // The Save button has no template capture yet, so only Cancel is declared; ok() then falls
+    // back to close(), which is all the handler does with this dialog.
+    override val okButton = null
+    override val buttons: List<BaseComponentInterface> = listOf(ButtonCancel)
 }
 
 /** Career -> Agenda */

@@ -64,6 +64,11 @@ const UNCONSUMED_SETTINGS_ALLOWLIST = {
  * the source fact that proves it and is re-verified at scan time, so the normalization cannot outlive
  * the code that justifies it.
  */
+/** Kotlin fallbacks that deliberately differ from the TypeScript default, keyed by `file:category.key`. */
+const FALLBACK_EXCEPTIONS = {
+    "RunConfigSnapshot.kt:general.scenario": "Records the scenario the bot actually read for the career log; a missing row stays blank instead of claiming the default scenario.",
+}
+
 const ROTATION_PREFIXES = [
     {
         id: "categoryPrefix-parameter",
@@ -189,7 +194,7 @@ for (const [file, source] of kotlinSources) {
             addBlocker(`${relative(file)}:${line}`, `could not parse the argument list of SettingsHelper.${m[1]}`)
             continue
         }
-        sites.push({ categoryExpr: args[0].trim(), keyExpr: args[1].trim(), file, line, source })
+        sites.push({ categoryExpr: args[0].trim(), keyExpr: args[1].trim(), file, line, source, index: m.index })
     }
 }
 
@@ -392,6 +397,96 @@ for (const { category, key, site } of resolvedReads) {
     )
 }
 
+/**
+ * `defaultSettings` leaf values that are plain literals (booleans, numbers, strings, arrays of those),
+ * keyed by path. Anything computed is left out, so its fallback is not compared.
+ */
+function collectDefaultLiterals() {
+    const source = ts.createSourceFile(SETTINGS_SOURCE, fs.readFileSync(SETTINGS_SOURCE, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    const literal = (node) => {
+        if (node.kind === ts.SyntaxKind.TrueKeyword) return { value: true }
+        if (node.kind === ts.SyntaxKind.FalseKeyword) return { value: false }
+        if (ts.isNumericLiteral(node)) return { value: Number(node.text) }
+        if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.MinusToken && ts.isNumericLiteral(node.operand)) return { value: -Number(node.operand.text) }
+        if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return { value: node.text }
+        if (ts.isArrayLiteralExpression(node)) {
+            const items = node.elements.map(literal)
+            return items.every(Boolean) ? { value: items.map((item) => item.value) } : null
+        }
+        return null
+    }
+    const values = new Map()
+    const walk = (object, prefix) => {
+        for (const property of object.properties) {
+            if (!ts.isPropertyAssignment(property)) continue
+            const name = ts.isIdentifier(property.name) || ts.isStringLiteral(property.name) ? property.name.text : null
+            if (!name) continue
+            const pathName = prefix ? `${prefix}.${name}` : name
+            if (ts.isObjectLiteralExpression(property.initializer)) walk(property.initializer, pathName)
+            else {
+                const found = literal(property.initializer)
+                if (found) values.set(pathName, found.value)
+            }
+        }
+    }
+    const declaration = source.statements
+        .filter(ts.isVariableStatement)
+        .flatMap((statement) => statement.declarationList.declarations)
+        .find((d) => ts.isIdentifier(d.name) && d.name.text === "defaultSettings")
+    if (!declaration?.initializer || !ts.isObjectLiteralExpression(declaration.initializer)) return null
+    walk(declaration.initializer, "")
+    return values
+}
+
+/** A Kotlin fallback argument as a value, or undefined when it is not a plain literal. */
+function kotlinLiteral(expr) {
+    if (expr === "true" || expr === "false") return expr === "true"
+    if (/^-?\d+(\.\d+)?$/.test(expr)) return Number(expr)
+    if (isStringLiteral(expr)) return JSON.parse(expr)
+    if (expr === "emptyList()" || expr === "listOf()") return []
+    const list = expr.match(/^listOf\((.*)\)$/s)
+    if (list) {
+        const items = list[1].split(",").map((item) => item.trim()).filter(Boolean)
+        return items.every(isStringLiteral) ? items.map((item) => JSON.parse(item)) : undefined
+    }
+    return undefined
+}
+
+/** Kotlin reads list settings either as a string array or as their JSON text. */
+function sameFallback(fallback, tsDefault) {
+    if (Array.isArray(tsDefault) && typeof fallback === "string") {
+        try {
+            return JSON.stringify(JSON.parse(fallback)) === JSON.stringify(tsDefault)
+        } catch {
+            return false
+        }
+    }
+    return JSON.stringify(fallback) === JSON.stringify(tsDefault)
+}
+
+const defaultLiterals = collectDefaultLiterals()
+if (!defaultLiterals) addBlocker(relative(SETTINGS_SOURCE), "could not locate the `defaultSettings` object literal")
+let comparedFallbacks = 0
+for (const site of sites) {
+    if (!defaultLiterals || !isStringLiteral(site.categoryExpr) || !isStringLiteral(site.keyExpr)) continue
+    const settingPath = `${JSON.parse(site.categoryExpr)}.${JSON.parse(site.keyExpr)}`
+    if (!defaultLiterals.has(settingPath)) continue
+    const args = splitArguments(site.source, site.source.indexOf("(", site.source.lastIndexOf("SettingsHelper", site.index)))
+    const fallback = args && args.length >= 3 ? kotlinLiteral(args[2].trim()) : undefined
+    if (fallback === undefined || FALLBACK_EXCEPTIONS[`${path.basename(site.file)}:${settingPath}`]) continue
+    comparedFallbacks++
+    const tsDefault = defaultLiterals.get(settingPath)
+    if (!sameFallback(fallback, tsDefault)) {
+        addViolation(
+            "fallback-differs-from-default",
+            settingPath,
+            `${relative(site.file)}:${site.line}`,
+            `Kotlin falls back to ${JSON.stringify(fallback)} when the row is missing, but the TypeScript default is ${JSON.stringify(tsDefault)}.`,
+            "Make the Kotlin fallback the TypeScript default."
+        )
+    }
+}
+
 const kotlinConsumed = new Set(resolvedReads.map(({ category, key }) => `${category}.${key}`))
 
 /**
@@ -428,6 +523,7 @@ for (const leaf of settingsLeaves ?? []) {
 }
 
 for (const [name, table] of [
+    ["FALLBACK_EXCEPTIONS", FALLBACK_EXCEPTIONS],
     ["RUNTIME_CATEGORIES", RUNTIME_CATEGORIES],
     ["RUNTIME_SETTING_PATHS", RUNTIME_SETTING_PATHS],
     ["UNCONSUMED_SETTINGS_ALLOWLIST", UNCONSUMED_SETTINGS_ALLOWLIST],
@@ -463,5 +559,5 @@ if (violations.length > 0) {
 const allowlisted = Object.keys(RUNTIME_SETTING_PATHS).length + Object.keys(UNCONSUMED_SETTINGS_ALLOWLIST).length
 console.log(
     `settings-parity: ${sites.length} reads, ${literalPairs.size} literal pairs, ${dynamicSiteCount} dynamic sites, ` +
-        `${settingsLeaves.length} leaves, ${allowlisted} allowlisted. OK`
+        `${settingsLeaves.length} leaves, ${comparedFallbacks} fallbacks compared, ${allowlisted} allowlisted. OK`
 )

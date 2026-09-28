@@ -300,10 +300,6 @@ object ButtonResume : ButtonInterface {
     override val template = Template("components/button/resume", region = Region.bottomHalf)
 }
 
-object ButtonSave : ButtonInterface {
-    override val template = Template("components/button/save", region = Region.bottomHalf)
-}
-
 object ButtonSaveSchedule : ButtonInterface {
     override val template = Template("components/button/save_schedule", region = Region.bottomHalf)
 }

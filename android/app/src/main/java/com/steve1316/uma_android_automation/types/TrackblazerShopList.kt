@@ -191,7 +191,12 @@ class TrackblazerShopList(private val game: Game) {
     val shopItems: Map<String, TrackblazerItemInfo> get() = Companion.shopItems
 
     /** Items to not purchase from the Shop. */
-    private val excludedItemsString = SettingsHelper.getStringSetting("scenarioOverrides", "trackblazerExcludedItems", "[]")
+    private val excludedItemsString =
+        SettingsHelper.getStringSetting(
+            "scenarioOverrides",
+            "trackblazerExcludedItems",
+            "[\"Energy Drink MAX\",\"Energy Drink MAX EX\",\"Yummy Cat Food\",\"Coaching Megaphone\"]",
+        )
 
     /** Whether the shop currently has a sale active. */
     private var isShopOnSale: Boolean = false
