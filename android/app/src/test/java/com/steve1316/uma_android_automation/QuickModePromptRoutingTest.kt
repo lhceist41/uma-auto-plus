@@ -185,15 +185,16 @@ class QuickModePromptRoutingTest {
         @Test
         fun `the two launch taps sit inside the Off gate and anything else only logs`() {
             val handler = nav.substring(nav.indexOf("private fun handleQuickModePrompt("))
-            val gate = handler.indexOf("if (launchTapsSkipPill(pillState)) {")
-            val otherwise = handler.indexOf("} else {", gate)
-            assertTrue(gate >= 0, "the taps are gated on the pill state")
+            // InCareerSkipFix.attempt runs tapPillTwice only for a pill launchTapsSkipPill accepts (tested in PersistentSkipPillTest).
+            val gate = handler.indexOf("InCareerSkipFix().attempt(\n                pillState,\n                tapPillTwice = {")
+            val lambdaEnd = handler.indexOf("\n                },\n                reRead = ", gate)
+            assertTrue(gate >= 0 && lambdaEnd > gate, "the taps are gated on the pill state")
             for (tap in listOf("skip_toggle_tap_1", "skip_toggle_tap_2")) {
-                assertTrue(handler.indexOf(tap) in gate until otherwise, "$tap runs only inside the Off gate")
+                assertTrue(handler.indexOf(tap) in gate until lambdaEnd, "$tap runs only inside the Off gate")
             }
-            val elseBranch = handler.substring(otherwise, handler.indexOf("\n        }\n", otherwise))
-            assertFalse(elseBranch.contains("CoordinateTap"), "a pill that is not Off is never tapped")
-            assertTrue(elseBranch.contains("leaving the player's Skip mode as it is"))
+            val notOff = handler.substring(handler.indexOf("SkipFixOutcome.NOT_OFF ->"), handler.indexOf("SkipFixOutcome.LEFT_OFF ->"))
+            assertFalse(notOff.contains("CoordinateTap"), "a pill that is not Off is never tapped")
+            assertTrue(notOff.contains("leaving the player's Skip mode as it is"))
         }
 
         @Test

@@ -91,7 +91,14 @@ import com.steve1316.uma_android_automation.types.TrackDistance
 import com.steve1316.uma_android_automation.types.TrackSurface
 import com.steve1316.uma_android_automation.types.Trainee
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
+import com.steve1316.uma_android_automation.utils.InCareerSkipFix
+import com.steve1316.uma_android_automation.utils.PersistentSkipState
 import com.steve1316.uma_android_automation.utils.PersistentSkipStateLog
+import com.steve1316.uma_android_automation.utils.SKIP_PILL_CENTRE_X_FRACTION
+import com.steve1316.uma_android_automation.utils.SKIP_PILL_CENTRE_Y_FRACTION
+import com.steve1316.uma_android_automation.utils.SkipFixOutcome
+import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.skipOffPillByColour
 import com.steve1316.uma_android_automation.utils.ProgressEvent
 import com.steve1316.uma_android_automation.utils.ProgressNotification
 import com.steve1316.uma_android_automation.utils.ProgressTracker
@@ -170,6 +177,9 @@ abstract class Campaign(game: Game) : Task(game) {
     protected var skillPlan: SkillPlan = SkillPlan(game, this)
 
     private val skipStateLog = PersistentSkipStateLog(TAG, "cutscene")
+
+    /** A Campaign is one career, so a pill that would not leave Off is left alone until the next one. */
+    private val skipFix = InCareerSkipFix()
 
     /** Lazily-built [SkillList] used only for career-end screen detection in [process]. Lazy and
      * shared because the constructor generates the full skill entries map from the database. */
@@ -3463,6 +3473,8 @@ abstract class Campaign(game: Game) : Task(game) {
         updateEstimatedRank()
         trainee.logInfo()
 
+        setFastSkipIfOff("main screen")
+
         // Scenario-specific main screen entry hook (e.g. for item usage).
         onMainScreenEntry()
 
@@ -4797,14 +4809,47 @@ abstract class Campaign(game: Game) : Task(game) {
             return false
         }
 
-        val skipState =
-            classifyPersistentSkip(
-                offPillMatched = { ButtonSkipOff.check(game.imageUtils, sourceBitmap = sourceBitmap) },
-                onPillMatched = { ButtonSkipOn.check(game.imageUtils, sourceBitmap = sourceBitmap) },
-                skipTextFound = { skipPillTextFound(sourceBitmap) },
-            )
+        val skipState = readSkipPill(sourceBitmap)
         skipStateLog.record(skipState)
         return skipState.pillVisible
+    }
+
+    /** The persistent Skip pill's state on [bitmap]; Off is the template or the pill's colours ([skipOffPillByColour]). */
+    private fun readSkipPill(bitmap: Bitmap): PersistentSkipState =
+        classifyPersistentSkip(
+            offPillMatched = { skipOffPill(bitmap) },
+            onPillMatched = { ButtonSkipOn.check(game.imageUtils, sourceBitmap = bitmap) },
+            skipTextFound = { skipPillTextFound(bitmap) },
+        )
+
+    private fun skipOffPill(bitmap: Bitmap): Boolean =
+        ButtonSkipOff.check(game.imageUtils, sourceBitmap = bitmap) ||
+            skipOffPillByColour(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)
+
+    /**
+     * Switches the persistent Skip pill from Off back to fast when this screen shows it Off
+     * ([InCareerSkipFix]), tapping the pill's measured centre. A screen without an Off pill costs
+     * one template match and a colour read, and taps nothing.
+     */
+    private fun setFastSkipIfOff(screen: String) {
+        val bitmap = game.imageUtils.getSourceBitmap()
+        if (!skipOffPill(bitmap)) return
+        val outcome =
+            skipFix.attempt(
+                PersistentSkipState.OFF,
+                tapPillTwice = {
+                    repeat(2) {
+                        game.tapCoordinate(bitmap.width * SKIP_PILL_CENTRE_X_FRACTION, bitmap.height * SKIP_PILL_CENTRE_Y_FRACTION, "skip_pill")
+                        game.wait(0.6)
+                    }
+                },
+                reRead = { readSkipPill(game.imageUtils.getSourceBitmap()) },
+            )
+        when (outcome) {
+            SkipFixOutcome.LEFT_OFF -> MessageLog.i(TAG, "[SKIP_PILL] The Skip pill read Off on the $screen; switched it to fast.")
+            SkipFixOutcome.GIVING_UP -> MessageLog.w(TAG, "[SKIP_PILL] The Skip pill still reads Off on the $screen after two taps; leaving it for the rest of this career.")
+            SkipFixOutcome.NOT_OFF, SkipFixOutcome.GAVE_UP_EARLIER -> {}
+        }
     }
 
     /** OCR fallback for the cutscene Skip pill: the intro-pill band, then a wider bottom-left scan. */
@@ -4898,6 +4943,8 @@ abstract class Campaign(game: Game) : Task(game) {
                 )
                 cutsceneRebinds.record(game.forceRebindAccessibilityService())
             }
+            // Before the rebind ladder starts only: a stuck-input episode must not gain pill taps.
+            if (count < cutsceneRebindThresholds.min()) setFastSkipIfOff("event screen")
             MessageLog.i(TAG, "[MISC] Event cutscene intro detected (Skip pill present); tapping to advance the dialogue toward the choices (tap $count).")
             game.tap(540.0, 1300.0, taps = 1)
             return

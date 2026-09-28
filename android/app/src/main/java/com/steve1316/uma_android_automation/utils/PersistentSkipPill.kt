@@ -87,6 +87,108 @@ class PersistentSkipStateLog(private val tag: String, private val context: Strin
 fun launchTapsSkipPill(state: PersistentSkipState): Boolean = state == PersistentSkipState.OFF
 
 /**
+ * Centre of the persistent Skip pill as a fraction of the capture: (387, 1873) on 1080x1920, the
+ * same on the launch prompt, the main screen, cutscenes and event choices. The pill spans x 275 to
+ * 496 and y 1842 to 1901 there, so a jittered tap at the centre always lands on it.
+ */
+const val SKIP_PILL_CENTRE_X_FRACTION = 387.0 / 1080.0
+const val SKIP_PILL_CENTRE_Y_FRACTION = 1873.0 / 1920.0
+
+/**
+ * Reads a white "Skip Off" pill from its colours: a near-white fill at the pill's left end and brown
+ * lettering across its text band. The `skip_off` template scores only 0.60 to 0.77 on the same pill
+ * over the light launch backgrounds (the game resets Skip to Off at every career start), below its
+ * threshold and below the 0.70 it gives chevron pills on event screens, so a template threshold
+ * cannot separate them. Measured: every Off pill reads fill 1.00 and lettering 0.195; every `>` and
+ * `>>` pill reads 0.00 and 0.000; a blank white screen has the fill but no lettering; none of 631
+ * other screenshots matched. Gated on the 1080x1920 surface the boxes were measured on.
+ */
+fun skipOffPillByColour(
+    sampler: SparkPixelSampler,
+    width: Int,
+    height: Int,
+): Boolean {
+    if (width != 1080 || height != 1920) return false
+    return fraction(sampler, 282..300, 1858..1885, ::isPillWhite) >= 0.9 &&
+        fraction(sampler, 310..470, 1852..1892, ::isPillLettering) >= 0.10
+}
+
+private fun fraction(
+    sampler: SparkPixelSampler,
+    xs: IntRange,
+    ys: IntRange,
+    test: (Int) -> Boolean,
+): Double {
+    var hits = 0
+    var total = 0
+    for (y in ys step 2) {
+        for (x in xs step 2) {
+            total++
+            if (test(sampler.argb(x, y))) hits++
+        }
+    }
+    return hits.toDouble() / total
+}
+
+private fun isPillWhite(argb: Int): Boolean {
+    val r = (argb shr 16) and 0xFF
+    val g = (argb shr 8) and 0xFF
+    val b = argb and 0xFF
+    return minOf(r, g, b) > 200 && maxOf(r, g, b) - minOf(r, g, b) < 45
+}
+
+private fun isPillLettering(argb: Int): Boolean {
+    val r = (argb shr 16) and 0xFF
+    val g = (argb shr 8) and 0xFF
+    val b = argb and 0xFF
+    return r in 71..189 && g in 26..129 && b < 80 && r - g > 25 && g - b > 5
+}
+
+/** How one attempt to turn an in-career "Skip Off" pill back to fast ended. */
+enum class SkipFixOutcome {
+    /** The pill did not read Off: nothing tapped. */
+    NOT_OFF,
+
+    /** An earlier attempt this career did not take: nothing tapped. */
+    GAVE_UP_EARLIER,
+
+    /** Two taps, and the pill no longer reads Off. */
+    LEFT_OFF,
+
+    /** Two taps, and the pill still reads Off or is gone: no more attempts this career. */
+    GIVING_UP,
+}
+
+/**
+ * Turns the persistent pill from Off to fast, at the launch prompt and on in-career screens. The
+ * game resets it to Off at every career start, so without this every career plays its events at
+ * full length. Taps only a pill read as Off ([launchTapsSkipPill]); two taps cycle Off to ">" to
+ * ">>". The re-read only has to
+ * show the pill left Off: `skip_on` stays under its threshold on the main screen's chevron pills
+ * (0.508 to 0.755 measured), so a fast pill there reads PRESENT_UNRESOLVED. A pill that still reads
+ * Off, or is gone, ends the attempts for the rest of the career, so it is never tapped in a loop.
+ * One instance per career.
+ */
+class InCareerSkipFix {
+    var gaveUp: Boolean = false
+        private set
+
+    fun attempt(
+        state: PersistentSkipState,
+        tapPillTwice: () -> Unit,
+        reRead: () -> PersistentSkipState,
+    ): SkipFixOutcome {
+        if (!launchTapsSkipPill(state)) return SkipFixOutcome.NOT_OFF
+        if (gaveUp) return SkipFixOutcome.GAVE_UP_EARLIER
+        tapPillTwice()
+        val after = reRead()
+        if (after != PersistentSkipState.OFF && after.pillVisible) return SkipFixOutcome.LEFT_OFF
+        gaveUp = true
+        return SkipFixOutcome.GIVING_UP
+    }
+}
+
+/**
  * Whether a visible Skip pill is the launch-time Quick Mode prompt rather than an in-career
  * tap-to-continue screen.
  *

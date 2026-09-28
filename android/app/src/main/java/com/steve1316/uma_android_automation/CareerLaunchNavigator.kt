@@ -75,8 +75,13 @@ import com.steve1316.uma_android_automation.utils.QuickModeOption
 import com.steve1316.uma_android_automation.utils.RosterScanPolicy
 import com.steve1316.uma_android_automation.utils.grandConcertCareerCompleteScreenPresent
 import com.steve1316.uma_android_automation.utils.grandConcertConcertPendingScreenPresent
+import com.steve1316.uma_android_automation.utils.InCareerSkipFix
+import com.steve1316.uma_android_automation.utils.PersistentSkipState
+import com.steve1316.uma_android_automation.utils.SKIP_PILL_CENTRE_X_FRACTION
+import com.steve1316.uma_android_automation.utils.SKIP_PILL_CENTRE_Y_FRACTION
+import com.steve1316.uma_android_automation.utils.SkipFixOutcome
 import com.steve1316.uma_android_automation.utils.classifyPersistentSkip
-import com.steve1316.uma_android_automation.utils.launchTapsSkipPill
+import com.steve1316.uma_android_automation.utils.skipOffPillByColour
 import com.steve1316.uma_android_automation.utils.isLaunchQuickModePrompt
 import com.steve1316.uma_android_automation.utils.quickModeDialogPresent
 import com.steve1316.uma_android_automation.utils.quickModeSelectedIndex
@@ -1764,12 +1769,7 @@ class CareerLaunchNavigator(private val context: Context) {
         if (isTrainingSelection(bitmap)) {
             return LaunchScreenState.TRAINING_SELECTION_SCREEN
         }
-        val skipState =
-            classifyPersistentSkip(
-                offPillMatched = { ButtonSkipOff.check(iu, sourceBitmap = bitmap) },
-                onPillMatched = { ButtonSkipOn.check(iu, sourceBitmap = bitmap) },
-                skipTextFound = { skipPillTextFound(bitmap) },
-            )
+        val skipState = readSkipPill(bitmap)
         skipStateLog.record(skipState)
         if (skipState.pillVisible) {
             if (isLaunchQuickModePrompt(resumeInProgressCareerMode || careerInFlightMode, skipToggleAlreadyDone)) {
@@ -1853,6 +1853,17 @@ class CareerLaunchNavigator(private val context: Context) {
 
         return LaunchScreenState.UNKNOWN
     }
+
+    /** The persistent Skip pill's state on [bitmap]; Off is the template or the pill's colours ([skipOffPillByColour]). */
+    private fun readSkipPill(bitmap: Bitmap): PersistentSkipState =
+        classifyPersistentSkip(
+            offPillMatched = {
+                ButtonSkipOff.check(iu, sourceBitmap = bitmap) ||
+                    skipOffPillByColour(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)
+            },
+            onPillMatched = { ButtonSkipOn.check(iu, sourceBitmap = bitmap) },
+            skipTextFound = { skipPillTextFound(bitmap) },
+        )
 
     /** OCR fallback for the Skip pill: scans 22%-53% width, 94%-98% height, centered on the pill. */
     private fun skipPillTextFound(bitmap: Bitmap): Boolean {
@@ -9216,29 +9227,31 @@ class CareerLaunchNavigator(private val context: Context) {
         // resume, skip pills become TAP_TO_CONTINUE). So max skip, then confirm.
 
         // Tap the Skip button position twice to cycle Skip Off → Skip > → Skip >>, but only from a
-        // pill that reads Off: any other state is the player's own mode (see launchTapsSkipPill).
-        // Position calibrated from actual game screen: white pill button center at
-        // x ≈ 386/1080 = 35.7%, y ≈ 1847/1920 = 96.2% (measured via pixel sampling).
+        // pill that reads Off: any other state is the player's own mode (see launchTapsSkipPill). The
+        // game resets the pill to Off at every career start, so this normally taps; the re-read
+        // confirms the pill left Off, and if it did not, the career's first main or event screen
+        // tries once more (Campaign.setFastSkipIfOff).
         val bitmap = iu.getSourceBitmap()
-        val pillState =
-            classifyPersistentSkip(
-                offPillMatched = { ButtonSkipOff.check(iu, sourceBitmap = bitmap) },
-                onPillMatched = { ButtonSkipOn.check(iu, sourceBitmap = bitmap) },
-                skipTextFound = { skipPillTextFound(bitmap) },
+        val pillState = readSkipPill(bitmap)
+        val tapX = bitmap.width * SKIP_PILL_CENTRE_X_FRACTION
+        val tapY = bitmap.height * SKIP_PILL_CENTRE_Y_FRACTION
+        val outcome =
+            InCareerSkipFix().attempt(
+                pillState,
+                tapPillTwice = {
+                    MessageLog.i(TAG, "[NAV] Skip pill reads Off; tapping it twice at ($tapX, $tapY) to set it to fast.")
+                    CoordinateTap.tap(gestureUtils, tapX, tapY, "skip_toggle_tap_1")
+                    waitSafe(0.6)
+                    CoordinateTap.tap(gestureUtils, tapX, tapY, "skip_toggle_tap_2")
+                    waitSafe(0.6)
+                },
+                reRead = { readSkipPill(iu.getSourceBitmap()) },
             )
-        if (launchTapsSkipPill(pillState)) {
-            val tapX = (bitmap.width * 0.357).toDouble()
-            val tapY = (bitmap.height * 0.962).toDouble()
-
-            MessageLog.i(TAG, "[NAV] Tapping Skip button (1st click) at ($tapX, $tapY)...")
-            CoordinateTap.tap(gestureUtils, tapX, tapY, "skip_toggle_tap_1")
-            waitSafe(0.6)
-
-            MessageLog.i(TAG, "[NAV] Tapping Skip button (2nd click) at ($tapX, $tapY)...")
-            CoordinateTap.tap(gestureUtils, tapX, tapY, "skip_toggle_tap_2")
-            waitSafe(0.6)
-        } else {
-            MessageLog.i(TAG, "[NAV] Skip pill reads ${pillState.name}, not Off; leaving the player's Skip mode as it is.")
+        when (outcome) {
+            SkipFixOutcome.NOT_OFF -> MessageLog.i(TAG, "[NAV] Skip pill reads ${pillState.name}, not Off; leaving the player's Skip mode as it is.")
+            SkipFixOutcome.LEFT_OFF -> MessageLog.i(TAG, "[NAV] Skip pill set to fast.")
+            SkipFixOutcome.GIVING_UP -> MessageLog.w(TAG, "[NAV] Skip pill still reads Off after two taps; the career's first main or event screen tries once more.")
+            SkipFixOutcome.GAVE_UP_EARLIER -> {}
         }
 
         skipToggleAlreadyDone = true
