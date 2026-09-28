@@ -114,6 +114,129 @@ class UnknownScreenRecoveryTest {
         }
     }
 
+    @Nested
+    @DisplayName("own screen in front")
+    inner class OwnUiInFront {
+        private val main by lazy { sourceFile("MainActivity.kt").readText().replace("\r\n", "\n") }
+        private val campaign by lazy { sourceFile("bot/Campaign.kt").readText().replace("\r\n", "\n") }
+        private val racing by lazy { sourceFile("bot/Racing.kt").readText().replace("\r\n", "\n") }
+        private val unityCup by lazy { sourceFile("bot/campaigns/UnityCup.kt").readText().replace("\r\n", "\n") }
+        private val game by lazy { sourceFile("bot/Game.kt").readText().replace("\r\n", "\n") }
+
+        @Test
+        fun `waits instead of tapping while our screen is in front`() {
+            var waits = 0
+            assertTrue(holdForOwnUi(ownUiInFront = true) { waits++ })
+            assertEquals(1, waits)
+        }
+
+        @Test
+        fun `taps as before while the game is in front`() {
+            var waits = 0
+            assertFalse(holdForOwnUi(ownUiInFront = false) { waits++ })
+            assertEquals(0, waits)
+        }
+
+        @Test
+        fun `the flag follows the activity lifecycle and a new process starts with the game assumed in front`() {
+            val onResume = main.substringAfter("override fun onResume()").substringBefore("}")
+            val onPause = main.substringAfter("override fun onPause()").substringBefore("}")
+            assertTrue("OwnUiForeground.resumed = true" in onResume)
+            assertTrue("OwnUiForeground.resumed = false" in onPause)
+            assertTrue(onPause.indexOf("OwnUiForeground.resumed = false") < onPause.indexOf("super.onPause()"), "cleared before the pause completes")
+            assertTrue("OwnUiForeground.resumed = true" !in main.substringAfter("override fun onPause()"), "nothing sets it after onPause")
+            val flag = sourceFile("bot/UnknownScreenRecovery.kt").readText().replace("\r\n", "\n").substringAfter("internal object OwnUiForeground {")
+            assertTrue(flag.substringBefore("}").contains("var resumed: Boolean = false"), "a new process never holds input")
+            val writers = Regex("""OwnUiForeground\.resumed = """)
+            assertEquals(2, writers.findAll(main).count())
+            assertEquals(0, writers.findAll(game + campaign + racing + unityCup).count(), "only the activity lifecycle writes it")
+        }
+
+        @Test
+        fun `the game helper reads the lifecycle flag`() {
+            val helper = game.substringAfter("fun holdBlindInputForOwnUi(): Boolean {").substringBefore("\n    }\n")
+            assertTrue("holdForOwnUi(OwnUiForeground.resumed)" in helper)
+            assertTrue("wait(" in helper, "the hold waits, keeping the stall watchdog's heartbeat")
+        }
+
+        @Test
+        fun `an unknown tick with our screen in front neither counts nor recovers`() {
+            val hold = campaign.indexOf("} else if (game.holdBlindInputForOwnUi()) {")
+            val increment = campaign.indexOf("consecutiveUnknownScreenCount++")
+            assertTrue(hold in 0 until increment, "held before the streak advances")
+            val branch = campaign.substring(hold, campaign.indexOf("} else", hold + 1))
+            assertTrue("detectedKnownScreen = false" in branch, "the streak is neither reset nor advanced")
+            assertTrue("recoverFromUnknownScreen" !in branch && "tap(" !in branch)
+            assertEquals(1, Regex("""recoverFromUnknownScreen\(consecutiveUnknownScreenCount\)""").findAll(campaign).count())
+            assertTrue(campaign.indexOf("recoverFromUnknownScreen(consecutiveUnknownScreenCount)") > increment, "recovery runs only on a counted tick")
+        }
+
+        @Test
+        fun `race-loop blind taps are held too`() {
+            assertTrue(racing.contains("if (!game.holdBlindInputForOwnUi()) {\n                        Log.d(TAG, \"[DEBUG] runRaceWithRetries:: No components detected."))
+            val timedFallback = "val heldMs = game.heldMsForOwnUi()\n                    if (heldMs != null) startTime += heldMs else game.tap(350.0, 750.0, taps = 3)"
+            assertTrue(racing.contains(timedFallback))
+            assertTrue(unityCup.contains(timedFallback))
+            val literalTaps = Regex("""game\.tap\(\d""")
+            assertEquals(2, literalTaps.findAll(racing).count())
+            assertEquals(1, literalTaps.findAll(unityCup).count())
+        }
+    }
+
+    @Nested
+    @DisplayName("time held for our own screen stays off the race caps")
+    inner class HeldTimeOffRaceCaps {
+        private val racing by lazy { sourceFile("bot/Racing.kt").readText().replace("\r\n", "\n") }
+        private val unityCup by lazy { sourceFile("bot/campaigns/UnityCup.kt").readText().replace("\r\n", "\n") }
+
+        /** One pass of a capped loop's fallback: [heldForMs] of our own screen in front, the loop's start moved by what was held. */
+        private fun elapsedAfterFallback(heldForMs: Long?): Long {
+            var now = 1_000L
+            var startTime = now
+            val heldMs = heldMsForOwnUi({ now }) {
+                if (heldForMs == null) return@heldMsForOwnUi false
+                now += heldForMs
+                true
+            }
+            if (heldMs != null) startTime += heldMs else now += 50
+            return now - startTime
+        }
+
+        @Test
+        fun `a hold longer than the 30 s finalize cap does not end the race`() {
+            val maxTimeMs = 30_000L
+            assertTrue(elapsedAfterFallback(heldForMs = 5 * 60_000L) < maxTimeMs)
+            val loop = racing.substringAfter("fun finalizeRaceResults(").substringBefore("return false\n    }")
+            assertTrue(loop.contains("var startTime: Long = System.currentTimeMillis()"))
+            assertTrue(loop.contains("while (System.currentTimeMillis() - startTime < maxTimeMs)"))
+            assertTrue(loop.contains("if (heldMs != null) startTime += heldMs else game.tap(350.0, 750.0, taps = 3)"))
+        }
+
+        @Test
+        fun `a hold longer than the 120 s Unity Cup cap does not abort the race event`() {
+            val executionTimeThresholdMs = 120_000L
+            assertTrue(elapsedAfterFallback(heldForMs = 10 * 60_000L) <= executionTimeThresholdMs)
+            val loop = unityCup.substringAfter("val executionTimeThresholdMs = 120000").substringBefore("\n    }\n")
+            assertTrue(loop.contains("var startTime = System.currentTimeMillis()"))
+            assertTrue(loop.contains("System.currentTimeMillis() - startTime > executionTimeThresholdMs"))
+            assertTrue(loop.contains("if (heldMs != null) startTime += heldMs else game.tap(350.0, 750.0, taps = 3)"))
+        }
+
+        @Test
+        fun `with the game in front the fallback taps and its time still counts`() {
+            assertEquals(null, heldMsForOwnUi({ 0L }) { false })
+            assertEquals(50L, elapsedAfterFallback(heldForMs = null))
+        }
+
+        @Test
+        fun `the held time is measured across the hold on the loops' own clock`() {
+            var now = 10L
+            assertEquals(2_000L, heldMsForOwnUi({ now }) { now += 2_000L; true })
+            val game = sourceFile("bot/Game.kt").readText().replace("\r\n", "\n")
+            assertTrue(game.contains("fun heldMsForOwnUi(): Long? = heldMsForOwnUi(System::currentTimeMillis) { holdBlindInputForOwnUi() }"), "the caps run on System.currentTimeMillis")
+        }
+    }
+
     private fun sourceFile(relative: String): File = File(kotlinRoot(), relative).also { require(it.isFile) { "missing ${it.path}" } }
 
     private fun kotlinRoot(): File {

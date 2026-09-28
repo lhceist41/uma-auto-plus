@@ -2109,9 +2109,11 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                 // the overlay straight back off. The race ends on its own and lands on the results
                 // screen, where the ButtonNext branch above returns true.
                 else -> {
-                    Log.d(TAG, "[DEBUG] runRaceWithRetries:: No components detected. Tapping to progress...")
-                    game.tap(350.0, 450.0, taps = 1)
-                    game.wait(1.5, skipWaitingForLoading = true)
+                    if (!game.holdBlindInputForOwnUi()) {
+                        Log.d(TAG, "[DEBUG] runRaceWithRetries:: No components detected. Tapping to progress...")
+                        game.tap(350.0, 450.0, taps = 1)
+                        game.wait(1.5, skipWaitingForLoading = true)
+                    }
                 }
             }
         } while (true)
@@ -2159,7 +2161,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         // Max time limit for the while loop to attempt to finalize race results.
         // It really shouldn't ever take this long.
-        val startTime: Long = System.currentTimeMillis()
+        var startTime: Long = System.currentTimeMillis()
         val maxTimeMs: Long = 30000
         while (System.currentTimeMillis() - startTime < maxTimeMs) {
             if (campaign.tryHandleAllDialogs()) {
@@ -2184,9 +2186,10 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     return true
                 }
 
-                // Tap on the screen to progress through screens.
+                // Tap on the screen to progress through screens. Time held for our own screen stays off the cap.
                 else -> {
-                    game.tap(350.0, 750.0, taps = 3)
+                    val heldMs = game.heldMsForOwnUi()
+                    if (heldMs != null) startTime += heldMs else game.tap(350.0, 750.0, taps = 3)
                 }
             }
         }

@@ -243,7 +243,7 @@ class UnityCup(game: Game) : Campaign(game) {
         // 120s gives ample margin; the career stall watchdog still backstops a true hang because a
         // working loop keeps its heartbeat fresh.
         val executionTimeThresholdMs = 120000 // 2 minutes.
-        val startTime = System.currentTimeMillis()
+        var startTime = System.currentTimeMillis()
 
         while (true) {
             val sourceBitmap: Bitmap = game.imageUtils.getSourceBitmap()
@@ -347,9 +347,10 @@ class UnityCup(game: Game) : Campaign(game) {
                     return false
                 }
 
-                // Tap on the screen to skip past any intermediate screens.
+                // Tap on the screen to skip past any intermediate screens. Time held for our own screen stays off the cap.
                 else -> {
-                    game.tap(350.0, 750.0, taps = 3)
+                    val heldMs = game.heldMsForOwnUi()
+                    if (heldMs != null) startTime += heldMs else game.tap(350.0, 750.0, taps = 3)
                 }
             }
         }

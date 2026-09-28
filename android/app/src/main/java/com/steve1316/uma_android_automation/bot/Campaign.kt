@@ -4674,6 +4674,9 @@ abstract class Campaign(game: Game) : Task(game) {
                 // If the bot is at the Inheritance screen, then accept the inheritance.
             } else if (performMiscChecks()) {
                 MessageLog.i(TAG, "[INFO] Misc checks complete.")
+            } else if (game.holdBlindInputForOwnUi()) {
+                // The capture is our own screen, not the game: no blind tap, and the streak holds.
+                detectedKnownScreen = false
             } else if (dataDownloadRunning()) {
                 // The game's download screens after its Data Download OK: waited out, tapping nothing.
                 detectedKnownScreen = false

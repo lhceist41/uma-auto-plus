@@ -13,6 +13,7 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnable
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.ScreenStateReceiver
+import com.steve1316.uma_android_automation.bot.OwnUiForeground
 import com.steve1316.uma_android_automation.utils.AppUpdateChecker
 import expo.modules.ReactActivityDelegateWrapper
 import org.opencv.android.OpenCVLoader
@@ -57,6 +58,16 @@ class MainActivity : ReactActivity() {
                 intArrayOf(520, 0, 280, 110),
                 intArrayOf(200, 2215, 300, 120),
             )
+    }
+
+    override fun onResume() {
+        super.onResume()
+        OwnUiForeground.resumed = true
+    }
+
+    override fun onPause() {
+        OwnUiForeground.resumed = false
+        super.onPause()
     }
 
     override fun onDestroy() {

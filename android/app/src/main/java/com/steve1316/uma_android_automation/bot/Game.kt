@@ -628,6 +628,27 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         tap(jx.toDouble(), jy.toDouble(), null, taps = taps, ignoreWaiting = ignoreWaiting)
     }
 
+    private var ownUiHoldNoted = false
+
+    /**
+     * Holds blind input while UMA Auto+'s own screen is in front ([OwnUiForeground]): waits a beat and
+     * returns true, so the caller neither taps nor counts the tick as stuck. The wait keeps the stall
+     * watchdog's heartbeat, which still fires on a real hang.
+     */
+    fun holdBlindInputForOwnUi(): Boolean {
+        val held =
+            holdForOwnUi(OwnUiForeground.resumed) {
+                if (!ownUiHoldNoted) MessageLog.i(TAG, "[MISC] UMA Auto+ is in front of the game; waiting for the game before tapping.")
+                ownUiHoldNoted = true
+                wait(2.0, skipWaitingForLoading = true)
+            }
+        if (!held) ownUiHoldNoted = false
+        return held
+    }
+
+    /** [holdBlindInputForOwnUi] for a loop with a wall-clock cap: the milliseconds held, or null when the game is in front. */
+    fun heldMsForOwnUi(): Long? = heldMsForOwnUi(System::currentTimeMillis) { holdBlindInputForOwnUi() }
+
     /**
      * Checks if the bot is at a "Now Loading..." screen or if the game is awaiting a server response.
      *
