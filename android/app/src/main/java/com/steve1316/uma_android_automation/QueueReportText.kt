@@ -287,6 +287,11 @@ internal val REPORT_REASON_KEYS =
         "TRAINEE_MISMATCH" to KeyText("the trainee in the career was not the one the rotation expected.", "Check the rotation list, return the game to its home screen"),
         "CONNECTION_LOST" to KeyText("the game lost its connection to its server and did not reconnect in time.", "Check the device's internet connection and clear the error in the game"),
         "DOWNLOAD_FAILED" to KeyText("the game could not finish downloading its data.", "Check the device's internet connection and let the game finish its download"),
+        "DATA_DOWNLOAD_PROMPT" to
+            KeyText(
+                "the game asked to download additional data, and the bot could not find the prompt's OK button.",
+                "Tap OK on the Data Download prompt in the game and let the download finish",
+            ),
         "SESSION_EXPIRED" to KeyText("the game ended its session and needs to go back to its title screen.", "Tap Title Screen in the game and wait for its home screen"),
         "GAME_UNRECOVERABLE" to KeyText("the game showed a screen the bot could not recognise, and reopening the game did not bring it back.", "Open the game and check it"),
         "A11Y_GRANT_MISSING" to

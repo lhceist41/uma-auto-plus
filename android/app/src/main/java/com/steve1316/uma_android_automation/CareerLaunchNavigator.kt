@@ -1072,6 +1072,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     )
                 }
             MessageLog.i(TAG, "[NAV] Attempt $attempt: Detected state = $detectedState (previous = $currentState)")
+            if (detectedState != LaunchScreenState.DIALOG_HANDLED || pendingBetweenRunDialog != BetweenRunDialog.DATA_DOWNLOAD) betweenRunRecovery.dataDownloadPromptGone()
 
             if (detectedState != LaunchScreenState.UNKNOWN) {
                 // The title stays up while the game logs in after "TAP TO START" (or downloads data):
@@ -1193,6 +1194,9 @@ class CareerLaunchNavigator(private val context: Context) {
                     launchFlowEntered = true
                 }
                 betweenRunRecovery.onScreen(detectedState)
+                betweenRunRecovery.dataDownloadDone(detectedState, SystemClock.elapsedRealtime())?.let {
+                    MessageLog.i(TAG, "[NAV] The game data download finished after ${it / 1000}s.")
+                }
                 // Latch once the launch has provably passed Start Career: PRE_RUN_CONFIRMATION and the
                 // in-career states only occur after the Start Career click, and the "Umamusume Details"
                 // card shown right after them must NOT be tested for Trainee Select. BUT a launch that
@@ -1211,6 +1215,10 @@ class CareerLaunchNavigator(private val context: Context) {
                     careerLaunchInitiated = true
                 }
             } else {
+                if (betweenRunRecovery.downloadingData(SystemClock.elapsedRealtime())) {
+                    waitOutDataDownload()
+                    continue
+                }
                 consecutiveUnknowns++
                 val unknownLimit = betweenRunRecovery.unknownScreenLimit(MAX_CONSECUTIVE_UNKNOWNS)
                 if (consecutiveUnknowns >= unknownLimit) {
@@ -1990,7 +1998,14 @@ class CareerLaunchNavigator(private val context: Context) {
         val dialog = pendingBetweenRunDialog ?: return TransitionResult.Continue
         pendingBetweenRunDialog = null
         val msBeforeDeadline = StartModule.NAV_DEADLINE_MS - (System.currentTimeMillis() - navigationStartedAtMs)
-        val step = planBetweenRunDialog(dialog, betweenRunConnectionBudget::onError, msBeforeDeadline, betweenRunRecovery.mayTapTitleScreen(careerLaunchInitiated))
+        val step =
+            planBetweenRunDialog(
+                dialog,
+                betweenRunConnectionBudget::onError,
+                msBeforeDeadline,
+                betweenRunRecovery.mayTapTitleScreen(careerLaunchInitiated),
+                betweenRunRecovery.dataDownloadOkMisses,
+            )
         if (step is BetweenRunDialogStep.Fail) {
             MessageLog.e(TAG, "[NAV] ${dialog.title} dialog between runs; stopping the queue (${step.reasonKey}). Nothing was tapped.")
             return TransitionResult.Failed(
@@ -2007,15 +2022,20 @@ class CareerLaunchNavigator(private val context: Context) {
             if (!BotService.isRunning || StartModule.queueStopRequested) return TransitionResult.Continue
         } else if (step is BetweenRunDialogStep.ReturnToTitle) {
             MessageLog.w(TAG, "[NAV] ${dialog.title} dialog between runs with no career in progress; tapping Title Screen and starting this launch over from the title screen.")
-        } else {
+        } else if (step !is BetweenRunDialogStep.AcceptDataDownload) {
             MessageLog.i(TAG, "[NAV] ${dialog.title} dialog between runs; dismissing it.")
         }
         if (step.taps.none { it.click(iu) }) {
+            if (step is BetweenRunDialogStep.AcceptDataDownload) betweenRunRecovery.missedDataDownloadOk()
             MessageLog.w(TAG, "[NAV] ${dialog.title} shows none of its buttons; re-detecting.")
         } else if (step is BetweenRunDialogStep.ReturnToTitle) {
             betweenRunRecovery.tappedTitleScreen()
             waitSafe(3.0)
             return TransitionResult.StartLaunchOver
+        } else if (step is BetweenRunDialogStep.AcceptDataDownload) {
+            val limitMs = betweenRunLoadingLimitMs(msBeforeDeadline)
+            betweenRunRecovery.acceptedDataDownload(SystemClock.elapsedRealtime(), limitMs)
+            MessageLog.i(TAG, "[NAV] ${dialog.title} between runs: tapped OK. Waiting up to ${limitMs / 1000}s for the game data, tapping nothing.")
         }
         return TransitionResult.Continue
     }
@@ -2079,6 +2099,27 @@ class CareerLaunchNavigator(private val context: Context) {
         val issued = tempGame?.forceRebindAccessibilityService() ?: return false
         if (!issued) navRepairRefused = true
         return issued
+    }
+
+    /**
+     * The game's download screens after the Data Download OK are not recognised: waits in this one
+     * attempt, tapping nothing, until a screen is recognised again, the download window
+     * ([BetweenRunRecovery.downloadingData]) runs out, or the bot stops. A detection error is left
+     * to the main loop's next look.
+     */
+    private fun waitOutDataDownload() {
+        while (BotService.isRunning && !StartModule.queueStopRequested && betweenRunRecovery.downloadingData(SystemClock.elapsedRealtime())) {
+            waitSafe(2.0)
+            val state =
+                try {
+                    detectScreenState(deepHomeProbe = false)
+                } catch (e: InterruptedException) {
+                    throw e
+                } catch (_: Exception) {
+                    return
+                }
+            if (state != LaunchScreenState.UNKNOWN) return
+        }
     }
 
     /** The in-career loading templates, as `Game.checkLoading` reads them. */

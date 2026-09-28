@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation
 
 import com.steve1316.uma_android_automation.CareerLaunchNavigator.LaunchScreenState
+import com.steve1316.uma_android_automation.bot.Game
 
 /**
  * How one between-run navigation gets the game back by itself: Title Screen on a Session Error, a
@@ -33,6 +34,8 @@ internal class BetweenRunRecovery(
     private var careerEndSinceHome = false
     private var continueCareerSeen = false
     private var lastTapToStartMs: Long? = null
+    private var dataDownloadAcceptedAtMs: Long? = null
+    private var dataDownloadLimitMs = 0L
 
     /** Records each recognised screen. */
     fun onScreen(state: LaunchScreenState) {
@@ -69,6 +72,47 @@ internal class BetweenRunRecovery(
     fun tappedToStart(nowMs: Long) {
         lastTapToStartMs = nowMs
         gameComingBack = true
+    }
+
+    /**
+     * OK was tapped on the game's Data Download dialog: for [limitMs] its download screens are
+     * waited out as unknown frames that count toward nothing ([downloadingData]), and the game is
+     * loading its way back ([gameComingBack]): its title is no stuck screen and nothing is rebound.
+     */
+    fun acceptedDataDownload(
+        nowMs: Long,
+        limitMs: Long,
+    ) {
+        dataDownloadAcceptedAtMs = nowMs
+        dataDownloadLimitMs = limitMs
+        dataDownloadOkMisses = 0
+        gameComingBack = true
+    }
+
+    /** Looks in a row at the Data Download prompt whose OK button was not found ([Game.DATA_DOWNLOAD_OK_MISS_LIMIT]). */
+    var dataDownloadOkMisses = 0
+        private set
+
+    fun missedDataDownloadOk() {
+        dataDownloadOkMisses++
+    }
+
+    /** Any look that is not the Data Download prompt: the misses were not in a row. */
+    fun dataDownloadPromptGone() {
+        dataDownloadOkMisses = 0
+    }
+
+    fun downloadingData(nowMs: Long): Boolean = Game.dataDownloadActive(dataDownloadAcceptedAtMs, nowMs, dataDownloadLimitMs)
+
+    /** Ends the download wait on Home, returning how long it ran; null when none was running. */
+    fun dataDownloadDone(
+        state: LaunchScreenState,
+        nowMs: Long,
+    ): Long? {
+        if (state != LaunchScreenState.HOME_SCREEN) return null
+        val acceptedAt = dataDownloadAcceptedAtMs ?: return null
+        dataDownloadAcceptedAtMs = null
+        return nowMs - acceptedAt
     }
 
     /** Unknown frames in a row that stop the navigation: more while the game loads its way back through its title. */

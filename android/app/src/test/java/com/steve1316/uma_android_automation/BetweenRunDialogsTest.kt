@@ -10,6 +10,7 @@ import com.steve1316.uma_android_automation.components.ButtonRetry
 import com.steve1316.uma_android_automation.components.ButtonTitleScreen
 import com.steve1316.uma_android_automation.components.DialogAgeConfirmation
 import com.steve1316.uma_android_automation.components.DialogConnectionError
+import com.steve1316.uma_android_automation.components.DialogDataDownload
 import com.steve1316.uma_android_automation.components.DialogDateChanged
 import com.steve1316.uma_android_automation.components.DialogDownloadError
 import com.steve1316.uma_android_automation.components.DialogFollowTrainer
@@ -74,6 +75,7 @@ class BetweenRunDialogsTest {
                     BetweenRunDialog.FOLLOW_TRAINER to DialogFollowTrainer.title,
                     BetweenRunDialog.CONNECTION_ERROR to DialogConnectionError.title,
                     BetweenRunDialog.DOWNLOAD_ERROR to DialogDownloadError.title,
+                    BetweenRunDialog.DATA_DOWNLOAD to DialogDataDownload.title,
                     BetweenRunDialog.SESSION_ERROR to DialogSessionError.title,
                     BetweenRunDialog.PURCHASE_CARATS to DialogPurchaseCarats.title,
                     BetweenRunDialog.AGE_CONFIRMATION to DialogAgeConfirmation.title,
@@ -164,11 +166,11 @@ class BetweenRunDialogsTest {
         }
 
         @Test
-        fun `no step can press anything but Close, OK on Date Changed, Cancel or Retry`() {
+        fun `no step can press anything but Close, OK on Date Changed or Data Download, Cancel or Retry`() {
             val taps = closing.flatMap { plan(it).taps } + failing.flatMap { plan(it).taps } + BetweenRunDialogStep.Retry(0L, 1).taps
             assertEquals(setOf(ButtonCloseWide, ButtonClose, ButtonOk, ButtonCancel, ButtonRetry), taps.toSet())
             val connection = listOf(BetweenRunDialog.CONNECTION_ERROR, BetweenRunDialog.DOWNLOAD_ERROR)
-            assertEquals(listOf(BetweenRunDialog.DATE_CHANGED), (BetweenRunDialog.entries - connection.toSet()).filter { ButtonOk in plan(it).taps })
+            assertEquals(listOf(BetweenRunDialog.DATE_CHANGED, BetweenRunDialog.DATA_DOWNLOAD), (BetweenRunDialog.entries - connection.toSet()).filter { ButtonOk in plan(it).taps })
         }
     }
 
@@ -381,7 +383,8 @@ class BetweenRunDialogsTest {
             assertTrue(handler.contains("StartModule.NAV_DEADLINE_MS - (System.currentTimeMillis() - navigationStartedAtMs)"))
             assertTrue(handler.indexOf("waitSafe(step.waitMs / 1000.0)") in 0 until taps, "the budget's pause comes before Retry")
             // Title Screen is planned only through the no-career check, and the launch starts over only once it landed.
-            assertTrue(handler.contains("planBetweenRunDialog(dialog, betweenRunConnectionBudget::onError, msBeforeDeadline, betweenRunRecovery.mayTapTitleScreen(careerLaunchInitiated))"))
+            val planned = listOf("dialog,", "betweenRunConnectionBudget::onError,", "msBeforeDeadline,", "betweenRunRecovery.mayTapTitleScreen(careerLaunchInitiated),")
+            assertTrue(handler.contains("planBetweenRunDialog(\n" + planned.joinToString("") { "                $it\n" }))
             val landed =
                 "} else if (step is BetweenRunDialogStep.ReturnToTitle) {\n            betweenRunRecovery.tappedTitleScreen()\n" +
                     "            waitSafe(3.0)\n            return TransitionResult.StartLaunchOver\n        }"

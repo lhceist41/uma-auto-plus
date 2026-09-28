@@ -392,6 +392,7 @@ object DialogObjects {
             DialogConsecutiveRaceWarning,
             DialogContinueCareer,
             DialogDailySale,
+            DialogDataDownload,
             DialogDateChanged,
             DialogDisplaySettings,
             DialogDownloadError,
@@ -797,6 +798,22 @@ object DialogDailySale : DialogInterface {
         listOf(
             ButtonCancel,
             ButtonShop,
+        )
+}
+
+/**
+ * Title screen or login, after a game patch: "Additional data (N MB) needs to be downloaded." OK
+ * downloads game data and spends nothing; Cancel is never pressed.
+ */
+object DialogDataDownload : DialogInterface {
+    override val name: String = "data_download"
+    override val title: String = "Data Download"
+    override val closeButton = null
+    override val okButton: BaseComponentInterface = ButtonOk
+    override val buttons: List<BaseComponentInterface> =
+        listOf(
+            ButtonCancel,
+            ButtonOk,
         )
 }
 

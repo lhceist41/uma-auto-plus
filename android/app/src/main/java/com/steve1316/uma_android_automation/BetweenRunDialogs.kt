@@ -24,6 +24,7 @@ internal enum class BetweenRunDialog(val title: String) {
     FOLLOW_TRAINER("Follow Trainer"),
     CONNECTION_ERROR("Connection Error"),
     DOWNLOAD_ERROR("Download Error"),
+    DATA_DOWNLOAD("Data Download"),
     SESSION_ERROR("Session Error"),
     PURCHASE_CARATS("Purchase Carats"),
     AGE_CONFIRMATION("Age Confirmation"),
@@ -63,6 +64,9 @@ internal sealed class BetweenRunDialogStep(val taps: List<ButtonInterface>) {
 
     data object ConfirmDateChanged : BetweenRunDialogStep(listOf(ButtonOk))
 
+    /** OK only, never Cancel: the game downloads its data (no spend), waited out by [BetweenRunRecovery.acceptedDataDownload]. */
+    data object AcceptDataDownload : BetweenRunDialogStep(listOf(ButtonOk))
+
     /** Cancel, as `DialogFollowTrainer.close` does. */
     data object CancelFollowTrainer : BetweenRunDialogStep(listOf(ButtonCancel))
 
@@ -87,13 +91,15 @@ internal const val CONNECTION_DEADLINE_MARGIN_MS = 60_000L
  * same [ConnectionOutageBudget] rules ([onConnectionError] records the error), but only while the
  * wait still fits before the navigation deadline, [msBeforeDeadline] from now. A session error
  * needs the game's title screen: Title Screen when [mayReturnToTitle], else a stop. The purchase
- * screens spend real money, so those stop.
+ * screens spend real money, so those stop. The Data Download prompt is answered with OK until its OK
+ * button was missed [Game.DATA_DOWNLOAD_OK_MISS_LIMIT] looks in a row ([dataDownloadOkMisses]), then it stops.
  */
 internal fun planBetweenRunDialog(
     dialog: BetweenRunDialog,
     onConnectionError: () -> ConnectionOutageBudget.Decision,
     msBeforeDeadline: Long,
     mayReturnToTitle: Boolean = false,
+    dataDownloadOkMisses: Int = 0,
 ): BetweenRunDialogStep =
     when (dialog) {
         BetweenRunDialog.NOTICES -> BetweenRunDialogStep.CloseNotices
@@ -101,6 +107,8 @@ internal fun planBetweenRunDialog(
         BetweenRunDialog.FOLLOW_TRAINER -> BetweenRunDialogStep.CancelFollowTrainer
         BetweenRunDialog.CONNECTION_ERROR -> retryOrFail(onConnectionError(), msBeforeDeadline) ?: BetweenRunDialogStep.Fail(reasonKey = "CONNECTION_LOST")
         BetweenRunDialog.DOWNLOAD_ERROR -> retryOrFail(onConnectionError(), msBeforeDeadline) ?: BetweenRunDialogStep.Fail(reasonKey = "DOWNLOAD_FAILED")
+        BetweenRunDialog.DATA_DOWNLOAD ->
+            if (dataDownloadOkMisses >= Game.DATA_DOWNLOAD_OK_MISS_LIMIT) BetweenRunDialogStep.Fail(reasonKey = "DATA_DOWNLOAD_PROMPT") else BetweenRunDialogStep.AcceptDataDownload
         BetweenRunDialog.SESSION_ERROR -> if (mayReturnToTitle) BetweenRunDialogStep.ReturnToTitle else BetweenRunDialogStep.Fail(reasonKey = "SESSION_EXPIRED")
         BetweenRunDialog.PURCHASE_CARATS, BetweenRunDialog.AGE_CONFIRMATION -> BetweenRunDialogStep.Fail(reasonKey = "PURCHASE_PROMPT")
     }

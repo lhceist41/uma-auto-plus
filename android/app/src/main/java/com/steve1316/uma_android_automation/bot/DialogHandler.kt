@@ -7,6 +7,8 @@ import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.SessionTally
+import com.steve1316.uma_android_automation.StartModule
+import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.components.ButtonRaceRecommendationsCenterStage
 import com.steve1316.uma_android_automation.components.ButtonRetry
 import com.steve1316.uma_android_automation.components.Checkbox
@@ -109,6 +111,9 @@ class ConnectionOutageBudget(private val now: () -> Long = { SystemClock.elapsed
  * @property game Reference to the bot's [Game] instance for state access and utilities.
  */
 open class DialogHandler(val game: Game) {
+    /** Looks in a row at the Data Download prompt without finding its OK button ([Game.DATA_DOWNLOAD_OK_MISS_LIMIT]). */
+    private var dataDownloadOkMisses = 0
+
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]${this::class.simpleName}"
     }
@@ -144,8 +149,10 @@ open class DialogHandler(val game: Game) {
         val dialog: DialogInterface? = dialog ?: DialogUtils.getDialog(game.imageUtils)
         if (dialog == null) {
             Log.d(TAG, "[DEBUG] handleDialogs:: No dialog found.")
+            dataDownloadOkMisses = 0
             return DialogHandlerResult.NoDialogDetected
         }
+        if (dialog.name != "data_download") dataDownloadOkMisses = 0
 
         Log.d(TAG, "[DEBUG] handleDialogs:: Handle dialog: ${dialog.name}")
 
@@ -165,6 +172,10 @@ open class DialogHandler(val game: Game) {
             // Generic Dialogs.
             "connection_error", "download_error" -> {
                 handleConnectionError(dialog)
+            }
+
+            "data_download" -> {
+                handleDataDownload(dialog)
             }
 
             "display_settings" -> {
@@ -488,6 +499,37 @@ open class DialogHandler(val game: Game) {
 
         game.wait(0.5)
         return DialogHandlerResult.Handled(dialog)
+    }
+
+    /**
+     * Accepts the game's Data Download prompt with OK, never Cancel, and starts the no-tap wait the
+     * campaign keeps while the download runs ([Game.dataDownloadActive]). A Download Error after it
+     * is the outage route's, as always.
+     */
+    private fun handleDataDownload(dialog: DialogInterface) {
+        if (!ButtonOk.click(game.imageUtils)) {
+            dataDownloadOkMisses++
+            if (dataDownloadOkMisses >= Game.DATA_DOWNLOAD_OK_MISS_LIMIT) stopForDataDownloadPrompt(dialog)
+            MessageLog.w(TAG, "[DIALOG] ${dialog.title} shows no OK button ($dataDownloadOkMisses/${Game.DATA_DOWNLOAD_OK_MISS_LIMIT}). Leaving it up.")
+            return
+        }
+        dataDownloadOkMisses = 0
+        game.dataDownloadAcceptedAtMs = SystemClock.elapsedRealtime()
+        MessageLog.i(TAG, "[DIALOG] ${dialog.title}: tapped OK. Waiting up to ${Game.LOADING_HARD_LIMIT_MS / 60_000} minutes for the game data, tapping nothing.")
+    }
+
+    /**
+     * The OK button was not found on [Game.DATA_DOWNLOAD_OK_MISS_LIMIT] looks in a row: stops the run
+     * with its own reason, as the trainee-mismatch stop does, rather than let the dialog streak end it
+     * as dead gestures. Nothing is tapped.
+     */
+    private fun stopForDataDownloadPrompt(dialog: DialogInterface): Nothing {
+        val reason = "The game asked to download additional data, and the ${dialog.title} prompt's OK button was not found. Tap OK in the game, let the download finish, then press Start again."
+        StartModule.queueStopKey = "DATA_DOWNLOAD_PROMPT"
+        StartModule.queueStopReason = reason
+        StartModule.queueStopRequested = true
+        MessageLog.e(TAG, "[DIALOG] $reason")
+        throw InterruptedException(reason)
     }
 
     /**

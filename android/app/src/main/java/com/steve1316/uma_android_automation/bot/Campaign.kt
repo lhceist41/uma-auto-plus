@@ -3,6 +3,7 @@ package com.steve1316.uma_android_automation.bot
 import android.accessibilityservice.AccessibilityService
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import com.steve1316.automation_library.utils.BotService
 import com.steve1316.automation_library.utils.DiscordUtils
@@ -4390,6 +4391,7 @@ abstract class Campaign(game: Game) : Task(game) {
             if (handleMainScreen()) {
                 consecutiveUnknownScreenCount = 0
                 careerScreenObservedThisTask = true
+                endDataDownloadWait()
                 return null
             }
 
@@ -4660,6 +4662,10 @@ abstract class Campaign(game: Game) : Task(game) {
                 // If the bot is at the Inheritance screen, then accept the inheritance.
             } else if (performMiscChecks()) {
                 MessageLog.i(TAG, "[INFO] Misc checks complete.")
+            } else if (dataDownloadRunning()) {
+                // The game's download screens after its Data Download OK: waited out, tapping nothing.
+                detectedKnownScreen = false
+                game.wait(2.0, skipWaitingForLoading = true)
             } else {
                 detectedKnownScreen = false
                 consecutiveUnknownScreenCount++
@@ -4695,6 +4701,7 @@ abstract class Campaign(game: Game) : Task(game) {
             }
 
             if (detectedKnownScreen) {
+                endDataDownloadWait()
                 consecutiveUnknownScreenCount = 0
                 lobbyReentryAttempts = 0
                 gameRestartAttemptsThisEpisode = 0
@@ -4729,6 +4736,22 @@ abstract class Campaign(game: Game) : Task(game) {
             MessageLog.i(TAG, "[INFO] Dismissed the notification shade in case it was open ($reason, dispatched=$dispatched).")
             game.wait(0.5)
         }
+    }
+
+    /** True inside the no-tap wait after the Data Download OK ([Game.dataDownloadActive]); once it runs out, says so and ends it. */
+    private fun dataDownloadRunning(): Boolean {
+        val acceptedAt = game.dataDownloadAcceptedAtMs ?: return false
+        if (Game.dataDownloadActive(acceptedAt, SystemClock.elapsedRealtime())) return true
+        game.dataDownloadAcceptedAtMs = null
+        MessageLog.w(TAG, "[DIALOG] The game data download did not finish within ${Game.LOADING_HARD_LIMIT_MS / 60_000} minutes. Back to the usual unknown-screen handling.")
+        return false
+    }
+
+    /** A recognised screen after the Data Download OK: the download is done. */
+    private fun endDataDownloadWait() {
+        val acceptedAt = game.dataDownloadAcceptedAtMs ?: return
+        game.dataDownloadAcceptedAtMs = null
+        MessageLog.i(TAG, "[DIALOG] The game data download finished after ${(SystemClock.elapsedRealtime() - acceptedAt) / 1000}s.")
     }
 
     /**

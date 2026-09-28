@@ -121,6 +121,10 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
     @Volatile
     internal var connectionLostReason: String? = null
 
+    /** When the dialog handler tapped OK on the game's Data Download dialog ([dataDownloadActive]), or null. */
+    @Volatile
+    internal var dataDownloadAcceptedAtMs: Long? = null
+
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]Game"
 
@@ -133,6 +137,23 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
 
         /** Dialogs that can sit under a loading indicator and need the outage handling. */
         internal val LOADING_ERROR_DIALOGS: Set<String> = setOf("connection_error", "download_error", "session_error")
+
+        /**
+         * Whether a data download accepted at [acceptedAtMs] may still be running. No capture of the
+         * game's download screens exists, so they are not recognised: for [limitMs] after the OK they
+         * are waited out like its loading screen, tapping nothing. At ~200 MB, [LOADING_HARD_LIMIT_MS]
+         * covers any link faster than about 3 Mbit/s.
+         */
+        internal fun dataDownloadActive(acceptedAtMs: Long?, nowMs: Long, limitMs: Long = LOADING_HARD_LIMIT_MS): Boolean =
+            acceptedAtMs != null && nowMs - acceptedAtMs in 0 until limitMs
+
+        /**
+         * Looks in a row at the Data Download prompt without finding its OK button before the bot
+         * stops and asks for it by hand. The OK template is unverified on this dialog; each look is a
+         * fresh capture seconds apart, so three misses outlast its opening animation and mean a
+         * template mismatch, not a frame caught mid-draw.
+         */
+        internal const val DATA_DOWNLOAD_OK_MISS_LIMIT = 3
 
         internal fun loadingHardLimitMessage(ms: Long): String = "The game kept loading for ${ms / 60_000} minutes with no error dialog. Stopping the run as a connection error."
 
