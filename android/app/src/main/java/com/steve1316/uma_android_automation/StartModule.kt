@@ -1602,6 +1602,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
         return try {
             navigator.navigate(reuseLastLaunchSetup, finalizeToHome, previousCareerComplete = previousCareerComplete, coldStartOnHome = coldStartOnHome, careerInFlight = careerInFlight)
+                .copy(careerResumed = navigator.careerResumed)
         } catch (e: InterruptedException) {
             // Clear the interrupt flag so queue teardown (log saving, events) is not poisoned.
             Thread.interrupted()
@@ -1648,7 +1649,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         isRecoverable = true,
                         recommendedAction = "If this was not a manual Stop, check the logs around the interrupt; the navigation did not actually time out.",
                     )
-            }
+            }.copy(careerResumed = navigator.careerResumed)
         } finally {
             navDone.set(true)
             deadlineThread.interrupt()
@@ -2159,10 +2160,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 ledger.reasonKey = navResult.reasonKey
                                 queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                                 queueHaltRun = startFromRun - 1
+                                queueHaltCareerInFlight = resumeReEntersCareer || navResult.careerResumed
                             }
                             queueStopRequested = true
                         } else {
                             coldStartConfirmedCareer = true
+                            // Resume re-entered a career already in the slot, so the first run carries it on.
+                            if (navResult.careerResumed) resumeReEntersCareer = true
                         }
                     } else if (coldStartNavigator != null) {
                         // Not confirmed on Home: assume a career already exists, as the unconditional
@@ -2519,6 +2523,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             // finished; the next run carries on with it.
                             val navResult = navigateWithDeadline(nextReuse, previousCareerComplete = careerFinished, careerInFlight = !careerFinished)
                             attachCareerEndSparks(ledger, i, runCareerEndSeq)
+                            if (navResult.careerResumed) previousRunLeftCareer = true
 
                             if (!navResult.success) {
                                 logNavigationFailure(navResult)
@@ -2538,7 +2543,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                     ledger.reasonKey = navResult.reasonKey
                                     queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                                     queueHaltRun = i
-                                    queueHaltCareerInFlight = !careerFinished
+                                    queueHaltCareerInFlight = !careerFinished || navResult.careerResumed
                                 }
                                 break
                             }

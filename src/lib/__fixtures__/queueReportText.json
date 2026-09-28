@@ -704,8 +704,8 @@
             },
             "text": {
                 "title": "Queue paused",
-                "reason": "The game stopped responding at run 3 and could not be restarted.",
-                "nextAction": "Open the game and check it, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+                "reason": "The game froze at run 3, and UMA Auto+ could not close it. Close the game fully (swipe it away in Recent apps) and open it again.",
+                "nextAction": "Then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -923,8 +923,8 @@
             },
             "text": {
                 "title": "Queue stopped",
-                "reason": "The queue stopped before run 1 of 2: the game showed a screen the bot could not recognise, and reopening the game did not bring it back.",
-                "nextAction": "Open the game and check it, then press Start in UMA Auto+."
+                "reason": "The queue stopped before run 1 of 2: the game froze on a screen the bot could not recognise, and UMA Auto+ could not close it. Close the game fully (swipe it away in Recent apps) and open it again.",
+                "nextAction": "Press Start in UMA Auto+."
             }
         },
         {
@@ -1258,8 +1258,8 @@
             },
             "text": {
                 "title": "Queue paused",
-                "reason": "The queue stopped after run 2 of 5: the game showed a screen the bot could not recognise, and reopening the game did not bring it back.",
-                "nextAction": "Open the game and check it, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+                "reason": "The queue stopped after run 2 of 5: the game froze on a screen the bot could not recognise, and UMA Auto+ could not close it. Close the game fully (swipe it away in Recent apps) and open it again.",
+                "nextAction": "Press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {

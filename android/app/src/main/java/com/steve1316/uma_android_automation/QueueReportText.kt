@@ -101,8 +101,8 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
         SessionEnd.GAME_UNRECOVERABLE ->
             ReportText(
                 haltTitle(resumable),
-                "The game stopped responding at run $reached and could not be restarted.",
-                "Open the game and check it, then ${pressStart(resumable)}",
+                "The game froze at run $reached, and UMA Auto+ could not close it. $CLOSE_FROZEN_GAME.",
+                "Then ${pressStart(resumable)}",
             )
         SessionEnd.RUN_HALTED -> {
             val why = keyText(key)
@@ -305,7 +305,7 @@ internal val REPORT_REASON_KEYS =
                 "Tap OK on the Data Download prompt in the game and let the download finish",
             ),
         "SESSION_EXPIRED" to KeyText("the game ended its session and needs to go back to its title screen.", "Tap Title Screen in the game and wait for its home screen"),
-        "GAME_UNRECOVERABLE" to KeyText("the game showed a screen the bot could not recognise, and reopening the game did not bring it back.", "Open the game and check it"),
+        "GAME_UNRECOVERABLE" to KeyText("the game froze on a screen the bot could not recognise, and UMA Auto+ could not close it. $CLOSE_FROZEN_GAME.", null),
         "A11Y_GRANT_MISSING" to
             KeyText(
                 "its accessibility service needed a repair, and UMA Auto+ does not have the permission to repair it.",
@@ -316,6 +316,9 @@ internal val REPORT_REASON_KEYS =
     )
 
 private val DECK_TEXT get() = KeyText("the support deck for the next career could not be set up.", "Set up the deck in the game (or change Required Support Deck)")
+
+// In the reason itself: the interrupted-queue banner shows only the reason.
+private const val CLOSE_FROZEN_GAME = "Close the game fully (swipe it away in Recent apps) and open it again"
 
 private val STUCK_TEXT get() = KeyText("it reached a screen it could not get past.", "Open the game and clear the screen it stopped on")
 

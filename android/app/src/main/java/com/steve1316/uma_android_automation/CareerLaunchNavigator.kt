@@ -166,6 +166,8 @@ data class NavigationResult(
     val screenshotPath: String = "",
     /** Player-safe cause for the queue report, set only where the player can act on it; "" otherwise. */
     val reasonKey: String = "",
+    /** True when the navigation clicked Resume on Continue Career: a career occupies the game's slot. */
+    val careerResumed: Boolean = false,
 )
 
 /**
@@ -617,6 +619,15 @@ class CareerLaunchNavigator(private val context: Context) {
      * [resumeInProgressCareerMode] it changes nothing else. Set per navigate(). */
     private var careerInFlightMode: Boolean = false
 
+    /** True once this navigation clicked Resume on Continue Career, which proves a career occupies the
+     * game's slot. Kept across a launch started over from the title screen. */
+    @Volatile
+    var careerResumed: Boolean = false
+        private set
+
+    // Set by a Resume tap in this pass; a launch started over from the title screen drives again.
+    private var resumeHandoverPending = false
+
     // Session-scoped: the game's Back was pressed on the Training selection screen this navigation.
     private var trainingSelectionBackPressed = false
 
@@ -855,6 +866,8 @@ class CareerLaunchNavigator(private val context: Context) {
         // Reset session-scoped flags for this navigation run. A launch that starts over from the title
         // screen resets everything else below, as a fresh call would, so no latch from the abandoned
         // pass (Start Career, Auto-Select, the deck checks) can skip a check on the new one.
+        if (!restartingLaunch) careerResumed = false
+        resumeHandoverPending = false
         if (restartingLaunch) {
             restartingLaunch = false
         } else {
@@ -1079,6 +1092,12 @@ class CareerLaunchNavigator(private val context: Context) {
                 }
             MessageLog.i(TAG, "[NAV] Attempt $attempt: Detected state = $detectedState (previous = $currentState)")
             if (detectedState != LaunchScreenState.DIALOG_HANDLED || pendingBetweenRunDialog != BetweenRunDialog.DATA_DOWNLOAD) betweenRunRecovery.dataDownloadPromptGone()
+            // After a Resume the career belongs to the campaign: only the Continue Career dialog itself is
+            // still tapped here, every other screen is handed over rather than driven by launch handlers.
+            if (resumeHandoverPending && detectedState != LaunchScreenState.CONTINUE_CAREER_DIALOG) {
+                MessageLog.i(TAG, "[NAV] The resumed career is on $detectedState; handing it to the campaign.")
+                return NavigationResult(success = true, lastDetectedState = detectedState.name, careerResumed = true)
+            }
 
             if (detectedState != LaunchScreenState.UNKNOWN) {
                 // The title stays up while the game logs in after "TAP TO START" (or downloads data):
@@ -1893,7 +1912,7 @@ class CareerLaunchNavigator(private val context: Context) {
     // ////////////////////////////////////////////////////////////////////////////
 
     private sealed class TransitionResult {
-        /** Navigation is complete - we reached the training menu. */
+        /** Navigation is complete - we reached the training menu, or resumed a career for the campaign. */
         object Success : TransitionResult()
 
         /** Transition was performed. Re-detect to find the next state. */
@@ -2171,17 +2190,28 @@ class CareerLaunchNavigator(private val context: Context) {
 
     /**
      * CONTINUE_CAREER_DIALOG: The "Continue Career" dialog that appears when entering Career
-     * mode while a previous career is still in progress. Clicking "Resume" goes straight
-     * back into the active career's training menu.
+     * mode while a previous career is still in progress. Clicking "Resume" re-enters that career
+     * on whatever screen it was left on (training menu, GOAL COMPLETE, an event, a result).
      *
      * Detection: ButtonResume template match (unique to this dialog).
-     * Transition: ButtonResume.click() → ACTIVE_TRAINING_MENU.
+     * Transition: ButtonResume.click(), then the career is handed to the campaign, which owns the
+     * in-career screens.
      */
     private fun handleContinueCareerDialog(): TransitionResult {
         MessageLog.i(TAG, "[NAV] Continue Career dialog detected. Clicking 'Resume'...")
 
         if (ButtonResume.click(iu)) {
+            // A Resume starts no career and selects no trainee, so no Trainee Select is owed: the
+            // resumed career's own Next screens (GOAL COMPLETE) would otherwise read as a misread
+            // roster and fail the launch (2026-09-28).
+            careerResumed = true
+            resumeHandoverPending = true
+            rosterSelectionPending = false
             waitSafe(3.0)
+            if (!ButtonResume.check(iu)) {
+                MessageLog.i(TAG, "[NAV] Resumed the career in progress; handing it to the campaign.")
+                return TransitionResult.Success
+            }
             return TransitionResult.Continue
         }
 

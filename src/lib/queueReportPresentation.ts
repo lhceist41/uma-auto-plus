@@ -103,7 +103,7 @@ function recoveriesLine(recoveries: unknown): string | null {
     if (!isRecord(recoveries)) return null
     const parts: [number, string, string][] = [
         [count(recoveries.accessibilityRebinds) + count(recoveries.accessibilityRewrites), "accessibility repair", "accessibility repairs"],
-        [count(recoveries.gameRelaunches), "game restart", "game restarts"],
+        [count(recoveries.gameRelaunches), "try to reopen the game", "tries to reopen the game"],
         [count(recoveries.lobbyReentries), "return to the career from the game's home screen", "returns to the career from the game's home screen"],
         [count(recoveries.connectionHolds), "wait for a lost connection", "waits for a lost connection"],
     ]

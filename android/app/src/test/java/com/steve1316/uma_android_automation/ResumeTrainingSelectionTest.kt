@@ -150,7 +150,8 @@ class ResumeTrainingSelectionTest {
             // An unfinished career is the one the loop already treats as left in the slot.
             val careerFinished = startModule.indexOf("val careerFinished = effectiveResult.code == TaskResultCode.TASK_RESULT_COMPLETE\n")
             assertTrue(startModule.indexOf("previousRunLeftCareer = !careerFinished\n") in careerFinished until startModule.indexOf("navigateWithDeadline(nextReuse,"))
-            assertEquals(3, count(startModule, "previousRunLeftCareer = "), "its false start, the clear on reading and the per-run update only")
+            assertEquals(4, count(startModule, "previousRunLeftCareer = "), "its false start, the clear on reading, the per-run update and a between-run Resume only")
+            assertTrue(startModule.contains("if (navResult.careerResumed) previousRunLeftCareer = true"))
             assertTrue(startModule.contains("nextRunCareerInFlight = true\n                        result = runSingleGame()"))
             assertEquals(1, count(startModule, "var result = runSingleGame()"))
             val run = body(startModule, "private fun runSingleGame(")

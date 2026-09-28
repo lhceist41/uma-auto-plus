@@ -170,8 +170,14 @@ describe("parseLastSession: one line per run", () => {
 describe("parseLastSession: recoveries", () => {
     it("adds up the recoveries and names each kind", () => {
         const recoveries = { accessibilityRebinds: 1, accessibilityRewrites: 1, gameRelaunches: 1, lobbyReentries: 2, connectionHolds: 1 }
-        expect(view({ recoveries }).recoveries).toBe("Recovered 6 times: 2 accessibility repairs, 1 game restart, 2 returns to the career from the game's home screen, 1 wait for a lost connection.")
-        expect(view({ recoveries: { gameRelaunches: 1 } }).recoveries).toBe("Recovered 1 time: 1 game restart.")
+        expect(view({ recoveries }).recoveries).toBe("Recovered 6 times: 2 accessibility repairs, 1 try to reopen the game, 2 returns to the career from the game's home screen, 1 wait for a lost connection.")
+        expect(view({ recoveries: { gameRelaunches: 1 } }).recoveries).toBe("Recovered 1 time: 1 try to reopen the game.")
+    })
+
+    it("counts reopen tries as tries, never as game restarts that happened", () => {
+        const line = view({ recoveries: { gameRelaunches: 3 } }).recoveries
+        expect(line).toBe("Recovered 3 times: 3 tries to reopen the game.")
+        expect(line).not.toMatch(/restart/i)
     })
 
     it("says nothing without a recovery, and ignores values it cannot read", () => {
