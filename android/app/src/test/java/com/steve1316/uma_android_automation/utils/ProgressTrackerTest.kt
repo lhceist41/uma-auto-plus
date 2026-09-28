@@ -235,7 +235,7 @@ class ProgressTrackerTest {
                     "^if \\(rung == WatchdogRung\\.TOGGLE_ACCESSIBILITY \\|\\| rung == WatchdogRung\\.SKIP_TOGGLE \\|\\| " +
                         "rung == WatchdogRung\\.INTERRUPT_GAME_THREAD\\) ProgressTracker\\.noteWatchdogRung\\(\\)$",
                 ),
-                Regex("^override fun getSourceBitmap\\(saveImage: Boolean\\): Bitmap = super\\.getSourceBitmap\\(saveImage\\)\\.also \\{ ProgressTracker\\.noteCapture\\(it\\) \\}$"),
+                Regex("^ProgressTracker\\.noteCapture\\(bitmap\\)$"),
                 Regex("^val progress = ProgressTracker\\.endWindow\\(\\)$"),
                 // The dashboard's STATUS shows when progress last happened; the server thread decides nothing with it.
                 Regex("^val lastProgress = ProgressTracker\\.lastProgressWallMs\\.takeIf \\{ it > 0 \\}$"),

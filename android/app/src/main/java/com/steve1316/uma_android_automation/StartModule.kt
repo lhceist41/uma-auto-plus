@@ -80,6 +80,17 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         internal fun isSessionActive(): Boolean = sessionActive.get()
 
         /**
+         * Requests the same stop as [stop] when screen capture ends under a running session, so the
+         * loop exits at its next wait instead of acting on the library's last cached frame. Sets the
+         * flag before logging, and logs with android.util.Log (AGENTS.md section 6).
+         */
+        internal fun stopForLostCapture() {
+            if (!shouldStopForLostCapture(sessionActive.get(), queueStopRequested)) return
+            queueStopRequested = true
+            Log.w(TAG, "[STOP] Screen capture stopped while the bot was running (for example the notification's Stop). Stopping the run.")
+        }
+
+        /**
          * Human-readable reason for an internal/deliberate queue stop (e.g. the trainee-mismatch guard),
          * or null when the stop is a genuine user Stop. Lets the result and queue logs say WHY the queue
          * stopped instead of always blaming the user (a trainee-mismatch guard stop reported as "manually
@@ -2861,6 +2872,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      */
     @Subscribe
     fun onJSEvent(event: JSEvent) {
+        if (isCaptureStoppedEvent(event.eventName, event.message)) stopForLostCapture()
         // Only send the event to the React Native frontend if it's not internal.
         // This prevents flooding the bridge during parallel operations where disableOutput is true.
         if (event.isInternal) return

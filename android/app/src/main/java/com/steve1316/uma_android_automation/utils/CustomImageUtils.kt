@@ -11,9 +11,11 @@ import com.google.mlkit.vision.common.InputImage
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.utils.BotService
 import com.steve1316.automation_library.utils.ImageUtils
+import com.steve1316.automation_library.utils.MediaProjectionService
 import com.steve1316.automation_library.utils.MessageLog
 import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.MainActivity
+import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.bot.Game
 import com.steve1316.uma_android_automation.bot.GrandConcertScenario
 import com.steve1316.uma_android_automation.bot.SKILL_POINTS_UNREADABLE
@@ -127,7 +129,17 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         SettingsHelper.getStringSetting("debug", "templateMatchCustomScale").toDoubleOrNull() ?: 1.0
 
     /** The library's capture, sampled for the detect-only frozen-frame measure ([ProgressTracker.noteCapture]). */
-    override fun getSourceBitmap(saveImage: Boolean): Bitmap = super.getSourceBitmap(saveImage).also { ProgressTracker.noteCapture(it) }
+    override fun getSourceBitmap(saveImage: Boolean): Bitmap {
+        // Once capture stops the library keeps returning its last cached frame, which would drive
+        // taps on a screen nobody can see (live 2026-09-28: 67 blind taps after the notification's Stop).
+        if (!MediaProjectionService.isRunning) {
+            StartModule.stopForLostCapture()
+            throw InterruptedException("Screen capture stopped")
+        }
+        val bitmap = super.getSourceBitmap(saveImage)
+        ProgressTracker.noteCapture(bitmap)
+        return bitmap
+    }
 
     /** Maximum allowed value for a single stat. */
     private val manualStatCap: Int = SettingsHelper.getIntSetting("training", "manualStatCap")
