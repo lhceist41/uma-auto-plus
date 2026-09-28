@@ -291,6 +291,11 @@ internal val REPORT_REASON_KEYS =
         "REQUIRED_DECK" to DECK_TEXT,
         "DECK_INCOMPLETE" to DECK_TEXT,
         "BORROW_NEEDS_HAND" to DECK_TEXT,
+        "TRAINEE_IN_DECK" to
+            KeyText(
+                "the support deck has a card of the trainee's own character, so the game would not start the career. Nothing was spent.",
+                "Swap that card or choose another deck in the game, or turn on Auto-Fill Support Deck with Required Support Deck off",
+            ),
         "CAPTURE_OR_ACCESSIBILITY" to KeyText("the bot lost screen capture or its accessibility service.", "Check that both are on"),
         "STUCK_ON_SCREEN" to STUCK_TEXT,
         "TRAINEE_NOT_FOUND" to KeyText("the next trainee in the rotation was not found on the trainee list.", "Check the rotation list, or pick the trainee by hand"),

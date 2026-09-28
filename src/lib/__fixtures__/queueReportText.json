@@ -1088,6 +1088,22 @@
             }
         },
         {
+            "name": "between runs: TRAINEE_IN_DECK",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "TRAINEE_IN_DECK"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: the support deck has a card of the trainee's own character, so the game would not start the career. Nothing was spent.",
+                "nextAction": "Swap that card or choose another deck in the game, or turn on Auto-Fill Support Deck with Required Support Deck off, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
             "name": "between runs: BORROW_NEEDS_HAND",
             "report": {
                 "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",

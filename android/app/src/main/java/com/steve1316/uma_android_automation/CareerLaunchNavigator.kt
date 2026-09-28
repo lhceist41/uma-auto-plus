@@ -67,6 +67,7 @@ import com.steve1316.uma_android_automation.utils.PersistentSkipStateLog
 import com.steve1316.uma_android_automation.utils.pillVisible
 import com.steve1316.uma_android_automation.utils.PostCareerScreenProbes
 import com.steve1316.uma_android_automation.utils.TitleScreenProbe
+import com.steve1316.uma_android_automation.utils.TraineeInDeckProbe
 import com.steve1316.uma_android_automation.utils.TrainingSelectionProbe
 import com.steve1316.uma_android_automation.utils.ProgressEvent
 import com.steve1316.uma_android_automation.utils.ProgressTracker
@@ -4787,14 +4788,19 @@ class CareerLaunchNavigator(private val context: Context) {
             MessageLog.i(TAG, "[NAV] Auto-Fill already done this session, skipping to Start Career.")
         }
 
+        val bitmap = iu.getSourceBitmap()
+
+        // An owned card of the trainee's own character keeps Start Career disabled, and no borrow can
+        // fix it, so stop before the first tap (it once cost five blind taps and a rebind). A tag on
+        // the Friends slot stays with the borrow replacement below.
+        traineeInDeckFailure(bitmap, requiredDeck)?.let { return it }
+
         // When Build-Aware Launch mode is on, the borrow AND the Start Career gate are owned by the
         // build-aware launch transaction; the legacy priority-list borrow and inline Start Career block
         // below run ONLY when the mode is off, so the default hands-off launch is byte-for-byte unchanged.
         if (SettingsHelper.getBooleanSetting("runQueue", "enableBuildAwareLaunch", false)) {
             return handleBuildAwareLaunch(requiredDeck)
         }
-
-        val bitmap = iu.getSourceBitmap()
 
         // Fill the empty friend slot, or replace a borrow the game flagged as a duplicate /
         // active-trainee conflict, through the shared runBorrowStep boundary; null means no borrow
@@ -5452,6 +5458,21 @@ class CareerLaunchNavigator(private val context: Context) {
      * 1..10 identity via [SupportDeckSelector.parseDeckLabel], or null when unreadable/ambiguous. The
      * explicit-deck gate treats null as failure (no fuzzy nearest-deck). Never throws except on interrupt.
      */
+    /** The launch refusal for an owned deck card of the trainee's own character, or null when no owned slot has the "! Trainee" tag. */
+    private fun traineeInDeckFailure(bitmap: Bitmap, requiredDeck: Int?): TransitionResult.Failed? {
+        val slot =
+            TraineeInDeckProbe.taggedSlots(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)
+                .firstOrNull { it != TraineeInDeckProbe.FRIEND_SLOT } ?: return null
+        val deck = (requiredDeck ?: readDeckNumber(bitmap))?.let { "Deck $it" } ?: "The support deck"
+        MessageLog.e(TAG, "[SUPPORT_DECK] $deck slot $slot holds a card of the trainee's own character; Start Career is disabled. Stopping before any tap.")
+        return TransitionResult.Failed(
+            reason = "$deck has a support card of the trainee's own character (slot $slot), so the game keeps Start Career disabled. Start Career was not pressed.",
+            transition = "SUPPORT_DECK_SCREEN -> PRE_RUN_CONFIRMATION",
+            recommendedAction = "Swap that card or choose another deck, or turn on Auto-Fill Support Deck with Required Support Deck off, then restart the queue.",
+            reasonKey = "TRAINEE_IN_DECK",
+        )
+    }
+
     private fun readDeckNumber(bitmap: Bitmap): Int? = readDeckNumberWithRaw(bitmap).second
 
     /**

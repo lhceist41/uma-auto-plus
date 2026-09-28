@@ -356,6 +356,7 @@ class QueueLedgerWiringTest {
                     "REQUIRED_DECK",
                     "DECK_INCOMPLETE",
                     "BORROW_NEEDS_HAND",
+                    "TRAINEE_IN_DECK",
                     "TRAINEE_NOT_FOUND",
                     "GAME_UNRECOVERABLE",
                 ),
