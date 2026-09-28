@@ -78,6 +78,15 @@ class PersistentSkipStateLog(private val tag: String, private val context: Strin
 }
 
 /**
+ * Whether the launch handler may tap the pill: only a positively matched "Skip Off" pill, which two
+ * taps take to "Skip >>". The pill can already be on when a career launches, and two blind taps on
+ * a "Skip >>" pill cycle it to the slow "Skip >"; an on or unresolved pill is left as the player set
+ * it. `skip_off` is the reliable detector here: it matches Off pills and none of the one- or
+ * two-chevron pills measured on live frames.
+ */
+fun launchTapsSkipPill(state: PersistentSkipState): Boolean = state == PersistentSkipState.OFF
+
+/**
  * Whether a visible Skip pill is the launch-time Quick Mode prompt rather than an in-career
  * tap-to-continue screen.
  *

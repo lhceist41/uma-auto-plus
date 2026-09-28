@@ -1,7 +1,10 @@
 package com.steve1316.uma_android_automation
 
+import com.steve1316.uma_android_automation.components.persistentSkipPillRegion
 import com.steve1316.uma_android_automation.utils.PersistentSkipState
+import com.steve1316.uma_android_automation.utils.classifyPersistentSkip
 import com.steve1316.uma_android_automation.utils.isLaunchQuickModePrompt
+import com.steve1316.uma_android_automation.utils.launchTapsSkipPill
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -20,7 +23,9 @@ import java.io.File
  * pill twice blind and walked an already-maxed pill back toward Off.
  *
  * These tests pin the entry-path decision and the wiring that carries it. Which chevron the pill
- * shows is deliberately not consulted -- no recognizer can read it yet.
+ * shows is deliberately not consulted for routing -- no recognizer can read it yet. The launch
+ * handler's taps are the one exception: it taps only a pill that positively reads Off, because two
+ * blind taps on a pill that was already "Skip >>" left a player's Skip mode on the slow "Skip >".
  */
 @DisplayName("Quick Mode prompt routing")
 class QuickModePromptRoutingTest {
@@ -138,6 +143,68 @@ class QuickModePromptRoutingTest {
             assertTrue(decl >= 0)
             val body = pill.substring(decl)
             assertFalse(body.contains("PersistentSkipState"), "the entry-path decision is independent of what the pill shows")
+        }
+    }
+
+    @Nested
+    @DisplayName("launch taps only an Off pill")
+    inner class LaunchTapsOnlyAnOffPill {
+        private val nav by lazy { sourceFile("CareerLaunchNavigator.kt").readText().replace("\r\n", "\n") }
+
+        @Test
+        fun `only a pill that reads Off is tapped`() {
+            assertEquals(
+                listOf(PersistentSkipState.OFF),
+                PersistentSkipState.entries.filter { launchTapsSkipPill(it) },
+            )
+        }
+
+        /**
+         * Template outcomes at the 0.8 threshold in the pill region, measured on live 1080x1920
+         * frames: `skip_off` scored 0.890-0.988 on every Off pill and at most 0.704 on every one- or
+         * two-chevron pill. The launch frame that cycled a player's pill read 0.529 / 0.673.
+         */
+        @Test
+        fun `measured pill frames tap only when Off`() {
+            data class Frame(val name: String, val off: Boolean, val on: Boolean, val text: Boolean, val taps: Boolean)
+            val frames =
+                listOf(
+                    Frame("Skip Off, main screen", off = true, on = false, text = true, taps = true),
+                    Frame("Skip Off, event cutscene", off = true, on = false, text = true, taps = true),
+                    Frame("Skip >, main screen", off = false, on = false, text = true, taps = false),
+                    Frame("Skip >>, main screen", off = false, on = false, text = true, taps = false),
+                    Frame("Skip >>, event choice", off = false, on = true, text = true, taps = false),
+                    Frame("launch pill that was cycled to slow", off = false, on = false, text = true, taps = false),
+                )
+            for (frame in frames) {
+                val state = classifyPersistentSkip({ frame.off }, { frame.on }, { frame.text })
+                assertEquals(frame.taps, launchTapsSkipPill(state), frame.name)
+            }
+        }
+
+        @Test
+        fun `the two launch taps sit inside the Off gate and anything else only logs`() {
+            val handler = nav.substring(nav.indexOf("private fun handleQuickModePrompt("))
+            val gate = handler.indexOf("if (launchTapsSkipPill(pillState)) {")
+            val otherwise = handler.indexOf("} else {", gate)
+            assertTrue(gate >= 0, "the taps are gated on the pill state")
+            for (tap in listOf("skip_toggle_tap_1", "skip_toggle_tap_2")) {
+                assertTrue(handler.indexOf(tap) in gate until otherwise, "$tap runs only inside the Off gate")
+            }
+            val elseBranch = handler.substring(otherwise, handler.indexOf("\n        }\n", otherwise))
+            assertFalse(elseBranch.contains("CoordinateTap"), "a pill that is not Off is never tapped")
+            assertTrue(elseBranch.contains("leaving the player's Skip mode as it is"))
+        }
+
+        @Test
+        fun `the resume and in-career body taps land outside the pill`() {
+            val (x, y, w, h) = persistentSkipPillRegion(1080, 1920).toList()
+            val bodyTaps = listOf("tap-to-continue" to (540.0 to 1920 * 0.677), "event cutscene" to (540.0 to 1300.0))
+            for ((name, point) in bodyTaps) {
+                val inside = point.first in x.toDouble()..(x + w).toDouble() && point.second in y.toDouble()..(y + h).toDouble()
+                assertFalse(inside, "the $name tap must not hit the Skip pill")
+            }
+            assertTrue(nav.contains("CoordinateTap.tap(gestureUtils, (bitmap.width * 0.5).toDouble(), (bitmap.height * 0.677).toDouble(), \"tap_to_continue_advance\")"))
         }
     }
 

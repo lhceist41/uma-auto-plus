@@ -76,6 +76,7 @@ import com.steve1316.uma_android_automation.utils.RosterScanPolicy
 import com.steve1316.uma_android_automation.utils.grandConcertCareerCompleteScreenPresent
 import com.steve1316.uma_android_automation.utils.grandConcertConcertPendingScreenPresent
 import com.steve1316.uma_android_automation.utils.classifyPersistentSkip
+import com.steve1316.uma_android_automation.utils.launchTapsSkipPill
 import com.steve1316.uma_android_automation.utils.isLaunchQuickModePrompt
 import com.steve1316.uma_android_automation.utils.quickModeDialogPresent
 import com.steve1316.uma_android_automation.utils.quickModeSelectedIndex
@@ -9214,20 +9215,31 @@ class CareerLaunchNavigator(private val context: Context) {
         // skip pill here only while isLaunchQuickModePrompt holds (once maxed, and on every career
         // resume, skip pills become TAP_TO_CONTINUE). So max skip, then confirm.
 
-        // Tap the Skip button position twice to cycle Skip Off → Skip > → Skip >>.
+        // Tap the Skip button position twice to cycle Skip Off → Skip > → Skip >>, but only from a
+        // pill that reads Off: any other state is the player's own mode (see launchTapsSkipPill).
         // Position calibrated from actual game screen: white pill button center at
         // x ≈ 386/1080 = 35.7%, y ≈ 1847/1920 = 96.2% (measured via pixel sampling).
         val bitmap = iu.getSourceBitmap()
-        val tapX = (bitmap.width * 0.357).toDouble()
-        val tapY = (bitmap.height * 0.962).toDouble()
+        val pillState =
+            classifyPersistentSkip(
+                offPillMatched = { ButtonSkipOff.check(iu, sourceBitmap = bitmap) },
+                onPillMatched = { ButtonSkipOn.check(iu, sourceBitmap = bitmap) },
+                skipTextFound = { skipPillTextFound(bitmap) },
+            )
+        if (launchTapsSkipPill(pillState)) {
+            val tapX = (bitmap.width * 0.357).toDouble()
+            val tapY = (bitmap.height * 0.962).toDouble()
 
-        MessageLog.i(TAG, "[NAV] Tapping Skip button (1st click) at ($tapX, $tapY)...")
-        CoordinateTap.tap(gestureUtils, tapX, tapY, "skip_toggle_tap_1")
-        waitSafe(0.6)
+            MessageLog.i(TAG, "[NAV] Tapping Skip button (1st click) at ($tapX, $tapY)...")
+            CoordinateTap.tap(gestureUtils, tapX, tapY, "skip_toggle_tap_1")
+            waitSafe(0.6)
 
-        MessageLog.i(TAG, "[NAV] Tapping Skip button (2nd click) at ($tapX, $tapY)...")
-        CoordinateTap.tap(gestureUtils, tapX, tapY, "skip_toggle_tap_2")
-        waitSafe(0.6)
+            MessageLog.i(TAG, "[NAV] Tapping Skip button (2nd click) at ($tapX, $tapY)...")
+            CoordinateTap.tap(gestureUtils, tapX, tapY, "skip_toggle_tap_2")
+            waitSafe(0.6)
+        } else {
+            MessageLog.i(TAG, "[NAV] Skip pill reads ${pillState.name}, not Off; leaving the player's Skip mode as it is.")
+        }
 
         skipToggleAlreadyDone = true
 
