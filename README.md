@@ -50,7 +50,7 @@ This project is purely for educational purposes to learn about Android automatio
 # Requirements
 
 - An Android device or emulator running Android 7.0 or newer.
-- A supported display configuration. Template matching is calibrated for **1080x1920 at 240 DPI**, or **1080x2340 at 450 DPI** for Samsung phones. On anything else the Home page warns you, detection misfires, and the bot stalls. If your phone cannot be set to one of those, try the `Basic Template Matching Test` under `Settings` > `Debug Tests` to find a working custom scale, or force the display down with the [resolution steps](#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate) below.
+- A supported display configuration. Template matching is calibrated for **1080x1920 at 240 DPI**, or **1080x2340 at 450 DPI** for Samsung phones. On anything else the Home page warns you, detection misfires, and the bot stalls. If your phone cannot be set to one of those, try the `Basic Template Matching Test` under `Settings` > `Go to Debug Settings` > `Debug Tests` to find a working custom scale, or force the display down with the [resolution steps](#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate) below.
 - Tested emulators are Bluestacks 5 (Pie 64-bit, other versions should work) and MuMu Player 12.0 (6.5.6.0) running an Android 12 guest, both on **x86_64**. Set either up as follows:
     - Portrait mode forced on always.
     - 4 CPU cores, 4 GB memory, 1080 x 1920 (width x height), 240 DPI. The DPI matters.

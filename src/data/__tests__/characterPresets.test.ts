@@ -928,14 +928,14 @@ describe("Trackblazer scenario-event picks never take a hint for a style the pre
     // (both master.mdb), as SkillDatabase.kt and raceSurvival/evidence.ts read them.
     const STYLE_BY_CODE: Record<number, string> = { 1: "front_runner", 2: "pace_chaser", 3: "late_surger", 4: "end_closer" }
     const STYLE_BY_STRATEGY: Record<string, string> = { Front: "front_runner", Pace: "pace_chaser", Late: "late_surger", End: "end_closer" }
-    const cards = (buildBudget as any).traineeGrowth as { character: string; outfit: string; runningStyle: number }[]
+    const cards = (buildBudget as any).traineeGrowth as { cardId: number; character: string; outfit: string; runningStyle: number }[]
     const trackblazer = (scenarios as any).Trackblazer as Record<string, string[]>
 
-    /** The preset's card; a plain name whose base outfit presetMeta does not list is that character's only card. */
+    /** The preset's card; a plain name whose base outfit presetMeta does not list is that character's base card, the lowest card id. */
     function presetCard(presetName: string) {
         const outfit = presetOutfit(presetName)
-        const own = cards.filter((c) => c.character === presetCharacter(presetName))
-        return outfit ? own.find((c) => c.outfit === (outfit.startsWith("[") ? outfit : `[${outfit}]`)) : own.length === 1 ? own[0] : undefined
+        const own = cards.filter((c) => c.character === presetCharacter(presetName)).sort((a, b) => a.cardId - b.cardId)
+        return outfit ? own.find((c) => c.outfit === (outfit.startsWith("[") ? outfit : `[${outfit}]`)) : own[0]
     }
 
     /**

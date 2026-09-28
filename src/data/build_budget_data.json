@@ -168,18 +168,18 @@
     "S"
   ],
   "counts": {
-    "factorGroups": 381,
+    "factorGroups": 397,
     "factorsByFamily": {
       "stat": 5,
       "aptitude": 10,
       "race": 34,
-      "skill": 233,
+      "skill": 235,
       "scenario": 4,
       "bonus": 2,
-      "unique": 93
+      "unique": 107
     },
-    "traineeCards": 95,
-    "traineeBaseRows": 304,
+    "traineeCards": 109,
+    "traineeBaseRows": 346,
     "trainingEffectRows": 72
   },
   "careerTurns": [
@@ -11006,6 +11006,47 @@
       ]
     },
     {
+      "groupId": 20239,
+      "factorType": 4,
+      "family": "white",
+      "subfamily": "skill",
+      "canonicalName": "Mad Dash",
+      "maxRarity": 3,
+      "factorIds": [
+        2023901,
+        2023902,
+        2023903
+      ],
+      "effectGroupIds": [
+        41,
+        42,
+        43
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 5,
+          "value1": [
+            202392,
+            202392,
+            202392,
+            202392,
+            202392
+          ],
+          "value2": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      ]
+    },
+    {
       "groupId": 20240,
       "factorType": 4,
       "family": "white",
@@ -11158,6 +11199,47 @@
             202432,
             202432,
             202432
+          ],
+          "value2": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "groupId": 20244,
+      "factorType": 4,
+      "family": "white",
+      "subfamily": "skill",
+      "canonicalName": "Risk-Taker",
+      "maxRarity": 3,
+      "factorIds": [
+        2024401,
+        2024402,
+        2024403
+      ],
+      "effectGroupIds": [
+        41,
+        42,
+        43
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 5,
+          "value1": [
+            202442,
+            202442,
+            202442,
+            202442,
+            202442
           ],
           "value2": [
             1,
@@ -14136,6 +14218,83 @@
       ]
     },
     {
+      "groupId": 100802,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "Into High Gear!",
+      "maxRarity": 3,
+      "factorIds": [
+        10080201,
+        10080202,
+        10080203
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            910081,
+            910081,
+            910081,
+            910081
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 61,
+          "kind": "MAX_STAT",
+          "stat": "Speed",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            2,
+            3,
+            4,
+            4
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 64,
+          "kind": "MAX_STAT",
+          "stat": "Guts",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
       "groupId": 100901,
       "factorType": 3,
       "family": "unique",
@@ -14202,6 +14361,83 @@
             3,
             4,
             4
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "groupId": 100902,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "Queen's Lumination",
+      "maxRarity": 3,
+      "factorIds": [
+        10090201,
+        10090202,
+        10090203
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            910091,
+            910091,
+            910091,
+            910091
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 61,
+          "kind": "MAX_STAT",
+          "stat": "Speed",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            2,
+            3,
+            4,
+            4
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 65,
+          "kind": "MAX_STAT",
+          "stat": "Wit",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
           ],
           "value2": [
             0,
@@ -15694,6 +15930,102 @@
       ]
     },
     {
+      "groupId": 101902,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "THE MOE AAAA Thanks for My Life",
+      "maxRarity": 3,
+      "factorIds": [
+        10190201,
+        10190202,
+        10190203
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            910191,
+            910191,
+            910191,
+            910191
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 61,
+          "kind": "MAX_STAT",
+          "stat": "Speed",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 63,
+          "kind": "MAX_STAT",
+          "stat": "Power",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 64,
+          "kind": "MAX_STAT",
+          "stat": "Guts",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            2,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
       "groupId": 102001,
       "factorType": 3,
       "family": "unique",
@@ -15926,6 +16258,102 @@
           "targetType": 63,
           "kind": "MAX_STAT",
           "stat": "Power",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "groupId": 102102,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "Lightning Flare",
+      "maxRarity": 3,
+      "factorIds": [
+        10210201,
+        10210202,
+        10210203
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            910211,
+            910211,
+            910211,
+            910211
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 61,
+          "kind": "MAX_STAT",
+          "stat": "Speed",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            2,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 62,
+          "kind": "MAX_STAT",
+          "stat": "Stamina",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 64,
+          "kind": "MAX_STAT",
+          "stat": "Guts",
           "aptitude": null,
           "levels": 4,
           "value1": [
@@ -16829,6 +17257,83 @@
       ]
     },
     {
+      "groupId": 102901,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "Snow Bright, Snow Flight",
+      "maxRarity": 3,
+      "factorIds": [
+        10290101,
+        10290102,
+        10290103
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            900291,
+            900291,
+            900291,
+            900291
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 61,
+          "kind": "MAX_STAT",
+          "stat": "Speed",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 64,
+          "kind": "MAX_STAT",
+          "stat": "Guts",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            2,
+            3,
+            4,
+            4
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
       "groupId": 103001,
       "factorType": 3,
       "family": "unique",
@@ -17291,6 +17796,102 @@
       ]
     },
     {
+      "groupId": 103402,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "Firelight",
+      "maxRarity": 3,
+      "factorIds": [
+        10340201,
+        10340202,
+        10340203
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            910341,
+            910341,
+            910341,
+            910341
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 61,
+          "kind": "MAX_STAT",
+          "stat": "Speed",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            2,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 63,
+          "kind": "MAX_STAT",
+          "stat": "Power",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 65,
+          "kind": "MAX_STAT",
+          "stat": "Wit",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
       "groupId": 103501,
       "factorType": 3,
       "family": "unique",
@@ -17357,6 +17958,102 @@
             3,
             4,
             4
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "groupId": 103502,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "Ticket to Your Dreams!",
+      "maxRarity": 3,
+      "factorIds": [
+        10350201,
+        10350202,
+        10350203
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            910351,
+            910351,
+            910351,
+            910351
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 61,
+          "kind": "MAX_STAT",
+          "stat": "Speed",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 63,
+          "kind": "MAX_STAT",
+          "stat": "Power",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            2,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 64,
+          "kind": "MAX_STAT",
+          "stat": "Guts",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
           ],
           "value2": [
             0,
@@ -18099,6 +18796,83 @@
       ]
     },
     {
+      "groupId": 104201,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "I'm Possible!",
+      "maxRarity": 3,
+      "factorIds": [
+        10420101,
+        10420102,
+        10420103
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            900421,
+            900421,
+            900421,
+            900421
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 61,
+          "kind": "MAX_STAT",
+          "stat": "Speed",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 65,
+          "kind": "MAX_STAT",
+          "stat": "Wit",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            2,
+            3,
+            4,
+            4
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
       "groupId": 104401,
       "factorType": 3,
       "family": "unique",
@@ -18599,6 +19373,102 @@
       ]
     },
     {
+      "groupId": 104901,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "Laugh at the Odds",
+      "maxRarity": 3,
+      "factorIds": [
+        10490101,
+        10490102,
+        10490103
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            900491,
+            900491,
+            900491,
+            900491
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 61,
+          "kind": "MAX_STAT",
+          "stat": "Speed",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 62,
+          "kind": "MAX_STAT",
+          "stat": "Stamina",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            2,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 63,
+          "kind": "MAX_STAT",
+          "stat": "Power",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
       "groupId": 105001,
       "factorType": 3,
       "family": "unique",
@@ -18665,6 +19535,102 @@
             3,
             4,
             4
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "groupId": 105002,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "Hephaestus",
+      "maxRarity": 3,
+      "factorIds": [
+        10500201,
+        10500202,
+        10500203
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            910501,
+            910501,
+            910501,
+            910501
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 62,
+          "kind": "MAX_STAT",
+          "stat": "Stamina",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 64,
+          "kind": "MAX_STAT",
+          "stat": "Guts",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 65,
+          "kind": "MAX_STAT",
+          "stat": "Wit",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            2,
+            2,
+            2
           ],
           "value2": [
             0,
@@ -19235,6 +20201,83 @@
           "targetType": 64,
           "kind": "MAX_STAT",
           "stat": "Guts",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "groupId": 105802,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "Spooky, Scary, Happy",
+      "maxRarity": 3,
+      "factorIds": [
+        10580201,
+        10580202,
+        10580203
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            910581,
+            910581,
+            910581,
+            910581
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 63,
+          "kind": "MAX_STAT",
+          "stat": "Power",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            2,
+            3,
+            4,
+            4
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 65,
+          "kind": "MAX_STAT",
+          "stat": "Wit",
           "aptitude": null,
           "levels": 4,
           "value1": [
@@ -20426,6 +21469,179 @@
       ]
     },
     {
+      "groupId": 107801,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "Sunny Breeze",
+      "maxRarity": 3,
+      "factorIds": [
+        10780101,
+        10780102,
+        10780103
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            900781,
+            900781,
+            900781,
+            900781
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 61,
+          "kind": "MAX_STAT",
+          "stat": "Speed",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            2,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 64,
+          "kind": "MAX_STAT",
+          "stat": "Guts",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 65,
+          "kind": "MAX_STAT",
+          "stat": "Wit",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            2,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "groupId": 108701,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "Silent Letter",
+      "maxRarity": 3,
+      "factorIds": [
+        10870101,
+        10870102,
+        10870103
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            900871,
+            900871,
+            900871,
+            900871
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 61,
+          "kind": "MAX_STAT",
+          "stat": "Speed",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            2,
+            3,
+            4,
+            4
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 64,
+          "kind": "MAX_STAT",
+          "stat": "Guts",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
       "groupId": 109801,
       "factorType": 3,
       "family": "unique",
@@ -20492,6 +21708,83 @@
             3,
             4,
             4
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "groupId": 110001,
+      "factorType": 3,
+      "family": "unique",
+      "subfamily": "unique",
+      "canonicalName": "Never Say Never",
+      "maxRarity": 3,
+      "factorIds": [
+        11000101,
+        11000102,
+        11000103
+      ],
+      "effectGroupIds": [
+        31,
+        32,
+        33
+      ],
+      "effects": [
+        {
+          "targetType": 41,
+          "kind": "SKILL",
+          "stat": null,
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            901001,
+            901001,
+            901001,
+            901001
+          ],
+          "value2": [
+            1,
+            2,
+            2,
+            3
+          ]
+        },
+        {
+          "targetType": 64,
+          "kind": "MAX_STAT",
+          "stat": "Guts",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            2,
+            3,
+            4,
+            4
+          ],
+          "value2": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "targetType": 65,
+          "kind": "MAX_STAT",
+          "stat": "Wit",
+          "aptitude": null,
+          "levels": 4,
+          "value1": [
+            1,
+            1,
+            1,
+            2
           ],
           "value2": [
             0,
@@ -20730,6 +22023,21 @@
       "runningStyle": 3
     },
     {
+      "cardId": 100802,
+      "charaId": 1008,
+      "character": "Vodka",
+      "outfit": "[Fiery Aqua Vitae]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 20,
+        "stamina": 0,
+        "power": 0,
+        "guts": 10,
+        "wit": 0
+      },
+      "runningStyle": 3
+    },
+    {
       "cardId": 100901,
       "charaId": 1009,
       "character": "Daiwa Scarlet",
@@ -20743,6 +22051,21 @@
         "wit": 0
       },
       "runningStyle": 2
+    },
+    {
+      "cardId": 100902,
+      "charaId": 1009,
+      "character": "Daiwa Scarlet",
+      "outfit": "[Nuit \u00c9toil\u00e9e de Scarlet]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 20,
+        "stamina": 0,
+        "power": 0,
+        "guts": 0,
+        "wit": 10
+      },
+      "runningStyle": 1
     },
     {
       "cardId": 101001,
@@ -21015,6 +22338,21 @@
       "runningStyle": 3
     },
     {
+      "cardId": 101902,
+      "charaId": 1019,
+      "character": "Agnes Digital",
+      "outfit": "[Fanatic\u2661Jiangshi]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 7,
+        "stamina": 7,
+        "power": 8,
+        "guts": 8,
+        "wit": 0
+      },
+      "runningStyle": 3
+    },
+    {
       "cardId": 102001,
       "charaId": 1020,
       "character": "Seiun Sky",
@@ -21058,6 +22396,21 @@
         "wit": 0
       },
       "runningStyle": 4
+    },
+    {
+      "cardId": 102102,
+      "charaId": 1021,
+      "character": "Tamamo Cross",
+      "outfit": "[Raging Thunder]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 14,
+        "stamina": 8,
+        "power": 0,
+        "guts": 8,
+        "wit": 0
+      },
+      "runningStyle": 2
     },
     {
       "cardId": 102201,
@@ -21225,6 +22578,21 @@
       "runningStyle": 2
     },
     {
+      "cardId": 102901,
+      "charaId": 1029,
+      "character": "Yukino Bijin",
+      "outfit": "[Darl'n Snowflake]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 10,
+        "stamina": 0,
+        "power": 0,
+        "guts": 20,
+        "wit": 0
+      },
+      "runningStyle": 2
+    },
+    {
       "cardId": 103001,
       "charaId": 1030,
       "character": "Rice Shower",
@@ -21315,6 +22683,21 @@
       "runningStyle": 4
     },
     {
+      "cardId": 103402,
+      "charaId": 1034,
+      "character": "Inari One",
+      "outfit": "[Golden Dream]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 14,
+        "stamina": 0,
+        "power": 8,
+        "guts": 0,
+        "wit": 8
+      },
+      "runningStyle": 4
+    },
+    {
       "cardId": 103501,
       "charaId": 1035,
       "character": "Winning Ticket",
@@ -21325,6 +22708,21 @@
         "stamina": 10,
         "power": 20,
         "guts": 0,
+        "wit": 0
+      },
+      "runningStyle": 3
+    },
+    {
+      "cardId": 103502,
+      "charaId": 1035,
+      "character": "Winning Ticket",
+      "outfit": "[Dream Deliverer]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 8,
+        "stamina": 0,
+        "power": 14,
+        "guts": 8,
         "wit": 0
       },
       "runningStyle": 3
@@ -21465,6 +22863,21 @@
       "runningStyle": 2
     },
     {
+      "cardId": 104201,
+      "charaId": 1042,
+      "character": "Seeking the Pearl",
+      "outfit": "[Rocket\u2606Star]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 10,
+        "stamina": 0,
+        "power": 0,
+        "guts": 0,
+        "wit": 20
+      },
+      "runningStyle": 2
+    },
+    {
       "cardId": 104401,
       "charaId": 1044,
       "character": "Sweep Tosho",
@@ -21555,6 +22968,21 @@
       "runningStyle": 2
     },
     {
+      "cardId": 104901,
+      "charaId": 1049,
+      "character": "Nakayama Festa",
+      "outfit": "[Desperate Measures]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 10,
+        "stamina": 10,
+        "power": 10,
+        "guts": 0,
+        "wit": 0
+      },
+      "runningStyle": 3
+    },
+    {
       "cardId": 105001,
       "charaId": 1050,
       "character": "Narita Taishin",
@@ -21566,6 +22994,21 @@
         "power": 0,
         "guts": 20,
         "wit": 0
+      },
+      "runningStyle": 4
+    },
+    {
+      "cardId": 105002,
+      "charaId": 1050,
+      "character": "Narita Taishin",
+      "outfit": "[Difference Engineer]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 0,
+        "stamina": 8,
+        "power": 0,
+        "guts": 8,
+        "wit": 14
       },
       "runningStyle": 4
     },
@@ -21671,6 +23114,21 @@
         "power": 0,
         "guts": 10,
         "wit": 0
+      },
+      "runningStyle": 2
+    },
+    {
+      "cardId": 105802,
+      "charaId": 1058,
+      "character": "Meisho Doto",
+      "outfit": "[Dot-o'-Lantern]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 0,
+        "stamina": 0,
+        "power": 15,
+        "guts": 0,
+        "wit": 15
       },
       "runningStyle": 2
     },
@@ -21885,6 +23343,36 @@
       "runningStyle": 3
     },
     {
+      "cardId": 107801,
+      "charaId": 1078,
+      "character": "Yamanin Zephyr",
+      "outfit": "[Fluttertail Spirit]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 10,
+        "stamina": 0,
+        "power": 0,
+        "guts": 10,
+        "wit": 10
+      },
+      "runningStyle": 2
+    },
+    {
+      "cardId": 108701,
+      "charaId": 1087,
+      "character": "Aston Machan",
+      "outfit": "[Flare]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 20,
+        "stamina": 0,
+        "power": 0,
+        "guts": 10,
+        "wit": 0
+      },
+      "runningStyle": 1
+    },
+    {
       "cardId": 109801,
       "charaId": 1098,
       "character": "Copano Rickey",
@@ -21896,6 +23384,21 @@
         "power": 10,
         "guts": 0,
         "wit": 20
+      },
+      "runningStyle": 2
+    },
+    {
+      "cardId": 110001,
+      "charaId": 1100,
+      "character": "Wonder Acute",
+      "outfit": "[Butterfly Sting]",
+      "defaultRarity": 3,
+      "growth": {
+        "speed": 0,
+        "stamina": 0,
+        "power": 0,
+        "guts": 15,
+        "wit": 15
       },
       "runningStyle": 2
     },
@@ -23013,6 +24516,75 @@
       }
     },
     {
+      "cardId": 100802,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 98,
+        "Stamina": 82,
+        "Power": 99,
+        "Guts": 81,
+        "Wit": 90
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 100802,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 91,
+        "Power": 111,
+        "Guts": 91,
+        "Wit": 98
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
+      "cardId": 100802,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 120,
+        "Stamina": 100,
+        "Power": 122,
+        "Guts": 100,
+        "Wit": 108
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "G",
+        "front": "C",
+        "pace": "B",
+        "late": "A",
+        "end": "F"
+      }
+    },
+    {
       "cardId": 100901,
       "starLevel": 2,
       "startStats": {
@@ -23096,6 +24668,75 @@
         "mile": "A",
         "medium": "A",
         "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100902,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 88,
+        "Stamina": 82,
+        "Power": 100,
+        "Guts": 98,
+        "Wit": 82
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "B",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100902,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 98,
+        "Stamina": 91,
+        "Power": 111,
+        "Guts": 109,
+        "Wit": 91
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "B",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "E",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 100902,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 108,
+        "Stamina": 100,
+        "Power": 122,
+        "Guts": 120,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "B",
+        "medium": "A",
+        "long": "A",
         "turf": "A",
         "dirt": "G",
         "front": "A",
@@ -24416,6 +26057,75 @@
       }
     },
     {
+      "cardId": 101902,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 85,
+        "Stamina": 91,
+        "Power": 98,
+        "Guts": 105,
+        "Wit": 71
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "G",
+        "turf": "A",
+        "dirt": "A",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 101902,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 95,
+        "Stamina": 101,
+        "Power": 109,
+        "Guts": 117,
+        "Wit": 78
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "G",
+        "turf": "A",
+        "dirt": "A",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 101902,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 104,
+        "Stamina": 111,
+        "Power": 120,
+        "Guts": 129,
+        "Wit": 86
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "A",
+        "medium": "A",
+        "long": "G",
+        "turf": "A",
+        "dirt": "A",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
       "cardId": 102001,
       "starLevel": 3,
       "startStats": {
@@ -24608,6 +26318,75 @@
         "Power": 129,
         "Guts": 102,
         "Wit": 102
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 102102,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 92,
+        "Stamina": 83,
+        "Power": 94,
+        "Guts": 92,
+        "Wit": 89
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 102102,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 102,
+        "Stamina": 92,
+        "Power": 104,
+        "Guts": 102,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "E",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "F",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 102102,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 113,
+        "Stamina": 101,
+        "Power": 115,
+        "Guts": 113,
+        "Wit": 108
       },
       "aptitudes": {
         "sprint": "G",
@@ -25451,6 +27230,75 @@
       }
     },
     {
+      "cardId": 102901,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 95,
+        "Stamina": 86,
+        "Power": 83,
+        "Guts": 95,
+        "Wit": 91
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "B",
+        "front": "C",
+        "pace": "A",
+        "late": "F",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 102901,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 106,
+        "Stamina": 96,
+        "Power": 93,
+        "Guts": 106,
+        "Wit": 99
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "B",
+        "front": "C",
+        "pace": "A",
+        "late": "F",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 102901,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 117,
+        "Stamina": 106,
+        "Power": 102,
+        "Guts": 117,
+        "Wit": 108
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "A",
+        "dirt": "B",
+        "front": "C",
+        "pace": "A",
+        "late": "F",
+        "end": "G"
+      }
+    },
+    {
       "cardId": 103001,
       "starLevel": 3,
       "startStats": {
@@ -25911,6 +27759,75 @@
       }
     },
     {
+      "cardId": 103402,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 95,
+        "Stamina": 88,
+        "Power": 98,
+        "Guts": 78,
+        "Wit": 91
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "B",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "A",
+        "front": "G",
+        "pace": "B",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 103402,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 106,
+        "Stamina": 98,
+        "Power": 109,
+        "Guts": 87,
+        "Wit": 100
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "B",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "A",
+        "front": "G",
+        "pace": "B",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 103402,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 117,
+        "Stamina": 108,
+        "Power": 120,
+        "Guts": 95,
+        "Wit": 110
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "B",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "A",
+        "front": "G",
+        "pace": "B",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
       "cardId": 103501,
       "starLevel": 1,
       "startStats": {
@@ -26011,6 +27928,75 @@
         "Power": 125,
         "Guts": 101,
         "Wit": 111
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103502,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 101,
+        "Stamina": 73,
+        "Power": 109,
+        "Guts": 87,
+        "Wit": 80
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103502,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 112,
+        "Stamina": 81,
+        "Power": 121,
+        "Guts": 96,
+        "Wit": 90
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "B",
+        "late": "A",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 103502,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 123,
+        "Stamina": 90,
+        "Power": 133,
+        "Guts": 106,
+        "Wit": 98
       },
       "aptitudes": {
         "sprint": "G",
@@ -26693,6 +28679,75 @@
       }
     },
     {
+      "cardId": 104201,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 99,
+        "Stamina": 65,
+        "Power": 104,
+        "Guts": 93,
+        "Wit": 89
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "E",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "C",
+        "pace": "A",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 104201,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 110,
+        "Stamina": 72,
+        "Power": 115,
+        "Guts": 104,
+        "Wit": 99
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "E",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "C",
+        "pace": "A",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
+      "cardId": 104201,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 121,
+        "Stamina": 79,
+        "Power": 127,
+        "Guts": 114,
+        "Wit": 109
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "A",
+        "medium": "E",
+        "long": "G",
+        "turf": "A",
+        "dirt": "F",
+        "front": "C",
+        "pace": "A",
+        "late": "A",
+        "end": "B"
+      }
+    },
+    {
       "cardId": 104401,
       "starLevel": 3,
       "startStats": {
@@ -27130,6 +29185,75 @@
       }
     },
     {
+      "cardId": 104901,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 97,
+        "Stamina": 92,
+        "Power": 99,
+        "Guts": 75,
+        "Wit": 87
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 104901,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 108,
+        "Stamina": 102,
+        "Power": 110,
+        "Guts": 84,
+        "Wit": 96
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
+      "cardId": 104901,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 119,
+        "Stamina": 113,
+        "Power": 121,
+        "Guts": 92,
+        "Wit": 105
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "C",
+        "medium": "A",
+        "long": "B",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "A",
+        "late": "A",
+        "end": "D"
+      }
+    },
+    {
       "cardId": 105001,
       "starLevel": 3,
       "startStats": {
@@ -27184,6 +29308,75 @@
         "Power": 121,
         "Guts": 97,
         "Wit": 114
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "F",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 105002,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 90,
+        "Stamina": 84,
+        "Power": 93,
+        "Guts": 82,
+        "Wit": 101
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "F",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 105002,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 100,
+        "Stamina": 94,
+        "Power": 103,
+        "Guts": 91,
+        "Wit": 112
+      },
+      "aptitudes": {
+        "sprint": "F",
+        "mile": "D",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "G",
+        "front": "G",
+        "pace": "F",
+        "late": "B",
+        "end": "A"
+      }
+    },
+    {
+      "cardId": 105002,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 110,
+        "Stamina": 103,
+        "Power": 113,
+        "Guts": 100,
+        "Wit": 124
       },
       "aptitudes": {
         "sprint": "F",
@@ -27759,6 +29952,75 @@
         "Power": 104,
         "Guts": 118,
         "Wit": 99
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "F",
+        "pace": "A",
+        "late": "B",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 105802,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 89,
+        "Stamina": 89,
+        "Power": 75,
+        "Guts": 103,
+        "Wit": 94
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "F",
+        "pace": "A",
+        "late": "B",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 105802,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 99,
+        "Stamina": 99,
+        "Power": 83,
+        "Guts": 115,
+        "Wit": 104
+      },
+      "aptitudes": {
+        "sprint": "G",
+        "mile": "F",
+        "medium": "A",
+        "long": "A",
+        "turf": "A",
+        "dirt": "E",
+        "front": "F",
+        "pace": "A",
+        "late": "B",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 105802,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 109,
+        "Stamina": 109,
+        "Power": 92,
+        "Guts": 126,
+        "Wit": 114
       },
       "aptitudes": {
         "sprint": "G",
@@ -28855,6 +31117,144 @@
       }
     },
     {
+      "cardId": 107801,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 97,
+        "Stamina": 83,
+        "Power": 81,
+        "Guts": 97,
+        "Wit": 92
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "A",
+        "long": "G",
+        "turf": "A",
+        "dirt": "D",
+        "front": "E",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 107801,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 108,
+        "Stamina": 92,
+        "Power": 90,
+        "Guts": 107,
+        "Wit": 103
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "A",
+        "long": "G",
+        "turf": "A",
+        "dirt": "D",
+        "front": "E",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 107801,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 119,
+        "Stamina": 101,
+        "Power": 99,
+        "Guts": 118,
+        "Wit": 113
+      },
+      "aptitudes": {
+        "sprint": "B",
+        "mile": "A",
+        "medium": "A",
+        "long": "G",
+        "turf": "A",
+        "dirt": "D",
+        "front": "E",
+        "pace": "A",
+        "late": "C",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 108701,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 99,
+        "Stamina": 73,
+        "Power": 97,
+        "Guts": 98,
+        "Wit": 83
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "G",
+        "long": "G",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 108701,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 110,
+        "Stamina": 81,
+        "Power": 108,
+        "Guts": 109,
+        "Wit": 92
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "G",
+        "long": "G",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
+      "cardId": 108701,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 121,
+        "Stamina": 89,
+        "Power": 118,
+        "Guts": 120,
+        "Wit": 102
+      },
+      "aptitudes": {
+        "sprint": "A",
+        "mile": "B",
+        "medium": "G",
+        "long": "G",
+        "turf": "A",
+        "dirt": "G",
+        "front": "A",
+        "pace": "A",
+        "late": "G",
+        "end": "G"
+      }
+    },
+    {
       "cardId": 109801,
       "starLevel": 3,
       "startStats": {
@@ -28921,6 +31321,75 @@
         "pace": "A",
         "late": "C",
         "end": "G"
+      }
+    },
+    {
+      "cardId": 110001,
+      "starLevel": 3,
+      "startStats": {
+        "Speed": 84,
+        "Stamina": 82,
+        "Power": 84,
+        "Guts": 101,
+        "Wit": 99
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "G",
+        "dirt": "A",
+        "front": "C",
+        "pace": "A",
+        "late": "C",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 110001,
+      "starLevel": 4,
+      "startStats": {
+        "Speed": 93,
+        "Stamina": 91,
+        "Power": 94,
+        "Guts": 112,
+        "Wit": 110
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "G",
+        "dirt": "A",
+        "front": "C",
+        "pace": "A",
+        "late": "C",
+        "end": "E"
+      }
+    },
+    {
+      "cardId": 110001,
+      "starLevel": 5,
+      "startStats": {
+        "Speed": 102,
+        "Stamina": 100,
+        "Power": 103,
+        "Guts": 123,
+        "Wit": 122
+      },
+      "aptitudes": {
+        "sprint": "D",
+        "mile": "A",
+        "medium": "A",
+        "long": "E",
+        "turf": "G",
+        "dirt": "A",
+        "front": "C",
+        "pace": "A",
+        "late": "C",
+        "end": "E"
       }
     }
   ],

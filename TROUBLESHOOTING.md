@@ -8,7 +8,7 @@ Most stops come down to one of these three.
 
 ### 1. Unsupported screen resolution
 
-Template matching is calibrated for **1080×1920 @ 240 DPI** or **1080×2340 @ 450 DPI** (Samsung). On anything else, detection misfires and the bot stalls. Set your emulator/device to one of those (see the resolution steps in the [README](README.md#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate)), or use the `Basic Template Matching Test` under **Settings → Debug Tests** to find a working custom scale.
+Template matching is calibrated for **1080×1920 @ 240 DPI** or **1080×2340 @ 450 DPI** (Samsung). On anything else, detection misfires and the bot stalls. Set your emulator/device to one of those (see the resolution steps in the [README](README.md#to-set-the-phones-resolution-to-1080p-faster-and-more-accurate)), or use the `Basic Template Matching Test` under **Settings → Go to Debug Settings → Debug Tests** to find a working custom scale.
 
 ### 2. The emulator killed the Accessibility service (MuMu)
 
@@ -73,7 +73,7 @@ spent when that happens.
 
 ## Skills aren't bought, or the wrong event option is picked
 
-Apply a **preset** for the character you're running: **Home → pick a scenario → pick the character**. The presets carry the skill-purchase plans and per-event choices. Without one, the bot falls back to generic scoring.
+Apply a **preset** for the trainee you're running: on **Home**, tap **Select Trainee Preset...**, tap the trainee (and outfit), then tap **Apply** on the scenario you're running; applying a preset also sets the scenario. The presets carry the skill-purchase plans and per-event choices. Without one, the bot falls back to generic scoring.
 
 ## The Racing Plan is missing information
 
