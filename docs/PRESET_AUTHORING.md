@@ -71,9 +71,16 @@ It is stamped on every apply precisely so a strict floor cannot carry over to th
   `name|scenario` key space.
 - **Never include** `discordToken`, `misc.formattedSettingsString`, `misc.currentProfileName`,
   `racing.racingPlanData`, or `racing.appliedRacingSnapshot`. The first is security sensitive, the
-  rest are runtime state. `misc` itself is a legitimate preset-owned category for ordinary UI/display
-  settings (screen text size, overlay button size, and the like); those two runtime fields are the
-  exception, not the whole category.
+  rest are runtime state. The other `misc` keys are the player's display settings (see the next
+  rule), so they are not preset-owned either.
+- **Personal settings are kept from the player, not the preset.** `PERSONAL_SETTINGS` in
+  `src/lib/personalSettings.ts` lists them: `general.waitDelay`, `dialogWaitDelay`,
+  `enableStopBeforeFinals`, `enableStopAtDate`, `stopAtDates` and `enableCraneGameAttempt`;
+  `racing.enableStopOnMandatoryRaces`; `trainingEvent.ocrConfidence`, `enableAutomaticOCRRetry` and
+  `enableHideOCRComparisonResults`; and the `misc` display keys. Both the Home apply and the queue's
+  rotation snapshots put the player's values back after the merge, so a value a preset ships for one
+  of them has no effect. Add a key to that list only when it belongs to the device or the player
+  and does not change how a career is played.
 - **Never set `skills.skillSpendMode` or `skills.accountTier`.** Those are the user's global
   choices.
 - **State the racing-plan trio explicitly** (`enableRacingPlan`, `enableMandatoryRacingPlan`,

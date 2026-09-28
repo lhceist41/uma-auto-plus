@@ -27,6 +27,7 @@ import { presetCharacter, presetOutfit } from "../../data/presetMeta"
 import { deriveInGameName, deriveExcludeOutfits } from "../../lib/rotationSnapshots"
 import { presetObjectiveOf } from "../../lib/adaptiveSkillPolicy"
 import { presetMoodFloorOf } from "../../lib/moodFloorPolicy"
+import { keepPersonalSettings } from "../../lib/personalSettings"
 import { GRAND_CONCERT_KEY, GRAND_CONCERT_WARNING, isGrandConcert, scenarioCapabilities } from "../../lib/scenarioKey"
 import { offersStopAfterCareer, presentQueueProgress, restoredQueueProgress, type QueueProgressEvent } from "../../lib/queueProgressPresentation"
 import { interruptedBannerReport, lastSessionCardVisible, parseLastSession, type LastSessionView } from "../../lib/queueReportPresentation"
@@ -525,6 +526,10 @@ const Home = () => {
             // are never stamped - presets must not set them.
             merged.skills.skillSpendObjective = presetObjectiveOf(preset.settings)
         }
+
+        // Same for the player's device timing, OCR tuning, display and stop points: every preset ships
+        // a value for them, and they are the player's, not the trainee's (see PERSONAL_SETTINGS).
+        keepPersonalSettings(merged, bsc.settings)
 
         // Stamp the preset's mood floor on EVERY apply (absent -> "Good"), for the same reason as
         // the objective above. Only trainees with a mood-gated trap event declare a strict floor;

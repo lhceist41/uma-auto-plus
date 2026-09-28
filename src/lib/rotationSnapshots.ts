@@ -2,6 +2,7 @@ import { Settings } from "../context/BotStateContext"
 import { characterPresets } from "../data/characterPresets"
 import { presetObjectiveOf } from "./adaptiveSkillPolicy"
 import { presetMoodFloorOf } from "./moodFloorPolicy"
+import { keepPersonalSettings } from "./personalSettings"
 import { convertSettingsToBatch } from "./settingsUtils"
 
 /**
@@ -186,6 +187,10 @@ export function buildRotationSnapshotRows(base: Settings, rotation: RotationEntr
             // would otherwise inherit whatever objective the base happened to carry.
             merged.skills.skillSpendObjective = presetObjectiveOf(preset.settings)
         }
+
+        // Same for the player's device timing, OCR tuning, display and stop points (PERSONAL_SETTINGS):
+        // the queue copies these rows straight into the live settings, so a preset value would reset them.
+        keepPersonalSettings(merged, base)
 
         // Same stamp for the mood floor (absent -> "Good"). A rotation is exactly where the silent
         // carry-over bit: a strict-floor trainee earlier in the cycle left her floor on every entry
