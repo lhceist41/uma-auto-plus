@@ -12565,7 +12565,7 @@ const basePresets: CharacterPreset[] = [
                 },
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -13184,7 +13184,7 @@ const basePresets: CharacterPreset[] = [
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -13764,7 +13764,7 @@ const basePresets: CharacterPreset[] = [
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -14343,7 +14343,7 @@ const basePresets: CharacterPreset[] = [
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -16920,7 +16920,7 @@ const basePresets: CharacterPreset[] = [
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -18908,7 +18908,7 @@ const basePresets: CharacterPreset[] = [
                 },
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -19538,7 +19538,7 @@ const basePresets: CharacterPreset[] = [
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -20134,7 +20134,7 @@ const basePresets: CharacterPreset[] = [
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -20739,10 +20739,10 @@ const basePresets: CharacterPreset[] = [
                 },
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|The Inescapable Ardan": 1,
+                    "Trackblazer|The Inescapable Ardan": 0,
                     "Trackblazer|The Strongest, Mightiest Cinderella!": 1,
-                    "Trackblazer|The Exciting Fruit Fest": 1,
-                    "Trackblazer|Vega and Spica": 1,
+                    "Trackblazer|The Exciting Fruit Fest": 0,
+                    "Trackblazer|Vega and Spica": 0,
                     "Trackblazer|Leave It to the Great Detective!": 0,
                     "Trackblazer|Gullible Socialites": 0,
                 },
@@ -24603,7 +24603,7 @@ const basePresets: CharacterPreset[] = [
                 },
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -25864,7 +25864,7 @@ const basePresets: CharacterPreset[] = [
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -31663,7 +31663,7 @@ const basePresets: CharacterPreset[] = [
                 characterEventOverrides: {},
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -34848,7 +34848,7 @@ const basePresets: CharacterPreset[] = [
                 },
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -36241,7 +36241,7 @@ const basePresets: CharacterPreset[] = [
                 },
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -37599,7 +37599,7 @@ const basePresets: CharacterPreset[] = [
                 },
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -43776,7 +43776,7 @@ const basePresets: CharacterPreset[] = [
                 },
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {
@@ -45151,7 +45151,7 @@ const basePresets: CharacterPreset[] = [
                 },
                 supportEventOverrides: {},
                 scenarioEventOverrides: {
-                    "Trackblazer|A Grandkid Get-Together": 1,
+                    "Trackblazer|A Grandkid Get-Together": 0,
                 },
             },
             misc: {

@@ -29,7 +29,9 @@ particular, these survive a preset switch:
 - **Your skill-spend timing.** The threshold and on/off switch in Skill Settings are yours, not the
   preset's.
 - **Your support-card and scenario event picks.** These depend on your deck, not on the trainee, so
-  a preset switch keeps them.
+  a preset switch keeps them, except the few Trackblazer scenario events a preset tunes for its
+  running style (for example a stat option instead of a hint for a skill that style cannot use).
+  For those events the preset's pick replaces yours.
 - **Your skill-spend mode and account tier.** Global choices, never preset-owned.
 
 Everything else in a shipped category is replaced, not merged: if a preset ships a racing plan or a
@@ -176,8 +178,9 @@ in Racing Settings. The bot warns at career start when the live settings have dr
 preset applied.
 
 **Its event picks look wrong.** Support-card and scenario event picks are yours, not the preset's,
-because they follow your deck. A preset only ships the character's own event picks. A few trainees
-ship those for one scenario and fall back to the automatic option reader for the others.
+because they follow your deck. A preset ships the character's own event picks, plus, for most
+Trackblazer presets, a few Trackblazer scenario events tuned for its running style. A few trainees
+ship character picks for one scenario and fall back to the automatic option reader for the others.
 
 **It force-ended at a goal race.** Almost always stamina against a Long goal, or a fan or
 result-point checkpoint the schedule could not reach in time. Check the trainee's advisory chip for

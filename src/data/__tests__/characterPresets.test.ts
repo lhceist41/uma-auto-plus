@@ -1,6 +1,8 @@
 import races from "../races.json"
 import objectives from "../character_objectives.json"
 import skills from "../skills.json"
+import scenarios from "../scenarios.json"
+import buildBudget from "../build_budget_data.json"
 import gcFanRuntime from "../../../android/app/src/main/assets/gc_fan_runtime.json"
 import { avoidAdvisoryFor, characterPresets, trainerAdvisories } from "../characterPresets"
 import { presetCharacter, presetOutfit, presetValidation } from "../presetMeta"
@@ -918,5 +920,78 @@ describe("Grand Concert derived presets", () => {
         ;(twin.settings.training as any).preferredDistanceOverride = "MUTATED"
         expect(source.settings.training!.preferredDistanceOverride).toBe(before)
         ;(twin.settings.training as any).preferredDistanceOverride = before
+    })
+})
+
+describe("Trackblazer scenario-event picks never take a hint for a style the preset does not race", () => {
+    // Codes of skills.json `running_style==N` and of build_budget_data's card `runningStyle`
+    // (both master.mdb), as SkillDatabase.kt and raceSurvival/evidence.ts read them.
+    const STYLE_BY_CODE: Record<number, string> = { 1: "front_runner", 2: "pace_chaser", 3: "late_surger", 4: "end_closer" }
+    const STYLE_BY_STRATEGY: Record<string, string> = { Front: "front_runner", Pace: "pace_chaser", Late: "late_surger", End: "end_closer" }
+    const cards = (buildBudget as any).traineeGrowth as { character: string; outfit: string; runningStyle: number }[]
+    const trackblazer = (scenarios as any).Trackblazer as Record<string, string[]>
+
+    /** The preset's card; a plain name whose base outfit presetMeta does not list is that character's only card. */
+    function presetCard(presetName: string) {
+        const outfit = presetOutfit(presetName)
+        const own = cards.filter((c) => c.character === presetCharacter(presetName))
+        return outfit ? own.find((c) => c.outfit === (outfit.startsWith("[") ? outfit : `[${outfit}]`)) : own.length === 1 ? own[0] : undefined
+    }
+
+    /**
+     * The style a preset races: its explicit race strategy. With "Default" the bot keeps the game's
+     * preselected strategy, the card's own style; when that card is not in the game data, the style
+     * the preset buys skills for is the only evidence.
+     */
+    function racedStyle(preset: (typeof characterPresets)[number]): string {
+        const strategy = (preset.settings as any).racing?.originalRaceStrategy
+        if (strategy && strategy !== "Default") return STYLE_BY_STRATEGY[strategy]
+        const card = presetCard(preset.name)
+        return card ? STYLE_BY_CODE[card.runningStyle] : (preset.settings as any).skills?.preferredRunningStyle
+    }
+
+    /** Every pick whose option is a hint for a skill that only works in another style. */
+    function deadHintPicks(): string[] {
+        const dead: string[] = []
+        for (const preset of characterPresets.filter((p) => p.scenario === "Trackblazer")) {
+            const picks = ((preset.settings as any).trainingEvent?.scenarioEventOverrides ?? {}) as Record<string, number>
+            for (const [key, option] of Object.entries(picks)) {
+                const text = trackblazer[key.split("|")[1]]?.[option] ?? ""
+                const hint = /^(.*) hint \+\d+$/m.exec(text)
+                const skill = hint ? (skills as any)[hint[1]] : undefined
+                const code = skill ? /running_style==(\d)/.exec(skill.condition ?? "") : null
+                if (code && STYLE_BY_CODE[Number(code[1])] !== racedStyle(preset)) dead.push(`${preset.name}|${key}`)
+            }
+        }
+        return dead.sort()
+    }
+
+    // Left as shipped on purpose: the card's style and the preset's skill style disagree, so the pick
+    // is a preset decision (its race strategy or its skill style), not this data rule.
+    const STYLE_CONFLICTS: Record<string, string> = {
+        "Mayano Top Gun|Trackblazer|A Grandkid Get-Together": "Default races the card's Front style; the preset buys Pace skills",
+        "El Condor Pasa (Kukulkan Warrior)|Trackblazer|A Grandkid Get-Together": "Default races the card's Late style; the preset buys Pace skills",
+        "Oguri Cap|Trackblazer|A Grandkid Get-Together": "Default races the card's Late style; the preset buys Pace skills",
+        "Oguri Cap (Ashen Miracle)|Trackblazer|A Grandkid Get-Together": "Default races the card's Late style; the preset buys Pace skills",
+        "Tamamo Cross|Trackblazer|A Grandkid Get-Together": "Default races the card's End style; the preset buys Pace skills",
+        "Special Week|Trackblazer|A Grandkid Get-Together": "Default races the card's Late style; the preset buys Pace skills",
+        "Special Week (Hopp'n♪Happy Heart)|Trackblazer|A Grandkid Get-Together": "Default races the card's Late style; the preset buys Pace skills",
+    }
+
+    it("takes the stat option wherever the hint is dead, apart from the listed style conflicts", () => {
+        expect(deadHintPicks()).toEqual(Object.keys(STYLE_CONFLICTS).sort())
+    })
+
+    it("reads the hints and styles it judges from the game data", () => {
+        expect(trackblazer["A Grandkid Get-Together"]).toEqual(["Stamina +6\nWit +6", "Prepared to Pass hint +1"])
+        expect((skills as any)["Prepared to Pass"].condition).toContain("running_style==2")
+        expect((skills as any)["Fast-Paced"].condition).toContain("running_style==1")
+        expect((skills as any)["Front Runner Straightaways ○"].condition).toContain("running_style==1")
+        const nishino = characterPresets.find((p) => p.name === "Nishino Flower" && p.scenario === "Trackblazer")!
+        expect(racedStyle(nishino)).toBe("pace_chaser")
+        const seiun = characterPresets.find((p) => p.name === "Seiun Sky" && p.scenario === "Trackblazer")!
+        expect(racedStyle(seiun)).toBe("front_runner")
+        expect(presetCard("Agnes Digital")?.outfit).toBe("[Full-Color Fangirling]")
+        expect(presetCard("Ines Fujin")?.runningStyle).toBe(1)
     })
 })
