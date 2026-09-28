@@ -49,6 +49,7 @@ import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.types.TrackblazerShopList
 import com.steve1316.uma_android_automation.types.Trainee
 import com.steve1316.uma_android_automation.utils.ScrollListEntry
+import com.steve1316.uma_android_automation.utils.StatusBoard
 import org.json.JSONArray
 import org.opencv.core.Point
 
@@ -560,6 +561,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         // Edge case: if there is only 1 turn left before a mandatory race, we can safely race
         // even if it would exceed the limit.
         val turnsRemaining = game.imageUtils.determineTurnsRemainingBeforeNextGoal()
+        StatusBoard.goal(date.day, turnsRemaining)
         val onlyOneTurnLeft = turnsRemaining == 1
 
         // Late December is the last racing opportunity before a mandatory goal race, so ignore the limit.

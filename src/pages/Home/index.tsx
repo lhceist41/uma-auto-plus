@@ -26,7 +26,7 @@ import { deriveInGameName, deriveExcludeOutfits } from "../../lib/rotationSnapsh
 import { presetObjectiveOf } from "../../lib/adaptiveSkillPolicy"
 import { presetMoodFloorOf } from "../../lib/moodFloorPolicy"
 import { GRAND_CONCERT_KEY, GRAND_CONCERT_WARNING, isGrandConcert, scenarioCapabilities } from "../../lib/scenarioKey"
-import { presentQueueProgress, type QueueProgressEvent } from "../../lib/queueProgressPresentation"
+import { presentQueueProgress, restoredQueueProgress, type QueueProgressEvent } from "../../lib/queueProgressPresentation"
 import { interruptedBannerReport, lastSessionCardVisible, parseLastSession, type LastSessionView } from "../../lib/queueReportPresentation"
 import { collectPreflightWarnings, readPreflightProbes, shouldShowPreflight, type PreflightItem } from "../../lib/preflightWarnings"
 import { accessibilityRepairStatus } from "../../lib/accessibilityRepairStatus"
@@ -201,6 +201,13 @@ const Home = () => {
             .catch(() => {})
     }, [StartModule])
 
+    /** Shows the running queue's last progress line again after this screen was re-created. Called on mount and on every return to the app. */
+    const refreshQueueProgress = useCallback(() => {
+        StartModule.getLastQueueProgress()
+            .then((raw: unknown) => setQueueProgress((shown) => restoredQueueProgress(shown, raw)))
+            .catch(() => {})
+    }, [StartModule])
+
     /** Re-reads whether the bot may repair its own accessibility service. Called on mount and on every return to the app. */
     const refreshSecureSettingsGrant = useCallback(() => {
         readPreflightProbes(StartModule)
@@ -309,6 +316,7 @@ const Home = () => {
         getVersion()
         fetchDeviceMetrics()
         refreshSessionState()
+        refreshQueueProgress()
         refreshInterruptedQueue()
         refreshLastSession()
         refreshSecureSettingsGrant()
@@ -336,10 +344,13 @@ const Home = () => {
     // Start/Stop follows the native armed and running state on every return to the app too.
     useEffect(() => {
         const subscription = AppState.addEventListener("change", (nextState) => {
-            if (nextState === "active") refreshSessionState()
+            if (nextState === "active") {
+                refreshSessionState()
+                refreshQueueProgress()
+            }
         })
         return () => subscription.remove()
-    }, [refreshSessionState])
+    }, [refreshSessionState, refreshQueueProgress])
 
     const repairStatus = useMemo(() => (secureSettingsGrant === undefined ? null : accessibilityRepairStatus(secureSettingsGrant, Application.applicationId)), [secureSettingsGrant])
 

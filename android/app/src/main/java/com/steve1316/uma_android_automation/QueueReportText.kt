@@ -165,6 +165,11 @@ private fun singleRunText(code: String?): ReportText =
         else -> ReportText("Run ended", "The run ended.", null)
     }
 
+/** One finished run's reason in the same words, for a run that did not finish its career; null for a finished career. */
+internal fun runWords(code: String?): String? = if (code == "TASK_RESULT_COMPLETE") null else singleRunText(code).reason
+
+internal fun runEndedWithError(code: String?): Boolean = code in RUN_ERROR_CODES
+
 private fun runs(n: Int) = if (n == 1) "1 run" else "$n runs"
 
 /**

@@ -95,6 +95,10 @@ object DebugTestGate {
         started = true
     }
 
+    /** Start was pressed and the overlay button has not been tapped yet. */
+    @Synchronized
+    fun isPending(): Boolean = expected != null && started
+
     @Synchronized
     fun cancel() {
         expected?.second?.cancel()

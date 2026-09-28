@@ -99,3 +99,35 @@ export function presentQueueProgress(event: QueueProgressEvent): QueueProgressPr
             return { kind: "running", title: "Queue status unavailable", isTerminal: false }
     }
 }
+
+/**
+ * Reads one `RunQueueProgress` payload (the event's JSON text, or the same text Kotlin keeps for the
+ * running session) into an event, or null when it is missing or not that shape.
+ */
+export function parseQueueProgress(raw: unknown): QueueProgressEvent | null {
+    if (typeof raw !== "string") return null
+    let payload: any
+    try {
+        payload = JSON.parse(raw)
+    } catch {
+        return null
+    }
+    if (!payload || typeof payload !== "object" || typeof payload.status !== "string") return null
+    return {
+        currentRun: payload.currentRun,
+        totalRuns: payload.totalRuns,
+        status: payload.status,
+        resultCode: payload.resultCode,
+        message: payload.message,
+    }
+}
+
+/**
+ * The progress line to show after re-reading the running session's last payload: a live event already
+ * on screen wins, and a finished queue's last event is not brought back.
+ */
+export function restoredQueueProgress(shown: QueueProgressEvent | null, raw: unknown): QueueProgressEvent | null {
+    if (shown) return shown
+    const event = parseQueueProgress(raw)
+    return event && !presentQueueProgress(event).isTerminal ? event : null
+}

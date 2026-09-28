@@ -92,6 +92,7 @@ import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.PersistentSkipStateLog
 import com.steve1316.uma_android_automation.utils.ProgressEvent
 import com.steve1316.uma_android_automation.utils.ProgressTracker
+import com.steve1316.uma_android_automation.utils.StatusBoard
 import com.steve1316.uma_android_automation.utils.pillVisible
 import com.steve1316.uma_android_automation.utils.classifyPersistentSkip
 import com.steve1316.uma_android_automation.utils.ScrollList
@@ -1008,6 +1009,7 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     fun recordEnteredRace(entry: EnteredRace) {
         pendingEnteredRace.record(entry)
+        StatusBoard.raceRun()
     }
 
     /**
@@ -3487,6 +3489,8 @@ abstract class Campaign(game: Game) : Task(game) {
             }
         }
 
+        publishTurnStatus()
+
         // Start this decision turn with no held entered-race fact. Only a race that completes inside
         // executeAction below may write one, and the trace emit right after reads it; clearing here
         // ensures a completed-race fact from a prior turn can never attach to this turn's trace.
@@ -3502,6 +3506,13 @@ abstract class Campaign(game: Game) : Task(game) {
         // recorded inside executeAction land in the block. emit() is idempotent per turn.
         decisionTracer?.emit()
         return actionExecuted
+    }
+
+    /** Hands this turn's already-read values to the dashboard, as plain copies. */
+    private fun publishTurnStatus() {
+        val (year, label) = StatusBoard.dateLabels(date.year.longName, date.phase.name, date.month.name, date.day)
+        val stats = listOf(trainee.stats.speed, trainee.stats.stamina, trainee.stats.power, trainee.stats.guts, trainee.stats.wit)
+        StatusBoard.careerTurn(trainee.name.ifEmpty { null }, game.scenario, year, label, date.day, stats, trainee.energy, trainee.mood.name)
     }
 
     /**
@@ -3822,6 +3833,7 @@ abstract class Campaign(game: Game) : Task(game) {
         if (!gateOpen || currentGoalSnapshot?.turn == date.day) return
 
         val turnsRemaining = game.imageUtils.determineTurnsRemainingBeforeNextGoal()
+        StatusBoard.goal(date.day, turnsRemaining)
         currentGoalSnapshot =
             if (turnsRemaining < 0) {
                 // OCR failed - inert for the whole turn, never a guess.
@@ -4030,6 +4042,16 @@ abstract class Campaign(game: Game) : Task(game) {
      * @return True if the action was executed successfully, false otherwise.
      */
     open fun executeAction(action: MainScreenAction, bIsScheduledRaceDay: Boolean): Boolean {
+        StatusBoard.action(
+            when (action) {
+                MainScreenAction.RACE -> "race"
+                MainScreenAction.TRAIN -> "training"
+                MainScreenAction.REST -> "rest"
+                MainScreenAction.RECOVER_MOOD, MainScreenAction.DATE -> "recreation"
+                MainScreenAction.NONE -> "other"
+            },
+            null,
+        )
         // Force Wit Training if requested by the pre-summer logic.
         if (action == MainScreenAction.TRAIN && bForcedWitTraining) {
             MessageLog.i(TAG, "[INFO] Executing forced Wit training as requested by pre-summer logic.")
@@ -4362,6 +4384,7 @@ abstract class Campaign(game: Game) : Task(game) {
 
             if (checkTrainingEventScreen()) {
                 // If the bot is at the Training Event screen, that means there are selectable options for rewards.
+                StatusBoard.action("event", null)
                 handleTrainingEvent()
             } else if (checkMandatoryRacePrepScreen()) {
                 // If the bot is at the Main screen with the button to select a race visible, that means the bot needs to handle a mandatory race.

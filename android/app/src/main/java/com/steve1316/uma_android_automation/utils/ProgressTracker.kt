@@ -131,6 +131,11 @@ internal object ProgressTracker {
 
     @Volatile
     private var lastProgressMs = 0L
+
+    /** The wall-clock time of [lastProgressMs], for the dashboard; 0 before the first window. */
+    @Volatile
+    var lastProgressWallMs = 0L
+        private set
     private val actions = AtomicLong()
     private val captures = AtomicInteger()
     private val watchdogRungs = AtomicInteger()
@@ -142,6 +147,7 @@ internal object ProgressTracker {
             val now = clock()
             window = ProgressWindow(now)
             lastProgressMs = now
+            lastProgressWallMs = System.currentTimeMillis()
             actionsAtLastSample = actions.get()
         }
         watchdogRungs.set(0)
@@ -153,6 +159,7 @@ internal object ProgressTracker {
             val now = clock()
             window.progress(event, now)
             lastProgressMs = now
+            lastProgressWallMs = System.currentTimeMillis()
         }
     }
 

@@ -137,7 +137,7 @@ These are off unless you turn them on:
 - **Trainee rotation** in the run queue, described above.
 - **Build-Aware Launch (advanced).** Verifies the live borrow list, deck and launch screen against what it intended to run before it spends TP, and refuses to start rather than guess. There is no fallback: if it cannot confirm the state, no career starts. It can pair with an optional [Windows companion](tools/host-companion/README.md) that adds one bounded list swipe as a last-resort recovery step and can never select a card or start a career.
 - **Support-card dating schedule.** With a Group support card in the deck, takes recreation outings on the turns that advance the card's outing chain.
-- **Remote Log Viewer** for watching the bot's log from a browser on your PC over ADB (`adb forward`), **screen recording** for capturing a problem, and the **YOLOv8 stat-gain detector** for reading training gains with an on-device vision model instead of template matching.
+- **Remote Log Viewer** with a dashboard, for watching your queue and the bot's log from a browser on your PC over ADB (`adb forward`; see [Watch your queue from your PC](#watch-your-queue-from-your-pc)), **screen recording** for capturing a problem, and the **YOLOv8 stat-gain detector** for reading training gains with an on-device vision model instead of template matching.
 
 **Record Decision Data** is on by default: the bot keeps a small per-turn record of its decisions so a career can be reviewed later. It is stored on your device only, nothing is uploaded, and it is independent of Debug Mode. Turn it off to minimize storage use.
 
@@ -181,6 +181,18 @@ Alternatively, do the same from a computer:
 > [!TIP]
 > Use 1.0 scaling and an 80% confidence threshold for best results in 1080p natively.
 
+## Watch your queue from your PC
+
+The Remote Log Viewer includes a dashboard: the run the queue is on, what the bot is doing, the career's date, stats, energy and mood, each run's result, and how the session ended. It is off by default and only shows what the bot is doing. It can be opened only on the device itself or from a computer connected to it over ADB, and only while Start is on.
+
+1. In UMA Auto+, open **Settings**, then **Debug Settings**, and turn on **Enable Remote Log Viewer**. Note the **Server Port** (9000 by default).
+2. Press **Start**. The access code appears under **Remote Log Viewer** on the Debug Settings page. It changes each time you press Start.
+3. Connect ADB from your PC:
+   - **MuMu:** find the ADB port in MuMu's settings (for example `16384`), then run `adb connect 127.0.0.1:<that port>`.
+   - **Phone:** connect by USB with USB debugging on, or pair with Wireless debugging.
+4. Run `adb forward tcp:9000 tcp:9000`, with your Server Port on both sides.
+5. Open `http://localhost:9000` in your PC's browser and enter the access code. **Full log** on the dashboard opens the log viewer.
+
 ## To view logs in real time
 
 The bot also writes a log file per career, which is the thing to attach to a bug report (see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)). To watch live instead:
@@ -221,6 +233,7 @@ This project is a React Native frontend configured via Expo over a Kotlin and Op
 10. [Ktor - For the Remote Log Viewer](https://ktor.io/)
 11. [YOLOv8 - Object detection](https://github.com/ultralytics/ultralytics)
 12. [ONNX Runtime - Lightweight engine for executing the YOLOv8 model](https://onnxruntime.ai/)
+13. The dashboard's fonts, bundled with their licences under the SIL Open Font License 1.1: [Barlow Condensed](https://github.com/jpt/barlow), [Plus Jakarta Sans](https://github.com/tokotype/PlusJakartaSans) and [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono)
 
 # License
 

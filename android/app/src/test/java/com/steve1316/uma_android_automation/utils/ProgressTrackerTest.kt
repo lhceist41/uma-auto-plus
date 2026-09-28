@@ -217,8 +217,8 @@ class ProgressTrackerTest {
         @Test
         fun `each recorded run closes its window, and a session starts a fresh one`() {
             val start = source("$main/StartModule.kt")
-            assertTrue(start.contains("val progress = ProgressTracker.endWindow()\n        ledger.addRun(\n            RunRecord("))
-            assertTrue(start.contains("careerEnd?.turn, retried, progress, careerEnd?.traineeName),"))
+            assertTrue(start.contains("val progress = ProgressTracker.endWindow()\n        val record =\n            RunRecord("))
+            assertTrue(start.contains("careerEnd?.turn, retried, progress, careerEnd?.traineeName)\n        ledger.addRun(record)"))
             assertTrue(start.contains("SessionTally.reset()\n                ProgressTracker.beginWindow()"))
         }
     }
@@ -237,6 +237,8 @@ class ProgressTrackerTest {
                 ),
                 Regex("^override fun getSourceBitmap\\(saveImage: Boolean\\): Bitmap = super\\.getSourceBitmap\\(saveImage\\)\\.also \\{ ProgressTracker\\.noteCapture\\(it\\) \\}$"),
                 Regex("^val progress = ProgressTracker\\.endWindow\\(\\)$"),
+                // The dashboard's STATUS shows when progress last happened; the server thread decides nothing with it.
+                Regex("^val lastProgress = ProgressTracker\\.lastProgressWallMs\\.takeIf \\{ it > 0 \\}$"),
             )
 
         @Test
@@ -250,7 +252,7 @@ class ProgressTrackerTest {
             val uses =
                 lines.filter { (_, l) -> !l.startsWith("//") && !l.startsWith("*") && !l.startsWith("/**") && !l.startsWith("import ") }
                     .filter { (_, l) -> Regex("\\b(ProgressTracker|ProgressEvent|ProgressWindow)\\b|\\bframeHash\\(").containsMatchIn(l) }
-            assertEquals(11, uses.size, uses.joinToString("\n"))
+            assertEquals(12, uses.size, uses.joinToString("\n"))
             for ((file, line) in uses) assertTrue(allowed.any { it.matches(line) }, "$file: $line")
         }
 

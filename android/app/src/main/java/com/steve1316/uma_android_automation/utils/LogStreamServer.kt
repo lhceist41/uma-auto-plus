@@ -10,6 +10,9 @@ import android.util.Log
 import com.steve1316.automation_library.data.SharedData
 import com.steve1316.automation_library.events.JSEvent
 import com.steve1316.automation_library.utils.MessageLog
+import com.steve1316.uma_android_automation.DebugTestGate
+import com.steve1316.uma_android_automation.SessionTally
+import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.bot.LaunchIdentityGate
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -23,6 +26,7 @@ import io.ktor.server.cio.CIOApplicationEngine
 import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.response.header
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
@@ -38,6 +42,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.greenrobot.eventbus.EventBus
@@ -106,8 +111,33 @@ object LogStreamServer {
     /** WebSocket close code for a missing or wrong access code (4000-4999 are application codes). */
     private const val AUTH_FAILED_CLOSE_CODE: Short = 4401
 
-    /** How long a new WebSocket client has to send its `AUTH:` frame. */
-    private const val AUTH_TIMEOUT_MS = 10_000L
+    /** How long a new WebSocket client has to send its `AUTH:` frame; shortened only by tests. */
+    @Volatile
+    internal var authTimeoutMs = 10_000L
+
+    /** STATUS goes out at most this often, and only when it changed. */
+    private const val STATUS_INTERVAL_MS = 1_000L
+
+    /**
+     * The only files the dashboard route serves: the request name is looked up here and never becomes a
+     * path, so nothing outside `assets/dashboard/` can be named.
+     */
+    private val DASHBOARD_FILES: Map<String, ContentType> =
+        mapOf(
+            "dashboard.css" to ContentType.Text.CSS,
+            "logic.js" to ContentType.Text.JavaScript,
+            "app.js" to ContentType.Text.JavaScript,
+        ) +
+            listOf(
+                "barlow-condensed/barlow-condensed-latin-600-normal.woff2",
+                "barlow-condensed/barlow-condensed-latin-700-normal.woff2",
+                "barlow-condensed/barlow-condensed-latin-ext-600-normal.woff2",
+                "barlow-condensed/barlow-condensed-latin-ext-700-normal.woff2",
+                "plus-jakarta-sans/plus-jakarta-sans-latin-wght-normal.woff2",
+                "plus-jakarta-sans/plus-jakarta-sans-latin-ext-wght-normal.woff2",
+                "jetbrains-mono/jetbrains-mono-latin-wght-normal.woff2",
+                "jetbrains-mono/jetbrains-mono-latin-ext-wght-normal.woff2",
+            ).associate { "fonts/$it" to ContentType("font", "woff2") }
 
     /** Mute flag to stop broadcasting logs after a run concludes. */
     @Volatile
@@ -332,6 +362,69 @@ object LogStreamServer {
         return "0.0.0.0"
     }
 
+    /** Serves one shipped dashboard file, `assets/dashboard/[name]`, where [name] is `index.html` or a key of [DASHBOARD_FILES], never request text. */
+    private suspend fun serveDashboardFile(
+        call: ApplicationCall,
+        name: String,
+        contentType: ContentType,
+    ) {
+        try {
+            val bytes = applicationContext?.assets?.open("dashboard/$name")?.use { it.readBytes() } ?: throw IOException("no application context")
+            call.respondBytes(bytes, contentType)
+        } catch (e: IOException) {
+            Log.e(TAG, "[ERROR] serveDashboardFile:: Failed to load a dashboard file: ${e.message}")
+            call.respondText("Failed to load the dashboard.", ContentType.Text.Plain, HttpStatusCode.InternalServerError)
+        }
+    }
+
+    /** STATUS from the published snapshot and the session's lock-free counters; reads no settings, file or log. */
+    internal fun statusJson(): JSONObject {
+        val t = SessionTally
+        val restores = t.tpRestores.map { it.rung }
+        // The counters the Home card adds up (recoveriesLine in queueReportPresentation.ts), so the two never disagree.
+        val accessibility = t.accessibilityRebinds.get() + t.accessibilityRewrites.get()
+        val tally =
+            StatusBoard.Tally(
+                tpItems = restores.count { it == "Toughness 30" || it == "Star Fruit" },
+                tpCarats = restores.count { it == "Carats" },
+                accessibility = accessibility,
+                relaunches = t.gameRelaunches.get(),
+                lobby = t.lobbyReentries.get(),
+                connection = t.connectionHolds.get(),
+                recoveriesTotal = accessibility + t.gameRelaunches.get() + t.lobbyReentries.get() + t.connectionHolds.get(),
+            )
+        val lastProgress = ProgressTracker.lastProgressWallMs.takeIf { it > 0 }
+        return StatusBoard.statusJson(
+            StatusBoard.snapshot(),
+            System.currentTimeMillis(),
+            StartModule.isSessionActive(),
+            DebugTestGate.isPending(),
+            lastProgress,
+            tally,
+        )
+    }
+
+    /** Sends STATUS to every connected client when it changed, at most once per [STATUS_INTERVAL_MS]. */
+    private suspend fun pushStatusWhileRunning() {
+        var lastSent: String? = null
+        while (true) {
+            delay(STATUS_INTERVAL_MS)
+            if (clients.isEmpty()) continue
+            val status = statusJson()
+            val unchanged = status.apply { remove("sentAt") }.toString()
+            if (unchanged == lastSent) continue
+            lastSent = unchanged
+            val frame = status.put("sentAt", System.currentTimeMillis()).toString()
+            for (client in clients) {
+                try {
+                    client.send(Frame.Text(frame))
+                } catch (_: Exception) {
+                    clients.remove(client)
+                }
+            }
+        }
+    }
+
     /**
      * Serves the log_viewer.html page from the Android assets directory.
      *
@@ -373,10 +466,10 @@ object LogStreamServer {
 
     /**
      * Accepts the session only if its first frame is `AUTH:<code>` with this session's code, answering `AUTH_OK`.
-     * Otherwise, or with no frame within [AUTH_TIMEOUT_MS], closes with [AUTH_FAILED_CLOSE_CODE] having sent nothing.
+     * Otherwise, or with no frame within [authTimeoutMs], closes with [AUTH_FAILED_CLOSE_CODE] having sent nothing.
      */
     private suspend fun authenticate(session: DefaultWebSocketServerSession): Boolean {
-        val frame = withTimeoutOrNull(AUTH_TIMEOUT_MS) { session.incoming.receiveCatching().getOrNull() }
+        val frame = withTimeoutOrNull(authTimeoutMs) { session.incoming.receiveCatching().getOrNull() }
         val text = (frame as? Frame.Text)?.readText()
         if (text != null && text.startsWith(AUTH_PREFIX) && accessCodeMatches(text.substring(AUTH_PREFIX.length))) {
             session.send(Frame.Text("AUTH_OK"))
@@ -401,6 +494,8 @@ object LogStreamServer {
             Log.w(TAG, "[WARN] handleWebSocketSession:: Closed a WebSocket client without the access code.")
             return
         }
+
+        session.send(Frame.Text(statusJson().toString()))
 
         // Enqueue the registration action to the background worker.
         actionChannel?.send(LogAction.NewClient(session))
@@ -949,6 +1044,7 @@ object LogStreamServer {
                 }
             }
         }
+        serverScope?.launch { pushStatusWhileRunning() }
 
         // Bind to loopback only: the viewer serves the full log and on-demand screenshots, so it must never be
         // exposed to the LAN. Reach it from a dev machine with: adb forward tcp:<port> tcp:<port>, then open
@@ -968,11 +1064,32 @@ object LogStreamServer {
 
                 routing {
                     // Serve the main log viewer HTML application.
+                    // The dashboard, its files, and the full log viewer.
                     get("/") {
-                        serveLogViewerHtml(call, applicationContext)
+                        serveDashboardFile(call, "index.html", ContentType.Text.Html)
                     }
                     get("/index.html") {
+                        serveDashboardFile(call, "index.html", ContentType.Text.Html)
+                    }
+                    get("/dashboard/{name...}") {
+                        val name = call.parameters.getAll("name")?.joinToString("/")
+                        val contentType = DASHBOARD_FILES[name]
+                        if (name == null || contentType == null) {
+                            call.respondText("Not found", ContentType.Text.Plain, HttpStatusCode.NotFound)
+                            return@get
+                        }
+                        serveDashboardFile(call, name, contentType)
+                    }
+                    get("/log") {
                         serveLogViewerHtml(call, applicationContext)
+                    }
+
+                    get("/status") {
+                        if (!accessCodeMatches(call.request.headers[ACCESS_CODE_HEADER])) {
+                            call.respondText("Unauthorized", ContentType.Text.Plain, HttpStatusCode.Unauthorized)
+                            return@get
+                        }
+                        call.respondText(statusJson().toString(), ContentType.Application.Json)
                     }
 
                     // Provide a health check endpoint for monitoring the server status.

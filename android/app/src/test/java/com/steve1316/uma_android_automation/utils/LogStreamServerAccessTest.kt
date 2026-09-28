@@ -2,6 +2,7 @@ package com.steve1316.uma_android_automation.utils
 
 import com.steve1316.automation_library.events.JSEvent
 import com.steve1316.uma_android_automation.bot.LaunchIdentityGate
+import org.json.JSONObject
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -70,7 +71,7 @@ class LogStreamServerAccessTest {
                 assertTrue(history.contains("history canary") && history.contains("live canary before auth"), "the authenticated client gets the history")
 
                 log("10:00:02.000 [INFO] live canary after auth")
-                assertTrue(viewer.next()?.contains("live canary after auth") == true, "the authenticated client gets live lines")
+                assertTrue(viewer.nextNonStatus()?.contains("live canary after auth") == true, "the authenticated client gets live lines")
                 assertNull(silent.next(700), "the waiting client still gets nothing")
             }
         }
@@ -129,7 +130,7 @@ class LogStreamServerAccessTest {
             assertEquals("AUTH_OK", client.next())
             client.untilHistoryDone()
             client.sendText("CMD:ARM_LAUNCH_MISMATCH_TEST")
-            assertEquals("ACK:ARM_LAUNCH_MISMATCH_TEST", client.next())
+            assertEquals("ACK:ARM_LAUNCH_MISMATCH_TEST", client.nextNonStatus())
         }
         LaunchIdentityGate.setExpected(1, "h")
         assertEquals(LaunchIdentityGate.Verdict.MISMATCH, LaunchIdentityGate.verdict(1, "h"), "an authenticated command arms the gate")
@@ -150,7 +151,7 @@ class LogStreamServerAccessTest {
                 "0.0.0.0:$port",
             )
         for (host in badHosts) {
-            for (path in listOf("/", "/index.html", "/health", "/logs/download")) {
+            for (path in listOf("/", "/index.html", "/health", "/logs/download", "/log", "/status", "/dashboard/app.js", "/dashboard/fonts/jetbrains-mono/jetbrains-mono-latin-wght-normal.woff2")) {
                 assertEquals(403, http(path, host, code).first, "$path with Host $host")
             }
             WsClient(port, host).use { assertEquals(403, it.status, "WebSocket upgrade with Host $host") }
@@ -216,6 +217,143 @@ class LogStreamServerAccessTest {
         assertTrue(page.contains("event.code === 4401"), "a rejected code is asked for again")
         for (store in listOf("localStorage", "sessionStorage", "document.cookie")) {
             assertFalse(page.lines().any { it.contains(store) && it.contains("accessCode") }, "the code must not be written to $store")
+        }
+    }
+
+    @Test
+    fun `a client that sends nothing is closed with 4401 when the auth time runs out`() {
+        LogStreamServer.authTimeoutMs = 300
+        try {
+            WsClient(port).use { silent ->
+                assertEquals(101, silent.status)
+                assertEquals("CLOSE:4401", silent.next(3000), "closed without a frame, having sent nothing")
+            }
+        } finally {
+            LogStreamServer.authTimeoutMs = 10_000L
+        }
+    }
+
+    @Test
+    fun `STATUS follows AUTH_OK, and GET status needs the code`() {
+        StatusBoard.reset()
+        StatusBoard.queueProgress(2, 4, "navigating", "{\"message\":\"raw text\"}")
+        WsClient(port).use { client ->
+            client.sendText("AUTH:$code")
+            assertEquals("AUTH_OK", client.next())
+            val first = JSONObject(client.next())
+            assertEquals("status", first.getString("type"), "STATUS is the first frame after AUTH_OK")
+            assertEquals(2, first.getJSONObject("run").getInt("current"))
+        }
+        assertEquals(401, http("/status", "127.0.0.1:$port").first)
+        assertEquals(401, http("/status", "127.0.0.1:$port", "wrong").first)
+        val (ok, body) = http("/status", "127.0.0.1:$port", code)
+        assertEquals(200, ok)
+        assertEquals("status", JSONObject(body).getString("type"))
+        assertFalse(body.contains("raw text") || body.contains(code), "no queue message and no access code in STATUS")
+        StatusBoard.reset()
+    }
+
+    @Test
+    fun `the dashboard route serves only its shipped files and never a path from the request`() {
+        // 500 here means the name passed the allowlist and only the Android assets are missing from the JVM.
+        val served =
+            listOf(
+                "/",
+                "/index.html",
+                "/log",
+                "/dashboard/dashboard.css",
+                "/dashboard/logic.js",
+                "/dashboard/app.js",
+                "/dashboard/fonts/barlow-condensed/barlow-condensed-latin-700-normal.woff2",
+            )
+        for (path in served) {
+            assertEquals(500, http(path, "localhost:$port").first, "served: $path")
+        }
+        val refused =
+            listOf(
+                "/dashboard/../log_viewer.html",
+                "/dashboard/..%2flog_viewer.html",
+                "/dashboard/%2e%2e/%2e%2e/log_viewer.html",
+                "/dashboard/fonts/barlow-condensed/OFL.txt",
+                "/dashboard/fonts/PROVENANCE.md",
+                "/dashboard/index.html",
+                "/dashboard/",
+                "/dashboard/app.js/",
+                "/dashboard/APP.JS",
+                "/dashboard/fonts",
+                "/log_viewer.html",
+                "/dashboard/settings.db",
+            )
+        for (path in refused) {
+            val status = http(path, "localhost:$port").first
+            assertTrue(status == 404 || status == 400, "refused: $path (got $status)")
+        }
+        val server = sourceFile("utils/LogStreamServer.kt").readText().replace("\r\n", "\n")
+        val serve = server.substring(server.indexOf("private suspend fun serveDashboardFile("), server.indexOf("internal fun statusJson()"))
+        assertTrue(serve.contains("open(\"dashboard/\$name\")"), "the asset path is built from the allowlisted name only")
+        val route = server.substring(server.indexOf("get(\"/dashboard/{name...}\")"), server.indexOf("get(\"/log\")"))
+        assertTrue(route.indexOf("DASHBOARD_FILES[name]") in 0 until route.indexOf("serveDashboardFile("), "the name is looked up before anything is served")
+    }
+
+    @Test
+    fun `STATUS is pushed only when it changed, at most once per second`() {
+        StatusBoard.reset()
+        WsClient(port).use { client ->
+            client.sendText("AUTH:$code")
+            assertEquals("AUTH_OK", client.next())
+            client.untilHistoryDone()
+            assertTrue(countStatusFrames(client, 2600) <= 1, "a quiet status is not resent (at most the poller's first look)")
+
+            val publisher =
+                Thread {
+                    var n = 0
+                    while (!Thread.currentThread().isInterrupted) {
+                        StatusBoard.queueProgress(++n, 1000, "navigating", "{}")
+                        try {
+                            Thread.sleep(40)
+                        } catch (_: InterruptedException) {
+                            return@Thread
+                        }
+                    }
+                }
+            publisher.start()
+            try {
+                val pushed = countStatusFrames(client, 2600)
+                assertTrue(pushed in 2..3, "changes every 40 ms go out once per second, not per change (got $pushed)")
+            } finally {
+                publisher.interrupt()
+                publisher.join()
+            }
+        }
+        StatusBoard.reset()
+    }
+
+    @Test
+    fun `STATUS leaves only through the authenticated WebSocket or the code-gated status route`() {
+        val server = sourceFile("utils/LogStreamServer.kt").readText().replace("\r\n", "\n")
+        val uses = Regex("statusJson\\(\\)").findAll(server).map { it.range.first }.filter { !server.startsWith("internal fun statusJson()", it - "internal fun ".length) }.toList()
+        assertEquals(3, uses.size, "the frame after AUTH_OK, the change push, and GET /status")
+
+        val session = server.substring(server.indexOf("private suspend fun handleWebSocketSession("), server.indexOf("private suspend fun handleNewClientAction("))
+        assertTrue(session.indexOf("if (!authenticate(session))") in 0 until session.indexOf("statusJson()"), "after the access code only")
+        val push = server.substring(server.indexOf("private suspend fun pushStatusWhileRunning("), server.indexOf("private suspend fun serveLogViewerHtml("))
+        assertTrue(push.contains("for (client in clients)") && !push.contains("session"), "pushed only to authenticated, synced clients")
+        val route = server.substring(server.indexOf("get(\"/status\")"), server.indexOf("get(\"/health\")"))
+        assertTrue(route.indexOf("accessCodeMatches(") in 0 until route.indexOf("statusJson()"), "GET /status checks the code first")
+        assertTrue(server.contains("private val clients") && Regex("clients\\.add\\(").findAll(server).count() == 1, "one place adds a client, after its history sync")
+    }
+
+    private fun countStatusFrames(
+        client: WsClient,
+        windowMs: Long,
+    ): Int {
+        val end = System.currentTimeMillis() + windowMs
+        var count = 0
+        while (true) {
+            val left = end - System.currentTimeMillis()
+            if (left <= 0) return count
+            val frame = client.next(left.toInt()) ?: return count
+            if (isStatus(frame)) count++
         }
     }
 
@@ -319,6 +457,14 @@ class LogStreamServerAccessTest {
             }
         }
 
+        /** The next frame that is not a STATUS push, which the server may interleave at any time. */
+        fun nextNonStatus(timeoutMs: Int = 5000): String? {
+            while (true) {
+                val frame = next(timeoutMs) ?: return null
+                if (!isStatus(frame)) return frame
+            }
+        }
+
         /** Reads up to `HISTORY_DONE` and returns everything received on the way. */
         fun untilHistoryDone(): String {
             val seen = StringBuilder()
@@ -347,3 +493,6 @@ class LogStreamServerAccessTest {
         throw IllegalStateException("could not locate the Kotlin source root from ${System.getProperty("user.dir")}")
     }
 }
+
+/** A STATUS frame; parsed, because the JVM's org.json does not keep key order. */
+private fun isStatus(frame: String) = frame.startsWith("{") && runCatching { JSONObject(frame).optString("type") }.getOrNull() == "status"

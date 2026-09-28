@@ -41,6 +41,7 @@ import com.steve1316.uma_android_automation.bot.shouldClearVerdictForRunResult
 import com.steve1316.uma_android_automation.utils.KeepScreenOn
 import com.steve1316.uma_android_automation.utils.LogStreamServer
 import com.steve1316.uma_android_automation.utils.ProgressTracker
+import com.steve1316.uma_android_automation.utils.StatusBoard
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.Kord
 import kotlinx.coroutines.runBlocking
@@ -930,6 +931,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             // Start the remote log stream server if enabled in settings.
             val enableRemoteLogViewer = SettingsHelper.getBooleanSetting("debug", "enableRemoteLogViewer", false)
             Log.d(TAG, "Able to start Remote Log Viewer in start(): $enableRemoteLogViewer")
+            StatusBoard.reset()
             if (enableRemoteLogViewer) {
                 val port = SettingsHelper.getIntSetting("debug", "remoteLogViewerPort", 9000)
                 LogStreamServer.start(context, port)
@@ -1032,6 +1034,16 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         map.putBoolean("armed", MediaProjectionService.isRunning)
         map.putBoolean("botRunning", BotService.isRunning)
         promise.resolve(map)
+    }
+
+    /**
+     * The last `RunQueueProgress` payload of the running session, or null. Home reads it on mount and
+     * on return to the foreground, so a screen re-created mid-queue shows its progress line again
+     * instead of waiting for the next event.
+     */
+    @ReactMethod
+    fun getLastQueueProgress(promise: Promise) {
+        promise.resolve(if (isSessionActive()) StatusBoard.snapshot().lastQueueProgress else null)
     }
 
     /** Clears any persisted interrupted queue state. */
@@ -1307,6 +1319,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 if (resultCode != null) put("resultCode", resultCode)
                 if (message != null) put("message", message)
             }
+        StatusBoard.queueProgress(currentRun, totalRuns, status, payload.toString())
         sendEvent("RunQueueProgress", payload.toString())
     }
 
@@ -1690,9 +1703,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         val stash = CareerEndStash(lastCareerEndSeq, lastCareerEndTrainee, lastCareerEndScenario, lastCareerEndOutcome, lastCareerEndTurn, lastCareerEndTraineeName)
         val careerEnd = careerEndForRun(careerEndSeqBeforeRun, stash)
         val progress = ProgressTracker.endWindow()
-        ledger.addRun(
-            RunRecord(run, startedAt, System.currentTimeMillis(), code.name, careerEnd?.trainee, careerEnd?.scenario, careerEnd?.outcome, careerEnd?.turn, retried, progress, careerEnd?.traineeName),
-        )
+        val record =
+            RunRecord(run, startedAt, System.currentTimeMillis(), code.name, careerEnd?.trainee, careerEnd?.scenario, careerEnd?.outcome, careerEnd?.turn, retried, progress, careerEnd?.traineeName)
+        ledger.addRun(record)
+        StatusBoard.runRecorded(record)
         ledger.errorPosted = lastRunPostedException
         QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
     }
@@ -1730,7 +1744,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 )
             val verdict = classifySessionEnd(facts)
             if (verdict.end == SessionEnd.STOPPED_BY_BOT) ledger.reasonKey = queueStopKey.orEmpty()
-            ledger.report(verdict, System.currentTimeMillis()).also { QueueLedger.finishSession(context, it) }
+            ledger.report(verdict, System.currentTimeMillis()).also { QueueLedger.finishSession(context, it) }.also { StatusBoard.sessionEnded(it) }
         } catch (e: Throwable) {
             Log.w(TAG, "Failed to write the queue report: ${e.message}")
             null
@@ -1816,6 +1830,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 accessibilityHaltKey = null
                 SessionTally.reset()
                 ProgressTracker.beginWindow()
+                StatusBoard.reset(ledger.startedAt)
                 launchSnapshotReadStarted = false
                 launchSnapshotReadFinished = false
 

@@ -58,6 +58,7 @@ import com.steve1316.uma_android_automation.types.TrackDistance
 import com.steve1316.uma_android_automation.types.TrackSurface
 import com.steve1316.uma_android_automation.utils.CustomImageUtils.RaceDetails
 import com.steve1316.uma_android_automation.utils.ScrollList
+import com.steve1316.uma_android_automation.utils.StatusBoard
 import net.ricecode.similarity.JaroWinklerStrategy
 import net.ricecode.similarity.StringSimilarityServiceImpl
 import org.json.JSONArray
@@ -1383,6 +1384,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     fun checkEligibilityToStartExtraRacingProcess(ignoreFanRequirement: Boolean = false): Boolean {
         MessageLog.i(TAG, "\n[RACE] Now determining eligibility to start the extra racing process...")
         val turnsRemaining = game.imageUtils.determineTurnsRemainingBeforeNextGoal()
+        StatusBoard.goal(campaign.date.day, turnsRemaining)
         MessageLog.i(TAG, "[RACE] Current remaining number of days before the next mandatory race: $turnsRemaining.")
 
         // Cache goal-deadline proximity while the OCR anchor (the energy label) is still visible.

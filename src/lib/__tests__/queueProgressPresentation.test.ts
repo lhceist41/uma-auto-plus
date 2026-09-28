@@ -1,4 +1,4 @@
-import { presentQueueProgress } from "../queueProgressPresentation"
+import { presentQueueProgress, restoredQueueProgress } from "../queueProgressPresentation"
 
 describe("presentQueueProgress", () => {
     it("presents a fresh queue starting", () => {
@@ -181,5 +181,26 @@ describe("presentQueueProgress", () => {
     it("clamps a negative or non-finite count to zero", () => {
         const p = presentQueueProgress({ currentRun: -3, totalRuns: NaN, status: "starting" })
         expect(p.title).toBe("Run 0/0 - Starting...")
+    })
+})
+
+describe("restoring the progress line after Home is re-created", () => {
+    const running = JSON.stringify({ currentRun: 2, totalRuns: 4, status: "navigating" })
+
+    it("shows the running session's last event when nothing is on screen", () => {
+        expect(restoredQueueProgress(null, running)).toEqual({ currentRun: 2, totalRuns: 4, status: "navigating", resultCode: undefined, message: undefined })
+        expect(presentQueueProgress(restoredQueueProgress(null, running)!).title).toBe("Run 2/4 - Navigating...")
+    })
+
+    it("keeps a live event that is already on screen", () => {
+        const live = { currentRun: 3, totalRuns: 4, status: "starting" }
+        expect(restoredQueueProgress(live, running)).toBe(live)
+    })
+
+    it("does not bring back a finished queue or a missing or malformed payload", () => {
+        expect(restoredQueueProgress(null, JSON.stringify({ currentRun: 4, totalRuns: 4, status: "queueComplete" }))).toBeNull()
+        for (const raw of [null, undefined, "", "not json", "{}", "[]", JSON.stringify({ currentRun: 1 }), 42]) {
+            expect(restoredQueueProgress(null, raw)).toBeNull()
+        }
     })
 })

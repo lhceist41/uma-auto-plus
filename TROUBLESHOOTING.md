@@ -91,6 +91,13 @@ The first time, before anything is downloaded, the dialog asks you to allow UMA 
 
 The update is refused while the bot is running, while Start is armed (the overlay button is showing), or while an interrupted queue is saved. Press Stop first, or resume or discard the saved queue on Home.
 
+## Watch your queue from your PC
+
+The dashboard is part of the Remote Log Viewer, which is off by default. It only shows what the bot is doing, and it can be opened only on the device or from a computer connected to it over ADB. The steps are in [README.md](README.md#watch-your-queue-from-your-pc): turn on **Enable Remote Log Viewer** under **Settings**, **Debug Settings**, press **Start**, connect ADB (on MuMu, `adb connect 127.0.0.1:<the ADB port from MuMu's settings>`; on a phone, USB or Wireless debugging), run `adb forward tcp:9000 tcp:9000` with your Server Port on both sides, open `http://localhost:9000`, and enter the access code shown on the Debug Settings page.
+
+- **The page does not open.** The viewer runs only after Start is pressed and stops when you press Stop. Run `adb forward` again after MuMu or the phone restarts, and use the same port on both sides.
+- **The code is refused.** The code changes each time you press Start; enter the one shown now on the Debug Settings page.
+
 ## Reporting a bug
 
 A useful report includes a **log file**. The bot writes one per career to:

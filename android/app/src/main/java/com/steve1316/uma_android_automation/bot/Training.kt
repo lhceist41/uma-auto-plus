@@ -35,6 +35,7 @@ import com.steve1316.uma_android_automation.types.DateYear
 import com.steve1316.uma_android_automation.types.GameDate
 import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
+import com.steve1316.uma_android_automation.utils.StatusBoard
 import org.opencv.core.Point
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -3287,6 +3288,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         }
 
     fun executeTraining(trainingSelected: StatName?) {
+        StatusBoard.action("training", trainingSelected?.name)
         MessageLog.v(TAG, "[TRAINING] Now starting process to execute $trainingSelected training...")
 
         if (trainingSelected != null) {

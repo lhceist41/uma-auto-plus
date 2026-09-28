@@ -364,7 +364,7 @@ const DebugSettings = () => {
 
                             <Separator style={{ marginVertical: 16 }} />
 
-                            <CustomTitle title="Remote Log Viewer" description="Watch the bot's log live in a browser on this device, or on a computer connected over ADB." />
+                            <CustomTitle title="Remote Log Viewer" description="Watch the bot's progress and log live in a browser on this device, or on a computer connected over ADB." />
 
                             <CustomCheckbox
                                 searchId="settings-enable-remote-log-viewer"
@@ -376,7 +376,7 @@ const DebugSettings = () => {
                                     })
                                 }}
                                 label="Enable Remote Log Viewer"
-                                description="Starts a log viewer on this device when the bot runs. To open it on a computer, use the adb forward command below, then the localhost address."
+                                description="Starts a dashboard and log viewer on this device when the bot runs. To open it on a computer, use the adb forward command below, then the localhost address. The dashboard only shows what the bot is doing."
                             />
 
                             <View style={bsc.settings.debug.enableRemoteLogViewer ? {} : { display: "none" }}>
@@ -423,6 +423,7 @@ const DebugSettings = () => {
                                         >
                                             http://localhost:{bsc.settings.debug.remoteLogViewerPort}
                                         </Text>
+                                        <Text style={[styles.infoDescription, { marginTop: 8 }]}>It opens the dashboard; its Full log link opens the log viewer.</Text>
                                         <Text style={[styles.infoDescription, { marginTop: 8 }]}>Access code (it changes each time you press Start):</Text>
                                         {viewerAccessCode ? (
                                             <Text selectable style={[styles.infoLabel, { marginTop: 8 }]}>
