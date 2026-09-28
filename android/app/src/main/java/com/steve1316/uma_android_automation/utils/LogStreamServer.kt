@@ -316,9 +316,7 @@ object LogStreamServer {
     /** Resets the mute flag and clears the buffer to allow log broadcasting for a new run. */
     fun resetMute() {
         Log.i(TAG, "[LogStreamServer] Log stream mute reset requested.")
-        serverScope?.launch {
-            actionChannel?.send(LogAction.Clear)
-        }
+        actionChannel?.trySend(LogAction.Clear)
     }
 
     /**
@@ -988,10 +986,10 @@ object LogStreamServer {
     private fun broadcast(message: String) {
         if (!isRunning) return
 
-        // Enqueue the broadcast action to ensure it is processed chronologically relative to new sessions.
-        serverScope?.launch {
-            actionChannel?.send(LogAction.Broadcast(message))
-        }
+        // Enqueued on the caller's thread, so lines keep their order and a line logged before a client
+        // authenticates is in that client's history. A coroutine launched per line could run late and
+        // reorder both. The channel is unlimited, so trySend never blocks the logging thread.
+        actionChannel?.trySend(LogAction.Broadcast(message))
     }
 
     /**

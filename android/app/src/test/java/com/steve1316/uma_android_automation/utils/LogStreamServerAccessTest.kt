@@ -539,6 +539,32 @@ class LogStreamServerAccessTest {
     }
 
     @Test
+    fun `lines logged just before a client connects are all in its history, in their order`() {
+        val lines = (1..300).map { "10:00:06.000 [INFO] burst-$it-end" }
+        lines.forEach { log(it) }
+        WsClient(port).use { client ->
+            client.sendText("AUTH:$code")
+            assertEquals("AUTH_OK", client.next())
+            val history = client.untilHistoryDone()
+            val positions = lines.map { history.indexOf(it.substringAfter("[INFO] ")) }
+            assertEquals(emptyList<String>(), lines.filterIndexed { i, _ -> positions[i] < 0 }, "every line logged before the client joined is in its history")
+            assertEquals(positions.sorted(), positions, "in the order they were logged")
+        }
+    }
+
+    @Test
+    fun `log lines and history clears are queued on the calling thread, in call order`() {
+        val server = sourceFile("utils/LogStreamServer.kt").readText().replace("\r\n", "\n")
+        for (declaration in listOf("private fun broadcast(", "fun resetMute(")) {
+            val start = server.indexOf(declaration)
+            val body = server.substring(start, server.indexOf("\n    }\n", start))
+            assertTrue(body.contains("actionChannel?.trySend("), "$declaration queues its action directly")
+            assertFalse(body.contains("serverScope?.launch"), "$declaration launches no coroutine per call, which could run late and reorder")
+        }
+        assertTrue(server.contains("actionChannel = Channel(Channel.UNLIMITED)"), "an unlimited channel, so trySend never drops for lack of room")
+    }
+
+    @Test
     fun `a flood of stop commands changes the state once and logs once`() =
         withQueue {
             val before = stopCommandLogLines()
