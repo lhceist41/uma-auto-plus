@@ -301,7 +301,11 @@ class QueueReportTextTest {
                     .map { it.name }
                     .toList()
             assertEquals(listOf("StartModule.kt"), users)
-            assertEquals(1, Regex("NotificationUtils\\.").findAll(startModule).count())
+            // The end notifier, and the live progress line it stops first.
+            assertEquals(2, Regex("NotificationUtils\\.").findAll(startModule).count())
+            assertEquals(1, Regex("update = \\{ NotificationUtils\\.updateNotification\\(").findAll(startModule).count())
+            val progressLine = Regex("ProgressNotification\\.begin\\(captureRunning = \\{ MediaProjectionService\\.isRunning \\}\\) \\{ text ->\\s+NotificationUtils\\.updateNotification\\(")
+            assertEquals(1, progressLine.findAll(startModule).count())
             assertEquals(1, Regex("\\bExceptionEvent\\(").findAll(startModule).count(), "only the game thread's own post")
         }
     }

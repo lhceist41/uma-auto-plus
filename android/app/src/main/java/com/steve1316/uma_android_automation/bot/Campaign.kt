@@ -92,6 +92,7 @@ import com.steve1316.uma_android_automation.types.Trainee
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
 import com.steve1316.uma_android_automation.utils.PersistentSkipStateLog
 import com.steve1316.uma_android_automation.utils.ProgressEvent
+import com.steve1316.uma_android_automation.utils.ProgressNotification
 import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.StatusBoard
 import com.steve1316.uma_android_automation.utils.pillVisible
@@ -3517,6 +3518,7 @@ abstract class Campaign(game: Game) : Task(game) {
         val (year, label) = StatusBoard.dateLabels(date.year.longName, date.phase.name, date.month.name, date.day)
         val stats = listOf(trainee.stats.speed, trainee.stats.stamina, trainee.stats.power, trainee.stats.guts, trainee.stats.wit)
         StatusBoard.careerTurn(trainee.name.ifEmpty { null }, game.scenario, year, label, date.day, stats, trainee.energy, trainee.mood.name)
+        ProgressNotification.refresh()
     }
 
     /**

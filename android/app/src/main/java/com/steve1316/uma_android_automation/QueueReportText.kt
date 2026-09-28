@@ -170,6 +170,49 @@ internal fun runWords(code: String?): String? = if (code == "TASK_RESULT_COMPLET
 
 internal fun runEndedWithError(code: String?): Boolean = code in RUN_ERROR_CODES
 
+private const val BETWEEN_RUNS = "Between runs"
+
+private const val NOT_RUNNING = "The bot is not running"
+
+/**
+ * The one table from a status key to its words. The dashboard page's `statusPhase` holds the same
+ * keys and labels (pinned by a test). An unknown key reads "Working", never a guess.
+ */
+internal val STATUS_LABELS: Map<String, String> =
+    buildMap {
+        put("armed", "Ready: tap the start button in the game")
+        put("running", "Running")
+        for (key in listOf("completed", "navigating", "waiting", "starting", "resuming", "retrying")) put(key, BETWEEN_RUNS)
+        for (key in listOf("queueFailed", "queueHalted", "queueStopped", "queueComplete", "notRunning")) put(key, NOT_RUNNING)
+    }
+
+internal fun statusLabel(key: String?): String = STATUS_LABELS[key] ?: "Working"
+
+/**
+ * The notification's line while a session runs, e.g. "Run 2 of 4, Classic Year Late January". [date]
+ * is the game date the bot last read, or null. [runRecorded] is whether [run] is already among the
+ * session's finished runs: only then does a between-runs line say it ended (the queue also sends the
+ * run about to start, e.g. its first run on a cold start). Built from the status key and numbers only:
+ * never a queue event's message, a TP amount or a time estimate.
+ */
+internal fun progressLineText(status: String?, run: Int?, total: Int?, date: String?, runRecorded: Boolean = false): String {
+    val label = statusLabel(status)
+    val position = if (run != null && total != null && run > 0 && total > 0) "run $run of $total" else null
+    return when {
+        label == BETWEEN_RUNS && position != null -> if (runRecorded) "$label: $position ended" else "$label: starting $position"
+        status == "running" -> listOfNotNull(position?.replaceFirstChar(Char::uppercase), date ?: label).joinToString(", ")
+        position != null -> "${position.replaceFirstChar(Char::uppercase)}, $label"
+        else -> label
+    }
+}
+
+/** The line is posted only for a live or between-runs key, or an unknown one; never before the overlay tap or once the queue has ended. */
+internal fun postsProgressLine(status: String?): Boolean = status != "armed" && statusLabel(status) != NOT_RUNNING
+
+/** At most one post per [minIntervalMs], and never the text already showing. */
+internal fun progressLineDue(text: String, lastText: String?, now: Long, lastPostAt: Long?, minIntervalMs: Long = 30_000L): Boolean =
+    text != lastText && (lastPostAt == null || now - lastPostAt >= minIntervalMs)
+
 private fun runs(n: Int) = if (n == 1) "1 run" else "$n runs"
 
 /**

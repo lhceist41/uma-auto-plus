@@ -40,6 +40,7 @@ import com.steve1316.uma_android_automation.bot.shouldClearSparkTransactionForRu
 import com.steve1316.uma_android_automation.bot.shouldClearVerdictForRunResult
 import com.steve1316.uma_android_automation.utils.KeepScreenOn
 import com.steve1316.uma_android_automation.utils.LogStreamServer
+import com.steve1316.uma_android_automation.utils.ProgressNotification
 import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.StatusBoard
 import dev.kord.common.entity.Snowflake
@@ -1328,6 +1329,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 if (message != null) put("message", message)
             }
         StatusBoard.queueProgress(currentRun, totalRuns, status, payload.toString())
+        ProgressNotification.refresh()
         sendEvent("RunQueueProgress", payload.toString())
     }
 
@@ -1794,6 +1796,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
      * dismiss), whose cancel-all can run before that late post. Never throws.
      */
     private fun notifySessionEnd(libraryThread: Thread, report: QueueReport?) {
+        ProgressNotification.end()
         try {
             val text = queueReportText(report?.toJson())
             Thread {
@@ -1865,6 +1868,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 SessionTally.reset()
                 ProgressTracker.beginWindow()
                 StatusBoard.reset(ledger.startedAt)
+                ProgressNotification.begin(captureRunning = { MediaProjectionService.isRunning }) { text ->
+                    NotificationUtils.updateNotification(context, MainActivity::class.java, true, text)
+                }
                 launchSnapshotReadStarted = false
                 launchSnapshotReadFinished = false
 
