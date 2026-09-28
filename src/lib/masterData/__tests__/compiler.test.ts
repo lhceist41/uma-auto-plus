@@ -1,6 +1,7 @@
-import { readFileSync, mkdirSync, writeFileSync, rmSync } from "node:fs"
+import { readFileSync, mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs"
 import { execFileSync } from "node:child_process"
 import { createHash } from "node:crypto"
+import { tmpdir } from "node:os"
 import { join } from "node:path"
 import process from "node:process"
 import { compileMasterData } from "../compiler.ts"
@@ -11,7 +12,6 @@ import type { RawFamily, RawInput, MasterDataManifest } from "../types.ts"
 // babel/Hermes transform, so paths are resolved from cwd instead.
 const REPO_ROOT = process.cwd()
 const DATA_DIR = join(REPO_ROOT, "src/data")
-const HERE = join(REPO_ROOT, "src/lib/masterData/__tests__")
 
 // ---- Synthetic fixture builder ----
 
@@ -283,7 +283,12 @@ describe("compileMasterData - determinism", () => {
 
 describe("compile-master-data CLI", () => {
     const SCRIPT = join(REPO_ROOT, "scripts/compile-master-data.mjs")
-    const TMP = join(HERE, "__cli_tmp__")
+    // Outside the source tree: tests that walk src/ (settingsDbOwnership) must never meet a directory
+    // that appears and disappears under it while Jest runs files in parallel.
+    let TMP = ""
+    beforeAll(() => {
+        TMP = mkdtempSync(join(tmpdir(), "compile-master-data-"))
+    })
     const runCli = (args: string[]): { code: number; out: string } => {
         try {
             const out = execFileSync("node", [SCRIPT, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })
@@ -298,7 +303,9 @@ describe("compile-master-data CLI", () => {
         mkdirSync(join(TMP, "in"), { recursive: true })
         mkdirSync(join(TMP, "out"), { recursive: true })
     })
-    afterAll(() => rmSync(TMP, { recursive: true, force: true }))
+    afterAll(() => {
+        if (TMP) rmSync(TMP, { recursive: true, force: true })
+    })
 
     const writeSix = (dir: string, inputs: RawInput[]) => {
         const nameByFamily: Record<RawFamily, string> = { skills: "skills.json", races: "races.json", characters: "characters.json", supports: "supports.json", scenarios: "scenarios.json", objectives: "character_objectives.json" }
