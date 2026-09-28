@@ -29,9 +29,10 @@ particular, these survive a preset switch:
 - **Your skill-spend timing.** The threshold and on/off switch in Skill Settings are yours, not the
   preset's.
 - **Your device and display settings, and your own stop points.** The Wait Delay and Dialog Wait
-  Delay, the OCR confidence, automatic OCR retry and hidden OCR comparison results, the message log
-  and overlay display settings, Stop Before Finals, Stop At Date and its dates, Stop On Mandatory
-  Races, and the Crane Game attempt switch. A preset applied by hand or by a queue's trainee rotation
+  Delay, the OCR confidence, automatic OCR retry and hidden OCR comparison results, the YOLO Stat
+  Detection and Training Analysis Validation switches, the message log and overlay display settings,
+  Stop Before Finals, Stop At Date and its dates, Stop On Mandatory Races, and the Crane Game attempt
+  switch. A preset applied by hand or by a queue's trainee rotation
   leaves them as you set them, even if the preset lists a value for one of them.
 - **Your support-card and scenario event picks.** These depend on your deck, not on the trainee, so
   a preset switch keeps them, except the few Trackblazer scenario events a preset tunes for its

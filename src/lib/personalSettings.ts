@@ -1,6 +1,6 @@
 /**
  * The settings that belong to the player and the device, not to a trainee's build: device timing, OCR
- * tuning, on-screen display, and the player's own stop points. Every preset ships a value for each of
+ * tuning, on-screen display, how the bot reads the screen, and the player's own stop points. Every preset ships a value for each of
  * them, so a plain merge would reset a slow device's wait delay or switch Stop Before Finals off on
  * every apply and every queue rotation switch. Both paths call [keepPersonalSettings] after the
  * preset is merged, so the player's value always wins, even when a preset ships one.
@@ -13,6 +13,7 @@ export const PERSONAL_SETTINGS: Readonly<Record<string, readonly string[]>> = {
     general: ["waitDelay", "dialogWaitDelay", "enableStopBeforeFinals", "enableStopAtDate", "stopAtDates", "enableCraneGameAttempt"],
     racing: ["enableStopOnMandatoryRaces"],
     trainingEvent: ["ocrConfidence", "enableAutomaticOCRRetry", "enableHideOCRComparisonResults"],
+    training: ["enableYoloStatDetection", "enableTrainingAnalysisValidation"],
     misc: ["enableSettingsDisplay", "enableMessageIdDisplay", "messageLogFontSize", "overlayButtonSizeDP"],
 }
 

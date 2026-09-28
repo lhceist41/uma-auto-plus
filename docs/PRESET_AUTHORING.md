@@ -77,7 +77,8 @@ It is stamped on every apply precisely so a strict floor cannot carry over to th
   `src/lib/personalSettings.ts` lists them: `general.waitDelay`, `dialogWaitDelay`,
   `enableStopBeforeFinals`, `enableStopAtDate`, `stopAtDates` and `enableCraneGameAttempt`;
   `racing.enableStopOnMandatoryRaces`; `trainingEvent.ocrConfidence`, `enableAutomaticOCRRetry` and
-  `enableHideOCRComparisonResults`; and the `misc` display keys. Both the Home apply and the queue's
+  `enableHideOCRComparisonResults`; `training.enableYoloStatDetection` and
+  `enableTrainingAnalysisValidation`; and the `misc` display keys. Both the Home apply and the queue's
   rotation snapshots put the player's values back after the merge, so a value a preset ships for one
   of them has no effect. Add a key to that list only when it belongs to the device or the player
   and does not change how a career is played.

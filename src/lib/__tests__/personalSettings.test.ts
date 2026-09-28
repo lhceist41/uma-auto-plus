@@ -14,7 +14,7 @@ function personalPairs(): [string, string][] {
 
 /** A base whose every personal key holds the player's value, plus a stale value for one preset-owned key. */
 function playerBase(): any {
-    const base: any = { general: {}, racing: {}, trainingEvent: {}, misc: {}, skills: { skillPointCheck: 750, enableSkillPointCheck: false } }
+    const base: any = { general: {}, racing: {}, trainingEvent: {}, training: {}, misc: {}, skills: { skillPointCheck: 750, enableSkillPointCheck: false } }
     for (const [category, key] of personalPairs()) base[category][key] = SENTINEL
     return base
 }
@@ -25,6 +25,7 @@ describe("PERSONAL_SETTINGS", () => {
             general: ["waitDelay", "dialogWaitDelay", "enableStopBeforeFinals", "enableStopAtDate", "stopAtDates", "enableCraneGameAttempt"],
             racing: ["enableStopOnMandatoryRaces"],
             trainingEvent: ["ocrConfidence", "enableAutomaticOCRRetry", "enableHideOCRComparisonResults"],
+            training: ["enableYoloStatDetection", "enableTrainingAnalysisValidation"],
             misc: ["enableSettingsDisplay", "enableMessageIdDisplay", "messageLogFontSize", "overlayButtonSizeDP"],
         })
     })
@@ -47,7 +48,7 @@ describe("PERSONAL_SETTINGS", () => {
 
 describe("keepPersonalSettings", () => {
     it("puts back every personal key the preset overwrote", () => {
-        const merged: any = { general: {}, racing: {}, trainingEvent: {}, misc: {} }
+        const merged: any = { general: {}, racing: {}, trainingEvent: {}, training: {}, misc: {} }
         for (const [category, key] of personalPairs()) merged[category][key] = "preset-value"
         keepPersonalSettings(merged, playerBase())
         for (const [category, key] of personalPairs()) expect(merged[category][key]).toBe(SENTINEL)
@@ -108,7 +109,7 @@ describe("rotation snapshots keep the player's personal settings", () => {
         const personal = new Set(personalPairs().map(([category, key]) => `${category}.${key}`))
         const skipped = new Set(["general.scenario"])
         let checked = 0
-        for (const category of ["general", "racing", "trainingEvent"]) {
+        for (const category of ["general", "racing", "trainingEvent", "training"]) {
             for (const [key, value] of Object.entries((preset.settings as any)[category])) {
                 if (personal.has(`${category}.${key}`) || skipped.has(`${category}.${key}`)) continue
                 if (typeof value === "object" && value !== null) continue
