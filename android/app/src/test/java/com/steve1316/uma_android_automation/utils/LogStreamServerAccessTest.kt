@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.utils
 
 import com.steve1316.automation_library.events.JSEvent
+import com.steve1316.uma_android_automation.StartModule
 import com.steve1316.uma_android_automation.bot.LaunchIdentityGate
 import org.json.JSONObject
 import org.junit.jupiter.api.AfterEach
@@ -366,6 +367,135 @@ class LogStreamServerAccessTest {
             val frame = client.next(left.toInt()) ?: return count
             if (isStatus(frame)) count++
         }
+    }
+
+    /** A queue on run 2 of 4, with the session probe set as given; everything restored after [body]. */
+    private fun withQueue(
+        active: Boolean = true,
+        key: String = "starting",
+        body: () -> Unit,
+    ) {
+        val probe = LogStreamServer.sessionActive
+        StartModule.stopAfterCareerRequested = false
+        StatusBoard.reset(900L)
+        StatusBoard.queueProgress(2, 4, key, "{}", 1_000L)
+        LogStreamServer.sessionActive = { active }
+        try {
+            body()
+        } finally {
+            LogStreamServer.sessionActive = probe
+            StartModule.stopAfterCareerRequested = false
+            StatusBoard.reset()
+        }
+    }
+
+    /** Sends [frames] on an authenticated socket, then waits for the ARM command's ack, so every frame before it was handled. */
+    private fun sendAuthenticated(vararg frames: String) {
+        WsClient(port).use { client ->
+            client.sendText("AUTH:$code")
+            assertEquals("AUTH_OK", client.next())
+            client.untilHistoryDone()
+            for (frame in frames) client.sendText(frame)
+            client.sendText("CMD:ARM_LAUNCH_MISMATCH_TEST")
+            assertEquals("ACK:ARM_LAUNCH_MISMATCH_TEST", client.nextNonStatus())
+        }
+    }
+
+    @Test
+    fun `stop after this career is taken only on an authenticated socket`() =
+        withQueue {
+            WsClient(port).use { client ->
+                client.sendText(LogStreamServer.CMD_STOP_AFTER_CAREER)
+                assertEquals("CLOSE:4401", client.next(), "a command before the code closes the socket")
+            }
+            WsClient(port).use { client ->
+                client.sendText("AUTH:wrong")
+                assertEquals("CLOSE:4401", client.next())
+            }
+            assertEquals(401, http("/status?cmd=${LogStreamServer.CMD_STOP_AFTER_CAREER}", "127.0.0.1:$port").first)
+            assertEquals(200, http("/status", "127.0.0.1:$port", code).first)
+            assertFalse(StartModule.stopAfterCareerRequested, "nothing before auth, with a wrong code or over HTTP sets it")
+            sendAuthenticated(LogStreamServer.CMD_STOP_AFTER_CAREER)
+            assertTrue(StartModule.stopAfterCareerRequested, "accepted after AUTH_OK")
+            sendAuthenticated(LogStreamServer.CMD_CANCEL_STOP_AFTER_CAREER)
+            assertFalse(StartModule.stopAfterCareerRequested, "and cancelled")
+        }
+
+    @Test
+    fun `a malformed stop command changes nothing`() =
+        withQueue {
+            sendAuthenticated("CMD:STOP_AFTER_CAREER ", "cmd:stop_after_career", "CMD:STOP_AFTER_CAREER:1", "STOP_AFTER_CAREER", "CMD:STOP")
+            assertFalse(StartModule.stopAfterCareerRequested)
+        }
+
+    @Test
+    fun `a stop command while it is not offered changes nothing`() {
+        withQueue(active = false) {
+            sendAuthenticated(LogStreamServer.CMD_STOP_AFTER_CAREER)
+            assertFalse(StartModule.stopAfterCareerRequested, "no session")
+        }
+        for (key in listOf("navigating", "waiting")) {
+            withQueue(key = key) {
+                sendAuthenticated(LogStreamServer.CMD_STOP_AFTER_CAREER)
+                assertFalse(StartModule.stopAfterCareerRequested, key)
+            }
+        }
+        withQueue(key = "navigating") {
+            StartModule.stopAfterCareerRequested = true
+            sendAuthenticated(LogStreamServer.CMD_CANCEL_STOP_AFTER_CAREER)
+            assertTrue(StartModule.stopAfterCareerRequested, "a cancel is also refused past the stop point, as Home hides it")
+        }
+    }
+
+    @Test
+    fun `the request made on the dashboard is the one Home reads, and STATUS shows it`() =
+        withQueue {
+            WsClient(port).use { client ->
+                client.sendText("AUTH:$code")
+                assertEquals("AUTH_OK", client.next())
+                val first = JSONObject(client.next()).getJSONObject("session").getJSONObject("stopAfterCareer")
+                assertTrue(first.getBoolean("offered") && !first.getBoolean("requested"))
+                client.untilHistoryDone()
+                client.sendText(LogStreamServer.CMD_STOP_AFTER_CAREER)
+                var shown = false
+                repeat(10) {
+                    val frame = client.next(3000) ?: return@repeat
+                    if (isStatus(frame) && JSONObject(frame).getJSONObject("session").getJSONObject("stopAfterCareer").getBoolean("requested")) shown = true
+                    if (shown) return@repeat
+                }
+                assertTrue(shown, "the next STATUS says it is requested")
+            }
+            assertTrue(StartModule.stopAfterCareerRequested)
+            val start = sourceFile("StartModule.kt").readText().replace("\r\n", "\n")
+            assertTrue(start.contains("map.putBoolean(\"stopAfterCareer\", stopAfterCareerRequested)"), "Home reads this flag")
+            assertTrue(start.contains("fun setStopAfterCareer(requested: Boolean, promise: Promise) {\n        stopAfterCareerRequested = requested"), "Home sets this flag")
+        }
+
+    @Test
+    fun `an accepted command is logged once, after the request changed, naming the dashboard`() {
+        val server = sourceFile("utils/LogStreamServer.kt").readText().replace("\r\n", "\n")
+        val branch = server.substringAfter("val now = stopAfterCareerCommand(text, offered, StartModule.stopAfterCareerRequested)").substringBefore("\n                    }\n                }")
+        val set = branch.indexOf("StartModule.stopAfterCareerRequested = now")
+        val logged = branch.indexOf("MessageLog.i(TAG,")
+        assertTrue(set in 0 until logged, "the state changes first, then one line")
+        assertEquals(1, Regex("MessageLog\\.").findAll(branch).count())
+        assertTrue(branch.contains("from the dashboard"))
+        // The commands are read only inside the frame loop after authenticate(), never in a route.
+        val afterAuth = server.substringAfter("private suspend fun handleWebSocketSession(").substringBefore("private suspend fun handleNewClientAction(")
+        assertTrue(afterAuth.indexOf("if (!authenticate(session))") in 0 until afterAuth.indexOf("stopAfterCareerCommand(text,"))
+        val routes = server.substringAfter("routing {")
+        assertFalse(routes.contains("stopAfterCareer"), "no route reads or sets it")
+    }
+
+    @Test
+    fun `the command decision takes only the exact frames while offered, and only a change`() {
+        val stop = LogStreamServer.CMD_STOP_AFTER_CAREER
+        val cancel = LogStreamServer.CMD_CANCEL_STOP_AFTER_CAREER
+        assertEquals(true, LogStreamServer.stopAfterCareerCommand(stop, offered = true, requested = false))
+        assertEquals(false, LogStreamServer.stopAfterCareerCommand(cancel, offered = true, requested = true))
+        assertNull(LogStreamServer.stopAfterCareerCommand(stop, offered = false, requested = false))
+        assertNull(LogStreamServer.stopAfterCareerCommand(stop, offered = true, requested = true), "no change, no log")
+        assertNull(LogStreamServer.stopAfterCareerCommand("CMD:REFRESH_IMAGES", offered = true, requested = false))
     }
 
     private fun log(line: String) = LogStreamServer.onMessageLogEvent(JSEvent("MessageLog", line))

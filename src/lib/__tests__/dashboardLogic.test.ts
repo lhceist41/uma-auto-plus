@@ -628,3 +628,52 @@ test('non-finite numbers are treated as not available everywhere, never a concat
   assert.equal(logic.turnsUntilGoal('12', 2), null);
   assert.deepEqual(logic.buildStatRows({ speed: '197', stamina: 104, power: 122, guts: 138, wit: 96 })[0].value, null);
 });
+
+// ---------------- stop after this career ----------------
+
+const stopStatus = (stop, extra) => statusWith(Object.assign({ session: { startedAt: T - 60000, stopAfterCareer: stop } }, extra || {}));
+
+test('stop after this career: shown only when STATUS offers it on a live connection', () => {
+  const offered = logic.stopAfterCareerView(stopStatus({ requested: false, offered: true }), true, false);
+  assert.equal(offered.visible, true);
+  assert.equal(offered.buttonText, 'Stop after this career');
+  assert.equal(offered.buttonLabel, 'Stop the queue after this career');
+  assert.equal(offered.buttonCommand, null, 'a request goes through the confirmation, never straight out');
+  assert.equal(offered.confirmVisible, false);
+  for (const [status, connected, why] of [
+    [stopStatus({ requested: false, offered: false }), true, 'not offered'],
+    [stopStatus({ requested: true, offered: false }), true, 'requested but not offered'],
+    [stopStatus({ requested: false, offered: true }), false, 'disconnected'],
+    [stopStatus({ requested: false, offered: true }, { sessionActive: false }), true, 'no session'],
+    [statusWith({ session: { startedAt: T } }), true, 'an older producer without the field'],
+    [null, true, 'no STATUS yet'],
+  ]) {
+    assert.equal(logic.stopAfterCareerView(status, connected, false).visible, false, why);
+  }
+});
+
+test('stop after this career: confirm first, then the state comes from STATUS', () => {
+  const confirming = logic.stopAfterCareerView(stopStatus({ requested: false, offered: true }), true, true);
+  assert.equal(confirming.confirmVisible, true);
+  assert.equal(logic.STOP_AFTER_CAREER_COMMAND, 'CMD:STOP_AFTER_CAREER');
+  const requested = logic.stopAfterCareerView(stopStatus({ requested: true, offered: true }), true, true);
+  assert.equal(requested.buttonText, 'Cancel stop');
+  assert.equal(requested.buttonLabel, 'Cancel the stop after this career');
+  assert.equal(requested.buttonCommand, 'CMD:CANCEL_STOP_AFTER_CAREER', 'a cancel goes straight out');
+  assert.equal(requested.confirmVisible, false);
+  assert.equal(requested.note, 'The queue pauses once this career has finished.');
+});
+
+test('stop after this career: the page sends only on the authenticated socket, as text, with its own markup', () => {
+  const app = fs.readFileSync(path.join(ASSETS_DIR, 'dashboard', 'app.js'), 'utf8').replace(/\r\n/g, '\n');
+  assert.match(app, /function sendCommand\(command\) \{\n    if \(state\.ws && state\.authed && state\.connected\) state\.ws\.send\(command\);\n  \}/);
+  assert.match(app, /if \(view\.buttonCommand\) sendCommand\(view\.buttonCommand\);\n      else state\.stopConfirming = true;/);
+  assert.match(app, /state\.stopConfirming = false;\n      sendCommand\(L\.STOP_AFTER_CAREER_COMMAND\);/);
+  assert.equal((app.match(/sendCommand\(/g) || []).length, 3, 'the helper and its two callers only');
+  const html = fs.readFileSync(path.join(ASSETS_DIR, 'dashboard', 'index.html'), 'utf8');
+  for (const id of ['rc-stop-after', 'rc-stop-after-button', 'rc-stop-after-confirm', 'rc-stop-after-yes', 'rc-stop-after-no', 'rc-stop-after-note']) {
+    assert.ok(html.includes(`id="${id}"`), id);
+  }
+  assert.ok(html.includes('<div id="rc-stop-after" class="rc-stop-after" hidden>'), 'hidden until STATUS offers it');
+  assert.ok(html.includes("content=\"default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; base-uri 'none'; form-action 'self'\""), 'CSP unchanged');
+});

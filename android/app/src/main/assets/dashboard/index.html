@@ -199,6 +199,15 @@
         <span class="rc-info-label">NEXT</span>
         <span id="rc-session-next" class="rc-session-value">not available</span>
         <span class="rc-session-sub">after this career ends</span>
+        <div id="rc-stop-after" class="rc-stop-after" hidden>
+          <button type="button" id="rc-stop-after-button" class="rc-btn rc-stop-after-btn"></button>
+          <div id="rc-stop-after-confirm" class="rc-stop-after-confirm" hidden>
+            <span class="rc-session-sub">The bot finishes the career it is on, including its end steps, then pauses the queue. Pressing Start later continues with the next run.</span>
+            <button type="button" id="rc-stop-after-yes" class="rc-btn rc-stop-after-btn" aria-label="Confirm: stop the queue after this career">Stop after this career</button>
+            <button type="button" id="rc-stop-after-no" class="rc-btn rc-stop-after-btn" aria-label="Keep the queue going">Keep going</button>
+          </div>
+          <span id="rc-stop-after-note" class="rc-session-sub" role="status"></span>
+        </div>
       </div>
     </section>
   </div>

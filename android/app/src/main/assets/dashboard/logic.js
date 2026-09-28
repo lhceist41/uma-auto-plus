@@ -502,6 +502,33 @@
     };
   }
 
+  // "Stop after this career" from the dashboard: the same request Home makes.
+  // Shown only when STATUS says it is offered on a live connection; the
+  // request goes through a confirmation, a cancel does not. What it shows
+  // after a press comes from the next STATUS, never from the press itself.
+  var STOP_AFTER_CAREER_COMMAND = 'CMD:STOP_AFTER_CAREER';
+  var CANCEL_STOP_AFTER_CAREER_COMMAND = 'CMD:CANCEL_STOP_AFTER_CAREER';
+
+  function stopAfterCareerView(status, connected, confirming) {
+    var hidden = { visible: false, requested: false, buttonText: '', buttonLabel: '', buttonCommand: null, confirmVisible: false, note: '' };
+    var stop = status && status.sessionActive === true && status.session && status.session.stopAfterCareer;
+    if (!connected || !stop || stop.offered !== true) return hidden;
+    if (stop.requested === true) {
+      return {
+        visible: true, requested: true,
+        buttonText: 'Cancel stop', buttonLabel: 'Cancel the stop after this career',
+        buttonCommand: CANCEL_STOP_AFTER_CAREER_COMMAND, confirmVisible: false,
+        note: 'The queue pauses once this career has finished.',
+      };
+    }
+    return {
+      visible: true, requested: false,
+      buttonText: 'Stop after this career', buttonLabel: 'Stop the queue after this career',
+      buttonCommand: null, confirmVisible: confirming === true,
+      note: '',
+    };
+  }
+
   return {
     ACCENT: ACCENT,
     STAT_NAMES: STAT_NAMES,
@@ -535,5 +562,7 @@
     totalTpRestores: totalTpRestores,
     totalRecoveries: totalRecoveries,
     viewModel: viewModel,
+    stopAfterCareerView: stopAfterCareerView,
+    STOP_AFTER_CAREER_COMMAND: STOP_AFTER_CAREER_COMMAND,
   };
 });

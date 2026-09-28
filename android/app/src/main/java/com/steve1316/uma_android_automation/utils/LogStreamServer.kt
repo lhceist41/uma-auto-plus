@@ -118,6 +118,32 @@ object LogStreamServer {
     /** STATUS goes out at most this often, and only when it changed. */
     private const val STATUS_INTERVAL_MS = 1_000L
 
+    /** The dashboard's "Stop after this career" and "Cancel stop", accepted only on an authenticated socket. */
+    internal const val CMD_STOP_AFTER_CAREER = "CMD:STOP_AFTER_CAREER"
+    internal const val CMD_CANCEL_STOP_AFTER_CAREER = "CMD:CANCEL_STOP_AFTER_CAREER"
+
+    /** Whether a bot session is running, for the stop's offer rule; replaced only by tests. */
+    @Volatile
+    internal var sessionActive: () -> Boolean = { StartModule.isSessionActive() }
+
+    /**
+     * The request state a stop command sets, or null to ignore it: an unknown frame, a command while
+     * the stop is not offered, or one that changes nothing.
+     */
+    internal fun stopAfterCareerCommand(
+        text: String,
+        offered: Boolean,
+        requested: Boolean,
+    ): Boolean? {
+        val wanted =
+            when (text) {
+                CMD_STOP_AFTER_CAREER -> true
+                CMD_CANCEL_STOP_AFTER_CAREER -> false
+                else -> return null
+            }
+        return wanted.takeIf { offered && it != requested }
+    }
+
     /**
      * The only files the dashboard route serves: the request name is looked up here and never becomes a
      * path, so nothing outside `assets/dashboard/` can be named.
@@ -397,10 +423,11 @@ object LogStreamServer {
         return StatusBoard.statusJson(
             StatusBoard.snapshot(),
             System.currentTimeMillis(),
-            StartModule.isSessionActive(),
+            sessionActive(),
             DebugTestGate.isPending(),
             lastProgress,
             tally,
+            StartModule.stopAfterCareerRequested,
         )
     }
 
@@ -516,6 +543,14 @@ object LogStreamServer {
                         LaunchIdentityGate.armForcedMismatchForTest()
                         Log.i(TAG, "[TEST] Armed the next launch-identity verdict for a forced mismatch (validation hook).")
                         session.send(Frame.Text("ACK:ARM_LAUNCH_MISMATCH_TEST"))
+                    } else {
+                        // The same request Home sets; the next STATUS shows it, nothing else answers.
+                        val offered = StatusBoard.stopAfterCareerOffered(StatusBoard.snapshot(), sessionActive())
+                        val now = stopAfterCareerCommand(text, offered, StartModule.stopAfterCareerRequested)
+                        if (now != null) {
+                            StartModule.stopAfterCareerRequested = now
+                            MessageLog.i(TAG, if (now) "[QUEUE] Stop after this career requested from the dashboard." else "[QUEUE] Stop after this career cancelled from the dashboard.")
+                        }
                     }
                 }
             }

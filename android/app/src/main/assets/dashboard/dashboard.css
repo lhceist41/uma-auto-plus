@@ -686,6 +686,20 @@ button {
 .rc-log-head { display: flex; align-items: center; gap: 12px; }
 .rc-log-hint { font-size: 12px; color: var(--rc-text-dim); }
 .rc-log-spacer { flex-grow: 1; }
+.rc-stop-after { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.rc-stop-after-confirm { display: flex; flex-direction: column; gap: 6px; }
+.rc-stop-after-btn {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--rc-line-strong);
+  background: var(--rc-bg);
+  color: var(--rc-text);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .rc-log-toggle {
   height: 44px;
   padding: 0 16px;

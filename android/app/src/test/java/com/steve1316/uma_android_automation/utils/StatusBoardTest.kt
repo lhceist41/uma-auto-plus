@@ -80,7 +80,8 @@ class StatusBoardTest {
             setOf("trainee", "scenario", "action", "date", "course", "goal", "stats", "energy", "mood", "racesRun"),
             keysOf(s.getJSONObject("career")),
         )
-        assertEquals(setOf("startedAt", "tpRestores", "recoveries"), keysOf(s.getJSONObject("session")))
+        assertEquals(setOf("startedAt", "tpRestores", "recoveries", "stopAfterCareer"), keysOf(s.getJSONObject("session")))
+        assertEquals(setOf("requested", "offered"), keysOf(s.getJSONObject("session").getJSONObject("stopAfterCareer")))
         assertEquals(setOf("items", "carats"), keysOf(s.getJSONObject("session").getJSONObject("tpRestores")))
         assertEquals(setOf("total", "accessibility", "relaunches", "lobby", "connection"), keysOf(s.getJSONObject("session").getJSONObject("recoveries")))
         for (leak in listOf("raw exception text", "secret", "message", "resultCode", "tpSpent", "tp_spent", "resultCode")) {
@@ -409,5 +410,35 @@ class StatusBoardTest {
             dir = dir?.parentFile
         }
         throw IllegalStateException("could not locate the Kotlin source root from ${System.getProperty("user.dir")}")
+    }
+
+    @Test
+    fun `stop after this career is offered for a career starting, playing, retried or ending, with a run after it`() {
+        fun offered(key: String?, current: Int = 2, total: Int = 4, active: Boolean = true): Boolean {
+            StatusBoard.reset(900L)
+            if (key != null) StatusBoard.queueProgress(current, total, key, "{}", 1_000L)
+            return StatusBoard.stopAfterCareerOffered(StatusBoard.snapshot(), active)
+        }
+        for (key in listOf("starting", "resuming", "retrying", "completed")) assertTrue(offered(key), key)
+        StatusBoard.reset(900L)
+        StatusBoard.queueProgress(2, 4, "starting", "{}", 1_000L)
+        turn()
+        assertTrue(StatusBoard.stopAfterCareerOffered(StatusBoard.snapshot(), true), "a career turn (running)")
+        for (key in listOf("navigating", "waiting", "queueComplete", "stoppedAfterCareer", "someFutureKey")) assertFalse(offered(key), key)
+        assertFalse(offered("starting", current = 4, total = 4), "the last run just finishes the queue")
+        assertFalse(offered("starting", active = false), "no session")
+        assertFalse(offered(null), "a single run sends no queue events")
+    }
+
+    @Test
+    fun `STATUS carries the request as it stands and whether it is offered`() {
+        StatusBoard.reset(900L)
+        StatusBoard.queueProgress(2, 4, "starting", "{}", 1_000L)
+        val requested = StatusBoard.statusJson(StatusBoard.snapshot(), 5_000L, true, false, null, tally, stopAfterCareerRequested = true)
+        val stop = requested.getJSONObject("session").getJSONObject("stopAfterCareer")
+        assertTrue(stop.getBoolean("requested") && stop.getBoolean("offered"))
+        StatusBoard.queueProgress(2, 4, "navigating", "{}", 2_000L)
+        val between = status().getJSONObject("session").getJSONObject("stopAfterCareer")
+        assertFalse(between.getBoolean("requested") || between.getBoolean("offered"))
     }
 }

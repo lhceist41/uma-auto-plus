@@ -173,6 +173,24 @@ internal object StatusBoard {
 
     private val TERMINAL_KEYS = setOf("queueComplete", "queueStopped", "queueHalted", "queueFailed", "stoppedAfterCareer")
 
+    /**
+     * The keys for which "Stop after this career" is offered: a career starting, being played,
+     * retried or finishing. Home's rule on the same queue events (`offersStopAfterCareer`); `running`
+     * is the per-turn key only STATUS carries. Not while navigating or waiting between runs: the queue
+     * has passed its stop point, so the request would land after the next career.
+     */
+    private val STOP_AFTER_CAREER_KEYS = setOf("running", "starting", "resuming", "retrying", "completed")
+
+    /** Whether the running queue can take "Stop after this career" now: a queued run with a run after it. */
+    fun stopAfterCareerOffered(
+        s: Snapshot,
+        sessionActive: Boolean,
+    ): Boolean {
+        val current = s.runCurrent ?: return false
+        val total = s.runTotal ?: return false
+        return sessionActive && (s.statusKey ?: "running") in STOP_AFTER_CAREER_KEYS && current < total
+    }
+
     /** The display labels of a GameDate's parts, e.g. "Junior Year" and "Late January"; the finale turns have their own names. */
     fun dateLabels(
         yearName: String,
@@ -302,6 +320,7 @@ internal object StatusBoard {
         armed: Boolean,
         lastProgressAt: Long?,
         tally: Tally,
+        stopAfterCareerRequested: Boolean = false,
     ): JSONObject {
         val key =
             when {
@@ -330,6 +349,7 @@ internal object StatusBoard {
                 } else {
                     JSONObject()
                         .put("startedAt", s.sessionStartedAt)
+                        .put("stopAfterCareer", JSONObject().put("requested", stopAfterCareerRequested).put("offered", stopAfterCareerOffered(s, sessionActive)))
                         .put("tpRestores", JSONObject().put("items", tally.tpItems).put("carats", tally.tpCarats))
                         .put(
                             "recoveries",

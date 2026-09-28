@@ -57,6 +57,7 @@
     selectedRunN: null,
     lastAnnouncedAction: null,
     lastRenderedPhase: null,
+    stopConfirming: false,
   };
 
   function setText(el, text) {
@@ -763,6 +764,29 @@
     var vm = currentViewModel();
     applyViewModel(vm);
     state.lastRenderedPhase = vm.phase;
+    renderStopAfterCareer();
+  }
+
+  // ---------------- stop after this career ----------------
+
+  function stopAfterCareerView() {
+    return L.stopAfterCareerView(state.lastGoodStatus, state.connected, state.stopConfirming);
+  }
+
+  function renderStopAfterCareer() {
+    var view = stopAfterCareerView();
+    if (!view.visible || view.requested) state.stopConfirming = false;
+    els.stopAfter.hidden = !view.visible;
+    setText(els.stopAfterButton, view.buttonText);
+    els.stopAfterButton.setAttribute('aria-label', view.buttonLabel);
+    els.stopAfterButton.hidden = view.confirmVisible;
+    els.stopAfterConfirm.hidden = !view.confirmVisible;
+    setText(els.stopAfterNote, view.note);
+  }
+
+  // Only on the authenticated socket; the next STATUS shows what happened.
+  function sendCommand(command) {
+    if (state.ws && state.authed && state.connected) state.ws.send(command);
   }
 
   function tick() {
@@ -837,6 +861,12 @@
     els.sessionTime = byId('rc-session-time');
     els.sessionTimeSub = byId('rc-session-time-sub');
     els.sessionNext = byId('rc-session-next');
+    els.stopAfter = byId('rc-stop-after');
+    els.stopAfterButton = byId('rc-stop-after-button');
+    els.stopAfterConfirm = byId('rc-stop-after-confirm');
+    els.stopAfterYes = byId('rc-stop-after-yes');
+    els.stopAfterNo = byId('rc-stop-after-no');
+    els.stopAfterNote = byId('rc-stop-after-note');
     els.logToggle = byId('rc-log-toggle');
     els.logLines = byId('rc-log-lines');
 
@@ -848,6 +878,21 @@
       connect(code);
     });
     els.logToggle.addEventListener('click', toggleLog);
+    els.stopAfterButton.addEventListener('click', function () {
+      var view = stopAfterCareerView();
+      if (view.buttonCommand) sendCommand(view.buttonCommand);
+      else state.stopConfirming = true;
+      renderStopAfterCareer();
+    });
+    els.stopAfterYes.addEventListener('click', function () {
+      state.stopConfirming = false;
+      sendCommand(L.STOP_AFTER_CAREER_COMMAND);
+      renderStopAfterCareer();
+    });
+    els.stopAfterNo.addEventListener('click', function () {
+      state.stopConfirming = false;
+      renderStopAfterCareer();
+    });
 
     fillAccessInstructions();
     showAccess();
