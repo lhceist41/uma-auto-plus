@@ -194,6 +194,16 @@ const RacingSettings = () => {
                                 description="When enabled, the bot will attempt to retry a failed mandatory race only if the daily free race retry is available."
                                 className="my-2"
                             />
+                            <CustomCheckbox
+                                searchId="enable-complete-career-on-failure"
+                                searchCondition={disableRaceRetries}
+                                parentId="disable-race-retries"
+                                checked={enableCompleteCareerOnFailure}
+                                onCheckedChange={(checked) => updateRacingSetting("enableCompleteCareerOnFailure", checked)}
+                                label="Complete Career on Failure"
+                                description="Only applies when Disable Race Retries is on. When enabled, a failed mandatory race ends the career and the bot goes on to the career completion screen instead of stopping at the Try Again dialog. With race retries on, the bot always does this once its retries run out."
+                                className="my-2"
+                            />
                             <Text style={styles.inputLabel}>Alarm Clock Carat Policy</Text>
                             <CustomSelect
                                 searchId="alarm-clock-policy"
@@ -221,14 +231,6 @@ const RacingSettings = () => {
                                 {"\n"}
                                 <Text style={{ fontWeight: "bold" }}>Always</Text>: spend 10 carats on every alarm clock prompt.
                             </Text>
-                            <CustomCheckbox
-                                searchId="enable-complete-career-on-failure"
-                                checked={enableCompleteCareerOnFailure}
-                                onCheckedChange={(checked) => updateRacingSetting("enableCompleteCareerOnFailure", checked)}
-                                label="Complete Career on Failure"
-                                description="When enabled, the bot will proceed to the career completion screen when a mandatory race is failed and it has run out of retries (or if retries are disabled). This is as opposed to the bot stopping at the Try Again dialog."
-                                className="my-2"
-                            />
                             <CustomCheckbox
                                 searchId="enable-stop-on-mandatory-races"
                                 checked={enableStopOnMandatoryRaces}

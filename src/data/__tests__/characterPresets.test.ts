@@ -573,7 +573,7 @@ describe("Wonder Acute and Nakayama Festa presets", () => {
         })
 
         it("keeps the whole default excluded-item list when Trackblazer adds to it (arrays replace)", () => {
-            for (const p of pipeline) {
+            for (const p of pipeline.filter((p) => p.scenario === "Trackblazer")) {
                 const items = p.settings.scenarioOverrides!.trackblazerExcludedItems as string[]
                 for (const item of ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food", "Coaching Megaphone"]) expect(items).toContain(item)
             }
@@ -993,5 +993,20 @@ describe("Trackblazer scenario-event picks never take a hint for a style the pre
         expect(racedStyle(seiun)).toBe("front_runner")
         expect(presetCard("Agnes Digital")?.outfit).toBe("[Full-Color Fangirling]")
         expect(presetCard("Ines Fujin")?.runningStyle).toBe(1)
+    })
+})
+
+describe("presets for other scenarios leave the Trackblazer settings alone", () => {
+    it("ships no Trackblazer override outside a Trackblazer preset", () => {
+        // Home's scenario dropdown switches the scenario without re-applying a preset, so any
+        // Trackblazer value a URA, Unity Cup or Grand Concert preset shipped would run in Trackblazer.
+        const shipped = characterPresets
+            .filter((p) => p.scenario !== "Trackblazer")
+            .flatMap((p) =>
+                Object.keys(p.settings.scenarioOverrides ?? {})
+                    .filter((key) => key.startsWith("trackblazer"))
+                    .map((key) => `${p.name}|${p.scenario} ${key}`)
+            )
+        expect(shipped).toEqual([])
     })
 })

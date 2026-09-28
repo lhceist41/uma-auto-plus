@@ -493,10 +493,10 @@ Once a race is selected:
 1. **Strategy Selection:** The bot selects a running strategy (Front Runner, Pace Chaser, Late Surger, or End Closer) based on the trainee's aptitudes.
 2. **Skip or Manual:** If the "skip" button is available, the bot skips the race animation. Otherwise, it watches and fast-forwards.
 3. **Retries:** If a race is lost and retries are enabled, the bot can retry the race (free retry available once per campaign if enabled). Mandatory races additionally retry toward 1st place while a retry is available — bounded by the free-retry count and re-checking the Congratulations banner on a fresh capture first, so a race that was already won is never retried.
-4. **Complete Career on Failure:** If a mandatory race is lost and this setting is enabled, the bot continues the campaign anyway rather than stopping.
+4. **Complete Career on Failure:** Only read when Disable Race Retries is on. If a mandatory race is lost and no daily free retry is used, this setting makes the bot close the Try Again dialog and finish the career instead of stopping. With race retries on, the bot always closes the dialog once its retries run out.
 
 > [!CAUTION]
-> Losing a mandatory race without `enableCompleteCareerOnFailure` will **stop the bot entirely**. If you want fully unattended runs, make sure this setting is enabled.
+> With Disable Race Retries on, losing a mandatory race without `enableCompleteCareerOnFailure` will **stop the bot entirely**. If you want fully unattended runs with retries disabled, make sure this setting is enabled.
 
 ---
 

@@ -118,7 +118,7 @@ const ScenarioOverridesSettings = () => {
                                 placeholder={bsc.defaultSettings.scenarioOverrides.trackblazerConsecutiveRacesLimit}
                                 onValueChange={(value) => updateOverrideSetting("trackblazerConsecutiveRacesLimit", value)}
                                 onSlidingComplete={(value) => updateOverrideSetting("trackblazerConsecutiveRacesLimit", value)}
-                                min={3}
+                                min={2}
                                 max={30}
                                 step={1}
                                 label="Consecutive Races Limit"

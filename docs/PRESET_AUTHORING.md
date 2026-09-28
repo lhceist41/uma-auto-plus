@@ -121,7 +121,7 @@ test suite asserts every declared objective is one of them.
 
 1. Configure the build in the app for that trainee and scenario: stat prioritization, stat targets,
    racing plan and preferences, the three skill plans (`skillPointCheck`, `preFinals`,
-   `careerComplete`), scenario overrides, and character event overrides. For a curated or farm
+   `careerComplete`), scenario overrides (Trackblazer presets only), and character event overrides. For a curated or farm
    racing plan, `scripts/generate-racing-plan.mjs` can generate the plan from
    `character_objectives.json`; it does not generate a complete preset entry.
 2. Optionally export it from Settings > Settings Management > Export Settings and use the JSON as a

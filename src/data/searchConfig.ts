@@ -399,8 +399,9 @@ const searchConfig: SearchOption[] = [
         id: "enable-complete-career-on-failure",
         title: "Complete Career on Failure",
         description:
-            "When enabled, the bot will proceed to the career completion screen when a mandatory race is failed and it has run out of retries (or if retries are disabled). This is as opposed to the bot stopping at the Try Again dialog.",
+            "Only applies when Disable Race Retries is on. When enabled, a failed mandatory race ends the career and the bot goes on to the career completion screen instead of stopping at the Try Again dialog. With race retries on, the bot always does this once its retries run out.",
         page: "RacingSettings",
+        parentId: "disable-race-retries",
     },
     {
         id: "enable-stop-on-mandatory-races",

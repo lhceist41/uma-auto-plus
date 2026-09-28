@@ -1,7 +1,12 @@
 import fs from "fs"
 import path from "path"
 import searchConfig from "../searchConfig"
+import { characterPresets } from "../characterPresets"
+import { defaultSettings } from "../../context/BotStateContext"
 import { skillPlanSettingsPages } from "../../pages/SkillPlanSettings/config"
+
+// Import the real defaults without loading the provider's native styling runtime.
+jest.mock("react-native-css-interop/jsx-runtime", () => jest.requireActual("react/jsx-runtime"))
 
 const PAGES_DIR = path.join(__dirname, "..", "..", "pages")
 
@@ -212,5 +217,61 @@ describe("Remote Log Viewer copy", () => {
         expect(page).not.toMatch(/served with no authentication/)
         const writes = page.split("\n").filter((line) => /setSettings|saveSettings|Storage|writeAsString/.test(line))
         expect(writes.filter((line) => /AccessCode/.test(line))).toEqual([])
+    })
+})
+
+describe("settings slider ranges", () => {
+    /** Every slider whose placeholder is a `defaultSettings.<category>.<key>` value and whose min and max are literals. */
+    const sliders = collectTsxFiles(PAGES_DIR).flatMap((file) =>
+        [...fs.readFileSync(file, "utf8").matchAll(/<CustomSlider\b([\s\S]*?)\/>/g)].flatMap((m) => {
+            const key = m[1].match(/placeholder=\{(?:bsc\.)?defaultSettings\.(\w+)\.(\w+)\}/)
+            const min = m[1].match(/\bmin=\{(-?[\d.]+)\}/)
+            const max = m[1].match(/\bmax=\{(-?[\d.]+)\}/)
+            return key && min && max ? [{ file: path.basename(path.dirname(file)), category: key[1], key: key[2], min: Number(min[1]), max: Number(max[1]) }] : []
+        })
+    )
+
+    it("finds the sliders it checks", () => {
+        expect(sliders.length).toBeGreaterThanOrEqual(40)
+        expect(sliders.some((s) => s.key === "trackblazerConsecutiveRacesLimit")).toBe(true)
+    })
+
+    it("holds every default, so touching a slider never moves a setting off its default by itself", () => {
+        const outside = sliders.filter((s) => {
+            const value = (defaultSettings as any)[s.category]?.[s.key]
+            return typeof value === "number" && (value < s.min || value > s.max)
+        })
+        expect(outside.map((s) => `${s.file} ${s.category}.${s.key}`)).toEqual([])
+    })
+
+    it("holds every value a preset ships", () => {
+        const outside = sliders.flatMap((s) =>
+            characterPresets
+                .filter((p) => {
+                    const value = (p.settings as any)[s.category]?.[s.key]
+                    return typeof value === "number" && (value < s.min || value > s.max)
+                })
+                .map((p) => `${p.name}|${p.scenario} ${s.category}.${s.key}`)
+        )
+        expect(outside).toEqual([])
+    })
+})
+
+describe("Complete Career on Failure", () => {
+    const page = fs.readFileSync(path.join(PAGES_DIR, "RacingSettings", "index.tsx"), "utf8")
+    const checkbox = page.match(/<CustomCheckbox\s+searchId="enable-complete-career-on-failure"[\s\S]*?\/>/)![0]
+    const entry = searchConfig.find((e) => e.id === "enable-complete-career-on-failure")!
+
+    it("sits under Disable Race Retries, the only case where the bot reads it", () => {
+        expect(checkbox).toMatch(/searchCondition=\{disableRaceRetries\}/)
+        expect(checkbox).toMatch(/parentId="disable-race-retries"/)
+        expect(entry.parentId).toBe("disable-race-retries")
+    })
+
+    it("says it only applies with race retries disabled, on the page and in search", () => {
+        for (const text of [checkbox, entry.description]) {
+            expect(text).toMatch(/Disable Race Retries is on/)
+            expect(text).not.toMatch(/run out of retries/)
+        }
     })
 })
