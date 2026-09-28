@@ -393,6 +393,38 @@
             }
         },
         {
+            "name": "stopped after a career: resumable",
+            "report": {
+                "kind": "STOPPED_AFTER_CAREER",
+                "queueEnabled": true,
+                "totalRuns": 4,
+                "completedRuns": 2,
+                "runReached": 2,
+                "resumable": true
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "You paused the queue after run 2 of 4. Start continues with run 3.",
+                "nextAction": "Press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "stopped after a career: record lost",
+            "report": {
+                "kind": "STOPPED_AFTER_CAREER",
+                "queueEnabled": true,
+                "totalRuns": 4,
+                "completedRuns": 2,
+                "runReached": 2,
+                "resumable": false
+            },
+            "text": {
+                "title": "Queue stopped",
+                "reason": "You paused the queue after run 2 of 4.",
+                "nextAction": null
+            }
+        },
+        {
             "name": "bot stop: trainee mismatch",
             "report": {
                 "kind": "STOPPED_BY_BOT",

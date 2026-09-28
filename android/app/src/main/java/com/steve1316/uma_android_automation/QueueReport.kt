@@ -95,6 +95,9 @@ enum class SessionEnd(val clearsQueueState: Boolean = false) {
 
     /** A run stopped for the reason its key names (an accessibility repair that could not help); its career is still in the slot. */
     RUN_HALTED,
+
+    /** The player asked to stop after the current career; it finished, and the next run was saved for Start to continue. */
+    STOPPED_AFTER_CAREER,
 }
 
 /**
@@ -114,6 +117,7 @@ internal data class SessionEndFacts(
     val haltEnd: SessionEnd? = null,
     val haltCareerInFlight: Boolean = false,
     val nothingToResume: Boolean = false,
+    val stoppedAfterCareer: Boolean = false,
     val stopRequested: Boolean = false,
     val stopByBot: Boolean = false,
     val serviceRunning: Boolean = true,
@@ -127,7 +131,9 @@ internal data class SessionEndVerdict(val end: SessionEnd, val resumable: Boolea
  * The single decision of how a session ended, mirroring the order the session itself exits in:
  * refusals and the diagnostic return before the queue starts, an escaped exception preempts
  * everything after it, a queue-off session is always one run, and the queue's own post-loop
- * branches (halt, then bot stop, user stop, dead service, completion) follow.
+ * branches (halt, then the player's stop after a career, bot stop, user stop, dead service,
+ * completion) follow. A stop, or the service going away, after the stop point still wins over the
+ * pause, as the post-loop branches decide it.
  *
  * `resumable` is whether the persisted resume record survives this ending: an ending that clears
  * it is never resumable, any other keeps what [SessionEndFacts.queueStateActive] reports.
@@ -143,6 +149,7 @@ internal fun classifySessionEnd(facts: SessionEndFacts): SessionEndVerdict {
             !facts.queueEnabled -> SessionEnd.SINGLE_RUN_ENDED
             facts.haltEnd != null -> facts.haltEnd
             facts.nothingToResume -> SessionEnd.NOTHING_TO_RESUME
+            facts.stoppedAfterCareer && !facts.stopRequested && facts.serviceRunning -> SessionEnd.STOPPED_AFTER_CAREER
             facts.stopRequested && facts.stopByBot -> SessionEnd.STOPPED_BY_BOT
             facts.stopRequested -> SessionEnd.STOPPED_BY_USER
             !facts.serviceRunning -> SessionEnd.SERVICE_ENDED
@@ -367,6 +374,9 @@ internal class SessionLedger(val sessionId: String, val startedAt: Long, val app
 
     @Volatile var nothingToResume = false
 
+    /** Set when the queue left its loop at the player's stop after a finished career. */
+    @Volatile var stoppedAfterCareer = false
+
     @Volatile var queueEnabled = false
 
     @Volatile var totalRuns = 0
@@ -447,6 +457,7 @@ internal class SessionLedger(val sessionId: String, val startedAt: Long, val app
             haltEnd = haltEnd,
             haltCareerInFlight = haltCareerInFlight,
             nothingToResume = nothingToResume,
+            stoppedAfterCareer = stoppedAfterCareer,
             stopRequested = stopRequested,
             stopByBot = stopByBot,
             serviceRunning = serviceRunning,

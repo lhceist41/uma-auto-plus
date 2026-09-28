@@ -1,6 +1,29 @@
-import { presentQueueProgress, restoredQueueProgress } from "../queueProgressPresentation"
+import { offersStopAfterCareer, presentQueueProgress, restoredQueueProgress } from "../queueProgressPresentation"
 
 describe("presentQueueProgress", () => {
+    it("presents the player's stop after a career as a pause with the next run, never a failure", () => {
+        const view = presentQueueProgress({ currentRun: 2, totalRuns: 4, status: "stoppedAfterCareer" })
+        expect(view).toEqual({ kind: "paused", title: "Queue paused after run 2/4", detail: "Start continues with run 3.", isTerminal: true })
+        expect(presentQueueProgress({ currentRun: 2, totalRuns: 4, status: "stoppedAfterCareer", message: "Paused after run 2 of 4. Start continues with run 3." }).detail).toBe(
+            "Paused after run 2 of 4. Start continues with run 3."
+        )
+    })
+
+    it("offers Stop after this career only while a queue runs with a run after this one", () => {
+        expect(offersStopAfterCareer(true, { currentRun: 2, totalRuns: 4, status: "starting" })).toBe(true)
+        expect(offersStopAfterCareer(true, { currentRun: 4, totalRuns: 4, status: "starting" })).toBe(false)
+        expect(offersStopAfterCareer(true, null)).toBe(false)
+        expect(offersStopAfterCareer(false, { currentRun: 2, totalRuns: 4, status: "starting" })).toBe(false)
+        expect(offersStopAfterCareer(true, { currentRun: 2, totalRuns: 4, status: "stoppedAfterCareer" })).toBe(false)
+        expect(offersStopAfterCareer(true, { currentRun: 2, totalRuns: 4, status: "queueStopped" })).toBe(false)
+    })
+
+    it("offers it for the career that is starting, playing, retrying or ending, never between runs past the stop point", () => {
+        const offered = (status: string) => offersStopAfterCareer(true, { currentRun: 2, totalRuns: 4, status })
+        for (const status of ["starting", "resuming", "retrying", "completed"]) expect(offered(status)).toBe(true)
+        for (const status of ["navigating", "waiting"]) expect(offered(status)).toBe(false)
+    })
+
     it("presents a fresh queue starting", () => {
         const p = presentQueueProgress({ currentRun: 1, totalRuns: 4, status: "starting" })
         expect(p).toEqual({ kind: "running", title: "Run 1/4 - Starting...", isTerminal: false })

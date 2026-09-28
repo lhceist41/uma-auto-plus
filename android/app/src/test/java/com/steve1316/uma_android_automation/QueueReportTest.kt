@@ -62,6 +62,7 @@ class QueueReportTest {
                 SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS to queue.copy(haltEnd = SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS),
                 SessionEnd.WAIT_INTERRUPTED to queue.copy(haltEnd = SessionEnd.WAIT_INTERRUPTED, haltCareerInFlight = true),
                 SessionEnd.COMPLETED to queue,
+                SessionEnd.STOPPED_AFTER_CAREER to queue.copy(stoppedAfterCareer = true),
                 SessionEnd.SINGLE_RUN_ENDED to SessionEndFacts(queueEnabled = false),
                 SessionEnd.ENDED_WITH_ERROR to queue.copy(unexpectedError = true, haltEnd = SessionEnd.BREAKPOINT),
             )
@@ -348,7 +349,7 @@ class QueueReportTest {
             assertTrue(stashed > 0 && stashed < campaign.indexOf("StartModule.lastCareerEndSeq++"), "the result is stashed before the sequence bump")
             val startModule = source("StartModule.kt")
             val attachAfterNavigation = Regex("""navigateWithDeadline\([^\n]*\)\n\s*attachCareerEndSparks\(ledger, i, runCareerEndSeq\)""")
-            assertEquals(2, attachAfterNavigation.findAll(startModule).count(), "sparks attach after the finalize and after the between-run navigation")
+            assertEquals(3, attachAfterNavigation.findAll(startModule).count(), "sparks attach after each finalize and after the between-run navigation")
             assertTrue(startModule.contains("val runCareerEndSeq = recordRun("))
             val navigator = source("CareerLaunchNavigator.kt")
             val keptOnly = "if (phase == \"kept\") {\n            val tx = SparkRerollGate.transaction\n            StartModule.lastCareerEndSparks = CareerEndSparks(StartModule.lastCareerEndSeq,"

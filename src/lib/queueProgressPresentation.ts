@@ -4,7 +4,7 @@
  *
  * The producer emits a small set of status strings (`starting`, `resuming`, `navigating`,
  * `waiting`, `retrying`, the per-run `completed`, and the terminal `queueComplete` / `queueStopped` /
- * `queueHalted` / `queueFailed`) plus an optional `resultCode` (a `TaskResultCode` name) and an
+ * `queueHalted` / `queueFailed` / `stoppedAfterCareer`) plus an optional `resultCode` (a `TaskResultCode` name) and an
  * optional `message`. Whether `message` is safe to show depends on the status: the terminal
  * statuses carry a dev-authored sentence or a breakpoint's own description, while the per-run
  * `completed` carries the task's own message, which can be raw exception text. So each branch
@@ -21,7 +21,7 @@ export type QueueProgressEvent = {
 }
 
 export type QueueProgressPresentation = {
-    kind: "running" | "completed" | "halted" | "stopped" | "failed"
+    kind: "running" | "completed" | "halted" | "stopped" | "failed" | "paused"
     title: string
     detail?: string
     isTerminal: boolean
@@ -79,6 +79,14 @@ export function presentQueueProgress(event: QueueProgressEvent): QueueProgressPr
             return { kind: "stopped", title: `Queue stopped: ${runOf}`, detail: event.message ?? "Stopped by the user.", isTerminal: true }
         case "queueHalted":
             return { kind: "halted", title: `Queue paused: ${runOf}`, detail: event.message ?? "Queue paused.", isTerminal: true }
+        case "stoppedAfterCareer":
+            // The player's own stop after a finished career: its run is the one that just finished.
+            return {
+                kind: "paused",
+                title: `Queue paused after run ${currentRun}/${totalRuns}`,
+                detail: event.message ?? `Start continues with run ${currentRun + 1}.`,
+                isTerminal: true,
+            }
         case "queueFailed": {
             if (event.resultCode === "TASK_RESULT_BREAKPOINT_REACHED") {
                 // Breakpoints are the one queueFailed cause with a trustworthy free-text reason:
@@ -98,6 +106,18 @@ export function presentQueueProgress(event: QueueProgressEvent): QueueProgressPr
             // guessing at a shape the producer hasn't documented.
             return { kind: "running", title: "Queue status unavailable", isTerminal: false }
     }
+}
+
+/**
+ * Whether Home offers "Stop after this career": only while a queue runs with a run after the one it
+ * reports. A single run sends no queue events, and on the last run the queue just finishes. Not while
+ * it navigates or waits between runs: the queue has passed its stop point by then, so a request would
+ * land after the next career, not this one.
+ */
+export function offersStopAfterCareer(botRunning: boolean, event: QueueProgressEvent | null): boolean {
+    if (!botRunning || event === null || presentQueueProgress(event).isTerminal) return false
+    if (event.status === "navigating" || event.status === "waiting") return false
+    return safeCount(event.currentRun) < safeCount(event.totalRuns)
 }
 
 /**

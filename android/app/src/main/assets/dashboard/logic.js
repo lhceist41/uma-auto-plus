@@ -101,7 +101,7 @@
   // (including a future key not in either family) falls to "Working", per
   // UI truthfulness rule 5: never guess a label for an unenumerated value.
   var BETWEEN_KEYS = ['completed', 'navigating', 'waiting', 'starting', 'resuming', 'retrying'];
-  var TERMINAL_KEYS = ['queueFailed', 'queueHalted', 'queueStopped', 'queueComplete', 'notRunning'];
+  var TERMINAL_KEYS = ['queueFailed', 'queueHalted', 'queueStopped', 'queueComplete', 'stoppedAfterCareer', 'notRunning'];
 
   function statusPhase(statusKey) {
     if (statusKey === 'armed') {
@@ -340,6 +340,7 @@
   var TERMINAL_BADGE = {
     queueComplete: 'FINISHED',
     queueStopped: 'STOPPED', queueHalted: 'STOPPED', queueFailed: 'STOPPED',
+    stoppedAfterCareer: 'PAUSED',
     notRunning: 'NOT RUNNING',
   };
   // "warn" tones the badge red (an interruption); "neutral" is the plain
@@ -347,6 +348,7 @@
   var TERMINAL_TONE = {
     queueComplete: 'neutral',
     queueStopped: 'warn', queueHalted: 'warn', queueFailed: 'warn',
+    stoppedAfterCareer: 'neutral',
     notRunning: 'neutral',
   };
 

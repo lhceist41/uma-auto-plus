@@ -28,7 +28,7 @@ test('status label table: "latest event wins" between-runs family (completed/nav
 });
 
 test('status label table: the real terminal literals from the source map, not just notRunning', () => {
-  for (const key of ['queueFailed', 'queueHalted', 'queueStopped', 'queueComplete']) {
+  for (const key of ['queueFailed', 'queueHalted', 'queueStopped', 'queueComplete', 'stoppedAfterCareer']) {
     assert.equal(logic.statusPhase(key).label, 'The bot is not running', key);
     assert.equal(logic.statusPhase(key).phase, 'terminal', key);
     assert.equal(logic.statusPhase(key).terminal, true, key);
@@ -527,6 +527,7 @@ test('viewModel: every terminal key gets its badge from the key table, never inf
     ['queueStopped', 'STOPPED', 'warn'],
     ['queueHalted', 'STOPPED', 'warn'],
     ['queueFailed', 'STOPPED', 'warn'],
+    ['stoppedAfterCareer', 'PAUSED', 'neutral'],
     ['notRunning', 'NOT RUNNING', 'neutral'],
   ];
   for (const [key, text, tone] of cases) {

@@ -171,7 +171,7 @@ internal object StatusBoard {
         val recoveriesTotal: Int,
     )
 
-    private val TERMINAL_KEYS = setOf("queueComplete", "queueStopped", "queueHalted", "queueFailed")
+    private val TERMINAL_KEYS = setOf("queueComplete", "queueStopped", "queueHalted", "queueFailed", "stoppedAfterCareer")
 
     /** The display labels of a GameDate's parts, e.g. "Junior Year" and "Late January"; the finale turns have their own names. */
     fun dateLabels(

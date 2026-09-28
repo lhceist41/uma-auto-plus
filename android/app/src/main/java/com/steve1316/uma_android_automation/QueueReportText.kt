@@ -108,6 +108,12 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
             val why = keyText(key)
             ReportText(haltTitle(resumable), "The queue stopped during run $reached of $total: ${why.reason}", why.next(resumable))
         }
+        SessionEnd.STOPPED_AFTER_CAREER ->
+            ReportText(
+                haltTitle(resumable),
+                "You paused the queue after run $reached of $total." + (if (resumable) " Start continues with run ${reached + 1}." else "") + errorSentence(r),
+                if (resumable) pressStart(true).replaceFirstChar { it.uppercase() } else null,
+            )
         SessionEnd.STOP_ON_ERROR ->
             ReportText(
                 haltTitle(resumable),
@@ -183,7 +189,7 @@ internal val STATUS_LABELS: Map<String, String> =
         put("armed", "Ready: tap the start button in the game")
         put("running", "Running")
         for (key in listOf("completed", "navigating", "waiting", "starting", "resuming", "retrying")) put(key, BETWEEN_RUNS)
-        for (key in listOf("queueFailed", "queueHalted", "queueStopped", "queueComplete", "notRunning")) put(key, NOT_RUNNING)
+        for (key in listOf("queueFailed", "queueHalted", "queueStopped", "queueComplete", "stoppedAfterCareer", "notRunning")) put(key, NOT_RUNNING)
     }
 
 internal fun statusLabel(key: String?): String = STATUS_LABELS[key] ?: "Working"

@@ -220,10 +220,12 @@ class StartModulePreLoopQueueHaltTest {
 
         @Test
         fun `the clear-and-complete path is the else of the halt branch`() {
+            // The player's pause after a finished career keeps the record too, as the arm between them.
+            val pause = Regex("notifyQueueHalted\\([^\\n]*\\)\\s*\\} else if \\(pausedAfterRun != null\\) \\{").find(startModule)
+            assertTrue(pause != null, "the pause is the next arm after the halt")
             assertTrue(
-                Regex("notifyQueueHalted\\([^\\n]*\\)\\s*\\} else \\{\\s*//[^\\n]*\\n\\s*clearQueueState\\(context\\)")
-                    .containsMatchIn(startModule),
-                "clearQueueState must be the else arm of the halt branch, unreachable once a halt reason is set",
+                Regex("\\} else \\{\\s*//[^\\n]*\\n\\s*clearQueueState\\(context\\)").find(startModule, pause!!.range.last) != null,
+                "clearQueueState must be the else arm after the halt and the pause, unreachable once either is set",
             )
             val haltStart = startModule.indexOf("val halt = queueHaltReason")
             val clear = startModule.indexOf("clearQueueState(context)", haltStart)

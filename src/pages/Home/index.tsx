@@ -28,7 +28,7 @@ import { deriveInGameName, deriveExcludeOutfits } from "../../lib/rotationSnapsh
 import { presetObjectiveOf } from "../../lib/adaptiveSkillPolicy"
 import { presetMoodFloorOf } from "../../lib/moodFloorPolicy"
 import { GRAND_CONCERT_KEY, GRAND_CONCERT_WARNING, isGrandConcert, scenarioCapabilities } from "../../lib/scenarioKey"
-import { presentQueueProgress, restoredQueueProgress, type QueueProgressEvent } from "../../lib/queueProgressPresentation"
+import { offersStopAfterCareer, presentQueueProgress, restoredQueueProgress, type QueueProgressEvent } from "../../lib/queueProgressPresentation"
 import { interruptedBannerReport, lastSessionCardVisible, parseLastSession, type LastSessionView } from "../../lib/queueReportPresentation"
 import { collectPreflightWarnings, readPreflightProbes, shouldShowPreflight, type PreflightItem } from "../../lib/preflightWarnings"
 import { accessibilityRepairStatus } from "../../lib/accessibilityRepairStatus"
@@ -143,6 +143,9 @@ const Home = () => {
     // Pre-start mismatch gate: the avoid pairings found in the pending launch, and whether the
     // confirm dialog is shown. Empty list → start proceeds without a prompt.
     const [showAvoidDialog, setShowAvoidDialog] = useState<boolean>(false)
+    // The running queue's "stop after this career" request, as Kotlin holds it.
+    const [stopAfterCareer, setStopAfterCareer] = useState<boolean>(false)
+    const [showStopAfterCareerDialog, setShowStopAfterCareerDialog] = useState<boolean>(false)
     const [avoidWarnings, setAvoidWarnings] = useState<{ label: string; reason: string }[]>([])
     const [showPreflightDialog, setShowPreflightDialog] = useState<boolean>(false)
     const [preflightItems, setPreflightItems] = useState<PreflightItem[]>([])
@@ -203,6 +206,7 @@ const Home = () => {
                     dispatchSession({ type: "NATIVE_STATE", armed: state.armed, botRunning: state.botRunning })
                     setSessionKnown(true)
                 }
+                if (state && typeof state.stopAfterCareer === "boolean") setStopAfterCareer(state.stopAfterCareer)
             })
             .catch(() => {})
     }, [StartModule])
@@ -362,6 +366,16 @@ const Home = () => {
 
     /** The queue-progress banner's presentation, recomputed only when the underlying event changes. */
     const queueProgressView = useMemo(() => (queueProgress ? presentQueueProgress(queueProgress) : null), [queueProgress])
+    const stopAfterCareerAvailable = offersStopAfterCareer(botRunning, queueProgress)
+    // Kotlin clears the request at each session start; a finished session leaves nothing to show.
+    useEffect(() => {
+        if (!botRunning) setStopAfterCareer(false)
+    }, [botRunning])
+    const requestStopAfterCareer = (requested: boolean) => {
+        StartModule.setStopAfterCareer(requested)
+            .then((now: unknown) => setStopAfterCareer(now === true))
+            .catch(() => {})
+    }
 
     /** The last report's reason and end time for the interrupted-queue banner, when the report belongs to that saved queue. */
     const interruptedReport = useMemo(() => interruptedBannerReport(lastSession, interruptedQueue, Date.now()), [lastSession, interruptedQueue])
@@ -938,7 +952,10 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                     }}
                 >
                     <Text style={{ fontSize: 13, color: colors.warningText, fontWeight: "600", marginBottom: 6 }}>
-                        Queue interrupted at run {interruptedQueue.currentRun} of {interruptedQueue.totalRuns} ({interruptedReport?.minutesAgo ?? Math.round(interruptedQueue.ageMinutes)} min ago)
+                        {interruptedReport?.paused
+                            ? `Queue paused after run ${interruptedQueue.currentRun} of ${interruptedQueue.totalRuns}`
+                            : `Queue interrupted at run ${interruptedQueue.currentRun} of ${interruptedQueue.totalRuns}`}{" "}
+                        ({interruptedReport?.minutesAgo ?? Math.round(interruptedQueue.ageMinutes)} min ago)
                     </Text>
                     {interruptedReport && <Text style={{ fontSize: 12, color: colors.warningText, marginBottom: 6 }}>{interruptedReport.reason}</Text>}
                     <Text style={{ fontSize: 12, color: colors.warningText, marginBottom: 8 }}>
@@ -948,7 +965,9 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                               ? "Your queue length changed since this run was saved, so it cannot be resumed. Pressing Start discards it and begins a new queue with your current settings."
                               : noAutoResumeReason === "noRunLeft"
                                 ? "This saved queue has no run left to resume. Pressing Start reports the queue as complete without playing another career."
-                                : "Pressing Start resumes this queue automatically from where it left off. Make sure the game is at the training menu first."}
+                                : interruptedReport?.paused
+                                  ? `Pressing Start continues this queue with run ${interruptedQueue.currentRun + 1}.`
+                                  : "Pressing Start resumes this queue automatically from where it left off. Make sure the game is at the training menu first."}
                     </Text>
                     {noAutoResumeReason !== null && (
                         <View style={{ flexDirection: "row", alignItems: "flex-start", marginBottom: 8 }}>
@@ -1169,11 +1188,32 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                         <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 13, color: colors.foreground }}>{queueProgressView.title}</Text>
                             {queueProgressView.detail && <Text style={{ fontSize: 11, color: colors.mutedForeground }}>{queueProgressView.detail}</Text>}
+                            {stopAfterCareerAvailable && stopAfterCareer && <Text style={{ fontSize: 11, color: colors.mutedForeground }}>The queue pauses once this career has finished.</Text>}
                         </View>
                     </View>
+                    {stopAfterCareerAvailable && (
+                        <TouchableOpacity
+                            onPress={() => (stopAfterCareer ? requestStopAfterCareer(false) : setShowStopAfterCareerDialog(true))}
+                            accessibilityRole="button"
+                            accessibilityLabel={stopAfterCareer ? "Cancel the stop after this career" : "Stop the queue after this career"}
+                            style={{
+                                paddingHorizontal: 10,
+                                paddingVertical: 4,
+                                backgroundColor: colors.muted,
+                                borderWidth: 1,
+                                borderColor: colors.border,
+                                borderRadius: 6,
+                                marginLeft: 8,
+                            }}
+                        >
+                            <Text style={{ fontSize: 12, color: colors.foreground, fontWeight: "600" }}>{stopAfterCareer ? "Cancel stop" : "Stop after this career"}</Text>
+                        </TouchableOpacity>
+                    )}
                     {botRunning && !queueProgressView.isTerminal && (
                         <TouchableOpacity
                             onPress={() => StartModule.skipQueueRun()}
+                            accessibilityRole="button"
+                            accessibilityLabel="Skip this run"
                             style={{
                                 paddingHorizontal: 10,
                                 paddingVertical: 4,
@@ -1193,6 +1233,30 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
             </View>
 
             <WhatsNewDialog content={armed || botRunning ? null : whatsNew.content} onClose={whatsNew.dismiss} />
+
+            <AlertDialog open={showStopAfterCareerDialog} onOpenChange={setShowStopAfterCareerDialog}>
+                <AlertDialogContent onDismiss={() => setShowStopAfterCareerDialog(false)}>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Stop after this career?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            The bot finishes the career it is on, including its end steps, then pauses the queue. Pressing Start later continues with the next run.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onPress={() => setShowStopAfterCareerDialog(false)}>
+                            <Text>Keep going</Text>
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onPress={() => {
+                                setShowStopAfterCareerDialog(false)
+                                requestStopAfterCareer(true)
+                            }}
+                        >
+                            <Text>Stop after this career</Text>
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             <AlertDialog open={showNotReadyDialog} onOpenChange={setShowNotReadyDialog}>
                 <AlertDialogContent onDismiss={() => setShowNotReadyDialog(false)}>

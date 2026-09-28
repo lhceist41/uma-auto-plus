@@ -18,6 +18,8 @@ export type LastSessionView = {
     runEnding: boolean
     /** The saved queue record survived this ending. Not a promise that Start resumes it. */
     resumable: boolean
+    /** The player paused the queue after a finished career (Stop after this career). */
+    paused: boolean
     endedAt: number | null
     totalRuns: number | null
     title: string
@@ -142,6 +144,7 @@ export function parseLastSession(payload: unknown): LastSessionView | null {
         dismissed: report.dismissed === true,
         runEnding: parsed.runEnding === true,
         resumable: report.resumable === true,
+        paused: report.kind === "STOPPED_AFTER_CAREER",
         endedAt: count(report.endedAt) || null,
         totalRuns: report.queueEnabled === true ? count(report.totalRuns) || null : null,
         title: words ? (text.title as string) : GENERIC_TITLE,
@@ -168,7 +171,7 @@ export function lastSessionCardVisible(view: LastSessionView | null, botRunning:
  * session ended. Only a queue report whose record survived and that matches the saved queue's
  * length qualifies; otherwise the banner keeps its own saved-state age.
  */
-export function interruptedBannerReport(view: LastSessionView | null, interrupted: { totalRuns: number } | null, nowMs: number): { reason: string; minutesAgo: number | null } | null {
+export function interruptedBannerReport(view: LastSessionView | null, interrupted: { totalRuns: number } | null, nowMs: number): { reason: string; minutesAgo: number | null; paused: boolean } | null {
     if (view === null || interrupted === null || !view.runEnding || !view.resumable || view.totalRuns !== interrupted.totalRuns) return null
-    return { reason: view.reason, minutesAgo: view.endedAt === null ? null : Math.max(0, Math.round((nowMs - view.endedAt) / 60000)) }
+    return { reason: view.reason, minutesAgo: view.endedAt === null ? null : Math.max(0, Math.round((nowMs - view.endedAt) / 60000)), paused: view.paused }
 }

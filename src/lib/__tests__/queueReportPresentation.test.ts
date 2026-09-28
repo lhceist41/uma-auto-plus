@@ -244,9 +244,20 @@ describe("interruptedBannerReport", () => {
     const halted = view({ resumable: true, queueEnabled: true, totalRuns: 5, endedAt: now - 42 * 60_000 }, { title: "Queue paused", reason: "Run 2 stopped at a breakpoint.", nextAction: null }, true)
 
     it("gives the report's reason and the minutes since the session ended", () => {
-        expect(interruptedBannerReport(halted, { totalRuns: 5 }, now)).toEqual({ reason: "Run 2 stopped at a breakpoint.", minutesAgo: 42 })
-        expect(interruptedBannerReport({ ...halted, endedAt: null }, { totalRuns: 5 }, now)).toEqual({ reason: "Run 2 stopped at a breakpoint.", minutesAgo: null })
+        expect(interruptedBannerReport(halted, { totalRuns: 5 }, now)).toEqual({ reason: "Run 2 stopped at a breakpoint.", minutesAgo: 42, paused: false })
+        expect(interruptedBannerReport({ ...halted, endedAt: null }, { totalRuns: 5 }, now)).toEqual({ reason: "Run 2 stopped at a breakpoint.", minutesAgo: null, paused: false })
         expect(interruptedBannerReport({ ...halted, endedAt: now + 60_000 }, { totalRuns: 5 }, now)?.minutesAgo).toBe(0)
+    })
+
+    it("says when the player paused the queue after a career, so the banner never reads as a crash", () => {
+        const paused = view(
+            { kind: "STOPPED_AFTER_CAREER", resumable: true, queueEnabled: true, totalRuns: 4, endedAt: now - 5 * 60_000 },
+            { title: "Queue paused", reason: "You paused the queue after run 2 of 4. Start continues with run 3.", nextAction: null },
+            true
+        )
+        expect(paused.paused).toBe(true)
+        expect(interruptedBannerReport(paused, { totalRuns: 4 }, now)).toEqual({ reason: "You paused the queue after run 2 of 4. Start continues with run 3.", minutesAgo: 5, paused: true })
+        expect(halted.paused).toBe(false)
     })
 
     it("uses only a queue report whose record survived and matches the saved queue", () => {
@@ -343,5 +354,43 @@ describe("Home wiring", () => {
         expect(home).toContain("({interruptedReport?.minutesAgo ?? Math.round(interruptedQueue.ageMinutes)} min ago)")
         expect(home).toContain("{interruptedReport && <Text")
         expect(home).toContain("{interruptedReport.reason}</Text>}")
+    })
+
+    it("offers Stop after this career by the pure rule, asks first, withdraws at once, and reads the request back", async () => {
+        expect(home).toContain("const stopAfterCareerAvailable = offersStopAfterCareer(botRunning, queueProgress)")
+        const indent = "\n                            "
+        expect(home).toContain(`accessibilityRole="button"${indent}accessibilityLabel={stopAfterCareer ? "Cancel the stop after this career" : "Stop the queue after this career"}`)
+        expect(home).toContain(`onPress={() => StartModule.skipQueueRun()}${indent}accessibilityRole="button"${indent}accessibilityLabel="Skip this run"`)
+        expect(home).toContain("onPress={() => (stopAfterCareer ? requestStopAfterCareer(false) : setShowStopAfterCareerDialog(true))}")
+        expect(home).toContain("setShowStopAfterCareerDialog(false)\n                                requestStopAfterCareer(true)")
+        const asked: boolean[] = []
+        const shown: boolean[] = []
+        const request = callback("requestStopAfterCareer", {
+            useCallback: (f: unknown) => f,
+            StartModule: { setStopAfterCareer: (r: boolean) => (asked.push(r), Promise.resolve(r)) },
+            setStopAfterCareer: (v: boolean) => shown.push(v),
+        })
+        request(true)
+        request(false)
+        await flush()
+        expect(asked).toEqual([true, false])
+        expect(shown).toEqual([true, false])
+        const read: boolean[] = []
+        const refresh = callback("refreshSessionState", {
+            useCallback: (f: unknown) => f,
+            liveSessionEvents: { current: 0 },
+            StartModule: { getSessionState: () => Promise.resolve({ armed: true, botRunning: true, stopAfterCareer: true }) },
+            dispatchSession: () => {},
+            setSessionKnown: () => {},
+            setStopAfterCareer: (v: boolean) => read.push(v),
+        })
+        refresh()
+        await flush()
+        expect(read).toEqual([true])
+    })
+
+    it("words a saved pause as a pause, and says which run Start continues with", () => {
+        expect(home).toContain("? `Queue paused after run ${interruptedQueue.currentRun} of ${interruptedQueue.totalRuns}`")
+        expect(home).toContain("? `Pressing Start continues this queue with run ${interruptedQueue.currentRun + 1}.`")
     })
 })

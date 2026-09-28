@@ -166,6 +166,14 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         var queueSkipRequested: Boolean = false
 
         /**
+         * The player asked to stop once the current career has finished: the queue pauses at the
+         * next launch point instead, with the next run saved for Start. In memory only: a process
+         * death ends the session anyway, and its saved state resumes the run that was playing.
+         */
+        @Volatile
+        var stopAfterCareerRequested: Boolean = false
+
+        /**
          * Set by the campaign when a run stops because the game could not be recovered to a driveable
          * state (it crashed/was killed and a relaunch never brought it back, or a live screen is
          * genuinely un-driveable). The queue then PAUSES after this run regardless of stopOnError:
@@ -1042,6 +1050,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         val map = Arguments.createMap()
         map.putBoolean("armed", MediaProjectionService.isRunning)
         map.putBoolean("botRunning", BotService.isRunning)
+        map.putBoolean("stopAfterCareer", stopAfterCareerRequested)
         promise.resolve(map)
     }
 
@@ -1075,6 +1084,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
     @ReactMethod
     fun dismissLastQueueReport(sessionId: String, promise: Promise) {
         promise.resolve(QueueLedger.dismissLastReport(context, sessionId))
+    }
+
+    /** Asks for (or withdraws) a stop once the current career has finished; resolves the request as it now stands. */
+    @ReactMethod
+    fun setStopAfterCareer(requested: Boolean, promise: Promise) {
+        stopAfterCareerRequested = requested
+        promise.resolve(stopAfterCareerRequested)
     }
 
     /** Skips the current run and advances to the next one in the queue. */
@@ -1863,6 +1879,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 queueStopReason = null
                 queueStopKey = null
                 queueSkipRequested = false
+                stopAfterCareerRequested = false
                 gameRecoveryFailed = false
                 accessibilityHaltKey = null
                 SessionTally.reset()
@@ -2069,6 +2086,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // not, and telling the operator to go clear a slot that is already empty sends them
                 // looking for the wrong thing.
                 var queueHaltCareerInFlight = false
+                // The run after which the player's stop after this career paused the queue, or null.
+                var stoppedAfterCareerRun: Int? = null
                 // True once a career is actually confirmed to exist: the cold-start probe below
                 // found the game already off the Home screen (an existing career), or launched one
                 // itself. Run queues always reach this before the first run's own Game.start(), so a
@@ -2418,6 +2437,38 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
                         previousRunLeftCareer = !careerFinished
 
+                        // The player's stop after this career: run i finished and the resume record
+                        // above already points Start at run i+1, so finish the career-end steps (as
+                        // the last run does) and leave the loop without launching. Only after a
+                        // finished career: an unfinished one plays on under the usual rules, and the
+                        // request waits for the next finished career.
+                        if (careerFinished && stopAfterCareerRequested) {
+                            val finalizeScenario = SettingsHelper.getStringSetting("general", "scenario")
+                            if (finalizeScenario != "Daily Races" && finalizeScenario != "Team Trials") {
+                                MessageLog.i(TAG, "[QUEUE] Stop after this career: run $i finished. Finishing its career-end flow, then pausing the queue.")
+                                val navResult = navigateWithDeadline(reuseLastLaunchSetup, finalizeToHome = true)
+                                attachCareerEndSparks(ledger, i, runCareerEndSeq)
+                                if (!navResult.success) {
+                                    logNavigationFailure(navResult)
+                                    // The career-end steps did not finish: the between-run navigation
+                                    // failure's halt, not a pause. A user Stop during it is a Stop.
+                                    if (navResult.lastDetectedState != "STOPPED") {
+                                        sendQueueProgressEvent(i, totalRuns, "queueFailed", TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name, "Between-run navigation failed after run $i.")
+                                        queueHaltReason = "career-end navigation failed after run $i: ${navResult.failureReason}"
+                                        ledger.haltEnd = SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS
+                                        ledger.reasonKey = navResult.reasonKey
+                                        queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
+                                        queueHaltRun = i
+                                        queueHaltCareerInFlight = false
+                                    }
+                                    break
+                                }
+                            }
+                            stoppedAfterCareerRun = i
+                            ledger.stoppedAfterCareer = true
+                            break
+                        }
+
                         // Trainee rotation: swap to the next run's trainee (settings + select mode)
                         // before reading the scenario or navigating. Stop the queue if its snapshot
                         // is missing rather than launch the wrong trainee under stale settings.
@@ -2512,6 +2563,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
                 if (enableRunQueue) {
                     val halt = queueHaltReason
+                    // A Stop or the service going away after the pause point wins over the pause.
+                    val pausedAfterRun = stoppedAfterCareerRun?.takeIf { !queueStopRequested && BotService.isRunning }
                     if (halt != null) {
                         // Do NOT clear the persisted queue state: the queue did not finish, and the
                         // remaining runs are still owed. The career occupying the game's one slot has
@@ -2541,6 +2594,14 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         }
                         MessageLog.e(TAG, "[QUEUE] ========================================\n")
                         notifyQueueHalted(doneRuns, totalRuns, unrun, halt, queueHaltCareerInFlight)
+                    } else if (pausedAfterRun != null) {
+                        // Paused at the player's request after a finished career. Keep the resume
+                        // record saved at the launch point: Start continues with the next run.
+                        val pausedMessage = "Paused after run $pausedAfterRun of $totalRuns. Start continues with run ${pausedAfterRun + 1}."
+                        sendQueueProgressEvent(pausedAfterRun, totalRuns, "stoppedAfterCareer", message = pausedMessage)
+                        MessageLog.i(TAG, "\n[QUEUE] ========================================")
+                        MessageLog.i(TAG, "[QUEUE] Queue paused after run $pausedAfterRun of $totalRuns, as asked. Start continues with run ${pausedAfterRun + 1}.")
+                        MessageLog.i(TAG, "[QUEUE] ========================================\n")
                     } else {
                         // Clear persisted queue state since queue finished normally.
                         clearQueueState(context)

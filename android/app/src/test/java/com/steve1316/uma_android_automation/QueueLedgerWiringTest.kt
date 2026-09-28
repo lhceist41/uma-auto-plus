@@ -55,7 +55,7 @@ class QueueLedgerWiringTest {
         @Test
         fun `each queueHaltReason assignment records its ending right beside it`() {
             val sites = Regex("queueHaltReason = \"").findAll(session).map { it.range.first }.toList()
-            assertEquals(9, sites.size, "the halt sites")
+            assertEquals(10, sites.size, "the halt sites")
             val ends =
                 sites.map { site ->
                     val block = session.substring(site, session.indexOf('\n', session.indexOf('\n', site) + 1))

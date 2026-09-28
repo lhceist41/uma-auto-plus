@@ -48,6 +48,7 @@ class ProgressNotificationTest {
                 "queueHalted" to "Run 2 of 4, The bot is not running",
                 "queueStopped" to "Run 2 of 4, The bot is not running",
                 "queueComplete" to "Run 2 of 4, The bot is not running",
+                "stoppedAfterCareer" to "Run 2 of 4, The bot is not running",
                 "notRunning" to "Run 2 of 4, The bot is not running",
             )
         assertEquals(STATUS_LABELS.keys, expected.keys, "every key in the table is covered")
