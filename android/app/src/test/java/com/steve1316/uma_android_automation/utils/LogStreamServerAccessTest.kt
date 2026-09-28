@@ -396,6 +396,8 @@ class LogStreamServerAccessTest {
             assertEquals("AUTH_OK", client.next())
             client.untilHistoryDone()
             for (frame in frames) client.sendText(frame)
+            // A new second of the per-connection command budget, so the barrier is never the dropped frame.
+            Thread.sleep(2_100)
             client.sendText("CMD:ARM_LAUNCH_MISMATCH_TEST")
             assertEquals("ACK:ARM_LAUNCH_MISMATCH_TEST", client.nextNonStatus())
         }
@@ -496,6 +498,120 @@ class LogStreamServerAccessTest {
         assertNull(LogStreamServer.stopAfterCareerCommand(stop, offered = false, requested = false))
         assertNull(LogStreamServer.stopAfterCareerCommand(stop, offered = true, requested = true), "no change, no log")
         assertNull(LogStreamServer.stopAfterCareerCommand("CMD:REFRESH_IMAGES", offered = true, requested = false))
+    }
+
+    /** The `[QUEUE]` lines the dashboard's stop commands wrote, from the app's own log. */
+    private fun stopCommandLogLines() = com.steve1316.automation_library.utils.MessageLog.getMessageLogCopy().count { it.contains("Stop after this career") && it.contains("from the dashboard") }
+
+    @Test
+    fun `an oversized frame closes only its own socket, before or after the code`() {
+        WsClient(port).use { client ->
+            client.sendText("AUTH:" + "x".repeat(2_000))
+            assertEquals("CLOSE:1009", client.next(), "an oversized first frame is refused as too big")
+        }
+        WsClient(port).use { bystander ->
+            bystander.sendText("AUTH:$code")
+            assertEquals("AUTH_OK", bystander.next())
+            bystander.untilHistoryDone()
+            WsClient(port).use { client ->
+                client.sendText("AUTH:$code")
+                assertEquals("AUTH_OK", client.next())
+                client.untilHistoryDone()
+                client.sendText("CMD:" + "y".repeat(LogStreamServer.MAX_INCOMING_FRAME_BYTES.toInt()))
+                assertEquals("CLOSE:1009", client.nextNonStatus(), "an oversized frame after the code closes that socket")
+            }
+            log("10:00:03.000 [INFO] still streaming")
+            assertTrue(bystander.nextNonStatus()?.contains("still streaming") == true, "another client is unaffected")
+        }
+    }
+
+    @Test
+    fun `the largest frames the server sends are not limited by the incoming frame size`() {
+        val long = "10:00:04.000 [INFO] " + "z".repeat(20_000)
+        log(long)
+        WsClient(port).use { client ->
+            client.sendText("AUTH:$code")
+            assertEquals("AUTH_OK", client.next())
+            assertTrue(client.untilHistoryDone().contains("z".repeat(20_000)), "a 20 KB history frame arrives whole")
+            log("10:00:05.000 [INFO] " + "w".repeat(20_000))
+            assertTrue(client.nextNonStatus()?.contains("w".repeat(20_000)) == true, "and so does a 20 KB live line")
+        }
+    }
+
+    @Test
+    fun `a flood of stop commands changes the state once and logs once`() =
+        withQueue {
+            val before = stopCommandLogLines()
+            WsClient(port).use { client ->
+                client.sendText("AUTH:$code")
+                assertEquals("AUTH_OK", client.next())
+                client.untilHistoryDone()
+                repeat(40) { client.sendText(LogStreamServer.CMD_STOP_AFTER_CAREER) }
+                Thread.sleep(2_100)
+                client.sendText("CMD:ARM_LAUNCH_MISMATCH_TEST")
+                assertEquals("ACK:ARM_LAUNCH_MISMATCH_TEST", client.nextNonStatus(), "the flood was handled")
+            }
+            assertTrue(StartModule.stopAfterCareerRequested)
+            assertEquals(1, stopCommandLogLines() - before)
+        }
+
+    @Test
+    fun `an alternating flood is cut to the per-second budget, with nothing logged for the dropped frames`() =
+        withQueue {
+            val before = stopCommandLogLines()
+            WsClient(port).use { client ->
+                client.sendText("AUTH:$code")
+                assertEquals("AUTH_OK", client.next())
+                client.untilHistoryDone()
+                repeat(20) { client.sendText(if (it % 2 == 0) LogStreamServer.CMD_STOP_AFTER_CAREER else LogStreamServer.CMD_CANCEL_STOP_AFTER_CAREER) }
+                Thread.sleep(2_100)
+                client.sendText("CMD:ARM_LAUNCH_MISMATCH_TEST")
+                assertEquals("ACK:ARM_LAUNCH_MISMATCH_TEST", client.nextNonStatus())
+            }
+            val logged = stopCommandLogLines() - before
+            assertTrue(logged in 1..LogStreamServer.COMMAND_FRAMES_PER_SECOND, "at most the budget in the flood's second: $logged")
+        }
+
+    @Test
+    fun `the command budget allows a few frames a second per connection`() {
+        val second = 1_000_000_000L
+        val budget = LogStreamServer.CommandBudget(perSecond = 3)
+        assertEquals(listOf(true, true, true, false, false), (0 until 5).map { budget.allow(second + it) })
+        assertTrue(budget.allow(2 * second - 1).not(), "the window lasts a second")
+        assertTrue(budget.allow(2 * second), "a new second, a new budget")
+        // nanoTime has an arbitrary origin: any value, even the smallest, starts a window.
+        val early = LogStreamServer.CommandBudget(perSecond = 1)
+        assertTrue(early.allow(Long.MIN_VALUE))
+        assertFalse(early.allow(Long.MIN_VALUE + 1))
+        assertTrue(early.allow(Long.MIN_VALUE + second))
+        val atZero = LogStreamServer.CommandBudget(perSecond = 1)
+        assertTrue(atZero.allow(0L))
+        assertFalse(atZero.allow(1L), "a window that starts at 0 is still a window")
+        assertEquals(5, LogStreamServer.COMMAND_FRAMES_PER_SECOND)
+        assertTrue(LogStreamServer.MAX_INCOMING_FRAME_BYTES >= ("AUTH:" + "a".repeat(16)).length * 10, "wide room over the largest legitimate frame")
+        val server = sourceFile("utils/LogStreamServer.kt").readText().replace("\r\n", "\n")
+        assertTrue(server.contains("install(WebSockets) {\n                    maxFrameSize = MAX_INCOMING_FRAME_BYTES\n                }"))
+        assertTrue(server.contains("if (frame is Frame.Text) {\n                    if (!budget.allow(System.nanoTime())) continue\n"), "monotonic; a dropped frame gets no reply and no log")
+    }
+
+    @Test
+    fun `each connection has its own budget, so one busy client cannot starve another`() {
+        WsClient(port).use { first ->
+            WsClient(port).use { second ->
+                for (client in listOf(first, second)) {
+                    client.sendText("AUTH:$code")
+                    assertEquals("AUTH_OK", client.next())
+                    client.untilHistoryDone()
+                }
+                // Both clients use their whole budget inside the same second: 4 ignored frames, then the ARM.
+                for (client in listOf(first, second)) {
+                    repeat(LogStreamServer.COMMAND_FRAMES_PER_SECOND - 1) { client.sendText("CMD:NOT_A_COMMAND") }
+                    client.sendText("CMD:ARM_LAUNCH_MISMATCH_TEST")
+                }
+                assertEquals("ACK:ARM_LAUNCH_MISMATCH_TEST", first.nextNonStatus(), "the first connection's fifth frame is within its own budget")
+                assertEquals("ACK:ARM_LAUNCH_MISMATCH_TEST", second.nextNonStatus(), "and so is the second's")
+            }
+        }
     }
 
     private fun log(line: String) = LogStreamServer.onMessageLogEvent(JSEvent("MessageLog", line))

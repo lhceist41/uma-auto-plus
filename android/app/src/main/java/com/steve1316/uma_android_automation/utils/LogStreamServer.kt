@@ -118,6 +118,36 @@ object LogStreamServer {
     /** STATUS goes out at most this often, and only when it changed. */
     private const val STATUS_INTERVAL_MS = 1_000L
 
+    /**
+     * The largest frame a client may send. The client only ever sends `AUTH:<code>` (21 bytes) and
+     * `CMD:*` frames (at most 28 bytes); 1 KiB leaves wide room and keeps any other frame from being
+     * buffered. Ktor applies it to incoming frames only and closes an oversized one with 1009, so the
+     * large history and image frames the server sends are unaffected.
+     */
+    internal const val MAX_INCOMING_FRAME_BYTES = 1024L
+
+    /** Command frames one connection may have handled per second; the pages send a few a minute at most. */
+    internal const val COMMAND_FRAMES_PER_SECOND = 5
+
+    /** One connection's command budget; frames over it are dropped with no reply and no log. */
+    internal class CommandBudget(
+        private val perSecond: Int = COMMAND_FRAMES_PER_SECOND,
+    ) {
+        private var started = false
+        private var windowStartNanos = 0L
+        private var used = 0
+
+        /** [nowNanos] is monotonic ([System.nanoTime]): a wall-clock step back must not freeze the window. */
+        fun allow(nowNanos: Long): Boolean {
+            if (!started || nowNanos - windowStartNanos >= 1_000_000_000L) {
+                started = true
+                windowStartNanos = nowNanos
+                used = 0
+            }
+            return ++used <= perSecond
+        }
+    }
+
     /** The dashboard's "Stop after this career" and "Cancel stop", accepted only on an authenticated socket. */
     internal const val CMD_STOP_AFTER_CAREER = "CMD:STOP_AFTER_CAREER"
     internal const val CMD_CANCEL_STOP_AFTER_CAREER = "CMD:CANCEL_STOP_AFTER_CAREER"
@@ -527,10 +557,12 @@ object LogStreamServer {
         // Enqueue the registration action to the background worker.
         actionChannel?.send(LogAction.NewClient(session))
 
+        val budget = CommandBudget()
         try {
             // Keep the session alive until the client disconnects.
             for (frame in session.incoming) {
                 if (frame is Frame.Text) {
+                    if (!budget.allow(System.nanoTime())) continue
                     val text = frame.readText()
                     if (text == "CMD:REFRESH_IMAGES") {
                         sendDebugImages(session)
@@ -1087,7 +1119,9 @@ object LogStreamServer {
         server =
             embeddedServer(CIO, host = "127.0.0.1", port = port) {
                 // Install the WebSockets plugin with default configuration.
-                install(WebSockets)
+                install(WebSockets) {
+                    maxFrameSize = MAX_INCOMING_FRAME_BYTES
+                }
 
                 // Every route, the WebSocket upgrade included, answers only a loopback Host with this port.
                 intercept(ApplicationCallPipeline.Plugins) {
