@@ -30,6 +30,7 @@ import { presetMoodFloorOf } from "../../lib/moodFloorPolicy"
 import { keepPersonalSettings } from "../../lib/personalSettings"
 import { GRAND_CONCERT_KEY, GRAND_CONCERT_WARNING, isGrandConcert, scenarioCapabilities } from "../../lib/scenarioKey"
 import { offersStopAfterCareer, presentQueueProgress, restoredQueueProgress, type QueueProgressEvent } from "../../lib/queueProgressPresentation"
+import { confirmStopAfterCareer, sendStopAfterCareer } from "../../lib/stopAfterCareer"
 import { interruptedBannerReport, lastSessionCardVisible, parseLastSession, type LastSessionView } from "../../lib/queueReportPresentation"
 import { collectPreflightWarnings, readPreflightProbes, shouldShowPreflight, type PreflightItem } from "../../lib/preflightWarnings"
 import { accessibilityRepairStatus } from "../../lib/accessibilityRepairStatus"
@@ -146,7 +147,6 @@ const Home = () => {
     const [showAvoidDialog, setShowAvoidDialog] = useState<boolean>(false)
     // The running queue's "stop after this career" request, as Kotlin holds it.
     const [stopAfterCareer, setStopAfterCareer] = useState<boolean>(false)
-    const [showStopAfterCareerDialog, setShowStopAfterCareerDialog] = useState<boolean>(false)
     const [avoidWarnings, setAvoidWarnings] = useState<{ label: string; reason: string }[]>([])
     const [showPreflightDialog, setShowPreflightDialog] = useState<boolean>(false)
     const [preflightItems, setPreflightItems] = useState<PreflightItem[]>([])
@@ -373,9 +373,9 @@ const Home = () => {
         if (!botRunning) setStopAfterCareer(false)
     }, [botRunning])
     const requestStopAfterCareer = (requested: boolean) => {
-        StartModule.setStopAfterCareer(requested)
-            .then((now: unknown) => setStopAfterCareer(now === true))
-            .catch(() => {})
+        sendStopAfterCareer(StartModule, requested)
+            .then(setStopAfterCareer)
+            .catch((error: Error) => showSnackbar(error.message, "error"))
     }
 
     /** The last report's reason and end time for the interrupted-queue banner, when the report belongs to that saved queue. */
@@ -1198,7 +1198,7 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
                     </View>
                     {stopAfterCareerAvailable && (
                         <TouchableOpacity
-                            onPress={() => (stopAfterCareer ? requestStopAfterCareer(false) : setShowStopAfterCareerDialog(true))}
+                            onPress={() => (stopAfterCareer ? requestStopAfterCareer(false) : confirmStopAfterCareer(Alert.alert, () => requestStopAfterCareer(true)))}
                             accessibilityRole="button"
                             accessibilityLabel={stopAfterCareer ? "Cancel the stop after this career" : "Stop the queue after this career"}
                             style={{
@@ -1238,30 +1238,6 @@ where width and height of the screen is in pixels, and diagonal is the diagonal 
             </View>
 
             <WhatsNewDialog content={armed || botRunning ? null : whatsNew.content} onClose={whatsNew.dismiss} />
-
-            <AlertDialog open={showStopAfterCareerDialog} onOpenChange={setShowStopAfterCareerDialog}>
-                <AlertDialogContent onDismiss={() => setShowStopAfterCareerDialog(false)}>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Stop after this career?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            The bot finishes the career it is on, including its end steps, then pauses the queue. Pressing Start later continues with the next run.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel onPress={() => setShowStopAfterCareerDialog(false)}>
-                            <Text>Keep going</Text>
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                            onPress={() => {
-                                setShowStopAfterCareerDialog(false)
-                                requestStopAfterCareer(true)
-                            }}
-                        >
-                            <Text>Stop after this career</Text>
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
 
             <AlertDialog open={showNotReadyDialog} onOpenChange={setShowNotReadyDialog}>
                 <AlertDialogContent onDismiss={() => setShowNotReadyDialog(false)}>

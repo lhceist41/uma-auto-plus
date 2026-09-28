@@ -2,6 +2,7 @@ import fs from "fs"
 import path from "path"
 import { transformSync } from "@babel/core"
 import { interruptedBannerReport, lastSessionCardVisible, parseLastSession, type LastSessionView } from "../queueReportPresentation"
+import { sendStopAfterCareer } from "../stopAfterCareer"
 
 const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, "../__fixtures__/queueReportText.json"), "utf8")) as {
     cases: { name: string; report: Record<string, unknown>; text: { title: string; reason: string; nextAction: string | null } }[]
@@ -361,12 +362,13 @@ describe("Home wiring", () => {
         const indent = "\n                            "
         expect(home).toContain(`accessibilityRole="button"${indent}accessibilityLabel={stopAfterCareer ? "Cancel the stop after this career" : "Stop the queue after this career"}`)
         expect(home).toContain(`onPress={() => StartModule.skipQueueRun()}${indent}accessibilityRole="button"${indent}accessibilityLabel="Skip this run"`)
-        expect(home).toContain("onPress={() => (stopAfterCareer ? requestStopAfterCareer(false) : setShowStopAfterCareerDialog(true))}")
-        expect(home).toContain("setShowStopAfterCareerDialog(false)\n                                requestStopAfterCareer(true)")
+        expect(home).toContain("onPress={() => (stopAfterCareer ? requestStopAfterCareer(false) : confirmStopAfterCareer(Alert.alert, () => requestStopAfterCareer(true)))}")
         const asked: boolean[] = []
         const shown: boolean[] = []
         const request = callback("requestStopAfterCareer", {
             useCallback: (f: unknown) => f,
+            sendStopAfterCareer,
+            showSnackbar: () => {},
             StartModule: { setStopAfterCareer: (r: boolean) => (asked.push(r), Promise.resolve(r)) },
             setStopAfterCareer: (v: boolean) => shown.push(v),
         })
