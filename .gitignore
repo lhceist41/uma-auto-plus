@@ -130,6 +130,8 @@ __pycache__/
 /tools/*
 !/tools/host-companion/
 !/tools/host-companion/**
+!/tools/open-dashboard.ps1
+!/tools/open-dashboard.cmd
 /tools/host-companion/build/
 
 # One-off local notes at the repository root. Public documentation lives at the

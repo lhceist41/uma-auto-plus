@@ -198,7 +198,7 @@ const RunQueueSettings = () => {
                                     checked={runQueueSettings.autoFillSupports}
                                     onCheckedChange={(checked) => updateSetting("autoFillSupports", checked)}
                                     label="Auto-Fill Support Deck"
-                                    description="When enabled, clicks the game's own Auto-Fill button on the support deck screen before each career starts. The game then rebuilds the deck with its own logic, which may replace cards you placed yourself as well as fill empty slots. Disable this to keep your hand-built deck exactly as you left it."
+                                    description="When enabled, clicks the game's own Auto-Fill button on the support deck screen before each career starts. The game then rebuilds the deck with its own logic, which may replace cards you placed yourself as well as fill empty slots, including the friend (borrow) slot. The bot borrows a card itself only if the friend slot is still empty after Auto-Fill, or if the friend card is a duplicate or the trainee's own character (replacing those needs Smart Borrow on). With Smart Borrow off it takes a recognised preferred friend card if one is visible, otherwise the first card in the Borrow list that is not a duplicate or the trainee's own character. Disable this to keep your hand-built deck exactly as you left it."
                                     className="mt-4"
                                 />
 

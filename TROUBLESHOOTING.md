@@ -20,7 +20,7 @@ The bot can heal this on its own, but only if it's allowed to re-enable the serv
 adb shell pm grant com.lhceist41.uma_auto_plus android.permission.WRITE_SECURE_SETTINGS
 ```
 
-Run it from a PC with `adb`, or from the device itself using **aShell You + Shizuku** (the same tools used for the resolution steps in the README). Without this grant, the bot can't recover when the emulator kills the service, and unattended runs will stop the first time it happens. Home shows whether the permission is granted.
+Run it from a PC with `adb`, or from the device itself using **aShell You + Shizuku** (the same tools used for the resolution steps in the README). On MuMu, if `adb` is not recognized, use MuMu's own copy in front of the command: `"C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\adb.exe" -s 127.0.0.1:16384 shell pm grant com.lhceist41.uma_auto_plus android.permission.WRITE_SECURE_SETTINGS` (the folder name can differ by MuMu version; the port is in MuMu's settings). Without this grant, the bot can't recover when the emulator kills the service, and unattended runs will stop the first time it happens. Home shows whether the permission is granted.
 
 MuMu can also leave the service switched on while the bot's taps silently stop landing. No fix from inside the app is known for that: when restarting the service changes nothing, the bot stops the queue and says its taps stopped having any effect. Restart MuMu (or the device), then press Start again.
 
@@ -93,9 +93,9 @@ The update is refused while the bot is running, while Start is armed (the overla
 
 ## Watch your queue from your PC
 
-The dashboard is part of the Remote Log Viewer, which is off by default. It only shows what the bot is doing, and it can be opened only on the device or from a computer connected to it over ADB. The steps are in [README.md](README.md#watch-your-queue-from-your-pc): turn on **Enable Remote Log Viewer** under **Settings**, **Debug Settings**, press **Start**, connect ADB (on MuMu, `adb connect 127.0.0.1:<the ADB port from MuMu's settings>`; on a phone, USB or Wireless debugging), run `adb forward tcp:9000 tcp:9000` with your Server Port on both sides, open `http://localhost:9000`, and enter the access code shown on the Debug Settings page.
+The dashboard is part of the Remote Log Viewer, which is off by default. It only shows what the bot is doing, and it can be opened only on the device or from a computer connected to it over ADB. The steps are in [README.md](README.md#watch-your-queue-from-your-pc): turn on **Enable Remote Log Viewer** under **Settings**, **Debug Settings**, press **Start**, connect ADB (on MuMu, `adb connect 127.0.0.1:<the ADB port from MuMu's settings>`; on a phone, USB or Wireless debugging), run `adb forward tcp:9000 tcp:9000` with your Server Port on both sides, open `http://localhost:9000`, and enter the access code shown on the Debug Settings page. On Windows with MuMu, double-clicking [`tools/open-dashboard.cmd`](tools/open-dashboard.cmd) does the connect, forward and browser steps for you. If `adb` is not recognized, MuMu's own copy is at `C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\adb.exe` (the folder name can differ by MuMu version); put that full path in quotes in front of the commands.
 
-- **The page does not open.** The viewer runs only after Start is pressed and stops when you press Stop. Run `adb forward` again after MuMu or the phone restarts, and use the same port on both sides.
+- **The page does not open.** The viewer runs only after Start is pressed and stops when you press Stop. Run `adb forward` again after MuMu or the phone restarts, and use the same port on both sides. On MuMu, double-clicking `tools/open-dashboard.cmd` again repeats both steps.
 - **The code is refused.** The code changes each time you press Start; enter the one shown now on the Debug Settings page.
 
 ## Reporting a bug

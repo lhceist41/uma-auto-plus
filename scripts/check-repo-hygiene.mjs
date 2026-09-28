@@ -65,6 +65,14 @@ const ALLOWLIST = new Map([
         "android/app/src/test/resources/fixtures/sparks/PROVENANCE.md",
         "fixture provenance required by the spark-reading tests that consume these captures",
     ],
+    [
+        "tools/open-dashboard.ps1",
+        "player-facing Windows helper that the README links to open the dashboard",
+    ],
+    [
+        "tools/open-dashboard.cmd",
+        "double-click wrapper for the dashboard helper",
+    ],
 ])
 
 /** One rule: a predicate over a tracked path plus the reason it is refused. */

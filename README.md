@@ -79,7 +79,7 @@ This project is purely for educational purposes to learn about Android automatio
 > ```
 > adb shell pm grant com.lhceist41.uma_auto_plus android.permission.WRITE_SECURE_SETTINGS
 > ```
-> Run it from a PC with `adb`, or on-device with aShell You and Shizuku (the same tools as the resolution steps below).
+> Run it from a PC with `adb`, or on-device with aShell You and Shizuku (the same tools as the resolution steps below). On MuMu, if `adb` is not recognized, use MuMu's own copy in front of the command, for example `"C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\adb.exe" -s 127.0.0.1:16384 shell pm grant ...` (the folder name can differ by MuMu version; the port is in MuMu's settings).
 
 5. Tapping `Start` then asks for screen-capture access (select `Entire screen` if prompted). A floating overlay button appears that you can drag around the screen.
 6. Follow the guidance overlay while dragging, so the button ends up somewhere it will not cover important UI.
@@ -168,7 +168,7 @@ These are off unless you turn them on:
 
 Alternatively, do the same from a computer:
 
-1. Install [**adb**](https://developer.android.com/tools/releases/platform-tools). Add the platform-tools folder to `PATH` via the `Environment Variable` setting under `View advanced system settings` so the terminal knows the `adb` command. You may need to restart your computer for the change to be picked up.
+1. Install [**adb**](https://developer.android.com/tools/releases/platform-tools). Add the platform-tools folder to `PATH` via the `Environment Variable` setting under `View advanced system settings` so the terminal knows the `adb` command. You may need to restart your computer for the change to be picked up. MuMu Player already includes an adb at `C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\adb.exe` (the folder name can differ by MuMu version); on MuMu you can skip this step and put that full path in quotes wherever a step below says `adb`.
 2. Open a new terminal (cmd, PowerShell, etc).
 3. Plug in your Android device via USB. Executing `adb devices` will show your connected device when `Settings > Developer options > USB Debugging` is enabled. There may be a popup on the device asking you to allow the ADB connection. Wireless ADB is also available via `Settings > Developer options > Wireless debugging`.
 4. Execute the following individually:
@@ -188,9 +188,10 @@ The Remote Log Viewer includes a dashboard: the run the queue is on, what the bo
 1. In UMA Auto+, open **Settings**, then **Debug Settings**, and turn on **Enable Remote Log Viewer**. Note the **Server Port** (9000 by default).
 2. Press **Start**. The access code appears under **Remote Log Viewer** on the Debug Settings page. It changes each time you press Start.
 3. Connect ADB from your PC:
-   - **MuMu:** find the ADB port in MuMu's settings (for example `16384`), then run `adb connect 127.0.0.1:<that port>`.
+   - **MuMu on Windows:** double-click [`tools/open-dashboard.cmd`](tools/open-dashboard.cmd). It finds MuMu's own adb, connects to MuMu's ADB port (`127.0.0.1:16384`), forwards your Server Port (9000) and opens the page, so you can skip the rest of these steps. If you installed from a release and have no copy of the repository, download [`open-dashboard.cmd`](https://github.com/lhceist41/uma-auto-plus/blob/main/tools/open-dashboard.cmd) and [`open-dashboard.ps1`](https://github.com/lhceist41/uma-auto-plus/blob/main/tools/open-dashboard.ps1) from GitHub (open each file and use its download button), save both into one folder, then double-click the `.cmd`. If your ADB port or Server Port is different, run `tools\open-dashboard.ps1 -Endpoint 127.0.0.1:<ADB port> -Port <Server Port>` in PowerShell. Add `-DryRun` to see what it would do without running anything.
+   - **MuMu by hand:** find the ADB port in MuMu's settings (for example `16384`), then run `adb connect 127.0.0.1:<that port>`. If `adb` is not recognized, use MuMu's own copy with its full path in quotes: `"C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\adb.exe" connect 127.0.0.1:16384` (the folder name can differ by MuMu version).
    - **Phone:** connect by USB with USB debugging on, or pair with Wireless debugging.
-4. Run `adb forward tcp:9000 tcp:9000`, with your Server Port on both sides.
+4. Run `adb forward tcp:9000 tcp:9000`, with your Server Port on both sides. With MuMu's copy: `"C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\adb.exe" -s 127.0.0.1:16384 forward tcp:9000 tcp:9000`.
 5. Open `http://localhost:9000` in your PC's browser and enter the access code. **Full log** on the dashboard opens the log viewer.
 
 ## To view logs in real time
@@ -201,7 +202,7 @@ The bot also writes a log file per career, which is the thing to attach to a bug
 2. Connect your device:
    - **USB:** enable `Developer Options` and `USB Debugging`, then connect by cable.
    - **Wireless:** enable `Wireless debugging` in Developer Options and pair with the code or QR.
-   - **Emulators:** enable the emulator's ADB option (usually `127.0.0.1:5555`). If Android Studio still does not see it, run `adb connect 127.0.0.1:5555` from a terminal. `adb disconnect` first gives you a clean slate.
+   - **Emulators:** enable the emulator's ADB option (usually `127.0.0.1:5555`). If Android Studio still does not see it, run `adb connect 127.0.0.1:5555` from a terminal. `adb disconnect` first gives you a clean slate. On MuMu, use its own ADB port and its own adb (full path in [Watch your queue from your PC](#watch-your-queue-from-your-pc)).
 3. Select your device in Logcat's device dropdown.
 4. Filter with `package:com.lhceist41.uma_auto_plus [UAA]`, or just `[UAA]`.
 
