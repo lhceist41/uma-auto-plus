@@ -19,6 +19,35 @@ export const deepMerge = <T extends Record<string, any>>(target: T, source: Part
 }
 
 /**
+ * Reference datasets the app writes into the settings table on every start (useBootstrap), keyed
+ * by category. They are not the player's settings: Export leaves most of them out, and a
+ * settings object applied without them no longer matches the rows on disk, which the Start check
+ * refuses until the app is restarted and reloads every row.
+ */
+const BUNDLED_DATA_KEYS: Record<string, string[]> = {
+    trainingEvent: ["characterEventData", "supportEventData", "scenarioEventData"],
+    racing: ["racingPlanData"],
+}
+
+/**
+ * Copies the bundled datasets from the settings the app is running with into settings about to
+ * replace them (an import or a reset), so a file can neither drop them nor bring an older copy.
+ * @param next - The settings about to be applied.
+ * @param current - The settings the app is running with.
+ * @returns `next` with the current bundled datasets.
+ */
+export const withBundledData = <T extends Record<string, any>>(next: T, current: Record<string, any>): T => {
+    const output: Record<string, any> = { ...next }
+    for (const [category, keys] of Object.entries(BUNDLED_DATA_KEYS)) {
+        for (const key of keys) {
+            if (current?.[category]?.[key] === undefined) continue
+            output[category] = { ...output[category], [key]: current[category][key] }
+        }
+    }
+    return output as T
+}
+
+/**
  * Converts `Settings` object to database batch format.
  * @param settings - The `Settings` object to convert.
  * @returns An array of objects in the format `{ category: string; key: string; value: any }`.

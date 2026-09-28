@@ -7,7 +7,7 @@ import { defaultSettings, Settings, BotStateContext } from "../context/BotStateC
 import { databaseManager } from "../lib/database"
 import { startTiming } from "../lib/performanceLogger"
 import { logWithTimestamp, logErrorWithTimestamp } from "../lib/logger"
-import { deepMerge, convertSettingsToBatch, applyMigrations } from "../lib/settingsUtils"
+import { deepMerge, convertSettingsToBatch, applyMigrations, withBundledData } from "../lib/settingsUtils"
 import { buildRotationSnapshotRows, BuildRotationResult } from "../lib/rotationSnapshots"
 import { LaunchBarrierResult, launchConfigIdentity, identityFromRows, verifyLaunchConfigPersisted } from "../lib/launchConfig"
 import { performSettingsImport, ImportSettingsResult, ImportedProfile } from "../lib/settingsImport"
@@ -312,7 +312,8 @@ export const useSettingsManager = () => {
                         await databaseManager.initialize()
                     }
 
-                    const { settings: importedSettings, profiles } = await loadFromJSONFile(fileUri)
+                    const { settings: fileSettings, profiles } = await loadFromJSONFile(fileUri)
+                    const importedSettings = withBundledData(fileSettings, settingsRef.current)
 
                     // Preserve the current Discord token: export strips it for privacy, so re-importing
                     // your own config would otherwise wipe it.
@@ -532,7 +533,7 @@ export const useSettingsManager = () => {
             }
 
             // Create a deep copy of default settings to avoid reference issues.
-            const defaultSettingsCopy = JSON.parse(JSON.stringify(defaultSettings))
+            const defaultSettingsCopy = withBundledData(JSON.parse(JSON.stringify(defaultSettings)), settingsRef.current)
 
             // Save default settings to SQLite database.
             await databaseManager.saveSettingsBatch(convertSettingsToBatch(defaultSettingsCopy))
