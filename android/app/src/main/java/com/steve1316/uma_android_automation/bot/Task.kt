@@ -97,6 +97,14 @@ abstract class Task(game: Game) : DialogHandler(game) {
                 connectionLost -> TaskResultCode.TASK_RESULT_CONNECTION_ERROR
                 else -> TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION
             }
+
+        /**
+         * The career ledger's `result` word. A stop the bot requested itself (it always sets
+         * [StartModule.queueStopReason]) reads STOPPED_BY_BOT, so it is never counted as the user's
+         * MANUALLY_STOPPED; every other code keeps its name without the prefix.
+         */
+        internal fun careerLedgerResult(code: TaskResultCode, botStopReason: String?): String =
+            if (code == TaskResultCode.TASK_RESULT_MANUALLY_STOPPED && botStopReason != null) "STOPPED_BY_BOT" else code.name.removePrefix("TASK_RESULT_")
     }
 
     // //////////////////////////////////////////////////////////////////////////////////////////////////

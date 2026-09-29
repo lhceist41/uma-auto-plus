@@ -4286,7 +4286,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 // this career's Veteran to the lineage read taken during its launch. Absent when no
                 // launch navigation minted one (a hand-played or restart-resumed career).
                 LaunchTransactionGate.active?.id?.let { put("launchTransactionId", it) }
-                put("result", result.code.name.removePrefix("TASK_RESULT_"))
+                put("result", careerLedgerResult(result.code, StartModule.queueStopReason))
                 put("outcome", outcome)
                 forceEndReason?.let { put("forceEndReason", it) }
                 put("trainee", resolvedName)
@@ -4314,13 +4314,14 @@ abstract class Campaign(game: Game) : Task(game) {
                 }
                 if (result.code == TaskResultCode.TASK_RESULT_MANUALLY_STOPPED) {
                     StartModule.queueStopReason?.let { put("stopReason", it) }
+                    StartModule.queueStopKey?.let { put("stopKey", it) }
                 }
                 put("cfg", JSONObject(outcomeConfigSnapshot as Map<*, *>))
             }
         OutcomeCorpus.append(game.myContext, record)
 
         return buildString {
-            append("[CAREER_END] result=").append(result.code.name.removePrefix("TASK_RESULT_"))
+            append("[CAREER_END] result=").append(careerLedgerResult(result.code, StartModule.queueStopReason))
             append(" outcome=").append(outcome)
             forceEndReason?.let { append(" forceEndReason=\"").append(it).append('"') }
             append(" trainee=").append(resolvedName)
@@ -4342,6 +4343,7 @@ abstract class Campaign(game: Game) : Task(game) {
             }
             if (result.code == TaskResultCode.TASK_RESULT_MANUALLY_STOPPED) {
                 StartModule.queueStopReason?.let { append(" stopReason=\"").append(it).append('"') }
+                StartModule.queueStopKey?.let { append(" stopKey=").append(it) }
             }
         }
     }

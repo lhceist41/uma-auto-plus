@@ -492,6 +492,26 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             return ResumePlan(if (phase == PHASE_CAREER) currentRun else currentRun + 1, prior)
         }
 
+        /**
+         * Whether a queue that ended without a halt or a pause keeps its resume record. Only the bot's
+         * own stops set [queueStopReason] (trainee mismatch, an unanswered data prompt, unresponsive
+         * navigation); the app, overlay and notification Stops set only [queueStopRequested]. A bot stop
+         * keeps the record as a halt does, so Start resumes the saved run instead of starting run 1 on
+         * the career still in the game's slot. A user stop still clears it, and so does a bot stop after
+         * the last career finished ([finishesLastCareer]): the record still names that run, so keeping it
+         * would replay it on a finished queue.
+         */
+        fun keepsResumeRecordAfterStop(queueStopRequested: Boolean, botStopReason: String?, lastCareerFinished: Boolean): Boolean =
+            queueStopRequested && botStopReason != null && !lastCareerFinished
+
+        /**
+         * Whether run [runIndex] finished the queue's last career. Decided from that run's own result, not
+         * from a count of completed runs: an earlier errored or skipped run is not counted as completed,
+         * yet the queue still reaches and finishes its last run.
+         */
+        fun finishesLastCareer(runIndex: Int, totalRuns: Int, resultCode: TaskResultCode): Boolean =
+            runIndex == totalRuns && resultCode == TaskResultCode.TASK_RESULT_COMPLETE
+
         /** Retries a queue may spend per Start: enough to ride out a one-off error, too few to loop on a career that keeps failing. */
         const val RUN_RETRY_BUDGET = 2
 
@@ -2098,6 +2118,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // not, and telling the operator to go clear a slot that is already empty sends them
                 // looking for the wrong thing.
                 var queueHaltCareerInFlight = false
+                var lastCareerFinished = false
                 // The run after which the player's stop after this career paused the queue, or null.
                 var stoppedAfterCareerRun: Int? = null
                 // True once a career is actually confirmed to exist: the cold-start probe below
@@ -2290,6 +2311,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             }
                             else -> result
                         }
+                    if (finishesLastCareer(i, totalRuns, effectiveResult.code)) lastCareerFinished = true
                     // A single run's launch navigation reports why it stopped, as a queue's navigation does.
                     val runError = effectiveResult as? TaskResult.Error
                     if (!enableRunQueue && runError != null && runError.reasonKey.isNotEmpty()) {
@@ -2636,16 +2658,15 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         MessageLog.i(TAG, "[QUEUE] ========================================\n")
                     } else {
                         // Clear persisted queue state since queue finished normally.
-                        clearQueueState(context)
-                        // Cleared for every outcome below: the queue is only resumed after a halt,
-                        // which is the branch above.
+                        // A bot stop keeps it, as a halt does (above); every other outcome below clears it.
                         val stopReason = queueStopReason
+                        if (!keepsResumeRecordAfterStop(queueStopRequested, stopReason, lastCareerFinished)) clearQueueState(context)
                         when {
                             queueStopRequested && stopReason != null -> {
                                 // A controlled internal stop (trainee mismatch, or an unresponsive
                                 // between-run navigation) rather than a plain user Stop or a
                                 // failure. stopReason is always developer-authored prose (set at
-                                // its two call sites, here and in Campaign.kt), never exception
+                                // its three call sites, in StartModule.kt, Campaign.kt and DialogHandler.kt), never exception
                                 // text, so it is safe to show verbatim.
                                 sendQueueProgressEvent(completedRuns, totalRuns, "queueHalted", message = stopReason)
                                 MessageLog.w(TAG, "\n[QUEUE] ========================================")

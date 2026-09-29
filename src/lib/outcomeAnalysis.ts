@@ -28,6 +28,8 @@ export interface OutcomeRecord {
     outcome: string
     forceEndReason?: string
     stopReason?: string
+    /** Why the bot stopped the career itself (result STOPPED_BY_BOT), e.g. DATA_DOWNLOAD_PROMPT. */
+    stopKey?: string
     trainee: string
     scenario: string
     /** End turn, or null when the bot never read an in-career date (see `isFinalizeOnly`). */
@@ -142,6 +144,7 @@ export function parseLedgerLine(line: string, file?: string): OutcomeRecord | nu
         outcome: fields.outcome ?? (result === "COMPLETE" ? "COMPLETED" : "INCOMPLETE"),
         forceEndReason: fields.forceEndReason,
         stopReason: fields.stopReason,
+        stopKey: fields.stopKey,
         trainee: normalizeName(fields.trainee),
         scenario: (fields.scenario ?? "unknown").replace(/_/g, " "),
         turn: toTurn(fields.turn),
@@ -382,6 +385,7 @@ export function parseCorpus(text: string, file?: string): ParsedCorpus {
             outcome: String(obj.outcome ?? "COMPLETED"),
             forceEndReason: obj.forceEndReason,
             stopReason: obj.stopReason,
+            stopKey: obj.stopKey,
             trainee: normalizeName(String(obj.trainee)),
             scenario: String(obj.scenario ?? "unknown").replace(/_/g, " "),
             turn: toTurn(obj.turn),

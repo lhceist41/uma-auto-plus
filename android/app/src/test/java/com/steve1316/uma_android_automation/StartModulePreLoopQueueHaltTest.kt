@@ -224,8 +224,11 @@ class StartModulePreLoopQueueHaltTest {
             val pause = Regex("notifyQueueHalted\\([^\\n]*\\)\\s*\\} else if \\(pausedAfterRun != null\\) \\{").find(startModule)
             assertTrue(pause != null, "the pause is the next arm after the halt")
             assertTrue(
-                Regex("\\} else \\{\\s*//[^\\n]*\\n\\s*clearQueueState\\(context\\)").find(startModule, pause!!.range.last) != null,
-                "clearQueueState must be the else arm after the halt and the pause, unreachable once either is set",
+                Regex(
+                    "\\} else \\{(\\s*//[^\\n]*\\n)+\\s*val stopReason = queueStopReason\\n\\s*" +
+                        "if \\(!keepsResumeRecordAfterStop\\(queueStopRequested, stopReason, lastCareerFinished\\)\\) clearQueueState\\(context\\)",
+                ).find(startModule, pause!!.range.last) != null,
+                "clearQueueState must be the else arm after the halt and the pause, unreachable once either is set, and skipped for a bot stop",
             )
             val haltStart = startModule.indexOf("val halt = queueHaltReason")
             val clear = startModule.indexOf("clearQueueState(context)", haltStart)

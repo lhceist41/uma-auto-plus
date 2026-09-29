@@ -231,6 +231,36 @@ describe("isBotFault", () => {
         expect(isBotFault(record({ result: "UNHANDLED_EXCEPTION", outcome: "INCOMPLETE", turn: 32 }))).toBe(true)
         expect(isBotFault(record({ result: "COMPLETE" }))).toBe(false)
         expect(isBotFault(record({ result: "MANUALLY_STOPPED", outcome: "INCOMPLETE" }))).toBe(false)
+        expect(isBotFault(record({ result: "STOPPED_BY_BOT", outcome: "INCOMPLETE" }))).toBe(false)
+    })
+})
+
+describe("a stop the bot requested itself", () => {
+    const BOT_STOP_LINE =
+        '11:45:15.563 [INFO] [CAREER_END] result=STOPPED_BY_BOT outcome=INCOMPLETE trainee=Taiki_Shuttle scenario=Grand_Concert turn=61 fans=73595 spd=1110 sta=358 pwr=808 grt=258 wit=324 skillPts=397 quality=INCOMPLETE stopReason="The game asked to download additional data." stopKey=DATA_DOWNLOAD_PROMPT'
+
+    it("parses from the ledger line with its stop key", () => {
+        const parsed = parseLedgerLine(BOT_STOP_LINE)
+        expect(parsed?.result).toBe("STOPPED_BY_BOT")
+        expect(parsed?.outcome).toBe("INCOMPLETE")
+        expect(parsed?.stopKey).toBe("DATA_DOWNLOAD_PROMPT")
+        expect(parsed?.stopReason).toBe("The game asked to download additional data.")
+        expect(parsed?.turn).toBe(61)
+    })
+
+    it("parses from careers.jsonl with its stop key", () => {
+        const [parsed] = parseJsonl(
+            '{"result":"STOPPED_BY_BOT","outcome":"INCOMPLETE","trainee":"Taiki_Shuttle","scenario":"Grand_Concert","turn":61,"fans":73595,"spd":1110,"sta":358,"pwr":808,"grt":258,"wit":324,"skillPts":397,"stopKey":"TRAINEE_MISMATCH"}',
+        )
+        expect(parsed.result).toBe("STOPPED_BY_BOT")
+        expect(parsed.stopKey).toBe("TRAINEE_MISMATCH")
+    })
+
+    it("aggregates as an incomplete run, as a user stop does", () => {
+        const [summary] = aggregate([record({ turn: 75 }), record({ outcome: "INCOMPLETE", result: "STOPPED_BY_BOT", fans: 5, turn: 61 })])
+        expect(summary.n).toBe(2)
+        expect(summary.buckets.incomplete).toBe(1)
+        expect(summary.buckets.full).toBe(1)
     })
 })
 
