@@ -360,50 +360,45 @@ export const trainerAdvisories: Record<string, { recommended?: string[]; avoid?:
         recommended: ["URA Finale", "Trackblazer"],
     },
     "Copano Rickey": {
-        // Dirt=A, Mile=A, Medium=A, Pace=A/Front=A, Turf=F; Power+10%/Wit+20%. Third pure dirt body
-        // after Haru Urara and Smart Falcon, and the only one built as a Pace Chaser: her unique
-        // (Luck Runs My Way) and her whole innate kit read the back half of the field
-        // (order_rate>=40 / running_style==2), which a Front build never satisfies.
+        // Dirt=A, Mile=A, Medium=A, Pace=A/Front=A, Turf=F; Power+10%/Wit+20%. Third pure dirt body after Haru
+        // Urara and Smart Falcon, and the only one built as a Pace Chaser: her unique (Luck Runs My Way) and her
+        // whole innate kit read the back half of the field (order_rate>=40 / running_style==2), which a Front
+        // build never satisfies.
         //
-        // URA is THE profile: it ships the curated dirt agenda and exists to farm Kashiwa Kinen
-        // Winner's Sashes (t57, G1 Dirt Mile 1600m, Funabashi). Two things about it are easy to get
-        // wrong. First, the career objective only asks for 3rd or better, but a sash needs 1st -
-        // a completed career is NOT evidence the sash farm works, and the [CAREER_END] line cannot
-        // tell you which happened. Check the t57 race result and the sash count itself. Second, the
-        // agenda deliberately leaves Senior unpinned so she reaches t57 rested; more races would mean
-        // more fans and a worse Kashiwa.
+        // URA is THE profile: it ships the curated dirt agenda and exists to farm Kashiwa Kinen Winner's Sashes
+        // (t57, G1 Dirt Mile 1600m, Funabashi). Two things about it are easy to get wrong. First, the career
+        // objective only asks for 3rd or better, but a sash needs 1st - a completed career is NOT evidence the
+        // sash farm works, and the [CAREER_END] line cannot tell you which happened. Check the t57 race result and
+        // the sash count itself. Second, the agenda deliberately leaves Senior unpinned so she reaches t57 rested;
+        // more races would mean more fans and a worse Kashiwa.
         //
         // Observed baseline, first live career 2026-07-17 (n=1, so this proves the profile VIABLE, not
-        // repeatable): she WON Kashiwa and took the sash while arriving at t57 on
-        // Spd 657 / Sta 337 / Pow 656 / Guts 452 / Wit 413 at 43% energy, and finished the career on
-        // 850 / 479 / 838 / 645 / 625 (A rank, URA finals swept 3/3). Treat those as the only numbers
-        // with evidence behind them. Higher stats are of course better - aim for them as ceilings, not
-        // as thresholds - but nothing here requires ~900 Speed at Kashiwa or ~1050 at the end: the run
-        // that earned the sash cleared neither. Note her growth is Power +10% / Wit +20% with NO Speed
-        // growth, so Speed is the expensive stat on this body; Speed still leads the scorer (it leads
-        // every winning build here and one career is not evidence to demote it), but do not read the
-        // gap between these numbers and the old targets as a training failure.
+        // repeatable): she WON Kashiwa and took the sash while arriving at t57 on Spd 657 / Sta 337 / Pow 656 /
+        // Guts 452 / Wit 413 at 43% energy, and finished the career on 850 / 479 / 838 / 645 / 625 (A rank, URA
+        // finals swept 3/3). Treat those as the only numbers with evidence behind them. Higher stats are of course
+        // better - aim for them as ceilings, not as thresholds - but nothing here requires ~900 Speed at Kashiwa
+        // or ~1050 at the end: the run that earned the sash cleared neither. Note her growth is Power +10% / Wit
+        // +20% with NO Speed growth, so Speed is the expensive stat on this body; Speed still leads the scorer (it
+        // leads every winning build here and one career is not evidence to demote it), but do not read the gap
+        // between these numbers and the old targets as a training failure.
         //
-        // Potential gating: Chance of Victory (Lv3), Collaborative Graded Races o (Lv4) and Strong
-        // Steps (Lv5) are strong Dirt picks for her but are locked behind Potential levels the account
-        // has not reached (she is on Lv2), so they are kept OUT of the active plans. Raise her Potential
-        // and they become worth adding - Collaborative Graded Races o especially, at 70 SP with an
-        // is_dirtgrade==1 condition that covers every graded dirt race she runs.
+        // Potential gating: Chance of Victory (Lv3), Collaborative Graded Races o (Lv4) and Strong Steps (Lv5) sit
+        // behind Potential levels. The plans carry Chance of Victory, bought once they are unlocked or offered by
+        // a support card. Strong Steps is held out: it chains from her own Solid Steps, and while locked the buyer
+        // would treat it as an upgrade of that row. Collaborative Graded Races o is not planned.
         //
-        // Green skills: an external guide claims her unique needs six greens for full effect. The
-        // only scaling term in the game data this repo can see is `phase_laterhalf_random==1`, which
-        // does not support that claim, so no preset here chases a green count. The greens in her plan
-        // are there because each is individually useful on a Dirt Mile Pace Chaser.
+        // Green skills: an external guide claims her unique needs six greens for full effect. The only scaling
+        // term in the game data this repo can see is `phase_laterhalf_random==1`, which does not support that
+        // claim, so no preset here chases a green count. The greens in her plan are there because each is
+        // individually useful on a Dirt Mile Pace Chaser.
         //
-        // Inheritance tradeoff: every extra skill she learns also enters the white-spark pool, so a
-        // wider buy dilutes the dirt whites this profile exists to farm. The plan stays compact partly
-        // for that reason.
+        // Inheritance tradeoff: every extra skill she learns also enters the white-spark pool, so a wider buy
+        // dilutes the dirt whites this profile exists to farm. The plan stays compact partly for that reason.
         //
-        // Deck archetype (advisory only - read SUPPORT_CARD_INVENTORY.md before acting on it, and
-        // remember the borrowed slot counts against the no-duplicate-character rule): Speed + Power +
-        // Wit + a dirt-hint card + one flexible slot, borrowing the strongest dirt/Speed card
-        // available. TP restoration for unattended queues is a global setting and is unrelated to the
-        // free race retries this preset enables.
+        // Deck archetype (advisory only - read SUPPORT_CARD_INVENTORY.md before acting on it, and remember the
+        // borrowed slot counts against the no-duplicate-character rule): Speed + Power + Wit + a dirt-hint card +
+        // one flexible slot, borrowing the strongest dirt/Speed card available. TP restoration for unattended
+        // queues is a global setting and is unrelated to the free race retries this preset enables.
         //
         // Research-graded (2026-07-17). Global release 2026-07-16, card 109801.
         recommended: ["URA Finale"],
@@ -1841,21 +1836,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201461,201451,201552,200701,201181,201171,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201461,201451,201552,200701,201481,201181,201171,200512,200362,201651",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201461,201451,201552,200701,201181,201171,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201461,201451,201552,200701,201481,201181,201171,200512,200362,201651",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201461,201451,201552,200701,201181,201171,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201461,201451,201552,200701,201481,201181,201171,200512,200362,201651",
                     },
                 },
             },
@@ -3109,21 +3104,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200381,201181,201171,200512,200362,201651",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200381,201181,201171,200512,200362,201651",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200381,201181,201171,200512,200362,201651",
                     },
                 },
             },
@@ -3322,21 +3317,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201111,201101,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,201441,200612,201111,201101,200512,200362,201651",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201111,201101,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,201441,200612,201111,201101,200512,200362,201651",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201111,201101,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,201441,200612,201111,201101,200512,200362,201651",
                     },
                 },
             },
@@ -3959,21 +3954,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201111,201101,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200381,200612,201111,201101,200512,200362,201651",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201111,201101,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200381,200612,201111,201101,200512,200362,201651",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201111,201101,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200381,200612,201111,201101,200512,200362,201651",
                     },
                 },
             },
@@ -4170,21 +4165,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161,200572",
+                        plan: "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161,200571,200572",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161,200572",
+                        plan: "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161,200571,200572",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161,200572",
+                        plan: "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161,200571,200572",
                     },
                 },
             },
@@ -4949,21 +4944,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "100071,201173,201171,201181,200351,200331,200511,201211,201221,201202,201201,200512,200352",
+                        plan: "100071,201173,201171,201181,200351,200331,200511,201211,201221,201202,201201,201481,200512,200352",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "100071,201173,201171,201181,200351,200331,200511,201211,201221,201202,201201,200512,200352",
+                        plan: "100071,201173,201171,201181,200351,200331,200511,201211,201221,201202,201201,201481,200512,200352",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "100071,201173,201171,201181,200351,200331,200511,201211,201221,201202,201201,200512,200352",
+                        plan: "100071,201173,201171,201181,200351,200331,200511,201211,201221,201202,201201,201481,200512,200352",
                     },
                 },
             },
@@ -6131,21 +6126,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200571,201351,200581,201321,201311,201181,201171,201531,201201,200371,200431,200561",
+                        plan: "200331,200351,200571,201351,200581,201321,201311,201181,201171,201531,201201,200371,200431,200561,200381",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200571,201351,200581,201321,201311,201181,201171,201531,201201,200371,200431,200561",
+                        plan: "200331,200351,200571,201351,200581,201321,201311,201181,201171,201531,201201,200371,200431,200561,200381",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200571,201351,200581,201321,201311,201181,201171,201531,201201,200371,200431,200561",
+                        plan: "200331,200351,200571,201351,200581,201321,201311,201181,201171,201531,201201,200371,200431,200561,200381",
                     },
                 },
             },
@@ -6329,21 +6324,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431",
+                        plan: "200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431,201441",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431",
+                        plan: "200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431,201441",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431",
+                        plan: "200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431,201441",
                     },
                 },
             },
@@ -6916,21 +6911,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201441,200601,200591,200611,201691,200331,200681,201111,201101,201391,201381,200351,200602,200512",
+                        plan: "201441,200601,200591,200611,201691,200331,200681,201111,201101,201391,201381,200351,200381,200602,200512",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201441,200601,200591,200611,201691,200331,200681,201111,201101,201391,201381,200351,200602,200512",
+                        plan: "201441,200601,200591,200611,201691,200331,200681,201111,201101,201391,201381,200351,200381,200602,200512",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201441,200601,200591,200611,201691,200331,200681,201111,201101,201391,201381,200351,200602,200512",
+                        plan: "201441,200601,200591,200611,201691,200331,200681,201111,201101,201391,201381,200351,200381,200602,200512",
                     },
                 },
             },
@@ -7112,21 +7107,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161",
+                        plan: "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161,200571",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161",
+                        plan: "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161,200571",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161",
+                        plan: "200431,100321,200581,201321,201311,201351,201111,201101,200372,200331,200351,200021,200352,200382,201161,200571",
                     },
                 },
             },
@@ -7891,21 +7886,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "100071,201173,201171,201181,200351,200331,200511,201211,201221,201202,201201,200512,200352",
+                        plan: "100071,201173,201171,201181,200351,200331,200511,201211,201221,201202,201201,201481,200512,200352",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "100071,201173,201171,201181,200351,200331,200511,201211,201221,201202,201201,200512,200352",
+                        plan: "100071,201173,201171,201181,200351,200331,200511,201211,201221,201202,201201,201481,200512,200352",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "100071,201173,201171,201181,200351,200331,200511,201211,201221,201202,201201,200512,200352",
+                        plan: "100071,201173,201171,201181,200351,200331,200511,201211,201221,201202,201201,201481,200512,200352",
                     },
                 },
             },
@@ -9085,21 +9080,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200571,201351,200581,201321,201311,201181,201171,201531,201201,200371,200431,200561",
+                        plan: "200331,200351,200571,201351,200581,201321,201311,201181,201171,201531,201201,200371,200431,200561,200381",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200571,201351,200581,201321,201311,201181,201171,201531,201201,200371,200431,200561",
+                        plan: "200331,200351,200571,201351,200581,201321,201311,201181,201171,201531,201201,200371,200431,200561,200381",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200571,201351,200581,201321,201311,201181,201171,201531,201201,200371,200431,200561",
+                        plan: "200331,200351,200571,201351,200581,201321,201311,201181,201171,201531,201201,200371,200431,200561,200381",
                     },
                 },
             },
@@ -9283,21 +9278,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431",
+                        plan: "200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431,201441",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431",
+                        plan: "200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431,201441",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431",
+                        plan: "200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431,201441",
                     },
                 },
             },
@@ -10071,21 +10066,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201441,200601,200591,200611,201691,200331,200681,201111,201101,201391,201381,200351,200602,200512",
+                        plan: "201441,200601,200591,200611,201691,200331,200681,201111,201101,201391,201381,200351,200381,200602,200512",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201441,200601,200591,200611,201691,200331,200681,201111,201101,201391,201381,200351,200602,200512",
+                        plan: "201441,200601,200591,200611,201691,200331,200681,201111,201101,201391,201381,200351,200381,200602,200512",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201441,200601,200591,200611,201691,200331,200681,201111,201101,201391,201381,200351,200602,200512",
+                        plan: "201441,200601,200591,200611,201691,200331,200681,201111,201101,201391,201381,200351,200381,200602,200512",
                     },
                 },
             },
@@ -10896,21 +10891,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201041,201031,200681,200512,200362",
+                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201041,201031,200681,201392,200512,200362",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201041,201031,200681,200512,200362",
+                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201041,201031,200681,201392,200512,200362",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201041,201031,200681,200512,200362",
+                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,201041,201031,200681,201392,200512,200362",
                     },
                 },
             },
@@ -11108,21 +11103,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051",
+                        plan: "200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051,201392",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051",
+                        plan: "200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051,201392",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051",
+                        plan: "200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051,201392",
                     },
                 },
             },
@@ -11304,21 +11299,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051",
+                        plan: "200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051,201392",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051",
+                        plan: "200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051,201392",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051",
+                        plan: "200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051,201392",
                     },
                 },
             },
@@ -13900,21 +13895,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331",
+                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331,200532",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331",
+                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331,200532",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331",
+                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331,200532",
                     },
                 },
             },
@@ -14093,21 +14088,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331",
+                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331,200532",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331",
+                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331,200532",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331",
+                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331,200532",
                     },
                 },
             },
@@ -14283,21 +14278,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331",
+                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331,200532",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331",
+                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331,200532",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331",
+                        plan: "200431,200352,200382,201112,201182,201172,201252,201242,201192,200351,200331,200532",
                     },
                 },
             },
@@ -15029,21 +15024,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: true,
-                        plan: "200582,200352,200382,201112,201102,201322,201312,200351,200331",
+                        plan: "200582,200352,200382,201112,201102,201322,201312,200351,200331,200571",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: true,
-                        plan: "200582,200352,200382,201112,201102,201322,201312,200351,200331",
+                        plan: "200582,200352,200382,201112,201102,201322,201312,200351,200331,200571",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: true,
-                        plan: "200582,200352,200382,201112,201102,201322,201312,200351,200331",
+                        plan: "200582,200352,200382,201112,201102,201322,201312,200351,200331,200571",
                     },
                 },
             },
@@ -15222,21 +15217,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: true,
-                        plan: "200582,200352,200382,201112,201102,201322,201312,200351,200331",
+                        plan: "200582,200352,200382,201112,201102,201322,201312,200351,200331,200571",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: true,
-                        plan: "200582,200352,200382,201112,201102,201322,201312,200351,200331",
+                        plan: "200582,200352,200382,201112,201102,201322,201312,200351,200331,200571",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: true,
-                        plan: "200582,200352,200382,201112,201102,201322,201312,200351,200331",
+                        plan: "200582,200352,200382,201112,201102,201322,201312,200351,200331,200571",
                     },
                 },
             },
@@ -15416,21 +15411,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: true,
-                        plan: "200582,200352,200382,201112,201102,201322,201312,200602,200351,200331",
+                        plan: "200582,200352,200382,201112,201102,201322,201312,200602,200351,200331,200571",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: true,
-                        plan: "200582,200352,200382,201112,201102,201322,201312,200602,200351,200331",
+                        plan: "200582,200352,200382,201112,201102,201322,201312,200602,200351,200331,200571",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: true,
-                        plan: "200582,200352,200382,201112,201102,201322,201312,200602,200351,200331",
+                        plan: "200582,200352,200382,201112,201102,201322,201312,200602,200351,200331,200571",
                     },
                 },
             },
@@ -17611,21 +17606,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201181,201171,201531,200512,201611,200372,100061",
+                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201181,201171,201531,200512,201611,200372,100061,200741",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201181,201171,201531,200512,201611,200372,100061",
+                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201181,201171,201531,200512,201611,200372,100061,200741",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201181,201171,201531,200512,201611,200372,100061",
+                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201181,201171,201531,200512,201611,200372,100061,200741",
                     },
                 },
             },
@@ -17834,21 +17829,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200741,201181,201171,200512,200362,201651",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200741,201181,201171,200512,200362,201651",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200741,201181,201171,200512,200362,201651",
                     },
                 },
             },
@@ -18035,21 +18030,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200741,201181,201171,200512,200362,201651",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200741,201181,201171,200512,200362,201651",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200741,201181,201171,200512,200362,201651",
                     },
                 },
             },
@@ -18874,21 +18869,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,201272",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,201272",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,201272",
                     },
                 },
             },
@@ -19066,21 +19061,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,201272",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,201272",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,201272",
                     },
                 },
             },
@@ -19252,21 +19247,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,201272",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,201272",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,201272",
                     },
                 },
             },
@@ -20001,21 +19996,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201321,201311,201532,200561,200581,201901,200971,200961,200512,200362",
+                        plan: "200331,200351,200431,200371,201321,201311,201532,200561,200581,201901,200361,200971,200961,200512,200362",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201321,201311,201532,200561,200581,201901,200971,200961,200512,200362",
+                        plan: "200331,200351,200431,200371,201321,201311,201532,200561,200581,201901,200361,200971,200961,200512,200362",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201321,201311,201532,200561,200581,201901,200971,200961,200512,200362",
+                        plan: "200331,200351,200431,200371,201321,201311,201532,200561,200581,201901,200361,200971,200961,200512,200362",
                     },
                 },
             },
@@ -20218,21 +20213,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201011,200651,200581,200331,200351,200582,200961,200971,201311,201321,200572,200431,200371,200372,200362",
+                        plan: "201011,200651,200581,200331,200351,200582,200961,200971,201311,201321,200572,200431,200371,200361,200372,200362",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201011,200651,200581,200331,200351,200582,200961,200971,201311,201321,200572,200431,200371,200372,200362",
+                        plan: "201011,200651,200581,200331,200351,200582,200961,200971,201311,201321,200572,200431,200371,200361,200372,200362",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201011,200651,200581,200331,200351,200582,200961,200971,201311,201321,200572,200431,200371,200372,200362",
+                        plan: "201011,200651,200581,200331,200351,200582,200961,200971,201311,201321,200572,200431,200371,200361,200372,200362",
                     },
                 },
             },
@@ -20427,21 +20422,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201011,200651,200581,200331,200351,200582,200961,200971,201311,201321,200572,200431,200371,200372,200362",
+                        plan: "201011,200651,200581,200331,200351,200582,200961,200971,201311,201321,200572,200431,200371,200361,200372,200362",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201011,200651,200581,200331,200351,200582,200961,200971,201311,201321,200572,200431,200371,200372,200362",
+                        plan: "201011,200651,200581,200331,200351,200582,200961,200971,201311,201321,200572,200431,200371,200361,200372,200362",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201011,200651,200581,200331,200351,200582,200961,200971,201311,201321,200572,200431,200371,200372,200362",
+                        plan: "201011,200651,200581,200331,200351,200582,200961,200971,201311,201321,200572,200431,200371,200361,200372,200362",
                     },
                 },
             },
@@ -20631,21 +20626,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200541,200351,200352,200331,200371,200551,200681,201041,201031,201251,201241,201051,201521,200431,200531",
+                        plan: "200541,200351,200352,200331,200371,200551,200681,201041,201031,201251,201241,201051,201521,200431,200531,201281",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200541,200351,200352,200331,200371,200551,200681,201041,201031,201251,201241,201051,201521,200431,200531",
+                        plan: "200541,200351,200352,200331,200371,200551,200681,201041,201031,201251,201241,201051,201521,200431,200531,201281",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200541,200351,200352,200331,200371,200551,200681,201041,201031,201251,201241,201051,201521,200431,200531",
+                        plan: "200541,200351,200352,200331,200371,200551,200681,201041,201031,201251,201241,201051,201521,200431,200531,201281",
                     },
                 },
             },
@@ -23705,21 +23700,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201461,201451,201501,200451,200641,200631,200642,201551,201111,201101,200632,200331,100181",
+                        plan: "200351,200431,201461,201451,201501,200451,200641,200631,200642,201551,201111,201101,200632,200331,100181,200621",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201461,201451,201501,200451,200641,200631,200642,201551,201111,201101,200632,200331,100181",
+                        plan: "200351,200431,201461,201451,201501,200451,200641,200631,200642,201551,201111,201101,200632,200331,100181,200621",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201461,201451,201501,200451,200641,200631,200642,201551,201111,201101,200632,200331,100181",
+                        plan: "200351,200431,201461,201451,201501,200451,200641,200631,200642,201551,201111,201101,200632,200331,100181,200621",
                     },
                 },
             },
@@ -23929,21 +23924,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200631,200632,200331,202021,202022,201461,201451,201551,201111,201101,200461,200492,200641,100181,202161",
+                        plan: "200351,200631,200632,200331,202021,202022,201461,201451,201551,201111,201101,200461,200492,200641,100181,200621,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200631,200632,200331,202021,202022,201461,201451,201551,201111,201101,200461,200492,200641,100181,202161",
+                        plan: "200351,200631,200632,200331,202021,202022,201461,201451,201551,201111,201101,200461,200492,200641,100181,200621,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200631,200632,200331,202021,202022,201461,201451,201551,201111,201101,200461,200492,200641,100181,202161",
+                        plan: "200351,200631,200632,200331,202021,202022,201461,201451,201551,201111,201101,200461,200492,200641,100181,200621,202161",
                     },
                 },
             },
@@ -24137,21 +24132,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200631,200632,200331,202021,202022,201461,201451,201551,201111,201101,200461,200492,200641,100181,202161",
+                        plan: "200351,200631,200632,200331,202021,202022,201461,201451,201551,201111,201101,200461,200492,200641,100181,200621,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200631,200632,200331,202021,202022,201461,201451,201551,201111,201101,200461,200492,200641,100181,202161",
+                        plan: "200351,200631,200632,200331,202021,202022,201461,201451,201551,201111,201101,200461,200492,200641,100181,200621,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200631,200632,200331,202021,202022,201461,201451,201551,201111,201101,200461,200492,200641,100181,202161",
+                        plan: "200351,200631,200632,200331,202021,202022,201461,201451,201551,201111,201101,200461,200492,200641,100181,200621,202161",
                     },
                 },
             },
@@ -24359,21 +24354,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,201612",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,201612",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,201612",
                     },
                 },
             },
@@ -24539,21 +24534,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,201612",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,201612",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,201612",
                     },
                 },
             },
@@ -24723,21 +24718,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,201612",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,201612",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,201612",
                     },
                 },
             },
@@ -24940,21 +24935,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201391,201381,201431,200451,200611,200601,200602,201541,201111,201101,200612,200331,100061",
+                        plan: "200351,200431,201391,201381,201431,200451,200611,200601,200602,201541,201111,201101,200612,200331,100061,201382",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201391,201381,201431,200451,200611,200601,200602,201541,201111,201101,200612,200331,100061",
+                        plan: "200351,200431,201391,201381,201431,200451,200611,200601,200602,201541,201111,201101,200612,200331,100061,201382",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201391,201381,201431,200451,200611,200601,200602,201541,201111,201101,200612,200331,100061",
+                        plan: "200351,200431,201391,201381,201431,200451,200611,200601,200602,201541,201111,201101,200612,200331,100061,201382",
                     },
                 },
             },
@@ -25139,21 +25134,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,201101,200461,200492,200612,100061,202161",
+                        plan: "200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,201101,200461,200492,200612,100061,201382,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,201101,200461,200492,200612,100061,202161",
+                        plan: "200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,201101,200461,200492,200612,100061,201382,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,201101,200461,200492,200612,100061,202161",
+                        plan: "200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,201101,200461,200492,200612,100061,201382,202161",
                     },
                 },
             },
@@ -25319,21 +25314,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,201101,200461,200492,200612,100061,202161",
+                        plan: "200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,201101,200461,200492,200612,100061,201382,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,201101,200461,200492,200612,100061,202161",
+                        plan: "200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,201101,200461,200492,200612,100061,201382,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,201101,200461,200492,200612,100061,202161",
+                        plan: "200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,201101,200461,200492,200612,100061,201382,202161",
                     },
                 },
             },
@@ -25514,21 +25509,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201111,201101,201531,200512,201611,200372,100061,200732",
+                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201111,201101,201531,200512,201611,200372,100061,201351,200732",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201111,201101,201531,200512,201611,200372,100061,200732",
+                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201111,201101,201531,200512,201611,200372,100061,201351,200732",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201111,201101,201531,200512,201611,200372,100061,200732",
+                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201111,201101,201531,200512,201611,200372,100061,201351,200732",
                     },
                 },
             },
@@ -25737,21 +25732,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201111,201101,200512,200362,201651,200732",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201351,200511,201111,201101,200512,200362,201651,200732",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201111,201101,200512,200362,201651,200732",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201351,200511,201111,201101,200512,200362,201651,200732",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201111,201101,200512,200362,201651,200732",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201351,200511,201111,201101,200512,200362,201651,200732",
                     },
                 },
             },
@@ -25948,21 +25943,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201111,201101,200512,200362,201651,200732",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201351,200511,201111,201101,200512,200362,201651,200732",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201111,201101,200512,200362,201651,200732",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201351,200511,201111,201101,200512,200362,201651,200732",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201111,201101,200512,200362,201651,200732",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201351,200511,201111,201101,200512,200362,201651,200732",
                     },
                 },
             },
@@ -26823,39 +26818,37 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "dirt",
                 plans: {
-                    // Compact and Dirt/Mile/Pace-only, and restricted to what she can actually learn
-                    // TODAY. Her Potential tree gates three otherwise-ideal picks - Chance of Victory
-                    // (Lv3), Collaborative Graded Races o (Lv4) and Strong Steps (Lv5) - and the account
-                    // is on Potential Lv2, so they are deliberately absent: the planner only buys rows
-                    // present on the skill screen, and listing locked skills just pads the plan with
-                    // entries that can never fire. Add them back when her Potential is raised.
+                    // Compact and Dirt/Mile/Pace-only. Of the three otherwise-ideal picks her Potential tree
+                    // gates, it plans Chance of Victory (Lv3), bought once they are unlocked or offered by a
+                    // support card. Strong Steps (Lv5) is held out: it chains from her own Solid Steps, and while
+                    // locked the buyer would treat it as an upgrade of that row. Collaborative Graded Races o
+                    // (Lv4) is not planned.
                     //
-                    // Deliberately NOT built to hit any fixed green count: the only scaling term in her
-                    // unique (Luck Runs My Way, 100981) that this repo can see is
-                    // `phase_laterhalf_random==1`, so the external "six greens for full effect" claim is
-                    // unsupported here and is not encoded as an invariant. Greens are in because each is
-                    // individually useful on a Dirt Mile Pace Chaser: Standard Distance covers 1600m and
-                    // Muddy/Wet cover an off-condition Kashiwa.
+                    // Deliberately NOT built to hit any fixed green count: the only scaling term in her unique
+                    // (Luck Runs My Way, 100981) that this repo can see is `phase_laterhalf_random==1`, so the
+                    // external "six greens for full effect" claim is unsupported here and is not encoded as an
+                    // invariant. Greens are in because each is individually useful on a Dirt Mile Pace Chaser:
+                    // Standard Distance covers 1600m and Muddy/Wet cover an off-condition Kashiwa.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,202261,200352,202262",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,202261,200352,202262",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,202261,200352,202262",
                     },
                 },
             },
@@ -27219,21 +27212,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,202261,200352,202262",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,202261,200352,202262",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,202261,200352,202262",
                     },
                 },
             },
@@ -27576,21 +27569,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,202261,200352,202262",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,202261,200352,202262",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,200352,202262",
+                        plan: "201532,201042,201032,200132,202343,200162,201322,201312,200681,202341,202301,200561,202261,200352,202262",
                     },
                 },
             },
@@ -29202,21 +29195,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201111,201101,201531,200512,201611,200372,100061,200572",
+                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201111,201101,201531,200512,201611,200372,100061,200571,201141,200572",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201111,201101,201531,200512,201611,200372,100061,200572",
+                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201111,201101,201531,200512,201611,200372,100061,200571,201141,200572",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201111,201101,201531,200512,201611,200372,100061,200572",
+                        plan: "200351,200431,201321,201311,200582,200511,200331,200461,201111,201101,201531,200512,201611,200372,100061,200571,201141,200572",
                     },
                 },
             },
@@ -29418,21 +29411,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201111,201101,200512,200362,201651,200572",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200571,201141,201111,201101,200512,200362,201651,200572",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201111,201101,200512,200362,201651,200572",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200571,201141,201111,201101,200512,200362,201651,200572",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201111,201101,200512,200362,201651,200572",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200571,201141,201111,201101,200512,200362,201651,200572",
                     },
                 },
             },
@@ -29620,21 +29613,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201111,201101,200512,200362,201651,200572",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200571,201141,201111,201101,200512,200362,201651,200572",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201111,201101,200512,200362,201651,200572",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200571,201141,201111,201101,200512,200362,201651,200572",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201111,201101,200512,200362,201651,200572",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,200571,201141,201111,201101,200512,200362,201651,200572",
                     },
                 },
             },
@@ -30505,21 +30498,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200541,201271,201272,200532",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200541,201271,201272,200532",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200541,201271,201272,200532",
                     },
                 },
             },
@@ -30695,21 +30688,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200541,201271,201272,200532",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200541,201271,201272,200532",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200541,201271,201272,200532",
                     },
                 },
             },
@@ -30874,21 +30867,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200541,201271,201272,200532",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200541,201271,201272,200532",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200431,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200541,201271,201272,200532",
                     },
                 },
             },
@@ -32286,21 +32279,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200591,200601,200611,201691,201441,200961,200971,201381,201391,201051,200701,200331,200512,201692,202161",
+                        plan: "200591,200601,200611,201691,201441,200961,200971,201381,201391,201051,200701,200331,201382,200512,201692,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200591,200601,200611,201691,201441,200961,200971,201381,201391,201051,200701,200331,200512,201692,202161",
+                        plan: "200591,200601,200611,201691,201441,200961,200971,201381,201391,201051,200701,200331,201382,200512,201692,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200591,200601,200611,201691,201441,200961,200971,201381,201391,201051,200701,200331,200512,201692,202161",
+                        plan: "200591,200601,200611,201691,201441,200961,200971,201381,201391,201051,200701,200331,201382,200512,201692,202161",
                     },
                 },
             },
@@ -32483,21 +32476,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200591,200601,200611,201691,201441,200961,200971,201381,201391,201051,200701,200331,200512,201692,202161",
+                        plan: "200591,200601,200611,201691,201441,200961,200971,201381,201391,201051,200701,200331,201382,200512,201692,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200591,200601,200611,201691,201441,200961,200971,201381,201391,201051,200701,200331,200512,201692,202161",
+                        plan: "200591,200601,200611,201691,201441,200961,200971,201381,201391,201051,200701,200331,201382,200512,201692,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200591,200601,200611,201691,201441,200961,200971,201381,201391,201051,200701,200331,200512,201692,202161",
+                        plan: "200591,200601,200611,201691,201441,200961,200971,201381,201391,201051,200701,200331,201382,200512,201692,202161",
                     },
                 },
             },
@@ -32680,21 +32673,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,200971,200961,200512,200362,201651,202161",
+                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,201382,200612,200971,200961,200512,200362,201651,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,200971,200961,200512,200362,201651,202161",
+                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,201382,200612,200971,200961,200512,200362,201651,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,200612,200971,200961,200512,200362,201651,202161",
+                        plan: "200331,200351,200431,200371,201391,201381,201542,200601,201382,200612,200971,200961,200512,200362,201651,202161",
                     },
                 },
             },
@@ -32899,21 +32892,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200581,200681,201051,200341,200331,200431,200582,201031,201041,201311,201321,201902,200351,200512",
+                        plan: "200581,200681,201051,200341,200331,200431,200582,201031,201041,201311,201321,201902,200351,201901,201042,201322,200512",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200581,200681,201051,200341,200331,200431,200582,201031,201041,201311,201321,201902,200351,200512",
+                        plan: "200581,200681,201051,200341,200331,200431,200582,201031,201041,201311,201321,201902,200351,201901,201042,201322,200512",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200581,200681,201051,200341,200331,200431,200582,201031,201041,201311,201321,201902,200351,200512",
+                        plan: "200581,200681,201051,200341,200331,200431,200582,201031,201041,201311,201321,201902,200351,201901,201042,201322,200512",
                     },
                 },
             },
@@ -33096,21 +33089,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200581,200681,201051,200341,200331,200431,200582,201031,201041,201311,201321,201902,200351,200512",
+                        plan: "200581,200681,201051,200341,200331,200431,200582,201031,201041,201311,201321,201902,200351,201901,201042,201322,200512",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200581,200681,201051,200341,200331,200431,200582,201031,201041,201311,201321,201902,200351,200512",
+                        plan: "200581,200681,201051,200341,200331,200431,200582,201031,201041,201311,201321,201902,200351,201901,201042,201322,200512",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200581,200681,201051,200341,200331,200431,200582,201031,201041,201311,201321,201902,200351,200512",
+                        plan: "200581,200681,201051,200341,200331,200431,200582,201031,201041,201311,201321,201902,200351,201901,201042,201322,200512",
                     },
                 },
             },
@@ -33293,21 +33286,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201041,201031,200681,200512,200362",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201041,201031,200681,201901,201042,200512,200362",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201041,201031,200681,200512,200362",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201041,201031,200681,201901,201042,200512,200362",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201041,201031,200681,200512,200362",
+                        plan: "200331,200351,200431,200371,201322,201312,201532,200582,200581,201041,201031,200681,201901,201042,200512,200362",
                     },
                 },
             },
@@ -40091,21 +40084,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200461,201322,201312,201112,201102,200572,201902,200492,200722",
+                        plan: "200331,200461,200581,201322,201312,201112,201102,200572,201902,200492,200722",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200461,201322,201312,201112,201102,200572,201902,200492,200722",
+                        plan: "200331,200461,200581,201322,201312,201112,201102,200572,201902,200492,200722",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200461,201322,201312,201112,201102,200572,201902,200492,200722",
+                        plan: "200331,200461,200581,201322,201312,201112,201102,200572,201902,200492,200722",
                     },
                 },
             },
@@ -40326,21 +40319,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200461,201322,201312,201112,201102,200572,201902,200492,200722",
+                        plan: "200331,200461,200581,201322,201312,201112,201102,200572,201902,200492,200722",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200461,201322,201312,201112,201102,200572,201902,200492,200722",
+                        plan: "200331,200461,200581,201322,201312,201112,201102,200572,201902,200492,200722",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200461,201322,201312,201112,201102,200572,201902,200492,200722",
+                        plan: "200331,200461,200581,201322,201312,201112,201102,200572,201902,200492,200722",
                     },
                 },
             },
@@ -40538,21 +40531,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200461,201322,201312,201112,201102,200572,201902,200492,200722",
+                        plan: "200331,200461,200581,201322,201312,201112,201102,200572,201902,200492,200722",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200461,201322,201312,201112,201102,200572,201902,200492,200722",
+                        plan: "200331,200461,200581,201322,201312,201112,201102,200572,201902,200492,200722",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200461,201322,201312,201112,201102,200572,201902,200492,200722",
+                        plan: "200331,200461,200581,201322,201312,201112,201102,200572,201902,200492,200722",
                     },
                 },
             },
@@ -40768,21 +40761,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200581,200461,201611,201322,201312,201042,201052,200572",
+                        plan: "200331,200581,200461,200571,201611,201322,201312,201042,201052,200572",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200581,200461,201611,201322,201312,201042,201052,200572",
+                        plan: "200331,200581,200461,200571,201611,201322,201312,201042,201052,200572",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200581,200461,201611,201322,201312,201042,201052,200572",
+                        plan: "200331,200581,200461,200571,201611,201322,201312,201042,201052,200572",
                     },
                 },
             },
@@ -40997,21 +40990,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200581,200461,201611,201322,201312,201042,201052,200572",
+                        plan: "200331,200581,200461,200571,201611,201322,201312,201042,201052,200572",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200581,200461,201611,201322,201312,201042,201052,200572",
+                        plan: "200331,200581,200461,200571,201611,201322,201312,201042,201052,200572",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200581,200461,201611,201322,201312,201042,201052,200572",
+                        plan: "200331,200581,200461,200571,201611,201322,201312,201042,201052,200572",
                     },
                 },
             },
@@ -41204,21 +41197,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200581,200461,201611,201322,201312,201042,201052,200572",
+                        plan: "200331,200581,200461,200571,201611,201322,201312,201042,201052,200572",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200581,200461,201611,201322,201312,201042,201052,200572",
+                        plan: "200331,200581,200461,200571,201611,201322,201312,201042,201052,200572",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200331,200581,200461,201611,201322,201312,201042,201052,200572",
+                        plan: "200331,200581,200461,200571,201611,201322,201312,201042,201052,200572",
                     },
                 },
             },
@@ -43449,21 +43442,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200471,200601,200591,200331,201212,201182,201172,201611",
+                        plan: "200351,200471,200601,200591,200331,202071,201212,201182,201172,201611",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200471,200601,200591,200331,201212,201182,201172,201611",
+                        plan: "200351,200471,200601,200591,200331,202071,201212,201182,201172,201611",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200471,200601,200591,200331,201212,201182,201172,201611",
+                        plan: "200351,200471,200601,200591,200331,202071,201212,201182,201172,201611",
                     },
                 },
             },
@@ -43677,21 +43670,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200471,200601,200591,200331,201212,201182,201172,201611",
+                        plan: "200351,200471,200601,200591,200331,202071,201212,201182,201172,201611",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200471,200601,200591,200331,201212,201182,201172,201611",
+                        plan: "200351,200471,200601,200591,200331,202071,201212,201182,201172,201611",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200471,200601,200591,200331,201212,201182,201172,201611",
+                        plan: "200351,200471,200601,200591,200331,202071,201212,201182,201172,201611",
                     },
                 },
             },
@@ -43883,21 +43876,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200471,200601,200591,200331,201212,201182,201172,201611",
+                        plan: "200351,200471,200601,200591,200331,202071,201212,201182,201172,201611",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200471,200601,200591,200331,201212,201182,201172,201611",
+                        plan: "200351,200471,200601,200591,200331,202071,201212,201182,201172,201611",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200471,200601,200591,200331,201212,201182,201172,201611",
+                        plan: "200351,200471,200601,200591,200331,202071,201212,201182,201172,201611",
                     },
                 },
             },
@@ -46032,9 +46025,8 @@ const basePresets: CharacterPreset[] = [
         // base racing config carries over. The diffs are the body and the kit: growth is
         // Stamina/Wit +15%, and the kit is recovery-rich - unique Superior Heal, innate
         // Deep Breaths / A Small Breather / Pace Strategy, awakening Trick (Front) (Lv2)
-        // and gold Cooldown (Lv3), all unlocked at the account's verified Potential Lv3.
-        // Late Surger Savvy ○ (Lv4) and Relax (Lv5) are still locked: 201542 and 201421
-        // stay out of every plan. Plans swap the base card's Be Still line (no hint
+        // and gold Cooldown (Lv3). Her Potential Lv4 Late Surger Savvy ○ and Lv5 Relax
+        // (201542, 201421) are not planned. Plans swap the base card's Be Still line (no hint
         // discount on this outfit) for her own Long chain (200742 Deep Breaths -> 200741
         // Cooldown) plus 201422 A Small Breather, and promote Stamina over Power.
         scenario: "URA Finale",
@@ -46730,32 +46722,32 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "dirt",
                 plans: {
-                    // Dirt / Mile / Pace Chaser plan, limited to what an unraised Potential can learn: her own
-                    // Down in the Dirt ○, Pace Chaser Savvy ○ and Unyielding Spirit, plus dirt, Mile and Pace
-                    // greens and golds (Got the Spirit! and Head-On per the Game8 build) and two recoveries
-                    // (Corner Recovery ○, Hydrate) for the 2000-2100m dirt goals. Her tree gates Mile
-                    // Straightaways ○ (Lv2), Big-Sisterly (Lv3), Solid Steps (Lv4) and Dancer in the Dirt (Lv5);
-                    // they stay out until her Potential is read in-game.
+                    // Dirt / Mile / Pace Chaser plan: her own Down in the Dirt ○, Pace Chaser Savvy ○ and
+                    // Unyielding Spirit, plus dirt, Mile and Pace greens and golds (Got the Spirit! and Head-On
+                    // per the Game8 build) and two recoveries (Corner Recovery ○, Hydrate) for the 2000-2100m dirt
+                    // goals. Of her Potential tree (Mile Straightaways ○ (Lv2), Big-Sisterly (Lv3), Solid Steps
+                    // (Lv4) and Dancer in the Dirt (Lv5)), it plans Mile Straightaways ○, Big-Sisterly and Dancer
+                    // in the Dirt, bought once they are unlocked or offered by a support card.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,200352,201352",
+                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,201071,202301,201032,200352,201352",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,200352,201352",
+                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,201071,202301,201032,200352,201352",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,200352,201352",
+                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,201071,202301,201032,200352,201352",
                     },
                 },
             },
@@ -46922,21 +46914,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,200352,201352",
+                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,201071,202301,201032,200352,201352",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,200352,201352",
+                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,201071,202301,201032,200352,201352",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,200352,201352",
+                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,201071,202301,201032,200352,201352",
                     },
                 },
             },
@@ -47100,21 +47092,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,200352,201352",
+                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,201071,202301,201032,200352,201352",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,200352,201352",
+                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,201071,202301,201032,200352,201352",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,200352,201352",
+                        plan: "201532,202302,201072,201042,201322,201312,200132,202343,200681,200561,202262,202312,201902,200331,201071,202301,201032,200352,201352",
                     },
                 },
             },
@@ -47294,33 +47286,35 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Late Surger / Medium plan in the Mejiro Ryan mold, limited to what an unraised Potential
-                    // can learn. She has no recovery in her kit, so the plan carries Be Still (hinted by her own
-                    // event The Gold Beyond the Ship, with Nimble Navigator), A Small Breather and the Corner
-                    // Recovery line. Her own All I've Got and Risk-Taker are in; Risky Business is left out because
-                    // its fatigue spike can cost the wins her Senior goals demand. Her tree gates Late Surger
-                    // Straightaways ○ (Lv2), Nothing Ventured (Lv3), Medium Straightaways ○ (Lv4) and Risk-Maker
-                    // (Lv5); they stay out until her Potential is read in-game.
+                    // Late Surger / Medium plan in the Mejiro Ryan mold. She has no recovery in her kit, so the
+                    // plan carries Be Still (hinted by her own event The Gold Beyond the Ship, with Nimble
+                    // Navigator), A Small Breather and the Corner Recovery line. Her own All I've Got and
+                    // Risk-Taker are in; Risky Business is left out because its fatigue spike can cost the wins
+                    // her Senior goals demand. Of her Potential tree (Late Surger Straightaways ○ (Lv2), Nothing
+                    // Ventured (Lv3), Medium Straightaways ○ (Lv4) and Risk-Maker (Lv5)), it plans Late Surger
+                    // Straightaways ○ and Medium Straightaways ○, bought once they are unlocked or offered by a
+                    // support card. Risk-Maker is held out: it chains from her own Risk-Taker, and while locked
+                    // the buyer would treat it as an upgrade of that row.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,202442",
+                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,201382,201102,202442",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,202442",
+                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,201382,201102,202442",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,202442",
+                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,201382,201102,202442",
                     },
                 },
             },
@@ -47485,21 +47479,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,202442",
+                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,201382,201102,202442",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,202442",
+                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,201382,201102,202442",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,202442",
+                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,201382,201102,202442",
                     },
                 },
             },
@@ -47662,21 +47656,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,202442",
+                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,201382,201102,202442",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,202442",
+                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,201382,201102,202442",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,202442",
+                        plan: "200351,200352,201692,201422,201702,201701,201391,201381,201541,201111,201101,200612,200602,200601,200492,100061,201382,201102,202442",
                     },
                 },
             },
@@ -47853,32 +47847,32 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "sprint",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Front Runner / Sprint plan, limited to what an unraised Potential can learn: her own Light
-                    // as a Feather, Early Lead and Wet Conditions ○, the Game8 core picks she can learn (Front
-                    // Runner Savvy ○, See Ya Later!, Second Wind, Sprinting Gear, Focus, Professor of Curvature),
-                    // and Front Runner and Sprint golds. Her tree gates Sprint Corners ○ (Lv2), Taking the Lead
-                    // (Lv3), Groundwork (Lv4) and In High Spirits (Lv5); they, and Sprint Corners ◎ above the
-                    // gated ○, stay out until her Potential is read in-game.
+                    // Front Runner / Sprint plan: her own Light as a Feather, Early Lead and Wet Conditions ○, the
+                    // Game8 core picks she can learn (Front Runner Savvy ○, See Ya Later!, Second Wind, Sprinting
+                    // Gear, Focus, Professor of Curvature), and Front Runner and Sprint golds. Of her Potential
+                    // tree (Sprint Corners ○ (Lv2), Taking the Lead (Lv3), Groundwork (Lv4) and In High Spirits
+                    // (Lv5)), it plans Sprint Corners ○, Taking the Lead and In High Spirits, bought once they are
+                    // unlocked or offered by a support card.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200512,200362",
+                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200531,202041,200972,200512,200362",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200512,200362",
+                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200531,202041,200972,200512,200362",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200512,200362",
+                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200531,202041,200972,200512,200362",
                     },
                 },
             },
@@ -48043,21 +48037,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200512,200362",
+                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200531,202041,200972,200512,200362",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200512,200362",
+                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200531,202041,200972,200512,200362",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200512,200362",
+                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200531,202041,200972,200512,200362",
                     },
                 },
             },
@@ -48221,21 +48215,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200512,200362",
+                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200531,202041,200972,200512,200362",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200512,200362",
+                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200531,202041,200972,200512,200362",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200512,200362",
+                        plan: "202042,200532,200162,201522,201251,201241,200541,200551,201292,201662,200961,200652,200651,201011,200331,200432,200431,200371,200351,200531,202041,200972,200512,200362",
                     },
                 },
             },
@@ -48431,34 +48425,34 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Late Surger / Medium plan, limited to what an unraised Potential can learn: her own Outer
-                    // Swell, Nimble Navigator and Unyielding Spirit, the Game8 core picks she can learn (On Your
-                    // Left!, Position Pilfer, Ramp Up, Medium Straightaways ○, Professor of Curvature), and Late
-                    // Surger and Medium golds. Her kit has no recovery, so the plan carries Corner Recovery ○ /
-                    // Swinging Maestro, Be Still and A Small Breather for the 2200-2400m goals. Her tree gates
-                    // Late Surger Straightaways ○ (Lv2), No Stopping Me! (Lv3), Standard Distance ○ (Lv4) and
-                    // Rising Dragon (Lv5); they, and the ◎ above the gated ○, stay out until her Potential is read
-                    // in-game.
+                    // Late Surger / Medium plan: her own Outer Swell, Nimble Navigator and Unyielding Spirit, the
+                    // Game8 core picks she can learn (On Your Left!, Position Pilfer, Ramp Up, Medium
+                    // Straightaways ○, Professor of Curvature), and Late Surger and Medium golds. Her kit has no
+                    // recovery, so the plan carries Corner Recovery ○ / Swinging Maestro, Be Still and A Small
+                    // Breather for the 2200-2400m goals. Of her Potential tree (Late Surger Straightaways ○ (Lv2),
+                    // No Stopping Me! (Lv3), Standard Distance ○ (Lv4) and Rising Dragon (Lv5)), it plans Late
+                    // Surger Straightaways ○ and No Stopping Me!, bought once they are unlocked or offered by a
+                    // support card.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331",
+                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331,200491,201382",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331",
+                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331,200491,201382",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331",
+                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331,200491,201382",
                     },
                 },
             },
@@ -48624,21 +48618,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331",
+                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331,200491,201382",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331",
+                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331,200491,201382",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331",
+                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331,200491,201382",
                     },
                 },
             },
@@ -48803,21 +48797,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331",
+                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331,200491,201382",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331",
+                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331,200491,201382",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331",
+                        plan: "200612,200492,201072,200601,200602,200592,201391,201541,201102,201111,201101,200462,201702,201701,200352,200351,201692,201422,200331,200491,201382",
                     },
                 },
             },
@@ -49005,32 +48999,32 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Pace Chaser / Mile plan, limited to what an unraised Potential can learn: her own Unyielding
-                    // Spirit, Sprint Straightaways ○ and Firm Conditions ○, the Game8 core picks she can learn
-                    // (Mile Corners ○, Mile Straightaways ○, Pace Chaser Corners ○, Homestretch Haste), and Pace
-                    // Chaser, Mile and Sprint golds. Her tree gates Light as a Feather (Lv2), Shocking Flash
-                    // (Lv3), Head-On (Lv4) and Big-Sisterly (Lv5); they, and Neck and Neck above the gated
-                    // Head-On, stay out until her Potential is read in-game.
+                    // Pace Chaser / Mile plan: her own Unyielding Spirit, Sprint Straightaways ○ and Firm
+                    // Conditions ○, the Game8 core picks she can learn (Mile Corners ○, Mile Straightaways ○, Pace
+                    // Chaser Corners ○, Homestretch Haste), and Pace Chaser, Mile and Sprint golds. Of her
+                    // Potential tree (Light as a Feather (Lv2), Shocking Flash (Lv3), Head-On (Lv4) and
+                    // Big-Sisterly (Lv5)), it plans Big-Sisterly, bought once they are unlocked or offered by a
+                    // support card.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,200512",
+                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,201071,200512",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,200512",
+                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,201071,200512",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,200512",
+                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,201071,200512",
                     },
                 },
             },
@@ -49196,21 +49190,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,200512",
+                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,201071,200512",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,200512",
+                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,201071,200512",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,200512",
+                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,201071,200512",
                     },
                 },
             },
@@ -49374,21 +49368,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,200512",
+                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,201071,200512",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,200512",
+                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,201071,200512",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,200512",
+                        plan: "201072,200962,200152,200961,201042,201041,201032,201031,200681,201051,201322,201321,201311,201532,200582,200581,200331,200431,200351,201071,200512",
                     },
                 },
             },
@@ -49584,13 +49578,12 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Pace Chaser / Medium plan with the Long greens for the 2500m and 3200m goals, limited to
-                    // what an unraised Potential can learn: her own Prepared to Pass, Up-Tempo and Non-Standard
-                    // Distance ○, and the Game8 core picks she can learn (My True Strength, Long Corners ○, Pace
-                    // Chaser Corners ○, Gourmand, Swinging Maestro). Her kit has no recovery, so the plan carries
-                    // Corner Recovery ○ / Swinging Maestro, Straightaway Recovery and Hydrate / Gourmand. Her tree
-                    // gates Straightaway Adept (Lv2), Speed Star (Lv3), Stamina to Spare (Lv4) and Killer Tunes
-                    // (Lv5); they stay out until her Potential is read in-game.
+                    // Pace Chaser / Medium plan with the Long greens for the 2500m and 3200m goals: her own
+                    // Prepared to Pass, Up-Tempo and Non-Standard Distance ○, and the Game8 core picks she can
+                    // learn (My True Strength, Long Corners ○, Pace Chaser Corners ○, Gourmand, Swinging Maestro).
+                    // Her kit has no recovery, so the plan carries Corner Recovery ○ / Swinging Maestro,
+                    // Straightaway Recovery and Hydrate / Gourmand. Her tree gates Straightaway Adept (Lv2), Speed
+                    // Star (Lv3), Stamina to Spare (Lv4) and Killer Tunes (Lv5); none of them is planned.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
@@ -50156,32 +50149,31 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Pace Chaser / Mile plan, limited to what an unraised Potential can learn: her own Shifting
-                    // Gears, Aspire and Long Shot ○, the Game8 core picks she can learn (Pace Chaser Corners ○,
-                    // Head-On), and Pace Chaser, Mile and Sprint greens and golds. Her tree gates Mile Corners ○
-                    // (Lv2), Changing Gears (Lv3), Corner Acceleration ○ (Lv4) and Ambitious Breeze (Lv5); they,
-                    // and the golds above the gated ○ (Mile Corners ◎, Corner Connoisseur), stay out until her
-                    // Potential is read in-game.
+                    // Pace Chaser / Mile plan: her own Shifting Gears, Aspire and Long Shot ○, the Game8 core
+                    // picks she can learn (Pace Chaser Corners ○, Head-On), and Pace Chaser, Mile and Sprint
+                    // greens and golds. Of her Potential tree (Mile Corners ○ (Lv2), Changing Gears (Lv3), Corner
+                    // Acceleration ○ (Lv4) and Ambitious Breeze (Lv5)), it plans Mile Corners ○, Changing Gears
+                    // and Ambitious Breeze, bought once they are unlocked or offered by a support card.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,200512,200962",
+                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,201051,202411,201042,200512,200962",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,200512,200962",
+                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,201051,202411,201042,200512,200962",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,200512,200962",
+                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,201051,202411,201042,200512,200962",
                     },
                 },
             },
@@ -50347,21 +50339,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,200512,200962",
+                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,201051,202411,201042,200512,200962",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,200512,200962",
+                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,201051,202411,201042,200512,200962",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,200512,200962",
+                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,201051,202411,201042,200512,200962",
                     },
                 },
             },
@@ -50525,21 +50517,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,200512,200962",
+                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,201051,202411,201042,200512,200962",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,200512,200962",
+                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,201051,202411,201042,200512,200962",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,200512,200962",
+                        plan: "201052,202412,200302,201322,201321,201311,201532,201032,201031,200681,200582,200581,201902,200331,200431,200351,201051,202411,201042,200512,200962",
                     },
                 },
             },
@@ -50727,34 +50719,33 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 plans: {
-                    // Pace Chaser / Medium plan with Mile-safe golds, limited to what an unraised Potential can
-                    // learn: her own Nimble Navigator, Medium Straightaways ○ and Straight Descent, and the Game8
-                    // core picks she can learn (Head-On, Professor of Curvature, Come What May, Pace Chaser
-                    // Straightaways ○, Swinging Maestro, Corner Recovery ○; Game8 asks for a gold recovery).
-                    // Hydrate adds a Pace recovery for the 2400m Oaks and Japan Cup. Her tree gates Snowy Days ○
-                    // (Lv2), No Stopping Me! (Lv3), Pace Chaser Corners ○ (Lv4) and Determined Descent (Lv5);
-                    // they, and Pace Chaser Corners ◎ above the gated ○, stay out until her Potential is read
-                    // in-game.
+                    // Pace Chaser / Medium plan with Mile-safe golds: her own Nimble Navigator, Medium
+                    // Straightaways ○ and Straight Descent, and the Game8 core picks she can learn (Head-On,
+                    // Professor of Curvature, Come What May, Pace Chaser Straightaways ○, Swinging Maestro, Corner
+                    // Recovery ○; Game8 asks for a gold recovery). Hydrate adds a Pace recovery for the 2400m Oaks
+                    // and Japan Cup. Of her Potential tree (Snowy Days ○ (Lv2), No Stopping Me! (Lv3), Pace Chaser
+                    // Corners ○ (Lv4) and Determined Descent (Lv5)), it plans No Stopping Me! and Pace Chaser
+                    // Corners ○, bought once they are unlocked or offered by a support card.
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200352,201352",
+                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200491,201322,200352,201352",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200352,201352",
+                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200491,201322,200352,201352",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200352,201352",
+                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200491,201322,200352,201352",
                     },
                 },
             },
@@ -50920,21 +50911,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200352,201352",
+                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200491,201322,200352,201352",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200352,201352",
+                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200491,201322,200352,201352",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200352,201352",
+                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200491,201322,200352,201352",
                     },
                 },
             },
@@ -51098,21 +51089,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200352,201352",
+                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200491,201322,200352,201352",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200352,201352",
+                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200491,201322,200352,201352",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200352,201352",
+                        plan: "200492,201102,201342,201101,201112,201312,201532,200572,201902,200582,200581,200722,201701,200331,200461,200351,200491,201322,200352,201352",
                     },
                 },
             },
@@ -51297,31 +51288,32 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
-                // The base Biwa Hayahide preset's plan with this card's own kit up to Potential Lv3
-                // (Homestretch Haste, Passing Pro, Preferred Position, Pace Chaser Savvy ○ and VIP Pass), and
-                // without what its higher Potential levels gate (Pace Chaser Straightaways ○, In Body and Mind and
-                // Pace Chaser Straightaways ◎) until her Potential is read in-game.
+                // The base Biwa Hayahide preset's plan with this card's own kit up to Potential Lv3 (Homestretch
+                // Haste, Passing Pro, Preferred Position, Pace Chaser Savvy ○ and VIP Pass). Of what its higher
+                // Potential levels gate (Pace Chaser Straightaways ○, In Body and Mind and Pace Chaser
+                // Straightaways ◎), it plans Pace Chaser Straightaways ○ and In Body and Mind, bought once they
+                // are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201202,200572,201201,200331,200351,200431,200371,201322,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "201202,200572,201201,200331,200351,200431,200371,201322,201532,200582,200581,200511,201312,201181,201171,200512,200362,201651",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201202,200572,201201,200331,200351,200431,200371,201322,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "201202,200572,201201,200331,200351,200431,200371,201322,201532,200582,200581,200511,201312,201181,201171,200512,200362,201651",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201202,200572,201201,200331,200351,200431,200371,201322,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "201202,200572,201201,200331,200351,200431,200371,201322,201532,200582,200581,200511,201312,201181,201171,200512,200362,201651",
                     },
                 },
             },
@@ -51505,21 +51497,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201202,200572,201201,200331,200351,200431,200371,201322,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "201202,200572,201201,200331,200351,200431,200371,201322,201532,200582,200581,200511,201312,201181,201171,200512,200362,201651",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201202,200572,201201,200331,200351,200431,200371,201322,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "201202,200572,201201,200331,200351,200431,200371,201322,201532,200582,200581,200511,201312,201181,201171,200512,200362,201651",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201202,200572,201201,200331,200351,200431,200371,201322,201532,200582,200581,201181,201171,200512,200362,201651",
+                        plan: "201202,200572,201201,200331,200351,200431,200371,201322,201532,200582,200581,200511,201312,201181,201171,200512,200362,201651",
                     },
                 },
             },
@@ -51703,21 +51695,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201202,200572,201532,201201,200351,200431,201321,200582,200331,200461,201181,201171,201531,200512,201611,200372,100061",
+                        plan: "201202,200572,201532,201201,200351,200431,201321,200582,200331,200461,201181,201171,201531,200512,201611,200372,100061,200511,201312",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201202,200572,201532,201201,200351,200431,201321,200582,200331,200461,201181,201171,201531,200512,201611,200372,100061",
+                        plan: "201202,200572,201532,201201,200351,200431,201321,200582,200331,200461,201181,201171,201531,200512,201611,200372,100061,200511,201312",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201202,200572,201532,201201,200351,200431,201321,200582,200331,200461,201181,201171,201531,200512,201611,200372,100061",
+                        plan: "201202,200572,201532,201201,200351,200431,201321,200582,200331,200461,201181,201171,201531,200512,201611,200372,100061,200511,201312",
                     },
                 },
             },
@@ -51918,31 +51910,31 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "front_runner",
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
-                // The base Mihono Bourbon preset's plan with this card's own kit up to Potential Lv3
-                // (Focus, Fast-Paced, Extra Tank, Front Runner Savvy ○ and Escape Artist), and without what its
-                // higher Potential levels gate (Groundwork and Concentration) until her Potential is
-                // read in-game.
+                // The base Mihono Bourbon preset's plan with this card's own kit up to Potential Lv3 (Focus,
+                // Fast-Paced, Extra Tank, Front Runner Savvy ○ and Escape Artist). Of what its higher Potential
+                // levels gate (Groundwork and Concentration), it plans Concentration, bought once they are
+                // unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200431",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200431",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200431",
                     },
                 },
             },
@@ -52104,21 +52096,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200431",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200431",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200431",
                     },
                 },
             },
@@ -52280,21 +52272,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200431",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200431",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331",
+                        plan: "200432,200542,200762,201522,200541,200352,200382,201112,201102,201252,201242,200531,200722,200351,200331,200431",
                     },
                 },
             },
@@ -52477,30 +52469,31 @@ const basePresets: CharacterPreset[] = [
                 preferredRunningStyle: "pace_chaser",
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
-                // The base Tamamo Cross preset's plan with this card's own kit (Ramp Up, Up-Tempo and Head-On),
-                // and without what its higher Potential levels gate (Wet Conditions ○, Killer Tunes, Tail Held
-                // High, It's On! and Wet Conditions ◎) until her Potential is read in-game.
+                // The base Tamamo Cross preset's plan with this card's own kit (Ramp Up, Up-Tempo and Head-On). Of
+                // what its higher Potential levels gate (Wet Conditions ○, Killer Tunes, Tail Held High, It's On!
+                // and Wet Conditions ◎), it plans Tail Held High and It's On!, bought once they are unlocked or
+                // offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,200461,201611",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,200461,201611",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,200461,201611",
                     },
                 },
             },
@@ -52662,21 +52655,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,200461,201611",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,200461,201611",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,200461,201611",
                     },
                 },
             },
@@ -52838,21 +52831,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,200461,201611",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,200461,201611",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331",
+                        plan: "200462,200722,201902,200582,200352,200382,201112,201182,201172,201322,201312,201352,200351,200331,200461,201611",
                     },
                 },
             },
@@ -53027,30 +53020,30 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 // The base Inari One preset's plan with this card's own kit (Oi Racecourse ○, Inside Scoop and
-                // Straightaway Spurt), and without what its higher Potential levels gate (I Can See Right Through
-                // You, Innate Experience, Rapid Gain, Encroaching Shadow, The Coast Is Clear! and Run Like Crazy!)
-                // until her Potential is read in-game.
+                // Straightaway Spurt). Of what its higher Potential levels gate (I Can See Right Through You,
+                // Innate Experience, Rapid Gain, Encroaching Shadow, The Coast Is Clear! and Run Like Crazy!), it
+                // plans Encroaching Shadow, bought once they are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200952,200752,202001,201612,200351,200331,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
+                        plan: "200952,200752,202001,201612,200351,200331,200641,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200952,200752,202001,201612,200351,200331,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
+                        plan: "200952,200752,202001,201612,200351,200331,200641,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200952,200752,202001,201612,200351,200331,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
+                        plan: "200952,200752,202001,201612,200351,200331,200641,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
                     },
                 },
             },
@@ -53234,21 +53227,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200952,200752,202001,201612,200351,200331,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
+                        plan: "200952,200752,202001,201612,200351,200331,200641,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200952,200752,202001,201612,200351,200331,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
+                        plan: "200952,200752,202001,201612,200351,200331,200641,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200952,200752,202001,201612,200351,200331,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
+                        plan: "200952,200752,202001,201612,200351,200331,200641,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
                     },
                 },
             },
@@ -53432,21 +53425,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200952,200752,202001,201612,200351,200331,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
+                        plan: "200952,200752,202001,201612,200351,200331,200641,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200952,200752,202001,201612,200351,200331,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
+                        plan: "200952,200752,202001,201612,200351,200331,200641,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200952,200752,202001,201612,200351,200331,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
+                        plan: "200952,200752,202001,201612,200351,200331,200641,200642,201452,201461,201451,201551,201111,201101,201181,201171,202002,201611",
                     },
                 },
             },
@@ -53654,30 +53647,30 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "dirt",
                 // The base Smart Falcon preset's plan with this card's own kit (Top Pick, Front Runner Corners ○
-                // and With All My Soul), and without what its higher Potential levels gate (Got the Spirit!,
-                // Trending in the Charts!, Dust Cloud, Be the Center! and Dust Cloud Idol) until her
-                // Potential is read in-game.
+                // and With All My Soul). Of what its higher Potential levels gate (Got the Spirit!, Trending in
+                // the Charts!, Dust Cloud, Be the Center! and Dust Cloud Idol), it plans Be the Center!, bought
+                // once they are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,200532,201041,201031,200512,200362,201651,202161",
+                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,202311,200532,201041,201031,200512,200362,201651,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,200532,201041,201031,200512,200362,201651,202161",
+                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,202311,200532,201041,201031,200512,200362,201651,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,200532,201041,201031,200512,200362,201651,202161",
+                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,202311,200532,201041,201031,200512,200362,201651,202161",
                     },
                 },
             },
@@ -53839,21 +53832,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,200532,201041,201031,200512,200362,201651,202161",
+                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,202311,200532,201041,201031,200512,200362,201651,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,200532,201041,201031,200512,200362,201651,202161",
+                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,202311,200532,201041,201031,200512,200362,201651,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,200532,201041,201031,200512,200362,201651,202161",
+                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,202311,200532,201041,201031,200512,200362,201651,202161",
                     },
                 },
             },
@@ -54015,21 +54008,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,200532,201041,201031,200512,200362,201651,202161",
+                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,202311,200532,201041,201031,200512,200362,201651,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,200532,201041,201031,200512,200362,201651,202161",
+                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,202311,200532,201041,201031,200512,200362,201651,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,200532,201041,201031,200512,200362,201651,202161",
+                        plan: "201672,201252,202132,200331,200351,200431,200371,201251,201241,201522,200541,201681,202311,200532,201041,201031,200512,200362,201651,202161",
                     },
                 },
             },
@@ -54215,8 +54208,8 @@ const basePresets: CharacterPreset[] = [
                 // and golds, and Corner Recovery ○ / Swinging Maestro, A Small Breather and Be Still for the
                 // 2400m-3200m goals. Her own Pressure is left out because the runtime skill table cannot resolve
                 // it yet; her tree gates Long Straightaways ○ (Lv2), Overwhelming Pressure (Lv3), Long Corners ○
-                // (Lv4) and Best in Japan (Lv5), which stay out until her Potential is read in-game. The Grandkid
-                // Get-Together hint is Pace-only, so that Trackblazer event takes the stats.
+                // (Lv4) and Best in Japan (Lv5); none of them is planned. The Grandkid Get-Together hint is
+                // Pace-only, so that Trackblazer event takes the stats.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -54839,30 +54832,30 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "sprint",
                 preferredTrackSurface: "turf",
                 // The base Curren Chan preset's plan with this card's own kit (Hesitant Front Runners, Pace Chaser
-                // Corners ○ and Intimidate), and without what its higher Potential levels gate (Sprinting Gear,
-                // Adored by All, Pace Chaser Savvy ○, Turbo Sprint and Pace Chaser Savvy ◎) until her
-                // Potential is read in-game.
+                // Corners ○ and Intimidate). Of what its higher Potential levels gate (Sprinting Gear, Adored by
+                // All, Pace Chaser Savvy ○, Turbo Sprint and Pace Chaser Savvy ◎), it plans Turbo Sprint, bought
+                // once they are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200851,201012,200331,200461,200431,200582,201321,201311,200972,200962,201322,201312,201902,200432",
+                        plan: "200851,201012,200331,200461,200431,200651,200582,201321,201311,200972,200962,201322,201312,201902,200432",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200851,201012,200331,200461,200431,200582,201321,201311,200972,200962,201322,201312,201902,200432",
+                        plan: "200851,201012,200331,200461,200431,200651,200582,201321,201311,200972,200962,201322,201312,201902,200432",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200851,201012,200331,200461,200431,200582,201321,201311,200972,200962,201322,201312,201902,200432",
+                        plan: "200851,201012,200331,200461,200431,200651,200582,201321,201311,200972,200962,201322,201312,201902,200432",
                     },
                 },
             },
@@ -55053,21 +55046,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200851,201012,200331,200461,200431,200582,201321,201311,200972,200962,201322,201312,201902,200432",
+                        plan: "200851,201012,200331,200461,200431,200651,200582,201321,201311,200972,200962,201322,201312,201902,200432",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200851,201012,200331,200461,200431,200582,201321,201311,200972,200962,201322,201312,201902,200432",
+                        plan: "200851,201012,200331,200461,200431,200651,200582,201321,201311,200972,200962,201322,201312,201902,200432",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200851,201012,200331,200461,200431,200582,201321,201311,200972,200962,201322,201312,201902,200432",
+                        plan: "200851,201012,200331,200461,200431,200651,200582,201321,201311,200972,200962,201322,201312,201902,200432",
                     },
                 },
             },
@@ -55255,21 +55248,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200851,201012,200331,200461,200431,200582,201321,201311,200972,200962,201322,201312,201902,200432",
+                        plan: "200851,201012,200331,200461,200431,200651,200582,201321,201311,200972,200962,201322,201312,201902,200432",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200851,201012,200331,200461,200431,200582,201321,201311,200972,200962,201322,201312,201902,200432",
+                        plan: "200851,201012,200331,200461,200431,200651,200582,201321,201311,200972,200962,201322,201312,201902,200432",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200851,201012,200331,200461,200431,200582,201321,201311,200972,200962,201322,201312,201902,200432",
+                        plan: "200851,201012,200331,200461,200431,200651,200582,201321,201311,200972,200962,201322,201312,201902,200432",
                     },
                 },
             },
@@ -55480,30 +55473,30 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 // The base Meisho Doto preset's plan with this card's own kit (Corner Recovery ○, Head-On and
-                // Medium Straightaways ○), and without what its higher Potential levels gate (On the Attack, Neck
-                // and Neck, Right-Handed ○, Swinging Maestro, Unstoppable and Right-Handed ◎) until her
-                // Potential is read in-game.
+                // Medium Straightaways ○). Of what its higher Potential levels gate (On the Attack, Neck and Neck,
+                // Right-Handed ○, Swinging Maestro, Unstoppable and Right-Handed ◎), it plans Neck and Neck and
+                // Swinging Maestro, bought once they are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331",
+                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331,201901,200351",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331",
+                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331,201901,200351",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331",
+                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331,201901,200351",
                     },
                 },
             },
@@ -55665,21 +55658,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331",
+                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331,201901,200351",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331",
+                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331,201901,200351",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331",
+                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331,201901,200351",
                     },
                 },
             },
@@ -55841,21 +55834,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331",
+                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331,201901,200351",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331",
+                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331,201901,200351",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331",
+                        plan: "201902,201102,200582,200352,200382,201112,201182,201172,201322,201312,201352,200331,201901,200351",
                     },
                 },
             },
@@ -56037,29 +56030,30 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "turf",
                 // The base Agnes Digital preset's plan with this card's own kit (Comeback, Ramp Up and
-                // Updrafters), and without what its higher Potential levels gate (Uma Stan, It's On!, Forward,
-                // March!, Can't Keep Me Down and Lead the Charge!) until her Potential is read in-game.
+                // Updrafters). Of what its higher Potential levels gate (Uma Stan, It's On!, Forward, March!,
+                // Can't Keep Me Down and Lead the Charge!), it plans Uma Stan, bought once they are unlocked or
+                // offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202272,200462,201592,200591,200601,200351,200331,200702,201651,201391,201381,201541,201041,201031,200602",
+                        plan: "202272,200462,201592,200591,200601,200351,200331,201591,200702,201651,201391,201381,201541,201041,201031,200602",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202272,200462,201592,200591,200601,200351,200331,200702,201651,201391,201381,201541,201041,201031,200602",
+                        plan: "202272,200462,201592,200591,200601,200351,200331,201591,200702,201651,201391,201381,201541,201041,201031,200602",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202272,200462,201592,200591,200601,200351,200331,200702,201651,201391,201381,201541,201041,201031,200602",
+                        plan: "202272,200462,201592,200591,200601,200351,200331,201591,200702,201651,201391,201381,201541,201041,201031,200602",
                     },
                 },
             },
@@ -56253,21 +56247,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202272,200462,201592,200591,200601,200351,200331,200702,201651,201391,201381,201541,201041,201031,200602",
+                        plan: "202272,200462,201592,200591,200601,200351,200331,201591,200702,201651,201391,201381,201541,201041,201031,200602",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202272,200462,201592,200591,200601,200351,200331,200702,201651,201391,201381,201541,201041,201031,200602",
+                        plan: "202272,200462,201592,200591,200601,200351,200331,201591,200702,201651,201391,201381,201541,201041,201031,200602",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202272,200462,201592,200591,200601,200351,200331,200702,201651,201391,201381,201541,201041,201031,200602",
+                        plan: "202272,200462,201592,200591,200601,200351,200331,201591,200702,201651,201391,201381,201541,201041,201031,200602",
                     },
                 },
             },
@@ -56461,21 +56455,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202272,200462,201592,200591,200601,200351,200331,200702,201651,201391,201381,201541,201041,201031,200602",
+                        plan: "202272,200462,201592,200591,200601,200351,200331,201591,200702,201651,201391,201381,201541,201041,201031,200602",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202272,200462,201592,200591,200601,200351,200331,200702,201651,201391,201381,201541,201041,201031,200602",
+                        plan: "202272,200462,201592,200591,200601,200351,200331,201591,200702,201651,201391,201381,201541,201041,201031,200602",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202272,200462,201592,200591,200601,200351,200331,200702,201651,201391,201381,201541,201041,201031,200602",
+                        plan: "202272,200462,201592,200591,200601,200351,200331,201591,200702,201651,201391,201381,201541,201041,201031,200602",
                     },
                 },
             },
@@ -56681,30 +56675,31 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 // The base Narita Taishin preset's plan with this card's own kit (Nimble Navigator, Breakin' Out
-                // and Take the Chance), and without what its higher Potential levels gate (End Closer Savvy ○,
-                // Breakin' Ahead, End Closer Straightaways ○, From the Brink, End Closer Savvy ◎ and End Closer
-                // Straightaways ◎) until her Potential is read in-game.
+                // and Take the Chance). Of what its higher Potential levels gate (End Closer Savvy ○, Breakin'
+                // Ahead, End Closer Straightaways ○, From the Brink, End Closer Savvy ◎ and End Closer
+                // Straightaways ◎), it plans End Closer Straightaways ○ and From the Brink, bought once they are
+                // unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202382,202082,200351,200631,200632,200331,202021,202022,201461,201111,201101,200461,200492,200641,100181,202161",
+                        plan: "202382,202082,200351,200631,200632,200331,202021,202022,201461,201111,201101,200461,200492,200641,100181,202081,201452,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202382,202082,200351,200631,200632,200331,202021,202022,201461,201111,201101,200461,200492,200641,100181,202161",
+                        plan: "202382,202082,200351,200631,200632,200331,202021,202022,201461,201111,201101,200461,200492,200641,100181,202081,201452,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202382,202082,200351,200631,200632,200331,202021,202022,201461,201111,201101,200461,200492,200641,100181,202161",
+                        plan: "202382,202082,200351,200631,200632,200331,202021,202022,201461,201111,201101,200461,200492,200641,100181,202081,201452,202161",
                     },
                 },
             },
@@ -56889,21 +56884,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202382,202082,200351,200631,200632,200331,202021,202022,201461,201111,201101,200461,200492,200641,100181,202161",
+                        plan: "202382,202082,200351,200631,200632,200331,202021,202022,201461,201111,201101,200461,200492,200641,100181,202081,201452,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202382,202082,200351,200631,200632,200331,202021,202022,201461,201111,201101,200461,200492,200641,100181,202161",
+                        plan: "202382,202082,200351,200631,200632,200331,202021,202022,201461,201111,201101,200461,200492,200641,100181,202081,201452,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202382,202082,200351,200631,200632,200331,202021,202022,201461,201111,201101,200461,200492,200641,100181,202161",
+                        plan: "202382,202082,200351,200631,200632,200331,202021,202022,201461,201111,201101,200461,200492,200641,100181,202081,201452,202161",
                     },
                 },
             },
@@ -57088,21 +57083,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,202382,202082,200351,200431,201461,201501,200451,200641,200631,200642,201111,201101,200632,200331,100181",
+                        plan: "200492,202382,202082,200351,200431,201461,201501,200451,200641,200631,200642,201111,201101,200632,200331,100181,202081,201452",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,202382,202082,200351,200431,201461,201501,200451,200641,200631,200642,201111,201101,200632,200331,100181",
+                        plan: "200492,202382,202082,200351,200431,201461,201501,200451,200641,200631,200642,201111,201101,200632,200331,100181,202081,201452",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,202382,202082,200351,200431,201461,201501,200451,200641,200631,200642,201111,201101,200632,200331,100181",
+                        plan: "200492,202382,202082,200351,200431,201461,201501,200451,200641,200631,200642,201111,201101,200632,200331,100181,202081,201452",
                     },
                 },
             },
@@ -57301,29 +57296,30 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 // The Winning Ticket (Get to Winning!) preset's plan with this card's own kit (Downhill Speedster,
-                // 1,500,000 CC and All I've Got), and without what its higher Potential levels gate (Position
-                // Pilfer, 15,000,000 CC, Full Throttle, Come What May, Fast & Furious and Keep Going!) until her Potential is read in-game.
+                // 1,500,000 CC and All I've Got). Of what its higher Potential levels gate (Position Pilfer,
+                // 15,000,000 CC, Full Throttle, Come What May, Fast & Furious and Keep Going!), it plans Come What
+                // May, bought once they are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,200031,202161",
+                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,201701,200031,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,200031,202161",
+                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,201701,200031,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,200031,202161",
+                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,201701,200031,202161",
                     },
                 },
             },
@@ -57506,21 +57502,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,200031,202161",
+                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,201701,200031,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,200031,202161",
+                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,201701,200031,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,200031,202161",
+                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,201701,200031,202161",
                     },
                 },
             },
@@ -57703,21 +57699,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,200031,202161",
+                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,201701,200031,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,200031,202161",
+                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,201701,200031,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,200031,202161",
+                        plan: "202172,201412,201702,200351,201391,201381,201111,201101,201541,200612,200601,200602,200491,201701,200031,202161",
                     },
                 },
             },
@@ -57914,9 +57910,8 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
                 // The Mejiro McQueen (Frontline Elegance) preset's plan with this card's own kit (Focus, Pace
-                // Chaser Savvy ○ and Feature Act), and without what its higher Potential levels gate (All Set,
-                // Headliner, Stamina to Spare, Heart All Set and Calm and Collected) until her Potential
-                // is read in-game.
+                // Chaser Savvy ○ and Feature Act). Its higher Potential levels gate All Set, Headliner, Stamina to
+                // Spare, Heart All Set and Calm and Collected; none of them is planned.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -58536,8 +58531,8 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackSurface: "turf",
                 // Pace Chaser plan on the base route: her own Corner Acceleration ○, Unyielding Spirit and Pace
                 // Chaser Corners ○, Pace Chaser and Medium greens and golds, and recovery. Her tree gates Pace
-                // Chaser Savvy ○, Big-Sisterly, Ramp Up, Corner Connoisseur, Pace Chaser Savvy ◎ and It's On!,
-                // which stay out until her Potential is read in-game.
+                // Chaser Savvy ○, Big-Sisterly, Ramp Up, Corner Connoisseur, Pace Chaser Savvy ◎ and It's On!;
+                // none of them is planned.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -59160,30 +59155,31 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 // The base Eishin Flash preset's plan with this card's own kit (Long Shot ○, Position Pilfer and
-                // Tether), and without what its higher Potential levels gate (Medium Straightaways ○, Dominator,
-                // Late Surger Corners ○, Flash Forward, Medium Straightaways ◎ and Late Surger Corners ◎) until
-                // her Potential is read in-game.
+                // Tether). Of what its higher Potential levels gate (Medium Straightaways ○, Dominator, Late
+                // Surger Corners ○, Flash Forward, Medium Straightaways ◎ and Late Surger Corners ◎), it plans
+                // Medium Straightaways ○, Late Surger Corners ○ and Flash Forward, bought once they are unlocked
+                // or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200302,201152,200511,200601,200591,200331,200461,201381,201112,200492,200432,200352,200512,200602,200592",
+                        plan: "200302,201152,200511,200601,200591,200331,200461,201103,201102,201392,201381,201112,200492,200432,200352,200512,200602,200592",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200302,201152,200511,200601,200591,200331,200461,201381,201112,200492,200432,200352,200512,200602,200592",
+                        plan: "200302,201152,200511,200601,200591,200331,200461,201103,201102,201392,201381,201112,200492,200432,200352,200512,200602,200592",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200302,201152,200511,200601,200591,200331,200461,201381,201112,200492,200432,200352,200512,200602,200592",
+                        plan: "200302,201152,200511,200601,200591,200331,200461,201103,201102,201392,201381,201112,200492,200432,200352,200512,200602,200592",
                     },
                 },
             },
@@ -59378,21 +59374,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200302,201152,200511,200601,200591,200331,200461,201381,201112,200492,200432,200352,200512,200602,200592",
+                        plan: "200302,201152,200511,200601,200591,200331,200461,201103,201102,201392,201381,201112,200492,200432,200352,200512,200602,200592",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200302,201152,200511,200601,200591,200331,200461,201381,201112,200492,200432,200352,200512,200602,200592",
+                        plan: "200302,201152,200511,200601,200591,200331,200461,201103,201102,201392,201381,201112,200492,200432,200352,200512,200602,200592",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200302,201152,200511,200601,200591,200331,200461,201381,201112,200492,200432,200352,200512,200602,200592",
+                        plan: "200302,201152,200511,200601,200591,200331,200461,201103,201102,201392,201381,201112,200492,200432,200352,200512,200602,200592",
                     },
                 },
             },
@@ -59584,21 +59580,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200302,201152,200511,200601,200591,200331,200461,201381,201112,200492,200432,200352,200512,200602,200592",
+                        plan: "200302,201152,200511,200601,200591,200331,200461,201103,201102,201392,201381,201112,200492,200432,200352,200512,200602,200592",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200302,201152,200511,200601,200591,200331,200461,201381,201112,200492,200432,200352,200512,200602,200592",
+                        plan: "200302,201152,200511,200601,200591,200331,200461,201103,201102,201392,201381,201112,200492,200432,200352,200512,200602,200592",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200302,201152,200511,200601,200591,200331,200461,201381,201112,200492,200432,200352,200512,200602,200592",
+                        plan: "200302,201152,200511,200601,200591,200331,200461,201103,201102,201392,201381,201112,200492,200432,200352,200512,200602,200592",
                     },
                 },
             },
@@ -59802,31 +59798,31 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 // The base Fine Motion preset's plan with this card's own kit (Firm Conditions ○, Head-On and
-                // Shifting Gears), and without what its higher Potential levels gate (Mile Corners ○, Changing
-                // Gears, Fall Runner ○, Neck and Neck, Mile Corners ◎ and Fall Runner ◎) until her Potential is
-                // read in-game. The base plan carries no recovery for her Medium goals, so it is topped up with
-                // Hydrate and Corner Recovery ○.
+                // Shifting Gears). Of what its higher Potential levels gate (Mile Corners ○, Changing Gears, Fall
+                // Runner ○, Neck and Neck, Mile Corners ◎ and Fall Runner ◎), it plans Neck and Neck, bought once
+                // they are unlocked or offered by a support card. The base plan carries no recovery for her Medium
+                // goals, so it is topped up with Hydrate and Corner Recovery ○.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200152,201052,200331,200461,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
+                        plan: "200152,201052,200331,200461,201901,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200152,201052,200331,200461,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
+                        plan: "200152,201052,200331,200461,201901,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200152,201052,200331,200461,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
+                        plan: "200152,201052,200331,200461,201901,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
                     },
                 },
             },
@@ -60020,21 +60016,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200152,201052,200331,200461,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
+                        plan: "200152,201052,200331,200461,201901,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200152,201052,200331,200461,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
+                        plan: "200152,201052,200331,200461,201901,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200152,201052,200331,200461,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
+                        plan: "200152,201052,200331,200461,201901,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
                     },
                 },
             },
@@ -60228,21 +60224,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200152,201052,200331,200461,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
+                        plan: "200152,201052,200331,200461,201901,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200152,201052,200331,200461,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
+                        plan: "200152,201052,200331,200461,201901,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200152,201052,200331,200461,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
+                        plan: "200152,201052,200331,200461,201901,201322,201312,201112,201102,200572,201902,200492,200722,201352,200352",
                     },
                 },
             },
@@ -60450,32 +60446,32 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "turf",
                 // The base Fuji Kiseki preset's plan with this card's own kit (Trick (Front), Mile Corners ○ and
-                // Prepared to Pass), and without what its higher Potential levels gate (Shrewd Step, Tantalizing
-                // Trick, Head-On, Speed Star, Technician and Neck and Neck) until her Potential is read in-game.
-                // The base plan is short, so it is topped up with Mile Corners ◎, Mile Straightaways ○, Mile
-                // Maven, Preferred Position, Swinging Maestro, Corner Recovery ○, Homestretch Haste and Pace
-                // Chaser Savvy ○.
+                // Prepared to Pass). Of what its higher Potential levels gate (Shrewd Step, Tantalizing Trick,
+                // Head-On, Speed Star, Technician and Neck and Neck), it plans Speed Star, bought once they are
+                // unlocked or offered by a support card. The base plan is short, so it is topped up with Mile
+                // Corners ◎, Mile Straightaways ○, Mile Maven, Preferred Position, Swinging Maestro, Corner
+                // Recovery ○, Homestretch Haste and Pace Chaser Savvy ○.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200352,200512,201532",
+                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200581,200352,200512,201532",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200352,200512,201532",
+                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200581,200352,200512,201532",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200352,200512,201532",
+                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200581,200352,200512,201532",
                     },
                 },
             },
@@ -60665,21 +60661,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200352,200512,201532",
+                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200581,200352,200512,201532",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200352,200512,201532",
+                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200581,200352,200512,201532",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200352,200512,201532",
+                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200581,200352,200512,201532",
                     },
                 },
             },
@@ -60869,21 +60865,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200352,200512,201532",
+                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200581,200352,200512,201532",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200352,200512,201532",
+                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200581,200352,200512,201532",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200352,200512,201532",
+                        plan: "200771,200582,200331,200461,201611,201322,201312,201042,201052,201041,201032,200681,200572,200351,200581,200352,200512,201532",
                     },
                 },
             },
@@ -61086,29 +61082,30 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "mile",
                 preferredTrackSurface: "turf",
                 // The Gold City (Autumn Cosmos) preset's plan with this card's own kit (Hanshin Racecourse ○,
-                // Watchful Eye and Slick Surge), and without what its higher Potential levels gate (Slipstream,
-                // Keen Eye, Acceleration, On Your Left! and Step on the Gas!) until her Potential is read in-game.
+                // Watchful Eye and Slick Surge). Of what its higher Potential levels gate (Slipstream, Keen Eye,
+                // Acceleration, On Your Left! and Step on the Gas!), it plans Keen Eye, bought once they are
+                // unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200052,200692,200602,200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051",
+                        plan: "200052,200692,200602,200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051,200691",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200052,200692,200602,200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051",
+                        plan: "200052,200692,200602,200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051,200691",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200052,200692,200602,200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051",
+                        plan: "200052,200692,200602,200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051,200691",
                     },
                 },
             },
@@ -61291,21 +61288,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200052,200692,200602,200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051",
+                        plan: "200052,200692,200602,200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051,200691",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200052,200692,200602,200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051",
+                        plan: "200052,200692,200602,200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051,200691",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200052,200692,200602,200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051",
+                        plan: "200052,200692,200602,200431,100711,201391,201381,201041,201031,200681,200331,200351,200021,200352,200382,201051,200691",
                     },
                 },
             },
@@ -61488,21 +61485,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200052,200692,200602,200331,200351,200431,200371,201391,201381,201542,200612,201041,201031,200681,200512,200362",
+                        plan: "200052,200692,200602,200331,200351,200431,200371,201391,201381,201542,200612,201041,201031,200681,200691,200512,200362",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200052,200692,200602,200331,200351,200431,200371,201391,201381,201542,200612,201041,201031,200681,200512,200362",
+                        plan: "200052,200692,200602,200331,200351,200431,200371,201391,201381,201542,200612,201041,201031,200681,200691,200512,200362",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200052,200692,200602,200331,200351,200431,200371,201391,201381,201542,200612,201041,201031,200681,200512,200362",
+                        plan: "200052,200692,200602,200331,200351,200431,200371,201391,201381,201542,200612,201041,201031,200681,200691,200512,200362",
                     },
                 },
             },
@@ -61708,8 +61705,8 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "sprint",
                 preferredTrackSurface: "dirt",
                 // The base Haru Urara preset's plan with this card's own kit (Prudent Positioning, Unyielding
-                // Spirit and Fighter), and without what its higher Potential levels gate (Shake It Out, Center
-                // Stage, Snowy Days ○, Hard Worker and Snowy Days ◎) until her Potential is read in-game.
+                // Spirit and Fighter). Its higher Potential levels gate Shake It Out, Center Stage, Snowy Days ○,
+                // Hard Worker and Snowy Days ◎; none of them is planned.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -62318,9 +62315,9 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
                 // The base Matikanefukukitaru preset's plan with this card's own kit (Right-Handed ○ and Slick
-                // Surge), and without what its higher Potential levels gate (Inside Scoop, Overwhelming Pressure,
-                // Kyoto Racecourse ○, Innate Experience and Kyoto Racecourse ◎) until her Potential is read
-                // in-game. Her own Pressure is left out because the runtime skill table cannot resolve it yet.
+                // Surge). Its higher Potential levels gate Inside Scoop, Overwhelming Pressure, Kyoto Racecourse
+                // ○, Innate Experience and Kyoto Racecourse ◎; none of them is planned. Her own Pressure is left
+                // out because the runtime skill table cannot resolve it yet.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -62937,30 +62934,31 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 // The base Mejiro Dober preset's plan with this card's own kit (Kyoto Racecourse ○, Fearless and
-                // Take the Chance), and without what its higher Potential levels gate (Medium Straightaways ○,
-                // Dauntless, Full Throttle, From the Brink, Medium Straightaways ◎ and Keep Going!) until her
-                // Potential is read in-game.
+                // Take the Chance). Of what its higher Potential levels gate (Medium Straightaways ○, Dauntless,
+                // Full Throttle, From the Brink, Medium Straightaways ◎ and Keep Going!), it plans Medium
+                // Straightaways ○, Dauntless and From the Brink, bought once they are unlocked or offered by a
+                // support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200062,202122,202082,200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,200461,200492,200612,100061,202161",
+                        plan: "200062,202122,202082,200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,200461,200492,200612,100061,202121,202081,201102,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200062,202122,202082,200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,200461,200492,200612,100061,202161",
+                        plan: "200062,202122,202082,200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,200461,200492,200612,100061,202121,202081,201102,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200062,202122,202082,200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,200461,200492,200612,100061,202161",
+                        plan: "200062,202122,202082,200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,200461,200492,200612,100061,202121,202081,201102,202161",
                     },
                 },
             },
@@ -63122,21 +63120,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200062,202122,202082,200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,200461,200492,200612,100061,202161",
+                        plan: "200062,202122,202082,200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,200461,200492,200612,100061,202121,202081,201102,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200062,202122,202082,200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,200461,200492,200612,100061,202161",
+                        plan: "200062,202122,202082,200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,200461,200492,200612,100061,202121,202081,201102,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200062,202122,202082,200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,200461,200492,200612,100061,202161",
+                        plan: "200062,202122,202082,200351,200601,200602,200331,200591,200592,201391,201381,201541,201111,200461,200492,200612,100061,202121,202081,201102,202161",
                     },
                 },
             },
@@ -63298,21 +63296,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200062,202122,202082,200351,200431,201391,201381,201431,200451,200611,200601,200602,201541,201111,200612,200331,100061",
+                        plan: "200062,202122,202082,200351,200431,201391,201381,201431,200451,200611,200601,200602,201541,201111,200612,200331,100061,202121,202081,201102",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200062,202122,202082,200351,200431,201391,201381,201431,200451,200611,200601,200602,201541,201111,200612,200331,100061",
+                        plan: "200062,202122,202082,200351,200431,201391,201381,201431,200451,200611,200601,200602,201541,201111,200612,200331,100061,202121,202081,201102",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200062,202122,202082,200351,200431,201391,201381,201431,200451,200611,200601,200602,201541,201111,200612,200331,100061",
+                        plan: "200062,202122,202082,200351,200431,201391,201381,201431,200451,200611,200601,200602,201541,201111,200612,200331,100061,202121,202081,201102",
                     },
                 },
             },
@@ -63488,30 +63486,30 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
                 // The Mejiro McQueen (Frontline Elegance) preset's plan with this card's own kit (Straightaway
-                // Adept, Stamina to Spare and Deep Breaths), and without what its higher Potential levels gate
-                // (Fall Runner ○, Cooldown, Ramp Up, Beeline Burst, Fall Runner ◎ and It's On!) until her
-                // Potential is read in-game.
+                // Adept, Stamina to Spare and Deep Breaths). Of what its higher Potential levels gate (Fall Runner
+                // ○, Cooldown, Ramp Up, Beeline Burst, Fall Runner ◎ and It's On!), it plans Cooldown, bought once
+                // they are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
+                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,200741,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
+                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,200741,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
+                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,200741,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
                 },
             },
@@ -63696,21 +63694,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
+                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,200741,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
+                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,200741,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
+                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,200741,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
                 },
             },
@@ -63895,21 +63893,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
+                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,200741,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
+                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,200741,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,201321,201311,201181,201171,201111,201101,200582,202161",
+                        plan: "200362,200562,200742,200561,200351,201352,200331,100061,100161,200741,201321,201311,201181,201171,201111,201101,200582,202161",
                     },
                 },
             },
@@ -64107,30 +64105,30 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 // The base Nice Nature preset's plan with this card's own kit (Nimble Navigator, Tether and Late
-                // Surger Savvy ○), and without what its higher Potential levels gate (Take the Chance, Dominator,
-                // Long Shot ○, No Stopping Me!, From the Brink and Long Shot ◎) until her Potential is read
-                // in-game.
+                // Surger Savvy ○). Of what its higher Potential levels gate (Take the Chance, Dominator, Long Shot
+                // ○, No Stopping Me!, From the Brink and Long Shot ◎), it plans No Stopping Me!, bought once they
+                // are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201152,201542,200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431",
+                        plan: "200492,201152,201542,200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431,200491",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201152,201542,200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431",
+                        plan: "200492,201152,201542,200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431,200491",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201152,201542,200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431",
+                        plan: "200492,201152,201542,200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431,200491",
                     },
                 },
             },
@@ -64312,21 +64310,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201152,201542,200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431",
+                        plan: "200492,201152,201542,200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431,200491",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201152,201542,200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431",
+                        plan: "200492,201152,201542,200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431,200491",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201152,201542,200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431",
+                        plan: "200492,201152,201542,200591,200611,200331,200601,201691,201391,201381,201111,201101,201541,201692,200351,200431,200491",
                     },
                 },
             },
@@ -64508,21 +64506,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201152,200331,200351,200431,200371,201391,201381,201542,200601,200612,201111,201101,200512,200362,201651",
+                        plan: "200492,201152,200331,200351,200431,200371,201391,201381,201542,200601,200491,200612,201111,201101,200512,200362,201651",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201152,200331,200351,200431,200371,201391,201381,201542,200601,200612,201111,201101,200512,200362,201651",
+                        plan: "200492,201152,200331,200351,200431,200371,201391,201381,201542,200601,200491,200612,201111,201101,200512,200362,201651",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200492,201152,200331,200351,200431,200371,201391,201381,201542,200601,200612,201111,201101,200512,200362,201651",
+                        plan: "200492,201152,200331,200351,200431,200371,201391,201381,201542,200601,200491,200612,201111,201101,200512,200362,201651",
                     },
                 },
             },
@@ -64722,30 +64720,30 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
                 // The base Rice Shower preset's plan with this card's own kit (Trick (Front), Long Straightaways ○
-                // and Stamina to Spare), and without what its higher Potential levels gate (Corner Recovery ○,
-                // Calm and Collected, Hesitant Front Runners, Tantalizing Trick and Swinging Maestro) until her
-                // Potential is read in-game.
+                // and Stamina to Spare). Of what its higher Potential levels gate (Corner Recovery ○, Calm and
+                // Collected, Hesitant Front Runners, Tantalizing Trick and Swinging Maestro), it plans Corner
+                // Recovery ○ and Calm and Collected, bought once they are unlocked or offered by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,201172,200562,200741,200331,200431,201352,201902,200492,201321,201311,201531,201181,201171,200742",
+                        plan: "200771,201172,200562,200741,200331,200431,200561,200352,201352,201902,200492,201321,201311,201531,201181,201171,200742",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,201172,200562,200741,200331,200431,201352,201902,200492,201321,201311,201531,201181,201171,200742",
+                        plan: "200771,201172,200562,200741,200331,200431,200561,200352,201352,201902,200492,201321,201311,201531,201181,201171,200742",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,201172,200562,200741,200331,200431,201352,201902,200492,201321,201311,201531,201181,201171,200742",
+                        plan: "200771,201172,200562,200741,200331,200431,200561,200352,201352,201902,200492,201321,201311,201531,201181,201171,200742",
                     },
                 },
             },
@@ -64937,21 +64935,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,201172,200562,200741,200331,200431,201352,201902,200492,201321,201311,201531,201181,201171,200742",
+                        plan: "200771,201172,200562,200741,200331,200431,200561,200352,201352,201902,200492,201321,201311,201531,201181,201171,200742",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,201172,200562,200741,200331,200431,201352,201902,200492,201321,201311,201531,201181,201171,200742",
+                        plan: "200771,201172,200562,200741,200331,200431,200561,200352,201352,201902,200492,201321,201311,201531,201181,201171,200742",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,201172,200562,200741,200331,200431,201352,201902,200492,201321,201311,201531,201181,201171,200742",
+                        plan: "200771,201172,200562,200741,200331,200431,200561,200352,201352,201902,200492,201321,201311,201531,201181,201171,200742",
                     },
                 },
             },
@@ -65139,21 +65137,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,201172,200562,200741,200331,200431,201352,201902,200492,201321,201311,201531,201181,201171,200742",
+                        plan: "200771,201172,200562,200741,200331,200431,200561,200352,201352,201902,200492,201321,201311,201531,201181,201171,200742",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,201172,200562,200741,200331,200431,201352,201902,200492,201321,201311,201531,201181,201171,200742",
+                        plan: "200771,201172,200562,200741,200331,200431,200561,200352,201352,201902,200492,201321,201311,201531,201181,201171,200742",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200771,201172,200562,200741,200331,200431,201352,201902,200492,201321,201311,201531,201181,201171,200742",
+                        plan: "200771,201172,200562,200741,200331,200431,200561,200352,201352,201902,200492,201321,201311,201531,201181,201171,200742",
                     },
                 },
             },
@@ -65366,32 +65364,33 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "long",
                 preferredTrackSurface: "turf",
                 // The base Super Creek preset's plan with this card's own kit (Corner Adept ○, Murmur and
-                // Hydrate), and without what its higher Potential levels gate (Pace Chaser Corners ○, Professor of
+                // Hydrate). Of what its higher Potential levels gate (Pace Chaser Corners ○, Professor of
                 // Curvature, Medium Straightaways ○, Mystifying Murmur, Pace Chaser Corners ◎ and Medium
-                // Straightaways ◎) until her Potential is read in-game. The base plan is short, so it is topped up
-                // with Pace Chaser Straightaways ○, Pace Chaser Savvy ○, Prepared to Pass, Preferred Position,
-                // Long Corners ○, Long Straightaways ○, Swinging Maestro and Corner Recovery ○.
+                // Straightaways ◎), it plans Pace Chaser Corners ○ and Professor of Curvature, bought once they
+                // are unlocked or offered by a support card. The base plan is short, so it is topped up with Pace
+                // Chaser Straightaways ○, Pace Chaser Savvy ○, Prepared to Pass, Preferred Position, Long Corners
+                // ○, Long Straightaways ○, Swinging Maestro and Corner Recovery ○.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,201532,200572",
+                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,200331,201322,201532,200572",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,201532,200572",
+                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,200331,201322,201532,200572",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,201532,200572",
+                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,200331,201322,201532,200572",
                     },
                 },
             },
@@ -65553,21 +65552,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,201532,200572",
+                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,200331,201322,201532,200572",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,201532,200572",
+                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,200331,201322,201532,200572",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,201532,200572",
+                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,200331,201322,201532,200572",
                     },
                 },
             },
@@ -65729,21 +65728,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,201532,200572",
+                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,200331,201322,201532,200572",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,201532,200572",
+                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,200331,201322,201532,200572",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,201532,200572",
+                        plan: "200332,201162,200582,200352,200382,201112,201182,201172,201312,201352,200351,200331,201322,201532,200572",
                     },
                 },
             },
@@ -65921,30 +65920,31 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 // Pace Chaser plan on the base route: her own Fall Runner ○, Inside Scoop and Stamina to Spare,
-                // Pace Chaser and Medium greens and golds, and recovery. Her tree gates Straight Descent, Calm and
-                // Collected, Pace Chaser Straightaways ○, Fall Frenzy, Determined Descent and Pace Chaser
-                // Straightaways ◎, which stay out until her Potential is read in-game.
+                // Pace Chaser and Medium greens and golds, and recovery. Of her Potential tree (Straight Descent,
+                // Calm and Collected, Pace Chaser Straightaways ○, Fall Frenzy, Determined Descent and Pace Chaser
+                // Straightaways ◎), it plans Pace Chaser Straightaways ○, bought once they are unlocked or offered
+                // by a support card.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,200572,201902,201111,201101,201182,202161,201352",
+                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,201312,200572,201902,201111,201101,201182,202161,201352",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,200572,201902,201111,201101,201182,202161,201352",
+                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,201312,200572,201902,201111,201101,201182,202161,201352",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,200572,201902,201111,201101,201182,202161,201352",
+                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,201312,200572,201902,201111,201101,201182,202161,201352",
                     },
                 },
             },
@@ -66132,21 +66132,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,200572,201902,201111,201101,201182,202161,201352",
+                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,201312,200572,201902,201111,201101,201182,202161,201352",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,200572,201902,201111,201101,201182,202161,201352",
+                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,201312,200572,201902,201111,201101,201182,202161,201352",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,200572,201902,201111,201101,201182,202161,201352",
+                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,201312,200572,201902,201111,201101,201182,202161,201352",
                     },
                 },
             },
@@ -66334,21 +66334,21 @@ const basePresets: CharacterPreset[] = [
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,200572,201902,201111,201101,201182,202161,201352",
+                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,201312,200572,201902,201111,201101,201182,202161,201352",
                     },
                     preFinals: {
                         enabled: true,
                         strategy: "optimize_skills",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,200572,201902,201111,201101,201182,202161,201352",
+                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,201312,200572,201902,201111,201101,201182,202161,201352",
                     },
                     careerComplete: {
                         enabled: true,
                         strategy: "optimize_knapsack",
                         enableBuyInheritedUniqueSkills: true,
                         enableBuyNegativeSkills: false,
-                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,200572,201902,201111,201101,201182,202161,201352",
+                        plan: "200192,200752,200562,200331,200351,200352,200461,200492,201322,201321,200582,200581,201312,200572,201902,201111,201101,201182,202161,201352",
                     },
                 },
             },
@@ -66552,12 +66552,11 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 // The base Daiwa Scarlet preset's plan with this card's own kit (Firm Resolve, Moxie and Feature
-                // Act), and without what its higher Potential levels gate (Long Straightaways ○, Restless, Long
-                // Corners ○, Can't Even Catch My Shadow, Long Straightaways ◎ and Long Corners ◎) until her
-                // Potential is read in-game. The base plan carries only white recoveries and Game8 asks for two
-                // gold ones, so it is topped up with Swinging Maestro and Breath of Fresh Air. Aimed at Medium, the
-                // base's Mile Corners ◎, Mile Straightaways ◎ and Mile Maven become Medium Corners ◎, Medium
-                // Straightaways ◎ and Up-Tempo.
+                // Act). Its higher Potential levels gate Long Straightaways ○, Restless, Long Corners ○, Can't
+                // Even Catch My Shadow, Long Straightaways ◎ and Long Corners ◎; none of them is planned. The base
+                // plan carries only white recoveries and Game8 asks for two gold ones, so it is topped up with
+                // Swinging Maestro and Breath of Fresh Air. Aimed at Medium, the base's Mile Corners ◎, Mile
+                // Straightaways ◎ and Mile Maven become Medium Corners ◎, Medium Straightaways ◎ and Up-Tempo.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
@@ -67164,9 +67163,8 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackDistance: "medium",
                 preferredTrackSurface: "turf",
                 // The base Vodka preset's plan with this card's own kit (Pedal to the Metal, Nimble Navigator and
-                // Medium Corners ○), and without what its higher Potential levels gate (Full Throttle, No Stopping
-                // Me!, Late Surger Straightaways ○, Top Gear, Keep Going! and Late Surger Straightaways ◎) until
-                // her Potential is read in-game.
+                // Medium Corners ○). Its higher Potential levels gate Full Throttle, No Stopping Me!, Late Surger
+                // Straightaways ○, Top Gear, Keep Going! and Late Surger Straightaways ◎; none of them is planned.
                 plans: {
                     skillPointCheck: {
                         enabled: true,

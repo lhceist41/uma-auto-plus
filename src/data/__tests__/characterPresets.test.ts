@@ -10,6 +10,11 @@ import { presetCharacter, presetOutfit, presetValidation } from "../presetMeta"
 import { SKILL_SPEND_OBJECTIVES } from "../../lib/adaptiveSkillPolicy"
 import { deriveExcludeOutfits, deriveInGameName } from "../../lib/rotationSnapshots"
 
+// Potential skills a preset may plan, except these green golds: each has its white version in the same card's own kit,
+// and while the gold is locked the planner counts it as an in-place upgrade of that white row and dead-taps it.
+// They stay out until a planner guard or a device check proves them safe.
+const GREEN_CHAIN_POTENTIAL_GOLDS = [202331, 201561, 202441]
+
 describe("avoidAdvisoryFor", () => {
     it("flags Haru Urara in Trackblazer as an avoid (turf-aptitude mismatch)", () => {
         const avoid = avoidAdvisoryFor("Haru Urara", "Trackblazer")
@@ -224,15 +229,11 @@ describe("Copano Rickey presets", () => {
         expect(trainerAdvisories["Copano Rickey"]).toBeDefined()
     })
 
-    it("never plans a skill locked behind a Potential level the account has not reached", () => {
-        // Read off her live Potential screen 2026-07-17: the account is on Potential Lv2, and her tree
-        // gates Chance of Victory (Lv3), Collaborative Graded Races o (Lv4) and Strong Steps (Lv5).
-        // The card manifest files these under `skills_awakening`, which is easy to misread as
-        // star-gated - they are not. A locked skill is a planner no-op, so this never crashed; it just
-        // silently wasted plan slots. Raise her Potential -> delete the id from this list and re-add it.
+    it("never plans Strong Steps, her Potential Lv5 gold that chains from a white in her own kit", () => {
+        // Her tree gates Chance of Victory (Lv3), Collaborative Graded Races o (Lv4) and Strong Steps (Lv5); the card
+        // manifest files them under `skills_awakening`, which is easy to misread as star-gated. A locked skill is skipped
+        // by the planner, so presets may plan them, except the green-chain hold.
         const potentialGated: Record<number, string> = {
-            202261: "Chance of Victory (Potential Lv3)",
-            202252: "Collaborative Graded Races o (Potential Lv4)",
             202331: "Strong Steps (Potential Lv5)",
         }
         for (const p of trio) {
@@ -402,8 +403,8 @@ describe("Grass Wonder (Saintly Jade Cleric) presets", () => {
 
     it("plans her own Long recovery chain in every scenario (Deep Breaths -> Cooldown)", () => {
         // Design decision for recovery protection: this profile PLANS its recovery (her own
-        // hint-discounted kit) rather than relying on automatic injection. 200741 Cooldown is
-        // awakening Lv3 and the account's verified Potential is Lv3, so the gold is obtainable.
+        // hint-discounted kit) rather than relying on automatic injection. 200741 Cooldown is her
+        // Potential Lv3 gold.
         for (const p of trio) {
             for (const planKey of ["skillPointCheck", "preFinals", "careerComplete"] as const) {
                 const ids = planIds(p, planKey)
@@ -416,20 +417,6 @@ describe("Grass Wonder (Saintly Jade Cleric) presets", () => {
     it("adds her Late recovery A Small Breather to the URA and Unity Cup plans", () => {
         for (const scenario of ["URA Finale", "Unity Cup"]) {
             expect(planIds(sjc(scenario), "careerComplete")).toContain(201422)
-        }
-    })
-
-    it("never plans a skill locked behind the account's Potential Lv3", () => {
-        // Read off her live Potential screen 2026-07-17: Lv2 Trick (Front) and Lv3 Cooldown are
-        // unlocked; Lv4 Late Surger Savvy ○ (201542) and Lv5 Relax (201421) are not. The base
-        // card's Trackblazer plan carries 201542, so a blind clone would have planned a locked
-        // skill - the Copano lesson. Raise her Potential -> revisit this pin.
-        for (const p of trio) {
-            for (const planKey of ["skillPointCheck", "preFinals", "careerComplete"] as const) {
-                const ids = planIds(p, planKey)
-                expect(ids).not.toContain(201542)
-                expect(ids).not.toContain(201421)
-            }
         }
     })
 
@@ -483,8 +470,7 @@ describe("Wonder Acute and Nakayama Festa presets", () => {
     const goalTurns = (name: string): number[] => (objectives as Record<string, any>)[name].mandatoryRaces.map((m: any) => m.turn)
 
     // Identity and kit read from the game's master data (card_rarity_data, available_skill_set).
-    // `gated` is each card's Potential Lv2-5 tree: the account's Potential on these new cards is
-    // unverified, so none of them may be planned until it is read in-game.
+    // `gated` is each card's Potential Lv2-5 tree. Presets may plan it, except the green-chain holds.
     const trainees = [
         {
             name: "Wonder Acute",
@@ -558,7 +544,7 @@ describe("Wonder Acute and Nakayama Festa presets", () => {
             }
         })
 
-        it("plans only known skills with the required strategies, and never a Potential-gated one", () => {
+        it("plans only known skills with the required strategies, and never a green-chain hold from its Potential tree", () => {
             for (const p of pipeline) {
                 expect(p.settings.skills!.plans!.skillPointCheck!.strategy).toBe("optimize_skills")
                 expect(p.settings.skills!.plans!.preFinals!.strategy).toBe("optimize_skills")
@@ -567,7 +553,7 @@ describe("Wonder Acute and Nakayama Festa presets", () => {
                     const ids = planIds(p, planKey)
                     expect(ids.length).toBeGreaterThanOrEqual(12)
                     for (const id of ids) expect(knownSkills.has(id)).toBe(true)
-                    for (const id of t.gated) expect(ids).not.toContain(id)
+                    for (const id of t.gated.filter((g) => GREEN_CHAIN_POTENTIAL_GOLDS.includes(g))) expect(ids).not.toContain(id)
                     for (const id of t.ownSkills) expect(ids).toContain(id)
                 }
             }
@@ -698,7 +684,7 @@ describe("Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O So
 
     // Identity and kit read from the game's master data (card_data, available_skill_set). `ownSkills`
     // is the card's Potential Lv1 kit; `gated` is its Lv2-5 tree plus the upgrades that sit above a
-    // gated skill. The account's Potential on these cards is unverified, so none may be planned yet.
+    // gated skill. Presets may plan the tree, except the green-chain holds.
     const trainees = [
         {
             name: "Aston Machan",
@@ -833,7 +819,7 @@ describe("Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O So
             }
         })
 
-        it("plans her own kit and known skills, never a Potential-gated one, with the required strategies", () => {
+        it("plans her own kit and known skills, never a green-chain hold, with the required strategies", () => {
             for (const p of pipeline) {
                 expect(p.settings.skills!.plans!.skillPointCheck!.strategy).toBe("optimize_skills")
                 expect(p.settings.skills!.plans!.preFinals!.strategy).toBe("optimize_skills")
@@ -843,7 +829,7 @@ describe("Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O So
                     expect(ids.length).toBeGreaterThanOrEqual(12)
                     expect(new Set(ids).size).toBe(ids.length)
                     for (const id of ids) expect(skillById.has(id)).toBe(true)
-                    for (const id of t.gated) expect(ids).not.toContain(id)
+                    for (const id of t.gated.filter((g) => GREEN_CHAIN_POTENTIAL_GOLDS.includes(g))) expect(ids).not.toContain(id)
                     for (const id of t.ownSkills) expect(ids).toContain(id)
                 }
             }
@@ -1134,7 +1120,7 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
             }
         })
 
-        it("plans her own learnable kit and known skills, never a gated one or one for another style", () => {
+        it("plans her own learnable kit and known skills, never a green-chain hold or one for another style", () => {
             for (const p of pipeline) {
                 const style = STYLE_CODE[p.settings.skills!.preferredRunningStyle as string]
                 for (const planKey of planKeys) {
@@ -1142,7 +1128,7 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
                     expect(ids.length).toBeGreaterThanOrEqual(12)
                     expect(new Set(ids).size).toBe(ids.length)
                     for (const id of ids) expect(skillById.has(id)).toBe(true)
-                    for (const id of [...t.gated, ...NEVER_PLANNED]) expect(ids).not.toContain(id)
+                    for (const id of [...t.gated.filter((g) => GREEN_CHAIN_POTENTIAL_GOLDS.includes(g)), ...NEVER_PLANNED]) expect(ids).not.toContain(id)
                     for (const id of t.own) expect(ids).toContain(id)
                     const dead = ids.filter((id) => {
                         const code = /running_style==(\d)/.exec(skillById.get(id)?.condition ?? "")
@@ -1643,5 +1629,198 @@ describe("skill plans resolve against the skill database", () => {
         const pressure = skillList.filter((s) => s.name_en === "Pressure")
         expect(pressure.map((s) => s.id)).toEqual([201212])
         expect(knownIds.has(202542)).toBe(false)
+    })
+})
+
+describe("Potential skills in preset plans", () => {
+    const planStrings = (p: (typeof characterPresets)[number]) =>
+        Object.entries(((p.settings as any).skills?.plans ?? {}) as Record<string, { plan?: string }>).map(
+            ([key, plan]) => [key, String(plan.plan ?? "").split(",").filter(Boolean).map(Number)] as const,
+        )
+
+    it("never plans a green-chain Potential gold in any preset", () => {
+        const planned: string[] = []
+        for (const p of characterPresets) {
+            for (const [key, ids] of planStrings(p)) {
+                for (const id of GREEN_CHAIN_POTENTIAL_GOLDS) if (ids.includes(id)) planned.push(`${p.name}|${p.scenario} ${key} ${id}`)
+            }
+        }
+        expect(planned).toEqual([])
+    })
+
+    // The Potential skills each preset gained, per preset and scenario (a Grand Concert twin copies its URA plans).
+    // Plan order is buying priority, so these must never outrank a gold the preset already planned.
+    const POTENTIAL_ADDITIONS: Record<string, number[]> = {
+        "Agnes Digital (Fanatic♡Jiangshi)|Trackblazer": [201591],
+        "Agnes Digital (Fanatic♡Jiangshi)|URA Finale": [201591],
+        "Agnes Digital (Fanatic♡Jiangshi)|Unity Cup": [201591],
+        "Agnes Tachyon|URA Finale": [200571],
+        "Agnes Tachyon|Unity Cup": [200571],
+        "Aston Machan|Trackblazer": [200531, 202041, 200972],
+        "Aston Machan|URA Finale": [200531, 202041, 200972],
+        "Aston Machan|Unity Cup": [200531, 202041, 200972],
+        "Biwa Hayahide (Rouge Caroler)|Trackblazer": [200511, 201312],
+        "Biwa Hayahide (Rouge Caroler)|URA Finale": [200511, 201312],
+        "Biwa Hayahide (Rouge Caroler)|Unity Cup": [200511, 201312],
+        "Biwa Hayahide|Trackblazer": [200741],
+        "Biwa Hayahide|URA Finale": [200741],
+        "Biwa Hayahide|Unity Cup": [200741],
+        "Copano Rickey|Trackblazer": [202261],
+        "Copano Rickey|URA Finale": [202261],
+        "Copano Rickey|Unity Cup": [202261],
+        "Curren Chan (Ma Chérie of the New Moon)|Trackblazer": [200651],
+        "Curren Chan (Ma Chérie of the New Moon)|URA Finale": [200651],
+        "Curren Chan (Ma Chérie of the New Moon)|Unity Cup": [200651],
+        "Eishin Flash (Precise Chocolatier)|Trackblazer": [201103, 201102, 201392],
+        "Eishin Flash (Precise Chocolatier)|URA Finale": [201103, 201102, 201392],
+        "Eishin Flash (Precise Chocolatier)|Unity Cup": [201103, 201102, 201392],
+        "Fine Motion (Titania)|Trackblazer": [201901],
+        "Fine Motion (Titania)|URA Finale": [201901],
+        "Fine Motion (Titania)|Unity Cup": [201901],
+        "Fine Motion|Trackblazer": [200581],
+        "Fine Motion|URA Finale": [200581],
+        "Fine Motion|Unity Cup": [200581],
+        "Fuji Kiseki (Succès Étoilé)|Trackblazer": [200581],
+        "Fuji Kiseki (Succès Étoilé)|URA Finale": [200581],
+        "Fuji Kiseki (Succès Étoilé)|Unity Cup": [200581],
+        "Fuji Kiseki|Trackblazer": [200571],
+        "Fuji Kiseki|URA Finale": [200571],
+        "Fuji Kiseki|Unity Cup": [200571],
+        "Gold City (Authentic / 1928)|Trackblazer": [200691],
+        "Gold City (Authentic / 1928)|URA Finale": [200691],
+        "Gold City (Authentic / 1928)|Unity Cup": [200691],
+        "Gold City (Autumn Cosmos)|Trackblazer": [201392],
+        "Gold City (Autumn Cosmos)|URA Finale": [201392],
+        "Gold City (Autumn Cosmos)|Unity Cup": [201392],
+        "Gold Ship|Trackblazer": [201481],
+        "Gold Ship|URA Finale": [201481],
+        "Gold Ship|Unity Cup": [201481],
+        "Inari One (Golden Dream)|Trackblazer": [200641],
+        "Inari One (Golden Dream)|URA Finale": [200641],
+        "Inari One (Golden Dream)|Unity Cup": [200641],
+        "Kawakami Princess|Trackblazer": [200491, 201382],
+        "Kawakami Princess|URA Finale": [200491, 201382],
+        "Kawakami Princess|Unity Cup": [200491, 201382],
+        "King Halo (Cheerleader in Noble White)|Trackblazer": [201382],
+        "King Halo (Cheerleader in Noble White)|URA Finale": [201382],
+        "King Halo (Cheerleader in Noble White)|Unity Cup": [201382],
+        "Kitasan Black|Trackblazer": [201272],
+        "Kitasan Black|URA Finale": [201272],
+        "Kitasan Black|Unity Cup": [201272],
+        "Maruzensky (Hot☆Summer Night)|Trackblazer": [201281],
+        "Mayano Top Gun|Trackblazer": [200381],
+        "Mayano Top Gun|URA Finale": [200381],
+        "Mayano Top Gun|Unity Cup": [200381],
+        "Meisho Doto (Dot-o'-Lantern)|Trackblazer": [201901, 200351],
+        "Meisho Doto (Dot-o'-Lantern)|URA Finale": [201901, 200351],
+        "Meisho Doto (Dot-o'-Lantern)|Unity Cup": [201901, 200351],
+        "Mejiro Bright|Trackblazer": [202071],
+        "Mejiro Bright|URA Finale": [202071],
+        "Mejiro Bright|Unity Cup": [202071],
+        "Mejiro Dober (Sapphire Sojourn)|Trackblazer": [202121, 202081, 201102],
+        "Mejiro Dober (Sapphire Sojourn)|URA Finale": [202121, 202081, 201102],
+        "Mejiro Dober (Sapphire Sojourn)|Unity Cup": [202121, 202081, 201102],
+        "Mejiro Dober|Trackblazer": [201382],
+        "Mejiro Dober|URA Finale": [201382],
+        "Mejiro Dober|Unity Cup": [201382],
+        "Mejiro McQueen (End of the Skies)|Trackblazer": [200741],
+        "Mejiro McQueen (End of the Skies)|URA Finale": [200741],
+        "Mejiro McQueen (End of the Skies)|Unity Cup": [200741],
+        "Mejiro Palmer|Trackblazer": [200532],
+        "Mejiro Palmer|URA Finale": [200532],
+        "Mejiro Palmer|Unity Cup": [200532],
+        "Mihono Bourbon (CODE: ICING)|Trackblazer": [200431],
+        "Mihono Bourbon (CODE: ICING)|URA Finale": [200431],
+        "Mihono Bourbon (CODE: ICING)|Unity Cup": [200431],
+        "Nakayama Festa|Trackblazer": [201382, 201102],
+        "Nakayama Festa|URA Finale": [201382, 201102],
+        "Nakayama Festa|Unity Cup": [201382, 201102],
+        "Narita Taishin (Difference Engineer)|Trackblazer": [202081, 201452],
+        "Narita Taishin (Difference Engineer)|URA Finale": [202081, 201452],
+        "Narita Taishin (Difference Engineer)|Unity Cup": [202081, 201452],
+        "Narita Taishin|Trackblazer": [200621],
+        "Narita Taishin|URA Finale": [200621],
+        "Narita Taishin|Unity Cup": [200621],
+        "Nice Nature (Run & Win)|Trackblazer": [200491],
+        "Nice Nature (Run & Win)|URA Finale": [200491],
+        "Nice Nature (Run & Win)|Unity Cup": [200491],
+        "Nice Nature|Trackblazer": [201441],
+        "Nice Nature|URA Finale": [201441],
+        "Nice Nature|Unity Cup": [201441],
+        "Nishino Flower|Trackblazer": [200361],
+        "Nishino Flower|URA Finale": [200361],
+        "Nishino Flower|Unity Cup": [200361],
+        "Rice Shower (Vampire Makeover!)|Trackblazer": [200561, 200352],
+        "Rice Shower (Vampire Makeover!)|URA Finale": [200561, 200352],
+        "Rice Shower (Vampire Makeover!)|Unity Cup": [200561, 200352],
+        "Seeking the Pearl|Trackblazer": [201071],
+        "Seeking the Pearl|URA Finale": [201071],
+        "Seeking the Pearl|Unity Cup": [201071],
+        "Seiun Sky (Soirée des Chatons)|Trackblazer": [200541, 201271, 201272, 200532],
+        "Seiun Sky (Soirée des Chatons)|URA Finale": [200541, 201271, 201272, 200532],
+        "Seiun Sky (Soirée des Chatons)|Unity Cup": [200541, 201271, 201272, 200532],
+        "Smart Falcon (Twilight Triumph)|Trackblazer": [202311],
+        "Smart Falcon (Twilight Triumph)|URA Finale": [202311],
+        "Smart Falcon (Twilight Triumph)|Unity Cup": [202311],
+        "Special Week|Trackblazer": [201351],
+        "Special Week|URA Finale": [201351, 200511],
+        "Special Week|Unity Cup": [201351, 200511],
+        "Super Creek (Chiffon-Wrapped Mummy)|Trackblazer": [200331, 201322],
+        "Super Creek (Chiffon-Wrapped Mummy)|URA Finale": [200331, 201322],
+        "Super Creek (Chiffon-Wrapped Mummy)|Unity Cup": [200331, 201322],
+        "Symboli Rudolf (Archer by Moonlight)|Trackblazer": [201312],
+        "Symboli Rudolf (Archer by Moonlight)|URA Finale": [201312],
+        "Symboli Rudolf (Archer by Moonlight)|Unity Cup": [201312],
+        "Taiki Shuttle (Bubblegum☆Memories)|Trackblazer": [201901, 201042],
+        "Taiki Shuttle (Bubblegum☆Memories)|URA Finale": [201901, 201042, 201322],
+        "Taiki Shuttle (Bubblegum☆Memories)|Unity Cup": [201901, 201042, 201322],
+        "Tamamo Cross (Raging Thunder)|Trackblazer": [200461, 201611],
+        "Tamamo Cross (Raging Thunder)|URA Finale": [200461, 201611],
+        "Tamamo Cross (Raging Thunder)|Unity Cup": [200461, 201611],
+        "Tamamo Cross|Trackblazer": [201612],
+        "Tamamo Cross|URA Finale": [201612],
+        "Tamamo Cross|Unity Cup": [201612],
+        "Tokai Teio (Beyond the Horizon)|Trackblazer": [200571, 201141],
+        "Tokai Teio (Beyond the Horizon)|URA Finale": [200571, 201141],
+        "Tokai Teio (Beyond the Horizon)|Unity Cup": [200571, 201141],
+        "Tosen Jordan|Trackblazer": [200571],
+        "Tosen Jordan|URA Finale": [200571],
+        "Tosen Jordan|Unity Cup": [200571],
+        "Vodka|Trackblazer": [200381],
+        "Vodka|URA Finale": [200381],
+        "Vodka|Unity Cup": [200381],
+        "Winning Ticket (Dream Deliverer)|Trackblazer": [201701],
+        "Winning Ticket (Dream Deliverer)|URA Finale": [201701],
+        "Winning Ticket (Dream Deliverer)|Unity Cup": [201701],
+        "Wonder Acute|Trackblazer": [201071, 202301, 201032],
+        "Wonder Acute|URA Finale": [201071, 202301, 201032],
+        "Wonder Acute|Unity Cup": [201071, 202301, 201032],
+        "Yamanin Zephyr|Trackblazer": [201051, 202411, 201042],
+        "Yamanin Zephyr|URA Finale": [201051, 202411, 201042],
+        "Yamanin Zephyr|Unity Cup": [201051, 202411, 201042],
+        "Yukino Bijin|Trackblazer": [200491, 201322],
+        "Yukino Bijin|URA Finale": [200491, 201322],
+        "Yukino Bijin|Unity Cup": [200491, 201322],
+    }
+    // Gold or higher: a gold icon (ending in 2) or an inherited unique. Matches the game's skill rarity for every planned id.
+    const skillById = new Map((Object.values(skills as any) as { id: number; icon_id: number; inherited?: boolean }[]).map((s) => [s.id, s]))
+    const isGold = (id: number) => {
+        const s = skillById.get(id)
+        return s !== undefined && (s.icon_id % 10 === 2 || s.inherited === true)
+    }
+
+    it("places added Potential skills after every gold the preset already planned", () => {
+        const misplaced: string[] = []
+        for (const p of characterPresets) {
+            const added = POTENTIAL_ADDITIONS[`${p.name}|${p.scenario === "Grand Concert" ? "URA Finale" : p.scenario}`]
+            if (added === undefined) continue
+            for (const [key, ids] of planStrings(p)) {
+                const firstAdded = ids.findIndex((id) => added.includes(id))
+                if (firstAdded === -1) continue
+                const laterGold = ids.slice(firstAdded).filter((id) => !added.includes(id) && isGold(id))
+                if (laterGold.length > 0) misplaced.push(`${p.name}|${p.scenario} ${key} gold after the block: ${laterGold.join(",")}`)
+            }
+        }
+        expect(misplaced).toEqual([])
     })
 })

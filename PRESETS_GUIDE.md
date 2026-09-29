@@ -165,9 +165,10 @@ its planned turns.
 **Deliberately buying a negative skill.** A trainee who starts with a built-in stat debuff gets
 negative-skill buying enabled, so the buy pass can clear it.
 
-**Skills left out of a plan.** Skills sitting behind Potential levels the build cannot reach are
-omitted on purpose. Listing a skill a trainee cannot learn only pads the plan with entries that
-never fire. Raise her Potential and those become worth adding.
+**Skills behind Potential levels.** Plans include each outfit's top-rated Potential skills, ranked
+after the gold skills the preset already plans. The bot buys one whenever it is on offer in a career: once you
+have raised that trainee's Potential to unlock it, or when a support card offers it. Skills for a
+different running style or race distance than the preset's are left out.
 
 ## When a preset does not behave as expected
 
