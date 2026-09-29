@@ -12,7 +12,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### What's new and changed
 
-- **Six more trainees get presets for all four scenarios:** Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O Sole Suo!), Yamanin Zephyr and Yukino Bijin. They are research-graded until a full career completes. Aston Machan and Seeking the Pearl show a Trackblazer caution: their Sprint and Mile aptitudes leave few winnable races after Junior.
+- **Six more trainee cards get presets for all four scenarios:** Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O Sole Suo!), Yamanin Zephyr and Yukino Bijin. They are research-graded until a full career completes. Aston Machan and Seeking the Pearl show a Trackblazer caution: their Sprint and Mile aptitudes leave few winnable races after Junior.
+
+- **Twelve alternate trainee outfits get their own presets for all four scenarios:** Biwa Hayahide (Rouge Caroler), Mihono Bourbon (CODE: ICING), Tamamo Cross (Raging Thunder), Inari One (Golden Dream), Smart Falcon (Twilight Triumph), Special Week (Ruler of Japan), Curren Chan (Ma Chérie of the New Moon), Meisho Doto (Dot-o'-Lantern), Agnes Digital (Fanatic♡Jiangshi), Narita Taishin (Difference Engineer), Winning Ticket (Dream Deliverer) and Mejiro McQueen (Fair Lady of the Waves). Each keeps her base outfit's build with the outfit's own skills, and Special Week (Ruler of Japan) runs as a Late Surger. They are research-graded until a full career completes. If you own one of these outfits but not the base outfit, apply the outfit's own preset: when it picks the trainee, a base preset skips every outfit that has its own preset.
 
 ## [1.6.0] - 2026-09-29
 

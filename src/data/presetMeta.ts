@@ -113,7 +113,6 @@ export const validatedPresets: ReadonlySet<string> = new Set([
     "Tosen Jordan|URA Finale",
     "Symboli Rudolf (Emperor's Path)|URA Finale",
     "Mejiro Ryan|URA Finale",
-    "Mihono Bourbon|URA Finale",
     "Mejiro Palmer|URA Finale",
     // A+ 12,611 on 2026-07-24: the Grand Concert scenario's first fully automated completion.
     "Taiki Shuttle|Grand Concert",
@@ -145,8 +144,8 @@ export const validatedPresets: ReadonlySet<string> = new Set([
     // sitting (A+ 12,532 / A 11,950 / A+ 13,480 / A 11,687). Biwa's run also survived a 17:00
     // daily-reset lobby bounce mid-launch and a bot restart; Doto's race-dense build proved the
     // song-carryover path (an unaffordable all-song trio banked across a concert and bought the
-    // next cycle).
-    "Biwa Hayahide|Grand Concert",
+    // next cycle). Biwa's run was on her Rouge Caroler outfit, so it does not promote the plain
+    // Biwa Hayahide preset, which models her base outfit.
     "Meisho Doto|Grand Concert",
     "Nice Nature|Grand Concert",
     "Tosen Jordan|Grand Concert",

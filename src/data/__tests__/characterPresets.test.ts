@@ -943,6 +943,126 @@ describe("Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O So
     })
 })
 
+describe("Alternate-outfit presets built from their base outfit's preset", () => {
+    const planKeys = ["skillPointCheck", "preFinals", "careerComplete"] as const
+    const planIds = (p: (typeof characterPresets)[number], planKey: (typeof planKeys)[number]) =>
+        String((p.settings.skills!.plans as any)[planKey].plan)
+            .split(",")
+            .filter(Boolean)
+            .map(Number)
+    const skillList = (Array.isArray(skills) ? skills : Object.values(skills)) as { id: number; condition?: string }[]
+    const skillById = new Map(skillList.map((s) => [s.id, s]))
+    const STYLE_CODE: Record<string, number> = { front_runner: 1, pace_chaser: 2, late_surger: 3, end_closer: 4 }
+    const cards = (buildBudget as any).traineeGrowth as { cardId: number; character: string; outfit: string; runningStyle: number }[]
+    const find = (name: string, scenario: string) => characterPresets.find((p) => p.name === name && p.scenario === scenario)!
+
+    // Kit read from the game's master data (available_skill_set): `own` is the kit the plan counts on
+    // (the Lv1 kit, or up to Potential Lv3 for Rouge Caroler and CODE: ICING), `gated` the rest of the
+    // tree plus any upgrade above a gated skill. Grid and goal route are the base outfit's.
+    const outfits = [
+        { name: "Biwa Hayahide (Rouge Caroler)", base: "Biwa Hayahide", cardId: 102302, own: [200512, 200572, 201202, 201532, 201201], gated: [201312, 200511, 201311] },
+        { name: "Mihono Bourbon (CODE: ICING)", base: "Mihono Bourbon", cardId: 102602, own: [200432, 200542, 200762, 201522, 200541], gated: [201601, 200431] },
+        { name: "Tamamo Cross (Raging Thunder)", base: "Tamamo Cross", cardId: 102102, own: [200462, 200722, 201902], gated: [200162, 200721, 201611, 200461, 200161] },
+        { name: "Inari One (Golden Dream)", base: "Inari One", cardId: 103402, own: [200952, 200752, 200642], gated: [201472, 200751, 202322, 200641, 201471, 202321] },
+        { name: "Smart Falcon (Twilight Triumph)", base: "Smart Falcon", cardId: 104602, own: [201672, 201252, 202132], gated: [202312, 201671, 202352, 202311, 202351] },
+        { name: "Special Week (Ruler of Japan)", base: "Special Week", cardId: 100103, own: [200332, 200612], gated: [201172, 201211, 201182, 202061, 201171, 201181] },
+        { name: "Curren Chan (Ma Chérie of the New Moon)", base: "Curren Chan", cardId: 103802, own: [200851, 201322, 201012], gated: [200652, 201011, 201532, 200651, 201531] },
+        { name: "Meisho Doto (Dot-o'-Lantern)", base: "Meisho Doto", cardId: 105802, own: [200352, 201902, 201102], gated: [202372, 201901, 200012, 200351, 202371, 200011] },
+        { name: "Agnes Digital (Fanatic♡Jiangshi)", base: "Agnes Digital", cardId: 101902, own: [202272, 200462, 200702], gated: [201591, 200461, 201682, 202271, 201681] },
+        { name: "Narita Taishin (Difference Engineer)", base: "Narita Taishin", cardId: 105002, own: [200492, 202382, 202082], gated: [201552, 202381, 201452, 202081, 201551, 201451] },
+        { name: "Winning Ticket (Dream Deliverer)", base: "Winning Ticket (Get to Winning!)", cardId: 103502, own: [202172, 201412, 201702], gated: [200592, 201411, 202152, 201701, 200591, 202151] },
+        { name: "Mejiro McQueen (Fair Lady of the Waves)", base: "Mejiro McQueen (Frontline Elegance)", cardId: 101303, own: [200432, 201532, 202012], gated: [202192, 202011, 200562, 202191, 200561] },
+    ]
+
+    /** The settings a derived outfit may change: the skill plans, plus Special Week's style change below. */
+    const withoutPlans = (settings: any) => ({ ...settings, skills: { ...settings.skills, plans: undefined } })
+
+    describe.each(outfits)("$name", (t) => {
+        const all = characterPresets.filter((p) => p.name === t.name)
+        const pipeline = all.filter((p) => p.scenario !== "Grand Concert")
+        const card = cards.find((c) => c.cardId === t.cardId)!
+
+        it("ships one preset per scenario, including the derived Grand Concert twin", () => {
+            expect(all.map((p) => p.scenario).sort()).toEqual(["Grand Concert", "Trackblazer", "URA Finale", "Unity Cup"])
+        })
+
+        it("names a real released outfit of her character exactly, and selects that outfit in Trainee Select", () => {
+            expect(`[${presetOutfit(t.name)}]`).toBe(card.outfit)
+            expect(presetCharacter(t.name)).toBe(presetCharacter(t.base))
+            expect(deriveInGameName(t.name)).toBe(`[${presetOutfit(t.name)}] ${presetCharacter(t.name)}`)
+            expect(deriveExcludeOutfits(t.name)).toEqual([])
+            for (const p of all) expect(p.traineeName).toBeUndefined()
+        })
+
+        it("stays research-graded with no recommended badge, and carries the base outfit's avoid advisories", () => {
+            for (const p of all) expect(presetValidation(p.name, p.scenario)).toBe("research")
+            expect(trainerAdvisories[t.name].recommended).toEqual([])
+            for (const scenario of ["URA Finale", "Unity Cup", "Trackblazer", "Grand Concert"]) {
+                expect(avoidAdvisoryFor(t.name, scenario)?.scenario).toBe(avoidAdvisoryFor(t.base, scenario)?.scenario)
+            }
+        })
+
+        it("keeps the base build in every scenario apart from the skill plans", () => {
+            if (t.name === "Special Week (Ruler of Japan)") return
+            for (const p of pipeline) expect(withoutPlans(p.settings)).toEqual(withoutPlans(find(t.base, p.scenario).settings))
+        })
+
+        it("races the style it buys skills for", () => {
+            for (const p of pipeline) {
+                const strategy = p.settings.racing!.originalRaceStrategy
+                if (strategy === "Default") expect(card.runningStyle).toBe(STYLE_CODE[p.settings.skills!.preferredRunningStyle as string])
+            }
+        })
+
+        it("plans her own learnable kit and known skills, never a gated one or one for another style", () => {
+            for (const p of pipeline) {
+                const style = STYLE_CODE[p.settings.skills!.preferredRunningStyle as string]
+                for (const planKey of planKeys) {
+                    const ids = planIds(p, planKey)
+                    expect(ids.length).toBeGreaterThanOrEqual(12)
+                    expect(new Set(ids).size).toBe(ids.length)
+                    for (const id of ids) expect(skillById.has(id)).toBe(true)
+                    for (const id of t.gated) expect(ids).not.toContain(id)
+                    for (const id of t.own) expect(ids).toContain(id)
+                    const dead = ids.filter((id) => {
+                        const code = /running_style==(\d)/.exec(skillById.get(id)?.condition ?? "")
+                        return code !== null && Number(code[1]) !== style
+                    })
+                    expect(dead).toEqual([])
+                }
+            }
+        })
+
+        it("takes the base outfit's Grand Concert Speed target", () => {
+            const key = (p: (typeof characterPresets)[number]) => `training${p.settings.training!.preferredDistanceOverride}StatTarget_speedStatTarget`
+            const twin = find(t.name, "Grand Concert")
+            const baseTwin = find(t.base, "Grand Concert")
+            expect((twin.settings.trainingStatTarget as any)[key(twin)]).toBe((baseTwin.settings.trainingStatTarget as any)[key(baseTwin)])
+        })
+    })
+
+    it("builds Special Week (Ruler of Japan) as a Late Surger, the card's own style, and otherwise keeps the base build", () => {
+        for (const scenario of ["URA Finale", "Unity Cup", "Trackblazer"]) {
+            const p = find("Special Week (Ruler of Japan)", scenario)
+            const base = find("Special Week", scenario)
+            expect(p.settings.skills!.preferredRunningStyle).toBe("late_surger")
+            const strip = (s: any) => ({ ...withoutPlans(s), skills: { ...s.skills, plans: undefined, preferredRunningStyle: undefined }, trainingEvent: { ...s.trainingEvent, scenarioEventOverrides: undefined } })
+            expect(strip(p.settings)).toEqual(strip(base.settings))
+        }
+        expect(find("Special Week (Ruler of Japan)", "Trackblazer").settings.trainingEvent!.scenarioEventOverrides).toEqual({ "Trackblazer|A Grandkid Get-Together": 0 })
+    })
+
+    it("leaves out Pressure (201212): skills.json is keyed by name and a newer Pressure (202542) shadows it", () => {
+        expect(skillById.has(201212)).toBe(false)
+        expect((skills as any).Pressure.id).toBe(202542)
+    })
+
+    it("makes the base outfit's preset skip every alternate outfit that now has its own preset", () => {
+        expect(deriveExcludeOutfits("Biwa Hayahide")).toEqual(["Rouge Caroler"])
+        expect(deriveExcludeOutfits("Mihono Bourbon")).toEqual(["CODE: ICING"])
+    })
+})
+
 describe("skill spend objective (Phase 2A)", () => {
     it("exactly the farming set, the Copano sash profile, and the SJC safety profile declare objectives", () => {
         // The four farming profiles run sparks (planned-only spending under Adaptive); Copano
@@ -1012,6 +1132,7 @@ describe("Grand Concert derived presets", () => {
     const EXPECTED_SPEED: Record<string, number | undefined> = {
         "Agnes Tachyon": 1400,
         "Mihono Bourbon": 1400,
+        "Mihono Bourbon (CODE: ICING)": 1400,
         Vodka: 1400,
         "Sakura Bakushin O": 1600,
         "King Halo": 1600,
@@ -1023,6 +1144,7 @@ describe("Grand Concert derived presets", () => {
         // Full-roster port: Sprint.
         "Aston Machan": 1600,
         "Curren Chan": 1600,
+        "Curren Chan (Ma Chérie of the New Moon)": 1600,
         "King Halo (Cheerleader in Noble White)": 1600,
         "Nishino Flower": 1600,
         "Haru Urara": 1400,
@@ -1038,9 +1160,11 @@ describe("Grand Concert derived presets", () => {
         "Seeking the Pearl": 1600,
         "Yamanin Zephyr": 1600,
         "Agnes Digital": 1400,
+        "Agnes Digital (Fanatic♡Jiangshi)": 1400,
         "Fuji Kiseki": 1400,
         "Gold City (Autumn Cosmos)": 1400,
         "Smart Falcon": 1400,
+        "Smart Falcon (Twilight Triumph)": 1400,
         // Medium.
         "Admire Vega": 1400,
         "Air Groove": 1400,
@@ -1050,21 +1174,25 @@ describe("Grand Concert derived presets", () => {
         "Fine Motion": 1400,
         "Hishi Amazon": 1400,
         "Inari One": 1400,
+        "Inari One (Golden Dream)": 1400,
         "Ines Fujin": 1400,
         "Kawakami Princess": 1400,
         "Kitasan Black": 1400,
         "Meisho Doto": 1400,
+        "Meisho Doto (Dot-o'-Lantern)": 1400,
         "Mejiro Ardan": 1400,
         "Mejiro Dober": 1400,
         "Mejiro Ryan": 1400,
         "Nakayama Festa": 1400,
         "Narita Taishin": 1400,
+        "Narita Taishin (Difference Engineer)": 1400,
         "Nice Nature": 1400,
         "Sakura Chiyono O": 1400,
         "Seiun Sky": 1400,
         "Seiun Sky (Soirée des Chatons)": 1400,
         "Silence Suzuka": 1400,
         "Special Week": 1400,
+        "Special Week (Ruler of Japan)": 1400,
         "Special Week (Hopp'n♪Happy Heart)": 1400,
         "Sweep Tosho": 1400,
         "Symboli Rudolf (Emperor's Path)": 1400,
@@ -1074,10 +1202,12 @@ describe("Grand Concert derived presets", () => {
         "Tokai Teio (Beyond the Horizon)": 1400,
         "Tosen Jordan": 1400,
         "Winning Ticket (Get to Winning!)": 1400,
+        "Winning Ticket (Dream Deliverer)": 1400,
         "Yaeno Muteki": 1400,
         "Yukino Bijin": 1400,
         // Long stayers.
         "Biwa Hayahide": undefined,
+        "Biwa Hayahide (Rouge Caroler)": undefined,
         "Gold Ship (RUN! RUIN! LAUNCHER!)": undefined,
         "Grass Wonder": undefined,
         "Grass Wonder (Saintly Jade Cleric)": undefined,
@@ -1087,12 +1217,14 @@ describe("Grand Concert derived presets", () => {
         "Mayano Top Gun": undefined,
         "Mayano Top Gun (Sunlight Bouquet)": undefined,
         "Mejiro Bright": undefined,
+        "Mejiro McQueen (Fair Lady of the Waves)": undefined,
         "Mejiro McQueen (Frontline Elegance)": undefined,
         "Mejiro Palmer": undefined,
         "Narita Brian": undefined,
         "Rice Shower": undefined,
         "Satono Diamond": undefined,
         "Tamamo Cross": undefined,
+        "Tamamo Cross (Raging Thunder)": undefined,
     }
     const SPEED_KEY: Record<string, string> = {
         Sprint: "trainingSprintStatTarget_speedStatTarget",
@@ -1114,8 +1246,8 @@ describe("Grand Concert derived presets", () => {
         // The docs used to be checked with `grep -c '^        scenario: "'`, which no longer works:
         // derived twins are not literals, and grandConcertFrom's own return adds a matching line.
         // This assertion is the authoritative count now. Update the docs whenever it changes.
-        expect(characterPresets.length).toBe(324)
-        expect(characterPresets.filter((p) => p.scenario === "Grand Concert")).toHaveLength(80)
+        expect(characterPresets.length).toBe(372)
+        expect(characterPresets.filter((p) => p.scenario === "Grand Concert")).toHaveLength(92)
         expect(new Set(characterPresets.map((p) => `${p.name}|${p.scenario}`)).size).toBe(characterPresets.length)
     })
 
