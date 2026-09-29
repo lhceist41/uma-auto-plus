@@ -6,9 +6,10 @@
  * Preset naming convention: outfit-specific presets are "Character (Outfit)"; plain names
  * model the character's base card, whose outfit title comes from characterBaseOutfits.
  * All base-outfit names below were read from the cards' gametora pages on 2026-07-06, except
- * Nakayama Festa and Wonder Acute, read from the game's master data on 2026-09-26, and Agnes Digital,
- * Inari One, Ines Fujin, Mejiro Bright and Satono Diamond, read from it on 2026-09-28. The base card is
- * the character's lowest card id in build_budget_data.json.
+ * Nakayama Festa and Wonder Acute, read from the game's master data on 2026-09-26, Agnes Digital,
+ * Inari One, Ines Fujin, Mejiro Bright and Satono Diamond, read from it on 2026-09-28, and Aston Machan,
+ * Kawakami Princess, Seeking the Pearl, Yamanin Zephyr and Yukino Bijin, read from it on 2026-09-29. The
+ * base card is the character's lowest card id in build_budget_data.json.
  */
 
 /** EN base-card outfit title per character, for presets whose name carries no bracket. */
@@ -18,6 +19,7 @@ export const characterBaseOutfits: Record<string, string> = {
     "Agnes Tachyon": "tach-nology",
     "Air Groove": "Empress Road",
     "Air Shakur": "unsigned",
+    "Aston Machan": "Flare",
     "Bamboo Memory": "Iron Ambition",
     "Biwa Hayahide": "pf. Winning Equation...",
     "Copano Rickey": "Eightfold☆Fortune",
@@ -34,6 +36,7 @@ export const characterBaseOutfits: Record<string, string> = {
     "Hishi Amazon": "Azure Amazon",
     "Inari One": "Edomurasaki",
     "Ines Fujin": "Always Electrifying",
+    "Kawakami Princess": "Princess of Pink",
     "King Halo": "King of Emeralds",
     "Kitasan Black": "Gilded Shrine to Glory",
     "Manhattan Cafe": "Creeping Shadow",
@@ -57,6 +60,7 @@ export const characterBaseOutfits: Record<string, string> = {
     "Sakura Bakushin O": "Blossom in Learning",
     "Sakura Chiyono O": "Strength in Full Bloom",
     "Satono Diamond": "Natural Brilliance",
+    "Seeking the Pearl": "Rocket☆Star",
     "Seiun Sky": "Reeling in the Big One",
     "Silence Suzuka": "Innocent Silence",
     "Smart Falcon": "LOVE☆4EVER",
@@ -70,6 +74,8 @@ export const characterBaseOutfits: Record<string, string> = {
     Vodka: "Wild Top Gear",
     "Wonder Acute": "Butterfly Sting",
     "Yaeno Muteki": "Blazed Head, Covered Fists",
+    "Yamanin Zephyr": "Fluttertail Spirit",
+    "Yukino Bijin": "Darl'n Snowflake",
 }
 
 /**

@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### What's new and changed
+
+- **Six more trainees get presets for all four scenarios:** Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O Sole Suo!), Yamanin Zephyr and Yukino Bijin. They are research-graded until a full career completes. Aston Machan and Seeking the Pearl show a Trackblazer caution: their Sprint and Mile aptitudes leave few winnable races after Junior.
+
 ## [1.6.0] - 2026-09-29
 
 ### Highlights

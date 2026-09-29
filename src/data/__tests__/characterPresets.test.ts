@@ -1,5 +1,6 @@
 import races from "../races.json"
 import objectives from "../character_objectives.json"
+import outfitData from "../character_outfits.json"
 import skills from "../skills.json"
 import scenarios from "../scenarios.json"
 import buildBudget from "../build_budget_data.json"
@@ -683,6 +684,265 @@ describe("Wonder Acute and Nakayama Festa presets", () => {
     })
 })
 
+describe("Aston Machan, Kawakami Princess, Seeking the Pearl, T.M. Opera O (O Sole Suo!), Yamanin Zephyr and Yukino Bijin presets", () => {
+    const planKeys = ["skillPointCheck", "preFinals", "careerComplete"] as const
+    const planIds = (p: (typeof characterPresets)[number], planKey: (typeof planKeys)[number]) =>
+        String((p.settings.skills!.plans as any)[planKey].plan)
+            .split(",")
+            .filter(Boolean)
+            .map(Number)
+    const skillList = (Array.isArray(skills) ? skills : Object.values(skills)) as { id: number; condition?: string }[]
+    const skillById = new Map(skillList.map((s) => [s.id, s]))
+    const STYLE_CODE: Record<string, string> = { front_runner: "1", pace_chaser: "2", late_surger: "3", end_closer: "4" }
+    const objectivesFor = (key: string) => (objectives as Record<string, any>)[key]
+
+    // Identity and kit read from the game's master data (card_data, available_skill_set). `ownSkills`
+    // is the card's Potential Lv1 kit; `gated` is its Lv2-5 tree plus the upgrades that sit above a
+    // gated skill. The account's Potential on these cards is unverified, so none may be planned yet.
+    const trainees = [
+        {
+            name: "Aston Machan",
+            character: "Aston Machan",
+            objectivesKey: "Aston Machan",
+            outfit: "Flare",
+            inGameName: "Aston Machan",
+            distance: "sprint",
+            style: "front_runner",
+            override: "Sprint",
+            goals: [21, 23, 29, 31, 42, 54, 66],
+            ownSkills: [200162, 200532, 202042],
+            gated: [200972, 200531, 201601, 202041, 200971],
+            gcSpeed: 1600,
+            trackblazerAvoid: /Medium and Long/,
+        },
+        {
+            name: "Kawakami Princess",
+            character: "Kawakami Princess",
+            objectivesKey: "Kawakami Princess",
+            outfit: "Princess of Pink",
+            inGameName: "Kawakami Princess",
+            distance: "medium",
+            style: "late_surger",
+            override: "Medium",
+            goals: [34, 44, 45, 53, 57, 60, 69],
+            ownSkills: [200492, 200612, 201072],
+            gated: [201382, 200491, 200132, 200611, 201381, 200131],
+            gcSpeed: 1400,
+            trackblazerAvoid: null,
+        },
+        {
+            name: "Seeking the Pearl",
+            character: "Seeking the Pearl",
+            objectivesKey: "Seeking the Pearl",
+            outfit: "Rocket☆Star",
+            inGameName: "Seeking the Pearl",
+            distance: "mile",
+            style: "pace_chaser",
+            override: "Mile",
+            goals: [21, 23, 31, 33, 41, 46, 54, 59, 66, 70],
+            ownSkills: [200152, 200962, 201072],
+            gated: [202042, 200963, 201902, 201071, 202041, 201901],
+            gcSpeed: 1600,
+            trackblazerAvoid: /Medium=E and Long=G/,
+        },
+        {
+            name: "T.M. Opera O (O Sole Suo!)",
+            character: "T.M. Opera O",
+            objectivesKey: "TM Opera O",
+            outfit: "O Sole Suo!",
+            inGameName: "[O Sole Suo!] T.M. Opera O",
+            distance: "medium",
+            style: "pace_chaser",
+            override: "Medium",
+            goals: [31, 34, 48, 56, 60, 70, 72],
+            ownSkills: [200142, 200582, 200722],
+            gated: [200362, 200581, 200562, 200721, 200361, 200561],
+            gcSpeed: 1400,
+            trackblazerAvoid: null,
+        },
+        {
+            name: "Yamanin Zephyr",
+            character: "Yamanin Zephyr",
+            objectivesKey: "Yamanin Zephyr",
+            outfit: "Fluttertail Spirit",
+            inGameName: "Yamanin Zephyr",
+            distance: "mile",
+            style: "pace_chaser",
+            override: "Mile",
+            goals: [31, 34, 42, 46, 59, 66, 68],
+            ownSkills: [200302, 201052, 202412],
+            gated: [201042, 201051, 200342, 202411, 201041, 200341],
+            gcSpeed: 1600,
+            trackblazerAvoid: null,
+        },
+        {
+            name: "Yukino Bijin",
+            character: "Yukino Bijin",
+            objectivesKey: "Yukino Bijin",
+            outfit: "Darl'n Snowflake",
+            inGameName: "Yukino Bijin",
+            distance: "medium",
+            style: "pace_chaser",
+            override: "Medium",
+            goals: [23, 31, 34, 38, 44, 54, 57, 69, 70],
+            ownSkills: [200492, 201102, 201342],
+            gated: [200242, 200491, 201322, 201341, 200241, 201321],
+            gcSpeed: 1400,
+            trackblazerAvoid: null,
+        },
+    ]
+
+    describe.each(trainees)("$name", (t) => {
+        const all = characterPresets.filter((p) => p.name === t.name)
+        const pipeline = all.filter((p) => p.scenario !== "Grand Concert")
+
+        it("ships one preset per scenario, including the derived Grand Concert twin", () => {
+            expect(all.map((p) => p.scenario).sort()).toEqual(["Grand Concert", "Trackblazer", "URA Finale", "Unity Cup"])
+        })
+
+        it("selects the right card in Trainee Select", () => {
+            for (const p of all) expect(p.traineeName).toBeUndefined()
+            expect(deriveInGameName(t.name)).toBe(t.inGameName)
+            expect(deriveExcludeOutfits(t.name)).toEqual([])
+        })
+
+        it("renders with its exact outfit title, research-graded everywhere", () => {
+            expect(presetCharacter(t.name)).toBe(t.character)
+            expect(presetOutfit(t.name)).toBe(t.outfit)
+            const outfits = (outfitData as Record<string, any>)[t.objectivesKey].outfits.map((o: any) => o.title)
+            expect(outfits).toContain(t.outfit)
+            for (const p of all) expect(presetValidation(p.name, p.scenario)).toBe("research")
+        })
+
+        it("still has the goal chain the presets were built against", () => {
+            expect(objectivesFor(t.objectivesKey).mandatoryRaces.map((m: any) => m.turn)).toEqual(t.goals)
+        })
+
+        it("carries one surface / distance / style identity and the racing-plan trio in every scenario", () => {
+            for (const p of all) {
+                expect(p.settings.skills!.preferredTrackSurface).toBe("turf")
+                expect(p.settings.skills!.preferredTrackDistance).toBe(t.distance)
+                expect(p.settings.skills!.preferredRunningStyle).toBe(t.style)
+                expect(p.settings.racing!.preferredTerrain).toBe("Turf")
+                expect(p.settings.training!.preferredDistanceOverride).toBe(t.override)
+                expect(p.settings.general!.enablePopupCheck).toBe(false)
+                expect(p.settings.general!.scenario).toBe(p.scenario)
+                expect(p.settings.racing!.enableRacingPlan).toBeDefined()
+                expect(p.settings.racing!.enableMandatoryRacingPlan).toBeDefined()
+                expect(p.settings.racing!.racingPlan).toBeDefined()
+            }
+        })
+
+        it("plans her own kit and known skills, never a Potential-gated one, with the required strategies", () => {
+            for (const p of pipeline) {
+                expect(p.settings.skills!.plans!.skillPointCheck!.strategy).toBe("optimize_skills")
+                expect(p.settings.skills!.plans!.preFinals!.strategy).toBe("optimize_skills")
+                expect(p.settings.skills!.plans!.careerComplete!.strategy).toBe("optimize_knapsack")
+                for (const planKey of planKeys) {
+                    const ids = planIds(p, planKey)
+                    expect(ids.length).toBeGreaterThanOrEqual(12)
+                    expect(new Set(ids).size).toBe(ids.length)
+                    for (const id of ids) expect(skillById.has(id)).toBe(true)
+                    for (const id of t.gated) expect(ids).not.toContain(id)
+                    for (const id of t.ownSkills) expect(ids).toContain(id)
+                }
+            }
+        })
+
+        it("plans no skill that only works for another running style", () => {
+            for (const p of pipeline) {
+                const dead = planIds(p, "careerComplete").filter((id) => {
+                    const code = /running_style==(\d)/.exec(skillById.get(id)?.condition ?? "")
+                    return code !== null && code[1] !== STYLE_CODE[t.style]
+                })
+                expect(dead).toEqual([])
+            }
+        })
+
+        it("keeps Trackblazer settings in the Trackblazer preset only, with the whole default excluded-item list", () => {
+            for (const p of pipeline) {
+                if (p.scenario !== "Trackblazer") {
+                    expect(p.settings.scenarioOverrides).toBeUndefined()
+                    continue
+                }
+                const items = p.settings.scenarioOverrides!.trackblazerExcludedItems as string[]
+                for (const item of ["Energy Drink MAX", "Energy Drink MAX EX", "Yummy Cat Food", "Coaching Megaphone"]) expect(items).toContain(item)
+            }
+        })
+
+        it("raises the Grand Concert Speed target to the policy value for her distance", () => {
+            const gc = all.find((p) => p.scenario === "Grand Concert")!
+            expect((gc.settings.trainingStatTarget as any)[`training${t.override}StatTarget_speedStatTarget`]).toBe(t.gcSpeed)
+        })
+
+        it("carries her advisory with no recommended badge until her own careers complete", () => {
+            expect(trainerAdvisories[t.name].recommended).toEqual([])
+            for (const scenario of ["URA Finale", "Unity Cup", "Grand Concert"]) expect(avoidAdvisoryFor(t.name, scenario)).toBeNull()
+            if (t.trackblazerAvoid) expect(avoidAdvisoryFor(t.name, "Trackblazer")?.reason).toMatch(t.trackblazerAvoid)
+            else expect(avoidAdvisoryFor(t.name, "Trackblazer")).toBeNull()
+        })
+    })
+
+    describe.each([
+        { name: "Kawakami Princess", objectivesKey: "Kawakami Princess", fanGoals: [{ turn: 31, targetFans: 7000 }] },
+        { name: "T.M. Opera O (O Sole Suo!)", objectivesKey: "TM Opera O", fanGoals: [{ turn: 28, targetFans: 5000 }] },
+    ])("$name URA agenda", ({ name, objectivesKey, fanGoals }) => {
+        const ura = characterPresets.find((p) => p.name === name && p.scenario === "URA Finale")!
+        const planned: { raceName: string; date: string; turnNumber: number }[] = JSON.parse(ura.settings.racing!.racingPlan as string)
+        const entry = (r: { raceName: string; date: string }) => (races as Record<string, any>)[`${r.raceName} (${r.date})`]
+
+        it("runs a curated mandatory agenda on URA and smart racing elsewhere", () => {
+            expect(ura.settings.racing!.enableRacingPlan).toBe(true)
+            expect(ura.settings.racing!.enableMandatoryRacingPlan).toBe(true)
+            for (const p of characterPresets.filter((x) => x.name === name && x.scenario !== "URA Finale")) {
+                expect(p.settings.racing!.enableRacingPlan).toBe(false)
+                expect(p.settings.racing!.racingPlan).toBe("")
+            }
+        })
+
+        it("carries the fan goal the agenda was built for, in the objectives data and the Grand Concert runtime asset", () => {
+            expect(objectivesFor(objectivesKey).fanGoals.map((g: any) => ({ turn: g.turn, targetFans: g.targetFans }))).toEqual(fanGoals)
+            expect((gcFanRuntime as any).characters[objectivesKey].fanGoals).toEqual(fanGoals)
+        })
+
+        it("plans only real turf races on the turn each entry claims, never on or next to a goal, debut or fan turn", () => {
+            const blocked = [12, ...fanGoals.map((g) => g.turn), ...objectivesFor(objectivesKey).mandatoryRaces.map((m: any) => m.turn)]
+            for (const r of planned) {
+                expect(entry(r)).toBeDefined()
+                expect(entry(r).turnNumber).toBe(r.turnNumber)
+                expect(entry(r).terrain).toBe("Turf")
+                for (const turn of [r.turnNumber - 1, r.turnNumber, r.turnNumber + 1]) expect(blocked).not.toContain(turn)
+            }
+        })
+
+        it("can clear each fan goal from its own pre-deadline wins, with no back-to-back pair", () => {
+            for (const goal of fanGoals) {
+                const winnerFans = planned.filter((r) => r.turnNumber < goal.turn).reduce((sum, r) => sum + entry(r).fans, 0)
+                expect(winnerFans).toBeGreaterThanOrEqual(goal.targetFans)
+            }
+            const turns = planned.map((r) => r.turnNumber)
+            for (let i = 1; i < turns.length; i++) expect(turns[i] - turns[i - 1]).toBeGreaterThan(1)
+        })
+
+        it("stays light on a dense goal chain and leaves Senior to the goals", () => {
+            expect(planned.length).toBeGreaterThanOrEqual(3)
+            expect(planned.length).toBeLessThanOrEqual(10)
+            expect(Math.max(...planned.map((r) => r.turnNumber))).toBeLessThan(49)
+        })
+    })
+
+    it("uses smart racing everywhere for the four trainees without a fan goal", () => {
+        for (const name of ["Aston Machan", "Seeking the Pearl", "Yamanin Zephyr", "Yukino Bijin"]) {
+            expect(objectivesFor(name).fanGoals ?? []).toEqual([])
+            for (const p of characterPresets.filter((x) => x.name === name)) {
+                expect(p.settings.racing!.enableRacingPlan).toBe(false)
+                expect(p.settings.racing!.enableMandatoryRacingPlan).toBe(false)
+                expect(p.settings.racing!.racingPlan).toBe("")
+            }
+        }
+    })
+})
+
 describe("skill spend objective (Phase 2A)", () => {
     it("exactly the farming set, the Copano sash profile, and the SJC safety profile declare objectives", () => {
         // The four farming profiles run sparks (planned-only spending under Adaptive); Copano
@@ -761,6 +1021,7 @@ describe("Grand Concert derived presets", () => {
         "Super Creek": undefined,
         "Gold Ship": undefined,
         // Full-roster port: Sprint.
+        "Aston Machan": 1600,
         "Curren Chan": 1600,
         "King Halo (Cheerleader in Noble White)": 1600,
         "Nishino Flower": 1600,
@@ -774,6 +1035,8 @@ describe("Grand Concert derived presets", () => {
         "Oguri Cap (Ashen Miracle)": 1600,
         "Taiki Shuttle (Bubblegum☆Memories)": 1600,
         "Wonder Acute": 1600,
+        "Seeking the Pearl": 1600,
+        "Yamanin Zephyr": 1600,
         "Agnes Digital": 1400,
         "Fuji Kiseki": 1400,
         "Gold City (Autumn Cosmos)": 1400,
@@ -788,6 +1051,7 @@ describe("Grand Concert derived presets", () => {
         "Hishi Amazon": 1400,
         "Inari One": 1400,
         "Ines Fujin": 1400,
+        "Kawakami Princess": 1400,
         "Kitasan Black": 1400,
         "Meisho Doto": 1400,
         "Mejiro Ardan": 1400,
@@ -805,11 +1069,13 @@ describe("Grand Concert derived presets", () => {
         "Sweep Tosho": 1400,
         "Symboli Rudolf (Emperor's Path)": 1400,
         "T.M. Opera O (New Year, Same Radiance!)": 1400,
+        "T.M. Opera O (O Sole Suo!)": 1400,
         "Tokai Teio": 1400,
         "Tokai Teio (Beyond the Horizon)": 1400,
         "Tosen Jordan": 1400,
         "Winning Ticket (Get to Winning!)": 1400,
         "Yaeno Muteki": 1400,
+        "Yukino Bijin": 1400,
         // Long stayers.
         "Biwa Hayahide": undefined,
         "Gold Ship (RUN! RUIN! LAUNCHER!)": undefined,
@@ -848,8 +1114,8 @@ describe("Grand Concert derived presets", () => {
         // The docs used to be checked with `grep -c '^        scenario: "'`, which no longer works:
         // derived twins are not literals, and grandConcertFrom's own return adds a matching line.
         // This assertion is the authoritative count now. Update the docs whenever it changes.
-        expect(characterPresets.length).toBe(300)
-        expect(characterPresets.filter((p) => p.scenario === "Grand Concert")).toHaveLength(74)
+        expect(characterPresets.length).toBe(324)
+        expect(characterPresets.filter((p) => p.scenario === "Grand Concert")).toHaveLength(80)
         expect(new Set(characterPresets.map((p) => `${p.name}|${p.scenario}`)).size).toBe(characterPresets.length)
     })
 
