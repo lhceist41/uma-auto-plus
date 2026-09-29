@@ -9189,12 +9189,13 @@ class CareerLaunchNavigator(private val context: Context) {
     /**
      * Ticks the "Event Boost (TP Usage x2)" checkbox on the Final Confirmation screen if it is OFF.
      * The dim OFF-state bar is the anchor; the checkbox sits a fixed offset to its left. A no-op when
-     * the bar isn't matched - already ticked, or the boost isn't offered (e.g. outside the event).
+     * the bar isn't matched: the boost may be offered and already ticked, or not offered (e.g.
+     * outside the event), and this cannot tell which.
      */
     private fun tickEventBoostIfOff() {
         val (barLocation, _) = LabelEventBoostOff.find(iu)
         if (barLocation == null) {
-            MessageLog.i(TAG, "[NAV] Event Boost enabled but the bar was not found (not offered on this screen). Skipping.")
+            MessageLog.i(TAG, "[NAV] Event Boost enabled but its bar was not matched on this screen, so the boost state was not checked and is left as it is.")
             return
         }
         // The bar template matches BOTH states - OFF (dim maroon) and ON (bright pink) differ only

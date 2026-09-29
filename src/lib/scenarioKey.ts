@@ -53,11 +53,10 @@ export const isGrandConcert = (raw: string | null | undefined): boolean => norma
 /**
  * Scenario-level capability gate.
  *
- * Grand Concert support is experimental and supervised: the shared career loop drives it, but
- * the Lesson shop and the concerts stop for manual input. Features that assume a career can run
- * start-to-finish unattended are therefore unavailable for it -- not because they would crash,
- * but because they would silently produce a queue of careers that each stall waiting for a
- * player who has gone to bed.
+ * Every capability is on for every scenario, Grand Concert included: run queues, trainee
+ * rotation and automatic TP restore all work there. Grand Concert is still labelled experimental,
+ * and a concert screen the bot cannot drive stops the run (and the queue) with the career
+ * preserved for the player to finish.
  */
 export interface ScenarioCapabilities {
     /** Multi-run queues require unattended completion. */

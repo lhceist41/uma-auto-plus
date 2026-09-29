@@ -1068,8 +1068,8 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
     /** The settings a derived outfit may change: the skill plans, plus the restyled outfits' running style below. */
     const withoutPlans = (settings: any) => ({ ...settings, skills: { ...settings.skills, plans: undefined } })
     // Outfits whose card style (and Game8 build) differs from the base preset's skill style race and buy as their own style.
-    // Never planned: Pressure 201212 (see below) and the three green-chain golds 202331, 201561, 202441.
-    const NEVER_PLANNED = [201212, 202331, 201561, 202441]
+    // Never planned: the three green-chain golds.
+    const NEVER_PLANNED = [202331, 201561, 202441]
     const REAIMED = new Set(["Daiwa Scarlet (Nuit Étoilée de Scarlet)"])
     const RESTYLED = new Set(["Special Week (Ruler of Japan)", "Air Groove (Quercus Civilis)", "Symboli Rudolf (Archer by Moonlight)"])
 

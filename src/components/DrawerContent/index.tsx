@@ -505,7 +505,7 @@ const DrawerContent: React.FC<DrawerContentComponentProps> = (props) => {
             <DrawerContentScrollView {...props} style={styles.container} contentContainerStyle={{ flexGrow: 1 }}>
                 <View style={styles.header}>
                     <View style={styles.headerTextContainer}>
-                        <Text style={styles.headerTitle}>Uma Android Automation</Text>
+                        <Text style={styles.headerTitle}>UMA Auto+</Text>
                         <Text style={styles.headerSubtitle}>{bsc.appVersion}</Text>
                     </View>
                     <Avatar alt="UAA" style={{ width: 72, height: 72 }}>

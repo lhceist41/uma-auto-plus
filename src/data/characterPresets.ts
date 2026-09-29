@@ -54206,8 +54206,7 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackSurface: "turf",
                 // Late Surger / Medium plan: her own Corner Adept ○ and Outer Swell, Late Surger and Medium greens
                 // and golds, and Corner Recovery ○ / Swinging Maestro, A Small Breather and Be Still for the
-                // 2400m-3200m goals. Her own Pressure is left out because the runtime skill table cannot resolve
-                // it yet; her tree gates Long Straightaways ○ (Lv2), Overwhelming Pressure (Lv3), Long Corners ○
+                // 2400m-3200m goals. Her own Pressure is not planned; her tree gates Long Straightaways ○ (Lv2), Overwhelming Pressure (Lv3), Long Corners ○
                 // (Lv4) and Best in Japan (Lv5); none of them is planned. The Grandkid Get-Together hint is
                 // Pace-only, so that Trackblazer event takes the stats.
                 plans: {
@@ -62316,8 +62315,8 @@ const basePresets: CharacterPreset[] = [
                 preferredTrackSurface: "turf",
                 // The base Matikanefukukitaru preset's plan with this card's own kit (Right-Handed ○ and Slick
                 // Surge). Its higher Potential levels gate Inside Scoop, Overwhelming Pressure, Kyoto Racecourse
-                // ○, Innate Experience and Kyoto Racecourse ◎; none of them is planned. Her own Pressure is left
-                // out because the runtime skill table cannot resolve it yet.
+                // ○, Innate Experience and Kyoto Racecourse ◎; none of them is planned. Her own Pressure is not
+                // planned either.
                 plans: {
                     skillPointCheck: {
                         enabled: true,
