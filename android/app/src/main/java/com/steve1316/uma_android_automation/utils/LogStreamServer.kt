@@ -185,6 +185,7 @@ object LogStreamServer {
             "dashboard.css" to ContentType.Text.CSS,
             "logic.js" to ContentType.Text.JavaScript,
             "app.js" to ContentType.Text.JavaScript,
+            "logo.png" to ContentType.Image.PNG,
         ) +
             listOf(
                 "barlow-condensed/barlow-condensed-latin-600-normal.woff2",

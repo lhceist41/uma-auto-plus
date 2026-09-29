@@ -278,6 +278,7 @@ class LogStreamServerAccessTest {
                 "/dashboard/dashboard.css",
                 "/dashboard/logic.js",
                 "/dashboard/app.js",
+                "/dashboard/logo.png",
                 "/dashboard/fonts/barlow-condensed/barlow-condensed-latin-700-normal.woff2",
             )
         for (path in served) {

@@ -199,6 +199,7 @@ button {
   line-height: 1;
 }
 .rc-logo-plus { color: var(--rc-accent); }
+.rc-logo-mark { display: block; width: 20px; height: 20px; flex: none; margin-right: -6px; }
 .rc-divider-v { width: 1px; height: 22px; background: var(--rc-line-strong); }
 .rc-tagline {
   font-family: 'Barlow Condensed', sans-serif;

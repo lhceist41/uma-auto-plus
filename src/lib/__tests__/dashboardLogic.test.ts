@@ -677,3 +677,14 @@ test('stop after this career: the page sends only on the authenticated socket, a
   assert.ok(html.includes('<div id="rc-stop-after" class="rc-stop-after" hidden>'), 'hidden until STATUS offers it');
   assert.ok(html.includes("content=\"default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; base-uri 'none'; form-action 'self'\""), 'CSP unchanged');
 });
+
+test('the header mark and the tab icon are the one shipped logo file, served under img-src self', () => {
+  const dir = path.join(ASSETS_DIR, 'dashboard');
+  const html = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
+  const png = fs.readFileSync(path.join(dir, 'logo.png'));
+  assert.equal(png.subarray(1, 4).toString('latin1'), 'PNG');
+  assert.ok(png.length < 30 * 1024, 'small enough to ship as a page asset');
+  assert.ok(html.includes('<link rel="icon" type="image/png" href="/dashboard/logo.png">'));
+  assert.equal((html.match(/<img class="rc-logo-mark" src="\/dashboard\/logo\.png"/g) || []).length, 1, 'once, in the dashboard header');
+  assert.ok(html.indexOf('rc-logo-mark') > html.indexOf('<header class="rc-header">'));
+});
