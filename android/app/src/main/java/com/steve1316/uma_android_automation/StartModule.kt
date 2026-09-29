@@ -82,7 +82,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         /**
          * Requests the same stop as [stop] when screen capture ends under a running session, so the
          * loop exits at its next wait instead of acting on the library's last cached frame. Sets the
-         * flag before logging, and logs with android.util.Log (AGENTS.md section 6).
+         * flag before logging, and logs with android.util.Log so a blocked message log cannot delay the stop.
          */
         internal fun stopForLostCapture() {
             if (!shouldStopForLostCapture(sessionActive.get(), queueStopRequested)) return
