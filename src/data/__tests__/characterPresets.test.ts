@@ -1052,9 +1052,11 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
         expect(find("Special Week (Ruler of Japan)", "Trackblazer").settings.trainingEvent!.scenarioEventOverrides).toEqual({ "Trackblazer|A Grandkid Get-Together": 0 })
     })
 
-    it("leaves out Pressure (201212): skills.json is keyed by name and a newer Pressure (202542) shadows it", () => {
-        expect(skillById.has(201212)).toBe(false)
-        expect((skills as any).Pressure.id).toBe(202542)
+    it("keeps Pressure (201212) in Mejiro Bright's plans now that skills.json resolves it", () => {
+        expect(skillById.has(201212)).toBe(true)
+        const bright = characterPresets.filter((p) => p.name === "Mejiro Bright" && p.scenario !== "Grand Concert")
+        expect(bright).toHaveLength(3)
+        for (const p of bright) for (const planKey of planKeys) expect(planIds(p, planKey)).toContain(201212)
     })
 
     it("makes the base outfit's preset skip every alternate outfit that now has its own preset", () => {
