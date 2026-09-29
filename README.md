@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/uma-auto-plus-banner.png" alt="UMA Auto+: Press Start. Walk away." width="960">
+</p>
+
 # UMA Auto+
 
 [![Latest release](https://img.shields.io/github/v/release/lhceist41/uma-auto-plus?label=latest%20release&color=blue)](https://github.com/lhceist41/uma-auto-plus/releases/latest)
@@ -19,7 +23,7 @@ A hands-off distribution of [steve1316/uma-android-automation](https://github.co
 - **Decision-engine extensions**, built on steve1316's scoring: a knapsack skill-buying strategy that accounts for upgrade chains, a choice of when mid-career skill buying happens (including an opt-in adaptive mode), single-star race prediction reading, Unity Cup opponent selection from the prediction circles, per-scenario stat caps for the July 2026 rebalance, and Trackblazer-specific tuning.
 - **Smart Borrow.** On queued launches the borrowed friend slot is filled from a curated list of strong cards instead of whatever sits in the top row, skipping picks the game would refuse.
 - **Career results history.** Each finished career records how it ended, the settings it ran under, an estimated overall rank, and the sparks it produced, so preset tuning can be measured across many runs.
-- **Quality of life.** A settings search across every page, named profiles for training settings, queue progress with a skip-run button, signed per-architecture release builds, and an in-app updater that downloads the next release for your device and hands it to Android's installer.
+- **Quality of life.** A settings search across every page, named profiles for training settings, queue progress with a skip-run button and a Stop after this career button, signed per-architecture release builds, and an in-app updater that downloads the next release for your device and hands it to Android's installer.
 
 For the version-by-version list, see the [CHANGELOG](CHANGELOG.md). For how any of it works internally, see [HOW_IT_WORKS.md](HOW_IT_WORKS.md).
 
@@ -118,7 +122,7 @@ Start now checks several of these (Restore TP with Items, Reuse Last Launch Setu
 
 A preset is a complete configuration for one trainee in one scenario: stat priorities and targets, racing preferences, skill plans, training-event picks, and the tuning that scenario needs. Tap the trainee card on the Home page to open the picker, expand a trainee, and apply the scenario card you want.
 
-Applying a preset replaces the settings it ships and leaves the rest of your configuration alone. [PRESETS_GUIDE.md](PRESETS_GUIDE.md) covers what a preset changes, how to read the picker's badges and advisories, and what to check when a run does not go the way you expected. Building or editing one is a separate job: see [docs/PRESET_AUTHORING.md](docs/PRESET_AUTHORING.md).
+Applying a preset replaces the settings it ships and leaves the rest of your configuration alone, including your device timing, OCR, display and stop-point settings. [PRESETS_GUIDE.md](PRESETS_GUIDE.md) covers what a preset changes, how to read the picker's badges and advisories, and what to check when a run does not go the way you expected. Building or editing one is a separate job: see [docs/PRESET_AUTHORING.md](docs/PRESET_AUTHORING.md).
 
 # What the bot changes on your account
 
@@ -183,7 +187,7 @@ Alternatively, do the same from a computer:
 
 ## Watch your queue from your PC
 
-The Remote Log Viewer includes a dashboard: the run the queue is on, what the bot is doing, the career's date, stats, energy and mood, each run's result, and how the session ended. It is off by default and only shows what the bot is doing. It can be opened only on the device itself or from a computer connected to it over ADB, and only while Start is on.
+The Remote Log Viewer includes a dashboard: the run the queue is on, what the bot is doing, the career's date, stats, energy and mood, each run's result, and how the session ended. It is off by default and only shows what the bot is doing; its one control is **Stop after this career**, described below. It can be opened only on the device itself or from a computer connected to it over ADB, and only while Start is on.
 
 1. In UMA Auto+, open **Settings**, then **Debug Settings**, and turn on **Enable Remote Log Viewer**. Note the **Server Port** (9000 by default).
 2. Press **Start**. The access code appears under **Remote Log Viewer** on the Debug Settings page. It changes each time you press Start.
@@ -193,6 +197,8 @@ The Remote Log Viewer includes a dashboard: the run the queue is on, what the bo
    - **Phone:** connect by USB with USB debugging on, or pair with Wireless debugging.
 4. Run `adb forward tcp:9000 tcp:9000`, with your Server Port on both sides. With MuMu's copy: `"C:\Program Files\Netease\MuMuPlayerGlobal-12.0\shell\adb.exe" -s 127.0.0.1:16384 forward tcp:9000 tcp:9000`.
 5. Open `http://localhost:9000` in your PC's browser and enter the access code. **Full log** on the dashboard opens the log viewer.
+
+**Stop after this career.** While a queue is playing a career and another run is still to come, both the dashboard and Home show a **Stop after this career** button. Confirm it and the bot finishes the career it is playing, including its end steps, then pauses the queue; press **Start** within 24 hours (with Run Queue on and the same number of runs) to continue with the next run. **Cancel stop** withdraws the request before that career ends. It is not offered between runs, in a single run or on the last run.
 
 ## To view logs in real time
 

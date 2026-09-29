@@ -53,6 +53,18 @@ In the same no-career situation, if the bot cannot recognise the game's screen, 
 
 The title screen is recognised only at 1080×1920. Neither recovery has been seen working on a device yet.
 
+### 7. The game asked to download additional data
+
+After a game patch the game can ask to download additional data. The bot taps **OK** (never Cancel) and waits, tapping nothing, for up to about 10 minutes for the download to finish, between runs and during a career. This has not been seen on a real patch yet. If the queue stops with a message saying to tap OK in the game, tap OK yourself, let the download finish and press Start again.
+
+### 8. The queue paused after a career
+
+If you used **Stop after this career** (on Home or on the dashboard), the bot finished that career and paused the queue on purpose: Home says "Queue paused after run 2/4" and the notification says you paused it. Press **Start** within 24 hours, with Run Queue on and the same number of runs, to continue with the next run. An in-app update is refused while a paused queue is saved; resume or discard it on Home first.
+
+### 9. The bot misses a button near the game's left edge
+
+Android's floating accessibility button (the "U+" bubble) can sit over the game's left edge. Drag it elsewhere, or switch the accessibility shortcut to a gesture.
+
 ## Grand Concert
 
 The bot pages the Scenario Select carousel to Grand Concert like any other scenario, so it works with

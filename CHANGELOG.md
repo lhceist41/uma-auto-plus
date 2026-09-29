@@ -10,37 +10,81 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-### Added
+## [1.6.0] - 2026-09-30
 
-- The **Update** button in the Update Available dialog now downloads the right file for your device, checks it against the release, and hands it to Android's installer, so you no longer need the browser: tap Update, then Install in Android's dialog. UMA Auto+ closes while it updates; open it again afterwards. The first time, before anything is downloaded, it asks you to allow UMA Auto+ to install apps: tap Open settings, turn on Allow from this source on Android's Install unknown apps screen, then come back and tap Continue. The update is refused while the bot is running or armed (Start pressed) or while an interrupted queue is saved, and if the download or the install fails you can still open the release page. This works for updates released after this version.
-- A **Last session** card on Home shows how the bot's last session ended once it has stopped, for example when you open the app the morning after an overnight queue. It shows the outcome, the reason and what to do next (the same words as the notification), how many runs were done and how many ended with an error, one line per run with the trainee and how the run ended, how often the bot recovered, and how many TP restores it made with items and with Carats, with any Carats use highlighted. It stays until you dismiss it, including after the app restarts. A start the bot refused, a diagnostic run, or a Start that found nothing left to resume never replaces the summary of a queue or run you have not dismissed yet. The interrupted-queue notice now also shows why the queue stopped, and when that session's summary is available its "min ago" counts from when the session ended.
-- Home shows whether **accessibility self-repair** is on: granted, off (with the exact adb command that grants it), or unknown when the app could not check. It is checked again each time you return to the app.
-- Between runs, a **Session Error** (the game ending its session after sitting idle, for example overnight) no longer stops the queue when no career is in progress: you pressed Start with the game on its home screen and the queue was not resuming a career, or the previous career finished and the game got back to its home screen. The bot taps Title Screen, taps through the title screen, closes the notices the game shows after logging in and launches the career. It does this once per launch; with a career in progress, or a second time, the queue still stops with the Session Error message. In the same situation, a screen the bot cannot recognise now makes it bring the game back to the front once (starting it again if it had closed) and start the launch over, and if that does not help the queue stops saying so. The Session Error stop has been seen on a morning Start in testing and the title screen is recognised from real captures, but neither recovery has been seen working on a device yet. The title screen is recognised only at 1080×1920.
-- A **dashboard** for watching your queue from your PC. With **Enable Remote Log Viewer** on (Debug Settings, off by default) and Start pressed, it needs ADB: connect MuMu's ADB port or your phone by USB or Wireless debugging, run `adb forward tcp:9000 tcp:9000` with your Server Port on both sides, open `http://localhost:9000` and enter the access code from the Debug Settings page. It shows the run the queue is on, what the bot is doing, the career's date, stats, energy and mood (and, for URA Finale, where the career is on its calendar), each run's result, and how the session ended. It only shows what the bot is doing. The log viewer is now its **Full log** link (`/log`). See "Watch your queue from your PC" in the README.
+### Highlights
 
-### Changed
+- **Watch your queue from your PC** on a live dashboard.
+- **Stop after this career:** the bot finishes its career, then pauses the queue.
+- **Sturdier overnight queues:** stalls, errors and the Data Download prompt are handled.
+- **Live progress** in the notification and a Last session card on Home.
+- **Presets keep your timing, OCR, display and stop settings.**
 
-- When the bot's accessibility repairs cannot help, the queue now pauses with a reason that says so, instead of ending the run with a generic error or stopping on a screen the bot could not get past: either the self-repair permission is missing, so the bot could not switch its accessibility service back on, or its taps stopped having any effect even after it restarted the service, in which case restart MuMu or the device. That run is not played again, since that cannot help; after the fix, pressing Start within 24 hours (with Run Queue on and the same number of runs) continues the queue from the same run. After two restarts of the service change nothing, the bot also tries once per run switching accessibility off for 3 seconds and back on; this has not been shown to bring dead taps back, and restarting MuMu remains the known fix.
-- The stall watchdog now measures time on a clock that ignores changes to the device's date and time, so a clock change can no longer make it act on a bot that is still working.
-- When the bot stops making progress, it now tries to recover on its own before closing the app. After 2 minutes without progress it turns its accessibility service off and on (when the accessibility self-repair permission is granted), and after 2.5 minutes it interrupts the run, so a queue can play that run once more. Only after 3 minutes without progress does it close the app, as before, and the Last session card then says the bot stopped itself after 180 seconds without progress. Some freezes can only be cleared by closing the app, so that remains the last resort.
-- The bot now keeps the device screen on while it runs, so a short screen timeout no longer ends an overnight queue. Pressing the power button or locking the device still stops it. Start no longer warns about a short screen timeout, and the summary for a queue that stopped while waiting between runs now points at the power button instead of the timeout.
-- A queued run that ends with an unexpected error, a timeout or a lost connection while its career is still in progress is now played once more as the same run, re-entering that career, instead of being counted as done while the next run quietly finished it. The bot retries at most twice per Start; a second error on the same run follows Stop Queue on Error as before. Run counts now include only finished careers, so a queue that lost a run to an error reports it separately, the live progress line on Home now says the run is retrying instead of starting again while it happens, and the Home summary marks a run that was retried.
-- Resuming an interrupted queue now re-enters the career that was in progress, with or without trainee rotation, instead of skipping to the next run, which used to finish the old career under the next run's number. A queue paused on its last run now resumes that run instead of reporting nothing to resume.
-- An interrupted queue can now be resumed for 24 hours instead of 6, so a queue that stopped overnight still resumes the next morning. Run Queue must still be on with the same number of runs, and the notification and Home summary now say so.
-- The stat-target sliders on the Training page (Sprint, Mile, Medium and Long, all five stats) now go up to 2000 instead of 1200, for high-investment builds that push past the old ceiling. The setting always accepted any value; only the slider's own range was capped (from the upstream project).
-- **Enable Crane Game Attempt is now on by default for new installs.** It spends nothing, so there is no reason for a fresh install to stop the run when the Crane Game event appears instead of attempting it. Existing installs keep whatever this was already set to; turn it on under Settings if you want it.
+> [!IMPORTANT]
+> **What you need to do**
+>
+> - **Remote Log Viewer:** enter the access code shown in Debug Settings; it changes each time you press Start.
+> - **In-app updates:** allow "Install unknown apps" when Android asks (1.6.0 itself installs from the release page).
+> - **Trackblazer:** once, check Consecutive Races Limit and Max Retries per Race (Settings, Go to Scenario Overrides Settings); older presets could have left them high.
+
+### What's new and changed
+
+**Queue and runs**
+
+- **Stop after this career** on Home or the dashboard pauses the queue; Start continues within 24 hours.
+- **Errored runs are retried** once, and an interrupted queue **resumes for 24 hours**.
+- **Session Errors, notices and connection errors** between runs no longer stop the queue.
+- **The screen stays on** while the bot runs.
+- **Start on the Training selection screen** now continues the career instead of tapping Skip.
+
+**Dashboard** ([setup](https://github.com/lhceist41/uma-auto-plus/blob/main/README.md#watch-your-queue-from-your-pc))
+
+- **Live view** of the run, stats and each run's result.
+- **One-click helper** for MuMu on Windows.
+- **Private:** the log viewer and dashboard now need an access code, so other apps can no longer read your log.
+
+**Home and notifications**
+
+- **The notification** shows queue progress and how a session really ended.
+- **A Last session card** on Home says what happened and what to do next.
+- **Update inside the app:** tap Update to install.
+- **New look:** new app icon, notification icon and dashboard logo.
+
+**Presets** ([guide](https://github.com/lhceist41/uma-auto-plus/blob/main/PRESETS_GUIDE.md))
+
+- **Your settings are kept** when you apply a preset: timing, OCR, display and stop points.
+- **Trackblazer presets** pick the stat option where a skill hint is useless; other presets no longer touch Trackblazer settings.
+- **New data:** outfit names for 18 more trainees and support cards up to the 2026-09-28 patch.
+
+**Settings**
+
+- **Sliders:** Trackblazer's Consecutive Races Limit now goes down to 2, and the stat-target sliders go up to 2000.
 
 ### Fixed
 
-- The notification shown when a bot session ends no longer always says "Completed successfully with no errors." It now says how the session actually ended: a finished queue with its run count, a paused or halted queue with what to do before pressing Start again, "Not started" when the bot refuses a start from the overlay button (nothing is spent then), and a stop made by tapping the overlay button, with how many runs were done. A run count also says how many of those runs ended with an error, and after an error the notification never reads as a success. Stopping from the app, or dismissing the overlay button, removes the notification instead of updating it.
-- Corrected several settings descriptions and messages: Stop Queue on Error and Reuse Last Launch Setup now say what actually happens, Event Boost no longer implies Restore TP with Items is already covering its TP cost, the Grand Concert note distinguishes a Lesson screen (which recovers on its own) from a concert screen (which stops the run and the rest of the queue), the Settings page confirms a reset instead of repeating the ready or not-ready message, the "no scenario selected" dialog now points at Home instead of Settings, and error messages for a failed preset save, a blocked Start, and a failed Discord connection test no longer show internal details.
-- Between runs, the game's Notices (for example after the daily reset) is now closed, Date Changed and Follow Trainer are dismissed by name, and the game's loading or "Connecting" screen is waited out, instead of counting toward a stop for a screen the bot could not get past. A Connection or Download Error is retried with the same growing pauses as during a career, waiting out the reconnect in between, for as long as launching the next career allows: at most about 9 minutes, less if the connection drops partway through. If it does not come back in that time, the queue stops with a message saying the connection was lost. The bot never taps Title Screen on a Connection or Download Error. A Carat purchase screen or an age check between runs stops the queue with its own message saying what to do, and nothing on it is tapped; so does a Session Error while a career is in progress (see the Session Error entry under Added). A Session Error between runs has been seen in testing, on a morning Start, where the queue stopped with its Session Error message; that was before the recovery under Added, which would now tap Title Screen there. The other dialogs (Notices, Date Changed, Follow Trainer, a Connection or Download Error, a Carat purchase screen or an age check) have not yet been seen between runs by the bot, so a screen the bot does not recognise there can still stop the queue.
-- A log downloaded from the Remote Log Viewer is now named the same way as a log saved on the device, instead of its own separate format, so a tool that reads saved-log filenames can read a downloaded one too (from the upstream project).
-- Pressing Start while a career was left on the Training selection screen (for example after UMA Auto+ was stopped or closed while the bot was choosing a training) now continues the career. Before, the bot tapped the Skip button, which could switch Skip off, and then tapped the screen until the run ended with an error. Now it presses the game's Back to return to the training menu and continues on the same turn, for a new Start, a single run and a resumed queue alike; if Back does not bring the training menu back, the run stops without touching Skip. A resumed queue, or a run played again after an error, also no longer taps the Skip button as if a new career were starting. Pressing Back on that screen was seen to return to the training menu in testing; the bot doing it has not been seen on a device yet.
-- When Android re-created the app's screen during a queue, Home's progress line stayed empty until the next run's update; it now shows the queue's current progress again when you return to the app.
-- While the Remote Log Viewer was on, other apps on the device could read its log and screenshots, and a web page open on your computer while `adb forward` was active could download its log. The viewer now asks for an access code before it shows the log or screenshots, lets you download the log or accepts a command; the code is shown under Debug Settings > Remote Log Viewer and changes each time you press Start. It also only answers when opened as localhost or 127.0.0.1 with the port you set. Its descriptions no longer say it works over Wi-Fi: it can be opened only on the device itself or from a computer over ADB (`adb forward`), as the setting shows.
+- **Start** is no longer refused after Import or Reset Settings.
+- **Stop in the notification** now stops the bot.
+- **Skip stays fast:** your fast Skip is no longer switched to slow, and when the game resets Skip to Off the bot switches it back to fast.
+- **Home** no longer shows Start while the bot is armed after its screen is re-created.
+- **Resuming a career in progress** now works even when the game opens on a GOAL COMPLETE screen.
+- **A frozen game** is reported plainly: the bot asks you to close and reopen it, instead of claiming it was restarted.
+- **Opening UMA Auto+** while a run is active no longer taps into the app; the bot waits until you switch back to the game.
+- **Deck check:** the bot stops before Start Career if a deck holds a card of the trainee's own character, and says which slot.
+- **Trackblazer items:** Megaphones, Ankle Weights, Reset Whistles and Charms are now used from the Training screen.
+- **Stat reading:** a stat misread early in a career no longer stays wrong, and an untrusted final stat shows as unknown.
+- **Resuming onto an event** lets the bot pick your preset's option instead of tapping one by accident.
+
+### Known limitations
+
+- **Data Download prompt:** not yet seen on a real patch.
+- **Newest support cards:** their training events use the first option for now.
+- **Overlay stop button:** the notification may briefly say "Completed successfully".
+
 
 ## [1.5.0] - 2026-09-26
+
+<details>
+<summary>Release notes for 1.5.0</summary>
 
 ### Added
 
@@ -69,7 +113,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Before every Start, the bot now double-checks that the settings it is about to use are the exact ones UMA Auto+ just verified, and refuses to start rather than run on the wrong ones. Nothing is spent when this happens: force stop and reopen UMA Auto+ (re-enabling its accessibility service if it was switched off), then press Start again.
 - If UMA Auto+ ever finds its settings file damaged or unreadable, it now refuses to start instead of risking a run on bad data, and says nothing was spent. The next time you open the app, it checks the file again and restores your settings from the last good backup if it is still damaged; a damaged file is kept next to the current one rather than deleted.
 
+</details>
+
 ## [1.4.0] - 2026-08-28
+
+<details>
+<summary>Release notes for 1.4.0</summary>
 
 ### Added
 
@@ -105,9 +154,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - **Bundled game data is repaired and refreshed.** The entire new dirt race schedule was missing (Kashiwa Kinen, Teio Sho, M.C. Nambu Hai, Tokyo Daishoten and the rest, 26 races, along with the Kawasaki, Funabashi and Morioka racecourses); skills that a scenario or an event grants rather than sells are now included, so reading a trainee's own skill list is complete; skill tier data is restored after the community source restructured its page; race-result training events now show which finishing position each reward line applies to; and the rest of the bundled data is brought up to date with the current Global release. Separately, settings search now reaches every settings page it points at, including Run Queue, Discord and Scenario Overrides.
 
+</details>
+
 ---
 
 ## [1.3.8] - 2026-07-13
+
+<details>
+<summary>Release notes for 1.3.8</summary>
 
 ### Added
 
@@ -132,7 +186,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - **A career now always runs on the right trainee's settings.** A rotation knocked out of sync used to be repaired while the wrong trainee's stat priorities, racing plan, event picks and skill plan stayed in force for the rest of the career; everything is reloaded from the correct preset now, and every rotation career states at career start whether it is running the settings its slot intended. Starting a single career with the queue off also verifies the Trainee Select screen against the preset you applied instead of accepting whoever the game preselected, and stops with a clear message rather than ever launching the wrong trainee. Separately, the game's daily reset dumping you back to the main lobby mid-career is recognised: the bot re-enters the career in progress instead of flailing and skipping ahead in the queue.
 - **Training reads are sturdier.** Failure chances that read as impossible values are rejected and re-read instead of being "corrected" into a plausible wrong number, the five facilities sanity-check each other against the trainee's energy, aptitude letters on the stat screen are compared in full instead of taken on the first close match, and rainbow trainings are detected from the actual glow around the support portraits instead of inferred from friendship bars. Stale analysis from a turn that ended in a race or a rest no longer carries into the next turn. Stats pushed past the scenario cap by inherited blue sparks are trained into and recorded correctly. (Several of these come from the upstream project.)
 
+</details>
+
 ## [1.3.7] - 2026-07-09
+
+<details>
+<summary>Release notes for 1.3.7</summary>
 
 A roster and control pass on top of the July-patch adaptation from 1.3.6: the full community S-tier preset list -- 156 presets across 52 entries -- reachable through a new searchable trainee picker with favorites and cross-scenario run queues, a control for when the bot spends skill points, smarter Unity Cup opponent selection, handling for URA Finale's new duel screen, and a set of reliability fixes.
 
@@ -168,7 +227,12 @@ A roster and control pass on top of the July-patch adaptation from 1.3.6: the fu
 - The navigation drawer's swipe-to-open gesture works again on Android; the app root was missing its gesture-handler wrapper.
 - The Quick Mode Settings popup is handled again, so the bot can pick "Shorten all events" like it's supposed to.
 
+</details>
+
 ## [1.3.6] - 2026-07-05
+
+<details>
+<summary>Release notes for 1.3.6</summary>
 
 The July 2026 game update (the Global 2nd-anniversary rebalance) raised stat caps, added new screens, and changed the training math. This release adapts to all of it and ships a large reliability pass on top: sturdier unattended queues, a run of screen-reading fixes, stamina tuning for the long-distance trainees, and a new results history that records how every career actually ended.
 
@@ -198,9 +262,14 @@ The July 2026 game update (the Global 2nd-anniversary rebalance) raised stat cap
 - A run of screen-reading fixes: misread rank letters are recovered, the View Results button, the restyled Legacy Select screen, and a chibi Start Career variant are recognized again, skill upgrade chains are priced at what the screen actually shows, and stubborn reads get a few retries instead of one attempt.
 - The per-race retry limit now applies on every retry path, and manual stops and skipped runs are labelled correctly in the end-of-run summary.
 
+</details>
+
 ---
 
 ## [1.3.5] - 2026-06-24
+
+<details>
+<summary>Release notes for 1.3.5</summary>
 
 A Trackblazer tuning knob plus a skill-matching fix. Megaphone use can now be gated per tier so the strong megaphones are saved for high-gain turns, and inherited unique skills are no longer skipped at the end-of-career buy.
 
@@ -212,9 +281,14 @@ A Trackblazer tuning knob plus a skill-matching fix. Megaphone use can now be ga
 
 - Inherited unique skills are no longer skipped when buying at career end. Skill names ending in the ★ marker sometimes failed to match their database entry on a shortcut path, so the bot never bought them; the shortcut now matches names the same way as everywhere else.
 
+</details>
+
 ---
 
 ## [1.3.4] - 2026-06-24
+
+<details>
+<summary>Release notes for 1.3.4</summary>
 
 Two accuracy fixes plus an opt-in Trackblazer training mode. The end-of-career summary now records the real final stats, a corrupted stat reading can no longer stick, and an experimental irregular-training option is available for Trackblazer (off by default).
 
@@ -227,9 +301,14 @@ Two accuracy fixes plus an opt-in Trackblazer training mode. The end-of-career s
 - The end-of-career summary now records the true final stats and fan count. The bot was silently failing to open the post-finale Details screen on every run, so it had been logging the pre-finale values -- roughly 40 per stat and tens of thousands of fans short of the real result.
 - A garbled stat reading can no longer lock a bad value in -- the bot keeps the last good value instead -- and impossible stat values are rejected even on a fresh install.
 
+</details>
+
 ---
 
 ## [1.3.3] - 2026-06-22
+
+<details>
+<summary>Release notes for 1.3.3</summary>
 
 A reliability patch plus two new trainees. The bot now skips through the result and event screens it used to churn on, the post-Auto-Fill "Follow Trainer" prompt no longer stalls a queue, a short scrollable list can no longer crash the tap picker, and "Prioritize Skill Hints" now plays by the same rules as every other training.
 
@@ -244,9 +323,14 @@ A reliability patch plus two new trainees. The bot now skips through the result 
 - A short scrollable list (such as the post-purchase "choose how many to use" screen) could crash the bot; it cannot any more.
 - "Prioritize Skill Hints" no longer trains a hinted stat at any failure chance or with no energy, and no longer overrides the training blacklist. A skill hint now only wins among trainings that already pass the same failure-rate, energy, and blacklist gates as every other training, and that prioritization now applies in every year.
 
+</details>
+
 ---
 
 ## [1.3.2] - 2026-06-20
+
+<details>
+<summary>Release notes for 1.3.2</summary>
 
 A reliability and diagnostics patch on top of 1.3.1. Overnight queues that crossed midnight could stall on the real-world date-rollover popup; the shop and long scrollable lists each had an edge case that could mislead the bot; and the end of a career now writes a single structured outcome line so a run's result is legible at a glance. Plus a new skill-buying option and a log-viewer fix.
 
@@ -265,9 +349,14 @@ Validated with a 3-career unattended Trackblazer queue that completed end to end
 - A popup the bot can't clear now ends the run cleanly after a few retries instead of spinning until the whole queue gets killed.
 - The Remote Log Viewer's Compact toggle now re-renders the lines already on screen instead of only affecting new ones.
 
+</details>
+
 ---
 
 ## [1.3.1] - 2026-06-20
+
+<details>
+<summary>Release notes for 1.3.1</summary>
 
 A focused stability patch. The bot was stalling on in-career story and support-card event cutscenes -- the "tap to continue" screens with a Skip pill that play before an event's choices appear. Both the between-run launcher and the in-career loop mistook these for other screens and gave up, ending the run (sometimes seconds after Start). They are now recognized and tapped through to the choices, so events that used to stop an unattended queue just resolve and the career continues.
 
@@ -278,9 +367,14 @@ Validated with a 6-career unattended overnight queue that completed end to end.
 - In-career story and support-card event intro cutscenes are now tapped through to their choices instead of being misread as an unknown screen and stalling the run until the bot gave up.
 - The between-run launcher no longer mistakes an in-career "tap to continue" cutscene for the Quick Mode prompt and loops on it until it times out; these screens are simply tapped through, while the real Quick Mode prompt is still handled as before.
 
+</details>
+
 ---
 
 ## [1.3.0] - 2026-06-18
+
+<details>
+<summary>Release notes for 1.3.0</summary>
 
 The headline feature: the bot can now grind a whole **rotation of different trainees** unattended -- queue several, and it cycles through them, training each under her own preset. Set it before bed, wake up to a stack of finished careers. On top of that, a near-complete preset overhaul (now 81 builds across 27 characters), a smarter skill-buying strategy, and two solid months of reliability work hardening every loop that was quietly killing overnight runs.
 
@@ -462,8 +556,11 @@ A reliability and content release. The bot survives long queues on MuMu, handles
 ### Changed
 - README updated to clearly credit the upstream project and link back to steve1316/uma-android-automation.
 
+</details>
+
 ---
 
+[1.6.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/lhceist41/uma-auto-plus/compare/v1.3.8...v1.4.0
 [1.3.8]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.8
@@ -475,4 +572,4 @@ A reliability and content release. The bot survives long queues on MuMu, handles
 [1.3.2]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.2
 [1.3.1]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.1
 [1.3.0]: https://github.com/lhceist41/uma-auto-plus/releases/tag/v1.3.0
-[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.5.0...main
+[Unreleased]: https://github.com/lhceist41/uma-auto-plus/compare/v1.6.0...main

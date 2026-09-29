@@ -12,12 +12,12 @@ export const RELEASE_NOTES_BASE_URL = "https://github.com/lhceist41/uma-auto-plu
 export const whatsNewEntries: Record<string, WhatsNewEntry> = {
     "1.6.0": {
         highlights: [
-            "Watch your queue from your PC: a live dashboard shows the current run, what the bot is doing and each run's result (Debug Settings, Enable Remote Log Viewer; it needs ADB).",
-            "A one-click Windows helper, tools/open-dashboard.cmd (see the README), opens the dashboard for MuMu without typing any adb commands.",
-            "The notification shows the queue's progress while the bot runs, for example the run number and the game date.",
-            "Home has a Last session card, and the notification after a session says how it really ended.",
-            "Tap Update in the update dialog to download the new version inside the app, then confirm Android's install prompt.",
-            "Overnight queues are sturdier: the screen stays on while the bot runs, an errored run is retried once, and an interrupted queue can be resumed for 24 hours.",
+            "Watch your queue from your PC on a live dashboard (Debug Settings, Enable Remote Log Viewer; on MuMu for Windows tools/open-dashboard.cmd opens it).",
+            "Stop after this career: the bot finishes the career it is playing, then pauses the queue.",
+            "The notification shows live progress and how a session really ended, and Home has a Last session card.",
+            "Tap Update in the update dialog to install a new version inside the app.",
+            "Sturdier overnight queues: the screen stays on, errors are retried, and the notification's Stop button really stops the bot.",
+            "Applying a preset no longer resets your timing, OCR, display or stop settings.",
         ],
     },
 }

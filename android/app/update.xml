@@ -1,17 +1,18 @@
 <AppUpdater>
   <update>
-    <latestVersion>1.5.0</latestVersion>
+    <latestVersion>1.6.0</latestVersion>
     <url>https://github.com/lhceist41/uma-auto-plus/releases/latest</url>
     <releaseNotes>
-v1.5.0 - Settings are safe from a hidden database bug, and Start warns you before a risky overnight queue
+v1.6.0 - watch your queue from your PC, and stop after this career
 
-- Fixed: a settings-persistence bug present since version 1.3.0. A setting changed after your first Start in an app session could fail to reach the bot, or be lost entirely if you closed the app before starting again -- the app and the bot now share a single settings database connection, so a changed setting always reaches the bot and survives closing the app.
-- Fixed: the bot now refuses to start rather than run on settings that do not match what UMA Auto+ just checked, or on a settings file it cannot verify is safe -- nothing is spent either way, and a damaged file can be restored from its last good backup the next time you open the app.
-- New: Start now warns you before a run queue about setup that can end a long run early (TP restore off, Reuse Last Launch Setup off, the accessibility repair permission missing, a short screen timeout, or notifications off), without ever blocking you from starting anyway.
-- New: presets for Wonder Acute and Nakayama Festa, in all four scenarios. The roster is now 300 presets across 74 trainee cards.
-- New: a plan check on the Racing Plan page that flags unrecognized races, wrong-turn races, double-booked turns, and back-to-back races the bot may not be able to run, before you start a career.
-- Improved: Carats for TP restore are now a separate setting, on by default, instead of always being spent once items run out; a lost connection mid-career is ridden out for up to 20 minutes with growing retry pauses instead of giving up quickly.
-- Fixed: settings import reports whether it actually succeeded, partly succeeded, or failed, and a failed profile import can no longer leave you with none.
+- New: watch your queue from your PC on a live dashboard (setup is in the README).
+- New: Stop after this career, on Home or the dashboard: the bot finishes its career, then pauses the queue.
+- New: live progress in the notification and a Last session card on Home.
+- New: sturdier overnight queues, with errors retried and the Data Download prompt handled.
+- New: presets keep your timing, OCR, display and stop settings.
+- Fixed: Stop in the notification now stops the bot, Start is no longer refused after Import or Reset Settings, and your fast Skip is no longer switched to slow.
+- Fixed: the bot stops before Start Career if a deck holds a card of the trainee's own character, and Trackblazer items are now used from the Training screen.
+- Do this: enter the access code shown in Debug Settings to open the dashboard, and Trackblazer players should check Consecutive Races Limit once.
 
     </releaseNotes>
   </update>

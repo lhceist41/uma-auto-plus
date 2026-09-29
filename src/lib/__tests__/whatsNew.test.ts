@@ -120,6 +120,7 @@ describe("the dialog and its wiring", () => {
     it("the hook stores the version only from the dismiss and from the fresh-install record", () => {
         const hook = source("src/hooks/useWhatsNew.ts")
         expect(hook.match(/saveWhatsNewSeenVersion\(/g)?.length).toBe(2)
+        expect(hook).toContain("if (!sessionKnown || botActive || decided.current) return")
         expect(hook).toContain('decision === "record" && currentVersion')
         expect(hook).toContain("const version = content?.version")
     })
