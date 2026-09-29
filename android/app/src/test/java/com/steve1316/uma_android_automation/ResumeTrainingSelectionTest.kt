@@ -121,7 +121,8 @@ class ResumeTrainingSelectionTest {
             assertTrue(navigator.contains("careerInFlight: Boolean = false,\n    ): NavigationResult {"))
             assertEquals(1, count(navigator, "careerInFlightMode = "), "set once per navigate()")
             assertTrue(navigator.contains("careerInFlightMode = careerInFlight\n"))
-            assertEquals(5, count(navigator, "careerInFlightMode"), "declaration, its mention in the navigate() KDoc, assignment, and the pill decision and its log reason only")
+            assertEquals(6, count(navigator, "careerInFlightMode"), "declaration, its mention in the navigate() KDoc, assignment, the pill decision and its log reason, and the event-choices handoff only")
+            assertTrue(body(navigator, "private fun handleTapToContinue(").contains("careerInFlightMode || careerResumed) && IconTrainingEventHorseshoe.check("))
             assertTrue(navigator.contains("isLaunchQuickModePrompt(resumeInProgressCareerMode || careerInFlightMode, skipToggleAlreadyDone)"))
             // A launch that starts over from the title screen keeps it.
             assertTrue(body(navigator, "private fun startLaunchOver(").contains("resumeInProgressCareer, coldStartOnHome, careerInFlight)"))

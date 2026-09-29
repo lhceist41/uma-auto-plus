@@ -9253,6 +9253,15 @@ class CareerLaunchNavigator(private val context: Context) {
      */
     private fun handleTapToContinue(): TransitionResult {
         val bitmap = iu.getSourceBitmap()
+        // A resumed career can sit on an event whose choices are showing, and the body tap lands on
+        // choice 2 (2026-09-29). The campaign's event handler picks the preset's choice instead.
+        // The Quick Mode Settings dialog's rows carry the same glyph and are not an event.
+        if ((resumeInProgressCareerMode || careerInFlightMode || careerResumed) && IconTrainingEventHorseshoe.check(iu, sourceBitmap = bitmap) &&
+            !quickModeDialogPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })
+        ) {
+            MessageLog.i(TAG, "[NAV] Event choices are showing; handing the career to the campaign to pick one.")
+            return TransitionResult.Success
+        }
         MessageLog.i(TAG, "[NAV] TAP_TO_CONTINUE: body-tapping to advance the in-career screen.")
         CoordinateTap.tap(gestureUtils, (bitmap.width * 0.5).toDouble(), (bitmap.height * 0.677).toDouble(), "tap_to_continue_advance")
         waitSafe(0.8)

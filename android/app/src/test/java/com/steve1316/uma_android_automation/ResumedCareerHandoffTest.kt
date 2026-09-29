@@ -172,4 +172,51 @@ class ResumedCareerHandoffTest {
             }
         }
     }
+
+    @Nested
+    @DisplayName("a resume onto an event with choices")
+    inner class EventChoices {
+        private val handler by lazy { block(navigator, "private fun handleTapToContinue(): TransitionResult {", "\n    }\n") }
+        private val campaign by lazy { source("bot/Campaign.kt") }
+
+        @Test
+        fun `visible choices hand the career to the campaign before any body tap`() {
+            // 2026-09-29: resumed onto Air Shakur's "Both High and Low"; the body tap at (543,1301) picked choice 2.
+            val guard = handler.indexOf("IconTrainingEventHorseshoe.check(iu, sourceBitmap = bitmap)")
+            val tap = handler.indexOf("CoordinateTap.tap(")
+            assertTrue(guard >= 0, "the choices check reads the frame just captured")
+            assertTrue(tap > guard, "the check runs before the body tap")
+            assertTrue(handler.substring(guard, tap).contains("return TransitionResult.Success"), "choices end navigation instead of tapping")
+        }
+
+        @Test
+        fun `the Quick Mode Settings dialog is not handed over as an event`() {
+            // Its four option rows match the same horseshoe glyph at 0.97-0.98 (skip_launch captures).
+            val guard = handler.indexOf("IconTrainingEventHorseshoe.check(iu, sourceBitmap = bitmap)")
+            val handover = handler.indexOf("return TransitionResult.Success", guard)
+            assertTrue(handler.substring(guard, handover).contains("&&\n            !quickModeDialogPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })"))
+        }
+
+        @Test
+        fun `only a career already in flight is handed over`() {
+            val guardLine = handler.lines().first { it.contains("IconTrainingEventHorseshoe.check(") }
+            for (flag in listOf("resumeInProgressCareerMode", "careerInFlightMode", "careerResumed")) {
+                assertTrue(guardLine.contains(flag), "both resume entry paths and a Resume tap: $flag")
+            }
+        }
+
+        @Test
+        fun `a screen without choices is still body-tapped to advance`() {
+            val tap = handler.indexOf("CoordinateTap.tap(")
+            val after = handler.substring(tap)
+            assertTrue(after.contains("return TransitionResult.Continue"), "plain dialogue and results keep advancing")
+        }
+
+        @Test
+        fun `the campaign reads the event screen before its own body-tap recovery`() {
+            val loop = campaign.indexOf("if (checkTrainingEventScreen()) {")
+            val recovery = campaign.indexOf("recoverFromUnknownScreen(consecutiveUnknownScreenCount)")
+            assertTrue(loop in 0 until recovery, "the handed-over event is picked, not tapped")
+        }
+    }
 }
