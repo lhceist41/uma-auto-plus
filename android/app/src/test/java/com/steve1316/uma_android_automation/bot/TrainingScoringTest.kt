@@ -138,7 +138,6 @@ class TrainingScoringTest {
         blacklist: List<StatName?> = emptyList(),
         disableTrainingOnMaxedStat: Boolean = false,
         skillHintsPerLocation: Map<StatName, Int> = StatName.entries.associateWith { 0 },
-        enablePrioritizeSkillHints: Boolean = false,
         statsTrainedOverBuffer: Set<StatName> = emptySet(),
     ): TrainingConfig {
         return TrainingConfig(
@@ -153,7 +152,6 @@ class TrainingScoringTest {
             disableTrainingOnMaxedStat = disableTrainingOnMaxedStat,
             trainingOptions = trainingOptions,
             skillHintsPerLocation = skillHintsPerLocation,
-            enablePrioritizeSkillHints = enablePrioritizeSkillHints,
             statsTrainedOverBuffer = statsTrainedOverBuffer,
         )
     }
@@ -713,13 +711,12 @@ class TrainingScoringTest {
     }
 
     @Test
-    @DisplayName("Prioritized skill hints return massive score")
-    fun testPrioritizedSkillHintsReturnMassiveScore() {
+    @DisplayName("The skill-hint bonus stays inside the bounded 0-100 misc score")
+    fun testSkillHintBonusStaysBounded() {
+        // A hint must not inflate the Year 2+ score past its bounded misc band: the preference for a
+        // hinted training is decided only in selectBestTrainingWithHintPriority.
         val training = createDefaultTrainingOption(name = StatName.SPEED)
-
-        val configWithPriority =
-            createDefaultConfig(
-                trainingOptions = listOf(training),
+        val oneHint = createDefaultConfig(trainingOptions = listOf(training),
                 skillHintsPerLocation =
                     mapOf(
                         StatName.SPEED to 1,
@@ -728,73 +725,211 @@ class TrainingScoringTest {
                         StatName.GUTS to 0,
                         StatName.WIT to 0,
                     ),
-                enablePrioritizeSkillHints = true,
             )
-        val configWithoutPriority =
-            createDefaultConfig(
-                trainingOptions = listOf(training),
+        val manyHints = createDefaultConfig(trainingOptions = listOf(training),
                 skillHintsPerLocation =
                     mapOf(
-                        StatName.SPEED to 1,
+                        StatName.SPEED to 9,
                         StatName.STAMINA to 0,
                         StatName.POWER to 0,
                         StatName.GUTS to 0,
                         StatName.WIT to 0,
                     ),
-                enablePrioritizeSkillHints = false,
             )
 
-        val priorityScore = calculateMiscScore(configWithPriority, training)
-        val normalScore = calculateMiscScore(configWithoutPriority, training)
-
-        assertTrue(priorityScore > normalScore, "Prioritized skill hints should return higher score than normal skill hints")
-    }
-
-    @Test
-    @DisplayName("Prioritization does not boost a training that carries zero skill hints (issue #372 gate)")
-    fun testPrioritizationDoesNotBoostHintlessTraining() {
-        // Regression guard for the issue #372 fix. A hinted training that fails the failure-rate/energy
-        // gate is dropped from trainingMap, so recommendTraining() reads 0 hints for it. With zero hints
-        // the priority boost must NOT apply even when prioritization is enabled — otherwise a gated-out
-        // high-failure hint could still dominate the recommendation. This verifies the 10000+ boost is
-        // conditional on numSkillHints > 0, keeping a hintless training in the normal 0..100 score band.
-        val training = createDefaultTrainingOption(name = StatName.SPEED)
-
-        val config =
-            createDefaultConfig(
-                trainingOptions = listOf(training),
-                skillHintsPerLocation =
-                    mapOf(
-                        StatName.SPEED to 0,
-                        StatName.STAMINA to 0,
-                        StatName.POWER to 0,
-                        StatName.GUTS to 0,
-                        StatName.WIT to 0,
-                    ),
-                enablePrioritizeSkillHints = true,
-            )
-
-        val score = calculateMiscScore(config, training)
-
-        assertTrue(score <= 100.0, "A training with zero skill hints must not receive the 10000+ priority boost even when prioritization is enabled")
+        assertEquals(60.0, calculateMiscScore(oneHint, training), 1e-9)
+        assertEquals(100.0, calculateMiscScore(manyHints, training), 1e-9)
     }
 
     // ============================================================================
-    // selectBestTrainingWithHintPriority Tests (issue #372 — all-years gated hint priority)
+    // selectBestTrainingWithHintPriority Tests (issue #372: all-years gated hint priority)
     // ============================================================================
 
     @Test
-    @DisplayName("Hint priority picks a hinted training over a higher-scored non-hinted one")
-    fun testHintPriorityPrefersHintedOverHigherScore() {
+    @DisplayName("A hinted training at 80% of the best score wins")
+    fun testHintedTrainingWithinShareWins() {
         val hinted = createDefaultTrainingOption(name = StatName.SPEED, numSkillHints = 1)
         val plain = createDefaultTrainingOption(name = StatName.STAMINA, numSkillHints = 0)
-        // The non-hinted training has the higher mode score, but prioritization must still pick the hinted one.
-        val scores = mapOf(hinted to 10.0, plain to 99.0)
+        val scores = mapOf(hinted to 80.0, plain to 100.0)
 
         val best = selectBestTrainingWithHintPriority(scores, enablePrioritizeSkillHints = true)
 
-        assertEquals(StatName.SPEED, best?.name, "With prioritization on, a hinted training should win even with a lower mode score")
+        assertEquals(StatName.SPEED, best?.name, "A hinted training nearly as good as the best should be preferred")
     }
+
+    @Test
+    @DisplayName("A hinted training at 70% of the best score loses to the best")
+    fun testHintedTrainingBelowShareLoses() {
+        val hinted = createDefaultTrainingOption(name = StatName.SPEED, numSkillHints = 1)
+        val plain = createDefaultTrainingOption(name = StatName.STAMINA, numSkillHints = 0)
+        val scores = mapOf(hinted to 70.0, plain to 100.0)
+
+        val best = selectBestTrainingWithHintPriority(scores, enablePrioritizeSkillHints = true)
+
+        assertEquals(StatName.STAMINA, best?.name, "A hint must not buy a training that is clearly worse than the best")
+    }
+
+    @Test
+    @DisplayName("A hinted training exactly at the share wins")
+    fun testHintedTrainingAtShareWins() {
+        val hinted = createDefaultTrainingOption(name = StatName.SPEED, numSkillHints = 1)
+        val plain = createDefaultTrainingOption(name = StatName.STAMINA, numSkillHints = 0)
+        val scores = mapOf(hinted to Training.HINT_PRIORITY_MIN_SCORE_SHARE * 200.0, plain to 200.0)
+
+        val best = selectBestTrainingWithHintPriority(scores, enablePrioritizeSkillHints = true)
+
+        assertEquals(StatName.SPEED, best?.name)
+    }
+
+    @Test
+    @DisplayName("With a best score of 0 there is no meaningful share, so a hinted training below it still wins")
+    fun testHintedTrainingWinsWhenBestScoreIsZero() {
+        // Junior friendship scoring: an all-orange board scores 0.0, and Guts carries the -0.2 energy tiebreak.
+        val hintedGuts = createDefaultTrainingOption(name = StatName.GUTS, numSkillHints = 1)
+        val plainSpeed = createDefaultTrainingOption(name = StatName.SPEED, numSkillHints = 0)
+        val scores = mapOf(hintedGuts to -0.2, plainSpeed to 0.0)
+
+        val best = selectBestTrainingWithHintPriority(scores, enablePrioritizeSkillHints = true)
+
+        assertEquals(StatName.GUTS, best?.name)
+    }
+
+    @Test
+    @DisplayName("With every score at 0 a hinted training wins")
+    fun testHintedTrainingWinsWhenAllScoresAreZero() {
+        val plainSpeed = createDefaultTrainingOption(name = StatName.SPEED, numSkillHints = 0)
+        val hintedPower = createDefaultTrainingOption(name = StatName.POWER, numSkillHints = 1)
+        val plainWit = createDefaultTrainingOption(name = StatName.WIT, numSkillHints = 0)
+        val scores = mapOf(plainSpeed to 0.0, hintedPower to 0.0, plainWit to 0.0)
+
+        val best = selectBestTrainingWithHintPriority(scores, enablePrioritizeSkillHints = true)
+
+        assertEquals(StatName.POWER, best?.name)
+    }
+
+    @Test
+    @DisplayName("A blacklisted hinted training cannot win")
+    fun testBlacklistedHintedTrainingCannotWin() {
+        // The blacklist zeroes the Year 2+ score; a zero-scored hinted option must not beat a real one.
+        val classicDate = GameDate(year = DateYear.CLASSIC, month = DateMonth.JANUARY, phase = DatePhase.EARLY)
+        val hinted = createDefaultTrainingOption(name = StatName.GUTS, statGains = statGainsToMap(intArrayOf(0, 0, 8, 20, 0)), numSkillHints = 1)
+        val plain = createDefaultTrainingOption(name = StatName.SPEED, statGains = statGainsToMap(intArrayOf(20, 0, 8, 0, 0)))
+        val config =
+            createDefaultConfig(
+                trainingOptions = listOf(hinted, plain),
+                currentDate = classicDate,
+                blacklist = listOf(StatName.GUTS),
+                skillHintsPerLocation = StatName.entries.associateWith { if (it == StatName.GUTS) 1 else 0 },
+            )
+        val scores = listOf(hinted, plain).associateWith { calculateRawTrainingScore(config, it) }
+
+        val best = selectBestTrainingWithHintPriority(scores, enablePrioritizeSkillHints = true)
+
+        assertEquals(0.0, scores[hinted])
+        assertEquals(StatName.SPEED, best?.name, "A blacklisted stat is never trained even when it shows a hint")
+    }
+
+    @Test
+    @DisplayName("Logged career: a weak hinted Guts turn no longer beats a double-rainbow Speed turn")
+    fun testLoggedDoubleRainbowSpeedBeatsWeakHintedGuts() {
+        // Unity Cup Vodka, Senior Early October: the bot trained hinted GUTS (7/0/15/14/0) over
+        // SPEED 55/0/24/0/0 with two rainbows. Inputs are the logged stats, targets and options.
+        val senior = GameDate(year = DateYear.SENIOR, month = DateMonth.OCTOBER, phase = DatePhase.EARLY)
+        val speed = loggedOption(StatName.SPEED, intArrayOf(55, 0, 24, 0, 0), rainbows = 2, level = 5, bars = listOf("orange" to 100.0, "orange" to 100.0))
+        val stamina = loggedOption(StatName.STAMINA, intArrayOf(0, 27, 0, 17, 0), level = 3, bars = listOf("orange" to 38.0, "orange" to 100.0, "orange" to 88.0))
+        val power = loggedOption(StatName.POWER, intArrayOf(0, 6, 19, 0, 0), level = 4)
+        val guts = loggedOption(StatName.GUTS, intArrayOf(7, 0, 15, 14, 0), level = 4, hints = 1, bars = listOf("orange" to 65.0))
+        val wit = loggedOption(StatName.WIT, intArrayOf(6, 0, 0, 0, 12), level = 3, bars = listOf("blue" to 8.0, "orange" to 100.0))
+        val options = listOf(speed, stamina, power, guts, wit)
+        val config =
+            loggedConfig(
+                options,
+                senior,
+                "Unity Cup",
+                stats = intArrayOf(1061, 328, 726, 371, 322),
+                targets = intArrayOf(1200, 450, 900, 250, 600),
+                priority = listOf(StatName.SPEED, StatName.POWER, StatName.WIT, StatName.STAMINA, StatName.GUTS),
+                spark = listOf(StatName.SPEED, StatName.POWER),
+            )
+        val scores = options.associateWith { calculateRawTrainingScore(config, it) }
+
+        val best = selectBestTrainingWithHintPriority(scores, enablePrioritizeSkillHints = true)
+
+        assertEquals(StatName.SPEED, best?.name)
+    }
+
+    @Test
+    @DisplayName("Logged career: a strong hinted Guts turn keeps its preference over a nearby Speed turn")
+    fun testLoggedStrongHintedGutsKeepsPreference() {
+        // URA Super Creek, Senior Early January: hinted GUTS 7/0/77/80/0 against SPEED 30/0/22/0/0 with two
+        // rainbows. The hinted option lands between 75% and 85% of the best, so it keeps the preference.
+        val senior = GameDate(year = DateYear.SENIOR, month = DateMonth.JANUARY, phase = DatePhase.EARLY)
+        val speed = loggedOption(StatName.SPEED, intArrayOf(30, 0, 22, 0, 0), rainbows = 2, level = 4, bars = listOf("green" to 50.0, "orange" to 87.0, "orange" to 77.0, "orange" to 75.0))
+        val stamina = loggedOption(StatName.STAMINA, intArrayOf(0, 17, 0, 7, 0), level = 1, bars = listOf("blue" to 33.0))
+        val power = loggedOption(StatName.POWER, intArrayOf(0, 9, 19, 0, 0), level = 1, bars = listOf("orange" to 100.0))
+        val guts = loggedOption(StatName.GUTS, intArrayOf(7, 0, 77, 80, 0), level = 1, hints = 1, bars = listOf("green" to 56.0))
+        val wit = loggedOption(StatName.WIT, intArrayOf(2, 0, 0, 0, 4), level = 1)
+        val options = listOf(speed, stamina, power, guts, wit)
+        val config =
+            loggedConfig(
+                options,
+                senior,
+                "URA Finale",
+                stats = intArrayOf(633, 402, 457, 237, 237),
+                targets = intArrayOf(1200, 650, 1000, 250, 450),
+                priority = listOf(StatName.SPEED, StatName.STAMINA, StatName.WIT, StatName.POWER, StatName.GUTS),
+                spark = listOf(StatName.SPEED, StatName.STAMINA),
+            )
+        val scores = options.associateWith { calculateRawTrainingScore(config, it) }
+        val share = scores.getValue(guts) / scores.getValue(speed)
+
+        val best = selectBestTrainingWithHintPriority(scores, enablePrioritizeSkillHints = true)
+
+        assertTrue(share in 0.75..0.85, "fixture should sit between the 75% and 85% shares, was $share")
+        assertEquals(StatName.GUTS, best?.name)
+    }
+
+    private fun loggedOption(
+        name: StatName,
+        gains: IntArray,
+        rainbows: Int = 0,
+        level: Int,
+        hints: Int = 0,
+        bars: List<Pair<String, Double>> = emptyList(),
+    ): TrainingOption =
+        TrainingOption(
+            name = name,
+            statGains = statGainsToMap(gains),
+            failureChance = 0,
+            relationshipBars = ArrayList(bars.map { (color, fill) -> BarFillResult(name, fill, 0, color) }),
+            numRainbow = rainbows,
+            numSkillHints = hints,
+            trainingLevel = level,
+        )
+
+    private fun loggedConfig(
+        options: List<TrainingOption>,
+        date: GameDate,
+        scenario: String,
+        stats: IntArray,
+        targets: IntArray,
+        priority: List<StatName>,
+        spark: List<StatName>,
+    ): TrainingConfig =
+        TrainingConfig(
+            currentStats = statGainsToMap(stats),
+            statPrioritization = priority,
+            statTargets = statGainsToMap(targets),
+            currentDate = date,
+            scenario = scenario,
+            enableRainbowTrainingBonus = false,
+            focusOnSparkStatTarget = spark,
+            blacklist = emptyList(),
+            disableTrainingOnMaxedStat = true,
+            trainingOptions = options,
+            skillHintsPerLocation = options.associate { it.name to it.numSkillHints },
+            enableTrainingLevelWeighting = true,
+        )
 
     @Test
     @DisplayName("Hint priority is ignored when prioritization is disabled")
@@ -826,7 +961,7 @@ class TrainingScoringTest {
         val lowHinted = createDefaultTrainingOption(name = StatName.SPEED, numSkillHints = 1)
         val highHinted = createDefaultTrainingOption(name = StatName.POWER, numSkillHints = 2)
         val plain = createDefaultTrainingOption(name = StatName.STAMINA, numSkillHints = 0)
-        val scores = mapOf(lowHinted to 20.0, highHinted to 40.0, plain to 99.0)
+        val scores = mapOf(lowHinted to 75.0, highHinted to 80.0, plain to 99.0)
 
         val best = selectBestTrainingWithHintPriority(scores, enablePrioritizeSkillHints = true)
 

@@ -16,6 +16,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - **Every released Global trainee outfit now has presets for all four scenarios, 107 trainee cards in all.** The 27 outfits added in this release that share a character with an existing preset keep that preset's build with the outfit's own skills. Special Week (Ruler of Japan) runs as a Late Surger, and Air Groove (Quercus Civilis) and Symboli Rudolf (Archer by Moonlight) as Pace Chasers. They are research-graded until a full career completes. If you own one of these outfits but not the base outfit, apply the outfit's own preset: when it picks the trainee, a base preset skips every outfit that has its own preset.
 
+- **Skill hints no longer cost you big training turns:** with Prioritize Skill Hints on, the bot now takes a hinted training only when it is at least 75% as good as the best training that turn, so it no longer passes up a much better training, such as a rainbow, for a weak hinted one.
+
 ## [1.6.0] - 2026-09-29
 
 ### Highlights

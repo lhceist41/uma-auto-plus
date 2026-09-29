@@ -600,7 +600,7 @@ const TrainingSettings = () => {
                                 checked={enablePrioritizeSkillHints}
                                 onCheckedChange={(checked) => updateTrainingSetting("enablePrioritizeSkillHints", checked)}
                                 label="Prioritize Skill Hints"
-                                description="When enabled, the bot prioritizes trainings that show a skill hint (overriding your stat prioritization), in every year. Hints still respect the failure-chance and energy limits and your training blacklist — a blacklisted stat is never trained even when it shows a hint."
+                                description="When enabled, the bot picks a training that shows a skill hint if it scores at least 75% as high as the best training that turn, in every year. Hints still respect the failure-chance and energy limits and your training blacklist: a blacklisted stat is never trained even when it shows a hint."
                                 className="my-2"
                                 searchId="enable-prioritize-skill-hints"
                             />
