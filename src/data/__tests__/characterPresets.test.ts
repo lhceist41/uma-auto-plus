@@ -972,10 +972,119 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
         { name: "Narita Taishin (Difference Engineer)", base: "Narita Taishin", cardId: 105002, own: [200492, 202382, 202082], gated: [201552, 202381, 201452, 202081, 201551, 201451] },
         { name: "Winning Ticket (Dream Deliverer)", base: "Winning Ticket (Get to Winning!)", cardId: 103502, own: [202172, 201412, 201702], gated: [200592, 201411, 202152, 201701, 200591, 202151] },
         { name: "Mejiro McQueen (Fair Lady of the Waves)", base: "Mejiro McQueen (Frontline Elegance)", cardId: 101303, own: [200432, 201532, 202012], gated: [202192, 202011, 200562, 202191, 200561] },
+        {
+            name: "Air Groove (Quercus Civilis)",
+            base: "Air Groove",
+            cardId: 101802,
+            own: [200342, 201072, 201322],
+            gated: [201532, 201071, 200462, 200341, 201531, 200461],
+        },
+        {
+            name: "Eishin Flash (Precise Chocolatier)",
+            base: "Eishin Flash",
+            cardId: 103702,
+            own: [200302, 200592, 201152],
+            gated: [201102, 201151, 201392, 201103, 201101, 201391],
+        },
+        {
+            name: "Fine Motion (Titania)",
+            base: "Fine Motion",
+            cardId: 102202,
+            own: [200152, 201902, 201052],
+            gated: [201042, 201051, 200192, 201901, 201041, 200191],
+        },
+        {
+            name: "Fuji Kiseki (Succès Étoilé)",
+            base: "Fuji Kiseki",
+            cardId: 100502,
+            own: [200771, 201042, 200582],
+            gated: [201332, 200772, 201902, 200581, 201331, 201901],
+        },
+        {
+            name: "Gold City (Authentic / 1928)",
+            base: "Gold City (Autumn Cosmos)",
+            cardId: 104001,
+            own: [200052, 200692, 200602],
+            gated: [201651, 200691, 201062, 200601, 201061],
+        },
+        {
+            name: "Haru Urara (New Year ♪ New Urara!)",
+            base: "Haru Urara",
+            cardId: 105202,
+            own: [200452, 201072, 201402],
+            gated: [201621, 200451, 200242, 201401, 200241],
+        },
+        {
+            name: "Matikanefukukitaru (Lucky Tidings)",
+            base: "Matikanefukukitaru",
+            cardId: 105602,
+            own: [200012, 200602],
+            gated: [200752, 201211, 200062, 200751, 200061],
+        },
+        {
+            name: "Mejiro Dober (Sapphire Sojourn)",
+            base: "Mejiro Dober",
+            cardId: 105902,
+            own: [200062, 202122, 202082],
+            gated: [201102, 202121, 202152, 202081, 201101, 202151],
+        },
+        {
+            name: "Mejiro McQueen (End of the Skies)",
+            base: "Mejiro McQueen (Frontline Elegance)",
+            cardId: 101302,
+            own: [200362, 200562, 200742],
+            gated: [200192, 200741, 200462, 200361, 200191, 200461],
+        },
+        {
+            name: "Nice Nature (Run & Win)",
+            base: "Nice Nature",
+            cardId: 106002,
+            own: [200492, 201152, 201542],
+            gated: [202082, 201151, 200302, 200491, 202081, 200301],
+        },
+        {
+            name: "Rice Shower (Vampire Makeover!)",
+            base: "Rice Shower",
+            cardId: 103002,
+            own: [200771, 201172, 200562],
+            gated: [200352, 200561, 200851, 200772, 200351],
+        },
+        {
+            name: "Super Creek (Chiffon-Wrapped Mummy)",
+            base: "Super Creek",
+            cardId: 104502,
+            own: [200332, 201162, 201352],
+            gated: [201322, 200331, 201102, 201161, 201321, 201101],
+        },
+        {
+            name: "Symboli Rudolf (Archer by Moonlight)",
+            base: "Symboli Rudolf (Emperor's Path)",
+            cardId: 101702,
+            own: [200192, 200752, 200562],
+            gated: [201342, 200561, 201312, 200194, 201341, 201311],
+        },
+        {
+            name: "Daiwa Scarlet (Nuit Étoilée de Scarlet)",
+            base: "Daiwa Scarlet",
+            cardId: 100902,
+            own: [202462, 201282, 202012],
+            gated: [201172, 201281, 201182, 202461, 201171, 201181],
+        },
+        {
+            name: "Vodka (Fiery Aqua Vitae)",
+            base: "Vodka",
+            cardId: 100802,
+            own: [202452, 200492, 201112],
+            gated: [202152, 200491, 201382, 202451, 202151, 201381],
+        },
     ]
 
-    /** The settings a derived outfit may change: the skill plans, plus Special Week's style change below. */
+    /** The settings a derived outfit may change: the skill plans, plus the restyled outfits' running style below. */
     const withoutPlans = (settings: any) => ({ ...settings, skills: { ...settings.skills, plans: undefined } })
+    // Outfits whose card style (and Game8 build) differs from the base preset's skill style race and buy as their own style.
+    // Never planned: Pressure 201212 (see below) and the three green-chain golds 202331, 201561, 202441.
+    const NEVER_PLANNED = [201212, 202331, 201561, 202441]
+    const RESTYLED = new Set(["Special Week (Ruler of Japan)", "Air Groove (Quercus Civilis)", "Symboli Rudolf (Archer by Moonlight)"])
 
     describe.each(outfits)("$name", (t) => {
         const all = characterPresets.filter((p) => p.name === t.name)
@@ -1003,7 +1112,7 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
         })
 
         it("keeps the base build in every scenario apart from the skill plans", () => {
-            if (t.name === "Special Week (Ruler of Japan)") return
+            if (RESTYLED.has(t.name)) return
             for (const p of pipeline) expect(withoutPlans(p.settings)).toEqual(withoutPlans(find(t.base, p.scenario).settings))
         })
 
@@ -1022,7 +1131,7 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
                     expect(ids.length).toBeGreaterThanOrEqual(12)
                     expect(new Set(ids).size).toBe(ids.length)
                     for (const id of ids) expect(skillById.has(id)).toBe(true)
-                    for (const id of t.gated) expect(ids).not.toContain(id)
+                    for (const id of [...t.gated, ...NEVER_PLANNED]) expect(ids).not.toContain(id)
                     for (const id of t.own) expect(ids).toContain(id)
                     const dead = ids.filter((id) => {
                         const code = /running_style==(\d)/.exec(skillById.get(id)?.condition ?? "")
@@ -1050,6 +1159,25 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
             expect(strip(p.settings)).toEqual(strip(base.settings))
         }
         expect(find("Special Week (Ruler of Japan)", "Trackblazer").settings.trainingEvent!.scenarioEventOverrides).toEqual({ "Trackblazer|A Grandkid Get-Together": 0 })
+    })
+
+    it.each([
+        ["Air Groove (Quercus Civilis)", "Air Groove"],
+        ["Symboli Rudolf (Archer by Moonlight)", "Symboli Rudolf (Emperor's Path)"],
+    ])("builds %s as a Pace Chaser, the card's own style, and otherwise keeps the base build", (name, base) => {
+        for (const scenario of ["URA Finale", "Unity Cup", "Trackblazer"]) {
+            const p = find(name, scenario)
+            expect(p.settings.skills!.preferredRunningStyle).toBe("pace_chaser")
+            const strip = (s: any) => ({
+                ...withoutPlans(s),
+                skills: { ...s.skills, plans: undefined, preferredRunningStyle: undefined },
+                trainingEvent: { ...s.trainingEvent, scenarioEventOverrides: undefined },
+            })
+            expect(strip(p.settings)).toEqual(strip(find(base, scenario).settings))
+        }
+        // The Grandkid hint (Prepared to Pass) is a Pace Chaser pick; Trackblazer's other picks are the base's.
+        const picks = (n: string) => find(n, "Trackblazer").settings.trainingEvent!.scenarioEventOverrides
+        expect(picks(name)).toEqual({ ...picks(base), "Trackblazer|A Grandkid Get-Together": 1 })
     })
 
     it("keeps Pressure (201212) in Mejiro Bright's plans now that skills.json resolves it", () => {
@@ -1136,12 +1264,15 @@ describe("Grand Concert derived presets", () => {
         "Mihono Bourbon": 1400,
         "Mihono Bourbon (CODE: ICING)": 1400,
         Vodka: 1400,
+        "Vodka (Fiery Aqua Vitae)": 1400,
         "Sakura Bakushin O": 1600,
         "King Halo": 1600,
         "Maruzensky (Formula R)": 1600,
         "Daiwa Scarlet": 1600,
+        "Daiwa Scarlet (Nuit Étoilée de Scarlet)": 1600,
         "Copano Rickey": 1600,
         "Super Creek": undefined,
+        "Super Creek (Chiffon-Wrapped Mummy)": undefined,
         "Gold Ship": undefined,
         // Full-roster port: Sprint.
         "Aston Machan": 1600,
@@ -1150,6 +1281,7 @@ describe("Grand Concert derived presets", () => {
         "King Halo (Cheerleader in Noble White)": 1600,
         "Nishino Flower": 1600,
         "Haru Urara": 1400,
+        "Haru Urara (New Year ♪ New Urara!)": 1400,
         "Hishi Akebono": 1400,
         // Mile.
         "Bamboo Memory": 1600,
@@ -1164,16 +1296,21 @@ describe("Grand Concert derived presets", () => {
         "Agnes Digital": 1400,
         "Agnes Digital (Fanatic♡Jiangshi)": 1400,
         "Fuji Kiseki": 1400,
+        "Fuji Kiseki (Succès Étoilé)": 1400,
         "Gold City (Autumn Cosmos)": 1400,
+        "Gold City (Authentic / 1928)": 1400,
         "Smart Falcon": 1400,
         "Smart Falcon (Twilight Triumph)": 1400,
         // Medium.
         "Admire Vega": 1400,
         "Air Groove": 1400,
+        "Air Groove (Quercus Civilis)": 1400,
         "Air Shakur": 1400,
         "Eishin Flash": 1400,
+        "Eishin Flash (Precise Chocolatier)": 1400,
         "El Condor Pasa (Kukulkan Warrior)": 1400,
         "Fine Motion": 1400,
+        "Fine Motion (Titania)": 1400,
         "Hishi Amazon": 1400,
         "Inari One": 1400,
         "Inari One (Golden Dream)": 1400,
@@ -1184,11 +1321,13 @@ describe("Grand Concert derived presets", () => {
         "Meisho Doto (Dot-o'-Lantern)": 1400,
         "Mejiro Ardan": 1400,
         "Mejiro Dober": 1400,
+        "Mejiro Dober (Sapphire Sojourn)": 1400,
         "Mejiro Ryan": 1400,
         "Nakayama Festa": 1400,
         "Narita Taishin": 1400,
         "Narita Taishin (Difference Engineer)": 1400,
         "Nice Nature": 1400,
+        "Nice Nature (Run & Win)": 1400,
         "Sakura Chiyono O": 1400,
         "Seiun Sky": 1400,
         "Seiun Sky (Soirée des Chatons)": 1400,
@@ -1198,6 +1337,7 @@ describe("Grand Concert derived presets", () => {
         "Special Week (Hopp'n♪Happy Heart)": 1400,
         "Sweep Tosho": 1400,
         "Symboli Rudolf (Emperor's Path)": 1400,
+        "Symboli Rudolf (Archer by Moonlight)": 1400,
         "T.M. Opera O (New Year, Same Radiance!)": 1400,
         "T.M. Opera O (O Sole Suo!)": 1400,
         "Tokai Teio": 1400,
@@ -1215,15 +1355,18 @@ describe("Grand Concert derived presets", () => {
         "Grass Wonder (Saintly Jade Cleric)": undefined,
         "Manhattan Cafe": undefined,
         Matikanefukukitaru: undefined,
+        "Matikanefukukitaru (Lucky Tidings)": undefined,
         Matikanetannhauser: undefined,
         "Mayano Top Gun": undefined,
         "Mayano Top Gun (Sunlight Bouquet)": undefined,
         "Mejiro Bright": undefined,
         "Mejiro McQueen (Fair Lady of the Waves)": undefined,
         "Mejiro McQueen (Frontline Elegance)": undefined,
+        "Mejiro McQueen (End of the Skies)": undefined,
         "Mejiro Palmer": undefined,
         "Narita Brian": undefined,
         "Rice Shower": undefined,
+        "Rice Shower (Vampire Makeover!)": undefined,
         "Satono Diamond": undefined,
         "Tamamo Cross": undefined,
         "Tamamo Cross (Raging Thunder)": undefined,
@@ -1248,8 +1391,8 @@ describe("Grand Concert derived presets", () => {
         // The docs used to be checked with `grep -c '^        scenario: "'`, which no longer works:
         // derived twins are not literals, and grandConcertFrom's own return adds a matching line.
         // This assertion is the authoritative count now. Update the docs whenever it changes.
-        expect(characterPresets.length).toBe(372)
-        expect(characterPresets.filter((p) => p.scenario === "Grand Concert")).toHaveLength(92)
+        expect(characterPresets.length).toBe(432)
+        expect(characterPresets.filter((p) => p.scenario === "Grand Concert")).toHaveLength(107)
         expect(new Set(characterPresets.map((p) => `${p.name}|${p.scenario}`)).size).toBe(characterPresets.length)
     })
 
