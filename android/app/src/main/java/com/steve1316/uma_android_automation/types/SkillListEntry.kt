@@ -65,6 +65,18 @@ class SkillListEntry(
                 0.35,
                 0.4,
             )
+
+        /**
+         * The rating a purchase adds. The game scores only the highest version of a skill the trainee owns: buying
+         * through unowned lower versions yields this skill alone, and an upgrade replaces the owned version it
+         * builds on (◎ over an owned ○ adds only their difference).
+         *
+         * @param ownPoints This skill's own aptitude-adjusted points.
+         * @param lowerVersions The lower versions nearest first, as (own aptitude-adjusted points, obtained).
+         * @return The points this purchase adds to the rating.
+         */
+        internal fun purchaseRatingGain(ownPoints: Int, lowerVersions: List<Pair<Int, Boolean>>): Int =
+            ownPoints - (lowerVersions.firstOrNull { it.second }?.first ?: 0)
     }
 
     /** The skill name (from [skillData]). */
@@ -263,26 +275,22 @@ class SkillListEntry(
     }
 
     /**
-     * Calculates the total evaluation points (rank gain) awarded for this skill.
-     *
-     * If a prerequisite version is still available (not yet bought), its evaluation points are folded into this total. Aptitude modifiers (running style, distance, or surface) apply when the skill has
-     * those activation conditions.
-     *
-     * @return The total rank points gained upon purchase.
+     * This skill's own evaluation points. Aptitude modifiers (running style, distance, or surface) apply when the skill has those activation conditions.
      */
-    private fun calculateEvaluationPoints(): Int {
-        var res: Int = skillData.evalPt
-
-        val prev: SkillListEntry? = prev
-        if (prev != null && prev.bIsAvailable) {
-            res += prev.evaluationPoints
+    private val ownEvaluationPoints: Int
+        get() {
+            val modifier: Double = getRunningStyleAptitudeEvaluationModifier() ?: getTrackDistanceAptitudeEvaluationModifier() ?: getTrackSurfaceAptitudeEvaluationModifier() ?: 1.0
+            return (skillData.evalPt * modifier).roundToInt()
         }
 
-        // Apply an aptitude-based multiplier if the skill relies on the Trainee's performance
-        // in a specific style, distance, or surface.
-        val modifier: Double = getRunningStyleAptitudeEvaluationModifier() ?: getTrackDistanceAptitudeEvaluationModifier() ?: getTrackSurfaceAptitudeEvaluationModifier() ?: 1.0
-
-        return (res * modifier).roundToInt()
+    /**
+     * Calculates the rank gain of buying this skill (see [purchaseRatingGain]).
+     *
+     * @return The rank points gained upon purchase.
+     */
+    private fun calculateEvaluationPoints(): Int {
+        val lowerVersions = generateSequence(prev) { it.prev }.map { it.ownEvaluationPoints to it.bIsObtained }.toList()
+        return purchaseRatingGain(ownEvaluationPoints, lowerVersions)
     }
 
     /**

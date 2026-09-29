@@ -600,6 +600,12 @@ const searchConfig: SearchOption[] = [
         description: "Buy only the ○ version of a skill and skip its ◎ upgrade, spreading the same skill points across more distinct skills.",
         page: "SkillSettings",
     },
+    {
+        id: "career-end-buy-any-skill",
+        title: "Buy Any Skill at Career End",
+        description: "With the Rank objective, spend the career's last skill points on the skills that add the most to the rating, even ones the trainee's running style can never use.",
+        page: "SkillSettings",
+    },
 
     // ============================================================
     // Skill Plan Settings - Skill Point Check

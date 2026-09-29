@@ -398,6 +398,15 @@ const SkillSettings = () => {
                                 description="Buy only the ○ version of a skill and skip its ◎ upgrade. The ◎ costs far more for a small extra gain, so skipping it spreads the same skill points across more distinct skills."
                             />
                         </View>
+                        <View style={styles.inputContainer}>
+                            <CustomCheckbox
+                                searchId="career-end-buy-any-skill"
+                                checked={skillSettings.careerEndBuyAnySkill}
+                                onCheckedChange={(checked) => updateSkillsSetting("careerEndBuyAnySkill", checked)}
+                                label="Buy Any Skill at Career End"
+                                description="With the Rank objective, the points left at the end of a career go to the skills that add the most to the rating. Off: only skills the trainee's running style can use, at any distance or surface. On: any skill, even ones the trainee can never use in a race."
+                            />
+                        </View>
                     </View>
                     <Divider style={{ marginBottom: 24 }} />
                     <View style={styles.section}>

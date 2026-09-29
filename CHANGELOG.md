@@ -22,6 +22,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - **Presets now plan each outfit's top-rated Potential skills:** the bot buys one whenever it is on offer in a career, once you have unlocked it with Potential or when a support card offers it.
 
+- **A higher rating from the career's last skill points:** with the Rank objective, the points left after the final race now go to the skills that add the most to the rating, still limited to skills the trainee's running style can use (at any distance or surface). To spend them on any skill for the highest rating, turn on **Buy Any Skill at Career End** in Skill Settings.
+
 ## [1.6.0] - 2026-09-29
 
 ### Highlights

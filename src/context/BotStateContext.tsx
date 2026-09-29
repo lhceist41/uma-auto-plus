@@ -125,6 +125,9 @@ export interface Settings {
         preferredTrackSurface: string
         // When true, the purchaser buys only the ○ version of a skill and skips its ◎ upgrade, spreading the SP budget across more distinct skills.
         skipDoubleCircleUpgrades: boolean
+        // Rank objective, career end only: when true the leftover points may buy any skill for rating, not only
+        // the ones the trainee's running style can activate. A player preference: presets never set it.
+        careerEndBuyAnySkill: boolean
         plans: Record<string, SkillPlanSettingsConfig>
     }
 
@@ -553,6 +556,7 @@ export const defaultSettings: Settings = {
         preferredTrackDistance: "inherit",
         preferredTrackSurface: "no_preference",
         skipDoubleCircleUpgrades: false,
+        careerEndBuyAnySkill: false,
         plans: Object.keys(skillPlanSettingsPages).reduce(
             (acc, curr) => {
                 acc[curr] = {

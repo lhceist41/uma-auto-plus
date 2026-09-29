@@ -38,6 +38,9 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
     /** When true, skip the ◎ upgrade of a skill and buy only its ○ form, stretching the budget across more distinct skills. */
     private val skipDoubleCircleUpgrades = SettingsHelper.getBooleanSetting("skills", "skipDoubleCircleUpgrades", false)
 
+    /** When true, the rank objective's career-end tail may buy any skill for rating, not only skills the trainee's running style can activate. */
+    private val careerEndBuyAnySkill = SettingsHelper.getBooleanSetting("skills", "careerEndBuyAnySkill", false)
+
     /** The preferred track distance override for training. */
     private val trainingSettingTrackDistanceString = SettingsHelper.getStringSetting("training", "preferredDistanceOverride")
 
@@ -252,6 +255,26 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     prefStyle in skillInferredStyles
             return distanceOk && surfaceOk && styleOk
         }
+
+        /**
+         * Whether the knapsack tail may buy a skill under [filter] ([careerEndTailFilter]): the full profile,
+         * the running style alone at any distance or surface, or anything.
+         */
+        internal fun knapsackTailAllows(
+            filter: CareerEndTailFilter,
+            skillDistance: TrackDistance?,
+            skillStyle: RunningStyle?,
+            skillInferredStyles: List<RunningStyle>,
+            skillSurface: TrackSurface?,
+            prefDistance: TrackDistance?,
+            prefStyle: RunningStyle?,
+            prefSurface: TrackSurface?,
+        ): Boolean =
+            when (filter) {
+                CareerEndTailFilter.ANY_SKILL -> true
+                CareerEndTailFilter.RUNNING_STYLE -> matchesPreference(skillDistance, skillStyle, skillInferredStyles, skillSurface, null, prefStyle, null)
+                CareerEndTailFilter.PROFILE -> matchesPreference(skillDistance, skillStyle, skillInferredStyles, skillSurface, prefDistance, prefStyle, prefSurface)
+            }
 
         /**
          * Whether a skill may enter the constrained career-end fallback (sparks objective at
@@ -1309,6 +1332,12 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
         // Optimize Skills/Rank; the knapsack is our addition, so extend the same gate here for
         // consistency. A no_preference axis resolves to null and never restricts (default presets unaffected).
         val (preferredRunningStyle, preferredTrackDistance, preferredTrackSurface) = resolvePreferredAxes()
+        val tailFilter = careerEndTailFilter(campaign.skillSpendObjective, sessionEffectiveTrigger, careerEndBuyAnySkill, preferredRunningStyle != null)
+        when (tailFilter) {
+            CareerEndTailFilter.RUNNING_STYLE -> MessageLog.i(TAG, "[KNAPSACK] Career end with the rank objective: the tail may buy $preferredRunningStyle skills at any distance or surface.")
+            CareerEndTailFilter.ANY_SKILL -> MessageLog.i(TAG, "[KNAPSACK] Career end with the rank objective: the tail may buy any skill by rating (setting on).")
+            CareerEndTailFilter.PROFILE -> Unit
+        }
         val available =
             skillList.getAvailableSkills().filterValues { entry ->
                 entry.bIsAvailable &&
@@ -1323,7 +1352,8 @@ class SkillPlan(private val game: Game, private val campaign: Campaign) {
                     // offers the [○, ◎] combo and the DP buys the ◎ — the toggle would no-op on the one
                     // strategy every preset uses at careerComplete.
                     (!skipDoubleCircleUpgrades || !isDoubleCircleUpgrade(entry.name)) &&
-                    matchesPreference(
+                    knapsackTailAllows(
+                        tailFilter,
                         entry.trackDistance,
                         entry.runningStyle,
                         entry.inferredRunningStyles,

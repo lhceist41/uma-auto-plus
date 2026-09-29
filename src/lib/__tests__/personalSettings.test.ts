@@ -38,6 +38,12 @@ describe("PERSONAL_SETTINGS", () => {
         }
     })
 
+    it("does not need the player's career-end skill choice: no preset ships it, so every merge keeps the player's value", () => {
+        for (const preset of characterPresets) {
+            expect((preset.settings as any).skills ?? {}).not.toHaveProperty("careerEndBuyAnySkill")
+        }
+    })
+
     it("never lists the keys a preset must own", () => {
         const listed = new Set(personalPairs().map(([category, key]) => `${category}.${key}`))
         for (const owned of ["general.scenario", "general.enablePopupCheck", "racing.enableRacingPlan", "racing.racingPlan", "skills.skillPointCheck"]) {

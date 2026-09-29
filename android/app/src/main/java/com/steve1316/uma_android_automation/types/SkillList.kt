@@ -69,10 +69,18 @@ private const val MAX_SKILL_SCROLLS = 10
 /**
  * The result of reading the Umamusume Details "Skills" tab.
  *
- * @property skillNames The canonical database names of the trainee's currently-owned skills.
+ * @property skillNames The canonical database names of the trainee's currently-owned skills, without the trainee's own unique.
  * @property uniqueLevel The unique skill's level read from the first cell, or 0 when unread.
+ * @property uniqueName The name read in the unique skill's cell, or null when unread.
  */
-data class DetailsSkillsResult(val skillNames: List<String>, val uniqueLevel: Int)
+data class DetailsSkillsResult(val skillNames: List<String>, val uniqueLevel: Int, val uniqueName: String? = null)
+
+/**
+ * The owned skills without the trainee's own unique. The unique scores through its level bonus; its name
+ * matches the database row of the unique's inherited version, so counting it as an owned skill too scored
+ * it twice (the estimate ran high by exactly that row's value against the game's rating).
+ */
+internal fun ownedSkillsWithoutUnique(names: Collection<String>, uniqueName: String?): List<String> = names.filter { it != uniqueName }
 
 /**
  * Handles all interactions with the skill list screen and manages the [Trainee]'s skill data.
@@ -625,6 +633,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
 
         val ownedNames = LinkedHashSet<String>()
         var uniqueLevel = 0
+        var uniqueName: String? = null
         var emptyPasses = 0
         for (pass in 0..MAX_SKILL_SCROLLS) {
             val bitmap = game.imageUtils.getSourceBitmap()
@@ -632,6 +641,7 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
             for (row in 0 until VISIBLE_SKILL_ROWS) {
                 for (col in 0 until 2) {
                     val name = readDetailsSkillCell(bitmap, row, col, pass) ?: continue
+                    if (pass == 0 && row == 0 && col == 0) uniqueName = name
                     if (ownedNames.add(name)) newFound++
                 }
             }
@@ -643,8 +653,9 @@ class SkillList(private val game: Game, private val campaign: Campaign) {
             scrollSkillsPanel()
         }
 
-        MessageLog.i(TAG, "[INFO] Read ${ownedNames.size} owned skills (unique Lvl $uniqueLevel): ${ownedNames.joinToString(", ")}")
-        return DetailsSkillsResult(ownedNames.toList(), uniqueLevel)
+        val skills = ownedSkillsWithoutUnique(ownedNames, uniqueName)
+        MessageLog.i(TAG, "[INFO] Read ${skills.size} owned skills plus the unique \"${uniqueName ?: "unread"}\" (Lvl $uniqueLevel): ${skills.joinToString(", ")}")
+        return DetailsSkillsResult(skills, uniqueLevel, uniqueName)
     }
 
     /**
