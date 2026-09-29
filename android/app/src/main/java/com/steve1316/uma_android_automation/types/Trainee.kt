@@ -120,7 +120,7 @@ class Trainee {
     }
 
     /** The user-defined preferred track distance override from settings. */
-    private val preferredDistanceOverride: String = SettingsHelper.getStringSetting("training", "preferredDistanceOverride")
+    private var preferredDistanceOverride: String = ""
 
     /** Mapping of [TrackDistance] types to their specific stat target thresholds. */
     private val statTargetsByDistance = mutableMapOf<TrackDistance, Stats>()
@@ -936,11 +936,14 @@ class Trainee {
     }
 
     /**
-     * Sets up stat targets for different race distances by reading values from SQLite settings.
+     * Reads the preferred distance override and the stat targets for every race distance from settings.
      *
-     * These targets are used to determine training priorities based on the expected race distance of the current campaign goal.
+     * Runs at construction and again when a rotation resync swaps in another trainee's settings snapshot mid-career:
+     * both values are preset-owned, so a stale copy would train the career toward the previous trainee's distance and
+     * targets.
      */
     fun setStatTargetsByDistances() {
+        val targets = mutableMapOf<TrackDistance, Stats>()
         for (trackDistance in TrackDistance.entries) {
             val newStats = Stats()
             for (statName in StatName.entries) {
@@ -949,8 +952,22 @@ class Trainee {
                 val target: Int = SettingsHelper.getIntSetting("trainingStatTarget", "training${trackDistanceString}StatTarget_${statNameString}StatTarget")
                 newStats.setStat(statName, target)
             }
-            statTargetsByDistance[trackDistance] = newStats
+            targets[trackDistance] = newStats
         }
+        applyTrainingSettings(SettingsHelper.getStringSetting("training", "preferredDistanceOverride"), targets)
+    }
+
+    /**
+     * Replaces the preset-owned training settings. Everything observed from the screen (name, stats, aptitudes,
+     * fans) is left untouched.
+     *
+     * @param distanceOverride The preferred distance override ("Auto" or empty falls back to the best aptitude).
+     * @param targets Stat targets for each race distance.
+     */
+    internal fun applyTrainingSettings(distanceOverride: String, targets: Map<TrackDistance, Stats>) {
+        preferredDistanceOverride = distanceOverride
+        statTargetsByDistance.clear()
+        statTargetsByDistance.putAll(targets)
     }
 
     /** Logs the trainee's current state in a structured format for the Remote Log Viewer dashboard. */

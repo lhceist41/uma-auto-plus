@@ -1,7 +1,6 @@
 package com.steve1316.uma_android_automation.bot.campaigns
 
 import com.steve1316.automation_library.utils.MessageLog
-import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.Campaign
 import com.steve1316.uma_android_automation.bot.CampaignBreakpointException
 import com.steve1316.uma_android_automation.bot.ConcertSegment
@@ -97,12 +96,12 @@ class GrandConcert(game: Game) : Campaign(game) {
     /** Reads the live Lesson list into telemetry. Never taps - navigation stays here in the campaign. */
     private val lessonReader = GrandConcertLessonReader(game)
 
-    /** The run's own training stat priority, read once the same way the Training class reads it:
-     * same setting key, same empty-list fallback to the enum's declaration order. Threading this into
-     * Lesson scoring is what lets a Stamina- or Guts-focused build outweigh a single-stat
-     * technique that used to be scored purely by the scenario's old Speed/Wit/Power preference. */
-    private val statPriority: List<StatName> =
-        SettingsHelper.getStringArraySetting("training", "statPrioritization").mapNotNull { StatName.fromName(it) }.ifEmpty { StatName.entries }
+    /** The run's own training stat priority, taken from the Training instance so a rotation resync (which
+     * rebuilds Training) also updates it. Threading this into Lesson scoring is what lets a Stamina- or
+     * Guts-focused build outweigh a single-stat technique that used to be scored purely by the scenario's
+     * old Speed/Wit/Power preference. */
+    private val statPriority: List<StatName>
+        get() = training.statPrioritization
 
     /** The committed Grand Concert fan facts (goals, mandatory gates, payout floor), loaded once from
      * the packaged asset. Null when the asset is missing or malformed, which the fan-pressure snapshot

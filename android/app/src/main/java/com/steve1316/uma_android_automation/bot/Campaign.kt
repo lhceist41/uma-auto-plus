@@ -298,6 +298,14 @@ abstract class Campaign(game: Game) : Task(game) {
      * pure config reads whose per-tick caches reset to empty harmlessly.
      */
     private fun reloadTraineeConfig() {
+        // The Trainee object and this Campaign outlive the swap and cache preset-owned settings too:
+        // the distance override and stat targets (read by Training every turn), the summer rest rule,
+        // the mood floor, the skill-spend objective and the skill check threshold.
+        trainee.setStatTargetsByDistances()
+        mustRestBeforeSummer = readMustRestBeforeSummer()
+        moodFloor = readMoodFloor()
+        skillSpendObjective = readSkillSpendObjective()
+        resolvedSkillThreshold = resolveAndLogSkillThreshold()
         training = Training(game, this)
         trainingEvent = TrainingEvent(game, this)
         // Racing and SkillPlan construction-cache career-shaping config too (the curated racing
@@ -556,11 +564,12 @@ abstract class Campaign(game: Game) : Task(game) {
      * Trade-off: stricter floors burn more turns on Recreation/Date and reduce training
      * pixels. Only enable when the trainee actually has the trap event.
      */
-    private val moodFloorString: String = SettingsHelper.getStringSetting("training", "moodFloor", "Good")
+    protected var moodFloor: Mood = readMoodFloor()
+        private set
 
-    /** Resolved Mood enum form of [moodFloorString]. Falls back to GOOD on unrecognized strings. */
-    protected val moodFloor: Mood =
-        when (moodFloorString.lowercase()) {
+    /** Reads the mood floor setting as a [Mood]. Falls back to GOOD on unrecognized strings. */
+    private fun readMoodFloor(): Mood =
+        when (SettingsHelper.getStringSetting("training", "moodFloor", "Good").lowercase()) {
             "normal" -> Mood.NORMAL
             "great" -> Mood.GREAT
             else -> Mood.GOOD
@@ -778,28 +787,38 @@ abstract class Campaign(game: Game) : Task(game) {
     protected val enableStopBeforeFinals: Boolean = SettingsHelper.getBooleanSetting("general", "enableStopBeforeFinals")
 
     /** Whether the bot must rest before Summer. */
-    protected val mustRestBeforeSummer: Boolean = SettingsHelper.getBooleanSetting("training", "mustRestBeforeSummer")
+    protected var mustRestBeforeSummer: Boolean = readMustRestBeforeSummer()
+        private set
+
+    private fun readMustRestBeforeSummer(): Boolean = SettingsHelper.getBooleanSetting("training", "mustRestBeforeSummer")
 
     /** The applied preset's skill-spend objective (Phase 2A). Preset-owned - stamped on every
      * preset apply, so a preset that never set it reads back `rank`, which keeps both dynamic
      * triggers inert and the behavior V1-identical. Manual mode ignores it entirely. */
-    internal val skillSpendObjective: SkillSpendObjective =
+    internal var skillSpendObjective: SkillSpendObjective = readSkillSpendObjective()
+        private set
+
+    private fun readSkillSpendObjective(): SkillSpendObjective =
         SkillSpendObjective.fromPersisted(SettingsHelper.getStringSetting("skills", "skillSpendObjective", "rank"))
 
     /** The resolved skill-spend threshold policy for this career: manual passthrough of
      * `skills.skillPointCheck`, or the account-tier table when adaptive mode is opted in.
-     * Resolved once at construction (settings cannot change mid-career) and logged so every
-     * career states which policy governed it. Deliberately NOT part of the outcome-config
+     * Resolved at construction, and again when a rotation resync swaps in another trainee's
+     * settings mid-career, and logged so every career states which policy governed it. Deliberately NOT part of the outcome-config
      * fingerprint: resolving inside that snapshot would rotate every existing arm and flag
      * phantom [CONFIG_DRIFT] against rotation snapshots, so the skill_spend records carry the
      * resolved threshold/tier/reason instead. */
-    internal val resolvedSkillThreshold: ResolvedSkillThreshold =
+    internal var resolvedSkillThreshold: ResolvedSkillThreshold = resolveAndLogSkillThreshold()
+        private set
+
+    private fun resolveAndLogSkillThreshold(): ResolvedSkillThreshold =
         resolveSkillThresholdFromSettings().also {
             MessageLog.i(TAG, "[SKILLS] Skill spend policy: ${it.reason}; objective: ${skillSpendObjective.token()}.")
         }
 
     /** The number of skill points required to trigger a check. */
-    protected val skillPointsRequired: Int = resolvedSkillThreshold.value
+    protected val skillPointsRequired: Int
+        get() = resolvedSkillThreshold.value
 
     /** Phase 2A per-career trigger state. All instance fields, so a new career resets them
      * naturally - none of this may ever move to the companion. */
@@ -2129,6 +2148,13 @@ abstract class Campaign(game: Game) : Task(game) {
                     "[ROTATION] Resynced onto interrupted career: this career is '$inCareer' (rotation entry #${bestIndex + 1} '$matched', " +
                         "score=${"%.2f".format(bestScore)}) but the queue had loaded the preset for '$target'. Applied the snapshot for " +
                         "'$matched', fast-forwarded the rotation cursor, and rebuilt the training config so the career now runs on her preset.",
+                )
+                val targets = trainee.getStatTargetsByDistance().entries.joinToString(", ") { "${it.key}=${it.value}" }
+                MessageLog.i(
+                    TAG,
+                    "[CONFIG_DRIFT] trainee settings reloaded: distance=${trainee.trackDistance} targets=[$targets] " +
+                        "mustRestBeforeSummer=$mustRestBeforeSummer moodFloor=$moodFloor skillPointCheck=$skillPointsRequired " +
+                        "objective=${skillSpendObjective.token()}",
                 )
                 // Prove the reload landed: the live fingerprint must now equal the resynced slot's.
                 warnOnTraineeConfigDrift(bestIndex, "post-resync verification")

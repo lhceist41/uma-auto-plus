@@ -266,9 +266,10 @@ class TrackblazerShopList(private val game: Game) {
     /** Mapping of shop items to their price, effect, and whether they are allowed for quick usage. */
     val shopItems: Map<String, TrackblazerItemInfo> get() = Companion.shopItems
 
-    /** Items to not purchase from the Shop. */
-    private val excludedItemsString =
-        SettingsHelper.getStringSetting(
+    /** Items to not purchase from the Shop. Read on each use: the list is preset-owned, and a rotation resync
+     * swaps in another trainee's settings mid-career while this object keeps its shop and inventory state. */
+    private val excludedItemsString: String
+        get() = SettingsHelper.getStringSetting(
             "scenarioOverrides",
             "trackblazerExcludedItems",
             "[\"Energy Drink MAX\",\"Energy Drink MAX EX\",\"Yummy Cat Food\",\"Coaching Megaphone\"]",
