@@ -259,6 +259,11 @@ object LabelOnSale : ComponentInterface {
     override val template = Template("components/label/on_sale", region = Region.topHalf)
 }
 
+/** The pink "Used" tag on an "Exchange Complete" row that the game used automatically on purchase. */
+object LabelItemUsed : ComponentInterface {
+    override val template = Template("components/label/item_used", region = Region.rightHalf)
+}
+
 object LabelRivalRacer : ComponentInterface {
     override val template = Template("components/label/rival_racer", region = Region.rightHalf)
 }

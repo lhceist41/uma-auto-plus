@@ -17,6 +17,7 @@ import com.steve1316.uma_android_automation.components.CheckboxDoNotShowAgain
 import com.steve1316.uma_android_automation.components.CheckboxShopItem
 import com.steve1316.uma_android_automation.components.IconDialogScrollListBottomRight
 import com.steve1316.uma_android_automation.components.IconDialogScrollListTopLeft
+import com.steve1316.uma_android_automation.components.LabelItemUsed
 import com.steve1316.uma_android_automation.components.LabelOnSale
 import com.steve1316.uma_android_automation.types.Mood
 import com.steve1316.uma_android_automation.types.StatName
@@ -225,6 +226,25 @@ class TrackblazerShopList(private val game: Game) {
             return next.toMap()
         }
 
+        /**
+         * Splits a purchase by what the "Exchange Complete" rows tagged "Used" showed.
+         *
+         * Only a read name that matches an item bought in this purchase counts, one bought copy per tag, so a
+         * misread never consumes an item that was not bought.
+         *
+         * @param boughtItems Every item bought in this purchase.
+         * @param quickUseItems The bought items the bot uses right away.
+         * @param usedTagNames The names read from the rows tagged "Used".
+         * @return The items the game used, and the quick-use items still to be queued.
+         */
+        internal fun splitAutoUsedPurchase(boughtItems: List<String>, quickUseItems: List<String>, usedTagNames: List<String>): Pair<List<String>, List<String>> {
+            val unclaimed = boughtItems.toMutableList()
+            val autoUsed = usedTagNames.filter { unclaimed.remove(it) }
+            val remaining = quickUseItems.toMutableList()
+            autoUsed.forEach { remaining.remove(it) }
+            return Pair(autoUsed, remaining)
+        }
+
         /** Whether an item list may be scanned: a caller that expects the Training Items dialog must see it first. */
         internal fun canScanItemList(bRequireTrainingItemsDialog: Boolean, bTrainingItemsDialogDetected: Boolean): Boolean {
             return !bRequireTrainingItemsDialog || bTrainingItemsDialogDetected
@@ -312,6 +332,16 @@ class TrackblazerShopList(private val game: Game) {
                 if (refPoint != null && game.debugMode) {
                     MessageLog.d(TAG, "[DEBUG] getShopItemName:: Using plus button as reference for item name detection.")
                 }
+            }
+        }
+
+        if (refPoint == null) {
+            // A row the game used automatically on purchase shows a "Used" tag instead of the plus button,
+            // on the same line and 83 px to its left at 1080 wide.
+            val usedTag = LabelItemUsed.findImageWithBitmap(game.imageUtils, bitmap)
+            if (usedTag != null) {
+                refPoint = Point(usedTag.x + game.imageUtils.relWidth(83), usedTag.y + game.imageUtils.relHeight(6))
+                if (game.debugMode) MessageLog.d(TAG, "[DEBUG] getShopItemName:: Using the Used tag as reference for item name detection.")
             }
         }
 
@@ -580,7 +610,9 @@ class TrackblazerShopList(private val game: Game) {
                 keyExtractor = { entry ->
                     val name = getShopItemName(entry, isEntryDisabled(entry.bitmap))
                     if (name != null) itemNameMapInUse[entry.index] = name
-                    name
+                    // An unreadable row keeps a key by position, so an unmoved list still reads as fully seen
+                    // instead of scanning until the time limit.
+                    name ?: "unread@${entry.bbox.y}"
                 },
             ) { entry ->
                 val isDisabled = isEntryDisabled(entry.bitmap)
@@ -721,6 +753,27 @@ class TrackblazerShopList(private val game: Game) {
                 else -> return false
             }
         return useSpecificItems(listOf(itemName), scannedItems = scannedItems, reason = "Boosting $stat training gains.").isNotEmpty()
+    }
+
+    /**
+     * Reads the names of the "Exchange Complete" rows the game tagged "Used".
+     *
+     * @return The names read, and how many tagged rows could not be read.
+     */
+    fun readUsedTagNames(): Pair<List<String>, Int> {
+        val source = game.imageUtils.getSourceBitmap()
+        val names = mutableListOf<String>()
+        var unreadable = 0
+        for (tag in LabelItemUsed.findAll(game.imageUtils, sourceBitmap = source)) {
+            // One row around the tag: rows are about 204 px apart at 1080x1920.
+            val halfRow = game.imageUtils.relHeight(100)
+            val top = (tag.y.toInt() - halfRow).coerceAtLeast(0)
+            val rowBox = BoundingBox(x = 0, y = top, w = source.width, h = (2 * halfRow).coerceAtMost(source.height - top))
+            val rowBitmap = game.imageUtils.createSafeBitmap(source, rowBox, "UsedTagRow")
+            val name = rowBitmap?.let { getShopItemName(ScrollListEntry(index = names.size + unreadable, bitmap = it, bbox = rowBox)) }
+            if (name != null) names.add(name) else unreadable++
+        }
+        return Pair(names, unreadable)
     }
 
     /**

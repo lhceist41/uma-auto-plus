@@ -52,7 +52,7 @@ class DecisionTraceItemWiringTest {
         assertTrue(Regex("""else if \(confirmAndCloseItemDialog\(itemsUsed\.size\)\) \{\s+itemsUsed\.forEach \{ \(name, _\) ->[\s\S]{0,400}?useInventoryItem\(name\)[\s\S]{0,200}?traceItemsUsed\(itemsUsed\)""").containsMatchIn(trackblazer))
         assertTrue(Regex("""if \(confirmAndCloseItemDialog\(itemsUsed\.size\)\) \{\s+itemsUsed\.forEach \{ \(name, _\) -> useInventoryItem\(name\) \}\s+traceItemsUsed\(itemsUsed\)""").containsMatchIn(trackblazer))
         assertTrue(Regex("""if \(confirmAndCloseItemDialog\(itemsUsedCount\)\) \{\s+traceItemsUsed\(itemsUsedWithReasons\)""").containsMatchIn(trackblazer))
-        assertTrue(Regex("""quickUseItemsOnly\.forEach \{ useInventoryItem\(it\) \}\s+traceItemsUsed\(quickUseItemsOnly\.map""").containsMatchIn(trackblazer))
+        assertTrue(Regex("""autoUsedItems\.forEach \{ useInventoryItem\(it\) \}\s+traceItemsUsed\(autoUsedItems\.map""").containsMatchIn(trackblazer))
         assertEquals(5, Regex("""\btraceItemsUsed\(""").findAll(trackblazer).count() - 1, "one definition plus five call sites")
     }
 

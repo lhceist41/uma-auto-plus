@@ -348,19 +348,30 @@ class Trackblazer(game: Game) : Campaign(game) {
                 val boughtItems = args["itemsBought"] as? List<String> ?: emptyList()
                 val quickUseItemsOnly = boughtItems.filter { shopList.shopItems[it]?.isQuickUsage == true }
 
-                // With the game's "When Exchanging Items from the Pro Shop" auto-use option on, the game uses
-                // these items itself and the dialog shows no item list and no Confirm Use button.
+                // With the game's "When Exchanging Items from the Pro Shop" auto-use option on, the game uses some
+                // items itself and tags their rows "Used"; only those tags count as used, and the rest is queued.
                 val bConfirmUseShown =
                     quickUseItemsOnly.isNotEmpty() &&
-                        (ButtonConfirmUse.check(game.imageUtils) || TrackblazerShopList.awaitDialog({ ButtonConfirmUse.check(game.imageUtils) }, { game.wait(it, skipWaitingForLoading = true) }, polls = 2))
-                if (quickUseItemsOnly.isNotEmpty() && !bConfirmUseShown) {
-                    MessageLog.i(TAG, "[TRACKBLAZER] The game used the quick-use items automatically on exchange: ${quickUseItemsOnly.joinToString(", ")}.")
-                    quickUseItemsOnly.forEach { useInventoryItem(it) }
-                    traceItemsUsed(quickUseItemsOnly.map { it to "Used automatically by the game on exchange." })
+                        (ButtonConfirmUse.check(game.imageUtils) || TrackblazerShopList.awaitDialog({ ButtonConfirmUse.check(game.imageUtils) }, { game.wait(it, skipWaitingForLoading = true) }))
+                val (usedTagNames, unreadableUsedTags) = if (quickUseItemsOnly.isNotEmpty()) shopList.readUsedTagNames() else Pair(emptyList(), 0)
+                val (autoUsedItems, remainingQuickUse) = TrackblazerShopList.splitAutoUsedPurchase(boughtItems, quickUseItemsOnly, usedTagNames)
+                if (autoUsedItems.isNotEmpty()) {
+                    MessageLog.i(TAG, "[TRACKBLAZER] The game used these items automatically on exchange: ${autoUsedItems.joinToString(", ")}.")
+                    autoUsedItems.forEach { useInventoryItem(it) }
+                    traceItemsUsed(autoUsedItems.map { it to "Used automatically by the game on exchange." })
+                }
+                if (unreadableUsedTags > 0) {
+                    MessageLog.w(TAG, "[WARN] handleDialogs:: $unreadableUsedTags row(s) tagged Used could not be read. Their items stay counted as held.")
+                }
+
+                if (quickUseItemsOnly.isNotEmpty() && remainingQuickUse.isEmpty()) {
+                    result.dialog.close(game.imageUtils)
+                } else if (quickUseItemsOnly.isNotEmpty() && !bConfirmUseShown) {
+                    MessageLog.w(TAG, "[WARN] handleDialogs:: The Exchange Complete item list could not be read. Leaving ${remainingQuickUse.joinToString(", ")} counted as held.")
                     result.dialog.close(game.imageUtils)
                 } else if (quickUseItemsOnly.isNotEmpty()) {
                     MessageLog.i(TAG, "[TRACKBLAZER] Quick-use items were purchased. Navigating and queuing for usage...")
-                    val usedItems = shopList.useSpecificItems(quickUseItemsOnly, bUseAll = true, reason = "Quick-use after purchase.")
+                    val usedItems = shopList.useSpecificItems(remainingQuickUse, bUseAll = true, reason = "Quick-use after purchase.")
                     usedItems.forEach { useInventoryItem(it.first) }
                     traceItemsUsed(usedItems)
 
