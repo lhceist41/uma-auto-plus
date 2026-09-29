@@ -76,7 +76,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Known limitations
 
-- **Data Download prompt:** not yet seen on a real patch.
+- **Game data updates:** the Data Download prompt is not yet seen on a real patch. If the game forces a data update in the middle of a career, the bot stops safely: tap Title Screen, then press Start, which begins a new queue from run 1. Any download screens after it are not yet recognised.
 - **Newest support cards:** their training events use the first option for now.
 - **Overlay stop button:** the notification may briefly say "Completed successfully".
 

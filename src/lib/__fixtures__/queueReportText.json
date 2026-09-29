@@ -1228,7 +1228,7 @@
             "text": {
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: the game asked to download additional data, and the bot could not find the prompt's OK button.",
-                "nextAction": "Tap OK on the Data Download prompt in the game and let the download finish, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+                "nextAction": "Answer the game's data prompt (OK, or Title Screen for a data update) and let any download finish, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {
@@ -1243,7 +1243,7 @@
             "text": {
                 "title": "Queue stopped",
                 "reason": "The bot stopped the queue with 1 of 4 runs done: the game asked to download additional data, and the bot could not find the prompt's OK button.",
-                "nextAction": "Tap OK on the Data Download prompt in the game and let the download finish, then press Start in UMA Auto+."
+                "nextAction": "Answer the game's data prompt (OK, or Title Screen for a data update) and let any download finish, then press Start in UMA Auto+."
             }
         },
         {

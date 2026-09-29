@@ -307,7 +307,7 @@ internal val REPORT_REASON_KEYS =
         "DATA_DOWNLOAD_PROMPT" to
             KeyText(
                 "the game asked to download additional data, and the bot could not find the prompt's OK button.",
-                "Tap OK on the Data Download prompt in the game and let the download finish",
+                "Answer the game's data prompt (OK, or Title Screen for a data update) and let any download finish",
             ),
         "SESSION_EXPIRED" to KeyText("the game ended its session and needs to go back to its title screen.", "Tap Title Screen in the game and wait for its home screen"),
         "GAME_UNRECOVERABLE" to KeyText("the game froze on a screen the bot could not recognise, and UMA Auto+ could not close it. $CLOSE_FROZEN_GAME.", null),

@@ -55,7 +55,7 @@ The title screen is recognised only at 1080×1920. Neither recovery has been see
 
 ### 7. The game asked to download additional data
 
-After a game patch the game can ask to download additional data. The bot taps **OK** (never Cancel) and waits, tapping nothing, for up to about 10 minutes for the download to finish, between runs and during a career. This has not been seen on a real patch yet. If the queue stops with a message saying to tap OK in the game, tap OK yourself, let the download finish and press Start again.
+After a game patch the game can ask to download additional data. The bot taps **OK** (never Cancel) and waits, tapping nothing, for up to about 10 minutes for the download to finish, between runs and during a career. This has not been seen on a real patch yet. If the game instead forces a **Data Update** in the middle of a career (its only button is **Title Screen**), the bot stops safely without tapping anything. Tap **Title Screen**, let the game reload and any download finish, then press Start again. If the queue stops asking you to answer the game's data prompt, do the same: tap **OK** or **Title Screen**, let any download finish and press Start again. The stopped queue is not continued: Start begins a new queue from run 1 and first picks up the career in progress. If your rotation mixes scenarios, select that career's trainee and scenario before you press Start.
 
 ### 8. The queue paused after a career
 

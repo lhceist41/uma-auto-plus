@@ -524,7 +524,7 @@ open class DialogHandler(val game: Game) {
      * as dead gestures. Nothing is tapped.
      */
     private fun stopForDataDownloadPrompt(dialog: DialogInterface): Nothing {
-        val reason = "The game asked to download additional data, and the ${dialog.title} prompt's OK button was not found. Tap OK in the game, let the download finish, then press Start again."
+        val reason = "The game asked to download additional data, and the ${dialog.title} prompt's OK button was not found. Answer the prompt in the game (OK, or Title Screen for a data update), let any download finish, then press Start again."
         StartModule.queueStopKey = "DATA_DOWNLOAD_PROMPT"
         StartModule.queueStopReason = reason
         StartModule.queueStopRequested = true
