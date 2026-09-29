@@ -6435,6 +6435,11 @@ class CareerLaunchNavigator(private val context: Context) {
             if (excludedOutfitSeen != null) excludedBannerSeen = banner
         }
 
+        fun isTargetAnchorRead(banner: String): Boolean {
+            if (excludeOutfits.any { TraineeNameMatcher.hasOutfit(banner, it) }) noteExcluded(banner)
+            return TraineeNameMatcher.isTargetBanner(target, banner, excludeOutfits, traineeMatchThreshold)
+        }
+
         val current = readTraineePreviewName()
         val currentExcluded = excludeOutfits.any { TraineeNameMatcher.hasOutfit(current, it) }
         if (currentExcluded) noteExcluded(current)
@@ -6459,7 +6464,7 @@ class CareerLaunchNavigator(private val context: Context) {
         var nearestCell = ""
         val seen = HashSet<String>()
 
-        anchorTraineeGridTop()?.let { return it }
+        anchorTraineeGridTop(::isTargetAnchorRead)?.let { return it }
 
         // Remembered-position jump: the roster order is stable between careers and the page swipe is a
         // fixed-distance drag, so the cell where this trainee was found last time is almost always
@@ -6518,7 +6523,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 )
             }
             MessageLog.i(TAG, "[ROTATION] Remembered position missed (read '$preview'); re-anchoring for the full scan.")
-            anchorTraineeGridTop()?.let { return it }
+            anchorTraineeGridTop(::isTargetAnchorRead)?.let { return it }
         }
 
         // Single top-down pass from the anchored top. Each page swipe is MEASURED (see
@@ -6544,7 +6549,7 @@ class CareerLaunchNavigator(private val context: Context) {
                 )
                 // Re-anchor rather than trusting wherever the first pass left the list: a scan that
                 // ended on an unmeasurable swipe does not know its own scroll position.
-                anchorTraineeGridTop()?.let { return it }
+                anchorTraineeGridTop(::isTargetAnchorRead)?.let { return it }
                 scanBitmap = iu.getSourceBitmap()
                 failedReads = 0
             }
@@ -6773,9 +6778,13 @@ class CareerLaunchNavigator(private val context: Context) {
      * bidirectional scan whose down-swing overshot and skipped a whole row of trainees between
      * pages — see swipeTraineeGrid.)
      *
-     * @return A [TransitionResult.Failed] when the queue was stopped mid-anchor, else null once anchored.
+     * The top-left tap selects that trainee and the preview shows the selection, so a read that
+     * [isTarget] accepts is the same proof the scan advances on: select her and stop here.
+     *
+     * @return [TransitionResult.Continue] after advancing on the target, a [TransitionResult.Failed] when
+     *   the queue was stopped mid-anchor or that Next click failed, else null once anchored.
      */
-    private fun anchorTraineeGridTop(): TransitionResult? {
+    private fun anchorTraineeGridTop(isTarget: (String) -> Boolean): TransitionResult? {
         var prevTop = ""
         for (i in 0..traineeMaxSwipes + 2) {
             if (!BotService.isRunning || StartModule.queueStopRequested) {
@@ -6793,7 +6802,21 @@ class CareerLaunchNavigator(private val context: Context) {
                 "trainee_anchor_top",
             )
             waitSafe(0.8)
-            val top = readTraineePreviewName().lowercase().replace(Regex("[^a-z0-9]"), "")
+            val preview = readTraineePreviewName()
+            if (isTarget(preview)) {
+                MessageLog.i(TAG, "[ROTATION] Anchor landed on the target ('$preview'). Selecting and advancing.")
+                if (ButtonNext.click(iu)) {
+                    markSingleRunTraineeVerified()
+                    waitSafe(2.0)
+                    return TransitionResult.Continue
+                }
+                return TransitionResult.Failed(
+                    reason = "Matched trainee '$preview' while anchoring the roster but the Next click failed.",
+                    transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
+                    recommendedAction = "Manually press Next and restart the queue.",
+                )
+            }
+            val top = preview.lowercase().replace(Regex("[^a-z0-9]"), "")
             if (top.isNotEmpty() && top == prevTop) break // top-left unchanged after a swipe = ceiling.
             prevTop = top
             swipeTraineeGrid(anchorBmp, pageDown = false)

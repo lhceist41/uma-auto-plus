@@ -179,12 +179,21 @@ class SingleRunTraineeGateTest {
         }
 
         @Test
-        fun `each of the three verified-advance points marks verification`() {
+        fun `each of the four verified-advance points marks verification`() {
             assertEquals(
-                3,
+                4,
                 Regex("markSingleRunTraineeVerified\\(\\)").findAll(nav).count() - 1, // minus the definition
-                "the fast path, remembered-position path, and full-scan match each mark verification",
+                "the fast path, the anchor's target read, the remembered-position path, and the full-scan match each mark verification",
             )
+        }
+
+        @Test
+        fun `the anchor marks verification only after its read matched the target`() {
+            val anchor = nav.indexOf("private fun anchorTraineeGridTop(")
+            assertTrue(anchor >= 0)
+            val match = nav.indexOf("if (isTarget(preview))", anchor)
+            val mark = nav.indexOf("markSingleRunTraineeVerified()", anchor)
+            assertTrue(match in anchor until mark, "the name match precedes the Next tap and the verification mark")
         }
 
         @Test

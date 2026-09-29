@@ -150,4 +150,8 @@ object TraineeNameMatcher {
      */
     fun excludedOutfitOf(target: String, banner: String, excludeOutfits: List<String>, threshold: Double): String? =
         excludeOutfits.firstOrNull { hasOutfit(banner, it) }?.takeIf { score(target, banner) >= threshold }
+
+    /** True when the selection [banner] is [target]: a name match at [threshold] that is not one of its [excludeOutfits]. */
+    fun isTargetBanner(target: String, banner: String, excludeOutfits: List<String>, threshold: Double): Boolean =
+        banner.isNotBlank() && excludeOutfits.none { hasOutfit(banner, it) } && score(target, banner) >= threshold
 }

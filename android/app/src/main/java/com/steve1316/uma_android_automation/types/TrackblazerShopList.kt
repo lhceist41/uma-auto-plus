@@ -245,6 +245,16 @@ class TrackblazerShopList(private val game: Game) {
             return Pair(autoUsed, remaining)
         }
 
+        /**
+         * The shop row's name, read at most once per detected entry: the scroll loop asks for a row's key
+         * twice per frame, and an unreadable row (greyed checkbox: unaffordable or already bought) stays unread.
+         */
+        internal fun cachedRowName(cache: MutableMap<Int, String?>, index: Int, read: () -> String?): String? =
+            if (cache.containsKey(index)) cache[index] else read().also { cache[index] = it }
+
+        /** A shop row's scroll key. An unreadable row is keyed by position, so an unmoved frame proves "no new rows". */
+        internal fun shopRowKey(name: String?, rowY: Int): String = name ?: "unread@$rowY"
+
         /** Whether an item list may be scanned: a caller that expects the Training Items dialog must see it first. */
         internal fun canScanItemList(bRequireTrainingItemsDialog: Boolean, bTrainingItemsDialogDetected: Boolean): Boolean {
             return !bRequireTrainingItemsDialog || bTrainingItemsDialogDetected
@@ -290,24 +300,23 @@ class TrackblazerShopList(private val game: Game) {
      * @return True if the scrolling process finished normally, false otherwise.
      */
     fun scrollShop(): Boolean {
-        val itemNameMap = mutableMapOf<Int, String>()
+        val readName = shopRowNameReader()
         return processItemsWithFallback(
-            keyExtractor = { entry ->
-                // Detect the item name for each entry.
-                val name = getShopItemName(entry, isEntryDisabled(entry.bitmap))
-                if (name != null) itemNameMap[entry.index] = name
-                name
-            },
+            keyExtractor = { entry -> shopRowKey(readName(entry), entry.bbox.y) },
         ) { entry ->
-            // Check if the item is buyable or disabled.
-            val isDisabled = isEntryDisabled(entry.bitmap)
-            val itemName = itemNameMap[entry.index] ?: getShopItemName(entry, isDisabled)
+            val itemName = readName(entry)
             if (itemName != null) {
                 val itemPrice = getShopItemPrice(itemName, entry.bitmap)
                 MessageLog.i(TAG, "[INFO] Detected Shop Item: \"$itemName\" with price $itemPrice at index ${entry.index}.")
             }
             false
         }
+    }
+
+    /** A per-pass shop row name reader: see [cachedRowName]. */
+    private fun shopRowNameReader(): (ScrollListEntry) -> String? {
+        val names = HashMap<Int, String?>()
+        return { entry -> cachedRowName(names, entry.index) { getShopItemName(entry, isEntryDisabled(entry.bitmap)) } }
     }
 
     /**
@@ -901,19 +910,13 @@ class TrackblazerShopList(private val game: Game) {
         // Scan the entire shop to log each item and its price, and to identify what is available.
         MessageLog.i(TAG, "[INFO] Beginning process of scanning shop items...")
         val availableInShop = mutableListOf<Triple<String, Int, ScrollListEntry>>()
-        val itemNameMap = mutableMapOf<Int, String>()
+        val readName = shopRowNameReader()
         var totalEntriesDetected = 0
         processItemsWithFallback(
-            keyExtractor = { entry ->
-                val name = getShopItemName(entry, isEntryDisabled(entry.bitmap))
-                if (name != null) itemNameMap[entry.index] = name
-                name
-            },
+            keyExtractor = { entry -> shopRowKey(readName(entry), entry.bbox.y) },
         ) { entry ->
             totalEntriesDetected++
-            // Check if the item's plus button is disabled.
-            val isDisabled = isEntryDisabled(entry.bitmap)
-            val itemName = itemNameMap[entry.index] ?: getShopItemName(entry, isDisabled)
+            val itemName = readName(entry)
             if (itemName != null) {
                 val price = getShopItemPrice(itemName, entry.bitmap)
                 MessageLog.i(TAG, "\t$itemName: $price coins at index ${entry.index}")
@@ -1049,16 +1052,12 @@ class TrackblazerShopList(private val game: Game) {
         // Re-process the list to click on the selected items.
         val itemsBought = mutableListOf<String>()
         val itemsRemainingToClick = itemsToBuy.toMutableList()
-        val itemNameMapInPurchase = mutableMapOf<Int, String>()
+        val readNameInPurchase = shopRowNameReader()
         processItemsWithFallback(
-            keyExtractor = { entry ->
-                val name = getShopItemName(entry, isEntryDisabled(entry.bitmap))
-                if (name != null) itemNameMapInPurchase[entry.index] = name
-                name
-            },
+            keyExtractor = { entry -> shopRowKey(readNameInPurchase(entry), entry.bbox.y) },
         ) { entry ->
             val isDisabled = isEntryDisabled(entry.bitmap)
-            val itemName = itemNameMapInPurchase[entry.index] ?: getShopItemName(entry, isDisabled)
+            val itemName = readNameInPurchase(entry)
 
             if (itemName != null) {
                 // In Force Purchase mode, we stop if we encounter a disabled button, as it means we are out of coins.

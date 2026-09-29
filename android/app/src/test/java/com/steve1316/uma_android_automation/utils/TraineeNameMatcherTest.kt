@@ -265,4 +265,32 @@ class TraineeNameMatcherTest {
             assertNull(TraineeNameMatcher.excludedOutfitOf("Biwa Hayahide", "[Rouge Caroler] Biwa Hayahide", emptyList(), threshold))
         }
     }
+
+    @Nested
+    @DisplayName("isTargetBanner: the anchor's top-left read may select the target")
+    inner class IsTargetBanner {
+        @Test
+        fun `the exact outfit banner, as OCR reads it on the roster, is the target`() {
+            assertTrue(TraineeNameMatcher.isTargetBanner("Agnes Tachyon", "J [tach-nology! Agnes Tachyon", emptyList(), threshold))
+            assertTrue(TraineeNameMatcher.isTargetBanner("[Wild Top Gear] Vodka", "J [Wild Top Gear] Vodka", emptyList(), threshold))
+        }
+
+        @Test
+        fun `an excluded sibling outfit is never the target`() {
+            val excludes = listOf("Kukulkan Warrior")
+            assertFalse(TraineeNameMatcher.isTargetBanner("El Condor Pasa", "[Kukulkan Warrior] El Condor Pasa", excludes, threshold))
+            assertTrue(TraineeNameMatcher.isTargetBanner("El Condor Pasa", "[El☆Número 1] El Condor Pasa", excludes, threshold))
+        }
+
+        @Test
+        fun `the wrong outfit of an outfit-specific target is not the target`() {
+            assertFalse(TraineeNameMatcher.isTargetBanner("[Kukulkan Warrior] El Condor Pasa", "[El☆Número 1] El Condor Pasa", emptyList(), threshold))
+        }
+
+        @Test
+        fun `a blank read or another trainee is not the target`() {
+            assertFalse(TraineeNameMatcher.isTargetBanner("Maruzensky", "", emptyList(), threshold))
+            assertFalse(TraineeNameMatcher.isTargetBanner("Maruzensky", "[RisingFortune] SMatikanefukukitaru", emptyList(), threshold))
+        }
+    }
 }

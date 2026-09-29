@@ -18,6 +18,26 @@ import kotlin.random.Random
  */
 @DisplayName("Trackblazer Shop Purchasing Tests")
 class TrackblazerShopPurchasingTest {
+    @Nested
+    @DisplayName("Shop row name reads and keys")
+    inner class ShopRowReads {
+        @Test
+        fun `each detected row is read once, including an unreadable one`() {
+            val cache = HashMap<Int, String?>()
+            var reads = 0
+            repeat(3) { assertEquals("Stamina Manual", TrackblazerShopList.cachedRowName(cache, 4) { reads++; "Stamina Manual" }) }
+            repeat(3) { assertNull(TrackblazerShopList.cachedRowName(cache, 5) { reads++; null }) }
+            assertEquals(2, reads)
+        }
+
+        @Test
+        fun `a read row is keyed by name and an unreadable row by its position`() {
+            assertEquals("Vita 40", TrackblazerShopList.shopRowKey("Vita 40", 243))
+            assertEquals("unread@243", TrackblazerShopList.shopRowKey(null, 243))
+            assertNotEquals(TrackblazerShopList.shopRowKey(null, 243), TrackblazerShopList.shopRowKey(null, 448))
+        }
+    }
+
     // =========================================================================
     // shopItems database validation
     // =========================================================================

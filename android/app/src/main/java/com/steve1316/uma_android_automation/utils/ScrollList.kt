@@ -68,6 +68,26 @@ internal fun endOfListProven(atTrackBottom: Boolean, foundNewEntries: Boolean, e
     atTrackBottom && !foundNewEntries && entriesDetected
 
 /**
+ * Whether the scrollbar proves the list already rests at its top, so a scroll-to-top swipe would
+ * move nothing. The track must be at least twice the thumb's height: a faint scrollbar can
+ * collapse the track bbox down to the thumb, which would otherwise read as "at top" anywhere.
+ * [tolerancePx] absorbs the +-1-2 px detection jitter.
+ */
+internal fun listProvenAtTop(bar: BoundingBox?, thumb: BoundingBox?, tolerancePx: Int = 3): Boolean =
+    bar != null && thumb != null && bar.h >= 2 * thumb.h && thumb.y - bar.y <= tolerancePx
+
+/**
+ * The number of leading [currentKeys] that repeat the tail of [lastKeys]: the rows this frame
+ * shares with the previous one. A frame whose every key overlaps revealed nothing new.
+ */
+internal fun frameOverlapCount(lastKeys: List<String>, currentKeys: List<String>): Int {
+    for (i in lastKeys.size.coerceAtMost(currentKeys.size) downTo 1) {
+        if (lastKeys.takeLast(i) == currentKeys.take(i)) return i
+    }
+    return 0
+}
+
+/**
  * Whether a pass that just hit its deadline may run ONE more iteration to try to obtain the
  * end-of-list proof. Granted only when the thumb is already at the track bottom (the proof is
  * one frame away) and only once, so a deadline can never be extended indefinitely - it exists
@@ -672,9 +692,14 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
      * @param bitmap Optional source bitmap to use when detecting scrollbar.
      */
     private fun scrollToTop(bitmap: Bitmap? = null, force: Boolean = false) {
-        val bboxThumb: BoundingBox? = getListScrollBarBoundingRegion().second
+        val (bboxBar, bboxThumb) = getListScrollBarBoundingRegion()
         if (!bIsScrollable && !force) {
             MessageLog.d(TAG, "[DEBUG] scrollToTop:: List is not scrollable.")
+            return
+        }
+
+        if (listProvenAtTop(bboxBar, bboxThumb)) {
+            MessageLog.d(TAG, "[DEBUG] scrollToTop:: Thumb already at the track top. Skipping the swipe.")
             return
         }
 
@@ -987,16 +1012,7 @@ class ScrollList private constructor(private val game: Game, private val bboxLis
                 var skipCount = 0
                 if (keyExtractor != null && lastFrameKeys.isNotEmpty()) {
                     val currentFrameKeys = currentFrameEntries.map { keyExtractor(it) ?: "UNKNOWN_${it.index}" }
-
-                    // Find the largest suffix of lastFrameKeys that matches a prefix of currentFrameKeys.
-                    for (i in lastFrameKeys.size.coerceAtMost(currentFrameKeys.size) downTo 1) {
-                        val suffix = lastFrameKeys.takeLast(i)
-                        val prefix = currentFrameKeys.take(i)
-                        if (suffix == prefix) {
-                            skipCount = i
-                            break
-                        }
-                    }
+                    skipCount = frameOverlapCount(lastFrameKeys, currentFrameKeys)
 
                     if (game.debugMode && skipCount > 0) {
                         MessageLog.d(TAG, "[DEBUG] process:: Identified overlap of $skipCount items between frames. Matching sequence: ${currentFrameKeys.take(skipCount).joinToString(", ")}")
