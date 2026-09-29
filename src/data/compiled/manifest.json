@@ -6,7 +6,7 @@
     "skillsSchemaVersion": 1,
     "racesSchemaVersion": 1
   },
-  "fingerprint": "c6f4319e3b04347ce65af613afd055fdfa0d27b5eecb3a9cc7cedd955b765605",
+  "fingerprint": "ea530e7adc622963f1d167f8d690fd8e57cf2d56dae93c14983bfa7d8b5c7864",
   "knownProvenance": {
     "generator": "scripts/data-scraper",
     "recordedSourceVersion": null,
@@ -57,7 +57,7 @@
     {
       "family": "skills",
       "path": "src/data/skills.json",
-      "sha256": "a29815dc235e4c0d6004eb226f64e92684b0bede72419e9f2ad94c893981ed51",
+      "sha256": "a38cfbbcd959e3d69e44af3ea20f654fd1a664746d7ef4336c1e7e2a9f687c0e",
       "recordCount": 697,
       "provenance": {
         "origin": "data-scraper",
@@ -83,17 +83,12 @@
     },
     {
       "path": "src/data/compiled/skills.json",
-      "sha256": "a80e5c9c9c227617509cdb958c600fbcdbe4647c8d161ca628f531135cd16ab7",
+      "sha256": "3e1bbe4a21ca13c38cbafe916d0c8987b334417c606a7b6fc5f449deee588ced",
       "recordCount": 697
     }
   ],
   "validation": {
-    "warnings": [
-      {
-        "code": "chainReferenceUnresolved",
-        "detail": "skill 201211 downgrade -> 201212 references a skill absent from this dataset"
-      }
-    ],
+    "warnings": [],
     "info": [
       {
         "code": "bareRaceNameCollision",

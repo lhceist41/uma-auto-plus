@@ -1408,3 +1408,32 @@ describe("presets for other scenarios leave the Trackblazer settings alone", () 
         expect(shipped).toEqual([])
     })
 })
+
+describe("skill plans resolve against the skill database", () => {
+    const skillList = (Array.isArray(skills) ? skills : Object.values(skills)) as { id: number; name_en: string }[]
+    const knownIds = new Set<number>(skillList.map((s) => s.id))
+
+    it("resolves every skill id planned by any preset", () => {
+        // The bot turns plan ids into names through this database and silently drops an id it cannot find.
+        const unresolved: string[] = []
+        for (const p of characterPresets) {
+            const plans = (p.settings.skills?.plans ?? {}) as Record<string, { plan?: string }>
+            for (const [planKey, plan] of Object.entries(plans)) {
+                for (const id of String(plan.plan ?? "")
+                    .split(",")
+                    .map((x) => x.trim())
+                    .filter(Boolean)
+                    .map(Number)) {
+                    if (!knownIds.has(id)) unresolved.push(`${p.name}|${p.scenario} ${planKey} ${id}`)
+                }
+            }
+        }
+        expect(unresolved).toEqual([])
+    })
+
+    it("keeps the Global Pressure (201212), not a same-named skill Global does not have", () => {
+        const pressure = skillList.filter((s) => s.name_en === "Pressure")
+        expect(pressure.map((s) => s.id)).toEqual([201212])
+        expect(knownIds.has(202542)).toBe(false)
+    })
+})

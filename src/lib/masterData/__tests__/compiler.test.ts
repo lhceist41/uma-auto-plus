@@ -350,8 +350,8 @@ describe("real committed dataset", () => {
         const r = compileMasterData(inputs())
         expect(r.ok).toBe(true)
         expect(r.manifest?.source.map((s) => s.family).sort()).toEqual(["characters", "objectives", "races", "scenarios", "skills", "supports"])
-        // The only warnings on real data are the known dangling downgrade chain references.
-        expect(new Set(r.validation.warnings.map((w) => w.code))).toEqual(new Set(["chainReferenceUnresolved"]))
+        // Real data carries no warnings: every upgrade/downgrade reference resolves.
+        expect(r.validation.warnings).toEqual([])
     })
 
     it("skill IDs are unique and race composite keys are unique (architecture invariants)", () => {
@@ -418,9 +418,9 @@ describe("real committed dataset", () => {
         expect(source?.recordCount).toBe(Object.keys(JSON.parse(bytes.toString("utf8"))).length)
     })
 
-    // Part D: pin the exact unresolved-chain reference set so a second dangling ref cannot pass silently
+    // Part D: pin the exact unresolved-chain reference set so a dangling ref cannot pass silently
     // merely by sharing the warning class. Refs are extracted structurally from the deterministic detail.
-    it("the unresolved-chain warning set is exactly the one known dangling downgrade", () => {
+    it("the real dataset has no unresolved chain reference", () => {
         const r = compileMasterData(inputs())
         const refs = r.validation.warnings
             .filter((w) => w.code === "chainReferenceUnresolved")
@@ -430,10 +430,9 @@ describe("real committed dataset", () => {
                 return `${m[1]}/${m[2]}/${m[3]}`
             })
             .sort()
-        expect(refs).toEqual(["201211/downgrade/201212"])
-        // They stay warnings, and the real compile still succeeds with warning status.
+        expect(refs).toEqual([])
         expect(r.ok).toBe(true)
-        expect(r.exitCode).toBe(1)
+        expect(r.exitCode).toBe(0)
     })
 })
 

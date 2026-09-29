@@ -196,5 +196,52 @@ class ExistsOnGlobalTest(unittest.TestCase):
         self.assertTrue(main.exists_on_global({"unreleased": None}))
 
 
+class SkillNameCollisionTest(unittest.TestCase):
+    """The file is keyed by English name, so two skills sharing a name cannot both be kept.
+
+    Each fixture pairs the colliding skills with a chain partner whose `versions` names one of them, so the tests also
+    prove no upgrade/downgrade link is left pointing at an id that is not in the file.
+    """
+
+    # A Global skill and its higher tier, as GameTora lists them: `versions` names the other ids in the chain.
+    GLOBAL = make_skill(900201, "Pinch", cost=160, versions=[900200])
+    GLOBAL_UPGRADE = make_skill(900200, "Pinch Master", cost=180, versions=[900201])
+    # A same-named skill Global does not have yet, with its own higher tier.
+    ABSENT = make_skill(900301, "Pinch", cost=190, unreleased=["en"], versions=[900300])
+    ABSENT_UPGRADE = make_skill(900300, "Pinch Crown", cost=200, unreleased=["en"], versions=[900301])
+
+    def collision_warnings(self, result):
+        return [r.getMessage() for r in result.records if r.levelno == logging.WARNING and "Skill name collision" in r.getMessage()]
+
+    def test_global_first_keeps_global_and_skips_the_absent_skill(self):
+        result = run_scraper([self.GLOBAL, self.GLOBAL_UPGRADE, self.ABSENT, self.ABSENT_UPGRADE])
+
+        self.assertEqual(900201, result.data["Pinch"]["id"])
+        self.assertEqual(900201, result.data["Pinch Master"]["downgrade"])
+        # The skipped id must not survive as a chain target.
+        self.assertIsNone(result.data["Pinch Crown"]["downgrade"])
+        self.assertEqual(1, len(self.collision_warnings(result)))
+
+    def test_absent_first_is_replaced_by_the_global_skill(self):
+        result = run_scraper([self.ABSENT, self.ABSENT_UPGRADE, self.GLOBAL, self.GLOBAL_UPGRADE])
+
+        self.assertEqual(900201, result.data["Pinch"]["id"])
+        self.assertEqual(900201, result.data["Pinch Master"]["downgrade"])
+        # The replaced id is dropped from the chain lookup, so its old partner no longer points at it.
+        self.assertIsNone(result.data["Pinch Crown"]["downgrade"])
+        self.assertEqual(1, len(self.collision_warnings(result)))
+
+    def test_two_global_skills_keep_the_last_one_with_a_warning(self):
+        first = make_skill(900401, "Twin Step", cost=100, versions=[900400])
+        partner = make_skill(900400, "Twin Step Plus", cost=150, versions=[900401])
+        second = make_skill(900402, "Twin Step", cost=120)
+
+        result = run_scraper([first, partner, second])
+
+        self.assertEqual(900402, result.data["Twin Step"]["id"])
+        self.assertIsNone(result.data["Twin Step Plus"]["downgrade"])
+        self.assertEqual(1, len(self.collision_warnings(result)))
+
+
 if __name__ == "__main__":
     unittest.main()
