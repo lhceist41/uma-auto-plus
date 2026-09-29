@@ -201,6 +201,9 @@ class Trainee {
     /** Reads the stat floor rejected on the Umamusume Details dialog since the career-end handler cleared this. */
     val detailsFloorRejections: MutableMap<StatName, Int> = mutableMapOf()
 
+    /** Stats whose latest Umamusume Details read was not accepted (unusable or held back), so they still hold an older value. */
+    val detailsUnacceptedReads: MutableSet<StatName> = mutableSetOf()
+
     /** The trainee's approximate energy percentage (0-100). */
     var energy: Int = 100
 
@@ -826,7 +829,12 @@ class Trainee {
                 for ((statName, readerValue) in statMapping) {
                     val oldValue = getStat(statName)
                     val newValue = StatMismatchPolicy.trackedReading(readerValue, floorRejected[statName], oldValue)
-                    when (val decision = decideStatUpdate(statName, oldValue, newValue, newValue != readerValue)) {
+                    val decision = decideStatUpdate(statName, oldValue, newValue, newValue != readerValue)
+                    if (isAptitudeDialog) {
+                        val accepted = decision is StatMismatchPolicy.Decision.Accept || decision is StatMismatchPolicy.Decision.Promote
+                        if (accepted) detailsUnacceptedReads.remove(statName) else detailsUnacceptedReads.add(statName)
+                    }
+                    when (decision) {
                         is StatMismatchPolicy.Decision.Discard ->
                             Log.d(TAG, "[DEBUG] updateStats:: Unusable $statName reading ($newValue) via sequential processing; keeping $oldValue.")
                         is StatMismatchPolicy.Decision.Accept -> acceptStat(statName, newValue)

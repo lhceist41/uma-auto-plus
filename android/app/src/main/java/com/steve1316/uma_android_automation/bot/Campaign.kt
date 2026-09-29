@@ -112,6 +112,7 @@ import com.steve1316.uma_android_automation.utils.VeteranIdentityCatalog
 import com.steve1316.uma_scoring.RankAptitudes
 import com.steve1316.uma_scoring.SkillScoreInput
 import com.steve1316.uma_scoring.estimateRank
+import org.json.JSONArray
 import org.json.JSONObject
 import org.opencv.core.Point
 import java.util.concurrent.CountDownLatch
@@ -253,6 +254,9 @@ abstract class Campaign(game: Game) : Task(game) {
      * been spent. Exactly one retry per career: the first large-balance verdict re-opens the
      * Learn screen through the existing entry machinery; the second verdict is terminal. */
     private var careerEndSpendRetryUsed: Boolean = false
+
+    /** Ledger keys of the stats the final Details reads left unaccepted; `[CAREER_END]` reports them as lastKnown. */
+    private var careerEndLastKnownStats: List<String> = emptyList()
 
     /** Fallback nonce, used only when this Campaign is running outside a real career task (the
      * debug harness, or a helper instance) and no career identity was installed at run start.
@@ -4304,6 +4308,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 put("pwr", st.power)
                 put("grt", st.guts)
                 put("wit", st.wit)
+                if (careerEndLastKnownStats.isNotEmpty()) put("lastKnown", JSONArray(careerEndLastKnownStats))
                 put("skillPts", trainee.skillPoints)
                 put("finaleRaces", finaleRaces)
                 put("finaleWins", finaleRaces1st)
@@ -4333,6 +4338,7 @@ abstract class Campaign(game: Game) : Task(game) {
             append(" pwr=").append(st.power)
             append(" grt=").append(st.guts)
             append(" wit=").append(st.wit)
+            if (careerEndLastKnownStats.isNotEmpty()) append(" lastKnown=").append(careerEndLastKnownStats.joinToString(","))
             append(" skillPts=").append(trainee.skillPoints)
             append(" finaleRaces=").append(finaleRaces)
             append(" finaleWins=").append(finaleRaces1st)
@@ -4505,6 +4511,8 @@ abstract class Campaign(game: Game) : Task(game) {
                 // pre-finale values (~+40/stat short of the real result screen). A few retries also
                 // cover a mid-render capture.
                 trainee.detailsFloorRejections.clear()
+                trainee.detailsUnacceptedReads.clear()
+                trainee.detailsUnacceptedReads.addAll(StatName.entries)
                 game.wait(1.0)
                 val buttonLocation = ButtonDetails.find(game.imageUtils, tries = 5).first
                 if (buttonLocation != null) {
@@ -4540,7 +4548,24 @@ abstract class Campaign(game: Game) : Task(game) {
                     MessageLog.w(TAG, "[WARN] process:: Could not find ButtonDetails to perform final updates for the end of the Career.")
                 }
 
-                handleDialogs()
+                val notAccepted =
+                    readCareerEndStats(
+                        read = {
+                            handleDialogs()
+                            trainee.detailsUnacceptedReads.toSet()
+                        },
+                        reopen = { unread ->
+                            MessageLog.i(TAG, "[CAREER_END] The final Details read left ${unread.joinToString { it.name }} without a usable value. Reading once more.")
+                            game.wait(1.0)
+                            val opened = buttonLocation != null && ButtonDetails.click(game.imageUtils)
+                            if (opened) {
+                                // The second read's floor rejections replace the first's.
+                                trainee.detailsFloorRejections.clear()
+                                game.wait(1.0)
+                            }
+                            opened
+                        },
+                    )
 
                 // Re-open the Details dialog to read the owned skills from its Skills tab - the first open was consumed by the standard dialog handler (final stats + aptitudes),
                 // which closes the dialog on its way out. The owned skills and unique level feed the estimated rank below.
@@ -4579,6 +4604,10 @@ abstract class Campaign(game: Game) : Task(game) {
                         trainee.stats.setStat(stat, -1)
                     }
                     trainee.estimatedRank = null
+                }
+                careerEndLastKnownStats = lastKnownLedgerKeys(notAccepted, contradicted.keys)
+                if (careerEndLastKnownStats.isNotEmpty()) {
+                    MessageLog.w(TAG, "[CAREER_END] No usable final read for ${careerEndLastKnownStats.joinToString(",")}; the ledger reports their last-known values as lastKnown.")
                 }
 
                 // Print the final Trainee information.
