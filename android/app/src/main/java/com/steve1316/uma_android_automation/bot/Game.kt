@@ -26,8 +26,11 @@ import com.steve1316.uma_android_automation.bot.campaigns.Trackblazer
 import com.steve1316.uma_android_automation.bot.campaigns.UnityCup
 import com.steve1316.uma_android_automation.bot.campaigns.UraFinale
 import com.steve1316.uma_android_automation.components.ButtonBack
+import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonCompleteCareer
+import com.steve1316.uma_android_automation.components.ButtonLearn
 import com.steve1316.uma_android_automation.components.ButtonLog
+import com.steve1316.uma_android_automation.components.ButtonRaceListFullStats
 import com.steve1316.uma_android_automation.components.ButtonRest
 import com.steve1316.uma_android_automation.components.ButtonSkillListFullStats
 import com.steve1316.uma_android_automation.components.ButtonTraining
@@ -41,6 +44,8 @@ import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.TrainingSelectionProbe
+import com.steve1316.uma_android_automation.utils.grandConcertLessonConfirmationPresent
+import com.steve1316.uma_android_automation.utils.grandConcertLessonListPresent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -677,6 +682,32 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         return TrainingSelectionProbe.isTrainingSelection(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }, bitmap.width, bitmap.height)
     }
 
+    /** The facts [resumeSettleStep] decides on, from one capture. The lesson probes are Grand Concert 1080x1920 only. */
+    private fun readResumeScreen(): ResumeScreen {
+        val bitmap = imageUtils.getSourceBitmap()
+        val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
+        val grandConcertFrame = GrandConcert.isGrandConcert(scenario) && bitmap.width == 1080 && bitmap.height == 1920
+        return ResumeScreen(
+            dialogTitle = if (DialogUtils.check(imageUtils, sourceBitmap = bitmap)) DialogUtils.getTitle(imageUtils, bitmap, logOnMiss = false) else null,
+            grandConcertDialog = grandConcertFrame && grandConcertLessonConfirmationPresent(sampler),
+            grandConcertLessonList = grandConcertFrame && grandConcertLessonListPresent(sampler),
+            raceList = ButtonRaceListFullStats.check(imageUtils, sourceBitmap = bitmap),
+            cancel = ButtonCancel.check(imageUtils, sourceBitmap = bitmap),
+            back = ButtonBack.check(imageUtils, sourceBitmap = bitmap),
+            learn = ButtonLearn.check(imageUtils, sourceBitmap = bitmap),
+        )
+    }
+
+    private fun pressResumeSettle(step: ResumeSettleStep): Boolean {
+        val pressed =
+            when (step.action) {
+                ResumeSettleAction.CANCEL -> ButtonCancel.click(imageUtils)
+                ResumeSettleAction.BACK -> ButtonBack.click(imageUtils)
+            }
+        if (pressed) MessageLog.i(TAG, "[INFO] Bot started on ${step.screen}. Pressed ${step.action.button} so the campaign decides again from the training menu.")
+        return pressed
+    }
+
     /**
      * Checks if the bot is currently on the in-career main screen (a normal training turn OR a
      * mandatory race day). Kept in sync with the CareerLaunchNavigator's ACTIVE_TRAINING_MENU
@@ -1026,7 +1057,9 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         // A stop, crash or restart during the training analysis leaves the career on the Training
         // selection screen, whose Skip pill the navigator would read as the launch Quick Mode prompt
         // (2026-09-27: two pill taps, then body taps until the run failed). The game's Back returns to
-        // the training menu there, as the training handler's own back-out does.
+        // the training menu there, as the training handler's own back-out does. A turn-committing
+        // confirmation or an in-career list is cancelled or backed out of first (ResumeSettle.kt).
+        if (!isMiscTask) settleResumedCareer(::readResumeScreen, ::pressResumeSettle, { wait(1.0) }, ::isOnTrainingMenu)
         val onTrainingSelection = !isMiscTask && isOnTrainingSelection()
         if (onTrainingSelection && backOutOfTrainingSelection(::isOnTrainingSelection, { ButtonBack.click(imageUtils) }, { wait(1.0) }, ::isOnTrainingMenu)) {
             MessageLog.i(TAG, "[INFO] Bot started on the Training selection screen. Pressed Back to return to the training menu.")

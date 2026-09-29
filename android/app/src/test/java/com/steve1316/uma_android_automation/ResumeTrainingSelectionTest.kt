@@ -105,7 +105,8 @@ class ResumeTrainingSelectionTest {
             val navigation = start.indexOf("if (!isMiscTask && !isOnTrainingMenu()) {")
             assertTrue(decide > start.indexOf("runDiagnostic()?.let { return it }"))
             assertTrue(backOut in decide until navigation)
-            assertEquals(1, count(game, "ButtonBack.click("), "no other Back in Game")
+            assertEquals(2, count(game, "ButtonBack.click("), "no other Back in Game than this one and the resume settle's")
+            assertTrue(game.contains("ResumeSettleAction.BACK -> ButtonBack.click(imageUtils)"))
             assertEquals(2, count(game, "backOutOfTrainingSelection("), "its definition and one call")
             assertTrue(game.contains("val bitmap = imageUtils.getSourceBitmap()\n        return TrainingSelectionProbe.isTrainingSelection("))
         }
