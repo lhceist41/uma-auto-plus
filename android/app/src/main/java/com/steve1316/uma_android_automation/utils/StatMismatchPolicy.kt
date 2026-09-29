@@ -63,11 +63,14 @@ object StatMismatchPolicy {
      * @param recordedMismatch the baseline from a previous differing reading, or null when none has
      *   been observed since the last accepted value.
      * @param strikes corroborations the baseline has already collected.
+     * @param contradictsHeld [newValue] is a read the drop floor rejected ([trackedReading]). It is
+     *   never taken at face value, even inside the accept window, and replaces the held value only
+     *   once corroborated like any other mismatch.
      */
-    fun decide(oldValue: Int, newValue: Int, recordedMismatch: Int?, strikes: Int): Decision {
+    fun decide(oldValue: Int, newValue: Int, recordedMismatch: Int?, strikes: Int, contradictsHeld: Boolean = false): Decision {
         // Real stats are always >= 1, so anything below that is a sentinel, never a reading.
         if (newValue < 1) return Decision.Discard
-        if (oldValue <= 0 || abs(newValue - oldValue) < ACCEPT_WINDOW) return Decision.Accept
+        if (!contradictsHeld && (oldValue <= 0 || abs(newValue - oldValue) < ACCEPT_WINDOW)) return Decision.Accept
         if (recordedMismatch == null || abs(newValue - recordedMismatch) >= CONSISTENT_WINDOW) {
             return Decision.Baseline(newValue)
         }
@@ -75,4 +78,14 @@ object StatMismatchPolicy {
         // Sentinels never reach here; Discard above owns them.
         return if (next >= STRIKES_TO_PROMOTE) Decision.Promote(next) else Decision.Hold(next)
     }
+
+    /**
+     * The reading the tracker weighs: the reader's value, or, when the reader returned its sentinel
+     * because the drop floor rejected a read that contradicts [oldValue], that read. Without this a
+     * promoted misread is permanent: the floor measures every true read against it and rejects them
+     * all (WIT held 1391 from turn 9 to 75 while the screen showed 145 to 512, 2026-09-28).
+     * Dropped-digit reads below [StatReadPlausibility.MIN_CONTRADICTING_READ] stay discarded.
+     */
+    fun trackedReading(readerValue: Int, floorRejectedRead: Int?, oldValue: Int): Int =
+        if (readerValue < 1 && floorRejectedRead != null && StatReadPlausibility.contradictsHeldValue(floorRejectedRead, oldValue)) floorRejectedRead else readerValue
 }

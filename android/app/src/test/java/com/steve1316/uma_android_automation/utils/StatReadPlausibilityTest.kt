@@ -145,7 +145,7 @@ class StatReadPlausibilityTest {
             // Live Details reads of 1 against held 122 to 176 happen on most careers.
             assertFalse(StatReadPlausibility.contradictsHeldValue(1, 176))
             assertFalse(StatReadPlausibility.contradictsHeldValue(7, 684))
-            assertFalse(StatReadPlausibility.contradictsHeldValue(StatReadPlausibility.MIN_CONTRADICTING_FINAL_READ - 1, 1391))
+            assertFalse(StatReadPlausibility.contradictsHeldValue(StatReadPlausibility.MIN_CONTRADICTING_READ - 1, 1391))
         }
 
         @Test

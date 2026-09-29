@@ -1286,6 +1286,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @param lastVerified The last verified value of this stat in THIS career, or <= 0 when none
      *   exists yet. Used only to reject implausible drops (see [StatReadPlausibility]); the caller
      *   owns the value, so it resets with the career's [Trainee].
+     * @param floorRejections Receives the read if the floor rejected it, keyed by stat.
      * @return The integer value of the stat, or -1 if detection fails.
      */
     fun determineSingleStatValue(
@@ -1294,6 +1295,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         skillPointsLocation: Point? = null,
         isAptitudeDialog: Boolean = false,
         lastVerified: Int = -1,
+        floorRejections: MutableMap<StatName, Int>? = null,
     ): Int {
         val (finalLocation, finalSourceBitmap) =
             if (sourceBitmap == null && skillPointsLocation == null) {
@@ -1393,6 +1395,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                     "[WARN] determineSingleStatValue:: [STAT_FLOOR] Rejected $statName read of $parsed: more than " +
                         "${StatReadPlausibility.MAX_SINGLE_EVENT_DROP} below the last verified $lastVerified. Keeping $lastVerified.",
                 )
+                floorRejections?.put(statName, parsed)
                 return -1
             }
             return parsed.coerceAtLeast(0)

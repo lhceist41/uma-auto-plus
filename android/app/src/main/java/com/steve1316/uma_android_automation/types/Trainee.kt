@@ -711,9 +711,9 @@ class Trainee {
      * [lastMismatchedValues] means "no baseline observed": the policy must see null, not a number
      * every low misread looks consistent with.
      */
-    private fun decideStatUpdate(statName: StatName, oldValue: Int, newValue: Int): StatMismatchPolicy.Decision {
+    private fun decideStatUpdate(statName: StatName, oldValue: Int, newValue: Int, contradictsHeld: Boolean): StatMismatchPolicy.Decision {
         val recorded = lastMismatchedValues[statName]?.takeIf { it >= 0 }
-        val decision = StatMismatchPolicy.decide(oldValue, newValue, recorded, mismatchCounts[statName] ?: 0)
+        val decision = StatMismatchPolicy.decide(oldValue, newValue, recorded, mismatchCounts[statName] ?: 0, contradictsHeld)
         when (decision) {
             is StatMismatchPolicy.Decision.Baseline -> {
                 mismatchCounts[statName] = 0
@@ -750,6 +750,7 @@ class Trainee {
             val statLatch = externalLatch ?: CountDownLatch(5)
             val waitLatch = CountDownLatch(5) // Internal latch for waiting, regardless of external latch.
             val threadSafeResults = ConcurrentHashMap<StatName, Int>()
+            val floorRejected = ConcurrentHashMap<StatName, Int>()
 
             // Create 5 threads, one for each stat.
             for (statName in StatName.entries) {
@@ -762,7 +763,7 @@ class Trainee {
                         // stats.setStat), and it resets to -1 with this Trainee, which Campaign
                         // rebuilds per career. Read here rather than captured outside the loop
                         // because nothing mutates it until every thread has finished below.
-                        val statValue = imageUtils.determineSingleStatValue(statName, sourceBitmap, skillPointsLocation, isAptitudeDialog, getStat(statName))
+                        val statValue = imageUtils.determineSingleStatValue(statName, sourceBitmap, skillPointsLocation, isAptitudeDialog, getStat(statName), floorRejected)
                         threadSafeResults[statName] = statValue
                     } catch (e: Exception) {
                         Log.e(TAG, "[ERROR] updateStats:: Error processing stat $statName: ${e.stackTraceToString()}")
@@ -783,9 +784,10 @@ class Trainee {
 
             // Update stats with thread-safe results.
             val statMapping = threadSafeResults.toMap()
-            for ((statName, newValue) in statMapping) {
+            for ((statName, readerValue) in statMapping) {
                 val oldValue = getStat(statName)
-                when (val decision = decideStatUpdate(statName, oldValue, newValue)) {
+                val newValue = StatMismatchPolicy.trackedReading(readerValue, floorRejected[statName], oldValue)
+                when (val decision = decideStatUpdate(statName, oldValue, newValue, newValue != readerValue)) {
                     is StatMismatchPolicy.Decision.Discard ->
                         Log.d(TAG, "[DEBUG] updateStats:: Unusable $statName reading ($newValue); keeping $oldValue.")
                     is StatMismatchPolicy.Decision.Accept -> acceptStat(statName, newValue)
@@ -810,18 +812,21 @@ class Trainee {
             // externalLatch for 5 stat-thread decrements; the finally block below contributes them so the
             // caller's await(10s) doesn't block to timeout every turn this path runs.
             try {
+                val floorRejected = mutableMapOf<StatName, Int>()
                 val statMapping: Map<StatName, Int> =
                     imageUtils.determineStatValues(
                         sourceBitmap = null,
                         skillPointsLocation = skillPointsLocation,
                         isAptitudeDialog = isAptitudeDialog,
                         lastVerified = StatName.entries.associateWith { getStat(it) },
-                        floorRejections = if (isAptitudeDialog) detailsFloorRejections else null,
+                        floorRejections = floorRejected,
                     )
+                if (isAptitudeDialog) detailsFloorRejections.putAll(floorRejected)
 
-                for ((statName, newValue) in statMapping) {
+                for ((statName, readerValue) in statMapping) {
                     val oldValue = getStat(statName)
-                    when (val decision = decideStatUpdate(statName, oldValue, newValue)) {
+                    val newValue = StatMismatchPolicy.trackedReading(readerValue, floorRejected[statName], oldValue)
+                    when (val decision = decideStatUpdate(statName, oldValue, newValue, newValue != readerValue)) {
                         is StatMismatchPolicy.Decision.Discard ->
                             Log.d(TAG, "[DEBUG] updateStats:: Unusable $statName reading ($newValue) via sequential processing; keeping $oldValue.")
                         is StatMismatchPolicy.Decision.Accept -> acceptStat(statName, newValue)

@@ -16,7 +16,7 @@ import type { DerivedProtection, ProtectionInventory } from "./protection.ts"
 import { normalizeJoinName, type RosterMatchStatus, type RosterReconciliation } from "./reconcile.ts"
 import { ROSTER_STAT_KEYS, approvedRosterRank, canonicalRosterFingerprint, rosterBindingDigest, type RosterEntryRecord, type RosterSnapshot } from "./roster.ts"
 import { PARENTLAB_RETENTION_SCHEMA, PARENTLAB_RETENTION_SCHEMA_VERSION, type FactorScarcityEntry, type FactorScarcityIndex, type ReplacementDifficulty, type ReplacementSummary, type ScarcityClaim } from "./retentionTypes.ts"
-import type { VeteranLibrary } from "./types.ts"
+import type { Veteran, VeteranLibrary } from "./types.ts"
 
 /**
  * Star floor at which a factor counts as high value for the protection rules.
@@ -295,9 +295,15 @@ export function scarcestClaim(evidence: VeteranEvidence, index: FactorScarcityIn
  */
 export const MIN_HISTORICAL_SAMPLES = 3
 
+/** A final stat below 0 is the bot's "unread" value; such a career has no stat total to rank against. */
+function hasStatTotal(veteran: Veteran): boolean {
+    const s = veteran.result.finalStats
+    return [s.spd, s.sta, s.pwr, s.grt, s.wit].every((v) => v >= 0)
+}
+
 export function replacementSummary(evidence: VeteranEvidence, library: VeteranLibrary | null): ReplacementSummary {
     const character = evidence.entry.character ? normalizeJoinName(evidence.entry.character) : null
-    const samples = character && library ? library.veterans.filter((v) => normalizeJoinName(v.trainee) === character) : []
+    const samples = character && library ? library.veterans.filter((v) => normalizeJoinName(v.trainee) === character && hasStatTotal(v)) : []
     const statTotal = evidence.statTotal
     const unknown = (basis: string): ReplacementSummary => ({
         difficulty: "UNKNOWN" as ReplacementDifficulty,
@@ -311,7 +317,7 @@ export function replacementSummary(evidence: VeteranEvidence, library: VeteranLi
     if (!library) return unknown("no historical library supplied")
     if (!character) return unknown("roster entry has no readable character")
     if (statTotal === null) return unknown("roster entry has an unread stat, so no stat total exists")
-    if (samples.length < MIN_HISTORICAL_SAMPLES) return unknown(`only ${samples.length} historical career(s) for this trainee; below the ${MIN_HISTORICAL_SAMPLES} needed for a band`)
+    if (samples.length < MIN_HISTORICAL_SAMPLES) return unknown(`only ${samples.length} historical career(s) with every stat read for this trainee; below the ${MIN_HISTORICAL_SAMPLES} needed for a band`)
 
     const others = samples.filter((v) => v.veteranId !== evidence.historicalVeteranId)
     const atOrAbove = others.filter((v) => {

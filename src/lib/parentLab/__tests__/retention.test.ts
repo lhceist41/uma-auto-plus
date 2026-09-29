@@ -446,6 +446,20 @@ describe("PL-R2 replacement difficulty", () => {
         expect(summary.basis).toMatch(/below the 3 needed/)
     })
 
+    it("leaves a career with an unread final stat out of the stat-total comparison", () => {
+        // -1 is the bot's unread value; summed as a number it would rank that career below every real one.
+        const known = [
+            career("Taiki_Shuttle", { spd: 900, sta: 700, pwr: 650, grt: 600, wit: 500 }, 100000),
+            career("Taiki_Shuttle", { spd: 890, sta: 690, pwr: 640, grt: 590, wit: 490 }, 100001),
+        ]
+        const unread = career("Taiki_Shuttle", { spd: 900, sta: 700, pwr: 650, grt: 600, wit: -1 }, 100002)
+        const { evidence, library } = build({ entries: [rosterEntry({ scanIndex: 0, rosterFingerprint: "fp-0" })], careers: [...known, unread] })
+        const summary = replacementSummary(evidence.veterans[0], library)
+        expect(summary.historicalSamples).toBe(2)
+        expect(summary.difficulty).toBe("UNKNOWN")
+        expect(summary.basis).toMatch(/every stat read/)
+    })
+
     it("never states the band as a probability", () => {
         const { evidence, library } = build(fullyCoveredTrio(GENERIC_SUBJECT, GENERIC_DOMINATOR))
         const summary = replacementSummary(evidence.veterans[0], library)

@@ -21,8 +21,8 @@ class StatMismatchPolicyTest {
         private var baseline: Int? = null
         private var strikes: Int = 0
 
-        fun read(value: Int): StatMismatchPolicy.Decision {
-            val decision = StatMismatchPolicy.decide(held, value, baseline, strikes)
+        fun read(value: Int, contradictsHeld: Boolean = false): StatMismatchPolicy.Decision {
+            val decision = StatMismatchPolicy.decide(held, value, baseline, strikes, contradictsHeld)
             when (decision) {
                 is StatMismatchPolicy.Decision.Accept -> {
                     held = value
@@ -42,6 +42,14 @@ class StatMismatchPolicyTest {
                 is StatMismatchPolicy.Decision.Discard -> Unit
             }
             return decision
+        }
+
+        /** One raw OCR value through the reader's drop floor and then the tracker, as `updateStats` wires them. */
+        fun screen(raw: Int): StatMismatchPolicy.Decision {
+            val rejected = raw.takeIf { StatReadPlausibility.isImplausibleDrop(it, held) }
+            val readerValue = if (rejected != null) -1 else raw
+            val tracked = StatMismatchPolicy.trackedReading(readerValue, rejected, held)
+            return read(tracked, contradictsHeld = tracked != readerValue)
         }
     }
 
@@ -189,6 +197,104 @@ class StatMismatchPolicyTest {
             // The stale 7 baseline must be gone, so a later 7 records again rather than striking.
             assertTrue(guts.read(7) is StatMismatchPolicy.Decision.Baseline)
             assertEquals(690, guts.held)
+        }
+    }
+
+    @Nested
+    @DisplayName("a held value the floor keeps contradicting")
+    inner class FloorLockTests {
+        @Test
+        fun `the Trackblazer WIT lock recovers after the policy's corroborating reads`() {
+            // 2026-09-28 Mejiro Ryan: 136 read as 1361 three times and was promoted, 139 as 1391 was
+            // accepted, then the floor rejected every true read from 145 to 512 until career end.
+            val wit = Tracker(held = 132)
+            listOf(1361, 1361, 1361, 1391).forEach { wit.screen(it) }
+            assertEquals(1391, wit.held, "the misread is held, as live")
+
+            assertTrue(wit.screen(145) is StatMismatchPolicy.Decision.Baseline)
+            assertTrue(wit.screen(157) is StatMismatchPolicy.Decision.Hold)
+            assertTrue(wit.screen(157) is StatMismatchPolicy.Decision.Promote)
+            assertEquals(157, wit.held)
+
+            for (read in listOf(166, 171, 248, 319, 442, 512)) wit.screen(read)
+            assertEquals(512, wit.held, "normal reads track the true value again")
+        }
+
+        @Test
+        fun `one stray low read is still rejected`() {
+            val guts = Tracker(held = 684)
+            assertTrue(guts.screen(300) is StatMismatchPolicy.Decision.Baseline)
+            assertEquals(684, guts.held)
+            assertTrue(guts.screen(690) is StatMismatchPolicy.Decision.Accept)
+            assertEquals(690, guts.held)
+            assertTrue(guts.screen(300) is StatMismatchPolicy.Decision.Baseline, "the stray's earlier baseline was cleared, so it starts over")
+            assertEquals(690, guts.held)
+        }
+
+        @Test
+        fun `a contradicting read inside the accept window is not taken at face value`() {
+            // 1290 is 101 below 1391: the floor rejects it, and abs(1290 - 1391) is inside the 150 window.
+            val wit = Tracker(held = 1391)
+            assertTrue(wit.screen(1290) is StatMismatchPolicy.Decision.Baseline)
+            assertEquals(1391, wit.held)
+        }
+
+        @Test
+        fun `dropped-digit reads never reach the tracker`() {
+            val guts = Tracker(held = 684)
+            repeat(5) { assertTrue(guts.screen(7) is StatMismatchPolicy.Decision.Discard) }
+            assertTrue(guts.screen(StatReadPlausibility.MIN_CONTRADICTING_READ - 1) is StatMismatchPolicy.Decision.Discard)
+            assertEquals(684, guts.held)
+        }
+
+        @Test
+        fun `a genuine large rise still promotes, and a small change is still accepted`() {
+            val speed = Tracker(held = 132)
+            assertTrue(speed.screen(420) is StatMismatchPolicy.Decision.Baseline)
+            assertTrue(speed.screen(425) is StatMismatchPolicy.Decision.Hold)
+            assertTrue(speed.screen(430) is StatMismatchPolicy.Decision.Promote)
+            assertEquals(430, speed.held)
+            assertTrue(speed.screen(470) is StatMismatchPolicy.Decision.Accept)
+            assertEquals(470, speed.held)
+        }
+
+        @Test
+        fun `a reading the reader kept is passed through unchanged`() {
+            assertEquals(512, StatMismatchPolicy.trackedReading(512, null, 1391))
+            assertEquals(512, StatMismatchPolicy.trackedReading(512, 145, 1391))
+            assertEquals(-1, StatMismatchPolicy.trackedReading(-1, null, 1391))
+            assertEquals(-1, StatMismatchPolicy.trackedReading(-1, 145, -1), "no held value, nothing to contradict")
+        }
+    }
+
+    @Nested
+    @DisplayName("updateStats wiring (source guard)")
+    inner class WiringTests {
+        private val trainee by lazy {
+            var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+            val relative = "android/app/src/main/java/com/steve1316/uma_android_automation/types/Trainee.kt"
+            repeat(8) {
+                val f = java.io.File(dir, relative)
+                if (f.isFile) return@lazy f.readText().replace("\r\n", "\n")
+                dir = dir?.parentFile
+            }
+            throw AssertionError("$relative not found")
+        }
+
+        private fun count(needle: String) = trainee.windowed(needle.length).count { it == needle }
+
+        @Test
+        fun `both branches collect floor rejections and weigh contradicting reads`() {
+            assertTrue(trainee.contains("getStat(statName), floorRejected)"), "threaded reads report floor rejections")
+            assertTrue(trainee.contains("floorRejections = floorRejected,"), "sequential reads report floor rejections")
+            assertEquals(2, count("val newValue = StatMismatchPolicy.trackedReading(readerValue, floorRejected[statName], oldValue)"))
+            assertEquals(2, count("decideStatUpdate(statName, oldValue, newValue, newValue != readerValue)"))
+            assertTrue(trainee.contains("StatMismatchPolicy.decide(oldValue, newValue, recorded, mismatchCounts[statName] ?: 0, contradictsHeld)"))
+        }
+
+        @Test
+        fun `the career-end Details check still sees the dialog's rejections`() {
+            assertTrue(trainee.contains("if (isAptitudeDialog) detailsFloorRejections.putAll(floorRejected)"))
         }
     }
 }
