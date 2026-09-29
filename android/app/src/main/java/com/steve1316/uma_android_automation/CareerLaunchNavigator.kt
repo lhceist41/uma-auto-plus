@@ -167,6 +167,11 @@ data class NavigationResult(
     val screenshotPath: String = "",
     /** Player-safe cause for the queue report, set only where the player can act on it; "" otherwise. */
     val reasonKey: String = "",
+    /** The preset trainee and outfit a [reasonKey] names, taken from the preset roster (never OCR); "" otherwise. */
+    val reasonTrainee: String = "",
+    val reasonOutfit: String = "",
+    /** True when the trainee [reasonKey] names was the rotation's target; false for an applied preset's (Home). */
+    val reasonRotation: Boolean = false,
     /** True when the navigation clicked Resume on Continue Career: a career occupies the game's slot. */
     val careerResumed: Boolean = false,
 )
@@ -1375,6 +1380,9 @@ class CareerLaunchNavigator(private val context: Context) {
                         recommendedAction = transitionResult.recommendedAction,
                         screenshotPath = screenshotPath,
                         reasonKey = transitionResult.reasonKey,
+                        reasonTrainee = transitionResult.reasonTrainee,
+                        reasonOutfit = transitionResult.reasonOutfit,
+                        reasonRotation = transitionResult.reasonRotation,
                     )
                 }
             }
@@ -1929,6 +1937,9 @@ class CareerLaunchNavigator(private val context: Context) {
             val isRecoverable: Boolean = true,
             val recommendedAction: String = "Manually navigate to the in-career training screen and restart the queue.",
             val reasonKey: String = "",
+            val reasonTrainee: String = "",
+            val reasonOutfit: String = "",
+            val reasonRotation: Boolean = false,
         ) : TransitionResult()
     }
 
@@ -6414,8 +6425,19 @@ class CareerLaunchNavigator(private val context: Context) {
         // Fast path: the game pre-highlights the last trainee, so within a trainee's block (no
         // switch) the target is already selected and the preview already reads her name. Confirm it
         // and advance without disturbing the grid - no scan, no risk of changing the selection.
+        // The first sibling-outfit banner of the target's own character that was read and skipped: when
+        // nothing else matches, the player owns her only in an outfit that has its own preset.
+        var excludedOutfitSeen: String? = null
+        var excludedBannerSeen = ""
+        fun noteExcluded(banner: String) {
+            if (excludedOutfitSeen != null) return
+            excludedOutfitSeen = TraineeNameMatcher.excludedOutfitOf(target, banner, excludeOutfits, traineeMatchThreshold)
+            if (excludedOutfitSeen != null) excludedBannerSeen = banner
+        }
+
         val current = readTraineePreviewName()
         val currentExcluded = excludeOutfits.any { TraineeNameMatcher.hasOutfit(current, it) }
+        if (currentExcluded) noteExcluded(current)
         if (!currentExcluded && current.isNotBlank() && TraineeNameMatcher.score(target, current) >= traineeMatchThreshold) {
             MessageLog.i(TAG, "[ROTATION] Target already selected ('$current'). Advancing.")
             if (ButtonNext.click(iu)) {
@@ -6481,6 +6503,7 @@ class CareerLaunchNavigator(private val context: Context) {
             waitSafe(1.0)
             val preview = readTraineePreviewName()
             val previewExcluded = excludeOutfits.any { TraineeNameMatcher.hasOutfit(preview, it) }
+            if (previewExcluded) noteExcluded(preview)
             if (!previewExcluded && preview.isNotBlank() && TraineeNameMatcher.score(target, preview) >= traineeMatchThreshold) {
                 MessageLog.i(TAG, "[ROTATION] Remembered position hit: '$preview'. Selecting and advancing.")
                 if (ButtonNext.click(iu)) {
@@ -6556,6 +6579,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     // would otherwise match an owned outfit ("[Kukulkan Warrior] El Condor Pasa").
                         if (excludeOutfits.any { TraineeNameMatcher.hasOutfit(preview, it) }) {
                             MessageLog.i(TAG, "[ROTATION] Cell ($col,$row): '$preview' is an excluded sibling outfit; skipping.")
+                            noteExcluded(preview)
                             continue
                         }
                         newThisPage++
@@ -6641,6 +6665,29 @@ class CareerLaunchNavigator(private val context: Context) {
         // trainee the scan saw so the next launch starts from jumps, not scans.
         TraineePositionStore.putAll(context, discoveredCells)
 
+        // A plain preset skips its character's outfits that have their own preset. When the roster
+        // read completely and one of those was her, she is owned only in that outfit: say so and name
+        // the preset to apply, instead of calling her absent from the roster.
+        val ownedOutfit = excludedOutfitSeen
+        if (ownedOutfit != null && RosterScanPolicy.onlyExcludedOutfitOwned(failedReads, ownedOutfit, nearestSim, NEAR_NAME_SIMILARITY)) {
+            MessageLog.e(
+                TAG,
+                "[ROTATION] '$target' is on the roster only as '$excludedBannerSeen', an outfit with its own preset, which this " +
+                    "preset skips. Apply the '$target ($ownedOutfit)' preset to run her.",
+            )
+            return TransitionResult.Failed(
+                reason = "Trainee '$target' is on the roster only as '$excludedBannerSeen', which has its own preset; " +
+                    "scanned ${seen.size} unique roster trainee(s). Stopping to avoid running the wrong trainee.",
+                transition = "TRAINEE_SELECT_SCREEN -> LEGACY_SELECT_SCREEN",
+                isRecoverable = true,
+                recommendedAction = "Apply the '$target ($ownedOutfit)' preset (on Home, or for this trainee under Rotate Trainees), then press Start.",
+                reasonKey = "TRAINEE_ONLY_OTHER_OUTFIT",
+                reasonTrainee = target,
+                reasonOutfit = ownedOutfit,
+                reasonRotation = !singleRunMode,
+            )
+        }
+
         // Say which answer this is. A clean scan that missed the target means she is not on the
         // roster; a scan with failed reads means the census is incomplete and "not owned" would be
         // an unsupported claim. The 2026-07-28 halt asserted the former while the latter was true.
@@ -6651,11 +6698,13 @@ class CareerLaunchNavigator(private val context: Context) {
             when {
                 failedReads > 0 ->
                     " WARNING: $failedReads cell(s) never read even after a re-anchored second pass, so this roster read is " +
-                        "INCOMPLETE and does not prove the trainee is unowned."
+                        "INCOMPLETE and does not prove the trainee is unowned." +
+                        (if (ownedOutfit != null) " Her '$excludedBannerSeen' outfit was read and skipped because it has its own preset." else "")
                 nearestSim >= NEAR_NAME_SIMILARITY ->
                     " Every cell read, and the closest was $nearestCell '$nearestLabel' at ${"%.3f".format(nearestSim)} similarity, " +
                         "below the $traineeMatchThreshold match threshold. That is a NAME-MATCHING miss, not proof she is unowned: " +
-                        "check that cell's text against the rotation's inGameName before changing the roster."
+                        "check that cell's text against the rotation's inGameName before changing the roster." +
+                        (if (ownedOutfit != null) " Her '$excludedBannerSeen' outfit was read and skipped because it has its own preset." else "")
                 else ->
                     " Every cell read and nothing on the roster resembles her (closest was '$nearestLabel' at " +
                         "${"%.3f".format(nearestSim)}), so she is genuinely not in the roster."

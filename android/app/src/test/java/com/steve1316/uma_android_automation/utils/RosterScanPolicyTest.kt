@@ -106,4 +106,33 @@ class RosterScanPolicyTest {
             assertNotEquals(old, fixed)
         }
     }
+
+    @Nested
+    @DisplayName("onlyExcludedOutfitOwned")
+    inner class OnlyExcludedOutfitOwned {
+        /** The navigator's NEAR_NAME_SIMILARITY. */
+        private val near = 0.70
+
+        @Test
+        fun `a near-miss name on a non-excluded cell keeps the name-matching diagnosis`() {
+            // She may own both outfits with her plain banner misread just under the match threshold.
+            assertFalse(RosterScanPolicy.onlyExcludedOutfitOwned(failedReads = 0, excludedOutfitSeen = "Rouge Caroler", nearestSimilarity = 0.82, nearNameSimilarity = near))
+            assertFalse(RosterScanPolicy.onlyExcludedOutfitOwned(failedReads = 0, excludedOutfitSeen = "Rouge Caroler", nearestSimilarity = near, nearNameSimilarity = near))
+        }
+
+        @Test
+        fun `a complete read that skipped her other outfit explains the miss`() {
+            assertTrue(RosterScanPolicy.onlyExcludedOutfitOwned(failedReads = 0, excludedOutfitSeen = "Rouge Caroler", nearestSimilarity = 0.5, nearNameSimilarity = near))
+        }
+
+        @Test
+        fun `with no outfit of hers read, the not-found answer stands`() {
+            assertFalse(RosterScanPolicy.onlyExcludedOutfitOwned(failedReads = 0, excludedOutfitSeen = null, nearestSimilarity = 0.5, nearNameSimilarity = near))
+        }
+
+        @Test
+        fun `an incomplete read cannot claim she is owned only in that outfit`() {
+            assertFalse(RosterScanPolicy.onlyExcludedOutfitOwned(failedReads = 2, excludedOutfitSeen = "Rouge Caroler", nearestSimilarity = 0.5, nearNameSimilarity = near))
+        }
+    }
 }

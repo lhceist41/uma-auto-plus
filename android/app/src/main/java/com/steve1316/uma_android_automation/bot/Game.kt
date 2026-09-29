@@ -1067,6 +1067,9 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                     return TaskResult.Error(
                         TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED,
                         "Auto-navigation to training menu failed: ${navResult.failureReason}",
+                        reasonKey = navResult.reasonKey,
+                        reasonTrainee = navResult.reasonTrainee,
+                        reasonOutfit = navResult.reasonOutfit,
                     )
                 }
                 MessageLog.i(TAG, "[INFO] Auto-navigation complete. Bot is now on the training menu.")

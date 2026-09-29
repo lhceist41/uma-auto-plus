@@ -100,6 +100,20 @@ class QueueReportTextTest {
         }
 
         @Test
+        fun `Trainee Select names the owned outfit before it falls back to not found, on both launch paths`() {
+            val nav = source("$main/CareerLaunchNavigator.kt")
+            assertEquals(3, Regex("noteExcluded\\((current|preview)\\)").findAll(nav).count(), "fast path, remembered position and the full scan")
+            val outfit = nav.indexOf("reasonKey = \"TRAINEE_ONLY_OTHER_OUTFIT\"")
+            val gate = nav.indexOf("RosterScanPolicy.onlyExcludedOutfitOwned(failedReads, ownedOutfit, nearestSim, NEAR_NAME_SIMILARITY)")
+            val notFound = nav.indexOf("reasonKey = \"TRAINEE_NOT_FOUND\"")
+            assertTrue(gate in 0 until outfit && outfit < notFound, "gate, then the outfit halt, then not found")
+            assertTrue(nav.contains("reasonRotation = !singleRunMode,"), "the halt says whether its target came from the rotation")
+            assertEquals(3, Regex("ledger\\.reasonRotation = navResult\\.reasonRotation").findAll(source("$main/StartModule.kt")).count(), "every navigation halt records it")
+            assertTrue(source("$main/bot/Game.kt").contains("reasonKey = navResult.reasonKey,"), "a single run's navigation key reaches its result")
+            assertTrue(source("$main/StartModule.kt").contains("if (!enableRunQueue && runError != null && runError.reasonKey.isNotEmpty())"), "and its report")
+        }
+
+        @Test
         fun `the mapped keys are exactly the keys the bot sets`() {
             val set = mutableSetOf<String>()
             set += Regex("reasonKey = \"(\\w+)\"").findAll(source("$main/CareerLaunchNavigator.kt")).map { it.groupValues[1] }

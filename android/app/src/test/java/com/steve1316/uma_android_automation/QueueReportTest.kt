@@ -424,6 +424,53 @@ class QueueReportTest {
         }
 
         @Test
+        fun `the trainee and outfit a key names ride only with that key, on an ending a key explains`() {
+            val l =
+                ledger(queueEnabled = true).apply {
+                    haltEnd = SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS
+                    reasonKey = "TRAINEE_ONLY_OTHER_OUTFIT"
+                    reasonTrainee = "Biwa Hayahide"
+                    reasonOutfit = "Rouge Caroler"
+                }
+            val nav = l.report(classifySessionEnd(l.facts(false, false, true, true)), 5L).toJson()
+            assertEquals("Biwa Hayahide", nav.getString("reasonTrainee"))
+            assertEquals("Rouge Caroler", nav.getString("reasonOutfit"))
+
+            l.haltEnd = SessionEnd.BREAKPOINT
+            val bp = l.report(classifySessionEnd(l.facts(false, false, true, true)), 5L).toJson()
+            assertFalse(bp.has("reasonTrainee") || bp.has("reasonOutfit"), "the names never ride on another ending")
+
+            assertFalse(nav.has("reasonRotation"), "an applied preset's target (rotation off) writes no rotation flag")
+            l.haltEnd = SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS
+            l.reasonRotation = true
+            val rotated = l.report(classifySessionEnd(l.facts(false, false, true, true)), 5L).toJson()
+            assertTrue(rotated.getBoolean("reasonRotation"))
+            assertTrue(queueReportText(rotated).nextAction!!.startsWith("Pick the Biwa Hayahide (Rouge Caroler) preset for this trainee under Rotate Trainees"))
+            assertTrue(queueReportText(nav).nextAction!!.startsWith("Apply the Biwa Hayahide (Rouge Caroler) preset on Home"))
+
+            val plain = ledger(queueEnabled = true).apply { haltEnd = SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS; reasonKey = "REQUIRED_DECK"; reasonRotation = true }
+            val plainJson = plain.report(classifySessionEnd(plain.facts(false, false, true, true)), 5L).toJson()
+            assertFalse(plainJson.has("reasonTrainee") || plainJson.has("reasonOutfit") || plainJson.has("reasonRotation"), "a key that names nobody adds no fields")
+        }
+
+        @Test
+        fun `a single run carries its own launch navigation's key, so its card names the fix`() {
+            val l =
+                ledger(queueEnabled = false).apply {
+                    reasonKey = "TRAINEE_ONLY_OTHER_OUTFIT"
+                    reasonTrainee = "Biwa Hayahide"
+                    reasonOutfit = "Rouge Caroler"
+                }
+            l.addRun(RunRecord(1, 1_100L, 2_000L, "TASK_RESULT_QUEUE_NAVIGATION_FAILED", null, null, null, null))
+            val report = l.report(classifySessionEnd(l.facts(stopRequested = false, stopByBot = false, serviceRunning = true, queueStateActive = false)), 2_100L)
+            assertEquals(SessionEnd.SINGLE_RUN_ENDED, report.kind)
+            assertEquals("TRAINEE_ONLY_OTHER_OUTFIT", report.reasonKey)
+            val text = queueReportText(report.toJson())
+            assertEquals("The run stopped at Trainee Select: Biwa Hayahide is on your roster only as Rouge Caroler, which has its own preset.", text.reason)
+            assertEquals("Apply the Biwa Hayahide (Rouge Caroler) preset on Home, then press Start in UMA Auto+.", text.nextAction)
+        }
+
+        @Test
         fun `a dead session's report is built from the same snapshot the session kept open`() {
             val l =
                 ledger(queueEnabled = true).apply {

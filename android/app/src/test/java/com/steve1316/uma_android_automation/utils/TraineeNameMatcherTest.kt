@@ -241,4 +241,28 @@ class TraineeNameMatcherTest {
             assertFalse(excludes.any { TraineeNameMatcher.hasOutfit(baseBanner, it) }, "base banner should be kept for the base target")
         }
     }
+
+    @Nested
+    @DisplayName("excludedOutfitOf: her own outfit that the plain preset skips")
+    inner class ExcludedOutfitOf {
+        private val threshold = 0.86
+        private val excludes = listOf("Rouge Caroler")
+
+        @Test
+        fun `names the exclusion list's own title when the skipped banner is her other outfit`() {
+            assertEquals("Rouge Caroler", TraineeNameMatcher.excludedOutfitOf("Biwa Hayahide", "[Rouge Caroler] Biwa Hayahide", excludes, threshold))
+            assertEquals("Rouge Caroler", TraineeNameMatcher.excludedOutfitOf("Biwa Hayahide", "Rouge Caroler Biwa Hayahide", excludes, threshold))
+        }
+
+        @Test
+        fun `a different character wearing a same-titled outfit is not her other outfit`() {
+            assertNull(TraineeNameMatcher.excludedOutfitOf("Biwa Hayahide", "[Rouge Caroler] Gold Ship", excludes, threshold))
+        }
+
+        @Test
+        fun `a banner the list does not exclude is not an excluded outfit`() {
+            assertNull(TraineeNameMatcher.excludedOutfitOf("Biwa Hayahide", "[pf. Winning Equation...] Biwa Hayahide", excludes, threshold))
+            assertNull(TraineeNameMatcher.excludedOutfitOf("Biwa Hayahide", "[Rouge Caroler] Biwa Hayahide", emptyList(), threshold))
+        }
+    }
 }

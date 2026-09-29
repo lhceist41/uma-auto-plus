@@ -74,10 +74,10 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
             val summary = if (done >= total) (if (total == 1) "The run is done." else "All $total runs are done.") else "$done of ${runs(total)} are done."
             ReportText(if (done >= total) "Queue finished" else "Queue ended", summary + errorSentence(r), null)
         }
-        SessionEnd.SINGLE_RUN_ENDED -> singleRunText(lastCode)
+        SessionEnd.SINGLE_RUN_ENDED -> if (key == ONLY_OTHER_OUTFIT) singleRunOutfitText(r) else singleRunText(lastCode)
         SessionEnd.STOPPED_BY_USER -> ReportText("Queue stopped", "You stopped the queue with $done of ${runs(total)} done." + errorSentence(r), null)
         SessionEnd.STOPPED_BY_BOT -> {
-            val why = keyText(key)
+            val why = keyText(key, r)
             ReportText("Queue stopped", "The bot stopped the queue with $done of ${runs(total)} done: ${why.reason}" + errorSentence(r), why.next(false))
         }
         SessionEnd.SERVICE_ENDED ->
@@ -105,7 +105,7 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
                 "Then ${pressStart(resumable)}",
             )
         SessionEnd.RUN_HALTED -> {
-            val why = keyText(key)
+            val why = keyText(key, r)
             ReportText(haltTitle(resumable), "The queue stopped during run $reached of $total: ${why.reason}", why.next(resumable))
         }
         SessionEnd.STOPPED_AFTER_CAREER ->
@@ -127,11 +127,11 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
                 pressStart(resumable).replaceFirstChar { it.uppercase() } + " Start prepares the rotation's trainee setups before launching.",
             )
         SessionEnd.LAUNCH_FAILED_BEFORE_RUN -> {
-            val why = keyText(key)
+            val why = keyText(key, r)
             ReportText(haltTitle(resumable), "The queue stopped before run ${reached + 1} of $total: ${why.reason}", why.next(resumable))
         }
         SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS -> {
-            val why = keyText(key)
+            val why = keyText(key, r)
             ReportText(haltTitle(resumable), "The queue stopped after run $reached of $total: ${why.reason}", why.next(resumable))
         }
         SessionEnd.WAIT_INTERRUPTED ->
@@ -299,6 +299,11 @@ internal val REPORT_REASON_KEYS =
         "CAPTURE_OR_ACCESSIBILITY" to KeyText("the bot lost screen capture or its accessibility service.", "Check that both are on"),
         "STUCK_ON_SCREEN" to STUCK_TEXT,
         "TRAINEE_NOT_FOUND" to KeyText("the next trainee in the rotation was not found on the trainee list.", "Check the rotation list, or pick the trainee by hand"),
+        ONLY_OTHER_OUTFIT to
+            KeyText(
+                "the next trainee is on the trainee list only in an outfit that has its own preset.",
+                "Apply that outfit's own preset on Home, or pick it for this trainee under Rotate Trainees in Run Queue Settings",
+            ),
         "NAVIGATION_TIMEOUT" to KeyText("getting to the next career took too long.", "Check that the game is responding"),
         "NAVIGATION_UNRESPONSIVE" to KeyText("getting to the next career stopped responding.", "Check that the game is responding"),
         "TRAINEE_MISMATCH" to KeyText("the trainee in the career was not the one the rotation expected.", "Check the rotation list, return the game to its home screen"),
@@ -327,7 +332,37 @@ private const val CLOSE_FROZEN_GAME = "Close the game fully (swipe it away in Re
 
 private val STUCK_TEXT get() = KeyText("it reached a screen it could not get past.", "Open the game and clear the screen it stopped on")
 
-private fun keyText(key: String): KeyText = REPORT_REASON_KEYS[key] ?: STUCK_TEXT
+private fun keyText(key: String, r: JSONObject): KeyText =
+    namedOutfit(key, r)?.let { (trainee, outfit) ->
+        // A rotation's trainee is fixed in its rotation row; a queue without rotation runs the preset applied on Home.
+        val fix =
+            if (r.optBoolean("reasonRotation")) {
+                "Pick the $trainee ($outfit) preset for this trainee under Rotate Trainees in Run Queue Settings"
+            } else {
+                "Apply the $trainee ($outfit) preset on Home"
+            }
+        KeyText("$trainee is on your roster only as $outfit, which has its own preset.", fix)
+    } ?: REPORT_REASON_KEYS[key] ?: STUCK_TEXT
+
+/** Set when Trainee Select found the trainee only in an outfit her plain preset skips; the report names both. */
+private const val ONLY_OTHER_OUTFIT = "TRAINEE_ONLY_OTHER_OUTFIT"
+
+/** The preset trainee and outfit an [ONLY_OTHER_OUTFIT] report names, or null for any other key or a report without them. */
+private fun namedOutfit(key: String, r: JSONObject): Pair<String, String>? {
+    if (key != ONLY_OTHER_OUTFIT) return null
+    val trainee = r.optString("reasonTrainee").trim()
+    val outfit = r.optString("reasonOutfit").trim()
+    return if (trainee.isEmpty() || outfit.isEmpty()) null else trainee to outfit
+}
+
+/** A single run stops at Trainee Select before anything is spent; its fix is on Home, not in a rotation. */
+private fun singleRunOutfitText(r: JSONObject): ReportText {
+    val named = namedOutfit(ONLY_OTHER_OUTFIT, r)
+    val why =
+        named?.let { (trainee, outfit) -> KeyText("$trainee is on your roster only as $outfit, which has its own preset.", "Apply the $trainee ($outfit) preset on Home") }
+            ?: KeyText("the trainee is on the trainee list only in an outfit that has its own preset.", "Apply that outfit's own preset on Home")
+    return ReportText("Run stopped", "The run stopped at Trainee Select: ${why.reason}", why.next(false))
+}
 
 private const val OPEN_APP_AND_START = "Open UMA Auto+, press Start, then tap the overlay button."
 

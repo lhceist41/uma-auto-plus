@@ -379,6 +379,64 @@
             }
         },
         {
+            "name": "single run: trainee owned only in another outfit",
+            "report": {
+                "kind": "SINGLE_RUN_ENDED",
+                "totalRuns": 1,
+                "reasonKey": "TRAINEE_ONLY_OTHER_OUTFIT",
+                "reasonTrainee": "Biwa Hayahide",
+                "reasonOutfit": "Rouge Caroler",
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_QUEUE_NAVIGATION_FAILED"
+                    }
+                ]
+            },
+            "text": {
+                "title": "Run stopped",
+                "reason": "The run stopped at Trainee Select: Biwa Hayahide is on your roster only as Rouge Caroler, which has its own preset.",
+                "nextAction": "Apply the Biwa Hayahide (Rouge Caroler) preset on Home, then press Start in UMA Auto+."
+            }
+        },
+        {
+            "name": "single run: trainee owned only in another outfit, without the names",
+            "report": {
+                "kind": "SINGLE_RUN_ENDED",
+                "totalRuns": 1,
+                "reasonKey": "TRAINEE_ONLY_OTHER_OUTFIT",
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_QUEUE_NAVIGATION_FAILED"
+                    }
+                ]
+            },
+            "text": {
+                "title": "Run stopped",
+                "reason": "The run stopped at Trainee Select: the trainee is on the trainee list only in an outfit that has its own preset.",
+                "nextAction": "Apply that outfit's own preset on Home, then press Start in UMA Auto+."
+            }
+        },
+        {
+            "name": "single run: launch navigation failed without a key",
+            "report": {
+                "kind": "SINGLE_RUN_ENDED",
+                "totalRuns": 1,
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_QUEUE_NAVIGATION_FAILED"
+                    }
+                ]
+            },
+            "text": {
+                "title": "Run ended with an error",
+                "reason": "The run ended with an unexpected error.",
+                "nextAction": "Open the game and check it, then press Start in UMA Auto+."
+            }
+        },
+        {
             "name": "stopped by the player",
             "report": {
                 "kind": "STOPPED_BY_USER",
@@ -1165,6 +1223,96 @@
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: the next trainee in the rotation was not found on the trainee list.",
                 "nextAction": "Check the rotation list, or pick the trainee by hand, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "between runs: TRAINEE_ONLY_OTHER_OUTFIT",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "TRAINEE_ONLY_OTHER_OUTFIT",
+                "reasonTrainee": "Biwa Hayahide",
+                "reasonOutfit": "Rouge Caroler",
+                "reasonRotation": true
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: Biwa Hayahide is on your roster only as Rouge Caroler, which has its own preset.",
+                "nextAction": "Pick the Biwa Hayahide (Rouge Caroler) preset for this trainee under Rotate Trainees in Run Queue Settings, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "launch failed before the first run: TRAINEE_ONLY_OTHER_OUTFIT",
+            "report": {
+                "kind": "LAUNCH_FAILED_BEFORE_RUN",
+                "queueEnabled": true,
+                "totalRuns": 3,
+                "runReached": 0,
+                "resumable": false,
+                "reasonKey": "TRAINEE_ONLY_OTHER_OUTFIT",
+                "reasonTrainee": "Mihono Bourbon",
+                "reasonOutfit": "CODE: ICING",
+                "reasonRotation": true
+            },
+            "text": {
+                "title": "Queue stopped",
+                "reason": "The queue stopped before run 1 of 3: Mihono Bourbon is on your roster only as CODE: ICING, which has its own preset.",
+                "nextAction": "Pick the Mihono Bourbon (CODE: ICING) preset for this trainee under Rotate Trainees in Run Queue Settings, then press Start in UMA Auto+."
+            }
+        },
+        {
+            "name": "between runs: TRAINEE_ONLY_OTHER_OUTFIT without the names",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "TRAINEE_ONLY_OTHER_OUTFIT"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: the next trainee is on the trainee list only in an outfit that has its own preset.",
+                "nextAction": "Apply that outfit's own preset on Home, or pick it for this trainee under Rotate Trainees in Run Queue Settings, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "launch failed before the first run: TRAINEE_ONLY_OTHER_OUTFIT, rotation off",
+            "report": {
+                "kind": "LAUNCH_FAILED_BEFORE_RUN",
+                "queueEnabled": true,
+                "totalRuns": 3,
+                "runReached": 0,
+                "resumable": false,
+                "reasonKey": "TRAINEE_ONLY_OTHER_OUTFIT",
+                "reasonTrainee": "Biwa Hayahide",
+                "reasonOutfit": "Rouge Caroler"
+            },
+            "text": {
+                "title": "Queue stopped",
+                "reason": "The queue stopped before run 1 of 3: Biwa Hayahide is on your roster only as Rouge Caroler, which has its own preset.",
+                "nextAction": "Apply the Biwa Hayahide (Rouge Caroler) preset on Home, then press Start in UMA Auto+."
+            }
+        },
+        {
+            "name": "between runs: TRAINEE_ONLY_OTHER_OUTFIT, rotation off",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "TRAINEE_ONLY_OTHER_OUTFIT",
+                "reasonTrainee": "Mihono Bourbon",
+                "reasonOutfit": "CODE: ICING"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: Mihono Bourbon is on your roster only as CODE: ICING, which has its own preset.",
+                "nextAction": "Apply the Mihono Bourbon (CODE: ICING) preset on Home, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {

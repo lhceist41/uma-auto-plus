@@ -56,4 +56,14 @@ object RosterScanPolicy {
      * find it, and paying a second 90-second pass to confirm that helps nobody.
      */
     fun needsSecondPass(failedReads: Int, passIndex: Int): Boolean = failedReads > 0 && passIndex == 0
+
+    /**
+     * Whether a not-found scan is explained by the target owning only an outfit her preset skips.
+     *
+     * Only on a complete read with no near-miss name: with a failed cell the plain outfit may simply not
+     * have been read, and a non-excluded cell at or above [nearNameSimilarity] may be her plain outfit
+     * misread, so "she is on the roster only as that outfit" would be an unsupported claim either way.
+     */
+    fun onlyExcludedOutfitOwned(failedReads: Int, excludedOutfitSeen: String?, nearestSimilarity: Double, nearNameSimilarity: Double): Boolean =
+        failedReads == 0 && excludedOutfitSeen != null && nearestSimilarity < nearNameSimilarity
 }

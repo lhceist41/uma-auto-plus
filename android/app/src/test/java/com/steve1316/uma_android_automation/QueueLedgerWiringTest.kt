@@ -358,6 +358,7 @@ class QueueLedgerWiringTest {
                     "BORROW_NEEDS_HAND",
                     "TRAINEE_IN_DECK",
                     "TRAINEE_NOT_FOUND",
+                    "TRAINEE_ONLY_OTHER_OUTFIT",
                     "GAME_UNRECOVERABLE",
                 ),
                 keys,

@@ -322,6 +322,11 @@ internal data class QueueReport(
     val recoveries: JSONObject,
     val tpRestores: JSONArray,
     val exitInfo: JSONObject?,
+    /** The preset trainee and outfit [reasonKey] names, only for a key that names them; null otherwise. */
+    val reasonTrainee: String? = null,
+    val reasonOutfit: String? = null,
+    /** True when the named trainee was a rotation's target, so the fix is in the rotation; written only when true. */
+    val reasonRotation: Boolean = false,
 ) {
     fun toJson(): JSONObject =
         JSONObject()
@@ -346,6 +351,9 @@ internal data class QueueReport(
             .put("recoveries", recoveries)
             .put("tpRestores", tpRestores)
             .put("exitInfo", exitInfo ?: JSONObject.NULL)
+            .apply { reasonTrainee?.let { put("reasonTrainee", it) } }
+            .apply { reasonOutfit?.let { put("reasonOutfit", it) } }
+            .apply { if (reasonRotation) put("reasonRotation", true) }
 
     /** The history line appended to the ledger file. */
     fun ledgerLine(): String = toJson().toString()
@@ -401,6 +409,14 @@ internal class SessionLedger(val sessionId: String, val startedAt: Long, val app
 
     /** The navigation `reasonKey` of a failed launch, or the bot's own stop key. */
     @Volatile var reasonKey = ""
+
+    /** The preset trainee and outfit the navigation [reasonKey] names, or "". */
+    @Volatile var reasonTrainee = ""
+
+    @Volatile var reasonOutfit = ""
+
+    /** Whether the trainee the navigation [reasonKey] names came from the rotation (else an applied preset). */
+    @Volatile var reasonRotation = false
 
     /** Whether the last run ended by posting an ExceptionEvent (splits an error from an overlay Stop). */
     @Volatile var errorPosted = false
@@ -488,11 +504,17 @@ internal class SessionLedger(val sessionId: String, val startedAt: Long, val app
             recoveries = SessionTally.recoveriesJson(),
             tpRestores = SessionTally.tpRestoresJson(),
             exitInfo = null,
+            reasonTrainee = reasonTrainee.takeIf { verdict.end in ENDINGS_WITH_REASON_KEY && reasonKey.isNotEmpty() && it.isNotEmpty() },
+            reasonOutfit = reasonOutfit.takeIf { verdict.end in ENDINGS_WITH_REASON_KEY && reasonKey.isNotEmpty() && it.isNotEmpty() },
+            reasonRotation = reasonRotation && verdict.end in ENDINGS_WITH_REASON_KEY && reasonKey.isNotEmpty() && reasonTrainee.isNotEmpty() && reasonOutfit.isNotEmpty(),
         )
 }
 
-/** The endings a reason key explains: the two navigation failures, and the bot's own stop. */
-private val ENDINGS_WITH_REASON_KEY = setOf(SessionEnd.LAUNCH_FAILED_BEFORE_RUN, SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS, SessionEnd.STOPPED_BY_BOT)
+/**
+ * The endings a reason key explains: the two navigation failures, a single run's own launch
+ * navigation failing, and the bot's own stop.
+ */
+private val ENDINGS_WITH_REASON_KEY = setOf(SessionEnd.LAUNCH_FAILED_BEFORE_RUN, SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS, SessionEnd.SINGLE_RUN_ENDED, SessionEnd.STOPPED_BY_BOT)
 
 internal fun runRecordJson(r: RunRecord): JSONObject =
     JSONObject()

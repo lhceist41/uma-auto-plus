@@ -64,8 +64,17 @@ sealed interface TaskResult {
      *
      * @property code The [TaskResultCode] associated with the result.
      * @property message A descriptive message about the error.
+     * @property reasonKey A single run's launch-navigation reason key for its report, or "".
+     * @property reasonTrainee The preset trainee [reasonKey] names, or "".
+     * @property reasonOutfit The preset outfit [reasonKey] names, or "".
      */
-    data class Error(override val code: TaskResultCode = TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION, override val message: String = "Task completed with errors.") : TaskResult
+    data class Error(
+        override val code: TaskResultCode = TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
+        override val message: String = "Task completed with errors.",
+        val reasonKey: String = "",
+        val reasonTrainee: String = "",
+        val reasonOutfit: String = "",
+    ) : TaskResult
 }
 
 /**

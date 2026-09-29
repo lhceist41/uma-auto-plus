@@ -141,4 +141,13 @@ object TraineeNameMatcher {
         if (n.isEmpty()) return false
         return (" " + normalize(banner) + " ").contains(" $n ")
     }
+
+    /**
+     * The entry of [excludeOutfits] that [banner] shows, when the banner's name is [target]'s own
+     * character; null otherwise. Returns the list's own title, never the OCR text, so it is safe to
+     * name in player-facing words. The name check keeps a different character who happens to share
+     * an outfit title from counting as the target's other outfit.
+     */
+    fun excludedOutfitOf(target: String, banner: String, excludeOutfits: List<String>, threshold: Double): String? =
+        excludeOutfits.firstOrNull { hasOutfit(banner, it) }?.takeIf { score(target, banner) >= threshold }
 }

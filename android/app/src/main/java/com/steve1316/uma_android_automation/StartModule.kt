@@ -2158,6 +2158,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 queueHaltReason = "cold-start career launch failed before run $startFromRun: ${navResult.failureReason}"
                                 ledger.haltEnd = SessionEnd.LAUNCH_FAILED_BEFORE_RUN
                                 ledger.reasonKey = navResult.reasonKey
+                                ledger.reasonTrainee = navResult.reasonTrainee
+                                ledger.reasonOutfit = navResult.reasonOutfit
+                                ledger.reasonRotation = navResult.reasonRotation
                                 queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                                 queueHaltRun = startFromRun - 1
                                 queueHaltCareerInFlight = resumeReEntersCareer || navResult.careerResumed
@@ -2287,6 +2290,13 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             }
                             else -> result
                         }
+                    // A single run's launch navigation reports why it stopped, as a queue's navigation does.
+                    val runError = effectiveResult as? TaskResult.Error
+                    if (!enableRunQueue && runError != null && runError.reasonKey.isNotEmpty()) {
+                        ledger.reasonKey = runError.reasonKey
+                        ledger.reasonTrainee = runError.reasonTrainee
+                        ledger.reasonOutfit = runError.reasonOutfit
+                    }
                     val runCareerEndSeq = recordRun(ledger, i, runStartedAt, careerEndSeqBeforeRun, effectiveResult.code, retried)
 
                     if (enableRunQueue) {
@@ -2472,6 +2482,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                         queueHaltReason = "career-end navigation failed after run $i: ${navResult.failureReason}"
                                         ledger.haltEnd = SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS
                                         ledger.reasonKey = navResult.reasonKey
+                                        ledger.reasonTrainee = navResult.reasonTrainee
+                                        ledger.reasonOutfit = navResult.reasonOutfit
+                                        ledger.reasonRotation = navResult.reasonRotation
                                         queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                                         queueHaltRun = i
                                         queueHaltCareerInFlight = false
@@ -2541,6 +2554,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                     queueHaltReason = "between-run navigation failed after run $i: ${navResult.failureReason}"
                                     ledger.haltEnd = SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS
                                     ledger.reasonKey = navResult.reasonKey
+                                    ledger.reasonTrainee = navResult.reasonTrainee
+                                    ledger.reasonOutfit = navResult.reasonOutfit
+                                    ledger.reasonRotation = navResult.reasonRotation
                                     queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
                                     queueHaltRun = i
                                     queueHaltCareerInFlight = !careerFinished || navResult.careerResumed
