@@ -335,28 +335,8 @@ class GrandConcertLessonsTest {
     }
 
     @Nested
-    @DisplayName("generic-screen guards and Global terms")
-    inner class Guards {
-        @Test
-        fun `every lesson and concert screen requires the manual handoff`() {
-            for (s in listOf(LessonScreen.LESSON_LIST, LessonScreen.LEARN_CONFIRMATION, LessonScreen.SCHEDULE_CONFIRMATION, LessonScreen.SCHEDULING_COMPLETE, LessonScreen.CONCERT_INFO)) {
-                assertTrue(LessonScreenGuard.requiresHandoff(s), "$s must be guarded")
-            }
-        }
-
-        @Test
-        fun `the career screen and unknown are not force-guarded here`() {
-            assertFalse(LessonScreenGuard.requiresHandoff(LessonScreen.CAREER))
-            assertFalse(LessonScreenGuard.requiresHandoff(LessonScreen.UNKNOWN))
-        }
-
-        @Test
-        fun `concert info routes to the concert handoff, the rest to the lesson-shop handoff`() {
-            assertEquals(GrandConcertHandoffReason.CONCERT_NOT_AUTOMATED, LessonScreenGuard.handoffReason(LessonScreen.CONCERT_INFO))
-            assertEquals(GrandConcertHandoffReason.LESSON_SHOP_NOT_AUTOMATED, LessonScreenGuard.handoffReason(LessonScreen.LESSON_LIST))
-            assertEquals(GrandConcertHandoffReason.LESSON_SHOP_NOT_AUTOMATED, LessonScreenGuard.handoffReason(LessonScreen.SCHEDULE_CONFIRMATION))
-        }
-
+    @DisplayName("Global terms")
+    inner class GlobalTerms {
         @Test
         fun `the fifth performance type is Composure on Global`() {
             assertEquals("Composure", PerformancePointType.COMPOSURE.displayName)

@@ -1196,9 +1196,9 @@ button is detected in all four states -- `LOCKED` / `UNLOCKED` / `UNLOCKED_SCHED
 while learning is the only transition that applies effects, and a scheduled song is never counted
 toward a concert's song target.
 
-`LessonScreenGuard` still routes any lesson or concert screen the campaign itself is not driving to
-the manual handoff, so a generic Confirm/Close/Next/OK handler can never act on one. The campaign
-acts first on the screens it owns; the guard catches everything else.
+Only the spend loop presses Learn, after its verify-before-Learn check. A lesson Learn dialog carries
+the skill list's "Confirmation" title and its Cancel and Learn buttons, so the shared dialog handler
+tells them apart by the lesson dialog's technique or song pill and cancels a lesson dialog it meets.
 
 **Titles are matched against a catalog, not trusted from OCR.** Song and technique effect text
 garbles badly on the list (mastery and concert lines worse than titles), so identity comes from a

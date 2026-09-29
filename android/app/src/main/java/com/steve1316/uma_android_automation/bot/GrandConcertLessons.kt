@@ -6,40 +6,13 @@ package com.steve1316.uma_android_automation.bot
  * lifecycle, the Concert Info screen, and the Hype model.
  *
  * Every type here is total, Android-free, and JUnit-pinned against the 2026-07-23 launch-night
- * captures (fixtures/grandconcert/PROVENANCE.md). Nothing here taps. The screen-family guard at
- * the bottom is the safety spine: it exists so a generic Confirm/Close/Next/OK handler can never
- * act on a lesson or concert screen, all of which route to the manual handoff instead.
+ * captures (fixtures/grandconcert/PROVENANCE.md). Nothing here taps.
  *
  * The distinction the whole file protects is scheduling vs learning. Scheduling a card is free and
  * inert - it queues nothing, spends nothing, and changes no counter - while learning is the only
  * transition that applies effects. Conflating the two would let the bot believe it had banked a
  * song's stat gain, concert bonus, and hype when it had merely reserved it.
  */
-
-/** Which Grand Concert screen family is on-screen, for the generic-handler guard. Detection reads
- * the header text live; the pixel probes corroborate. */
-enum class LessonScreen {
-    /** Career main screen (the Lessons button lives here). Not a lesson screen itself. */
-    CAREER,
-
-    /** The three-card lesson list ("Select a technique or song to learn."). */
-    LESSON_LIST,
-
-    /** "Confirmation": the learn dialog (affordable), with Cancel / Learn. */
-    LEARN_CONFIRMATION,
-
-    /** "Schedule": the schedule dialog (unaffordable), with Cancel / Schedule. */
-    SCHEDULE_CONFIRMATION,
-
-    /** "Scheduling Complete": the post-schedule acknowledgement, Close only. */
-    SCHEDULING_COMPLETE,
-
-    /** "Concert Info": the hype / bonus / set-list summary, Close only. */
-    CONCERT_INFO,
-
-    /** Could not be identified. */
-    UNKNOWN,
-}
 
 /** A five-type performance-point vector (costs, balances, or "points left over" which can go
  * negative). A null component means "not readable". */
@@ -339,30 +312,4 @@ data class HypeState(
 
     /** A learned song is the only thing that moves applied hype and the learned count. */
     fun afterLearningSong(): HypeState = copy(appliedIncrease = true, learnedSongs = learnedSongs + 1, previewedIncrease = false)
-}
-
-/**
- * The safety guard: which screens a generic Confirm/Close/Next/OK handler must NOT act on, and
- * which handoff reason they route to. Every lesson and concert screen is guarded, because a stray
- * generic tap on any of them can spend performance points, dismiss a choice, or skip a concert.
- */
-object LessonScreenGuard {
-    /** True when the generic post-run navigation handlers must not touch this screen. */
-    fun requiresHandoff(screen: LessonScreen): Boolean =
-        when (screen) {
-            LessonScreen.LESSON_LIST,
-            LessonScreen.LEARN_CONFIRMATION,
-            LessonScreen.SCHEDULE_CONFIRMATION,
-            LessonScreen.SCHEDULING_COMPLETE,
-            LessonScreen.CONCERT_INFO,
-            -> true
-            LessonScreen.CAREER, LessonScreen.UNKNOWN -> false
-        }
-
-    /** The handoff reason for a guarded screen. */
-    fun handoffReason(screen: LessonScreen): GrandConcertHandoffReason =
-        when (screen) {
-            LessonScreen.CONCERT_INFO -> GrandConcertHandoffReason.CONCERT_NOT_AUTOMATED
-            else -> GrandConcertHandoffReason.LESSON_SHOP_NOT_AUTOMATED
-        }
 }

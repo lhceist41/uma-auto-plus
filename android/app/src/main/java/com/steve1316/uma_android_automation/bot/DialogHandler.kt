@@ -8,6 +8,7 @@ import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.SessionTally
 import com.steve1316.uma_android_automation.StartModule
+import com.steve1316.uma_android_automation.bot.campaigns.GrandConcert
 import com.steve1316.uma_android_automation.components.ButtonOk
 import com.steve1316.uma_android_automation.components.ButtonRaceRecommendationsCenterStage
 import com.steve1316.uma_android_automation.components.ButtonRetry
@@ -20,6 +21,8 @@ import com.steve1316.uma_android_automation.components.RadioCareerQuickShortenAl
 import com.steve1316.uma_android_automation.components.RadioPortrait
 import com.steve1316.uma_android_automation.types.BoundingBox
 import com.steve1316.uma_android_automation.types.RaceGrade
+import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.grandConcertLessonConfirmationPresent
 import org.opencv.core.Point
 
 /** Represents the result of a dialog handling operation. */
@@ -472,6 +475,14 @@ open class DialogHandler(val game: Game) {
 
             // Skill List Dialogs.
             "skill_list_confirmation" -> {
+                // A Grand Concert lesson Learn dialog has this title and these buttons. Only the lesson
+                // spend loop, after its verify-before-Learn gate, may press its Learn.
+                if (grandConcertLessonConfirmationShowing()) {
+                    MessageLog.w(TAG, "[GRAND_CONCERT] A lesson Learn dialog reached the generic dialog handler. Cancelling it; only the lesson spend loop learns.")
+                    dialog.close(game.imageUtils)
+                    game.wait(0.8)
+                    return DialogHandlerResult.Handled(dialog)
+                }
                 dialog.ok(game.imageUtils)
 
                 // This dialog takes longer to close than others. Add an extra delay to make sure we don't skip anything.
@@ -516,6 +527,13 @@ open class DialogHandler(val game: Game) {
         dataDownloadOkMisses = 0
         game.dataDownloadAcceptedAtMs = SystemClock.elapsedRealtime()
         MessageLog.i(TAG, "[DIALOG] ${dialog.title}: tapped OK. Waiting up to ${Game.LOADING_HARD_LIMIT_MS / 60_000} minutes for the game data, tapping nothing.")
+    }
+
+    private fun grandConcertLessonConfirmationShowing(): Boolean {
+        if (!GrandConcert.isGrandConcert(game.scenario)) return false
+        val bitmap = game.imageUtils.getSourceBitmap()
+        if (bitmap.width != 1080 || bitmap.height != 1920) return false
+        return grandConcertLessonConfirmationPresent(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })
     }
 
     /**

@@ -155,14 +155,14 @@ class GrandConcertScenarioTest {
 
         @Test
         fun `the player message names the screen, the preservation, and the resume path`() {
-            val msg = GrandConcertHandoff(GrandConcertHandoffReason.LESSON_SHOP_NOT_AUTOMATED).playerMessage()
+            val msg = GrandConcertHandoff(GrandConcertHandoffReason.CONCERT_NOT_AUTOMATED).playerMessage()
             assertTrue(msg.contains("career is preserved", ignoreCase = true), msg)
             assertTrue(msg.contains("press Start to resume", ignoreCase = true), msg)
         }
 
         @Test
         fun `repeated handoffs are independent and carry no accumulated state`() {
-            val a = GrandConcertHandoff(GrandConcertHandoffReason.LESSON_SHOP_NOT_AUTOMATED, "turn 5")
+            val a = GrandConcertHandoff(GrandConcertHandoffReason.UNRECOGNIZED_SCENARIO_SCREEN, "turn 5")
             val b = GrandConcertHandoff(GrandConcertHandoffReason.CONCERT_NOT_AUTOMATED, "turn 24")
             assertTrue(a.preservesCareer && b.preservesCareer)
             assertFalse(a.permitsGameRelaunch || b.permitsGameRelaunch)

@@ -307,6 +307,8 @@ object GrandConcertLessonGeometry {
      * grandConcertScheduleShortfallPresent. Measured on the 2026-07-24 song-confirm capture. */
     val CONFIRM_TITLE_OCR_REGION = intArrayOf(90, 150, 660, 70)
     val CONFIRM_KIND_PILL_OCR_REGION = intArrayOf(760, 150, 250, 60)
+    const val CONFIRM_KIND_PILL_X = 885
+    const val CONFIRM_KIND_PILL_Y = 180
 
     /** The two confirmation buttons: the green Learn/Schedule (bottom-right) and Cancel (bottom-left). */
     const val CONFIRM_AFFIRMATIVE_X = 775
@@ -344,6 +346,15 @@ fun grandConcertLessonListPresent(sampler: SparkPixelSampler): Boolean {
 fun grandConcertDialogHeaderPresent(sampler: SparkPixelSampler): Boolean {
     val (r, g, b) = mean(sampler, GrandConcertLessonGeometry.HEADER_GREEN_X, GrandConcertLessonGeometry.HEADER_TOP_Y)
     return isLessonDialogGreen(r, g, b)
+}
+
+/** True when a lesson Learn or Schedule dialog is up: the dialog header plus its technique or song kind
+ * pill. The skill list's Learn "Confirmation" has the same header, title, Cancel and Learn, but a grey
+ * row under the pill, measured (241, 241, 241) against (150, 219, 70) and (171, 130, 245). */
+fun grandConcertLessonConfirmationPresent(sampler: SparkPixelSampler): Boolean {
+    if (!grandConcertDialogHeaderPresent(sampler)) return false
+    val (r, g, b) = mean(sampler, GrandConcertLessonGeometry.CONFIRM_KIND_PILL_X, GrandConcertLessonGeometry.CONFIRM_KIND_PILL_Y)
+    return maxOf(r, g, b) - minOf(r, g, b) >= 60
 }
 
 /** True when the "Scheduling Complete" dialog is up: the green header sits mid-screen (a smaller

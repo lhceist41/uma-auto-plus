@@ -901,7 +901,6 @@ data class GrandConcertLessonReport(
  */
 enum class GrandConcertHandoffReason(val playerText: String) {
     UNRECOGNIZED_SCENARIO_SCREEN("Grand Concert needs manual input on this screen."),
-    LESSON_SHOP_NOT_AUTOMATED("The Lesson shop is not automated yet."),
     CONCERT_NOT_AUTOMATED("Concert screens are not automated yet."),
     QUICK_MODE_UNCONFIGURED("Quick Mode has not been configured in UMA Auto+."),
     QUICK_MODE_UNREADABLE("The Quick Mode dialog could not be read reliably."),
