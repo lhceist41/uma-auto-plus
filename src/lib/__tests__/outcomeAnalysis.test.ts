@@ -264,6 +264,29 @@ describe("a stop the bot requested itself", () => {
     })
 })
 
+describe("a career whose final stat was reported at its last-known value", () => {
+    const LAST_KNOWN_LINE =
+        "11:45:15.563 [INFO] [CAREER_END] result=COMPLETE outcome=COMPLETED trainee=Taiki_Shuttle scenario=URA_Finale turn=75 fans=73595 spd=1110 sta=358 pwr=1213 grt=258 wit=324 lastKnown=spd,pwr skillPts=397 quality=COMPLETED"
+
+    it("parses lastKnown from the ledger line, and a line without it has none", () => {
+        expect(parseLedgerLine(LAST_KNOWN_LINE)?.lastKnown).toEqual(["spd", "pwr"])
+        expect(parseLedgerLine(MODERN_LINE)?.lastKnown).toBeUndefined()
+    })
+
+    it("parses lastKnown from careers.jsonl", () => {
+        const [parsed] = parseJsonl(
+            '{"result":"COMPLETE","outcome":"COMPLETED","trainee":"Taiki_Shuttle","scenario":"URA_Finale","turn":75,"fans":73595,"spd":1110,"sta":358,"pwr":1213,"grt":258,"wit":324,"lastKnown":["spd","pwr"],"skillPts":397}',
+        )
+        expect(parsed.lastKnown).toEqual(["spd", "pwr"])
+    })
+
+    it("leaves a last-known value out of that stat's median only", () => {
+        const [summary] = aggregate([record({ pwr: 700 }), record({ pwr: 1213, spd: 1110, lastKnown: ["pwr"] }), record({ pwr: 800 })])
+        expect(summary.medianStats.pwr).toBe(700)
+        expect(summary.medianStats.spd).toBe(900)
+    })
+})
+
 describe("dedupe", () => {
     it("drops the log copy of a career that also exists as a corpus record", () => {
         const jsonl = record({ source: "jsonl", app: "1.3.6", fp: "aaaaaaaaaa" })

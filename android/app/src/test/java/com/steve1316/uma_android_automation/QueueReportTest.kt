@@ -277,6 +277,29 @@ class QueueReportTest {
         }
 
         @Test
+        fun `a stat the career end could only report at its last-known value is marked, and nothing else is`() {
+            val lastKnown = careerResultAtEnd("COMPLETED", "A", 10757, 221054, 3, 3, listOf(1248, 508, 1213, 395, 438), listOf("pwr"))!!
+            assertEquals(listOf("power"), lastKnown.lastKnownStats)
+            assertEquals(1213, lastKnown.finalStats!![2], "the value stays, marked")
+            assertEquals(emptyList<String>(), careerResultAtEnd("COMPLETED", "A", 10757, 221054, 3, 3, listOf(1248, 508, 816, 395, 438))!!.lastKnownStats)
+            val unread = careerResultAtEnd("COMPLETED", "A", 10757, 221054, 3, 3, listOf(1248, -1, 816, 395, 438), listOf("sta", "bogus", "spd"))!!
+            assertEquals(listOf("speed"), unread.lastKnownStats, "an unread stat shows no value, and an unknown key is ignored")
+        }
+
+        @Test
+        fun `the run record lists last-known stats only when there are some, and reads back unchanged`() {
+            val base = RunRecord(1, 1_100L, 2_000L, "TASK_RESULT_COMPLETE", "El_Condor_Pasa", "URA_Finale", "COMPLETED", 75)
+            assertFalse(runRecordJson(base.copy(result = finished)).has("lastKnownStats"), "additive: absent for a fully read career")
+            val marked = base.copy(result = finished.copy(lastKnownStats = listOf("speed", "power")))
+            val json = runRecordJson(marked)
+            assertEquals(listOf("speed", "power"), (0 until json.getJSONArray("lastKnownStats").length()).map { json.getJSONArray("lastKnownStats").getString(it) })
+            assertEquals(1248, json.getJSONObject("finalStats").getInt("speed"), "finalStats keeps its keys and values")
+            val stored = JSONObject(open(JSONArray().put(json)).toString())
+            val run = processEndedReport(stored, null, null, resumable = false).toJson().getJSONArray("runs").getJSONObject(0)
+            assertEquals(canonical(JSONObject(json.toString())), canonical(run))
+        }
+
+        @Test
         fun `spark types follow the bot's rows, and a white is a skill only when the catalog knew it`() {
             fun type(
                 kind: SparkRowKind,

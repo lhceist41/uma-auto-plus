@@ -94,6 +94,20 @@ class StatusBoardTest {
     }
 
     @Test
+    fun `a run marks its last-known final stats, and only then carries the key`() {
+        StatusBoard.reset(900L)
+        val marked = record(1, "TASK_RESULT_COMPLETE", "El_Condor_Pasa").copy(result = CareerResult("UG4", 18432, 221054, 2, 3, listOf(1248, 500, 1213, 395, 438), listOf("power")))
+        StatusBoard.runRecorded(marked)
+        StatusBoard.runRecorded(record(2, "TASK_RESULT_COMPLETE", "El_Condor_Pasa").copy(result = CareerResult("UG4", 18432, 221054, 2, 3, listOf(1248, 500, 816, 395, 438))))
+        StatusBoard.queueProgress(2, 3, "completed", "{}", 1_000L)
+        val runs = status().getJSONArray("runs")
+        val lastKnown = runs.getJSONObject(0).getJSONArray("lastKnownStats")
+        assertEquals(listOf("power"), (0 until lastKnown.length()).map { lastKnown.getString(it) })
+        assertEquals(1213, runs.getJSONObject(0).getJSONObject("finalStats").getInt("power"), "the value stays, marked")
+        assertFalse(runs.getJSONObject(1).has("lastKnownStats"), "a fully read career adds no key")
+    }
+
+    @Test
     fun `a finished run carries its result and, once read, its kept sparks, with the contract's names and types`() {
         StatusBoard.reset(900L)
         val result = CareerResult("UG4", 18432, 221054, 2, 3, listOf(1248, null, 816, 395, 438))

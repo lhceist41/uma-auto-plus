@@ -40,6 +40,8 @@ export interface OutcomeRecord {
     pwr: number
     grt: number
     wit: number
+    /** Ledger keys (spd, sta, pwr, grt, wit) whose value is the last one the bot accepted, not a final read; absent when every stat was read. */
+    lastKnown?: string[]
     skillPts: number
     /** Finale races entered (URA finale only today; undefined on records predating the feature). */
     finaleRaces?: number
@@ -154,6 +156,7 @@ export function parseLedgerLine(line: string, file?: string): OutcomeRecord | nu
         pwr: toInt(fields.pwr),
         grt: toInt(fields.grt),
         wit: toInt(fields.wit),
+        lastKnown: fields.lastKnown ? fields.lastKnown.split(",") : undefined,
         skillPts: toInt(fields.skillPts),
         finaleRaces: fields.finaleRaces !== undefined ? toInt(fields.finaleRaces) : undefined,
         finaleWins: fields.finaleWins !== undefined ? toInt(fields.finaleWins) : undefined,
@@ -395,6 +398,7 @@ export function parseCorpus(text: string, file?: string): ParsedCorpus {
             pwr: Number(obj.pwr) || 0,
             grt: Number(obj.grt) || 0,
             wit: Number(obj.wit) || 0,
+            lastKnown: Array.isArray(obj.lastKnown) ? obj.lastKnown.map(String) : undefined,
             skillPts: Number(obj.skillPts) || 0,
             finaleRaces: obj.finaleRaces !== undefined ? Number(obj.finaleRaces) : undefined,
             finaleWins: obj.finaleWins !== undefined ? Number(obj.finaleWins) : undefined,
@@ -533,7 +537,8 @@ export function aggregate(records: OutcomeRecord[]): ArmSummary[] {
         // of an unfinished trainee and would drag every percentile down.
         const finished = list.filter((r) => classifyBucket(r) !== "incomplete")
         const fans = finished.map((r) => r.fans)
-        const median = (pick: (r: OutcomeRecord) => number) => percentile(finished.map(pick), 50)
+        // A stat the bot could only report at its last-known value is left out of that stat's median.
+        const median = (pick: (r: OutcomeRecord) => number, key: string) => percentile(finished.filter((r) => !r.lastKnown?.includes(key)).map(pick), 50)
         const nonIncomplete = list.length - buckets.incomplete
         const finaleReached = list.filter((r) => r.quality === "WIN" || r.quality === "FINALE_LOST").length
         const finaleWon = list.filter((r) => r.quality === "WIN").length
@@ -549,11 +554,11 @@ export function aggregate(records: OutcomeRecord[]): ArmSummary[] {
             finaleWon,
             fans: { p25: percentile(fans, 25), p50: percentile(fans, 50), p75: percentile(fans, 75) },
             medianStats: {
-                spd: median((r) => r.spd),
-                sta: median((r) => r.sta),
-                pwr: median((r) => r.pwr),
-                grt: median((r) => r.grt),
-                wit: median((r) => r.wit),
+                spd: median((r) => r.spd, "spd"),
+                sta: median((r) => r.sta, "sta"),
+                pwr: median((r) => r.pwr, "pwr"),
+                grt: median((r) => r.grt, "grt"),
+                wit: median((r) => r.wit, "wit"),
             },
             forceEndTurns: finished
                 .filter((r) => classifyBucket(r) !== "full")

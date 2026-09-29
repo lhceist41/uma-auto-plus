@@ -624,7 +624,7 @@
       var finalsBlock = el('div', 'rc-details-finals-head');
       finalsBlock.appendChild(el('span', 'rc-info-label', 'FINAL STATS'));
       var finalsGrid = el('div', 'rc-details-finals-grid');
-      L.buildStatRows(run.finalStats, L.ACCENT).forEach(function (r) {
+      L.buildStatRows(run.finalStats, L.ACCENT, run.lastKnownStats).forEach(function (r) {
         var col = el('div', 'rc-details-final-col');
         col.style.borderTopColor = r.color;
         var name = el('span', 'rc-details-final-name', r.name);
@@ -634,6 +634,7 @@
         var gradeEl = el('span', 'rc-details-final-grade', r.grade == null ? '–' : r.grade);
         gradeEl.style.color = r.gradeColor;
         col.appendChild(gradeEl);
+        if (r.lastKnown) col.appendChild(el('span', 'rc-details-final-mark', 'earlier read'));
         finalsGrid.appendChild(col);
       });
       finalsBlock.appendChild(finalsGrid);

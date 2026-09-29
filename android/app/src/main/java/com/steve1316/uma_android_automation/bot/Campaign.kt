@@ -4272,6 +4272,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 finaleRaces,
                 finaleRaces1st,
                 listOf(st.speed, st.stamina, st.power, st.guts, st.wit),
+                careerEndLastKnownStats,
             )
         // Bumped last, after every stash above, so the queue report attributes them to this run only.
         StartModule.lastCareerEndSeq++

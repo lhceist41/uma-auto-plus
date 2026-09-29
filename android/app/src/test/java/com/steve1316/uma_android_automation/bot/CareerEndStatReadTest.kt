@@ -112,6 +112,11 @@ class CareerEndStatReadTest {
             assertTrue(campaign.contains("                put(\"wit\", st.wit)\n                if (careerEndLastKnownStats.isNotEmpty()) put(\"lastKnown\", JSONArray(careerEndLastKnownStats))\n"))
         }
 
+        @Test
+        fun `the queue report's career result gets the same last-known stats`() {
+            assertTrue(campaign.contains("                listOf(st.speed, st.stamina, st.power, st.guts, st.wit),\n                careerEndLastKnownStats,\n            )"))
+        }
+
         private fun source(relative: String): String = File(kotlinRoot(), relative).readText().replace("\r\n", "\n")
 
         private fun kotlinRoot(): File {

@@ -5,6 +5,7 @@ import com.steve1316.uma_android_automation.ReportText
 import com.steve1316.uma_android_automation.RunRecord
 import com.steve1316.uma_android_automation.finalStatsJson
 import com.steve1316.uma_android_automation.finaleJson
+import com.steve1316.uma_android_automation.lastKnownStatsJson
 import com.steve1316.uma_android_automation.queueReportText
 import com.steve1316.uma_android_automation.runEndedWithError
 import com.steve1316.uma_android_automation.runWords
@@ -250,6 +251,7 @@ internal object StatusBoard {
                     .put("fans", result?.fans ?: JSONObject.NULL)
                     .put("finale", result?.let(::finaleJson) ?: JSONObject.NULL)
                     .put("finalStats", result?.let(::finalStatsJson) ?: JSONObject.NULL)
+                    .apply { result?.let(::lastKnownStatsJson)?.let { put("lastKnownStats", it) } }
                     .put("sparks", r.sparks?.let(::sparksJson) ?: JSONObject.NULL)
                     .put("sparksNote", r.sparksNote ?: JSONObject.NULL)
                     .put("startedAt", r.startedAt)

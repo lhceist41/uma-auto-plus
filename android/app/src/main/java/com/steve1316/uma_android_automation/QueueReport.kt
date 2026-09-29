@@ -188,10 +188,24 @@ internal data class RunRecord(
 
 /**
  * A finished career's result as the bot computed it at its end. A value the bot did not read is
- * null. [finalStats] is speed, stamina, power, guts, wit. [finaleOf] counts the finale races the
- * bot saw, not the scenario's total.
+ * null. [finalStats] is speed, stamina, power, guts, wit. [lastKnownStats] names the [finalStats]
+ * entries the career-end reads did not confirm: each holds the last value the bot accepted, not a
+ * final one. [finaleOf] counts the finale races the bot saw, not the scenario's total.
  */
-internal data class CareerResult(val rank: String?, val estScore: Int?, val fans: Int?, val finaleWon: Int?, val finaleOf: Int?, val finalStats: List<Int?>?)
+internal data class CareerResult(
+    val rank: String?,
+    val estScore: Int?,
+    val fans: Int?,
+    val finaleWon: Int?,
+    val finaleOf: Int?,
+    val finalStats: List<Int?>?,
+    val lastKnownStats: List<String> = emptyList(),
+)
+
+private val FINAL_STAT_NAMES = listOf("speed", "stamina", "power", "guts", "wit")
+
+/** [finalStats] names by the `[CAREER_END]` ledger key the career-end read reports them under. */
+private val FINAL_STAT_NAME_BY_LEDGER_KEY = mapOf("spd" to "speed", "sta" to "stamina", "pwr" to "power", "grt" to "guts", "wit" to "wit")
 
 /** One kept spark; [type] is `stat`, `aptitude`, `unique`, `skill` or `other`. */
 internal data class KeptSpark(val name: String, val type: String, val stars: Int)
@@ -207,11 +221,21 @@ internal data class CareerEndStash(val seq: Long, val trainee: String?, val scen
  * its stats and rank are not final). A stat of -1 is unread. Fans of 1 are not taken as a read:
  * 1 is both the trainee's default and every career's starting count.
  */
-internal fun careerResultAtEnd(outcome: String, rankLabel: String?, estScore: Int?, fans: Int, finaleRaces: Int, finaleWins: Int, stats: List<Int>): CareerResult? {
+internal fun careerResultAtEnd(
+    outcome: String,
+    rankLabel: String?,
+    estScore: Int?,
+    fans: Int,
+    finaleRaces: Int,
+    finaleWins: Int,
+    stats: List<Int>,
+    lastKnownLedgerKeys: List<String> = emptyList(),
+): CareerResult? {
     if (outcome == "INCOMPLETE") return null
     val finalStats = stats.map { v -> v.takeIf { it >= 0 } }.takeIf { list -> list.any { it != null } }
     val finale = finaleRaces > 0
-    return CareerResult(rankLabel, estScore, fans.takeIf { it > 1 }, finaleWins.takeIf { finale }, finaleRaces.takeIf { finale }, finalStats)
+    val lastKnown = lastKnownLedgerKeys.mapNotNull(FINAL_STAT_NAME_BY_LEDGER_KEY::get).filter { name -> finalStats?.getOrNull(FINAL_STAT_NAMES.indexOf(name)) != null }
+    return CareerResult(rankLabel, estScore, fans.takeIf { it > 1 }, finaleWins.takeIf { finale }, finaleRaces.takeIf { finale }, finalStats, lastKnown)
 }
 
 /** A spark row as the dashboard types it. A white row is a skill spark only when the skill catalog knew its name; race, scenario and unreadable whites are `other`. */
@@ -537,6 +561,7 @@ internal fun runRecordJson(r: RunRecord): JSONObject =
                 result.fans?.let { put("fans", it) }
                 finaleJson(result)?.let { put("finale", it) }
                 finalStatsJson(result)?.let { put("finalStats", it) }
+                lastKnownStatsJson(result)?.let { put("lastKnownStats", it) }
             }
             r.sparks?.let { put("sparks", sparksJson(it)) }
             r.sparksNote?.let { put("sparksNote", it) }
@@ -550,8 +575,11 @@ internal fun finaleJson(result: CareerResult): JSONObject? {
 
 internal fun finalStatsJson(result: CareerResult): JSONObject? {
     val stats = result.finalStats ?: return null
-    return JSONObject().apply { listOf("speed", "stamina", "power", "guts", "wit").forEachIndexed { i, name -> put(name, stats.getOrNull(i) ?: JSONObject.NULL) } }
+    return JSONObject().apply { FINAL_STAT_NAMES.forEachIndexed { i, name -> put(name, stats.getOrNull(i) ?: JSONObject.NULL) } }
 }
+
+/** The [CareerResult.finalStats] names held at a last-known value, or null when every stat is a confirmed final read. */
+internal fun lastKnownStatsJson(result: CareerResult): JSONArray? = result.lastKnownStats.takeIf { it.isNotEmpty() }?.let { JSONArray(it) }
 
 internal fun sparksJson(sparks: List<KeptSpark>): JSONArray = JSONArray().also { arr -> sparks.forEach { arr.put(JSONObject().put("name", it.name).put("type", it.type).put("stars", it.stars)) } }
 

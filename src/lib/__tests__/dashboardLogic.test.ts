@@ -248,6 +248,16 @@ test('buildStatRows: names, order, colours and grades', () => {
   assert.equal(rows.every((r) => r.width.endsWith('%')), true);
 });
 
+test('buildStatRows: a stat named last-known is marked and keeps its value and grade; the rest are not', () => {
+  const stats = { speed: 197, stamina: 104, power: 122, guts: 138, wit: 96 };
+  const rows = logic.buildStatRows(stats, '#E8B84B', ['power']);
+  assert.deepEqual(rows.map((r) => r.lastKnown), [false, false, true, false, false]);
+  assert.equal(rows[2].value, 122);
+  assert.equal(rows[2].grade, logic.grade(122));
+  assert.equal(logic.buildStatRows(stats, '#E8B84B').every((r) => r.lastKnown === false), true);
+  assert.equal(logic.buildStatRows({ speed: null, stamina: 104, power: 122, guts: 138, wit: 96 }, '#E8B84B', ['speed'])[0].lastKnown, false, 'an unread stat has no value to mark');
+});
+
 test('buildStatRows: null stats yields an empty table, never fabricated rows', () => {
   assert.deepEqual(logic.buildStatRows(null), []);
 });

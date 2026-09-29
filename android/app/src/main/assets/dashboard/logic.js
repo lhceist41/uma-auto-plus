@@ -191,12 +191,16 @@
 
   // Builds the 5-row stat table (speed/stamina/power/guts/wit) from
   // career.stats. Bars always run to 1200, per the design's own caption.
-  function buildStatRows(stats, accent) {
+  // `lastKnown` (a run's lastKnownStats) names the stats whose value is the last one the
+  // bot confirmed rather than a final read; those rows carry lastKnown: true. Their grade is
+  // kept: it grades the value shown, which the mark says is an earlier read one.
+  function buildStatRows(stats, accent, lastKnown) {
     if (!stats) return [];
+    var marked = Array.isArray(lastKnown) ? lastKnown : [];
     return STAT_NAMES.map(function (name, i) {
       var v = stats[STAT_KEYS[i]];
       if (!Number.isFinite(v)) {
-        return { name: name, value: null, width: '0%', color: STAT_COLORS[name], grade: null, gradeColor: '#EDF1F5' };
+        return { name: name, value: null, width: '0%', color: STAT_COLORS[name], grade: null, gradeColor: '#EDF1F5', lastKnown: false };
       }
       return {
         name: name,
@@ -205,6 +209,7 @@
         color: STAT_COLORS[name],
         grade: grade(v),
         gradeColor: gradeColor(v, accent),
+        lastKnown: marked.indexOf(STAT_KEYS[i]) !== -1,
       };
     });
   }

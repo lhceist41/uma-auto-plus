@@ -627,6 +627,7 @@ button {
 .rc-details-final-col { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 2px solid; }
 .rc-details-final-name { font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: 1.5px; }
 .rc-details-final-value { font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 30px; line-height: 1; }
+.rc-details-final-mark { font-size: 11px; letter-spacing: 0.5px; color: var(--rc-text-dim); }
 .rc-details-final-grade {
   align-self: flex-start;
   padding: 2px 7px;
