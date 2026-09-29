@@ -61,6 +61,15 @@ internal fun holdForOwnUi(ownUiInFront: Boolean, wait: () -> Unit): Boolean {
     return true
 }
 
+/**
+ * Settles after a notification-shade dismissal. The shade's close animation is waited out only when the system
+ * performed the dismissal ([dispatched]). MuMu reports false on nearly every unknown-screen tick, where a fixed wait
+ * only added half a second. Loading is waited out either way, as the settle wait always did.
+ */
+internal fun settleAfterShadeDismiss(dispatched: Boolean, waitForShadeClose: () -> Unit, waitForLoading: () -> Unit) {
+    if (dispatched) waitForShadeClose() else waitForLoading()
+}
+
 /** The milliseconds [hold] spent holding for our own screen on [clock], or null when it did not hold, so a timed loop can keep them off its cap. */
 internal fun heldMsForOwnUi(clock: () -> Long, hold: () -> Boolean): Long? {
     val from = clock()

@@ -237,6 +237,34 @@ class UnknownScreenRecoveryTest {
         }
     }
 
+    @Nested
+    @DisplayName("settleAfterShadeDismiss")
+    inner class ShadeDismissSettle {
+        private fun settle(dispatched: Boolean): List<String> {
+            val calls = mutableListOf<String>()
+            settleAfterShadeDismiss(dispatched, waitForShadeClose = { calls += "shade" }, waitForLoading = { calls += "loading" })
+            return calls
+        }
+
+        @Test
+        fun `a dismissal the system did not perform skips the shade wait but still waits out loading`() {
+            assertEquals(listOf("loading"), settle(dispatched = false))
+        }
+
+        @Test
+        fun `a performed dismissal keeps the shade wait`() {
+            assertEquals(listOf("shade"), settle(dispatched = true))
+        }
+
+        @Test
+        fun `the shade dismissal settles through it, with the half-second wait only for a performed dismissal`() {
+            val body = sourceFile("bot/Campaign.kt").readText().replace("\r\n", "\n")
+                .substringAfter("protected fun dismissNotificationShade(reason: String) {").substringBefore("\n    }\n")
+            assertTrue(body.contains("settleAfterShadeDismiss(dispatched, waitForShadeClose = { game.wait(0.5) }, waitForLoading = { game.waitForLoading() })"))
+            assertEquals(1, Regex("""game\.wait\(0\.5\)""").findAll(body).count(), "no unconditional wait besides the performed-dismissal one")
+        }
+    }
+
     private fun sourceFile(relative: String): File = File(kotlinRoot(), relative).also { require(it.isFile) { "missing ${it.path}" } }
 
     private fun kotlinRoot(): File {

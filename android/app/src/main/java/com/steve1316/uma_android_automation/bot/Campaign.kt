@@ -4790,7 +4790,7 @@ abstract class Campaign(game: Game) : Task(game) {
         if (Build.VERSION.SDK_INT >= 31) {
             val dispatched = game.gestureUtils.performGlobalAction(AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE)
             MessageLog.i(TAG, "[INFO] Dismissed the notification shade in case it was open ($reason, dispatched=$dispatched).")
-            game.wait(0.5)
+            settleAfterShadeDismiss(dispatched, waitForShadeClose = { game.wait(0.5) }, waitForLoading = { game.waitForLoading() })
         }
     }
 
