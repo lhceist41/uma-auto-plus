@@ -49,9 +49,24 @@ class DecisionTraceItemWiringTest {
     @Test
     fun `every confirmed item use is traced`() {
         assertTrue(Regex("""usedItems\.forEach \{ useInventoryItem\(it\.first\) \}\s+traceItemsUsed\(usedItems\)""").containsMatchIn(trackblazer))
-        assertEquals(2, Regex("""confirmAndCloseItemDialog\(itemsUsed\.size\)\s+traceItemsUsed\(itemsUsed\)""").findAll(trackblazer).count())
-        assertTrue(Regex("""confirmAndCloseItemDialog\(itemsUsedCount\)\s+traceItemsUsed\(itemsUsedWithReasons\)""").containsMatchIn(trackblazer))
-        assertEquals(4, Regex("""\btraceItemsUsed\(""").findAll(trackblazer).count() - 1, "one definition plus four call sites")
+        assertTrue(Regex("""else if \(confirmAndCloseItemDialog\(itemsUsed\.size\)\) \{\s+itemsUsed\.forEach \{ \(name, _\) ->[\s\S]{0,400}?useInventoryItem\(name\)[\s\S]{0,200}?traceItemsUsed\(itemsUsed\)""").containsMatchIn(trackblazer))
+        assertTrue(Regex("""if \(confirmAndCloseItemDialog\(itemsUsed\.size\)\) \{\s+itemsUsed\.forEach \{ \(name, _\) -> useInventoryItem\(name\) \}\s+traceItemsUsed\(itemsUsed\)""").containsMatchIn(trackblazer))
+        assertTrue(Regex("""if \(confirmAndCloseItemDialog\(itemsUsedCount\)\) \{\s+traceItemsUsed\(itemsUsedWithReasons\)""").containsMatchIn(trackblazer))
+        assertTrue(Regex("""quickUseItemsOnly\.forEach \{ useInventoryItem\(it\) \}\s+traceItemsUsed\(quickUseItemsOnly\.map""").containsMatchIn(trackblazer))
+        assertEquals(5, Regex("""\btraceItemsUsed\(""").findAll(trackblazer).count() - 1, "one definition plus five call sites")
+    }
+
+    @Test
+    fun `a greyed Confirm Use leaves the cache and the trace untouched at every caller`() {
+        // One definition plus four callers, each one gating its bookkeeping on the result.
+        assertEquals(5, Regex("""\bconfirmAndCloseItemDialog\(""").findAll(trackblazer).count())
+        assertEquals(emptyList<String>(), Regex("""(?m)^\s+confirmAndCloseItemDialog\(.*$""").findAll(trackblazer).map { it.value.trim() }.toList())
+        assertTrue(Regex("""if \(bWhistleQueued && confirmAndCloseItemDialog\(1\)\) \{\s+useInventoryItem\("Reset Whistle"\)""").containsMatchIn(trackblazer))
+        assertTrue(Regex("""\} else \{\s+// Nothing was used[^\n]*\s+currentInventory = TrackblazerShopList\.returnItemsToInventory\(currentInventory, itemsUsedWithReasons\.map \{ it\.first \}\)""").containsMatchIn(trackblazer))
+        // The emergency and race-item paths no longer decrement before the confirm.
+        assertFalse(Regex("""bForceUseReservedItem = false\s+itemsUsed\.forEach""").containsMatchIn(trackblazer))
+        assertFalse(Regex("""reason = "Race bonus for \${'$'}grade\."\)\s+itemsUsed\.forEach""").containsMatchIn(trackblazer))
+        assertTrue(Regex("""return false\s+\}\s+MessageLog\.i\(TAG, "\[TRACKBLAZER\] Confirming usage""").containsMatchIn(trackblazer))
     }
 
     @Test

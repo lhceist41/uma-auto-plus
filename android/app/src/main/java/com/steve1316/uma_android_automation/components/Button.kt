@@ -665,6 +665,9 @@ object ButtonExchange : ButtonInterface {
 
 object ButtonConfirmUse : ButtonInterface {
     override val template = Template("components/button/confirm_use", region = Region.bottomHalf)
+
+    // Greyed out at a use count of 0: measured 0.49 luminance against the template's 0.78.
+    override val disabledLuminanceTolerance = 0.12
 }
 
 object ButtonUseTrainingItems : ButtonInterface {

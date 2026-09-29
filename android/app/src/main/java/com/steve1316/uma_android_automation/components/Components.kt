@@ -189,6 +189,10 @@ interface BaseComponentInterface {
 interface ComponentInterface : BaseComponentInterface {
     val template: Template
 
+    /** How much darker than the template (0-1 luminance) the on-screen component must be for [checkDisabled]. */
+    val disabledLuminanceTolerance: Double
+        get() = 0.05
+
     override fun find(imageUtils: CustomImageUtils, region: IntArray?, tries: Int, confidence: Double?): Pair<Point?, Bitmap> {
         return imageUtils.findImage(
             template.path,
@@ -351,7 +355,7 @@ interface ComponentInterface : BaseComponentInterface {
         if (bitmap == null) {
             return null
         }
-        val res: Int = imageUtils.compareBitmapLuminance(bitmap, templateBitmap)
+        val res: Int = imageUtils.compareBitmapLuminance(bitmap, templateBitmap, tolerance = disabledLuminanceTolerance)
         // If templateBitmap is darker than the detected bitmap, we return true.
         return res > 0
     }

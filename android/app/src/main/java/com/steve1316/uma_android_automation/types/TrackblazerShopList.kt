@@ -173,6 +173,62 @@ class TrackblazerShopList(private val game: Game) {
                 "Master Cleat Hammer" to TrackblazerItemInfo(40, "Race bonus +35% (One turn)", false, "Races"),
                 "Glow Sticks" to TrackblazerItemInfo(15, "Race fan gain +50% (One turn)", false, "Races"),
             )
+
+        /**
+         * Polls [isDialogOpen] up to [polls] times, pausing [pollIntervalSeconds] before each check.
+         *
+         * @return True as soon as the dialog is detected.
+         */
+        internal fun awaitDialog(isDialogOpen: () -> Boolean, pause: (Double) -> Unit, polls: Int = 6, pollIntervalSeconds: Double = 0.3): Boolean {
+            repeat(polls) {
+                pause(pollIntervalSeconds)
+                if (isDialogOpen()) return true
+            }
+            return false
+        }
+
+        /**
+         * Taps the dialog's open button and waits for the dialog, tapping again at most [maxTaps] - 1 times.
+         *
+         * Scanning an absent list would swipe and tap false anchor matches on the screen underneath, so
+         * callers only scan after this returns true. A retry only follows the full poll window, and
+         * [tapOpenButton] (given the 0-based attempt) must be template-confirmed so a missing button ends
+         * the attempt.
+         *
+         * @return True only when the dialog was detected.
+         */
+        internal fun openDialogAndConfirm(tapOpenButton: (Int) -> Boolean, isDialogOpen: () -> Boolean, pause: (Double) -> Unit, maxTaps: Int = 2): Boolean {
+            repeat(maxTaps) { attempt ->
+                if (!tapOpenButton(attempt)) return false
+                if (awaitDialog(isDialogOpen, pause)) return true
+            }
+            return false
+        }
+
+        /**
+         * Offset from the matched Training Items label to the tap point, per 0-based attempt.
+         *
+         * On the Training screen the round button sits at the left edge, and the Android accessibility
+         * floating button (a system overlay from y 532 at 1080x1920) covers the lower part of the label, so
+         * taps jittered over the label never reach the game. The first tap goes up and right of the label,
+         * the retry straight up; both stay inside the button (radius about 58 around the label) and above
+         * the overlay.
+         */
+        internal fun trainingItemsTapOffset(attempt: Int, labelWidth: Int, labelHeight: Int): Pair<Double, Double> {
+            return if (attempt == 0) Pair(labelWidth * 0.15, -labelHeight * 0.6) else Pair(0.0, -labelHeight * 0.8)
+        }
+
+        /** Adds one of each of [items] back to [inventory], for items counted as used that the game never used. */
+        internal fun returnItemsToInventory(inventory: Map<String, Int>, items: List<String>): Map<String, Int> {
+            val next = inventory.toMutableMap()
+            items.forEach { next[it] = (next[it] ?: 0) + 1 }
+            return next.toMap()
+        }
+
+        /** Whether an item list may be scanned: a caller that expects the Training Items dialog must see it first. */
+        internal fun canScanItemList(bRequireTrainingItemsDialog: Boolean, bTrainingItemsDialogDetected: Boolean): Boolean {
+            return !bRequireTrainingItemsDialog || bTrainingItemsDialogDetected
+        }
     }
 
     /** Callback provider to retrieve the current inventory summary. */
@@ -520,6 +576,7 @@ class TrackblazerShopList(private val game: Game) {
             val itemNameMapInUse = mutableMapOf<Int, String>()
             val handledItems = mutableSetOf<String>()
             processItemsWithFallback(
+                bRequireTrainingItemsDialog = true,
                 keyExtractor = { entry ->
                     val name = getShopItemName(entry, isEntryDisabled(entry.bitmap))
                     if (name != null) itemNameMapInUse[entry.index] = name
@@ -669,16 +726,30 @@ class TrackblazerShopList(private val game: Game) {
     /**
      * Open the Training Items dialog from the current screen.
      *
-     * @return True if the dialog was opened successfully.
+     * @return True only if the dialog was detected on screen.
      */
     fun openTrainingItemsDialog(): Boolean {
-        if (ButtonTrainingItems.click(game.imageUtils)) {
-            // Wait for the dialog to appear.
-            game.wait(game.dialogWaitDelay, skipWaitingForLoading = true)
-            return true
-        }
-        MessageLog.e(TAG, "[ERROR] openTrainingItemsDialog:: Failed to open Training Items dialog.")
-        return false
+        val opened =
+            openDialogAndConfirm(
+                tapOpenButton = { attempt -> tapTrainingItems(attempt) },
+                isDialogOpen = { ButtonConfirmUse.check(game.imageUtils) },
+                pause = { game.wait(it, skipWaitingForLoading = true) },
+            )
+        if (!opened) MessageLog.w(TAG, "[WARN] openTrainingItemsDialog:: The Training Items dialog did not open. Skipping the item scan.")
+        return opened
+    }
+
+    /**
+     * Taps the round Training Items button above its matched label, at [trainingItemsTapOffset].
+     *
+     * @return False if the button was not found, so nothing is tapped.
+     */
+    private fun tapTrainingItems(attempt: Int): Boolean {
+        val point = ButtonTrainingItems.find(game.imageUtils).first ?: return false
+        val label = ButtonTrainingItems.template.getBitmap(game.imageUtils) ?: return false
+        val (dx, dy) = trainingItemsTapOffset(attempt, label.width, label.height)
+        game.tap(point.x + dx, point.y + dy, ButtonTrainingItems.template.path)
+        return true
     }
 
     /**
@@ -695,12 +766,26 @@ class TrackblazerShopList(private val game: Game) {
      * Process items in a dialog, handling both scrollable and non-scrollable cases.
      *
      * @param keyExtractor Optional callback to extract a unique key for each entry.
+     * @param bRequireTrainingItemsDialog If true, scan nothing unless the Training Items dialog is detected: the default shop-list anchors false-match on other screens.
      * @param callback The callback to execute for each entry. Return true to stop.
      * @return True if the process completed successfully.
      */
-    fun processItemsWithFallback(keyExtractor: ((ScrollListEntry) -> String?)? = null, callback: (ScrollListEntry) -> Boolean): Boolean {
+    fun processItemsWithFallback(
+        keyExtractor: ((ScrollListEntry) -> String?)? = null,
+        bRequireTrainingItemsDialog: Boolean = false,
+        callback: (ScrollListEntry) -> Boolean,
+    ): Boolean {
         // Training Items dialog uses specific scroll regions if detected.
-        val isTrainingItems = ButtonConfirmUse.check(game.imageUtils)
+        val isTrainingItems =
+            if (bRequireTrainingItemsDialog) {
+                ButtonConfirmUse.check(game.imageUtils) || awaitDialog({ ButtonConfirmUse.check(game.imageUtils) }, { game.wait(it, skipWaitingForLoading = true) })
+            } else {
+                ButtonConfirmUse.check(game.imageUtils)
+            }
+        if (!canScanItemList(bRequireTrainingItemsDialog, isTrainingItems)) {
+            MessageLog.w(TAG, "[WARN] processItemsWithFallback:: The Training Items dialog is not on screen. Skipping the item scan.")
+            return false
+        }
         val topLeft = if (isTrainingItems) IconDialogScrollListTopLeft else null
         val bottomRight = if (isTrainingItems) IconDialogScrollListBottomRight else null
 

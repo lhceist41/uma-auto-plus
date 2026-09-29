@@ -348,14 +348,28 @@ class Trackblazer(game: Game) : Campaign(game) {
                 val boughtItems = args["itemsBought"] as? List<String> ?: emptyList()
                 val quickUseItemsOnly = boughtItems.filter { shopList.shopItems[it]?.isQuickUsage == true }
 
-                if (quickUseItemsOnly.isNotEmpty()) {
+                // With the game's "When Exchanging Items from the Pro Shop" auto-use option on, the game uses
+                // these items itself and the dialog shows no item list and no Confirm Use button.
+                val bConfirmUseShown =
+                    quickUseItemsOnly.isNotEmpty() &&
+                        (ButtonConfirmUse.check(game.imageUtils) || TrackblazerShopList.awaitDialog({ ButtonConfirmUse.check(game.imageUtils) }, { game.wait(it, skipWaitingForLoading = true) }, polls = 2))
+                if (quickUseItemsOnly.isNotEmpty() && !bConfirmUseShown) {
+                    MessageLog.i(TAG, "[TRACKBLAZER] The game used the quick-use items automatically on exchange: ${quickUseItemsOnly.joinToString(", ")}.")
+                    quickUseItemsOnly.forEach { useInventoryItem(it) }
+                    traceItemsUsed(quickUseItemsOnly.map { it to "Used automatically by the game on exchange." })
+                    result.dialog.close(game.imageUtils)
+                } else if (quickUseItemsOnly.isNotEmpty()) {
                     MessageLog.i(TAG, "[TRACKBLAZER] Quick-use items were purchased. Navigating and queuing for usage...")
                     val usedItems = shopList.useSpecificItems(quickUseItemsOnly, bUseAll = true, reason = "Quick-use after purchase.")
                     usedItems.forEach { useInventoryItem(it.first) }
                     traceItemsUsed(usedItems)
 
-                    // This clicks the "Confirm Use" button on the "Exchange Complete" dialog.
-                    if (result.dialog.ok(game.imageUtils)) {
+                    if (usedItems.isEmpty()) {
+                        // Nothing queued, so Confirm Use is greyed out and tapping it would do nothing.
+                        MessageLog.i(TAG, "[TRACKBLAZER] No quick-use item could be queued, so Confirm Use stays greyed out. Closing dialog...")
+                        result.dialog.close(game.imageUtils)
+                    } else if (result.dialog.ok(game.imageUtils)) {
+                        // That tapped the "Confirm Use" button on the "Exchange Complete" dialog.
                         game.wait(0.5)
                         // This clicks the "Use Training Items" button on the "Confirm Use" dialog.
                         handleDialogs(DialogConfirmUse)
@@ -937,19 +951,18 @@ class Trackblazer(game: Game) : Campaign(game) {
                     bForceUseReservedItem = true
                     val itemsUsed = shopList.useSpecificItems(listOf(conserveItem), reason = "Emergency race recovery to avoid -30 stat penalty.")
                     bForceUseReservedItem = false
-                    itemsUsed.forEach { (name, _) ->
-                        val gain = energyGains[name] ?: 0
-                        val oldEnergy = trainee.energy
-                        trainee.energy = (trainee.energy + gain).coerceAtMost(100)
-                        useInventoryItem(name)
-                        MessageLog.i(TAG, "[TRACKBLAZER] Emergency recovery: $oldEnergy% -> ${trainee.energy}%.")
-                    }
-                    if (itemsUsed.isNotEmpty()) {
-                        confirmAndCloseItemDialog(itemsUsed.size)
-                        traceItemsUsed(itemsUsed)
-                    } else {
+                    if (itemsUsed.isEmpty()) {
                         ButtonClose.click(game.imageUtils)
                         game.wait(game.dialogWaitDelay)
+                    } else if (confirmAndCloseItemDialog(itemsUsed.size)) {
+                        itemsUsed.forEach { (name, _) ->
+                            val gain = energyGains[name] ?: 0
+                            val oldEnergy = trainee.energy
+                            trainee.energy = (trainee.energy + gain).coerceAtMost(100)
+                            useInventoryItem(name)
+                            MessageLog.i(TAG, "[TRACKBLAZER] Emergency recovery: $oldEnergy% -> ${trainee.energy}%.")
+                        }
+                        traceItemsUsed(itemsUsed)
                     }
                 }
 
@@ -1458,8 +1471,16 @@ class Trackblazer(game: Game) : Campaign(game) {
      * Confirms the usage of items and closes the Training Items dialog.
      *
      * @param itemsUsedCount The number of items used during this pass to determine the animation delay.
+     * @return False if Confirm Use was greyed out and the dialog was closed without using anything.
      */
-    private fun confirmAndCloseItemDialog(itemsUsedCount: Int = 1) {
+    private fun confirmAndCloseItemDialog(itemsUsedCount: Int = 1): Boolean {
+        // Confirm Use stays greyed out while the use count is 0; tapping it does nothing.
+        if (ButtonConfirmUse.checkDisabled(game.imageUtils) == true) {
+            MessageLog.w(TAG, "[WARN] confirmAndCloseItemDialog:: Confirm Use is greyed out, so no item was queued. Closing the dialog without confirming.")
+            ButtonClose.click(game.imageUtils)
+            game.wait(game.dialogWaitDelay)
+            return false
+        }
         MessageLog.i(TAG, "[TRACKBLAZER] Confirming usage of $itemsUsedCount items.")
         ButtonConfirmUse.click(game.imageUtils)
         game.wait(game.dialogWaitDelay)
@@ -1481,6 +1502,7 @@ class Trackblazer(game: Game) : Campaign(game) {
 
         // Clear the training analysis cache so that the bot re-evaluates the training options if it re-enters the training screen.
         training.clearAnalysisCache()
+        return true
     }
 
     /**
@@ -1620,9 +1642,8 @@ class Trackblazer(game: Game) : Campaign(game) {
             } else if (hasWhistle) {
                 MessageLog.i(TAG, "[TRACKBLAZER] No suitable training found. Using Reset Whistle.")
                 if (shopList.openTrainingItemsDialog()) {
-                    if (shopList.useSpecificItems(listOf("Reset Whistle"), reason = "No suitable training found.").isNotEmpty()) {
-                        confirmAndCloseItemDialog(1)
-
+                    val bWhistleQueued = shopList.useSpecificItems(listOf("Reset Whistle"), reason = "No suitable training found.").isNotEmpty()
+                    if (bWhistleQueued && confirmAndCloseItemDialog(1)) {
                         useInventoryItem("Reset Whistle")
                         bUsedWhistleToday = true
 
@@ -1671,6 +1692,8 @@ class Trackblazer(game: Game) : Campaign(game) {
 
                         // Perform another consolidated item usage pass if needed after shuffle.
                         useItems(trainee, trainingSelected)
+                    } else if (bWhistleQueued) {
+                        MessageLog.w(TAG, "[WARN] handleTrackblazerTraining:: The Reset Whistle was not used because Confirm Use stayed greyed out.")
                     } else {
                         MessageLog.i(TAG, "[TRACKBLAZER] No Reset Whistles found in inventory.")
                         decisionTracer?.recordWhistleOutcome(DecisionTracer.WhistleVerdict.NOT_IN_INVENTORY, "None found in the items dialog.")
@@ -1870,15 +1893,14 @@ class Trackblazer(game: Game) : Campaign(game) {
 
                 // Pass the reasoning and trigger a single consolidated usage summary.
                 val itemsUsed = shopList.useSpecificItems(itemsToUseList, bUseAll = false, reason = "Race bonus for $grade.")
-                itemsUsed.forEach { (name, _) ->
-                    useInventoryItem(name)
-                }
 
                 if (itemsUsed.isNotEmpty()) {
                     MessageLog.i(TAG, "[TRACKBLAZER] Queued ${itemsUsed.size} race items for $grade ($fans fans). Confirming usage.")
-                    confirmAndCloseItemDialog(itemsUsed.size)
-                    traceItemsUsed(itemsUsed)
-                    bUsedHammerToday = true
+                    if (confirmAndCloseItemDialog(itemsUsed.size)) {
+                        itemsUsed.forEach { (name, _) -> useInventoryItem(name) }
+                        traceItemsUsed(itemsUsed)
+                        bUsedHammerToday = true
+                    }
                 } else {
                     if (ButtonClose.click(game.imageUtils)) {
                         game.wait(game.dialogWaitDelay)
@@ -1915,6 +1937,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         val initialEnergy = trainee?.energy ?: 0
         val initialMood = trainee?.mood ?: Mood.NORMAL
         val initialMegaphoneTurnCounter = trainee?.megaphoneTurnCounter ?: 0
+        val initialUsedCharmToday = bUsedCharmToday
         val nextInventory = currentInventory.toMutableMap()
         val scannedItemsList = mutableListOf<ScannedItem>()
         var itemsUsedCount = 0
@@ -1982,6 +2005,7 @@ class Trackblazer(game: Game) : Campaign(game) {
         // same pass raise `trainee.energy`. Greedy selection in isBestEnergyItemToUse still picks which.
         val passStartEnergy = trainee?.energy ?: 0
         shopList.processItemsWithFallback(
+            bRequireTrainingItemsDialog = true,
             keyExtractor = { entry ->
                 val name = shopList.getShopItemName(entry, ButtonSkillUp.checkDisabled(game.imageUtils, entry.bitmap) == true)
                 if (name != null) itemNameMapInManage[entry.index] = name
@@ -2116,8 +2140,16 @@ class Trackblazer(game: Game) : Campaign(game) {
         }
 
         if (itemsUsedCount > 0 && !bDryRun) {
-            confirmAndCloseItemDialog(itemsUsedCount)
-            traceItemsUsed(itemsUsedWithReasons)
+            if (confirmAndCloseItemDialog(itemsUsedCount)) {
+                traceItemsUsed(itemsUsedWithReasons)
+            } else {
+                // Nothing was used: undo what this pass counted as used.
+                currentInventory = TrackblazerShopList.returnItemsToInventory(currentInventory, itemsUsedWithReasons.map { it.first })
+                trainee?.energy = initialEnergy
+                trainee?.mood = initialMood
+                trainee?.megaphoneTurnCounter = initialMegaphoneTurnCounter
+                bUsedCharmToday = initialUsedCharmToday
+            }
         } else if (!bDryRun) {
             if (ButtonClose.click(game.imageUtils, tries = 30)) {
                 game.wait(game.dialogWaitDelay)
