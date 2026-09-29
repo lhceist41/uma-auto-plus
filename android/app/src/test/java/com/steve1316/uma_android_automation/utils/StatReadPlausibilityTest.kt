@@ -129,4 +129,34 @@ class StatReadPlausibilityTest {
             assertEquals(1102, verified)
         }
     }
+
+    @Nested
+    @DisplayName("contradictsHeldValue")
+    inner class FinalReadTests {
+        @Test
+        fun `the Trackblazer career-end WIT is not reported from either reader`() {
+            // 2026-09-28 Mejiro Ryan: WIT held a promoted 1391 from turn 9; the result screen read
+            // 512, which the game's Career Info confirms.
+            assertTrue(StatReadPlausibility.contradictsHeldValue(512, 1391))
+        }
+
+        @Test
+        fun `a dropped-digit final read keeps the held value`() {
+            // Live Details reads of 1 against held 122 to 176 happen on most careers.
+            assertFalse(StatReadPlausibility.contradictsHeldValue(1, 176))
+            assertFalse(StatReadPlausibility.contradictsHeldValue(7, 684))
+            assertFalse(StatReadPlausibility.contradictsHeldValue(StatReadPlausibility.MIN_CONTRADICTING_FINAL_READ - 1, 1391))
+        }
+
+        @Test
+        fun `a final read the floor accepts is no contradiction`() {
+            assertFalse(StatReadPlausibility.contradictsHeldValue(841, 801))
+            assertFalse(StatReadPlausibility.contradictsHeldValue(1291, 1391))
+        }
+
+        @Test
+        fun `a career with no held value has nothing to contradict`() {
+            assertFalse(StatReadPlausibility.contradictsHeldValue(512, -1))
+        }
+    }
 }

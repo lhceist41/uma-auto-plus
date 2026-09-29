@@ -50,4 +50,19 @@ object StatReadPlausibility {
         if (lastVerified <= 0) return false
         return parsed < lastVerified - MAX_SINGLE_EVENT_DROP
     }
+
+    /**
+     * Smallest career-end Details read that can contradict the held value. Dropped-digit reads such
+     * as 1 or 7 are OCR failures and keep the held value; a larger number is what the game's own
+     * result screen shows.
+     */
+    const val MIN_CONTRADICTING_FINAL_READ: Int = 100
+
+    /**
+     * True when the career-end Details read disagrees with the held value by more than any event
+     * explains. The floor then keeps the held value, but the held value is not trustworthy either:
+     * a Trackblazer career promoted a WIT misread of 1361 at turn 9 and the floor rejected every
+     * true read after it, including the final 512 (2026-09-28). Neither value is reported.
+     */
+    fun contradictsHeldValue(finalRead: Int, held: Int): Boolean = finalRead >= MIN_CONTRADICTING_FINAL_READ && isImplausibleDrop(finalRead, held)
 }

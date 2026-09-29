@@ -102,6 +102,7 @@ import com.steve1316.uma_android_automation.utils.skipOffPillByColour
 import com.steve1316.uma_android_automation.utils.ProgressEvent
 import com.steve1316.uma_android_automation.utils.ProgressNotification
 import com.steve1316.uma_android_automation.utils.ProgressTracker
+import com.steve1316.uma_android_automation.utils.StatReadPlausibility
 import com.steve1316.uma_android_automation.utils.StatusBoard
 import com.steve1316.uma_android_automation.utils.pillVisible
 import com.steve1316.uma_android_automation.utils.classifyPersistentSkip
@@ -4203,6 +4204,7 @@ abstract class Campaign(game: Game) : Task(game) {
      * pre-finale in-career snapshot it logged before that fix. If the Details re-read fails (logged
      * `[WARN] Could not find ButtonDetails`), the fields fall back to the last in-career OCR and will
      * understate the finale rewards (~+40 per stat, large fan injection) — trust `turn`/`result` then.
+     * A stat the result screen contradicts is logged as -1 and no estRank/estScore is written.
      */
     override fun careerEndLedgerLine(result: TaskResult): String {
         val shownName = trainee.name.ifEmpty { SettingsHelper.getStringSetting("misc", "currentProfileName") }
@@ -4474,6 +4476,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 // whole post-finale fan+stat re-read every career and left [CAREER_END] on the stale
                 // pre-finale values (~+40/stat short of the real result screen). A few retries also
                 // cover a mid-render capture.
+                trainee.detailsFloorRejections.clear()
                 game.wait(1.0)
                 val buttonLocation = ButtonDetails.find(game.imageUtils, tries = 5).first
                 if (buttonLocation != null) {
@@ -4535,8 +4538,20 @@ abstract class Campaign(game: Game) : Task(game) {
                     game.wait(1.0)
                 }
 
-                // Recompute the estimated rank from the final stats, aptitudes, and owned skills so the end-of-run log and the [CAREER_END] ledger reflect the completed career.
-                updateEstimatedRank()
+                // A final Details read the floor rejected leaves the game's result screen and the
+                // in-career value disagreeing. Neither is reported: the stat goes out unread and no
+                // rank is claimed from it.
+                val contradicted = trainee.detailsFloorRejections.filter { (stat, read) -> StatReadPlausibility.contradictsHeldValue(read, trainee.getStat(stat)) }
+                if (contradicted.isEmpty()) {
+                    // Recompute the estimated rank from the final stats, aptitudes, and owned skills so the end-of-run log and the [CAREER_END] ledger reflect the completed career.
+                    updateEstimatedRank()
+                } else {
+                    contradicted.forEach { (stat, read) ->
+                        MessageLog.w(TAG, "[STAT_FLOOR] The result screen reads $stat as $read but the career held ${trainee.getStat(stat)}. Recording $stat as unread and no estimated rank.")
+                        trainee.stats.setStat(stat, -1)
+                    }
+                    trainee.estimatedRank = null
+                }
 
                 // Print the final Trainee information.
                 trainee.logInfo()

@@ -141,6 +141,14 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         return bitmap
     }
 
+    /**
+     * The Wit cell is the stat table's last column: a full-width crop ends 8 px past the table's
+     * outer border, which Tesseract reads as a trailing 1 (Trackblazer WIT 136 read as 1361). On
+     * 121 captured frames across Trackblazer, URA and Unity Cup the digits end by column 81 and the
+     * border starts at column 92.
+     */
+    private val witMainScreenCropWidth = 88
+
     /** Maximum allowed value for a single stat. */
     private val manualStatCap: Int = SettingsHelper.getIntSetting("training", "manualStatCap")
 
@@ -1329,7 +1337,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         } else {
             offsetX = -860 + (index * 170)
             offsetY = 20
-            width = 100
+            width = if (statName == StatName.WIT) witMainScreenCropWidth else 100
             height = 50
         }
 
@@ -1400,6 +1408,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @param lastVerified Last verified value per stat in THIS career; a stat missing from the map
      *   (or <= 0) has no baseline yet. Used only to reject implausible drops, exactly as in
      *   [determineSingleStatValue] - this is the sequential fallback for the same read.
+     * @param floorRejections Receives each read the floor rejected, keyed by stat.
      * @return A map of stat names to their detected integer values.
      */
     fun determineStatValues(
@@ -1407,6 +1416,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         skillPointsLocation: Point? = null,
         isAptitudeDialog: Boolean = false,
         lastVerified: Map<StatName, Int> = emptyMap(),
+        floorRejections: MutableMap<StatName, Int>? = null,
     ): Map<StatName, Int> {
         val (finalLocation, finalSourceBitmap) =
             if (sourceBitmap == null && skillPointsLocation == null) {
@@ -1449,7 +1459,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                     // Minor adjustments for OCR accuracy.
                     offsetX = -862 + (index * 170)
                     offsetY = 20
-                    width = 98
+                    width = if (statName == StatName.WIT) witMainScreenCropWidth else 98
                     height = 50
                 }
 
@@ -1499,6 +1509,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                                         "[WARN] determineStatValues:: [STAT_FLOOR] Rejected $statName read of $best: more than " +
                                             "${StatReadPlausibility.MAX_SINGLE_EVENT_DROP} below the last verified $baseline. Keeping $baseline.",
                                     )
+                                    floorRejections?.put(statName, best)
                                     result[statName] = -1
                                 } else {
                                     result[statName] = best

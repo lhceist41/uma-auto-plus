@@ -198,6 +198,9 @@ class Trainee {
     /** The most recently computed estimated overall rank, or null before the first computation. */
     var estimatedRank: RankResult? = null
 
+    /** Reads the stat floor rejected on the Umamusume Details dialog since the career-end handler cleared this. */
+    val detailsFloorRejections: MutableMap<StatName, Int> = mutableMapOf()
+
     /** The trainee's approximate energy percentage (0-100). */
     var energy: Int = 100
 
@@ -813,6 +816,7 @@ class Trainee {
                         skillPointsLocation = skillPointsLocation,
                         isAptitudeDialog = isAptitudeDialog,
                         lastVerified = StatName.entries.associateWith { getStat(it) },
+                        floorRejections = if (isAptitudeDialog) detailsFloorRejections else null,
                     )
 
                 for ((statName, newValue) in statMapping) {
