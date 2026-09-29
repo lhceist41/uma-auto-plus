@@ -1084,6 +1084,7 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
     // Outfits whose card style (and Game8 build) differs from the base preset's skill style race and buy as their own style.
     // Never planned: Pressure 201212 (see below) and the three green-chain golds 202331, 201561, 202441.
     const NEVER_PLANNED = [201212, 202331, 201561, 202441]
+    const REAIMED = new Set(["Daiwa Scarlet (Nuit Étoilée de Scarlet)"])
     const RESTYLED = new Set(["Special Week (Ruler of Japan)", "Air Groove (Quercus Civilis)", "Symboli Rudolf (Archer by Moonlight)"])
 
     describe.each(outfits)("$name", (t) => {
@@ -1113,7 +1114,17 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
 
         it("keeps the base build in every scenario apart from the skill plans", () => {
             if (RESTYLED.has(t.name)) return
-            for (const p of pipeline) expect(withoutPlans(p.settings)).toEqual(withoutPlans(find(t.base, p.scenario).settings))
+            // Nuit Étoilée de Scarlet aims at Medium (5 of her 8 goals, Medium A) where the base card aims at Mile.
+            const aim = (s: any) =>
+                REAIMED.has(t.name)
+                    ? {
+                          ...s,
+                          racing: { ...s.racing, preferredDistances: undefined },
+                          skills: { ...s.skills, preferredTrackDistance: undefined },
+                          training: { ...s.training, preferredDistanceOverride: undefined },
+                      }
+                    : s
+            for (const p of pipeline) expect(aim(withoutPlans(p.settings))).toEqual(aim(withoutPlans(find(t.base, p.scenario).settings)))
         })
 
         it("races the style it buys skills for", () => {
@@ -1142,11 +1153,12 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
             }
         })
 
-        it("takes the base outfit's Grand Concert Speed target", () => {
+        it("takes the base outfit's Grand Concert Speed target, or the Medium policy value when re-aimed at Medium", () => {
             const key = (p: (typeof characterPresets)[number]) => `training${p.settings.training!.preferredDistanceOverride}StatTarget_speedStatTarget`
             const twin = find(t.name, "Grand Concert")
             const baseTwin = find(t.base, "Grand Concert")
-            expect((twin.settings.trainingStatTarget as any)[key(twin)]).toBe((baseTwin.settings.trainingStatTarget as any)[key(baseTwin)])
+            const expected = REAIMED.has(t.name) ? 1400 : (baseTwin.settings.trainingStatTarget as any)[key(baseTwin)]
+            expect((twin.settings.trainingStatTarget as any)[key(twin)]).toBe(expected)
         })
     })
 
@@ -1155,7 +1167,14 @@ describe("Alternate-outfit presets built from their base outfit's preset", () =>
             const p = find("Special Week (Ruler of Japan)", scenario)
             const base = find("Special Week", scenario)
             expect(p.settings.skills!.preferredRunningStyle).toBe("late_surger")
-            const strip = (s: any) => ({ ...withoutPlans(s), skills: { ...s.skills, plans: undefined, preferredRunningStyle: undefined }, trainingEvent: { ...s.trainingEvent, scenarioEventOverrides: undefined } })
+            // Its base races explicit Pace; this outfit keeps Default, which races its Late card.
+            expect(p.settings.racing!.originalRaceStrategy).toBe("Default")
+            const strip = (s: any) => ({
+                ...withoutPlans(s),
+                racing: { ...s.racing, juniorYearRaceStrategy: undefined, originalRaceStrategy: undefined },
+                skills: { ...s.skills, plans: undefined, preferredRunningStyle: undefined },
+                trainingEvent: { ...s.trainingEvent, scenarioEventOverrides: undefined },
+            })
             expect(strip(p.settings)).toEqual(strip(base.settings))
         }
         expect(find("Special Week (Ruler of Japan)", "Trackblazer").settings.trainingEvent!.scenarioEventOverrides).toEqual({ "Trackblazer|A Grandkid Get-Together": 0 })
@@ -1269,7 +1288,7 @@ describe("Grand Concert derived presets", () => {
         "King Halo": 1600,
         "Maruzensky (Formula R)": 1600,
         "Daiwa Scarlet": 1600,
-        "Daiwa Scarlet (Nuit Étoilée de Scarlet)": 1600,
+        "Daiwa Scarlet (Nuit Étoilée de Scarlet)": 1400,
         "Copano Rickey": 1600,
         "Super Creek": undefined,
         "Super Creek (Chiffon-Wrapped Mummy)": undefined,
@@ -1513,13 +1532,57 @@ describe("Trackblazer scenario-event picks never take a hint for a style the pre
     // is a preset decision (its race strategy or its skill style), not this data rule.
     const STYLE_CONFLICTS: Record<string, string> = {
         "Mayano Top Gun|Trackblazer|A Grandkid Get-Together": "Default races the card's Front style; the preset buys Pace skills",
-        "El Condor Pasa (Kukulkan Warrior)|Trackblazer|A Grandkid Get-Together": "Default races the card's Late style; the preset buys Pace skills",
-        "Oguri Cap|Trackblazer|A Grandkid Get-Together": "Default races the card's Late style; the preset buys Pace skills",
-        "Oguri Cap (Ashen Miracle)|Trackblazer|A Grandkid Get-Together": "Default races the card's Late style; the preset buys Pace skills",
-        "Tamamo Cross|Trackblazer|A Grandkid Get-Together": "Default races the card's End style; the preset buys Pace skills",
-        "Special Week|Trackblazer|A Grandkid Get-Together": "Default races the card's Late style; the preset buys Pace skills",
-        "Special Week (Hopp'n♪Happy Heart)|Trackblazer|A Grandkid Get-Together": "Default races the card's Late style; the preset buys Pace skills",
     }
+
+    // Validated presets keep the race behaviour their recorded careers had (card default style) until a live A/B
+    // settles them: Mayano Top Gun and Symboli Rudolf (Emperor's Path) everywhere, Daiwa Scarlet's Default URA and
+    // Unity Cup, and Sakura Bakushin O's URA, the source of her validated Grand Concert twin.
+    const RACE_STYLE_HOLDS = new Set([
+        "Mayano Top Gun|URA Finale",
+        "Mayano Top Gun|Unity Cup",
+        "Mayano Top Gun|Trackblazer",
+        "Mayano Top Gun|Grand Concert",
+        "Symboli Rudolf (Emperor's Path)|URA Finale",
+        "Symboli Rudolf (Emperor's Path)|Unity Cup",
+        "Symboli Rudolf (Emperor's Path)|Trackblazer",
+        "Symboli Rudolf (Emperor's Path)|Grand Concert",
+        "Daiwa Scarlet|URA Finale",
+        "Daiwa Scarlet|Unity Cup",
+        "Daiwa Scarlet|Grand Concert",
+        "Sakura Bakushin O|URA Finale",
+        "Sakura Bakushin O|Grand Concert",
+    ])
+    const STYLE_CODE_OF: Record<string, string> = { front_runner: "1", pace_chaser: "2", late_surger: "3", end_closer: "4" }
+    const skillIndex = new Map((Object.values(skills as any) as { id: number; condition?: string }[]).map((s) => [s.id, s]))
+
+    it("races the style every preset buys skills for, apart from the validated holds", () => {
+        const mismatched = characterPresets
+            .filter((p) => (p.settings as any).skills?.preferredRunningStyle in STYLE_CODE_OF)
+            .filter((p) => racedStyle(p) !== (p.settings as any).skills.preferredRunningStyle)
+            .map((p) => `${p.name}|${p.scenario}`)
+            .sort()
+        expect(mismatched).toEqual([...RACE_STYLE_HOLDS].sort())
+    })
+
+    it("plans no skill that only works for another running style", () => {
+        const offStyle: string[] = []
+        for (const preset of characterPresets) {
+            const style = (preset.settings as any).skills?.preferredRunningStyle
+            if (!(style in STYLE_CODE_OF)) continue
+            for (const [planKey, plan] of Object.entries(((preset.settings as any).skills?.plans ?? {}) as Record<string, { plan?: string }>)) {
+                for (const id of String(plan.plan ?? "")
+                    .split(",")
+                    .filter(Boolean)
+                    .map(Number)) {
+                    const codes = [...String(skillIndex.get(id)?.condition ?? "").matchAll(/running_style==(\d)/g)].map((m) => m[1])
+                    if (codes.length > 0 && !codes.includes(STYLE_CODE_OF[style])) offStyle.push(`${preset.name}|${preset.scenario} ${planKey} ${id}`)
+                }
+            }
+        }
+        // Tosen Jordan's URA preset is validated, and so is its Grand Concert twin: its Slick Surge stays until a live A/B.
+        const held = ["Tosen Jordan|URA Finale", "Tosen Jordan|Grand Concert"].flatMap((k) => ["skillPointCheck", "preFinals", "careerComplete"].map((pk) => `${k} ${pk} 200602`))
+        expect(offStyle.sort()).toEqual(held.sort())
+    })
 
     it("takes the stat option wherever the hint is dead, apart from the listed style conflicts", () => {
         expect(deadHintPicks()).toEqual(Object.keys(STYLE_CONFLICTS).sort())

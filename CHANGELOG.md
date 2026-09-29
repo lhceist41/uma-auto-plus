@@ -18,6 +18,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - **Skill hints no longer cost you big training turns:** with Prioritize Skill Hints on, the bot now takes a hinted training only when it is at least 75% as good as the best training that turn, so it no longer passes up a much better training, such as a rainbow, for a weak hinted one.
 
+- **Presets race the running style their skills are for:** Oguri Cap, Oguri Cap (Ashen Miracle), Tamamo Cross, Special Week and Special Week (Hopp'n♪Happy Heart) now race as Pace Chasers, and Sakura Bakushin O (Unity Cup) and Daiwa Scarlet (Legacy Farm) as Front Runners, so the style skills they buy take effect. Air Groove now buys Pace Chaser skills and El Condor Pasa (Kukulkan Warrior) Late Surger skills, the styles they already race. Several presets also stop buying skills for another style and plan more of the trainee's own race skills, and Daiwa Scarlet (Nuit Étoilée de Scarlet) now trains for Medium, where most of her goals are.
+
 ## [1.6.0] - 2026-09-29
 
 ### Highlights
