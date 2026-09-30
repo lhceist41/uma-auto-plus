@@ -293,7 +293,7 @@ const searchConfig: SearchOption[] = [
         id: "prioritize-energy-options",
         title: "Prioritize Energy Options",
         description:
-            "When enabled, the bot will prioritize training event choices that provide energy recovery or avoid energy consumption, helping to maintain optimal energy levels for training sessions.",
+            "When enabled, the bot strongly prefers training event choices that give energy while the trainee is below 50% energy. Above that, energy is weighed against the other rewards, so a larger stat or skill point gain wins.",
         page: "TrainingEventSettings",
     },
     {

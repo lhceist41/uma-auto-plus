@@ -223,6 +223,70 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]TrainingEvent"
 
+        /**
+         * The weight per point of energy an event option gives. With Prioritize Energy on, energy outweighs any
+         * stat only while it is short (below 50%): above that, a small energy gain used to beat a much larger
+         * stat gain even at full energy. Otherwise the weight falls as energy rises and is zero from 90%.
+         */
+        internal fun eventEnergyMultiplier(currentEnergy: Int, prioritizeEnergy: Boolean): Int =
+            when {
+                prioritizeEnergy && currentEnergy < 50 -> 100
+                currentEnergy < 30 -> 4
+                currentEnergy < 50 -> 3
+                currentEnergy < 70 -> 2
+                currentEnergy >= 90 -> 0
+                else -> 1
+            }
+
+        /** A line between two outcomes of a "Randomly either" option that states the next outcome's chance. */
+        private val RANDOM_OUTCOME_CHANCE = Regex("(?i)^or \\(~?(\\d+)%\\)$")
+
+        /**
+         * An event option's weight from its reward lines. A "Randomly either" option gives only one of its
+         * outcomes (split by divider lines and "or (~N%)" lines), so it is weighed by what it is likely to give;
+         * its header line keeps its own weight. Any other option is the sum of its lines.
+         */
+        internal fun weighEventOption(lines: List<String>, weighLine: (String) -> Int): Int {
+            val header = lines.indexOfFirst { it.isNotBlank() }
+            if (header < 0 || !lines[header].trim().startsWith("Randomly either", ignoreCase = true)) return lines.sumOf(weighLine)
+            val outcomes = mutableListOf<Pair<Int, Int?>>()
+            var current: Int? = null
+            var currentChance: Int? = null
+            var statedChance: Int? = null
+            for (line in lines.drop(header + 1)) {
+                val trimmed = line.trim()
+                val chance = RANDOM_OUTCOME_CHANCE.matchEntire(trimmed)
+                if (trimmed.length >= 5 && trimmed.substring(0, 5).all { it == '-' } || chance != null) {
+                    current?.let { outcomes.add(it to currentChance) }
+                    current = null
+                    if (chance != null) statedChance = chance.groupValues[1].toInt()
+                } else if (trimmed.isNotEmpty()) {
+                    if (current == null) {
+                        currentChance = statedChance
+                        statedChance = null
+                    }
+                    current = (current ?: 0) + weighLine(line)
+                }
+            }
+            current?.let { outcomes.add(it to currentChance) }
+            return weighLine(lines[header]) + expectedOutcomeWeight(outcomes)
+        }
+
+        /**
+         * The weight a random option is likely to give: each outcome at its stated chance, the rest of the
+         * chance shared evenly by the outcomes that state none (the data states it only on the second of two
+         * outcomes, "or (~70%)", leaving the first 30%). Without stated chances, or when they do not add up,
+         * every outcome counts equally.
+         */
+        internal fun expectedOutcomeWeight(outcomes: List<Pair<Int, Int?>>): Int {
+            if (outcomes.isEmpty()) return 0
+            val stated = outcomes.sumOf { it.second ?: 0 }
+            val unstated = outcomes.count { it.second == null }
+            if (stated == 0 || stated > 100 || unstated == 0 && stated != 100) return outcomes.sumOf { it.first } / outcomes.size
+            val shareOfRest = if (unstated == 0) 0.0 else (100 - stated).toDouble() / unstated
+            return (outcomes.sumOf { (weight, chance) -> weight * (chance?.toDouble() ?: shareOfRest) } / 100.0).toInt()
+        }
+
         /** How many captures the option-row read may take before giving up on a stable answer. */
         const val OPTION_ROW_MAX_CAPTURES = 4
 
@@ -941,7 +1005,8 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                     eventRewards.forEachIndexed { rewardIndex, reward ->
                         val formattedReward: List<String> = reward.split("\n")
 
-                        formattedReward.forEach { line ->
+                        selectionWeight[rewardIndex] = weighEventOption(formattedReward) { line ->
+                            var lineWeight = 0
                             val formattedLine: String =
                                 regex
                                     .replace(line, "")
@@ -952,18 +1017,18 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
 
                             // Skip empty strings and divider lines (lines that are all dashes or start with 5 dashes).
                             if (line.trim().isEmpty() || line.trim().length >= 5 && line.trim().substring(0, 5).all { it == '-' }) {
-                                return@forEach
+                                return@weighEventOption 0
                             }
 
                             var priorityStatCheck = false
                             if (line.lowercase().contains("can start dating")) {
-                                selectionWeight[rewardIndex] += 1000
+                                lineWeight += 1000
                             } else if (line.lowercase().contains("event chain ended")) {
-                                selectionWeight[rewardIndex] += -300
+                                lineWeight += -300
                             } else if (line.lowercase().contains("(random)")) {
-                                selectionWeight[rewardIndex] += -10
+                                lineWeight += -10
                             } else if (line.lowercase().contains("randomly")) {
-                                selectionWeight[rewardIndex] += 50
+                                lineWeight += 50
                             } else if (line.lowercase().contains("energy")) {
                                 val finalEnergyValue =
                                     try {
@@ -984,23 +1049,11 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                                                 formattedLine.toInt()
                                             }
 
-                                        if (enablePrioritizeEnergyOptions) {
-                                            energyValue * 100
-                                        } else {
-                                            val energyMultiplier =
-                                                when {
-                                                    campaign.trainee.energy < 30 -> 4
-                                                    campaign.trainee.energy < 50 -> 3
-                                                    campaign.trainee.energy < 70 -> 2
-                                                    campaign.trainee.energy >= 90 -> 0
-                                                    else -> 1
-                                                }
-                                            energyValue * energyMultiplier
-                                        }
+                                        energyValue * eventEnergyMultiplier(campaign.trainee.energy, enablePrioritizeEnergyOptions)
                                     } catch (_: NumberFormatException) {
                                         20
                                     }
-                                selectionWeight[rewardIndex] += finalEnergyValue
+                                lineWeight += finalEnergyValue
                             } else if (line.lowercase().contains("mood")) {
                                 val moodMultiplier =
                                     when (campaign.trainee.mood) {
@@ -1011,22 +1064,22 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                                         Mood.GREAT -> 0
                                     }
                                 val moodWeight = if (formattedLine.contains("-")) -150 else moodMultiplier
-                                selectionWeight[rewardIndex] += moodWeight
+                                lineWeight += moodWeight
                             } else if (line.lowercase().contains("bond")) {
                                 val bondWeight = if (formattedLine.contains("-")) -20 else 20
-                                selectionWeight[rewardIndex] += bondWeight
+                                lineWeight += bondWeight
                             } else if (priorityScenarioSkillHints.any { line.lowercase().contains(it) }) {
                                 // Per Trackblazer guide: always grab Nimble Navigator and Uma Stan hints. The
                                 // large bump beats stat-option alternatives while both options still compete on
                                 // their full weight sum.
-                                selectionWeight[rewardIndex] += 500
+                                lineWeight += 500
                                 MessageLog.v(TAG, "[TRAINING_EVENT] Priority scenario-skill hint in option ${rewardIndex + 1}: +500 weight.")
                             } else if (line.lowercase().contains("hint")) {
-                                selectionWeight[rewardIndex] += 25
+                                lineWeight += 25
                             } else if (PositiveStatus.names.any { status -> line.contains(status) }) {
-                                selectionWeight[rewardIndex] += 25
+                                lineWeight += 25
                             } else if (NegativeStatus.names.any { status -> line.contains(status) }) {
-                                selectionWeight[rewardIndex] += -25
+                                lineWeight += -25
                             } else if (line.lowercase().contains("skill")) {
                                 val finalSkillPoints =
                                     if (formattedLine.contains("/")) {
@@ -1052,7 +1105,15 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                                             10
                                         }
                                     }
-                                selectionWeight[rewardIndex] += finalSkillPoints
+                                lineWeight += finalSkillPoints
+                            } else if (line.trim().lowercase().startsWith("all stats")) {
+                                // Every one of the five stats gains the amount.
+                                lineWeight +=
+                                    try {
+                                        formattedLine.toInt() * 5
+                                    } catch (_: NumberFormatException) {
+                                        10
+                                    }
                             } else {
                                 // Apply inflated weights to the prioritized stats based on their order.
                                 campaign.training.statPrioritization.forEachIndexed { index, stat ->
@@ -1089,7 +1150,7 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                                                 priorityStatCheck = false
                                                 10
                                             }
-                                        selectionWeight[rewardIndex] += finalStatValue
+                                        lineWeight += finalStatValue
                                     }
                                 }
 
@@ -1115,9 +1176,10 @@ class TrainingEvent(private val game: Game, private val campaign: Campaign) {
                                         } catch (_: NumberFormatException) {
                                             10
                                         }
-                                    selectionWeight[rewardIndex] += finalStatValue
+                                    lineWeight += finalStatValue
                                 }
                             }
+                            lineWeight
                         }
                     }
 

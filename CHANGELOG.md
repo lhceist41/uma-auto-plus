@@ -24,6 +24,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - **A higher rating from the career's last skill points:** with the Rank objective, the points left after the final race now go to the skills that add the most to the rating, still limited to skills the trainee's running style can use (at any distance or surface). To spend them on any skill for the highest rating, turn on **Buy Any Skill at Career End** in Skill Settings.
 
+- **Better training event choices:** with Prioritize Energy Options on, the bot now strongly prefers the energy option while the trainee is below 50% energy. Above that it weighs energy against the other rewards, so a larger stat or skill point reward wins, for example +15 Speed instead of +15 energy at 80% energy. It also counts "All stats" rewards for all five stats, and judges a random-outcome option by its likely result, using the chances the event states.
+
 ### Fixed
 
 - **Goal races are read on the right day:** the bot now reads the date on a goal race's race list, so it names that race and its grade instead of the previous turn's, and an Alarm Clock setting such as G1 Only applies to G1 goal races. If the date cannot be read there, the bot uses the last turn it saw, as before.

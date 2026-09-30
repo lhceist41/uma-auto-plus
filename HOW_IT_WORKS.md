@@ -533,8 +533,8 @@ When no override applies, each option receives a weight score based on its rewar
 | "Can start dating" | +1000 | Extremely high priority — unlocks dating events |
 | "Event chain ended" | -300 | Penalty — ending an event chain loses future rewards |
 | "(Random)" | -10 | Small penalty for uncertain outcomes |
-| "Randomly" | +50 | Mild bonus for partially random outcomes |
-| Energy gain | value × multiplier | Multiplier scales with current energy[^2] (4x at <30%, 3x at <50%, 2x at <70%, 0x at ≥90%). If "Prioritize Energy" is enabled, multiplier is 100x |
+| "Randomly" | +50 | Mild bonus for partially random outcomes. A "Randomly either" option then counts what it is likely to give, since only one outcome happens: each outcome at the chance the event states ("or (~70%)"), the rest shared evenly by outcomes that state none, or a plain average when no chance is stated |
+| Energy gain | value × multiplier | Multiplier scales with current energy[^2] (4x at <30%, 3x at <50%, 2x at <70%, 1x at <90%, 0x at ≥90%). If "Prioritize Energy" is enabled, the multiplier is 100x below 50% energy |
 | Mood gain | 80–150 | Higher weight when mood is lower (150 at Awful, 0 at Great). Mood loss: -150 |
 | Bond gain | +20 | Bond loss: -20 |
 | Skill hint | +25 | Learning a new skill |
@@ -542,6 +542,7 @@ When no override applies, each option receives a weight score based on its rewar
 | Negative status | -25 | Gaining a harmful condition |
 | Stat gain (priority stat) | value + 10–50 bonus | Bonus based on stat priority rank (1st: +50, 2nd: +40, 3rd: +30, 4th: +20, 5th: +10) |
 | Stat gain (other) | raw value | No priority bonus |
+| All stats | value × 5 | Every stat gains the amount |
 | Skill points | raw value | Direct skill point gains |
 
 [^2]: The energy multiplier is intentionally aggressive — at low energy, even small energy gains receive high scores because training at low energy carries significant failure risk.
