@@ -349,6 +349,8 @@ internal val REPORT_REASON_KEYS =
                 "Grant the self-repair permission shown on Home, and turn the accessibility service back on if it is off",
             ),
         "A11Y_INPUT_DEAD" to KeyText("its taps stopped having any effect, even after it restarted its accessibility service.", "Restart MuMu or the device"),
+        "GAME_NOT_RESPONDING" to
+            KeyText("the game stopped responding to taps while the bot's own taps still reached the screen, and UMA Auto+ could not get it going again. $CLOSE_FROZEN_GAME.", null),
         "PURCHASE_PROMPT" to KeyText("the game opened a Carat purchase or age check, which the bot never touches.", "Close it in the game"),
     )
 

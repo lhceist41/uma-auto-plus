@@ -47,6 +47,7 @@ import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.TitleScreenProbe
+import com.steve1316.uma_android_automation.utils.ownInputReachesScreen
 import com.steve1316.uma_android_automation.utils.TrainingSelectionProbe
 import com.steve1316.uma_android_automation.utils.grandConcertLessonConfirmationPresent
 import com.steve1316.uma_android_automation.utils.grandConcertLessonListPresent
@@ -972,6 +973,11 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                     Log.w(TAG, "[RECOVERY] Pressed Home to close the game (dispatched=$pressed).")
                     pressed
                 },
+                frontPackage = {
+                    val front = frontWindowPackage()
+                    Log.w(TAG, "[RECOVERY] Window in front after Home: ${front ?: "unreadable, so the screen decides"}.")
+                    front
+                },
                 killGame = { killGameProcess() },
                 launch = { clearTask -> launchGame(clearTask) },
                 titleShowing = {
@@ -1000,8 +1006,8 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
                 SessionTally.gameRelaunches.incrementAndGet()
                 MessageLog.w(
                     TAG,
-                    "[RECOVERY] Home did not clearly leave the game (not dispatched, or the screen did not change and hold still), so the game " +
-                        "was not closed. It was brought to the front as it was, not restarted.",
+                    "[RECOVERY] Home did not clearly leave the game (not dispatched, the game's window still in front, or the screen did not " +
+                        "change and hold still), so the game was not closed. It was brought to the front as it was, not restarted.",
                 )
                 wait(waitAfterLaunch, skipWaitingForLoading = true)
                 GameReopen.REFRONTED
@@ -1030,6 +1036,26 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             false
         }
     }
+
+    /**
+     * The package of the window in front, or null when it cannot be read (no accessibility service, or
+     * no active window). Asks the app in front for its window root, so a hung app in front can hold the
+     * call for the accessibility timeout before it returns null.
+     */
+    internal fun frontWindowPackage(): String? =
+        try {
+            gestureUtils.rootInActiveWindow?.packageName?.toString()
+        } catch (e: Exception) {
+            Log.w(TAG, "[RECOVERY] The window in front could not be read: ${e.javaClass.simpleName}")
+            null
+        }
+
+    /**
+     * Whether the bot's own taps still reach the screen ([ownInputReachesScreen]): true proves that a
+     * game ignoring them has stopped responding, false that the taps are dead, null that it could not tell.
+     */
+    internal fun ownInputReachesScreen(): Boolean? =
+        ownInputReachesScreen(myContext, runCatching { gestureUtils }.getOrNull(), MyAccessibilityService.isGestureAllowed)
 
     /** Asks Android to end the game's process. A no-op while the game ranks above a cached background app, and on Android 14+. */
     private fun killGameProcess() {

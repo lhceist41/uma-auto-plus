@@ -19,7 +19,7 @@ internal enum class GameReopen {
 
 /** How [restartFrozenGame] ended. */
 internal enum class FrozenGameRestart {
-    /** Home was not dispatched, or the screen did not change and settle after it: nothing was closed. */
+    /** Home was not dispatched or did not leave the game (see [restartFrozenGame]): nothing was closed. */
     SCREEN_UNCHANGED_AFTER_HOME,
     RESTARTED,
 
@@ -85,6 +85,14 @@ internal fun changedShare(a: IntArray, b: IntArray): Double {
     return a.indices.count { abs(a[it] - b[it]) > HOME_CELL_DELTA }.toDouble() / a.size
 }
 
+/**
+ * Whether Home left the game, from the package of the window in front: any other package (the
+ * launcher) means it did, the game's own means it did not. Null when the package could not be read.
+ * Pixels cannot tell: a game turning to a new still screen passed [homeLanded] in 36 of 3,943
+ * running-game frame triples (MuMu captures, 2026-09-30).
+ */
+internal fun homeLeftGameByWindow(frontPackage: String?): Boolean? = frontPackage?.let { it != Game.GAME_PACKAGE }
+
 /** True when at least [HOME_LEFT_GAME_SHARE] of the cells changed between [before] and [after]. */
 internal fun screenLeftGame(before: IntArray, after: IntArray): Boolean = changedShare(before, after) >= HOME_LEFT_GAME_SHARE
 
@@ -107,9 +115,10 @@ internal const val GAME_HOME_STILL_SECONDS = 1.0
 /**
  * Closes a frozen game and launches it fresh.
  *
- * 1. Press Home and confirm it was dispatched and the screen left the game and held still
- *    ([homeLanded]). Otherwise nothing is closed: a kill is a no-op on a game in front, and clearing
- *    its task would tear it down.
+ * 1. Press Home and confirm it was dispatched and left the game: by the package of the window in
+ *    front ([homeLeftGameByWindow]), or, only when that cannot be read, by a screen that changed and
+ *    held still ([homeLanded]). Otherwise nothing is closed: a kill is a no-op on a game in front, and
+ *    clearing its task would tear it down.
  * 2. Ask for the game's background process to end at every [GAME_KILL_SECONDS_AFTER_HOME] mark.
  * 3. Launch into a fresh task ([launch] with clearTask). A plain launch after a kill re-enters the
  *    surviving task and hung at the splash screen on MuMu (2026-09-29); clearing the task gave a
@@ -122,6 +131,7 @@ internal const val GAME_HOME_STILL_SECONDS = 1.0
 internal fun restartFrozenGame(
     captureGrid: () -> IntArray,
     pressHome: () -> Boolean,
+    frontPackage: () -> String?,
     killGame: () -> Unit,
     launch: (clearTask: Boolean) -> Boolean,
     titleShowing: () -> Boolean,
@@ -130,11 +140,16 @@ internal fun restartFrozenGame(
     val before = captureGrid()
     if (!pressHome()) return FrozenGameRestart.SCREEN_UNCHANGED_AFTER_HOME
     sleep(GAME_HOME_SETTLE_SECONDS)
-    val after = captureGrid()
-    sleep(GAME_HOME_STILL_SECONDS)
-    if (!homeLanded(before, after, captureGrid())) return FrozenGameRestart.SCREEN_UNCHANGED_AFTER_HOME
+    var elapsed = GAME_HOME_SETTLE_SECONDS
+    val left =
+        homeLeftGameByWindow(frontPackage()) ?: run {
+            val after = captureGrid()
+            sleep(GAME_HOME_STILL_SECONDS)
+            elapsed += GAME_HOME_STILL_SECONDS
+            homeLanded(before, after, captureGrid())
+        }
+    if (!left) return FrozenGameRestart.SCREEN_UNCHANGED_AFTER_HOME
 
-    var elapsed = GAME_HOME_SETTLE_SECONDS + GAME_HOME_STILL_SECONDS
     for (at in GAME_KILL_SECONDS_AFTER_HOME) {
         sleep(at - elapsed)
         elapsed = at

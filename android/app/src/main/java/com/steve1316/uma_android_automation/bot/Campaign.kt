@@ -751,6 +751,9 @@ abstract class Campaign(game: Game) : Task(game) {
     /** Max [Game.restartGame] attempts per stuck episode before the run stops as game-unrecoverable. */
     private val maxGameRestartAttempts: Int = 3
 
+    /** Restarts this run spent on a game that stopped responding on a known screen ([stopForStuckInput]). */
+    private var unresponsiveGameReopens: Int = 0
+
     /**
      * Cap on [consecutiveUnknownScreenCount] while a story-event intro cutscene is being tapped
      * through (Skip pill present). Higher than [maxUnknownScreenBeforeStop] because a support-card
@@ -1120,12 +1123,22 @@ abstract class Campaign(game: Game) : Task(game) {
      * Live check of the stuck-game restart on a healthy game. Start it with the game in front, for
      * example mid-career: it makes the call the unknown-screen ladder makes on its second attempt
      * ([Game.reopenGame] with attempt 2), so on Android 12-13 the game is sent Home, asked to close,
-     * launched into a fresh task and checked for its title screen. It closes the game once and taps
-     * nothing; the career stays server-saved and resumes through Continue Career on the next normal
-     * start. Tagged [RESTART-TEST].
+     * launched into a fresh task and checked for its title screen. First it runs the own-input probe
+     * ([Game.ownInputReachesScreen]), whose one tap lands on a small window of this app, never on the
+     * game. It closes the game once and taps nothing in it; the career stays server-saved and resumes
+     * through Continue Career on the next normal start. Tagged [RESTART-TEST].
      */
     open fun startGameRestartTest() {
-        MessageLog.i(TAG, "\n[TEST] [RESTART-TEST] Restarting the game the way a stuck episode's second attempt does. Nothing is tapped.")
+        MessageLog.i(TAG, "\n[TEST] [RESTART-TEST] Checking the bot's own taps, then restarting the game the way a stuck episode's second attempt does. Nothing in the game is tapped.")
+        // The Home check trusts the window in front, so this proves the read names the game while it is in front.
+        val front = game.frontWindowPackage()
+        MessageLog.i(TAG, "[TEST] [RESTART-TEST] Window in front before Home: ${front ?: "unreadable"}.")
+        if (front != Game.GAME_PACKAGE) {
+            MessageLog.w(TAG, "[TEST] [RESTART-TEST] Stopping: the game must be in front, and the window read named ${front ?: "nothing"}. Nothing was tapped or closed.")
+            return
+        }
+        val ownInput = game.ownInputReachesScreen()
+        MessageLog.i(TAG, "[TEST] [RESTART-TEST] Own-input probe: ${ownInput ?: "could not run"} (true: the bot's taps reach the screen).")
         val reopen = game.reopenGame(attempt = 2)
         MessageLog.i(TAG, "[TEST] [RESTART-TEST] Result $reopen: ${reopenOutcomeWords(reopen)}. Start the bot normally to resume a career in progress.")
     }
@@ -4460,7 +4473,7 @@ abstract class Campaign(game: Game) : Task(game) {
                         dialogStopAt = consecutiveDialogTicks + STRONG_TOGGLE_GRACE_TICKS
                         return null
                     }
-                    stopForStuckInput(dialogRebinds, "Dialog handling made no progress for $consecutiveDialogTicks ticks - gestures are likely dead and could not be revived.")
+                    stopForStuckInput(dialogRebinds, "Dialog handling made no progress for $consecutiveDialogTicks ticks, and accessibility rebinds did not help.")
                 }
                 return null
             }
@@ -5002,10 +5015,40 @@ abstract class Campaign(game: Game) : Task(game) {
         }
     }
 
-    /** Stops a stuck-input ladder: halting the queue with its accessibility reason when it asked for rebinds, as a plain stop otherwise. */
-    private fun stopForStuckInput(episode: RebindEpisode, message: String): Nothing {
-        episode.stopKey()?.let { requestAccessibilityHalt(it) }
-        throw InterruptedException(message)
+    /**
+     * Ends a ladder whose taps changed nothing on a screen the bot knows. The own-input probe runs
+     * first: when the bot's taps still reach the screen, the game has stopped responding (a frozen
+     * event cutscene took input for 56 taps on 2026-09-29 and let none through), so the game is
+     * restarted ([Game.reopenGame]'s closing attempt) and the ladders start over. Where it cannot be
+     * closed (Android 14+) it is brought to the front once instead ([unresponsiveReopensAfter]). When the taps are
+     * dead, or the run's tries are spent, the run stops with the truthful key.
+     */
+    private fun stopForStuckInput(episode: RebindEpisode, message: String) {
+        val ownInputArrived = game.ownInputReachesScreen()
+        val key = stuckInputKey(episode.stopKey(), ownInputArrived)
+        if (reopensUnresponsiveGame(key, careerScreenObservedThisTask, unresponsiveGameReopens)) {
+            val reopen = game.reopenGame(attempt = 2)
+            val attempt = unresponsiveGameReopens + 1
+            unresponsiveGameReopens = unresponsiveReopensAfter(reopen, attempt, Build.VERSION.SDK_INT)
+            if (reopen != GameReopen.NOT_DISPATCHED) {
+                val tried =
+                    if (unresponsiveGameReopens > attempt) {
+                        "a re-front, the run's last try (this Android version does not let the bot close the game)"
+                    } else {
+                        "closing try $attempt/$MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN"
+                    }
+                MessageLog.w(TAG, "[RECOVERY] The game stopped responding on a screen the bot knows (its own taps still reach the screen): $tried ${reopenOutcomeWords(reopen)}.")
+                consecutiveUnknownScreenCount = 0
+                lobbyReentryAttempts = 0
+                consecutiveDialogTicks = 0
+                dialogStopAt = dialogTicksBeforeStop
+                cutsceneStopAt = maxCutsceneAdvanceBeforeStop
+                return
+            }
+        }
+        MessageLog.w(TAG, "[RECOVERY] Stopping for taps that changed nothing: own-input probe ${ownInputArrived ?: "could not run"}, reason ${key ?: "none"}.")
+        key?.let { requestAccessibilityHalt(it) }
+        throw InterruptedException(if (key == GAME_NOT_RESPONDING) "$message The bot's own taps still reached the screen, so the game stopped responding." else message)
     }
 
     private fun recoverFromUnknownScreen(count: Int) {
@@ -5036,6 +5079,7 @@ abstract class Campaign(game: Game) : Task(game) {
                         "Bot stuck advancing an event cutscene for $count consecutive cycles. Stopping. " +
                             "A screenshot was saved to the temp folder as event_cutscene_stuck.",
                     )
+                    return
                 }
             }
             if (count in cutsceneRebindThresholds) {

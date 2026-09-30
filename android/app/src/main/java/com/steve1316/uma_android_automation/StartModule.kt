@@ -195,9 +195,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         var gameRecoveryFailed: Boolean = false
 
         /**
-         * Set by a run whose accessibility repair could not help (A11Y_GRANT_MISSING or
-         * A11Y_INPUT_DEAD). The run is not replayed and the queue halts after it, keeping the saved
-         * queue so Start continues it once MuMu is restarted or the grant given. Reset every session.
+         * Set by a run whose taps changed nothing and whose repair could not help (A11Y_GRANT_MISSING,
+         * A11Y_INPUT_DEAD, or GAME_NOT_RESPONDING when the game ignored taps that still reached the
+         * screen). The run is not replayed and the queue halts after it, keeping the saved queue so
+         * Start continues it once MuMu or the game is restarted or the grant given. Reset every session.
          */
         @Volatile
         var accessibilityHaltKey: String? = null
@@ -2470,11 +2471,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             }
                             val accessibilityKey = accessibilityHaltKey
                             if (accessibilityKey != null) {
-                                // The accessibility repair could not help (no grant, or taps stayed dead), so the next
+                                // The repair could not help (no grant, dead taps, or a game that ignores them), so the next
                                 // run would fail the same way. Pause regardless of stopOnError, keeping the saved queue
                                 // for a Start after MuMu is restarted or the grant given.
-                                MessageLog.e(TAG, "[QUEUE] Run $i stopped because its accessibility repair could not help ($accessibilityKey). Pausing the queue.")
-                                queueHaltReason = "run $i stopped because its accessibility repair could not help ($accessibilityKey)"
+                                MessageLog.e(TAG, "[QUEUE] Run $i stopped because its taps changed nothing and could not be repaired ($accessibilityKey). Pausing the queue.")
+                                queueHaltReason = "run $i stopped because its taps changed nothing and could not be repaired ($accessibilityKey)"
                                 ledger.haltEnd = SessionEnd.RUN_HALTED
                                 ledger.reasonKey = accessibilityKey
                                 queueHaltResultCode = effectiveResult.code.name

@@ -12,6 +12,35 @@ internal const val A11Y_GRANT_MISSING = "A11Y_GRANT_MISSING"
 /** Rebinds were issued and the bot's taps still had no effect. */
 internal const val A11Y_INPUT_DEAD = "A11Y_INPUT_DEAD"
 
+/** The bot's own taps still reached the screen, and the game ignored them: the game stopped responding. */
+internal const val GAME_NOT_RESPONDING = "GAME_NOT_RESPONDING"
+
+/**
+ * The stop reason for taps that changed nothing, once the own-input probe has run. A tap that
+ * reached the bot's own probe window proves its input works, so the game is the one not responding,
+ * whatever the rebinds did. Otherwise [rebindKey] stands: a probe that could not run proves nothing.
+ */
+internal fun stuckInputKey(rebindKey: String?, ownInputArrived: Boolean?): String? = if (ownInputArrived == true) GAME_NOT_RESPONDING else rebindKey
+
+/**
+ * Restarts of an unresponsive game allowed per run, on a screen the bot knows. A game that freezes
+ * again on the same screen after that halts with [GAME_NOT_RESPONDING] instead of restarting forever.
+ */
+internal const val MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN = 2
+
+/**
+ * The run's restarts used after [reopen], counting the one just made in [used]. Where the game can
+ * never be closed ([reopenClosesGame] false on [sdk], Android 14 and later), a re-front leaves a
+ * frozen game as it was, so it is the run's one and last try: the next stop halts. Where it can, a
+ * re-front means only that Home missed once, so it counts as one failed try and the next may close.
+ */
+internal fun unresponsiveReopensAfter(reopen: GameReopen, used: Int, sdk: Int): Int =
+    if (reopen == GameReopen.REFRONTED && !reopenClosesGame(attempt = 2, sdk = sdk)) MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN else used
+
+/** Whether a stop for [key] restarts the game instead: an unresponsive game, a career seen, and the run's restarts left. */
+internal fun reopensUnresponsiveGame(key: String?, careerObserved: Boolean, reopensThisRun: Int): Boolean =
+    key == GAME_NOT_RESPONDING && careerObserved && reopensThisRun < MAX_UNRESPONSIVE_GAME_REOPENS_PER_RUN
+
 /**
  * The stop reason for a ladder that gave up after asking for rebinds: a refused one means the grant
  * is missing; issued ones that changed nothing mean taps stayed dead. Null when the ladder asked for

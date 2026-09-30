@@ -93,6 +93,7 @@ class GameRestartTest {
         val homePressed: Boolean = true,
         val leavesGame: Boolean = true,
         val keepsAnimating: Boolean = false,
+        val front: String? = null,
         val launchDispatches: List<Boolean> = listOf(true, true),
         val titleAfterLaunch: Int? = 1,
         val titleAfterPolls: Int = 1,
@@ -104,7 +105,8 @@ class GameRestartTest {
         private var homeAt = -1.0
         private var titleFrom = -1
         private var polls = 0
-        private var captures = 0
+        var captures = 0
+            private set
 
         fun run(): FrozenGameRestart =
             restartFrozenGame(
@@ -121,6 +123,7 @@ class GameRestartTest {
                     steps += "home"
                     homePressed
                 },
+                frontPackage = { front },
                 killGame = {
                     killTimes += now - homeAt
                     steps += "kill"
@@ -137,6 +140,33 @@ class GameRestartTest {
                 },
                 sleep = { now += it },
             )
+    }
+
+    @Nested
+    @DisplayName("did Home leave the game (window in front)")
+    inner class HomeByWindow {
+        @Test
+        fun `the package in front decides, and only an unreadable one falls back to pixels`() {
+            assertEquals(false, homeLeftGameByWindow(Game.GAME_PACKAGE))
+            assertEquals(true, homeLeftGameByWindow("com.android.launcher3"))
+            assertEquals(null, homeLeftGameByWindow(null))
+        }
+
+        @Test
+        fun `the launcher in front goes on without the still-screen captures`() {
+            val s = Script(front = "com.android.launcher3", keepsAnimating = true)
+            assertEquals(FrozenGameRestart.RESTARTED, s.run())
+            assertEquals(1, s.captures, "only the before-Home grid")
+            assertEquals(listOf(5.0, 15.0, 25.0, 35.0, 45.0, 55.0), s.killTimes)
+            assertEquals(GAME_LAUNCH_SECONDS_AFTER_HOME + GAME_TITLE_POLL_SECONDS, s.now, 1e-9)
+        }
+
+        @Test
+        fun `the game still in front closes nothing, whatever the pixels say`() {
+            val s = Script(front = Game.GAME_PACKAGE)
+            assertEquals(FrozenGameRestart.SCREEN_UNCHANGED_AFTER_HOME, s.run())
+            assertEquals(listOf("home"), s.steps)
+        }
     }
 
     @Nested

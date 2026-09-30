@@ -1060,7 +1060,7 @@ const DebugSettings = () => {
                                 checked={bsc.settings.debug.debugMode_startGameRestartTest}
                                 onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startGameRestartTest", checked)}
                                 label="Start Game Restart Test"
-                                description="Checks the stuck-game restart on a healthy game. With the game in front (a career may be in progress), start the bot: on Android 12 and 13 it sends the game Home, asks Android to close it, launches it fresh and waits for its title screen, then stops. It closes the game once and taps nothing; start the bot normally afterwards to resume the career. Tagged [RESTART-TEST] in the log."
+                                description="Checks the stuck-game restart on a healthy game. With the game in front (a career may be in progress), start the bot: it first checks that its own taps reach a small window of its own, then, on Android 12 and 13, sends the game Home, asks Android to close it, launches it fresh and waits for its title screen, then stops. It closes the game once and taps nothing in it; start the bot normally afterwards to resume the career. Tagged [RESTART-TEST] in the log."
                                 style={{ marginTop: 10 }}
                             />
                         </View>

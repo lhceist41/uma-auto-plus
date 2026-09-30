@@ -321,7 +321,7 @@ class BetweenRunRecoveryTest {
 
         @Test
         fun `the launch starts over only after Title Screen or a relaunch, keeping the deadline, budget and recoveries`() {
-            assertEquals(3, count(navigator, "startLaunchOver("), "the definition and its two callers")
+            assertEquals(4, count(navigator, "startLaunchOver("), "the definition and its three callers: Title Screen, the relaunch, an unresponsive game's restart")
             assertEquals(1, count(navigator, "TransitionResult.StartLaunchOver ->"))
             assertEquals(1, count(navigator, "restartingLaunch = true"))
             assertTrue(body(navigator, "private fun startLaunchOver(").contains("restartingLaunch = true\n        return navigate("))
@@ -371,7 +371,9 @@ class BetweenRunRecoveryTest {
             assertTrue(bound.substring(rebind).contains("titleScreenRebindIssued = rebindAccessibility()\n"))
             assertTrue(navigator.contains("private const val TITLE_LOGIN_REBIND_AT = 20\n"))
             assertTrue(20 < BetweenRunRecovery.COMING_BACK_UNKNOWN_LIMIT)
-            assertTrue(bound.substringBefore("} else {\n                    titleLoginLooks = 0").contains("reasonKey = navigatorStuckKey(navRepairRefused, titleScreenRebindIssued),"))
+            val titleStop = bound.substringBefore("} else {\n                    titleLoginLooks = 0")
+            assertTrue(titleStop.contains("val stuckKey = probedStuckKey(navigatorStuckKey(navRepairRefused, titleScreenRebindIssued))"))
+            assertTrue(titleStop.contains("reasonKey = stuckKey,"))
             assertTrue(navigate.indexOf("titleScreenRebindIssued = false") in 0 until navigate.indexOf("for (attempt in 0 until MAX_DETECTION_ATTEMPTS)"))
         }
 

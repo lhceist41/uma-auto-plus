@@ -11,6 +11,12 @@ import com.steve1316.automation_library.utils.SettingsHelper
 import com.steve1316.uma_android_automation.bot.CareerFinalizeGate
 import com.steve1316.uma_android_automation.bot.ConnectionOutageBudget
 import com.steve1316.uma_android_automation.bot.navigatorStuckKey
+import com.steve1316.uma_android_automation.bot.A11Y_GRANT_MISSING
+import com.steve1316.uma_android_automation.bot.A11Y_INPUT_DEAD
+import com.steve1316.uma_android_automation.bot.GAME_NOT_RESPONDING
+import com.steve1316.uma_android_automation.bot.GameReopen
+import com.steve1316.uma_android_automation.bot.reopenOutcomeWords
+import com.steve1316.uma_android_automation.bot.stuckInputKey
 import com.steve1316.uma_android_automation.bot.CoordinateTap
 import com.steve1316.uma_android_automation.bot.FinalizeVerdict
 import com.steve1316.uma_android_automation.bot.Game
@@ -1044,6 +1050,18 @@ class CareerLaunchNavigator(private val context: Context) {
         // One-shot recovery for exceptions crossing the FSM boundary (see the catch blocks below).
         var exceptionRecoveryUsed = false
 
+        // A known screen the clicks no longer move while the bot's own taps still reach the screen: the
+        // game stopped responding. It is restarted in place of the navigation's one relaunch, only with
+        // no career in flight, and the launch starts over from the title.
+        fun restartUnresponsiveGame(key: String): NavigationResult? {
+            if (key != GAME_NOT_RESPONDING || !betweenRunRecovery.mayRestartUnresponsiveGame(careerLaunchInitiated)) return null
+            betweenRunRecovery.restartingUnresponsiveGame()
+            val reopen = tempGame?.reopenGame(attempt = 2) ?: return null
+            if (reopen == GameReopen.NOT_DISPATCHED) return null
+            MessageLog.w(TAG, "[NAV] The game stopped responding (the bot's own taps still reach the screen): ${reopenOutcomeWords(reopen)}. Starting this launch over.")
+            return startLaunchOver(reuseLastLaunchSetup, finalizeToHome, singleRunTrainee, singleRunTraineeExcludes, previousCareerComplete, resumeInProgressCareer, coldStartOnHome, careerInFlight)
+        }
+
         for (attempt in 0 until MAX_DETECTION_ATTEMPTS) {
             if (!BotService.isRunning || StartModule.queueStopRequested) {
                 return NavigationResult(
@@ -1136,6 +1154,8 @@ class CareerLaunchNavigator(private val context: Context) {
                         stuckScreenRebindIssued = rebindAccessibility()
                     }
                     if (stuckInStateCount >= MAX_STUCK_ITERATIONS) {
+                        val stuckKey = probedStuckKey(navigatorStuckKey(navRepairRefused, stuckScreenRebindIssued))
+                        restartUnresponsiveGame(stuckKey)?.let { return it }
                         val screenshotPath = captureFailureScreenshot("stuck_in_${detectedState.name}")
                         return NavigationResult(
                             success = false,
@@ -1144,7 +1164,7 @@ class CareerLaunchNavigator(private val context: Context) {
                             failedTransition = "${detectedState.name} -> next screen",
                             isRecoverable = true,
                             recommendedAction = "Manually advance past the current screen and restart the queue.",
-                            reasonKey = navigatorStuckKey(navRepairRefused, stuckScreenRebindIssued),
+                            reasonKey = stuckKey,
                             screenshotPath = screenshotPath,
                         )
                     }
@@ -1162,6 +1182,8 @@ class CareerLaunchNavigator(private val context: Context) {
                         tapScreenRebindIssued = rebindAccessibility()
                     }
                     if (tapToContinueCount >= MAX_TAP_TO_CONTINUE_ITERATIONS) {
+                        val stuckKey = probedStuckKey(navigatorStuckKey(navRepairRefused, tapScreenRebindIssued))
+                        restartUnresponsiveGame(stuckKey)?.let { return it }
                         val screenshotPath = captureFailureScreenshot("stuck_in_TAP_TO_CONTINUE")
                         return NavigationResult(
                             success = false,
@@ -1170,7 +1192,7 @@ class CareerLaunchNavigator(private val context: Context) {
                             failedTransition = "TAP_TO_CONTINUE -> next screen",
                             isRecoverable = true,
                             recommendedAction = "Manually advance past the current screen and restart the queue.",
-                            reasonKey = navigatorStuckKey(navRepairRefused, tapScreenRebindIssued),
+                            reasonKey = stuckKey,
                             screenshotPath = screenshotPath,
                         )
                     }
@@ -1184,6 +1206,8 @@ class CareerLaunchNavigator(private val context: Context) {
                         titleScreenRebindIssued = rebindAccessibility()
                     }
                     if (titleLoginLooks >= BetweenRunRecovery.COMING_BACK_UNKNOWN_LIMIT) {
+                        val stuckKey = probedStuckKey(navigatorStuckKey(navRepairRefused, titleScreenRebindIssued))
+                        restartUnresponsiveGame(stuckKey)?.let { return it }
                         val screenshotPath = captureFailureScreenshot("stuck_on_TITLE_SCREEN")
                         return NavigationResult(
                             success = false,
@@ -1192,7 +1216,7 @@ class CareerLaunchNavigator(private val context: Context) {
                             failedTransition = "TITLE_SCREEN -> next screen",
                             isRecoverable = true,
                             recommendedAction = "Open the game and check it, then restart the queue.",
-                            reasonKey = navigatorStuckKey(navRepairRefused, titleScreenRebindIssued),
+                            reasonKey = stuckKey,
                             screenshotPath = screenshotPath,
                         )
                     }
@@ -1427,6 +1451,13 @@ class CareerLaunchNavigator(private val context: Context) {
         restartingLaunch = true
         return navigate(reuseLastLaunchSetup, finalizeToHome, singleRunTrainee, singleRunTraineeExcludes, previousCareerComplete, resumeInProgressCareer, coldStartOnHome, careerInFlight)
     }
+
+    /**
+     * [key] for a known screen the clicks did not move, checked by the own-input probe when it blames
+     * the bot's input ([stuckInputKey]): taps that still reach the screen mean the game stopped responding.
+     */
+    private fun probedStuckKey(key: String): String =
+        if (key == A11Y_INPUT_DEAD || key == A11Y_GRANT_MISSING) stuckInputKey(key, tempGame?.ownInputReachesScreen()) ?: key else key
 
     /** The stop after the one relaunch did not bring back a screen the navigator knows. */
     private fun gameUnrecoverable(lastState: LaunchScreenState, reason: String): NavigationResult =

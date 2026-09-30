@@ -1031,7 +1031,7 @@ const searchConfig: SearchOption[] = [
         id: "debug-game-restart-test",
         title: "Start Game Restart Test",
         description:
-            "Disables normal bot operations and checks the stuck-game restart on a healthy game: sends the game Home, asks Android to close it, launches it fresh and waits for its title screen. Closes the game once and taps nothing; a career in progress resumes on the next normal start.",
+            "Disables normal bot operations and checks the stuck-game restart on a healthy game: checks that the bot's own taps reach a small window of its own, then sends the game Home, asks Android to close it, launches it fresh and waits for its title screen. Closes the game once and taps nothing in it; a career in progress resumes on the next normal start.",
         page: "DebugSettings",
     },
     {
