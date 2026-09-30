@@ -1816,13 +1816,18 @@ abstract class Campaign(game: Game) : Task(game) {
      *
      * @param dialog The Try Again dialog.
      * @param args Additional arguments from dialog handling.
+     * @param lostGoalRace True when the game opened this dialog after a lost goal race, which may use the career's whole retry budget.
      * @return True if the retry was initiated (button clicked), false to close the dialog without retrying.
      */
-    open fun shouldRetryRace(dialog: DialogInterface, args: Map<String, Any>): Boolean {
-        if (racing.raceRetries > 0 && racing.retriesThisRace < racing.maxRetriesPerRace) {
+    open fun shouldRetryRace(dialog: DialogInterface, args: Map<String, Any>, lostGoalRace: Boolean): Boolean {
+        // The Alarm Clock purchase was already declined this race; another retry would only reopen it.
+        if (racing.bAlarmClockPolicySkippedThisRace) return false
+        val raceLimit = Racing.raceRetryLimit(lostGoalRace, racing.retriesThisRace, racing.raceRetries, racing.maxRetriesPerRace)
+        if (Racing.retryAllowed(lostGoalRace, racing.retriesThisRace, racing.raceRetries, racing.maxRetriesPerRace)) {
             val policy = SettingsHelper.getStringSetting("racing", "alarmClockPolicy", "Never")
             val freeRetryShown = IconOneFreePerDayTooltip.check(game.imageUtils)
-            MessageLog.i(TAG, Racing.raceRetryText(freeRetryShown, racing.retriesThisRace + 1, racing.maxRetriesPerRace, racing.raceRetries - 1, policy, racing.lastRaceGrade))
+            MessageLog.i(TAG, Racing.raceRetryText(freeRetryShown, racing.retriesThisRace + 1, raceLimit, racing.raceRetries - 1, policy, racing.lastRaceGrade, lostGoalRace))
+            if (lostGoalRace) racing.bRetryingLostGoalRace = true
             racing.raceRetries--
             racing.retriesThisRace++
             game.wait(0.5)
@@ -1895,8 +1900,6 @@ abstract class Campaign(game: Game) : Task(game) {
      * @return The result of the dialog handling operation.
      */
     private fun handleTryAgainDialog(dialog: DialogInterface, args: Map<String, Any>): DialogHandlerResult {
-        val openedByBot = racing.bRetryDialogOpenedByBot
-        racing.bRetryDialogOpenedByBot = false
         // All branches need a slight delay to allow the dialog to close since the runRaceWithRetries() loop handles dialogs at the start of each iteration.
         // Can cause problem where we handle one branch then immediately handle dialogs again and handle a second branch for the same dialog instance.
         if (racing.disableRaceRetries) {
@@ -1926,13 +1929,15 @@ abstract class Campaign(game: Game) : Task(game) {
             throw IllegalStateException()
         }
 
-        if (shouldRetryRace(dialog, args)) {
+        // The game offers Try Again on a goal race only when the goal failed.
+        val lostGoalRace = racing.bRunningGoalRace
+        if (shouldRetryRace(dialog, args, lostGoalRace)) {
             // Retry was initiated by the hook.
         } else {
             val policy = SettingsHelper.getStringSetting("racing", "alarmClockPolicy", "Never")
-            MessageLog.i(TAG, Racing.raceRetryDeclinedText(racing.bAlarmClockPolicySkippedThisRace, racing.retriesThisRace, racing.maxRetriesPerRace, racing.raceRetries, policy))
-            // Unless the bot's own retry button opened it, the game offers Try Again on a goal race only when the goal failed.
-            if (Racing.declinedRetryFailsGoal(racing.bRunningGoalRace, date.bIsFinaleSeason, openedByBot)) markCareerForceEnded("MANDATORY_RACE_LOST")
+            val raceLimit = Racing.raceRetryLimit(lostGoalRace, racing.retriesThisRace, racing.raceRetries, racing.maxRetriesPerRace)
+            MessageLog.i(TAG, Racing.raceRetryDeclinedText(racing.bAlarmClockPolicySkippedThisRace, racing.retriesThisRace, raceLimit, racing.raceRetries, policy))
+            if (Racing.declinedRetryFailsGoal(racing.bRunningGoalRace, date.bIsFinaleSeason)) markCareerForceEnded("MANDATORY_RACE_LOST")
             dialog.close(game.imageUtils)
         }
 
@@ -2587,6 +2592,9 @@ abstract class Campaign(game: Game) : Task(game) {
      *   in this career run.
      */
     fun getLastRaceGrade(): com.steve1316.uma_android_automation.types.RaceGrade? = racing.lastRaceGrade
+
+    /** Whether the current Alarm Clock purchase is for retrying a lost goal race, for the "GoalRaces" policy in [DialogHandler]. */
+    fun isRetryingLostGoalRace(): Boolean = racing.bRetryingLostGoalRace
 
     /**
      * Marks the current race as having had its alarm-clock retry option declined per

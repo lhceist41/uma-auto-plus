@@ -149,24 +149,6 @@ const ScenarioOverridesSettings = () => {
 
                         <View style={styles.section}>
                             <CustomSlider
-                                searchId="trackblazer-max-retries-per-race"
-                                value={scenarioOverrides.trackblazerMaxRetriesPerRace}
-                                placeholder={bsc.defaultSettings.scenarioOverrides.trackblazerMaxRetriesPerRace}
-                                onValueChange={(value) => updateOverrideSetting("trackblazerMaxRetriesPerRace", value)}
-                                onSlidingComplete={(value) => updateOverrideSetting("trackblazerMaxRetriesPerRace", value)}
-                                min={0}
-                                max={5}
-                                step={1}
-                                label="Max Retries per Race"
-                                labelUnit=""
-                                showValue={true}
-                                showLabels={true}
-                                description="The maximum number of times the bot will attempt to retry a failed race in the Trackblazer scenario."
-                            />
-                        </View>
-
-                        <View style={styles.section}>
-                            <CustomSlider
                                 searchId="trackblazer-min-stat-gain-for-charm"
                                 value={scenarioOverrides.trackblazerMinStatGainForCharm}
                                 placeholder={bsc.defaultSettings.scenarioOverrides.trackblazerMinStatGainForCharm}
@@ -351,54 +333,6 @@ const ScenarioOverridesSettings = () => {
                                                     fontSize: 14,
                                                     fontWeight: "600",
                                                     color: scenarioOverrides.trackblazerShopCheckGrades.includes(grade) ? colors.background : colors.foreground,
-                                                }}
-                                            >
-                                                {grade}
-                                            </Text>
-                                        </View>
-                                    ))}
-                                </View>
-                            </View>
-                        </SearchableItem>
-
-                        <SearchableItem
-                            id="trackblazer-retry-races-before-final-grades"
-                            title="Trackblazer Race Grades to use Race Retries on"
-                            description="Select which race grades should allow using a Race Retry in the Trackblazer scenario."
-                        >
-                            <View style={styles.section}>
-                                <Text style={{ fontSize: 16, color: colors.foreground, marginBottom: 8 }}>Race Grades to use Race Retries on</Text>
-                                <Text style={{ fontSize: 14, color: colors.foreground, opacity: 0.7, marginBottom: 12 }}>
-                                    Select which race grades should allow using a Race Retry in the Trackblazer scenario.
-                                </Text>
-                                <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                                    {["G1", "G2", "G3"].map((grade) => (
-                                        <View
-                                            key={grade}
-                                            style={{
-                                                padding: 10,
-                                                borderRadius: 8,
-                                                marginRight: 8,
-                                                marginBottom: 8,
-                                                backgroundColor: scenarioOverrides.trackblazerRetryRacesBeforeFinalGrades.includes(grade) ? colors.primary : colors.card,
-                                            }}
-                                            onTouchEnd={() => {
-                                                const currentGrades = scenarioOverrides.trackblazerRetryRacesBeforeFinalGrades
-                                                if (currentGrades.includes(grade)) {
-                                                    updateOverrideSetting(
-                                                        "trackblazerRetryRacesBeforeFinalGrades",
-                                                        currentGrades.filter((g) => g !== grade)
-                                                    )
-                                                } else {
-                                                    updateOverrideSetting("trackblazerRetryRacesBeforeFinalGrades", [...currentGrades, grade])
-                                                }
-                                            }}
-                                        >
-                                            <Text
-                                                style={{
-                                                    fontSize: 14,
-                                                    fontWeight: "600",
-                                                    color: scenarioOverrides.trackblazerRetryRacesBeforeFinalGrades.includes(grade) ? colors.background : colors.foreground,
                                                 }}
                                             >
                                                 {grade}

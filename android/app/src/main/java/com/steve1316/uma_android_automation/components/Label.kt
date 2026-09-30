@@ -303,15 +303,9 @@ object LabelDailySale : ComponentInterface {
     override val template = Template("components/label/daily_sale", region = Region.middle)
 }
 
-/** "Congratulations!" banner shown on a 1st-place race result. Guards the mandatory-race
- * retry so a win is never retried. */
-object LabelCongratulations : ComponentInterface {
-    override val template = Template("components/label/congratulations", region = Region.topHalf)
-}
-
 /** The gold "1st" laurel shown on any 1st-place race result, independent of the victory-text banner
  * (the URA Finals shows "Congratulations!" but the Qualifier/Semi-Final show "You did it!"). Trainee-
- * agnostic, so it detects a finale win where the text-only [LabelCongratulations] misses the two
+ * agnostic, so it detects a finale win where the "Congratulations!" text banner misses the two
  * qualifier banners - used by the finale-result win capture in Racing.finalizeRaceResults. */
 object LabelFirstPlace : ComponentInterface {
     override val template = Template("components/label/first_place", region = Region.topHalf)

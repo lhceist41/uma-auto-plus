@@ -138,5 +138,13 @@ export const applyMigrations = (settings: any): { settings: any; anyMigrated: bo
         logWithTimestamp("[SettingsManager] Migrated stopAtDate to stopAtDates array.")
     }
 
+    // The Trackblazer race-retry settings were removed. Their stored rows stay behind and nothing reads them, so drop them
+    // from the loaded settings (and from what Export writes) without flagging a save that would re-run on every load.
+    const overrides = (migratedSettings as any).scenarioOverrides
+    if (overrides) {
+        delete overrides.trackblazerMaxRetriesPerRace
+        delete overrides.trackblazerRetryRacesBeforeFinalGrades
+    }
+
     return { settings: migratedSettings, anyMigrated }
 }

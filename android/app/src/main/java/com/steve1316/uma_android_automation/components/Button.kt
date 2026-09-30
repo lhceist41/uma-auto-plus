@@ -388,10 +388,6 @@ object ButtonTryAgain : ButtonInterface {
     override val template = Template("components/button/try_again", region = Region.bottomHalf)
 }
 
-object ButtonTryAgainAlt : ButtonInterface {
-    override val template = Template("components/button/try_again_alt", region = Region.bottomHalf)
-}
-
 object ButtonViewResults : ButtonInterface {
     override val template = Template("components/button/view_results", region = Region.bottomHalf)
 }

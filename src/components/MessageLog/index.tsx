@@ -368,9 +368,7 @@ ${longTargetsString}
 ✨ Trackblazer Skip Empowering Megaphone Below Gain: ${settings.scenarioOverrides?.trackblazerSkipEmpoweringMegaphoneBelowGain}
 ✨ Trackblazer Skip Motivating Megaphone Below Gain: ${settings.scenarioOverrides?.trackblazerSkipMotivatingMegaphoneBelowGain}
 ✨ Trackblazer Skip Coaching Megaphone Below Gain: ${settings.scenarioOverrides?.trackblazerSkipCoachingMegaphoneBelowGain}
-🔄 Trackblazer Max Retries per Race: ${settings.scenarioOverrides?.trackblazerMaxRetriesPerRace}
 🔄 Trackblazer Whistle Forces Training: ${settings.scenarioOverrides?.trackblazerWhistleForcesTraining ? "✅" : "❌"}
-🔄 Trackblazer Retry Grades: ${settings.scenarioOverrides?.trackblazerRetryRacesBeforeFinalGrades?.join(", ")}
 ✨ Trackblazer Enable Irregular Training: ${settings.scenarioOverrides?.trackblazerEnableIrregularTraining ? "✅" : "❌"}
 ✨ Trackblazer Irregular Training Min Gain: ${settings.scenarioOverrides?.trackblazerIrregularTrainingMinStatGain}
 

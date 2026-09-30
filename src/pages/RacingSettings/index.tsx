@@ -208,9 +208,10 @@ const RacingSettings = () => {
                             <CustomSelect
                                 searchId="alarm-clock-policy"
                                 searchTitle="Alarm Clock Carat Policy"
-                                searchDescription="When the bot runs out of free Alarm Clocks (5 per career) and the game prompts to buy one for 10 carats, this policy decides whether to spend carats based on what race was lost."
+                                searchDescription="When a race retry has no free retry or Alarm Clock left, the game offers to buy an Alarm Clock for 10 carats. This decides whether the bot buys one: never, only for a lost career goal race, or by the race's grade."
                                 options={[
                                     { value: "Never", label: "Never (cancel popup, save carats)" },
+                                    { value: "GoalRaces", label: "Goal races only" },
                                     { value: "G1Only", label: "G1 only" },
                                     { value: "G1AndFinale", label: "G1 + Twinkle Star Climax finale" },
                                     { value: "Always", label: "Always (spend carats every time)" },
@@ -220,9 +221,14 @@ const RacingSettings = () => {
                                 placeholder="Select policy"
                             />
                             <Text style={styles.inputDescription}>
-                                When the bot runs out of free Alarm Clocks (5 per career) and the game prompts to buy one for 10 carats, this policy controls whether to spend.
+                                A race retry uses a free retry or an Alarm Clock you hold. When neither is left, the game offers to buy an Alarm Clock for 10 carats, and this setting
+                                decides whether the bot buys one. The bot retries a lost career goal race while its career retry budget lasts (3 retries, 5 in Trackblazer), and
+                                never retries optional races or goals it passed.
                                 {"\n\n"}
                                 <Text style={{ fontWeight: "bold" }}>Never</Text>: always cancel and continue the run without retry. Default — never spends carats without opt-in.
+                                {"\n"}
+                                <Text style={{ fontWeight: "bold" }}>Goal races only</Text>: spend 10 carats only when a career goal race was lost, because losing it ends the
+                                career.
                                 {"\n"}
                                 <Text style={{ fontWeight: "bold" }}>G1 only</Text>: spend 10 carats only for failed G1 races.
                                 {"\n"}

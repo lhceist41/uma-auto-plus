@@ -25,7 +25,6 @@ import com.steve1316.uma_android_automation.components.ButtonRaceManual
 import com.steve1316.uma_android_automation.components.ButtonRaces
 import com.steve1316.uma_android_automation.components.ButtonRacesGrandConcert
 import com.steve1316.uma_android_automation.components.ButtonSkip
-import com.steve1316.uma_android_automation.components.ButtonTryAgainAlt
 import com.steve1316.uma_android_automation.components.ButtonViewResults
 import com.steve1316.uma_android_automation.components.ComponentInterface
 import com.steve1316.uma_android_automation.components.IconRaceAgendaEmpty
@@ -37,7 +36,6 @@ import com.steve1316.uma_android_automation.components.IconRaceListPredictionSin
 import com.steve1316.uma_android_automation.components.IconRaceListSelectionBracketBottomRight
 import com.steve1316.uma_android_automation.components.IconScrollListBottomRight
 import com.steve1316.uma_android_automation.components.IconScrollListTopLeft
-import com.steve1316.uma_android_automation.components.LabelCongratulations
 import com.steve1316.uma_android_automation.components.LabelFirstPlace
 import com.steve1316.uma_android_automation.components.LabelRaceCriteriaFans
 import com.steve1316.uma_android_automation.components.LabelRaceCriteriaG1
@@ -258,9 +256,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     var lastRaceGrade: RaceGrade? = null
     var lastRaceFans: Int = 0
 
-    /** Tracks if the last race selected was a Rival Race. */
-    var lastRaceIsRival: Boolean = false
-
     /** Whether the Purchase Alarm Clock dialog was rejected this race per the user's `alarmClockPolicy`.
      * Once rejected, [shouldRetryRace] short-circuits further retries for the SAME race even with
      * [raceRetries] positive — the only retry option was the carat purchase, which the user declined.
@@ -269,18 +264,14 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      */
     var bAlarmClockPolicySkippedThisRace: Boolean = false
 
-    /** Tracks if the current race has already been retried. */
-    var bRetriedCurrentRace: Boolean = false
-
     /** Retries used on the current race. Shared by the button-based and dialog-based retry paths so both honor the per-race limit. */
     var retriesThisRace: Int = 0
 
     /** True while a goal race (the race-day ribbon's mandatory race) runs, so a Try Again dialog the bot declines is known to fail the goal. */
     var bRunningGoalRace: Boolean = false
 
-    /** True from a results-screen retry-button tap until the Try Again dialog it opens is handled. That dialog is the bot's own
-     * request, not the game reporting a failed goal, so closing it must not end the career as a lost goal race. */
-    var bRetryDialogOpenedByBot: Boolean = false
+    /** True once this race's Try Again was accepted to retry a lost goal race, so the "GoalRaces" Alarm Clock policy knows the purchase is for one. */
+    var bRetryingLostGoalRace: Boolean = false
 
     /** Which tier resolved the LAST [lookupRaceInDatabase] call, so a caller can label entered-race telemetry
      * `exact` vs `fuzzy` truthfully. Reset to NONE at each lookup entry; only meaningful when read
@@ -354,26 +345,8 @@ class Racing(private val game: Game, private val campaign: Campaign) {
     /** The user's defined planned races loaded at initialization. */
     private val userPlannedRaces: List<PlannedRace> = loadUserPlannedRaces()
 
-    /** The maximum number of retries allowed per race. Internal so the dialog-based retry path (shouldRetryRace overrides) can honor it too. */
-    internal val maxRetriesPerRace = if (game.scenario == "Trackblazer") SettingsHelper.getIntSetting("scenarioOverrides", "trackblazerMaxRetriesPerRace", 1) else 1
-
-    /** The list of race grades that are eligible for retries in Trackblazer. */
-    internal val trackblazerRetryGrades: List<RaceGrade> =
-        try {
-            val gradesString = SettingsHelper.getStringSetting("scenarioOverrides", "trackblazerRetryRacesBeforeFinalGrades", "[\"G1\",\"G2\",\"G3\"]")
-            val jsonArray = JSONArray(gradesString)
-            val grades = mutableListOf<RaceGrade>()
-            for (i in 0 until jsonArray.length()) {
-                val gradeName = jsonArray.getString(i)
-                val grade = RaceGrade.fromName(gradeName)
-                if (grade != null) {
-                    grades.add(grade)
-                }
-            }
-            grades
-        } catch (e: Exception) {
-            listOf(RaceGrade.G1, RaceGrade.G2, RaceGrade.G3)
-        }
+    /** Retries a race may use from the Try Again dialog; a lost goal race may go beyond it (see [raceRetryLimit]). */
+    internal val maxRetriesPerRace = 1
 
     /**
      * Information about a specific race.
@@ -696,58 +669,79 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         internal fun canonicalizeRaceLabelForLookup(detectedName: String): String =
             DISTANCE_METER_TOKEN.replace(detectedName) { match -> match.value.replace('O', '0') }
 
-        /** Whether `alarmClockPolicy` lets the bot buy an Alarm Clock (10 carats) to retry a race of [grade]. An unknown policy never buys. */
-        internal fun alarmClockPurchaseAllowed(policy: String, grade: RaceGrade?): Boolean =
+        /** Whether `alarmClockPolicy` lets the bot buy an Alarm Clock (10 carats) to retry a race of [grade]; "GoalRaces" buys only to
+         * retry a lost goal race. An unknown policy never buys. */
+        internal fun alarmClockPurchaseAllowed(
+            policy: String,
+            grade: RaceGrade?,
+            lostGoalRace: Boolean,
+        ): Boolean =
             when (policy) {
+                "GoalRaces" -> lostGoalRace
                 "G1Only" -> grade == RaceGrade.G1
                 "G1AndFinale" -> grade == RaceGrade.G1 || grade == RaceGrade.FINALE
                 "Always" -> true
                 else -> false
             }
 
-        /** The log line for a retry taken from the Try Again dialog: what it spends, and what the per-race limit and the career's retry budget leave. */
+        /** How many retries this race may use. A lost goal race ends the career, so it may use the rest of the career's retry
+         * budget; any other race keeps the per-race cap. */
+        internal fun raceRetryLimit(
+            lostGoalRace: Boolean,
+            retriesThisRace: Int,
+            budgetLeft: Int,
+            maxRetriesPerRace: Int,
+        ): Int = if (lostGoalRace) retriesThisRace + budgetLeft else maxRetriesPerRace
+
+        /** Whether the Try Again dialog may be accepted: budget left and this race under its [raceRetryLimit]. */
+        internal fun retryAllowed(
+            lostGoalRace: Boolean,
+            retriesThisRace: Int,
+            budgetLeft: Int,
+            maxRetriesPerRace: Int,
+        ): Boolean = budgetLeft > 0 && retriesThisRace < raceRetryLimit(lostGoalRace, retriesThisRace, budgetLeft, maxRetriesPerRace)
+
+        /** The log line for a retry taken from the Try Again dialog: what it spends, and what this race's limit and the career's retry budget leave. */
         internal fun raceRetryText(
             freeRetryShown: Boolean,
             retryNumber: Int,
-            maxRetriesPerRace: Int,
+            raceLimit: Int,
             budgetLeft: Int,
             policy: String,
             grade: RaceGrade?,
+            lostGoalRace: Boolean,
         ): String {
             val spends =
                 if (freeRetryShown) {
                     "the daily free retry"
                 } else {
-                    "an Alarm Clock (if none is held, alarmClockPolicy=$policy ${if (alarmClockPurchaseAllowed(policy, grade)) "buys one" else "buys none"})"
+                    "an Alarm Clock (if none is held, alarmClockPolicy=$policy ${if (alarmClockPurchaseAllowed(policy, grade, lostGoalRace)) "buys one" else "buys none"})"
                 }
-            return "[RACE] Retrying the failed race with $spends: retry $retryNumber of $maxRetriesPerRace for this race, $budgetLeft left in this career's retry budget."
+            val race = if (lostGoalRace) "the lost goal race" else "the failed race"
+            return "[RACE] Retrying $race with $spends: retry $retryNumber of $raceLimit for this race, $budgetLeft left in this career's retry budget."
         }
 
         /** The log line for a Try Again dialog the bot closes, naming the rule that stopped the retry. */
         internal fun raceRetryDeclinedText(
             alarmClockDeclined: Boolean,
             retriesThisRace: Int,
-            maxRetriesPerRace: Int,
+            raceLimit: Int,
             budgetLeft: Int,
             policy: String,
         ): String {
             val reason =
                 when {
                     alarmClockDeclined -> "no Alarm Clock is held and alarmClockPolicy=$policy buys none for this race"
-                    retriesThisRace >= maxRetriesPerRace -> "this race already used its $maxRetriesPerRace ${if (maxRetriesPerRace == 1) "retry" else "retries"}"
                     budgetLeft <= 0 -> "this career's retry budget is used up"
+                    retriesThisRace >= raceLimit -> "this race already used its $raceLimit ${if (raceLimit == 1) "retry" else "retries"}"
                     else -> "the scenario's retry rules do not cover this race"
                 }
             return "[RACE] Not retrying the failed race: $reason. Closing the Try Again dialog."
         }
 
         /** Whether closing a Try Again dialog ends the career on a failed goal. Finale losses stay out: the finale win count records them
-         * (quality FINALE_LOST). A dialog the bot opened with the results-screen retry button follows a goal that was met below 1st. */
-        internal fun declinedRetryFailsGoal(
-            runningGoalRace: Boolean,
-            finaleSeason: Boolean,
-            openedByBot: Boolean,
-        ): Boolean = runningGoalRace && !finaleSeason && !openedByBot
+         * (quality FINALE_LOST). */
+        internal fun declinedRetryFailsGoal(runningGoalRace: Boolean, finaleSeason: Boolean): Boolean = runningGoalRace && !finaleSeason
     }
 
     init {
@@ -1944,14 +1938,14 @@ class Racing(private val game: Game, private val campaign: Campaign) {
      *
      * @return True if the bot completed the race; otherwise false.
      */
-    fun runRaceWithRetries(isMandatory: Boolean = false): Boolean {
+    fun runRaceWithRetries(): Boolean {
         MessageLog.i(TAG, "[RACE] Proceeding to handle the race...")
 
         // Flag used to prevent us from attempting to select a running style after we've already successfully selected a running style once.
         var bDidSelectRaceStrategy = false
         // Reset the shared per-race retry counter at the start of the button-based loop (covers direct callers like UnityCup that bypass handleRaceEvents' gate).
         retriesThisRace = 0
-        bRetryDialogOpenedByBot = false
+        bRetryingLostGoalRace = false
 
         // Time budget rather than an iteration count. A race the ACCOUNT has never run has no
         // View Results / Skip (both unlock only after the first playthrough), so it MUST be watched
@@ -2052,114 +2046,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
                     MessageLog.i(TAG, "[TRACKBLAZER] Closed post-race Rival popup.")
                     campaign.onRaceWin()
                     game.wait(1.0)
-
-                    // After closing the popup, check if we can retry a specific race grade.
-                    if (!disableRaceRetries &&
-                        lastRaceGrade != null &&
-                        trackblazerRetryGrades.contains(lastRaceGrade) &&
-                        raceRetries > 0 &&
-                        retriesThisRace < maxRetriesPerRace &&
-                        ButtonTryAgainAlt.checkDisabled(game.imageUtils) == false
-                    ) {
-                        MessageLog.i(TAG, "[TRACKBLAZER] $lastRaceGrade race detected and retry button is available. Retrying...")
-                        if (ButtonTryAgainAlt.click(game.imageUtils)) {
-                            bRetryDialogOpenedByBot = true
-                            game.wait(3.0)
-                            retriesThisRace++
-                            raceRetries--
-                        }
-                    } else if (!disableRaceRetries &&
-                        lastRaceIsRival &&
-                        lastRaceGrade != null &&
-                        trackblazerRetryGrades.contains(lastRaceGrade) &&
-                        !bRetriedCurrentRace &&
-                        raceRetries > 0 &&
-                        retriesThisRace < maxRetriesPerRace &&
-                        ButtonTryAgainAlt.checkDisabled(game.imageUtils) == false
-                    ) {
-                        // Trackblazer Rival Race retry logic: retry once then stop.
-                        MessageLog.i(TAG, "[TRACKBLAZER] Rival Race retry button is available. Retrying once...")
-                        bRetriedCurrentRace = true
-                        if (ButtonTryAgainAlt.click(game.imageUtils)) {
-                            bRetryDialogOpenedByBot = true
-                            game.wait(3.0)
-                            retriesThisRace++
-                            raceRetries--
-                        }
-                    } else {
-                        MessageLog.i(TAG, "[TRACKBLAZER] No retries remaining or G1/G2/G3/Rival race conditions not met.")
-                    }
-                }
-
-                game.scenario == "Trackblazer" &&
-                    !disableRaceRetries &&
-                    lastRaceGrade != null &&
-                    trackblazerRetryGrades.contains(lastRaceGrade) &&
-                    raceRetries > 0 &&
-                    retriesThisRace < maxRetriesPerRace &&
-                    ButtonTryAgainAlt.checkDisabled(
-                        game.imageUtils,
-                        sourceBitmap = bitmap,
-                    ) == false -> {
-                    // Check if we can retry a specific race grade even if no popup appeared.
-                    MessageLog.i(TAG, "[TRACKBLAZER] $lastRaceGrade race detected and retry button is available. Retrying...")
-                    if (ButtonTryAgainAlt.click(game.imageUtils, sourceBitmap = bitmap)) {
-                        bRetryDialogOpenedByBot = true
-                        game.wait(3.0)
-                        retriesThisRace++
-                        raceRetries--
-                    }
-                }
-
-                game.scenario == "Trackblazer" &&
-                    !disableRaceRetries &&
-                    lastRaceIsRival &&
-                    lastRaceGrade != null &&
-                    trackblazerRetryGrades.contains(lastRaceGrade) &&
-                    !bRetriedCurrentRace &&
-                    raceRetries > 0 &&
-                    retriesThisRace < maxRetriesPerRace &&
-                    ButtonTryAgainAlt.checkDisabled(
-                        game.imageUtils,
-                        sourceBitmap = bitmap,
-                    ) == false -> {
-                    // Trackblazer Rival Race retry logic even if no popup appeared.
-                    MessageLog.i(TAG, "[TRACKBLAZER] Rival Race retry button is available. Retrying once...")
-                    bRetriedCurrentRace = true
-                    if (ButtonTryAgainAlt.click(game.imageUtils, sourceBitmap = bitmap)) {
-                        bRetryDialogOpenedByBot = true
-                        game.wait(3.0)
-                        retriesThisRace++
-                        raceRetries--
-                    }
-                }
-
-                // Mandatory races retry toward 1st place whenever a retry is available (upstream
-                // 0c288332), threaded through our retry accounting: bounded by the per-race cap,
-                // the free alarm-clock count, and the user's alarm-clock policy skip flag - an
-                // unbounded retry on a hopeless race would loop into the purchase dialog forever.
-                // The Congratulations banner means 1st place: never retry a win.
-                isMandatory &&
-                    !disableRaceRetries &&
-                    !bAlarmClockPolicySkippedThisRace &&
-                    raceRetries > 0 &&
-                    retriesThisRace < maxRetriesPerRace &&
-                    !LabelCongratulations.check(game.imageUtils, sourceBitmap = bitmap) &&
-                    ButtonTryAgainAlt.checkDisabled(game.imageUtils, sourceBitmap = bitmap) == false -> {
-                    // The banner can lag the captured frame; a stale miss here burns an alarm
-                    // clock retrying a race that was already won, so re-check a fresh capture.
-                    game.wait(0.5)
-                    if (LabelCongratulations.check(game.imageUtils)) {
-                        MessageLog.i(TAG, "[RACE] Congratulations banner appeared on re-check. Not retrying a won mandatory race.")
-                    } else {
-                        MessageLog.i(TAG, "[RACE] Mandatory race finished below 1st place. Retrying for the win...")
-                        if (ButtonTryAgainAlt.click(game.imageUtils)) {
-                            bRetryDialogOpenedByBot = true
-                            game.wait(3.0)
-                            retriesThisRace++
-                            raceRetries--
-                        }
-                    }
                 }
 
                 ButtonNext.check(game.imageUtils, sourceBitmap = bitmap) -> {
@@ -2211,7 +2097,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         // Close the outcome loop for the finale: the gold "1st" laurel (= 1st place) is co-present with
         // the results screen just confirmed above, before we click through it. Read the laurel, NOT the
         // text banner - the URA Qualifier and Semi-Final show "You did it!" while only the Finals shows
-        // "Congratulations!", so a LabelCongratulations check undercounts (validated live 2026-07-09:
+        // "Congratulations!", so a check of that text banner undercounts (validated live 2026-07-09:
         // Rudolf swept 3/3 but the text-only check caught only the Finals). Record win/lose per finale
         // race so the ledger tells a true finale win from a completed-but-lost run. Double-read since the
         // result graphic can lag one frame.
@@ -3167,11 +3053,9 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         if (!ButtonRace.check(game.imageUtils)) {
             lastRaceGrade = null
             lastRaceFans = 0
-            lastRaceIsRival = false
-            bRetriedCurrentRace = false
             bAlarmClockPolicySkippedThisRace = false
             retriesThisRace = 0
-            bRetryDialogOpenedByBot = false
+            bRetryingLostGoalRace = false
         }
         MessageLog.v(TAG, "\n********************")
         MessageLog.v(TAG, "[RACE] Starting Racing process on ${campaign.date}.")
@@ -3424,7 +3308,7 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         bRunningGoalRace = true
         val (raceCompleted, resultsFinalized) =
             try {
-                runRaceWithRetries(isMandatory = true) to finalizeRaceResults()
+                runRaceWithRetries() to finalizeRaceResults()
             } finally {
                 bRunningGoalRace = false
             }
@@ -4319,7 +4203,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         game.tap(targetRaceLocation.x, targetRaceLocation.y, winnerTemplatePath, ignoreWaiting = true)
         lastRaceGrade = bestRace.raceData.grade
         lastRaceFans = bestRace.raceData.fans
-        lastRaceIsRival = bestRace.raceData.isRival
 
         return true
     }
@@ -4531,7 +4414,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
         val raceDataList = lookupRaceInDatabase(campaign.date.day, selectedRaceName)
         lastRaceGrade = raceDataList.firstOrNull()?.grade
         lastRaceFans = raceDataList.firstOrNull()?.fans ?: 0
-        lastRaceIsRival = filteredRaces[index].isRival
 
         // Selects the determined race on screen.
         MessageLog.v(TAG, "[RACE] Selecting extra race at option #${index + 1}.")
@@ -4606,7 +4488,6 @@ class Racing(private val game: Game, private val campaign: Campaign) {
 
         lastRaceGrade = resolvedGrades[selection.index]
         lastRaceFans = resolvedFans[selection.index]
-        lastRaceIsRival = candidates[selection.index].isRival
 
         val winner = anchors[selection.index]
         MessageLog.i(

@@ -616,38 +616,6 @@ class Trackblazer(game: Game) : Campaign(game) {
         }
     }
 
-    override fun shouldRetryRace(dialog: DialogInterface, args: Map<String, Any>): Boolean {
-        // Once all free Alarm Clocks are used up, the only retry option is the carat-purchase popup.
-        // If alarmClockPolicy already declined that popup this race, accepting the retry just
-        // re-triggers the same declined popup, so bail out and proceed to results.
-        if (racing.bAlarmClockPolicySkippedThisRace) {
-            MessageLog.i(TAG, "[TRACKBLAZER] Alarm clock policy already declined the carat-retry option this race. Skipping further retry attempts and proceeding to race results.")
-            return false
-        }
-        if (racing.lastRaceGrade != null &&
-            racing.trackblazerRetryGrades.contains(racing.lastRaceGrade) &&
-            racing.raceRetries > 0 &&
-            racing.retriesThisRace < racing.maxRetriesPerRace
-        ) {
-            if (racing.lastRaceIsRival && !racing.bRetriedCurrentRace) {
-                MessageLog.i(TAG, "[TRACKBLAZER] ${racing.lastRaceGrade} Rival Race retry button is available. Retrying once.")
-                racing.bRetriedCurrentRace = true
-            } else {
-                MessageLog.i(TAG, "[TRACKBLAZER] ${racing.lastRaceGrade} race retry button is available. Retrying.")
-            }
-
-            racing.raceRetries--
-            racing.retriesThisRace++
-            if (dialog.ok(game.imageUtils)) {
-                game.wait(1.0)
-            }
-            return true
-        }
-
-        MessageLog.w(TAG, "[WARN] shouldRetryRace:: No retries remaining or G1/G2/G3/Rival race conditions not met.")
-        return false
-    }
-
     override fun shouldRecoverMoodFromItems(sourceBitmap: Bitmap): Boolean? {
         val hasMoodItems =
             currentInventory.any { (name, count) ->
@@ -751,7 +719,6 @@ class Trackblazer(game: Game) : Campaign(game) {
                 }
 
                 racing.lastRaceGrade = raceData.grade
-                racing.lastRaceIsRival = raceData.isRival
                 // Carry the selection's real resolution provenance (exact/fuzzy/ambiguousSet) instead of
                 // stamping exact/1 unconditionally.
                 tbSelectedEnteredRace = suitableRaceResult.enteredRace

@@ -72,7 +72,7 @@ export interface Settings {
         daysToRunExtraRaces: number
         disableRaceRetries: boolean
         enableFreeRaceRetry: boolean
-        alarmClockPolicy: "Never" | "G1Only" | "G1AndFinale" | "Always"
+        alarmClockPolicy: "Never" | "GoalRaces" | "G1Only" | "G1AndFinale" | "Always"
         enableCompleteCareerOnFailure: boolean
         enableStopOnMandatoryRaces: boolean
         enableForceRacing: boolean
@@ -439,9 +439,7 @@ export interface Settings {
         trackblazerSkipEmpoweringMegaphoneBelowGain: number
         trackblazerSkipMotivatingMegaphoneBelowGain: number
         trackblazerSkipCoachingMegaphoneBelowGain: number
-        trackblazerMaxRetriesPerRace: number
         trackblazerWhistleForcesTraining: boolean
-        trackblazerRetryRacesBeforeFinalGrades: string[]
         trackblazerEnableIrregularTraining: boolean
         trackblazerIrregularTrainingMinStatGain: number
         trackblazerExcludedItems: string[]
@@ -495,14 +493,12 @@ export const defaultSettings: Settings = {
         daysToRunExtraRaces: 5,
         disableRaceRetries: false,
         enableFreeRaceRetry: false,
-        // Policy for when the bot runs out of free Alarm Clocks (5 per career) and the game
-        // offers a paid retry for 10 carats. Four-option policy:
-        //   - "Never"        -> always cancel the popup, never spend carats.
-        //   - "G1Only"       -> spend carats only if the failed race was G1.
-        //   - "G1AndFinale"  -> spend carats for G1 races OR Twinkle Star Climax finale races
-        //                       (turns 73-75 in Trackblazer, tagged as RaceGrade.FINALE).
-        //   - "Always"       -> always spend the 10 carats and retry.
-        // Defaults to "Never" so the bot never spends premium currency without explicit opt-in.
+        // When a retry has no free retry or held Alarm Clock left, the game offers one for 10 carats:
+        //   - "Never"        -> cancel, never spend carats (the default).
+        //   - "GoalRaces"    -> spend only to retry a lost goal race.
+        //   - "G1Only"       -> spend only if the failed race was G1.
+        //   - "G1AndFinale"  -> spend for G1 races or Twinkle Star Climax finale races (turns 73-75 in Trackblazer).
+        //   - "Always"       -> always spend.
         alarmClockPolicy: "Never",
         enableCompleteCareerOnFailure: false,
         enableStopOnMandatoryRaces: false,
@@ -935,9 +931,7 @@ export const defaultSettings: Settings = {
         trackblazerSkipEmpoweringMegaphoneBelowGain: 0,
         trackblazerSkipMotivatingMegaphoneBelowGain: 0,
         trackblazerSkipCoachingMegaphoneBelowGain: 0,
-        trackblazerMaxRetriesPerRace: 1,
         trackblazerWhistleForcesTraining: true,
-        trackblazerRetryRacesBeforeFinalGrades: ["G1", "G2", "G3"],
         trackblazerEnableIrregularTraining: false,
         trackblazerIrregularTrainingMinStatGain: 30,
         // The two Energy Drinks are the worst energy-per-coin in the shop and are excluded on

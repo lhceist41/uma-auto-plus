@@ -392,7 +392,7 @@ const searchConfig: SearchOption[] = [
         id: "alarm-clock-policy",
         title: "Alarm Clock Carat Policy",
         description:
-            "When the bot runs out of free Alarm Clocks (5 per career) and the game prompts to buy one for 10 carats, this policy decides whether to spend carats based on what race was lost.",
+            "When a race retry has no free retry or Alarm Clock left, the game offers to buy an Alarm Clock for 10 carats. This decides whether the bot buys one: never, only for a lost career goal race, or by the race's grade.",
         page: "RacingSettings",
     },
     {
@@ -762,22 +762,10 @@ const searchConfig: SearchOption[] = [
         page: "ScenarioOverridesSettings",
     },
     {
-        id: "trackblazer-max-retries-per-race",
-        title: "Trackblazer Max Retries per Race",
-        description: "Sets the maximum number of retries allowed for a single race in the Trackblazer scenario.",
-        page: "ScenarioOverridesSettings",
-    },
-    {
         id: "trackblazer-whistle-forces-training",
         title: "Trackblazer Reset Whistle Forces Training",
         description:
             "Whether or not using a Reset Whistle means it can ignore the failure chance thresholds in the Training Settings page. If enabled, the bot will pick the best available training after usage even if it's risky.",
-        page: "ScenarioOverridesSettings",
-    },
-    {
-        id: "trackblazer-retry-races-before-final-grades",
-        title: "Trackblazer Race Grades to use Race Retries on",
-        description: "Select which race grades should allow using a Race Retry in the Trackblazer scenario.",
         page: "ScenarioOverridesSettings",
     },
     {

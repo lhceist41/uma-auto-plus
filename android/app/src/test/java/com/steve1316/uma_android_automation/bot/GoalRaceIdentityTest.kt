@@ -88,8 +88,8 @@ class GoalRaceIdentityTest {
             assertTrue(racesOnTurn(43).none(course))
             assertTrue(racesOnTurn(43).any { it.getString("name") == "Kyoto Daishoten" && it.getString("grade") == "G2" })
             // With G1Only, the goal read on its own turn buys the retry; the stale G2 read did not.
-            assertTrue(Racing.alarmClockPurchaseAllowed("G1Only", RaceGrade.G1))
-            assertFalse(Racing.alarmClockPurchaseAllowed("G1Only", RaceGrade.G2))
+            assertTrue(Racing.alarmClockPurchaseAllowed("G1Only", RaceGrade.G1, lostGoalRace = false))
+            assertFalse(Racing.alarmClockPurchaseAllowed("G1Only", RaceGrade.G2, lostGoalRace = false))
         }
 
         @Test
@@ -120,15 +120,15 @@ class GoalRaceIdentityTest {
         @Test
         fun `the Alarm Clock rule decides on the goal race's grade`() {
             // The G1 goal read on its own turn lets G1Only buy; the stale turn's G3 did not.
-            assertTrue(Racing.alarmClockPurchaseAllowed("G1Only", RaceGrade.G1))
-            assertFalse(Racing.alarmClockPurchaseAllowed("G1Only", RaceGrade.G3))
-            assertFalse(Racing.alarmClockPurchaseAllowed("Never", RaceGrade.G1))
-            assertTrue(Racing.alarmClockPurchaseAllowed("G1AndFinale", RaceGrade.FINALE))
-            assertFalse(Racing.alarmClockPurchaseAllowed("G1AndFinale", RaceGrade.G2))
-            assertTrue(Racing.alarmClockPurchaseAllowed("Always", null))
-            assertFalse(Racing.alarmClockPurchaseAllowed("G1Only", null))
-            assertFalse(Racing.alarmClockPurchaseAllowed("unknown", RaceGrade.G1))
-            assertTrue(source("$botDir/DialogHandler.kt").contains("val shouldSpend = Racing.alarmClockPurchaseAllowed(policy, grade)"))
+            assertTrue(Racing.alarmClockPurchaseAllowed("G1Only", RaceGrade.G1, lostGoalRace = false))
+            assertFalse(Racing.alarmClockPurchaseAllowed("G1Only", RaceGrade.G3, lostGoalRace = false))
+            assertFalse(Racing.alarmClockPurchaseAllowed("Never", RaceGrade.G1, lostGoalRace = false))
+            assertTrue(Racing.alarmClockPurchaseAllowed("G1AndFinale", RaceGrade.FINALE, lostGoalRace = false))
+            assertFalse(Racing.alarmClockPurchaseAllowed("G1AndFinale", RaceGrade.G2, lostGoalRace = false))
+            assertTrue(Racing.alarmClockPurchaseAllowed("Always", null, lostGoalRace = false))
+            assertFalse(Racing.alarmClockPurchaseAllowed("G1Only", null, lostGoalRace = false))
+            assertFalse(Racing.alarmClockPurchaseAllowed("unknown", RaceGrade.G1, lostGoalRace = false))
+            assertTrue(source("$botDir/DialogHandler.kt").contains("val shouldSpend = Racing.alarmClockPurchaseAllowed(policy, grade, lostGoalRace)"))
         }
     }
 
@@ -137,29 +137,29 @@ class GoalRaceIdentityTest {
     inner class RetryText {
         @Test
         fun `a retry names what it spends and what is left`() {
-            // The goal race retry: the career had used one retry of its budget of 3 on an earlier goal race.
+            // A retry of a race held to the per-race cap of 1, with the career budget of 3 partly used.
             assertEquals(
                 "[RACE] Retrying the failed race with an Alarm Clock (if none is held, alarmClockPolicy=Never buys none): retry 1 of 1 for this race, 1 left in this career's retry budget.",
-                Racing.raceRetryText(freeRetryShown = false, retryNumber = 1, maxRetriesPerRace = 1, budgetLeft = 1, policy = "Never", grade = RaceGrade.G1),
+                Racing.raceRetryText(freeRetryShown = false, retryNumber = 1, raceLimit = 1, budgetLeft = 1, policy = "Never", grade = RaceGrade.G1, lostGoalRace = false),
             )
             assertEquals(
                 "[RACE] Retrying the failed race with an Alarm Clock (if none is held, alarmClockPolicy=G1Only buys one): retry 1 of 1 for this race, 1 left in this career's retry budget.",
-                Racing.raceRetryText(freeRetryShown = false, retryNumber = 1, maxRetriesPerRace = 1, budgetLeft = 1, policy = "G1Only", grade = RaceGrade.G1),
+                Racing.raceRetryText(freeRetryShown = false, retryNumber = 1, raceLimit = 1, budgetLeft = 1, policy = "G1Only", grade = RaceGrade.G1, lostGoalRace = false),
             )
             assertEquals(
                 "[RACE] Retrying the failed race with the daily free retry: retry 1 of 1 for this race, 2 left in this career's retry budget.",
-                Racing.raceRetryText(freeRetryShown = true, retryNumber = 1, maxRetriesPerRace = 1, budgetLeft = 2, policy = "Never", grade = RaceGrade.G1),
+                Racing.raceRetryText(freeRetryShown = true, retryNumber = 1, raceLimit = 1, budgetLeft = 2, policy = "Never", grade = RaceGrade.G1, lostGoalRace = false),
             )
         }
 
         @Test
         fun `a closed Try Again dialog names the rule that stopped the retry`() {
-            // The second loss: the per-race limit, not an empty budget (one retry was still left).
-            val perRace = Racing.raceRetryDeclinedText(alarmClockDeclined = false, retriesThisRace = 1, maxRetriesPerRace = 1, budgetLeft = 1, policy = "Never")
+            // A race at its per-race limit with budget still left names the limit, not an empty budget.
+            val perRace = Racing.raceRetryDeclinedText(alarmClockDeclined = false, retriesThisRace = 1, raceLimit = 1, budgetLeft = 1, policy = "Never")
             assertEquals("[RACE] Not retrying the failed race: this race already used its 1 retry. Closing the Try Again dialog.", perRace)
             assertEquals(
                 "[RACE] Not retrying the failed race: no Alarm Clock is held and alarmClockPolicy=Never buys none for this race. Closing the Try Again dialog.",
-                Racing.raceRetryDeclinedText(alarmClockDeclined = true, retriesThisRace = 0, maxRetriesPerRace = 1, budgetLeft = 3, policy = "Never"),
+                Racing.raceRetryDeclinedText(alarmClockDeclined = true, retriesThisRace = 0, raceLimit = 1, budgetLeft = 3, policy = "Never"),
             )
             assertTrue(Racing.raceRetryDeclinedText(false, 0, 1, 0, "Never").contains("this career's retry budget is used up"))
             assertTrue(Racing.raceRetryDeclinedText(false, 0, 2, 4, "Never").contains("the scenario's retry rules do not cover this race"))
@@ -169,8 +169,8 @@ class GoalRaceIdentityTest {
         @Test
         fun `the dialog path logs through the helpers`() {
             val campaign = source("$botDir/Campaign.kt")
-            assertTrue(campaign.contains("MessageLog.i(TAG, Racing.raceRetryText(freeRetryShown, racing.retriesThisRace + 1, racing.maxRetriesPerRace, racing.raceRetries - 1, policy, racing.lastRaceGrade))"))
-            assertTrue(campaign.contains("MessageLog.i(TAG, Racing.raceRetryDeclinedText(racing.bAlarmClockPolicySkippedThisRace, racing.retriesThisRace, racing.maxRetriesPerRace, racing.raceRetries, policy))"))
+            assertTrue(campaign.contains("MessageLog.i(TAG, Racing.raceRetryText(freeRetryShown, racing.retriesThisRace + 1, raceLimit, racing.raceRetries - 1, policy, racing.lastRaceGrade, lostGoalRace))"))
+            assertTrue(campaign.contains("MessageLog.i(TAG, Racing.raceRetryDeclinedText(racing.bAlarmClockPolicySkippedThisRace, racing.retriesThisRace, raceLimit, racing.raceRetries, policy))"))
             assertFalse(campaign.contains("Retries remaining: \${racing.raceRetries}"))
             assertFalse(campaign.contains("No retries remaining but Try Again dialog detected"))
         }
@@ -181,42 +181,27 @@ class GoalRaceIdentityTest {
     inner class FailedGoal {
         @Test
         fun `a closed Try Again dialog on a goal race fails the goal, outside the finale`() {
-            assertTrue(Racing.declinedRetryFailsGoal(runningGoalRace = true, finaleSeason = false, openedByBot = false))
-            assertFalse(Racing.declinedRetryFailsGoal(runningGoalRace = false, finaleSeason = false, openedByBot = false))
-            assertFalse(Racing.declinedRetryFailsGoal(runningGoalRace = true, finaleSeason = true, openedByBot = false))
+            assertTrue(Racing.declinedRetryFailsGoal(runningGoalRace = true, finaleSeason = false))
+            assertFalse(Racing.declinedRetryFailsGoal(runningGoalRace = false, finaleSeason = false))
+            assertFalse(Racing.declinedRetryFailsGoal(runningGoalRace = true, finaleSeason = true))
         }
 
         @Test
-        fun `a goal met below 1st does not force-end, a failed goal still does`() {
-            // A goal met at 2nd-5th: the bot taps the results-screen retry button, the game asks to confirm the retry
-            // (the Trackblazer G1 sequence: try_again_alt tapped, then the Try Again dialog), and the per-race cap closes it.
-            assertFalse(Racing.declinedRetryFailsGoal(runningGoalRace = true, finaleSeason = false, openedByBot = true))
-            // Tenno Sho (Spring) lost twice: the game opened the dialog itself after each loss.
-            assertTrue(Racing.declinedRetryFailsGoal(runningGoalRace = true, finaleSeason = false, openedByBot = false))
-        }
-
-        @Test
-        fun `every results-screen retry tap marks its dialog, and the dialog handler consumes the mark first`() {
+        fun `a goal met below 1st does not force-end, because the bot no longer opens a Try Again dialog itself`() {
+            // A goal met at 2nd-5th used to be followed by the bot's own results-screen retry tap, whose confirmation dialog
+            // the per-race cap then closed (the Trackblazer G1 sequence: try_again_alt tapped, then the Try Again dialog).
+            // With no retry tap left, every Try Again dialog is the game's, shown after a failed goal.
             val racing = source("$botDir/Racing.kt")
-            val loop = body(racing, "fun runRaceWithRetries(", "private fun tapRaceDayButton(")
-            val taps = Regex("if \\(ButtonTryAgainAlt\\.click\\([^)]*\\)\\) \\{\\n\\s*bRetryDialogOpenedByBot = true\\n").findAll(loop).count()
-            assertEquals(5, Regex("ButtonTryAgainAlt\\.click\\(").findAll(loop).count(), "results-screen retry taps")
-            assertEquals(5, taps, "each tap marks the dialog it opens")
-            assertTrue(loop.contains("retriesThisRace = 0\n        bRetryDialogOpenedByBot = false"), "reset when the race loop starts")
-            assertTrue(racing.contains("retriesThisRace = 0\n            bRetryDialogOpenedByBot = false"), "reset with the other per-race flags")
-            val tryAgain = body(source("$botDir/Campaign.kt"), "private fun handleTryAgainDialog(", "open fun onAfterTurnStartUpdates()")
-            assertTrue(
-                tryAgain.startsWith(
-                    "private fun handleTryAgainDialog(dialog: DialogInterface, args: Map<String, Any>): DialogHandlerResult {\n" +
-                        "        val openedByBot = racing.bRetryDialogOpenedByBot\n        racing.bRetryDialogOpenedByBot = false\n",
-                ),
-                "the mark is read and cleared before the dialog is handled",
-            )
+            assertFalse(racing.contains("ButtonTryAgainAlt"), "no results-screen retry tap")
+            assertFalse(racing.contains("bRetryDialogOpenedByBot"))
+            assertFalse(source("android/app/src/main/java/com/steve1316/uma_android_automation/components/Button.kt").contains("ButtonTryAgainAlt"))
+            // Tenno Sho (Spring) lost twice: the game opened the dialog after each loss.
+            assertTrue(Racing.declinedRetryFailsGoal(runningGoalRace = true, finaleSeason = false))
         }
 
         @Test
         fun `the fixture career ledgers FORCE_END, not COMPLETED, and keeps its result`() {
-            val forceEnded = Racing.declinedRetryFailsGoal(runningGoalRace = true, finaleSeason = false, openedByBot = false)
+            val forceEnded = Racing.declinedRetryFailsGoal(runningGoalRace = true, finaleSeason = false)
             val outcome = classifyCareerOutcome(TaskResultCode.TASK_RESULT_COMPLETE, forceEnded)
             assertEquals("FORCE_END", outcome)
             assertEquals("FORCE_END", classifyCareerQuality(outcome, finaleRaces = 0, finaleWins = 0))
@@ -228,11 +213,11 @@ class GoalRaceIdentityTest {
         fun `the goal race window marks the force-end and closes after the results`() {
             val mandatory = body(source("$botDir/Racing.kt"), "private fun handleMandatoryRace(): Boolean {", "private fun selectMaidenRace(")
             val set = mandatory.indexOf("bRunningGoalRace = true")
-            val race = mandatory.indexOf("runRaceWithRetries(isMandatory = true) to finalizeRaceResults()")
+            val race = mandatory.indexOf("runRaceWithRetries() to finalizeRaceResults()")
             val cleared = mandatory.indexOf("} finally {\n                bRunningGoalRace = false")
             assertTrue(set in 0 until race && race < cleared, "the flag spans the race and its results")
             val tryAgain = body(source("$botDir/Campaign.kt"), "private fun handleTryAgainDialog(", "open fun onAfterTurnStartUpdates()")
-            assertTrue(tryAgain.contains("if (Racing.declinedRetryFailsGoal(racing.bRunningGoalRace, date.bIsFinaleSeason, openedByBot)) markCareerForceEnded(\"MANDATORY_RACE_LOST\")"))
+            assertTrue(tryAgain.contains("if (Racing.declinedRetryFailsGoal(racing.bRunningGoalRace, date.bIsFinaleSeason)) markCareerForceEnded(\"MANDATORY_RACE_LOST\")"))
         }
 
         @Test

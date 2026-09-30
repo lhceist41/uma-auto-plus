@@ -205,4 +205,15 @@ describe("applyMigrations", () => {
         expect(anyMigrated).toBe(false)
         expect(second).toEqual(first)
     })
+
+    it("drops the removed Trackblazer race-retry settings without asking for a save", () => {
+        const settings = {
+            general: { stopAtDates: [] },
+            scenarioOverrides: { trackblazerMaxRetriesPerRace: 1, trackblazerRetryRacesBeforeFinalGrades: ["G1"], trackblazerEnergyThreshold: 40 },
+        } as any
+
+        const { settings: migrated, anyMigrated } = applyMigrations(settings)
+        expect(migrated.scenarioOverrides).toEqual({ trackblazerEnergyThreshold: 40 })
+        expect(anyMigrated).toBe(false)
+    })
 })

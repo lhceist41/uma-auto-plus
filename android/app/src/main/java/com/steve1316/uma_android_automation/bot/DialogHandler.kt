@@ -339,6 +339,7 @@ open class DialogHandler(val game: Game) {
                 // for 10 carats. Decision is driven by `racing.alarmClockPolicy` and the grade
                 // of the most recent race (tracked on Racing.lastRaceGrade):
                 //   - "Never"        -> always cancel.
+                //   - "GoalRaces"    -> spend only to retry a lost goal race.
                 //   - "G1Only"       -> spend only if last race was G1.
                 //   - "G1AndFinale"  -> spend for G1 or Twinkle Star Climax finale (RaceGrade.FINALE).
                 //   - "Always"       -> always spend.
@@ -346,12 +347,13 @@ open class DialogHandler(val game: Game) {
                 // (e.g., misc tasks where this dialog shouldn't fire anyway).
                 val policy = SettingsHelper.getStringSetting("racing", "alarmClockPolicy", "Never")
                 val grade = (game.task as? Campaign)?.getLastRaceGrade()
-                val shouldSpend = Racing.alarmClockPurchaseAllowed(policy, grade)
+                val lostGoalRace = (game.task as? Campaign)?.isRetryingLostGoalRace() ?: false
+                val shouldSpend = Racing.alarmClockPurchaseAllowed(policy, grade, lostGoalRace)
                 if (shouldSpend) {
-                    MessageLog.i(TAG, "[DIALOG] Out of free Alarm Clocks. Spending 10 carats to retry (policy='$policy', grade=$grade).")
+                    MessageLog.i(TAG, "[DIALOG] Out of free Alarm Clocks. Spending 10 carats to retry (policy='$policy', grade=$grade, lostGoalRace=$lostGoalRace).")
                     dialog.ok(game.imageUtils)
                 } else {
-                    MessageLog.i(TAG, "[DIALOG] Out of free Alarm Clocks. Skipping carats spend (policy='$policy', grade=$grade). Continuing without retry.")
+                    MessageLog.i(TAG, "[DIALOG] Out of free Alarm Clocks. Skipping carats spend (policy='$policy', grade=$grade, lostGoalRace=$lostGoalRace). Continuing without retry.")
                     // Mark this race as having had its retry option exhausted via policy. Without this
                     // flag the bot loops: cancel popup → game returns to retry screen → bot taps retry
                     // button again → popup reopens → policy rejects again. shouldRetryRace short-circuits
