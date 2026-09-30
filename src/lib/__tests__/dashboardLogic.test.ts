@@ -310,7 +310,8 @@ test('describeTpRestores and describeRecoveries compose from the actual sub-coun
   assert.equal(logic.describeRecoveries({ total: 1, accessibility: 0, relaunches: 0, connection: 1 }), '1 connection hold');
   assert.equal(logic.describeRecoveries({ total: 2, accessibility: 0, relaunches: 0, connection: 2 }), '2 connection holds');
   assert.equal(logic.describeRecoveries({ total: 1, accessibility: 0, relaunches: 0, lobby: 1, connection: 0 }), '1 lobby re-entry');
-  assert.equal(logic.describeRecoveries({ total: 6, accessibility: 2, relaunches: 1, lobby: 2, connection: 1 }), '2 accessibility repairs · 1 relaunch · 2 lobby re-entries · 1 connection hold');
+  assert.equal(logic.describeRecoveries({ total: 6, accessibility: 2, relaunches: 1, lobby: 2, connection: 1 }), '2 accessibility repairs · 1 game reopen · 2 lobby re-entries · 1 connection hold');
+  assert.equal(logic.describeRecoveries({ total: 2, accessibility: 0, relaunches: 2, connection: 0 }), '2 game reopens');
   assert.equal(logic.describeRecoveries({ total: 0, accessibility: 0, relaunches: 0, connection: 0 }), 'none yet');
   assert.equal(logic.describeRecoveries(null), null);
 });

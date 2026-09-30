@@ -329,6 +329,8 @@ export interface Settings {
         veteranInspirationScanStartIndex: number
         // Read-only Veteran protection probe (PL-R2a). Park the game on the Veteran Roster list with Filters: OFF; probes whether any Veteran is favorited or has a memo via the filter dialog, applying nothing, and writes veteran_protection.jsonl.
         debugMode_startVeteranProtectionScanTest: boolean
+        // Live check of the stuck-game restart on a healthy game: sends the game Home, asks Android to close it, launches it fresh and checks for its title screen. Closes the game once; taps nothing.
+        debugMode_startGameRestartTest: boolean
         enableScreenRecording: boolean
         recordingBitRate: number
         recordingFrameRate: number
@@ -875,6 +877,7 @@ export const defaultSettings: Settings = {
         veteranInspirationScanLimit: 1,
         veteranInspirationScanStartIndex: 0,
         debugMode_startVeteranProtectionScanTest: false,
+        debugMode_startGameRestartTest: false,
         enableScreenRecording: false,
         recordingBitRate: 6,
         recordingFrameRate: 30,

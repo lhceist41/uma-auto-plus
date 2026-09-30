@@ -1040,6 +1040,13 @@ const searchConfig: SearchOption[] = [
         page: "DebugSettings",
     },
     {
+        id: "debug-game-restart-test",
+        title: "Start Game Restart Test",
+        description:
+            "Disables normal bot operations and checks the stuck-game restart on a healthy game: sends the game Home, asks Android to close it, launches it fresh and waits for its title screen. Closes the game once and taps nothing; a career in progress resumes on the next normal start.",
+        page: "DebugSettings",
+    },
+    {
         id: "debug-trackblazer-race-selection-test",
         title: "Start Trackblazer Race Selection Test",
         description:

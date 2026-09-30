@@ -60,6 +60,7 @@ const DebugSettings = () => {
         "debugMode_startVeteranInspirationReadTest",
         "debugMode_startVeteranInspirationScanTest",
         "debugMode_startVeteranProtectionScanTest",
+        "debugMode_startGameRestartTest",
     ] as const
 
     /**
@@ -1051,6 +1052,15 @@ const DebugSettings = () => {
                                 onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startVeteranProtectionScanTest", checked)}
                                 label="Start Veteran Protection Probe"
                                 description="Read-only check of which Veterans are protected from release. Park the game on the Veteran Roster list with Filters: OFF, then start the bot: it opens Display Settings > Filter and reads whether any Veteran is favorited or has a memo (the two markers that block a release), using the game's own greyed-out Apply button instead of applying anything. It leaves through Cancel, so the roster stays Filters: OFF, and never favorites, memos, transfers or edits. Tagged [PROTECTION-SCAN] in the log."
+                                style={{ marginTop: 10 }}
+                            />
+
+                            <CustomCheckbox
+                                searchId="debug-game-restart-test"
+                                checked={bsc.settings.debug.debugMode_startGameRestartTest}
+                                onCheckedChange={(checked) => handleDebugTestToggle("debugMode_startGameRestartTest", checked)}
+                                label="Start Game Restart Test"
+                                description="Checks the stuck-game restart on a healthy game. With the game in front (a career may be in progress), start the bot: on Android 12 and 13 it sends the game Home, asks Android to close it, launches it fresh and waits for its title screen, then stops. It closes the game once and taps nothing; start the bot normally afterwards to resume the career. Tagged [RESTART-TEST] in the log."
                                 style={{ marginTop: 10 }}
                             />
                         </View>

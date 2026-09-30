@@ -36,6 +36,7 @@ object DebugTestGate {
             "debugMode_startVeteranInspirationReadTest",
             "debugMode_startVeteranInspirationScanTest",
             "debugMode_startVeteranProtectionScanTest",
+            "debugMode_startGameRestartTest",
         )
 
     /** Enumerates stored flags for the navigator's dry-run conflict check, not launch authorization. */

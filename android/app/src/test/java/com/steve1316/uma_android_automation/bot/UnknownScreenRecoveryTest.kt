@@ -1,5 +1,6 @@
 package com.steve1316.uma_android_automation.bot
 
+import com.steve1316.uma_android_automation.DebugTestGate
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -68,10 +69,56 @@ class UnknownScreenRecoveryTest {
     inner class SourceGuard {
         @Test
         fun `restartGame re-fronts the game and never tears down a live task with CLEAR_TASK`() {
-            val game = sourceFile("bot/Game.kt").readText()
-            val body = game.substring(game.indexOf("fun restartGame("), game.indexOf("fun start()"))
-            assertFalse("FLAG_ACTIVITY_CLEAR_TASK" in body, "the relaunch must not CLEAR_TASK a live game (it killed the game on 2026-07-21)")
-            assertTrue("FLAG_ACTIVITY_NEW_TASK" in body, "the relaunch still starts the game task from this service context")
+            val game = sourceFile("bot/Game.kt").readText().replace("\r\n", "\n")
+            assertTrue(
+                game.contains("fun restartGame(waitAfterLaunch: Double = 20.0): Boolean = reopenGame(attempt = 1, waitAfterLaunch = waitAfterLaunch)"),
+                "the navigator's single relaunch stays the first-attempt re-front",
+            )
+            // CLEAR_TASK against a live game killed it on 2026-07-21: it exists only behind launchGame's
+            // clearTask flag, and only the restart sequence passes true, after its kill window.
+            assertEquals(1, Regex("FLAG_ACTIVITY_CLEAR_TASK").findAll(game).count())
+            assertTrue(game.contains("if (clearTask) Intent.FLAG_ACTIVITY_CLEAR_TASK else Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED"))
+            assertFalse(game.contains("launchGame(clearTask = true)") || game.contains("launchGame(true)"))
+            assertTrue(game.contains("launch = { clearTask -> launchGame(clearTask) }"))
+            val restart = sourceFile("bot/GameRestart.kt").readText().replace("\r\n", "\n").substringAfter("internal fun restartFrozenGame(")
+            val lastKill = restart.indexOf("        killGame()\n    }\n    sleep(GAME_LAUNCH_SECONDS_AFTER_HOME - elapsed)")
+            assertTrue(lastKill > restart.indexOf("pressHome()"), "the kill calls come after Home")
+            assertTrue(restart.indexOf("launch(true)") > lastKill, "the fresh-task launch comes after the whole kill window")
+            assertEquals(1, Regex("""launch\(true\)""").findAll(restart).count())
+        }
+
+        @Test
+        fun `the kill route is only taken where Android lets an app close another app, and only after Home`() {
+            val game = sourceFile("bot/Game.kt").readText().replace("\r\n", "\n")
+            val reopen = game.substringAfter("internal fun reopenGame(").substringBefore("\n    }\n")
+            assertTrue(reopen.contains("if (!reopenClosesGame(attempt, Build.VERSION.SDK_INT)) {"))
+            // A Home press that was not dispatched must stop the kill route: the lambda returns the real result.
+            assertTrue(reopen.contains("(dispatched=\$pressed).\")\n                    pressed\n                },"))
+            assertEquals(1, Regex("""\.killBackgroundProcesses\(""").findAll(game).count(), "one kill site")
+            assertTrue(game.substringAfter("private fun killGameProcess()").substringBefore("\n    }\n").contains("killBackgroundProcesses(GAME_PACKAGE)"))
+            val manifest = File(kotlinRoot(), "../../../../AndroidManifest.xml").readText()
+            assertTrue(manifest.contains("<uses-permission android:name=\"android.permission.KILL_BACKGROUND_PROCESSES\" />"))
+        }
+
+        @Test
+        fun `the reopen acts before it logs through MessageLog, and counts only what it dispatched`() {
+            val game = sourceFile("bot/Game.kt").readText().replace("\r\n", "\n")
+            val reopen = game.substringAfter("internal fun reopenGame(").substringBefore("\n    }\n")
+            val steps = reopen.substringAfter("restartFrozenGame(").substringBefore("return when (result)")
+            assertFalse(steps.contains("MessageLog"), "the steps log with android.util.Log only")
+            for (helper in listOf("private fun launchGame(", "private fun killGameProcess(")) {
+                assertFalse(game.substringAfter(helper).substringBefore("\n    }\n").contains("MessageLog"), helper)
+            }
+            // Re-front, restarted, not restarted, and the re-front after an unchanged screen; never when nothing was dispatched.
+            assertEquals(4, Regex("""SessionTally\.gameRelaunches\.incrementAndGet\(\)""").findAll(reopen).count())
+            assertFalse(reopen.substringAfter("FrozenGameRestart.NOT_DISPATCHED ->").contains("SessionTally"))
+
+            val campaign = sourceFile("bot/Campaign.kt").readText().replace("\r\n", "\n")
+            val rung = campaign.substringAfter("if (shouldRelaunchGame(").substringBefore("if (DialogUtils.check(game.imageUtils))")
+            val act = rung.indexOf("val reopen = game.reopenGame(gameRestartAttemptsThisEpisode)")
+            assertTrue(act >= 0 && act < rung.indexOf("MessageLog"), "the ladder reopens before it logs")
+            assertTrue(rung.contains("if (reopen != GameReopen.NOT_DISPATCHED) {"))
+            assertFalse(campaign.contains("relaunching the game"), "the ladder no longer claims a relaunch before one happened")
         }
 
         @Test
@@ -86,6 +133,30 @@ class UnknownScreenRecoveryTest {
             assertFalse("did not help - relaunching the game" in campaign)
             assertFalse("\$gameRestartAttemptsThisEpisode relaunch " in campaign)
             assertTrue("did not help - reopening the game" in campaign)
+        }
+
+        @Test
+        fun `the reopen's words claim only what the app can see`() {
+            val game = sourceFile("bot/Game.kt").readText().replace("\r\n", "\n")
+            val reopen = game.substringAfter("internal fun reopenGame(").substringBefore("\n    }\n")
+            val restarted = reopen.substringAfter("FrozenGameRestart.RESTARTED, FrozenGameRestart.RESTARTED_ON_PLAIN_LAUNCH ->").substringBefore("GameReopen.RESTARTED")
+            assertTrue(restarted.contains("asked to close") && !restarted.contains(", closed and"), "a kill is asked for, never proven")
+            val notRestarted = reopen.substringAfter("FrozenGameRestart.NOT_RESTARTED ->").substringBefore("GameReopen.NOT_RESTARTED")
+            assertFalse(notRestarted.contains("twice") || notRestarted.contains("either time"), "one of the two launches may not have been dispatched")
+            val unchanged = reopen.substringAfter("FrozenGameRestart.SCREEN_UNCHANGED_AFTER_HOME ->").substringBefore("GameReopen.REFRONTED")
+            assertTrue(unchanged.contains("Home did not clearly leave the game") && !unchanged.contains("is stuck"), "the cause is not known")
+        }
+
+        @Test
+        fun `the restart test is an explicit diagnostic that makes the ladder's second-attempt call and taps nothing`() {
+            val campaign = sourceFile("bot/Campaign.kt").readText().replace("\r\n", "\n")
+            assertTrue("debugMode_startGameRestartTest" in DebugTestGate.ALL_KEYS)
+            assertTrue(campaign.contains("\"debugMode_startGameRestartTest\" to ::startGameRestartTest,"))
+            val body = campaign.substringAfter("open fun startGameRestartTest() {").substringBefore("\n    }\n")
+            assertTrue(body.contains("game.reopenGame(attempt = 2)"))
+            for (forbidden in listOf("tap(", "tapCoordinate(", "swipe(", ".click(", "restartGame(")) assertFalse(body.contains(forbidden), forbidden)
+            val rung = campaign.substringAfter("if (shouldRelaunchGame(").substringBefore("if (DialogUtils.check(game.imageUtils))")
+            assertTrue(rung.contains("game.reopenGame(gameRestartAttemptsThisEpisode)"), "the diagnostic makes the rung's own call")
         }
 
         @Test

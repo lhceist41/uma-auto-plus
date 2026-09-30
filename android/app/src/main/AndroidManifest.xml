@@ -38,6 +38,11 @@
         and SIGKILL it under memory pressure. Paired with the FGS declarations below.-->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!--Lets the stuck-game recovery end the game's process once it is in the background
+        (Game.reopenGame). Normal protection level, no player prompt; on Android 14+ it only
+        covers this app's own processes.-->
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
+
     <!--Package visibility for the game (Android 11+ filters other packages by default):
         without this, getLaunchIntentForPackage returns null and the last-resort game
         relaunch in Game.restartGame silently no-ops.-->

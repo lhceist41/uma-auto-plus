@@ -398,7 +398,7 @@ class QueueLedgerWiringTest {
         fun `each recovery bumps its tally`() {
             assertTrue(after("fun ensureAccessibilityService(", game).substringBefore("\n    }\n").contains("SessionTally.accessibilityRewrites.incrementAndGet()"))
             assertTrue(after("fun forceRebindAccessibilityService(", game).substringBefore("\n    }\n").contains("SessionTally.accessibilityRebinds.incrementAndGet()"))
-            assertTrue(after("fun restartGame(", game).substringBefore("\n    }\n").contains("SessionTally.gameRelaunches.incrementAndGet()"))
+            assertTrue(after("internal fun reopenGame(", game).substringBefore("\n    }\n").contains("SessionTally.gameRelaunches.incrementAndGet()"))
             assertTrue(campaign.contains("lobbyReentryAttempts++\n                SessionTally.lobbyReentries.incrementAndGet()"))
             assertTrue(dialogHandler.contains("if (decision.attempt == 1) SessionTally.connectionHolds.incrementAndGet()"))
             assertTrue(startModule.indexOf("SessionTally.reset()") in 0 until startModule.indexOf("val launchSelection = dispatchDiagnostic("))

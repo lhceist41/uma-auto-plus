@@ -1110,9 +1110,24 @@ abstract class Campaign(game: Game) : Task(game) {
                 "debugMode_startVeteranInspirationReadTest" to ::startVeteranInspirationReadTest,
                 "debugMode_startVeteranInspirationScanTest" to ::startVeteranInspirationScanTest,
                 "debugMode_startVeteranProtectionScanTest" to ::startVeteranProtectionScanTest,
+                "debugMode_startGameRestartTest" to ::startGameRestartTest,
             )
 
         return game.diagnosticSelection?.dispatch(fnMap) ?: false
+    }
+
+    /**
+     * Live check of the stuck-game restart on a healthy game. Start it with the game in front, for
+     * example mid-career: it makes the call the unknown-screen ladder makes on its second attempt
+     * ([Game.reopenGame] with attempt 2), so on Android 12-13 the game is sent Home, asked to close,
+     * launched into a fresh task and checked for its title screen. It closes the game once and taps
+     * nothing; the career stays server-saved and resumes through Continue Career on the next normal
+     * start. Tagged [RESTART-TEST].
+     */
+    open fun startGameRestartTest() {
+        MessageLog.i(TAG, "\n[TEST] [RESTART-TEST] Restarting the game the way a stuck episode's second attempt does. Nothing is tapped.")
+        val reopen = game.reopenGame(attempt = 2)
+        MessageLog.i(TAG, "[TEST] [RESTART-TEST] Result $reopen: ${reopenOutcomeWords(reopen)}. Start the bot normally to resume a career in progress.")
     }
 
     /**
@@ -5078,28 +5093,29 @@ abstract class Campaign(game: Game) : Task(game) {
             unknownScreenRebinds.record(game.forceRebindAccessibilityService())
         }
 
-        // Last resort before the stop: relaunch the game. The gesture rebinds above cover MuMu's
+        // Last resort before the stop: reopen the game. The gesture rebinds above cover MuMu's
         // dead-dispatch mode; this covers a GAME-side soft-lock (an un-driveable screen that a rebind
         // cannot fix - e.g. the game wedged on a first-time race) or a game that has actually gone
         // away (a crash/kill leaving a foreign app on top). Gated to a career actually in progress
         // (careerScreenObservedThisTask) so a bot parked at the lobby never relaunches, and bounded to
-        // [maxGameRestartAttempts] per episode. Retrying (not a single shot) matters because the first
-        // relaunch can be dropped or race the game's own teardown; each attempt gets a fresh
+        // [maxGameRestartAttempts] per episode. The first attempt brings the game to the front; later
+        // ones close and restart it where Android allows ([Game.reopenGame]). Each attempt gets a fresh
         // unknown-screen budget (the counter resets below), so a cold boot has a minute+ to land before
         // the next attempt. The career is server-saved and resumes via the lobby re-entry path
-        // (Continue Career) once a game screen is back.
+        // (Continue Career) once a game screen is back. The reopen acts before anything is logged.
         if (shouldRelaunchGame(count, gameRestartThreshold, gameRestartAttemptsThisEpisode, maxGameRestartAttempts, careerScreenObservedThisTask)) {
             unknownScreenRebinds.closeLast()
             gameRestartAttemptsThisEpisode++
-            MessageLog.w(
-                TAG,
-                "[RECOVERY] Stuck for $count cycles and gesture rebinds did not help - reopening the game " +
-                    "(attempt $gameRestartAttemptsThisEpisode/$maxGameRestartAttempts) before stopping.",
-            )
-            if (game.restartGame()) {
-                // Give the relaunch a fresh window: the next ticks land on the game's title/lobby,
+            val reopen = game.reopenGame(gameRestartAttemptsThisEpisode)
+            if (reopen != GameReopen.NOT_DISPATCHED) {
+                MessageLog.w(
+                    TAG,
+                    "[RECOVERY] Stuck for $count cycles and gesture rebinds did not help - reopening the game " +
+                        "(attempt $gameRestartAttemptsThisEpisode/$maxGameRestartAttempts): ${reopenOutcomeWords(reopen)}.",
+                )
+                // Give the reopen a fresh window: the next ticks land on the game's title/lobby,
                 // which the lobby re-entry branch above resumes into the interrupted career. The
-                // re-entry budget resets too - the relaunched game is a fresh lobby, not the one any
+                // re-entry budget resets too - the reopened game is a fresh lobby, not the one any
                 // earlier failed re-entries were fighting. If the game did NOT actually come back, the
                 // counter simply climbs to the threshold again and the next attempt fires (up to the
                 // cap), because a recognized game screen never returns to reset it to 0.

@@ -1,8 +1,11 @@
 package com.steve1316.uma_android_automation.bot
 
+import android.accessibilityservice.AccessibilityService
+import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Build
 import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
@@ -43,6 +46,7 @@ import com.steve1316.uma_android_automation.components.LabelSkillListScreenSkill
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.TitleScreenProbe
 import com.steve1316.uma_android_automation.utils.TrainingSelectionProbe
 import com.steve1316.uma_android_automation.utils.grandConcertLessonConfirmationPresent
 import com.steve1316.uma_android_automation.utils.grandConcertLessonListPresent
@@ -918,55 +922,122 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
     }
 
     /**
-     * Relaunches the Umamusume game as a last-resort recovery from a screen no handler can identify
+     * Brings the Umamusume game back to the front as a recovery from a screen no handler can identify
      * or advance (e.g. the game itself soft-locking, distinct from MuMu's gesture death which
      * [forceRebindAccessibilityService] handles). Career progress is saved server-side each turn, so
      * the game comes back on its Continue-Career flow, which the campaign's lobby re-entry path
      * resumes in place - no career is lost (validated manually 2026-07-11 via an adb force-stop +
-     * relaunch that resumed El Condor's career).
-     *
-     * Uses NEW_TASK | RESET_TASK_IF_NEEDED, NOT CLEAR_TASK. This deliberately does NOT tear the
-     * game's task down: a live task is brought back to its front door, and a dead one is cold-started.
-     * The earlier CLEAR_TASK variant killed a still-alive foreground game from this background service
-     * without the follow-up cold start ever landing (a background activity launch after the task
-     * teardown gets dropped) - a daily-reset run on 2026-07-21 went from an alive-but-unrecognized
-     * lobby to a dead game with a foreign app on top, which the bot then stared at until it stopped.
-     * Re-fronting is non-destructive, so a relaunch that does not help simply leaves the game where it
-     * was rather than destroying it.
-     *
-     * An ordinary app cannot force-stop another package without root, so this is a best-effort
-     * relaunch rather than a hard kill; it recovers a UI/task soft-lock but may not reset a crashed
-     * native renderer. Falls through (returns false) if the launcher intent cannot be resolved, so
-     * the caller's normal stop still applies - no new dead-end. The caller verifies whether the game
-     * actually came back (a recognized game screen returning); a dispatched intent is not proof.
+     * relaunch that resumed El Condor's career). The first attempt of [reopenGame]; the navigator's
+     * single relaunch uses it.
      *
      * @param waitAfterLaunch Seconds to wait after firing the intent for the game to come up.
-     * @return True if the relaunch intent was dispatched, false if it could not be resolved.
+     * @return True if the intent was dispatched, false if it could not be resolved.
      */
-    fun restartGame(waitAfterLaunch: Double = 20.0): Boolean {
-        val launchIntent: Intent? = myContext.packageManager.getLaunchIntentForPackage(GAME_PACKAGE)
-        if (launchIntent == null) {
-            MessageLog.e(TAG, "[ERROR] restartGame:: Could not resolve a launcher intent for $GAME_PACKAGE. Is the game installed under that package? Skipping the restart.")
-            return false
+    fun restartGame(waitAfterLaunch: Double = 20.0): Boolean = reopenGame(attempt = 1, waitAfterLaunch = waitAfterLaunch) != GameReopen.NOT_DISPATCHED
+
+    /**
+     * Reopens the game for attempt [attempt] of a stuck episode.
+     *
+     * The first attempt, and every attempt on Android 14 and later, only brings the game's task to the
+     * front (NEW_TASK | RESET_TASK_IF_NEEDED): a live game comes back as it was, a dead one cold-starts.
+     * That leaves a frozen game frozen: the game's process kept its pid for hours (2026-09-29).
+     *
+     * From the second attempt below Android 14, [restartFrozenGame] closes it instead: Home,
+     * `killBackgroundProcesses` across the settle window, a launch into a fresh task (CLEAR_TASK, only
+     * after that window: the earlier CLEAR_TASK against a live foreground game killed it with no
+     * relaunch landing, 2026-07-21), then the title screen as the proof. An ordinary app cannot
+     * force-stop another package or see its process, so the title is the only evidence of a restart.
+     *
+     * Each step acts first and logs after, with [Log] inside the sequence: this is recovery code.
+     */
+    internal fun reopenGame(attempt: Int, waitAfterLaunch: Double = 20.0): GameReopen {
+        if (myContext.packageManager.getLaunchIntentForPackage(GAME_PACKAGE) == null) {
+            MessageLog.e(TAG, "[ERROR] reopenGame:: Could not resolve a launcher intent for $GAME_PACKAGE. Is the game installed under that package? Skipping the reopen.")
+            return GameReopen.NOT_DISPATCHED
         }
-        return try {
-            // NEW_TASK is required to start an Activity from this (non-Activity) service context;
-            // RESET_TASK_IF_NEEDED lands on the task's entry Activity if it is resumed from history.
-            // No CLEAR_TASK: never tear down a live game task (that killed the game on 2026-07-21) -
-            // re-front a live game, cold-start a dead one.
-            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-            MessageLog.w(
-                TAG,
-                "[RECOVERY] Reopening the game ($GAME_PACKAGE) to recover from an unrecognized/soft-locked screen: a running game is " +
-                    "brought to the front as it is, not restarted, and only a game that is not running starts fresh. A career in progress resumes via Continue Career.",
-            )
-            myContext.startActivity(launchIntent)
+        if (!reopenClosesGame(attempt, Build.VERSION.SDK_INT)) {
+            if (!launchGame(clearTask = false)) return GameReopen.NOT_DISPATCHED
             SessionTally.gameRelaunches.incrementAndGet()
+            val why = if (attempt >= 2) "Android 14 and later do not let an app close another app" else "the first try only brings it back"
+            MessageLog.w(TAG, "[RECOVERY] Reopening the game ($GAME_PACKAGE): brought it to the front as it was ($why); it was not restarted. A career in progress resumes via Continue Career.")
             wait(waitAfterLaunch, skipWaitingForLoading = true)
+            return GameReopen.REFRONTED
+        }
+
+        val result =
+            restartFrozenGame(
+                captureGrid = { imageUtils.getSourceBitmap().let { b -> homeLumaGrid(b.width, b.height) { x, y -> b.getPixel(x, y) } } },
+                pressHome = {
+                    val pressed = gestureUtils.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+                    Log.w(TAG, "[RECOVERY] Pressed Home to close the game (dispatched=$pressed).")
+                    pressed
+                },
+                killGame = { killGameProcess() },
+                launch = { clearTask -> launchGame(clearTask) },
+                titleShowing = {
+                    imageUtils.getSourceBitmap().let { b -> TitleScreenProbe.isTitleScreen(SparkPixelSampler { x, y -> b.getPixel(x, y) }, b.width, b.height) }
+                },
+                sleep = { wait(it, skipWaitingForLoading = true) },
+            )
+        return when (result) {
+            FrozenGameRestart.RESTARTED, FrozenGameRestart.RESTARTED_ON_PLAIN_LAUNCH -> {
+                SessionTally.gameRelaunches.incrementAndGet()
+                val launch = if (result == FrozenGameRestart.RESTARTED) "a launch into a fresh task" else "a second, plain launch"
+                MessageLog.w(TAG, "[RECOVERY] The game restarted: it was sent Home, asked to close and brought up by $launch, and its title screen came up. A career in progress resumes via Continue Career.")
+                GameReopen.RESTARTED
+            }
+            FrozenGameRestart.NOT_RESTARTED -> {
+                SessionTally.gameRelaunches.incrementAndGet()
+                MessageLog.w(
+                    TAG,
+                    "[RECOVERY] The game was sent Home, asked to close and launched again, but its title screen did not come up within " +
+                        "${GAME_TITLE_WAIT_SECONDS.toInt()} s of a launch. Android does not show whether it closed; it was not restarted.",
+                )
+                GameReopen.NOT_RESTARTED
+            }
+            FrozenGameRestart.SCREEN_UNCHANGED_AFTER_HOME -> {
+                if (!launchGame(clearTask = false)) return GameReopen.NOT_DISPATCHED
+                SessionTally.gameRelaunches.incrementAndGet()
+                MessageLog.w(
+                    TAG,
+                    "[RECOVERY] Home did not clearly leave the game (not dispatched, or the screen did not change and hold still), so the game " +
+                        "was not closed. It was brought to the front as it was, not restarted.",
+                )
+                wait(waitAfterLaunch, skipWaitingForLoading = true)
+                GameReopen.REFRONTED
+            }
+            FrozenGameRestart.NOT_DISPATCHED -> {
+                MessageLog.e(TAG, "[ERROR] reopenGame:: The game was sent Home but no launch could be dispatched.")
+                GameReopen.NOT_DISPATCHED
+            }
+        }
+    }
+
+    /**
+     * Starts the game's launcher activity: into a fresh task with [clearTask], else to the front of
+     * its existing task. NEW_TASK is required to start an Activity from this (non-Activity) service
+     * context; RESET_TASK_IF_NEEDED lands on the task's entry Activity if it is resumed from history.
+     */
+    private fun launchGame(clearTask: Boolean): Boolean {
+        val intent = myContext.packageManager.getLaunchIntentForPackage(GAME_PACKAGE) ?: return false
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or if (clearTask) Intent.FLAG_ACTIVITY_CLEAR_TASK else Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+        return try {
+            myContext.startActivity(intent)
+            Log.w(TAG, "[RECOVERY] Launched the game (${if (clearTask) "fresh task" else "existing task"}).")
             true
         } catch (e: Exception) {
-            MessageLog.e(TAG, "[ERROR] restartGame:: Failed to relaunch the game: ${e.message}")
+            Log.e(TAG, "[RECOVERY] Launching the game failed: ${e.message}")
             false
+        }
+    }
+
+    /** Asks Android to end the game's process. A no-op while the game ranks above a cached background app, and on Android 14+. */
+    private fun killGameProcess() {
+        try {
+            myContext.getSystemService(ActivityManager::class.java)?.killBackgroundProcesses(GAME_PACKAGE)
+            Log.w(TAG, "[RECOVERY] Asked Android to end the game's background process.")
+        } catch (e: SecurityException) {
+            Log.e(TAG, "[RECOVERY] Ending the game's background process was refused: ${e.message}")
         }
     }
 

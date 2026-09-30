@@ -313,7 +313,7 @@
     if (!r) return null;
     var parts = [];
     if (r.accessibility) parts.push(r.accessibility + (r.accessibility === 1 ? ' accessibility repair' : ' accessibility repairs'));
-    if (r.relaunches) parts.push(r.relaunches + (r.relaunches === 1 ? ' relaunch' : ' relaunches'));
+    if (r.relaunches) parts.push(r.relaunches + (r.relaunches === 1 ? ' game reopen' : ' game reopens'));
     if (r.lobby) parts.push(r.lobby + (r.lobby === 1 ? ' lobby re-entry' : ' lobby re-entries'));
     if (r.connection) parts.push(r.connection + (r.connection === 1 ? ' connection hold' : ' connection holds'));
     return parts.length ? parts.join(' · ') : 'none yet';
