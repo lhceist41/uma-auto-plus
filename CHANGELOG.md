@@ -24,6 +24,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - **A higher rating from the career's last skill points:** with the Rank objective, the points left after the final race now go to the skills that add the most to the rating, still limited to skills the trainee's running style can use (at any distance or surface). To spend them on any skill for the highest rating, turn on **Buy Any Skill at Career End** in Skill Settings.
 
+### Fixed
+
+- **Goal races are read on the right day:** the bot now reads the date on a goal race's race list, so it names that race and its grade instead of the previous turn's, and an Alarm Clock setting such as G1 Only applies to G1 goal races. If the date cannot be read there, the bot uses the last turn it saw, as before.
+- **A career that ends on a lost goal race now shows as ended early** in the queue report, the dashboard and the career log, and the log says what each race retry used.
+
 ## [1.6.0] - 2026-09-29
 
 ### Highlights
@@ -77,8 +82,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Fixed
 
 - **Start** is no longer refused after Import or Reset Settings.
-- **Goal races are read on the right day:** the bot now reads the date on a goal race's race list, so it names that race and its grade instead of the previous turn's, and an Alarm Clock setting such as G1 Only applies to G1 goal races. If the date cannot be read there, the bot uses the last turn it saw, as before.
-- **A career that ends on a lost goal race now shows as ended early** in the queue report, the dashboard and the career log, and the log says what each race retry used.
 - **Stop in the notification** now stops the bot.
 - **Skip stays fast:** your fast Skip is no longer switched to slow, and when the game resets Skip to Off the bot switches it back to fast.
 - **Home** no longer shows Start while the bot is armed after its screen is re-created.
