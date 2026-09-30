@@ -20,7 +20,6 @@ import com.steve1316.uma_android_automation.components.LabelRecreationUmamusume
 import com.steve1316.uma_android_automation.components.RadioCareerQuickShortenAllEvents
 import com.steve1316.uma_android_automation.components.RadioPortrait
 import com.steve1316.uma_android_automation.types.BoundingBox
-import com.steve1316.uma_android_automation.types.RaceGrade
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.grandConcertLessonConfirmationPresent
 import org.opencv.core.Point
@@ -347,14 +346,7 @@ open class DialogHandler(val game: Game) {
                 // (e.g., misc tasks where this dialog shouldn't fire anyway).
                 val policy = SettingsHelper.getStringSetting("racing", "alarmClockPolicy", "Never")
                 val grade = (game.task as? Campaign)?.getLastRaceGrade()
-                val shouldSpend =
-                    when (policy) {
-                        "Never" -> false
-                        "G1Only" -> grade == RaceGrade.G1
-                        "G1AndFinale" -> grade == RaceGrade.G1 || grade == RaceGrade.FINALE
-                        "Always" -> true
-                        else -> false
-                    }
+                val shouldSpend = Racing.alarmClockPurchaseAllowed(policy, grade)
                 if (shouldSpend) {
                     MessageLog.i(TAG, "[DIALOG] Out of free Alarm Clocks. Spending 10 carats to retry (policy='$policy', grade=$grade).")
                     dialog.ok(game.imageUtils)

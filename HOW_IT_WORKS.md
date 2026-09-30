@@ -314,7 +314,7 @@ flowchart TD
 
 **Priority explanations:**
 
-1. **Mandatory Race:** If the game shows a career-goal race ribbon, the bot must race. No choice here.
+1. **Mandatory Race:** If the game shows a career-goal race ribbon, the bot must race. No choice here. A goal race day opens without the Main screen, so the bot reads the date from the race list before it looks the race up; the race name and grade it logs and acts on (Alarm Clock policy, graded race events) are that day's. If that read fails, it logs a warning and keeps the turn from the last Main screen. Finale days are dated on the Main screen before their race, so the race list date is not read there.
 2. **Racing popup:** If a previous race selection triggered a popup that wasn't fully resolved, continue with racing.
 3. **Pinned recreation outing:** A recreation turn pinned by the dating schedule. It sits between the two race checks deliberately: a mandatory career-goal race still outranks it, but it outranks a scheduled in-game agenda race. With the dating schedule off this is a settings-only check that costs nothing.
 4. **Scheduled Race:** A race the user's in-game agenda has scheduled for this turn.
@@ -334,7 +334,7 @@ flowchart TD
 
 ### 5.1 Outcome Measurement
 
-Every career ends with a structured `[CAREER_END]` log line carrying an `outcome=` label — `COMPLETED` (reached the career-end screen with no confirmed force-end), `FORCE_END` (a lost mandatory race the bot could not retry past), or `INCOMPLETE` (a non-completion result: user stop, watchdog timeout, or unhandled exception). The game shows the same end screen for a win and an early force-end, so within `COMPLETED` the end turn is the tell: a full arc ends near the scenario's last turn, a force-end ends early.
+Every career ends with a structured `[CAREER_END]` log line carrying an `outcome=` label: `COMPLETED` (reached the career-end screen with no confirmed force-end), `FORCE_END` (a lost goal race whose Try Again dialog the bot closed, `forceEndReason="MANDATORY_RACE_LOST"`; a lost URA finale race is recorded by the finale win count instead when race retries are on), or `INCOMPLETE` (a non-completion result: user stop, watchdog timeout, or unhandled exception). The game shows the same end screen for a win and an early force-end, so within `COMPLETED` the end turn is the tell: a full arc ends near the scenario's last turn, a force-end ends early.
 
 Alongside the log line, each career appends one JSON record to an on-device corpus (`files/outcomes/careers.jsonl`) carrying those fields plus the app version and a **config fingerprint** — a stable hash of the tunables that shape play (stat priorities and targets, racing flags, the racing-plan content, skill threshold, mood floor, and the Trackblazer overrides), snapshotted when the campaign is constructed so a rotation switch between runs cannot mislabel the record. A dev-side tool (`scripts/analyze-outcomes.mjs`, backed by `src/lib/outcomeAnalysis.ts`) reads the corpus — and harvests the older ledger lines out of pulled message logs — and reports per-trainee outcome distributions per config arm: how many full arcs versus early exits, fan and stat percentiles, and the turns each arm tends to die at. This is what lets a tuning change be measured across many runs instead of judged one at a time.
 
@@ -492,8 +492,8 @@ Once a race is selected:
 
 1. **Strategy Selection:** The bot selects a running strategy (Front Runner, Pace Chaser, Late Surger, or End Closer) based on the trainee's aptitudes.
 2. **Skip or Manual:** If the "skip" button is available, the bot skips the race animation. Otherwise, it watches and fast-forwards.
-3. **Retries:** If a race is lost and retries are enabled, the bot can retry the race (free retry available once per campaign if enabled). Mandatory races additionally retry toward 1st place while a retry is available — bounded by the free-retry count and re-checking the Congratulations banner on a fresh capture first, so a race that was already won is never retried.
-4. **Complete Career on Failure:** Only read when Disable Race Retries is on. If a mandatory race is lost and no daily free retry is used, this setting makes the bot close the Try Again dialog and finish the career instead of stopping. With race retries on, the bot always closes the dialog once its retries run out.
+3. **Retries:** If a race is lost and retries are enabled, the bot can retry the race (free retry available once per campaign if enabled). Mandatory races additionally retry toward 1st place while a retry is available, bounded by the free-retry count and re-checking the Congratulations banner on a fresh capture first, so a race that was already won is never retried. Each retry from the Try Again dialog logs what it spends (the daily free retry or an Alarm Clock, and whether `alarmClockPolicy` buys one when none is held) and what the per-race limit and the career's retry budget leave; a closed dialog logs the rule that stopped the retry.
+4. **Complete Career on Failure:** Only read when Disable Race Retries is on. If a mandatory race is lost and no daily free retry is used, this setting makes the bot close the Try Again dialog and finish the career instead of stopping. With race retries on, the bot always closes the dialog once its retries run out, and a closed dialog on a goal race records the career as `FORCE_END`.
 
 > [!CAUTION]
 > With Disable Race Retries on, losing a mandatory race without `enableCompleteCareerOnFailure` will **stop the bot entirely**. If you want fully unattended runs with retries disabled, make sure this setting is enabled.

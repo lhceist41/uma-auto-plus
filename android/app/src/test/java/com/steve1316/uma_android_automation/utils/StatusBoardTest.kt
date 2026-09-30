@@ -88,7 +88,7 @@ class StatusBoardTest {
             assertFalse(text.contains(leak), "STATUS must not carry $leak")
         }
         assertEquals(
-            setOf("n", "trainee", "scenario", "state", "rank", "estScore", "fans", "finale", "finalStats", "sparks", "sparksNote", "startedAt", "endedAt", "words"),
+            setOf("n", "trainee", "scenario", "state", "outcome", "rank", "estScore", "fans", "finale", "finalStats", "sparks", "sparksNote", "startedAt", "endedAt", "words"),
             keysOf(s.getJSONArray("runs").getJSONObject(0)),
         )
     }

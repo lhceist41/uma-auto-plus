@@ -1805,7 +1805,9 @@ abstract class Campaign(game: Game) : Task(game) {
      */
     open fun shouldRetryRace(dialog: DialogInterface, args: Map<String, Any>): Boolean {
         if (racing.raceRetries > 0 && racing.retriesThisRace < racing.maxRetriesPerRace) {
-            MessageLog.i(TAG, "[RACE] Retrying the race. Retries remaining: ${racing.raceRetries}")
+            val policy = SettingsHelper.getStringSetting("racing", "alarmClockPolicy", "Never")
+            val freeRetryShown = IconOneFreePerDayTooltip.check(game.imageUtils)
+            MessageLog.i(TAG, Racing.raceRetryText(freeRetryShown, racing.retriesThisRace + 1, racing.maxRetriesPerRace, racing.raceRetries - 1, policy, racing.lastRaceGrade))
             racing.raceRetries--
             racing.retriesThisRace++
             game.wait(0.5)
@@ -1878,6 +1880,8 @@ abstract class Campaign(game: Game) : Task(game) {
      * @return The result of the dialog handling operation.
      */
     private fun handleTryAgainDialog(dialog: DialogInterface, args: Map<String, Any>): DialogHandlerResult {
+        val openedByBot = racing.bRetryDialogOpenedByBot
+        racing.bRetryDialogOpenedByBot = false
         // All branches need a slight delay to allow the dialog to close since the runRaceWithRetries() loop handles dialogs at the start of each iteration.
         // Can cause problem where we handle one branch then immediately handle dialogs again and handle a second branch for the same dialog instance.
         if (racing.disableRaceRetries) {
@@ -1910,7 +1914,10 @@ abstract class Campaign(game: Game) : Task(game) {
         if (shouldRetryRace(dialog, args)) {
             // Retry was initiated by the hook.
         } else {
-            MessageLog.w(TAG, "[WARN] handleDialogs:: No retries remaining but Try Again dialog detected. Closing dialog...")
+            val policy = SettingsHelper.getStringSetting("racing", "alarmClockPolicy", "Never")
+            MessageLog.i(TAG, Racing.raceRetryDeclinedText(racing.bAlarmClockPolicySkippedThisRace, racing.retriesThisRace, racing.maxRetriesPerRace, racing.raceRetries, policy))
+            // Unless the bot's own retry button opened it, the game offers Try Again on a goal race only when the goal failed.
+            if (Racing.declinedRetryFailsGoal(racing.bRunningGoalRace, date.bIsFinaleSeason, openedByBot)) markCareerForceEnded("MANDATORY_RACE_LOST")
             dialog.close(game.imageUtils)
         }
 

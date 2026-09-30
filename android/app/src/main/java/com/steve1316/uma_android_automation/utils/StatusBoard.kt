@@ -246,6 +246,7 @@ internal object StatusBoard {
                     .put("trainee", displayName(r) ?: JSONObject.NULL)
                     .put("scenario", r.scenario ?: JSONObject.NULL)
                     .put("state", runState(r.resultCode))
+                    .put("outcome", r.outcome ?: JSONObject.NULL)
                     .put("rank", result?.rank ?: JSONObject.NULL)
                     .put("estScore", result?.estScore ?: JSONObject.NULL)
                     .put("fans", result?.fans ?: JSONObject.NULL)

@@ -611,7 +611,7 @@
       textCol.style.gap = '6px';
       textCol.style.minWidth = '0';
       textCol.appendChild(el('div', 'rc-details-trainee', L.naText(run.trainee)));
-      textCol.appendChild(el('div', 'rc-details-outcome', 'Career finished'));
+      textCol.appendChild(el('div', 'rc-details-outcome', run.outcome === 'FORCE_END' ? 'Ended early: a goal was missed' : 'Career finished'));
       top.appendChild(textCol);
       body.appendChild(top);
 
