@@ -145,7 +145,14 @@ class RunRetryAndResumeTest {
 
         @Test
         fun `launching is saved only after a finished career`() {
-            assertEquals(1, Regex("phase = PHASE_LAUNCHING").findAll(startModule).count(), "one launch-boundary save")
+            // Only where no career of the saved run is in the slot: after a finished career (below), after a
+            // run skipped before Start Career (currentRun = that run), and at a launch stopped before Start
+            // Career with no rotation (currentRun = the run before it, so Start launches it again).
+            assertEquals(3, Regex("phase = PHASE_LAUNCHING").findAll(startModule).count(), "the launch boundary, a skipped run and a run that could not start")
+            val leave = startModule.substringAfter("private fun leaveSkippedRun(").substringBefore("\n    }\n")
+            assertTrue(leave.contains("saveQueueState(context, active = true, currentRun = run, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns)"))
+            val notStarted = loop.substringAfter("if (unplayable == UnplayableRunStep.HALT && launchStop != null) {").substringBefore("// Evaluate the result.")
+            assertTrue(notStarted.contains("saveQueueState(context, active = true, currentRun = i - 1, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns)"))
             val gate = loop.indexOf("val careerFinished = effectiveResult.code == TaskResultCode.TASK_RESULT_COMPLETE\n                        if (careerFinished) {")
             val save = loop.indexOf("saveQueueState(context, active = true, currentRun = i, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns)")
             assertTrue(gate in 0 until save, "gate $gate, save $save")

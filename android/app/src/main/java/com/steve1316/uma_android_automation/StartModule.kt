@@ -1756,6 +1756,35 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         return rows
     }
 
+    /** The trainee a rotation plays in run [run], or "" without a rotation. */
+    private fun rotationTraineeFor(rotation: RotationConfig, run: Int): String =
+        if (rotation.enabled) rotation.inGameNames.getOrElse(rotation.indexForRun(run, rotationCursorOffset)) { "" } else ""
+
+    /** A launch that stopped on its trainee's own conflict, which a rotation skips ([unplayableRunStep]). */
+    private fun skipsTrainee(navResult: NavigationResult, rotation: RotationConfig): Boolean =
+        !navResult.success && navResult.lastDetectedState != "STOPPED" && unplayableRunStep(navResult.reasonKey, rotation.enabled) == UnplayableRunStep.SKIP
+
+    /** Adds why run [run]'s launch stopped ([stop]) to its record, so the report says why it did not play. */
+    private fun attachLaunchStop(ledger: SessionLedger, run: Int, stop: TaskResult.Error, trainee: String) {
+        val record = ledger.attachLaunchStop(run, stop.reasonKey, stop.reasonTrainee, stop.reasonOutfit, trainee) ?: return
+        StatusBoard.runUpdated(record)
+        QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
+    }
+
+    /**
+     * Leaves skipped run [run]: saves the resume record past it (no career of it is in the slot, and it
+     * is not counted as done) and backs the game out of the stopped launch to Home, where the next run's
+     * own launch starts. True once Home shows.
+     */
+    private fun leaveSkippedRun(ledger: SessionLedger, run: Int, totalRuns: Int, completedRuns: Int): Boolean {
+        saveQueueState(context, active = true, currentRun = run, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns)
+        ledger.phase = StartModule.PHASE_LAUNCHING
+        QueueLedger.refreshOpenSession(context, ledger.sessionId, ledger.openJson())
+        val home = CareerLaunchNavigator(context).backOutToHome()
+        if (!home) MessageLog.e(TAG, "[QUEUE] Could not return the game to its home screen after skipping run $run.")
+        return home
+    }
+
     /**
      * Adds run [run]'s record, with the career-end facts only if this run produced them. Returns the
      * sequence of this run's career end, or null when it had none.
@@ -2130,6 +2159,23 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                 // actually confirmed.
                 var coldStartConfirmedCareer = false
 
+                // A skip that could not go on: the game did not come back to Home after skipped run [run], or
+                // the setup of the trainee for run [run] is missing.
+                fun haltSkipping(run: Int, snapshotMissing: Boolean) {
+                    if (snapshotMissing) {
+                        queueHaltReason = "missing rotation snapshot for the trainee of run $run"
+                        ledger.haltEnd = SessionEnd.NEXT_SNAPSHOT_MISSING
+                        queueHaltRun = run - 1
+                    } else {
+                        queueHaltReason = "run $run was skipped, and the game could not be returned to its home screen"
+                        ledger.haltEnd = SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS
+                        ledger.reasonKey = "STUCK_ON_SCREEN"
+                        queueHaltRun = run
+                    }
+                    queueHaltResultCode = TaskResultCode.TASK_RESULT_QUEUE_NAVIGATION_FAILED.name
+                    queueHaltCareerInFlight = false
+                }
+
                 // Rotation cycle parsed above (before the resume block). The cold-start snapshot for
                 // the first launched run is applied just below, before the home-screen probe reads
                 // the scenario, so a rotation that switches scenarios launches the correct campaign.
@@ -2170,7 +2216,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         MessageLog.i(TAG, "[QUEUE] Game is on the home screen. Launching a career for run $startFromRun...")
                         sendQueueProgressEvent(startFromRun, totalRuns, "navigating")
                         val navResult = navigateWithDeadline(coldStartReuse, coldStartNavigator, coldStartOnHome = !resumeReEntersCareer, careerInFlight = resumeReEntersCareer)
-                        if (!navResult.success) {
+                        if (!resumeReEntersCareer && skipsTrainee(navResult, rotation) && coldStartNavigator.backOutToHome()) {
+                            MessageLog.w(TAG, "[QUEUE] Run $startFromRun cannot start its trainee (${navResult.reasonKey}): ${navResult.failureReason} Back on the home screen; the run's own launch records the skip.")
+                        } else if (!navResult.success) {
                             logNavigationFailure(navResult)
                             // A user Stop mid-navigation is a clean cancellation, not a navigation
                             // failure - no halt reason, so the post-loop queueComplete reports the
@@ -2298,6 +2346,11 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         result = runSingleGame()
                     }
 
+                    // A queue run whose launch stopped before Start Career keeps its reason. One stopped by its
+                    // trainee's own conflict started no career: a rotation skips it, and without one it halts.
+                    val launchStop = (result as? TaskResult.Error)?.takeIf { enableRunQueue && it.reasonKey.isNotEmpty() }
+                    val unplayable = if (queueSkipRequested || queueStopRequested) null else launchStop?.let { unplayableRunStep(it.reasonKey, rotation.enabled) }
+
                     // Determine the effective result considering queue flags.
                     val effectiveResult =
                         when {
@@ -2308,6 +2361,10 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             queueStopRequested -> {
                                 MessageLog.i(TAG, "[QUEUE] Run $i stopped: ${queueStopReason ?: "user stop"}.")
                                 result // Use original result
+                            }
+                            unplayable == UnplayableRunStep.SKIP -> {
+                                MessageLog.w(TAG, "[QUEUE] Run $i cannot start its trainee (${launchStop?.reasonKey}). Skipping it; the rotation goes on with the next trainee.")
+                                TaskResult.Success(TaskResultCode.TASK_RESULT_SKIPPED_BY_QUEUE, "Run $i was skipped: its trainee cannot start.")
                             }
                             else -> result
                         }
@@ -2320,6 +2377,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         ledger.reasonOutfit = runError.reasonOutfit
                     }
                     val runCareerEndSeq = recordRun(ledger, i, runStartedAt, careerEndSeqBeforeRun, effectiveResult.code, retried)
+                    launchStop?.let { attachLaunchStop(ledger, i, it, it.reasonTrainee.ifEmpty { rotationTraineeFor(rotation, i) }) }
 
                     if (enableRunQueue) {
                         sendQueueProgressEvent(i, totalRuns, "completed", effectiveResult.code.name, effectiveResult.message)
@@ -2338,6 +2396,24 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     // only a COMPLETE career's spark flow is the next thing on screen.
                     if (shouldClearSparkTransactionForRunResult(effectiveResult.code)) {
                         SparkRerollGate.invalidate("run result ${effectiveResult.code.name}")
+                    }
+
+                    if (unplayable == UnplayableRunStep.HALT && launchStop != null) {
+                        // Without a rotation every run is this trainee and would stop the same way, whatever
+                        // Stop Queue on Error says.
+                        MessageLog.e(TAG, "[QUEUE] Run $i cannot start its trainee (${launchStop.reasonKey}). Without a rotation every run is this trainee, so the queue stops here.")
+                        queueHaltReason = "run $i could not start its trainee (${launchStop.reasonKey})"
+                        ledger.haltEnd = SessionEnd.LAUNCH_FAILED_BEFORE_RUN
+                        ledger.reasonKey = launchStop.reasonKey
+                        ledger.reasonTrainee = launchStop.reasonTrainee
+                        ledger.reasonOutfit = launchStop.reasonOutfit
+                        ledger.reasonRotation = false
+                        queueHaltResultCode = effectiveResult.code.name
+                        queueHaltRun = i - 1
+                        queueHaltCareerInFlight = false
+                        // No career of this run is in the slot, so Start launches it again.
+                        if (i > 1) saveQueueState(context, active = true, currentRun = i - 1, totalRuns = totalRuns, phase = PHASE_LAUNCHING, completedRuns = completedRuns) else clearQueueState(context)
+                        break
                     }
 
                     // Evaluate the result.
@@ -2418,6 +2494,20 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                                 MessageLog.w(TAG, "[QUEUE] Run $i ended with ${effectiveResult.code}. Continuing queue (stopOnError=false); the run is recorded as errored.")
                             }
                         }
+                    }
+
+                    if (unplayable == UnplayableRunStep.SKIP) {
+                        // Leave the stopped launch from Home: the next run's own launch starts there, for the
+                        // rotation's next trainee. No career played, so there is no career end and no wait.
+                        if (!leaveSkippedRun(ledger, i, totalRuns, completedRuns)) {
+                            haltSkipping(i, snapshotMissing = false)
+                            break
+                        }
+                        if (i < totalRuns && applyRotationForRun(rotation, i + 1, reuseLastLaunchSetup) == null) {
+                            haltSkipping(i + 1, snapshotMissing = true)
+                            break
+                        }
+                        continue
                     }
 
                     // Debug diagnostics are single-shot: the one diagnostic execution has returned, so
@@ -2560,7 +2650,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             attachCareerEndSparks(ledger, i, runCareerEndSeq)
                             if (navResult.careerResumed) previousRunLeftCareer = true
 
-                            if (!navResult.success) {
+                            if (skipsTrainee(navResult, rotation) && CareerLaunchNavigator(context).backOutToHome()) {
+                                MessageLog.w(TAG, "[QUEUE] Run ${i + 1} cannot start its trainee (${navResult.reasonKey}): ${navResult.failureReason} Back on the home screen; the run's own launch records the skip.")
+                            } else if (!navResult.success) {
                                 logNavigationFailure(navResult)
                                 // Same as the cold-start path: a user Stop mid-navigation is not a
                                 // navigation failure - no failure event, the post-loop queueComplete

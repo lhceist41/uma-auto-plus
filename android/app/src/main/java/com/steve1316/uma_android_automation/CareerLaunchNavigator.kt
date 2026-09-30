@@ -799,6 +799,15 @@ class CareerLaunchNavigator(private val context: Context) {
     }
 
     /**
+     * Leaves a launch that stopped before Start Career (a trainee the queue skips) by pressing the
+     * game's Back until Home shows ([backOutOfLaunch]). Presses nothing on a screen without a Back.
+     */
+    fun backOutToHome(): Boolean {
+        if (!ensureInitialised()) return false
+        return backOutOfLaunch(::isOnHomeScreen, { ButtonBack.click(iu) }, { waitSafe(1.5) }, LAUNCH_BACK_OUT_MAX_PRESSES)
+    }
+
+    /**
      * One-shot probe: is the game parked on the main home screen?
      *
      * Used by the queue before run 1. The navigator otherwise only runs BETWEEN careers,
@@ -6432,7 +6441,7 @@ class CareerLaunchNavigator(private val context: Context) {
         fun noteExcluded(banner: String) {
             if (excludedOutfitSeen != null) return
             excludedOutfitSeen = TraineeNameMatcher.excludedOutfitOf(target, banner, excludeOutfits, traineeMatchThreshold)
-            if (excludedOutfitSeen != null) excludedBannerSeen = banner
+            if (excludedOutfitSeen != null) excludedBannerSeen = TraineeNameMatcher.bannerForLog(banner)
         }
 
         fun isTargetAnchorRead(banner: String): Boolean {

@@ -184,6 +184,11 @@ internal data class RunRecord(
     /** The kept spark set, attached after the career-end flow read it; null when it was not read. */
     val sparks: List<KeptSpark>? = null,
     val sparksNote: String? = null,
+    /** Why this run's launch stopped before Start Career, as a report reason key; null for a run that launched. */
+    val reasonKey: String? = null,
+    /** The preset trainee and outfit [reasonKey] names, when it names them. */
+    val reasonTrainee: String? = null,
+    val reasonOutfit: String? = null,
 )
 
 /**
@@ -463,6 +468,31 @@ internal class SessionLedger(val sessionId: String, val startedAt: Long, val app
         return runs[index].copy(sparks = kept.sparks, sparksNote = kept.note).also { runs[index] = it }
     }
 
+    /**
+     * Adds why [run]'s launch stopped before Start Career ([reasonKey], and the preset trainee and outfit
+     * it names) to its latest record, with [trainee] as its shown name when it has none. Returns the
+     * updated record, or null when [run] has none.
+     */
+    @Synchronized
+    fun attachLaunchStop(
+        run: Int,
+        reasonKey: String,
+        reasonTrainee: String,
+        reasonOutfit: String,
+        trainee: String,
+    ): RunRecord? {
+        val index = runs.indexOfLast { it.run == run }
+        if (index < 0) return null
+        val record = runs[index]
+        return record
+            .copy(
+                reasonKey = reasonKey,
+                reasonTrainee = reasonTrainee.ifEmpty { null },
+                reasonOutfit = reasonOutfit.ifEmpty { null },
+                traineeName = record.traineeName ?: trainee.ifEmpty { null },
+            ).also { runs[index] = it }
+    }
+
     @Synchronized
     private fun runsJson(): JSONArray = JSONArray().also { arr -> runs.forEach { arr.put(runRecordJson(it)) } }
 
@@ -565,6 +595,9 @@ internal fun runRecordJson(r: RunRecord): JSONObject =
             }
             r.sparks?.let { put("sparks", sparksJson(it)) }
             r.sparksNote?.let { put("sparksNote", it) }
+            r.reasonKey?.let { put("reasonKey", it) }
+            r.reasonTrainee?.let { put("reasonTrainee", it) }
+            r.reasonOutfit?.let { put("reasonOutfit", it) }
         }
 
 internal fun finaleJson(result: CareerResult): JSONObject? {

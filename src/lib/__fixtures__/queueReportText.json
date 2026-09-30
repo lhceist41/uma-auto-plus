@@ -1652,6 +1652,126 @@
                 "reason": "The bot session ended.",
                 "nextAction": null
             }
+        },
+        {
+            "name": "queue ended: a rotation run skipped for its own-character deck card",
+            "report": {
+                "kind": "COMPLETED",
+                "queueEnabled": true,
+                "totalRuns": 3,
+                "completedRuns": 2,
+                "startFromRun": 1,
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_COMPLETE"
+                    },
+                    {
+                        "run": 2,
+                        "resultCode": "TASK_RESULT_SKIPPED_BY_QUEUE",
+                        "traineeName": "Vodka",
+                        "reasonKey": "TRAINEE_IN_DECK"
+                    },
+                    {
+                        "run": 3,
+                        "resultCode": "TASK_RESULT_COMPLETE"
+                    }
+                ]
+            },
+            "text": {
+                "title": "Queue ended",
+                "reason": "2 of 3 runs are done. Run 2 (Vodka) was skipped: the support deck has a card of the trainee's own character, so the game would not start the career. Nothing was spent. Swap that card or choose another deck in the game, or turn on Auto-Fill Support Deck with Required Support Deck off.",
+                "nextAction": null
+            }
+        },
+        {
+            "name": "queue ended: a rotation run skipped for an outfit-only preset",
+            "report": {
+                "kind": "COMPLETED",
+                "queueEnabled": true,
+                "totalRuns": 2,
+                "completedRuns": 1,
+                "startFromRun": 1,
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_SKIPPED_BY_QUEUE",
+                        "traineeName": "Mihono Bourbon",
+                        "reasonKey": "TRAINEE_ONLY_OTHER_OUTFIT",
+                        "reasonTrainee": "Mihono Bourbon",
+                        "reasonOutfit": "CODE: ICING"
+                    },
+                    {
+                        "run": 2,
+                        "resultCode": "TASK_RESULT_COMPLETE"
+                    }
+                ]
+            },
+            "text": {
+                "title": "Queue ended",
+                "reason": "1 of 2 runs are done. Run 1 (Mihono Bourbon) was skipped: Mihono Bourbon is on your roster only as CODE: ICING, which has its own preset. Pick the Mihono Bourbon (CODE: ICING) preset for this trainee under Rotate Trainees in Run Queue Settings.",
+                "nextAction": null
+            }
+        },
+        {
+            "name": "queue ended: every rotation run skipped",
+            "report": {
+                "kind": "COMPLETED",
+                "queueEnabled": true,
+                "totalRuns": 2,
+                "completedRuns": 0,
+                "startFromRun": 1,
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_SKIPPED_BY_QUEUE",
+                        "traineeName": "Agnes Tachyon",
+                        "reasonKey": "TRAINEE_NOT_FOUND"
+                    },
+                    {
+                        "run": 2,
+                        "resultCode": "TASK_RESULT_SKIPPED_BY_QUEUE",
+                        "traineeName": "Vodka",
+                        "reasonKey": "TRAINEE_IN_DECK"
+                    }
+                ]
+            },
+            "text": {
+                "title": "Queue ended",
+                "reason": "0 of 2 runs are done. Run 1 (Agnes Tachyon) was skipped: the next trainee in the rotation was not found on the trainee list. Check the rotation list, or pick the trainee by hand. Run 2 (Vodka) was skipped: the support deck has a card of the trainee's own character, so the game would not start the career. Nothing was spent. Swap that card or choose another deck in the game, or turn on Auto-Fill Support Deck with Required Support Deck off.",
+                "nextAction": null
+            }
+        },
+        {
+            "name": "queue without rotation stopped at run 1: an outfit-only preset",
+            "report": {
+                "kind": "LAUNCH_FAILED_BEFORE_RUN",
+                "queueEnabled": true,
+                "totalRuns": 1,
+                "completedRuns": 0,
+                "startFromRun": 1,
+                "runReached": 0,
+                "resumable": false,
+                "reasonKey": "TRAINEE_ONLY_OTHER_OUTFIT",
+                "reasonTrainee": "Mihono Bourbon",
+                "reasonOutfit": "CODE: ICING",
+                "reasonRotation": false,
+                "runs": [
+                    {
+                        "run": 1,
+                        "resultCode": "TASK_RESULT_QUEUE_NAVIGATION_FAILED",
+                        "traineeName": "Mihono Bourbon",
+                        "reasonKey": "TRAINEE_ONLY_OTHER_OUTFIT",
+                        "reasonTrainee": "Mihono Bourbon",
+                        "reasonOutfit": "CODE: ICING"
+                    }
+                ]
+            },
+            "text": {
+                "title": "Queue stopped",
+                "reason": "The queue stopped before run 1 of 1: Mihono Bourbon is on your roster only as CODE: ICING, which has its own preset.",
+                "nextAction": "Apply the Mihono Bourbon (CODE: ICING) preset on Home, then press Start in UMA Auto+."
+            }
         }
     ]
 }

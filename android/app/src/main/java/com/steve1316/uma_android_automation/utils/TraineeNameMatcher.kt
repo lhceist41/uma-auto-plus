@@ -151,6 +151,9 @@ object TraineeNameMatcher {
     fun excludedOutfitOf(target: String, banner: String, excludeOutfits: List<String>, threshold: Double): String? =
         excludeOutfits.firstOrNull { hasOutfit(banner, it) }?.takeIf { score(target, banner) >= threshold }
 
+    /** The OCR'd [banner] for a log line: a bracket opened at its end and cut off by the crop is dropped. */
+    fun bannerForLog(banner: String): String = banner.trim().replace(Regex("""\s*[(\[]$"""), "")
+
     /** True when the selection [banner] is [target]: a name match at [threshold] that is not one of its [excludeOutfits]. */
     fun isTargetBanner(target: String, banner: String, excludeOutfits: List<String>, threshold: Double): Boolean =
         banner.isNotBlank() && excludeOutfits.none { hasOutfit(banner, it) } && score(target, banner) >= threshold

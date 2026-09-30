@@ -256,7 +256,7 @@ internal object StatusBoard {
                     .put("sparksNote", r.sparksNote ?: JSONObject.NULL)
                     .put("startedAt", r.startedAt)
                     .put("endedAt", r.endedAt)
-                    .put("words", runWords(r.resultCode)?.let { JSONObject().put("reason", it) } ?: JSONObject.NULL),
+                    .put("words", runWords(r)?.let { JSONObject().put("reason", it) } ?: JSONObject.NULL),
             )
         }
         val current = s.runCurrent ?: return runs

@@ -55,7 +55,9 @@ class QueueLedgerWiringTest {
         @Test
         fun `each queueHaltReason assignment records its ending right beside it`() {
             val sites = Regex("queueHaltReason = \"").findAll(session).map { it.range.first }.toList()
-            assertEquals(10, sites.size, "the halt sites")
+            // Thirteen: the ten halts, a launch whose trainee cannot start with no rotation (LAUNCH_FAILED_BEFORE_RUN),
+            // and a skip that cannot go on (the game not back on Home, or the next trainee's setup missing).
+            assertEquals(13, sites.size, "the halt sites")
             val ends =
                 sites.map { site ->
                     val block = session.substring(site, session.indexOf('\n', session.indexOf('\n', site) + 1))
@@ -82,9 +84,17 @@ class QueueLedgerWiringTest {
 
         @Test
         fun `both navigation halts carry the navigation's reason key`() {
+            // Every site of both endings names its reason on the next line: a navigation's own key, the key of
+            // the run's own launch that stopped, or the screen a skipped run could not be left from.
+            val reasons = setOf("ledger.reasonKey = navResult.reasonKey", "ledger.reasonKey = launchStop.reasonKey", "ledger.reasonKey = \"STUCK_ON_SCREEN\"")
             for (end in listOf("LAUNCH_FAILED_BEFORE_RUN", "NAVIGATION_FAILED_BETWEEN_RUNS")) {
-                val site = after("ledger.haltEnd = SessionEnd.$end")
-                assertTrue(site.lineSequence().drop(1).first().contains("ledger.reasonKey = navResult.reasonKey"), end)
+                val sites = Regex(Regex.escape("ledger.haltEnd = SessionEnd.$end")).findAll(session).toList()
+                assertTrue(sites.isNotEmpty(), end)
+                for (site in sites) {
+                    val next = session.substring(site.range.last).lineSequence().drop(1).first().trim()
+                    assertTrue(next in reasons, "$end: $next")
+                }
+                assertTrue(sites.any { session.substring(it.range.last).lineSequence().drop(1).first().trim() == "ledger.reasonKey = navResult.reasonKey" }, "$end: a navigation site")
             }
         }
 

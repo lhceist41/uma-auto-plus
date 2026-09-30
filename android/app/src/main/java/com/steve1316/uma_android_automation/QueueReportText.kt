@@ -72,23 +72,23 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
         SessionEnd.NOTHING_TO_RESUME -> ReportText("Nothing to resume", "The saved queue had already reached its last run, so there was nothing left to resume.", null)
         SessionEnd.COMPLETED -> {
             val summary = if (done >= total) (if (total == 1) "The run is done." else "All $total runs are done.") else "$done of ${runs(total)} are done."
-            ReportText(if (done >= total) "Queue finished" else "Queue ended", summary + errorSentence(r), null)
+            ReportText(if (done >= total) "Queue finished" else "Queue ended", summary + runNotes(r), null)
         }
         SessionEnd.SINGLE_RUN_ENDED -> if (key == ONLY_OTHER_OUTFIT) singleRunOutfitText(r) else singleRunText(lastCode)
-        SessionEnd.STOPPED_BY_USER -> ReportText("Queue stopped", "You stopped the queue with $done of ${runs(total)} done." + errorSentence(r), null)
+        SessionEnd.STOPPED_BY_USER -> ReportText("Queue stopped", "You stopped the queue with $done of ${runs(total)} done." + runNotes(r), null)
         SessionEnd.STOPPED_BY_BOT -> {
             val why = keyText(key, r)
-            ReportText("Queue stopped", "The bot stopped the queue with $done of ${runs(total)} done: ${why.reason}" + errorSentence(r), why.next(false))
+            ReportText("Queue stopped", "The bot stopped the queue with $done of ${runs(total)} done: ${why.reason}" + runNotes(r), why.next(false))
         }
         SessionEnd.SERVICE_ENDED ->
             if (r.optBoolean("errorPosted")) {
                 ReportText(
                     "Stopped by an error",
-                    "The bot stopped after an unexpected error at run $reached, with $done of ${runs(total)} done." + errorSentence(r),
+                    "The bot stopped after an unexpected error at run $reached, with $done of ${runs(total)} done." + runNotes(r),
                     "Press Start in UMA Auto+ to run the queue again.",
                 )
             } else {
-                ReportText("Queue stopped", "The bot was stopped with $done of ${runs(total)} done." + errorSentence(r), null)
+                ReportText("Queue stopped", "The bot was stopped with $done of ${runs(total)} done." + runNotes(r), null)
             }
         SessionEnd.BREAKPOINT -> {
             val detail = r.optString("breakpointDetail").takeUnless { r.isNull("breakpointDetail") || it.isBlank() }
@@ -111,7 +111,7 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
         SessionEnd.STOPPED_AFTER_CAREER ->
             ReportText(
                 haltTitle(resumable),
-                "You paused the queue after run $reached of $total." + (if (resumable) " Start continues with run ${reached + 1}." else "") + errorSentence(r),
+                "You paused the queue after run $reached of $total." + (if (resumable) " Start continues with run ${reached + 1}." else "") + runNotes(r),
                 if (resumable) pressStart(true).replaceFirstChar { it.uppercase() } else null,
             )
         SessionEnd.STOP_ON_ERROR ->
@@ -123,16 +123,16 @@ private fun endingText(end: SessionEnd, r: JSONObject): ReportText {
         SessionEnd.FIRST_SNAPSHOT_MISSING, SessionEnd.NEXT_SNAPSHOT_MISSING ->
             ReportText(
                 haltTitle(resumable),
-                "The queue stopped because the saved setup for the next trainee in the rotation was missing.",
+                "The queue stopped because the saved setup for the next trainee in the rotation was missing." + skipSentences(r),
                 pressStart(resumable).replaceFirstChar { it.uppercase() } + " Start prepares the rotation's trainee setups before launching.",
             )
         SessionEnd.LAUNCH_FAILED_BEFORE_RUN -> {
             val why = keyText(key, r)
-            ReportText(haltTitle(resumable), "The queue stopped before run ${reached + 1} of $total: ${why.reason}", why.next(resumable))
+            ReportText(haltTitle(resumable), "The queue stopped before run ${reached + 1} of $total: ${why.reason}" + skipSentences(r), why.next(resumable))
         }
         SessionEnd.NAVIGATION_FAILED_BETWEEN_RUNS -> {
             val why = keyText(key, r)
-            ReportText(haltTitle(resumable), "The queue stopped after run $reached of $total: ${why.reason}", why.next(resumable))
+            ReportText(haltTitle(resumable), "The queue stopped after run $reached of $total: ${why.reason}" + skipSentences(r), why.next(resumable))
         }
         SessionEnd.WAIT_INTERRUPTED ->
             ReportText(
@@ -173,6 +173,14 @@ private fun singleRunText(code: String?): ReportText =
 
 /** One finished run's reason in the same words, for a run that did not finish its career; null for a finished career. */
 internal fun runWords(code: String?): String? = if (code == "TASK_RESULT_COMPLETE") null else singleRunText(code).reason
+
+/** [runWords] for a run record: a run whose launch stopped before Start Career says why, in the report's words. */
+internal fun runWords(run: RunRecord): String? {
+    val key = run.reasonKey ?: return runWords(run.resultCode)
+    val skipped = run.resultCode == "TASK_RESULT_SKIPPED_BY_QUEUE"
+    val why = keyText(key, runRecordJson(run).put("reasonRotation", skipped))
+    return (if (skipped) "The run was skipped: " else "The run could not start: ") + why.reason
+}
 
 internal fun runEndedWithError(code: String?): Boolean = code in RUN_ERROR_CODES
 
@@ -240,6 +248,25 @@ private fun errorSentence(r: JSONObject): String {
     }
 }
 
+/** How many runs ended with an error, then each run the queue skipped because its trainee cannot start. */
+private fun runNotes(r: JSONObject): String = errorSentence(r) + skipSentences(r)
+
+/**
+ * One sentence per run skipped at its launch, in the words a halt on the same key uses, with its fix.
+ * Only a rotation skips, so the fix names the rotation.
+ */
+private fun skipSentences(r: JSONObject): String {
+    val runs = r.optJSONArray("runs") ?: return ""
+    return (0 until runs.length())
+        .mapNotNull { runs.optJSONObject(it) }
+        .filter { it.optString("resultCode") == "TASK_RESULT_SKIPPED_BY_QUEUE" && it.optString("reasonKey").isNotEmpty() }
+        .joinToString("") { run ->
+            val why = keyText(run.optString("reasonKey"), JSONObject(run.toString()).put("reasonRotation", true))
+            val who = run.optString("traineeName").trim().takeIf { it.isNotEmpty() && !run.isNull("traineeName") }?.let { " ($it)" }.orEmpty()
+            " Run ${run.optInt("run")}$who was skipped: ${why.reason}" + (why.fix?.let { " $it." }.orEmpty())
+        }
+}
+
 private fun haltTitle(resumable: Boolean) = if (resumable) "Queue paused" else "Queue stopped"
 
 /**
@@ -269,7 +296,7 @@ private val EXIT_CAUSES =
     )
 
 /** Why a navigation or the bot stopped the queue, and the fix, which ends in pressing Start. */
-internal class KeyText(val reason: String, private val fix: String?) {
+internal class KeyText(val reason: String, val fix: String?) {
     fun next(resumable: Boolean): String = if (fix == null) pressStart(resumable).replaceFirstChar { it.uppercase() } else "$fix, then ${pressStart(resumable)}"
 }
 
