@@ -30,6 +30,8 @@ import com.steve1316.uma_android_automation.bot.ScenarioState
 import com.steve1316.uma_android_automation.components.ButtonBack
 import com.steve1316.uma_android_automation.components.ButtonCancel
 import com.steve1316.uma_android_automation.components.ButtonClose
+import com.steve1316.uma_android_automation.components.DialogSongAcquired
+import com.steve1316.uma_android_automation.components.DialogUtils
 import com.steve1316.uma_android_automation.components.IconRaceDayRibbon
 import com.steve1316.uma_android_automation.types.StatName
 import com.steve1316.uma_android_automation.utils.GrandConcertCareerComplete
@@ -48,6 +50,8 @@ import com.steve1316.uma_android_automation.utils.grandConcertCutsceneCheckboxSt
 import com.steve1316.uma_android_automation.utils.grandConcertDialogHeaderPresent
 import com.steve1316.uma_android_automation.utils.grandConcertLessonSlotState
 import com.steve1316.uma_android_automation.utils.grandConcertOnStagePresent
+import com.steve1316.uma_android_automation.utils.grandConcertPlaybackMenuButtonPresent
+import com.steve1316.uma_android_automation.utils.grandConcertPlaybackMenuSkipPresent
 import com.steve1316.uma_android_automation.utils.grandConcertPlaybackSkipPresent
 import com.steve1316.uma_android_automation.utils.grandConcertResultNextPresent
 import java.text.SimpleDateFormat
@@ -315,6 +319,8 @@ class GrandConcert(game: Game) : Campaign(game) {
         if (!startConcertFromConfirm()) return false
 
         var ticks = 0
+        var menuOpens = 0
+        var menuSkips = 0
         while (ticks++ < MAX_ESCORT_TICKS) {
             val bitmap = game.imageUtils.getSourceBitmap()
             val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
@@ -323,6 +329,26 @@ class GrandConcert(game: Game) : Campaign(game) {
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Playback detected; skipping the performance.")
                     game.tapCoordinate(GrandConcertEscort.SKIP_GLYPH_X.toDouble(), GrandConcertEscort.SKIP_GLYPH_Y.toDouble(), "gc_concert_skip")
                     game.wait(2.0)
+                }
+                // A performance with a menu button in the skip disc (seen on a Grand finale that
+                // rendered black): the disc only toggles the menu, so a tap there never skips. The
+                // Skip entry is tapped only once the open menu shows it; Rotate is never touched.
+                grandConcertPlaybackMenuSkipPresent(sampler) && menuSkips < MAX_PLAYBACK_MENU_TAPS -> {
+                    menuSkips++
+                    MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Performance menu open; tapping its Skip (try $menuSkips of $MAX_PLAYBACK_MENU_TAPS).")
+                    game.tapCoordinate(GrandConcertEscort.MENU_SKIP_X.toDouble(), GrandConcertEscort.MENU_SKIP_Y.toDouble(), "gc_concert_menu_skip")
+                    game.wait(2.0)
+                    if (playbackControlsPresent()) {
+                        MessageLog.w(TAG, "[GRAND_CONCERT] [CONCERT] The performance is still showing after its menu Skip.")
+                    } else {
+                        MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Performance skipped from its menu.")
+                    }
+                }
+                grandConcertPlaybackMenuButtonPresent(sampler) && menuOpens < MAX_PLAYBACK_MENU_TAPS -> {
+                    menuOpens++
+                    MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Playback shows a menu button, not Skip; opening the menu (try $menuOpens of $MAX_PLAYBACK_MENU_TAPS).")
+                    game.tapCoordinate(GrandConcertEscort.PLAYBACK_MENU_X.toDouble(), GrandConcertEscort.PLAYBACK_MENU_Y.toDouble(), "gc_concert_menu")
+                    game.wait(1.0)
                 }
                 grandConcertResultNextPresent(sampler) -> {
                     game.tapCoordinate(GrandConcertEscort.NEXT_BUTTON_X.toDouble(), GrandConcertEscort.NEXT_BUTTON_Y.toDouble(), "gc_concert_next")
@@ -375,11 +401,24 @@ class GrandConcert(game: Game) : Campaign(game) {
                     MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Concert complete; a mandatory race day follows and the main loop owns it.")
                     return true
                 }
+                // A performance the account had never played unlocks its song after the skip.
+                DialogUtils.getTitle(game.imageUtils, bitmap, logOnMiss = false) == DialogSongAcquired.title -> {
+                    MessageLog.i(TAG, "[GRAND_CONCERT] [CONCERT] Song Acquired notice; closing.")
+                    DialogSongAcquired.close(game.imageUtils)
+                    game.wait(1.2)
+                }
                 else -> game.wait(1.0)
             }
         }
         MessageLog.w(TAG, "[GRAND_CONCERT] [CONCERT] Escort budget exhausted on an unrecognised screen.")
         return false
+    }
+
+    /** True while any playback control shows: the skip glyph, the menu button or the open menu. */
+    private fun playbackControlsPresent(): Boolean {
+        val bitmap = game.imageUtils.getSourceBitmap()
+        val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
+        return grandConcertPlaybackSkipPresent(sampler) || grandConcertPlaybackMenuButtonPresent(sampler) || grandConcertPlaybackMenuSkipPresent(sampler)
     }
 
     /**
@@ -1079,6 +1118,9 @@ class GrandConcert(game: Game) : Campaign(game) {
 
         /** Escort loop budget: playback plus a handful of result screens fits well inside this. */
         private const val MAX_ESCORT_TICKS = 40
+
+        /** Taps on the performance menu button, and separately on its Skip entry, per escort. */
+        private const val MAX_PLAYBACK_MENU_TAPS = 3
 
         /**
          * Escort re-entries allowed for one pending concert before handing the career to the player.

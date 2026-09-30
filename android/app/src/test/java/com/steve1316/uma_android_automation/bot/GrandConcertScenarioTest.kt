@@ -498,6 +498,36 @@ class GrandConcertScenarioTest {
             )
         }
 
+        /**
+         * A performance can hold a menu button in the skip disc (a black-rendered Grand finale on
+         * 2026-09-30), where a tap on the disc only toggles the menu. The escort must skip through
+         * the open menu's identified Skip entry, bounded, verify the skip, and close the Song
+         * Acquired notice that follows.
+         */
+        @Test
+        fun `the concert escort skips a menu-button performance through the menu's Skip`() {
+            val campaign = source("bot/campaigns/GrandConcert.kt")
+            val escortBody = functionBody(campaign, "private fun runConcertEscort()")
+            val direct = escortBody.indexOf("grandConcertPlaybackSkipPresent(sampler) ->")
+            val menuSkip = escortBody.indexOf("grandConcertPlaybackMenuSkipPresent(sampler) && menuSkips < MAX_PLAYBACK_MENU_TAPS ->")
+            val menuOpen = escortBody.indexOf("grandConcertPlaybackMenuButtonPresent(sampler) && menuOpens < MAX_PLAYBACK_MENU_TAPS ->")
+            assertTrue(direct in 0 until menuSkip && menuSkip < menuOpen, "direct skip, then the open menu's Skip, then opening the menu")
+
+            val skipBranch = escortBody.substring(menuSkip, menuOpen)
+            assertEquals(1, Regex("""tapCoordinate\(""").findAll(skipBranch).count(), "one tap in the menu Skip branch")
+            assertTrue(skipBranch.contains("tapCoordinate(GrandConcertEscort.MENU_SKIP_X.toDouble(), GrandConcertEscort.MENU_SKIP_Y.toDouble()"))
+            assertTrue(skipBranch.contains("menuSkips++") && skipBranch.contains("if (playbackControlsPresent())"), "counted and verified")
+
+            val openBranch = escortBody.substring(menuOpen).substringBefore("grandConcertResultNextPresent(sampler) ->")
+            assertEquals(1, Regex("""tapCoordinate\(""").findAll(openBranch).count(), "one tap in the menu button branch")
+            assertTrue(openBranch.contains("tapCoordinate(GrandConcertEscort.PLAYBACK_MENU_X.toDouble(), GrandConcertEscort.PLAYBACK_MENU_Y.toDouble()"))
+            assertTrue(openBranch.contains("menuOpens++"))
+
+            assertTrue(campaign.contains("private const val MAX_PLAYBACK_MENU_TAPS = 3"))
+            val notice = escortBody.indexOf("DialogUtils.getTitle(game.imageUtils, bitmap, logOnMiss = false) == DialogSongAcquired.title ->")
+            assertTrue(notice > escortBody.indexOf("IconRaceDayRibbon.check"), "the notice check runs only after every exit")
+        }
+
         @Test
         fun `functionBody finds its marker under both CRLF and LF line endings`() {
             val lf =

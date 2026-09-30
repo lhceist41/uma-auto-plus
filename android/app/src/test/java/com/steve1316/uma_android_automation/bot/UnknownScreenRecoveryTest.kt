@@ -75,6 +75,20 @@ class UnknownScreenRecoveryTest {
         }
 
         @Test
+        fun `the recovery log says the game is reopened, since a running game keeps its process`() {
+            // The intent re-fronts a live game: the pid stays the same, so "relaunching" misled the
+            // reader of a stuck run into thinking the game had been restarted.
+            val game = sourceFile("bot/Game.kt").readText()
+            val body = game.substring(game.indexOf("fun restartGame("), game.indexOf("fun start()"))
+            assertFalse("Relaunching the game" in body)
+            assertTrue("[RECOVERY] Reopening the game" in body && "not restarted" in body)
+            val campaign = sourceFile("bot/Campaign.kt").readText()
+            assertFalse("did not help - relaunching the game" in campaign)
+            assertFalse("\$gameRestartAttemptsThisEpisode relaunch " in campaign)
+            assertTrue("did not help - reopening the game" in campaign)
+        }
+
+        @Test
         fun `the relaunch rung is bounded by the retry helper, not a one-shot boolean`() {
             val campaign = sourceFile("bot/Campaign.kt").readText()
             assertTrue("shouldRelaunchGame(" in campaign, "the ladder gates the relaunch through the bounded helper")

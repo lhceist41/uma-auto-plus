@@ -955,7 +955,11 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
             // No CLEAR_TASK: never tear down a live game task (that killed the game on 2026-07-21) -
             // re-front a live game, cold-start a dead one.
             launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-            MessageLog.w(TAG, "[RECOVERY] Relaunching the game ($GAME_PACKAGE) to recover from an unrecognized/soft-locked screen. A career in progress resumes via Continue Career.")
+            MessageLog.w(
+                TAG,
+                "[RECOVERY] Reopening the game ($GAME_PACKAGE) to recover from an unrecognized/soft-locked screen: a running game is " +
+                    "brought to the front as it is, not restarted, and only a game that is not running starts fresh. A career in progress resumes via Continue Career.",
+            )
             myContext.startActivity(launchIntent)
             SessionTally.gameRelaunches.incrementAndGet()
             wait(waitAfterLaunch, skipWaitingForLoading = true)

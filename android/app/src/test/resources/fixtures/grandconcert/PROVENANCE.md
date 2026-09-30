@@ -187,6 +187,18 @@ as a warm connected component enclosed by white outline, resizes to a fixed grid
 matches font digits measured from a full career capture corpus. They are channel-swapped into the
 fixture orientation like every other bot-saved frame.
 
+## Ninth capture set: a performance with a menu button instead of Skip (2026-09-30, MuMu screenshots)
+
+A Grand finale (turn 72) of an unattended career, captured while the escort was stuck on it. The
+3D performance rendered black, and the skip disc held a menu button instead of the skip glyph, so
+every tap on the disc only opened or closed the menu. Native RGB, 1080x1920.
+
+| Fixture | Screen |
+|---|---|
+| concert_playback_menu.png | Black performance with only the menu button (three brown bars) in the skip disc |
+| concert_playback_menu_open.png | The same after one tap on the button: a Skip / Rotate pill above the disc, which now holds a close cross |
+| concert_song_acquired.png | After Skip in that menu: the "Song Acquired" notice ("You got a new song!") with Close, over a white screen |
+
 ## Screens still needed before further automation
 
 1. The lesson list immediately after a successful LEARN (the refresh; we have only after-schedule)

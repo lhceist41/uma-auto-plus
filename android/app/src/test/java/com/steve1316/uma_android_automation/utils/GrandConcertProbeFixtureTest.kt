@@ -42,6 +42,7 @@ class GrandConcertProbeFixtureTest {
             "concert_confirm", "concert_playback", "concert_success_banner", "concert_overview",
             "bonuses_updated", "concert_on_stage", "active_bonuses_panel",
             "grand_confirm_unchecked", "grand_confirm_checked",
+            "concert_playback_menu", "concert_playback_menu_open", "concert_song_acquired",
             "training_panel_vi_gain", "training_panel_rainbow", "training_panel_hidden",
             "training_panel_gain_single_digit", "training_panel_gain_row3_bg",
         )
@@ -116,6 +117,53 @@ class GrandConcertProbeFixtureTest {
         }
 
         @Test
+        fun `a performance with a menu button reads as menu, never as skip`() {
+            // The disc that holds the skip glyph on the numbered concerts held a menu button on a
+            // black-rendered Grand finale; tapping it as a skip only toggled the menu, forever.
+            assertTrue(grandConcertPlaybackMenuButtonPresent(sampler("concert_playback_menu")))
+            assertFalse(grandConcertPlaybackSkipPresent(sampler("concert_playback_menu")))
+            assertFalse(grandConcertPlaybackMenuSkipPresent(sampler("concert_playback_menu")))
+
+            assertTrue(grandConcertPlaybackMenuSkipPresent(sampler("concert_playback_menu_open")))
+            assertFalse(grandConcertPlaybackSkipPresent(sampler("concert_playback_menu_open")))
+            assertFalse(grandConcertPlaybackMenuButtonPresent(sampler("concert_playback_menu_open")))
+
+            assertFalse(grandConcertPlaybackMenuButtonPresent(sampler("concert_playback")))
+            assertFalse(grandConcertPlaybackMenuSkipPresent(sampler("concert_playback")))
+        }
+
+        @Test
+        fun `the open menu is not read as a Skip entry without both its glyph and its label`() {
+            fun erased(x0: Int, y0: Int, x1: Int, y1: Int): SparkPixelSampler {
+                val img = image("concert_playback_menu_open")
+                return SparkPixelSampler { x, y -> if (x in x0..x1 && y in y0..y1) -1 else img.getRGB(x, y) }
+            }
+            assertFalse(grandConcertPlaybackMenuSkipPresent(erased(950, 1526, 1006, 1570)), "glyph erased")
+            assertFalse(grandConcertPlaybackMenuSkipPresent(erased(950, 1586, 1006, 1620)), "label erased")
+            assertTrue(grandConcertPlaybackMenuSkipPresent(erased(950, 1640, 1006, 1710)), "Rotate erased: Skip is still identified")
+            assertFalse(grandConcertPlaybackMenuSkipPresent(erased(950, 1805, 1006, 1850)), "no close cross: the menu is not known to be open")
+        }
+
+        @Test
+        fun `a solid brown button is not read as the menu button`() {
+            val img = image("concert_playback_menu")
+            val brown = 0xFF9A5A2A.toInt()
+            val solid = SparkPixelSampler { x, y -> if (x in 944..1011 && y in 1800..1854) brown else img.getRGB(x, y) }
+            assertFalse(grandConcertPlaybackMenuButtonPresent(solid))
+        }
+
+        @Test
+        fun `the menu Skip tap lands on the Skip entry's glyph, above Rotate`() {
+            val img = image("concert_playback_menu_open")
+            val p = img.getRGB(GrandConcertEscort.MENU_SKIP_X, GrandConcertEscort.MENU_SKIP_Y)
+            val r = (p shr 16) and 0xFF
+            val b = p and 0xFF
+            assertTrue(r - b >= 80, "expected the brown skip glyph under the tap, got r=$r b=$b")
+            // Rotate's icon starts below the Skip label; the tap and its jitter stay well above it.
+            assertTrue(GrandConcertEscort.MENU_SKIP_Y + 25 < 1650)
+        }
+
+        @Test
         fun `no escort probe fires on a capture it does not own`() {
             val confirmCaptures = listOf("concert_confirm", "grand_confirm_unchecked", "grand_confirm_checked")
             for (name in allFixtures) {
@@ -124,6 +172,12 @@ class GrandConcertProbeFixtureTest {
                 }
                 if (name != "concert_playback") {
                     assertFalse(grandConcertPlaybackSkipPresent(sampler(name)), "skip on $name")
+                }
+                if (name != "concert_playback_menu") {
+                    assertFalse(grandConcertPlaybackMenuButtonPresent(sampler(name)), "menu button on $name")
+                }
+                if (name != "concert_playback_menu_open") {
+                    assertFalse(grandConcertPlaybackMenuSkipPresent(sampler(name)), "menu skip on $name")
                 }
                 if (name !in listOf("concert_success_banner", "concert_overview")) {
                     assertFalse(grandConcertResultNextPresent(sampler(name)), "next on $name")

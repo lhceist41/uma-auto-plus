@@ -5086,7 +5086,7 @@ abstract class Campaign(game: Game) : Task(game) {
             gameRestartAttemptsThisEpisode++
             MessageLog.w(
                 TAG,
-                "[RECOVERY] Stuck for $count cycles and gesture rebinds did not help - relaunching the game " +
+                "[RECOVERY] Stuck for $count cycles and gesture rebinds did not help - reopening the game " +
                     "(attempt $gameRestartAttemptsThisEpisode/$maxGameRestartAttempts) before stopping.",
             )
             if (game.restartGame()) {
@@ -5100,7 +5100,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 lobbyReentryAttempts = 0
                 return
             }
-            MessageLog.w(TAG, "[RECOVERY] Game relaunch could not be dispatched; falling through to the standard stop.")
+            MessageLog.w(TAG, "[RECOVERY] The game could not be reopened; falling through to the standard stop.")
         }
 
         if (DialogUtils.check(game.imageUtils)) {
@@ -5135,7 +5135,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 StartModule.gameRecoveryFailed = true
                 MessageLog.e(
                     TAG,
-                    "[RECOVERY] The game could not be recovered after $gameRestartAttemptsThisEpisode relaunch " +
+                    "[RECOVERY] The game could not be recovered after $gameRestartAttemptsThisEpisode reopen " +
                         "attempt(s); the bot is on an unrecognized screen. Pausing the queue.",
                 )
             }
