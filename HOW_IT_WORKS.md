@@ -1,7 +1,5 @@
 # How It Works
 
-*Last updated: 2026-08-06*
-
 A comprehensive guide to the inner workings of the app. This document explains what the bot does at each step of a campaign, how it makes decisions, and how each scenario differs.
 
 ## Table of Contents
