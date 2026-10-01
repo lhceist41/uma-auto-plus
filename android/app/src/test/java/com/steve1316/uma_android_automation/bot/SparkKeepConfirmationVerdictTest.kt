@@ -162,6 +162,26 @@ class SparkKeepConfirmationVerdictTest {
         }
 
         @Test
+        fun `a pipe read for a Roman numeral I is compatible with the real glyph`() {
+            assertTrue(SparkTextNorm.namesCompatible("Queen Elizabeth I| Cup", "Queen Elizabeth II Cup"))
+            assertTrue(SparkTextNorm.namesCompatible("Queen Elizabeth II Cup", "Queen Elizabeth I| Cup"))
+        }
+
+        @Test
+        fun `a stray pipe on a short name still matches the clean read`() {
+            assertTrue(SparkTextNorm.namesCompatible("Wit|", "Wit"))
+            assertTrue(SparkTextNorm.namesCompatible("|Guts", "Guts"))
+            assertFalse(SparkTextNorm.namesCompatible("Wit|", "Guts"))
+        }
+
+        @Test
+        fun `a pipe fold does not let a different Roman numeral or name through`() {
+            assertFalse(SparkTextNorm.namesCompatible("Queen Elizabeth I| Cup", "Queen Elizabeth III Cup"))
+            assertFalse(SparkTextNorm.namesCompatible("Queen Elizabeth II Cup", "Takarazuka Kinen"))
+            assertFalse(SparkTextNorm.namesCompatible("Queen Elizabeth I| Cup", "Takarazuka Kinen"))
+        }
+
+        @Test
         fun `an unreadable side matches anything`() {
             assertTrue(SparkTextNorm.namesCompatible(SPARK_UNREADABLE_NAME, "Ramp Up"))
             assertTrue(SparkTextNorm.namesCompatible("", "Ramp Up"))

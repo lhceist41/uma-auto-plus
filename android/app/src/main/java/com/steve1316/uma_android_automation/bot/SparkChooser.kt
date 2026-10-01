@@ -687,6 +687,11 @@ object SparkTextNorm {
     fun namesCompatible(a: String?, b: String?): Boolean {
         if (a.isNullOrBlank() || b.isNullOrBlank()) return true
         if (a == SPARK_UNREADABLE_NAME || b == SPARK_UNREADABLE_NAME) return true
+        return foldedNamesCompatible(a, b) || foldedNamesCompatible(a.replace('|', 'i'), b.replace('|', 'i'))
+    }
+
+    // OCR reads a Roman numeral "I" as "|" but also adds "|" as a border artifact, so both readings are tried.
+    private fun foldedNamesCompatible(a: String, b: String): Boolean {
         val fa = fold(a).filter { it.isLetterOrDigit() }
         val fb = fold(b).filter { it.isLetterOrDigit() }
         if (fa.isEmpty() || fb.isEmpty()) return true
