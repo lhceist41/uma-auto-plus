@@ -440,8 +440,7 @@
     var course = L.buildCourse(career.course, date && date.turn, goalDueTurn);
     els.courseTrack.setAttribute('aria-label', 'Career course' + (date && date.turn != null ? (': turn ' + date.turn) : '') + (career.course && career.course.finalTurn ? (' of ' + career.course.finalTurn) : ''));
     if (!course) {
-      // Most scenarios have no verified calendar yet (1.6.0 sends `course`
-      // only for URA Finale), so this is the common case, not a rare edge:
+      // Daily Races, Team Trials and an unread scenario send no `course`;
       // it must read as a normal, finished state, not a broken one.
       els.courseTrack.appendChild(el('div', 'rc-course-empty', 'No course map yet for this scenario. Date and turn are shown above.'));
       return;

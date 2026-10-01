@@ -176,6 +176,24 @@ test('course geometry: positions match the design sample at turn 2, goal turn 12
   assert.equal(c.finale.to, 75);
 });
 
+test('course geometry: a Trackblazer course draws its own finale label on the same 75-turn track', () => {
+  const trackblazer = {
+    finalTurn: 75,
+    segments: [
+      { label: 'Junior Year', from: 1, to: 24 },
+      { label: 'Classic Year', from: 25, to: 48 },
+      { label: 'Senior Year', from: 49, to: 72 },
+      { label: 'Twinkle Star Climax', from: 73, to: 75, finale: true },
+    ],
+  };
+  const c = logic.buildCourse(trackblazer, 74, 75);
+  assert.equal(c.finale.label, 'TWINKLE STAR CLIMAX');
+  assert.equal(c.finale.left, '96%');
+  assert.equal(c.runner, '98.67%'); // round(74/75*10000)/100
+  assert.equal(c.goal, '100%');
+  assert.deepEqual(c.poles, ['32%', '64%', '96%']);
+});
+
 test('course geometry: the goal flag sits at the goal\'s dueTurn, not at the current turn', () => {
   const atCurrentTurn = logic.buildCourse(SAMPLE_COURSE, 2, 2).goal;
   const atDueTurn = logic.buildCourse(SAMPLE_COURSE, 2, 12).goal;

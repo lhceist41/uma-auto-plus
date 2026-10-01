@@ -6,6 +6,7 @@ import com.steve1316.uma_android_automation.QueueReport
 import com.steve1316.uma_android_automation.RunRecord
 import com.steve1316.uma_android_automation.SessionEnd
 import com.steve1316.uma_android_automation.SessionTally
+import com.steve1316.uma_android_automation.bot.GrandConcertScenario
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.jupiter.api.AfterEach
@@ -269,19 +270,57 @@ class StatusBoardTest {
         assertTrue(status(sessionActive = false).isNull("lastProgressAt"))
     }
 
-    @Test
-    fun `the course is sent for URA Finale only, from the bot's calendar`() {
-        val course = StatusBoard.courseJson("URA Finale")
-        assertNotNull(course)
+    private fun finaleSegment(scenario: String): JSONObject {
+        val course = StatusBoard.courseJson(scenario)
+        assertNotNull(course, "course for $scenario")
         course!!
         assertEquals(75, course.getInt("finalTurn"))
         val segments: JSONArray = course.getJSONArray("segments")
         assertEquals(listOf(1 to 24, 25 to 48, 49 to 72, 73 to 75), (0 until segments.length()).map { segments.getJSONObject(it).getInt("from") to segments.getJSONObject(it).getInt("to") })
-        assertTrue(segments.getJSONObject(3).getBoolean("finale"))
-        for (other in listOf("Unity Cup", "Trackblazer", "Grand Concert", "Daily Races", "", null)) {
+        assertEquals(listOf("Junior Year", "Classic Year", "Senior Year"), (0 until 3).map { segments.getJSONObject(it).getString("label") })
+        assertTrue((0 until 3).none { segments.getJSONObject(it).has("finale") })
+        return segments.getJSONObject(3).also { assertTrue(it.getBoolean("finale")) }
+    }
+
+    private fun finaleDates(scenario: String?) = listOf(73, 74, 75).map { StatusBoard.dateLabels("SENIOR YEAR", "LATE", "DECEMBER", it, scenario) }
+
+    @Test
+    fun `URA Finale's course ends in the URA Finale`() {
+        assertEquals("URA Finale", finaleSegment("URA Finale").getString("label"))
+        assertEquals(listOf(null to "Finale Qualifier", null to "Finale Semi-Final", null to "Finale Finals"), finaleDates("URA Finale"))
+        assertEquals(null to "Finale Finals", StatusBoard.dateLabels("SENIOR YEAR", "LATE", "DECEMBER", 75))
+    }
+
+    @Test
+    fun `Unity Cup's course ends in the URA Finale`() {
+        assertEquals("URA Finale", finaleSegment("Unity Cup").getString("label"))
+        assertEquals(listOf(null to "Finale Qualifier", null to "Finale Semi-Final", null to "Finale Finals"), finaleDates("Unity Cup"))
+    }
+
+    @Test
+    fun `Grand Concert's course ends in the URA Finale`() {
+        assertEquals("URA Finale", finaleSegment(GrandConcertScenario.KEY).getString("label"))
+        assertEquals(listOf(null to "Finale Qualifier", null to "Finale Semi-Final", null to "Finale Finals"), finaleDates(GrandConcertScenario.KEY))
+    }
+
+    @Test
+    fun `Trackblazer's course ends in the Twinkle Star Climax`() {
+        assertEquals("Twinkle Star Climax", finaleSegment("Trackblazer").getString("label"))
+        assertEquals(listOf(null to "Climax Race 1", null to "Climax Race 2", null to "Climax Race 3"), finaleDates("Trackblazer"))
+    }
+
+    @Test
+    fun `turns before the finale keep their calendar labels in every scenario`() {
+        for (scenario in listOf("URA Finale", "Unity Cup", GrandConcertScenario.KEY, "Trackblazer")) {
+            assertEquals("Senior Year" to "Late December", StatusBoard.dateLabels("SENIOR YEAR", "LATE", "DECEMBER", 72, scenario), scenario)
+        }
+    }
+
+    @Test
+    fun `no course is sent for a scenario without a career calendar`() {
+        for (other in listOf("Daily Races", "Team Trials", "", null)) {
             assertEquals(null, StatusBoard.courseJson(other), "course for $other")
         }
-        assertEquals(null to "Finale Finals", StatusBoard.dateLabels("SENIOR YEAR", "LATE", "DECEMBER", 75))
     }
 
     @Test

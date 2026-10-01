@@ -4,6 +4,7 @@ import com.steve1316.uma_android_automation.QueueReport
 import com.steve1316.uma_android_automation.ReportText
 import com.steve1316.uma_android_automation.RunRecord
 import com.steve1316.uma_android_automation.finalStatsJson
+import com.steve1316.uma_android_automation.bot.GrandConcertScenario
 import com.steve1316.uma_android_automation.finaleJson
 import com.steve1316.uma_android_automation.lastKnownStatsJson
 import com.steve1316.uma_android_automation.queueReportText
@@ -198,27 +199,41 @@ internal object StatusBoard {
         phaseName: String,
         monthName: String,
         turn: Int,
+        scenario: String? = null,
     ): Pair<String?, String?> {
-        FINALE_LABELS[turn]?.let { return null to it }
+        finaleTurnNames(scenario)?.get(turn)?.let { return null to it }
         return titleCase(yearName) to "${titleCase(phaseName)} ${titleCase(monthName)}"
     }
 
-    private val FINALE_LABELS = mapOf(73 to "Finale Qualifier", 74 to "Finale Semi-Final", 75 to "Finale Finals")
+    private val URA_FINALE_TURNS = mapOf(73 to "Finale Qualifier", 74 to "Finale Semi-Final", 75 to "Finale Finals")
+    private val CLIMAX_TURNS = mapOf(73 to "Climax Race 1", 74 to "Climax Race 2", 75 to "Climax Race 3")
+
+    /** Unity Cup and Grand Concert end in the URA Finale races; Trackblazer ends in the Twinkle Star Climax. */
+    private fun finaleTurnNames(scenario: String?): Map<Int, String>? =
+        when (scenario) {
+            null, "URA Finale", "Unity Cup", GrandConcertScenario.KEY -> URA_FINALE_TURNS
+            "Trackblazer" -> CLIMAX_TURNS
+            else -> null
+        }
 
     private fun titleCase(value: String) = value.lowercase().split(' ', '_').filter { it.isNotEmpty() }.joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
 
     /**
-     * The course for [scenario], from GameDate's calendar: three 24-turn years, then the finale on turns
-     * 73-75. Only URA Finale is sent, the one scenario whose end was confirmed on a device; the others
-     * stay null until their calendars are verified.
+     * The course for [scenario]: three 24-turn years, then the finale on turns 73-75. Every career scenario
+     * runs this calendar; other strings (Daily Races, Team Trials, unknown) stay null.
      */
     fun courseJson(scenario: String?): JSONObject? {
-        if (scenario != "URA Finale") return null
+        val finaleLabel =
+            when (scenario) {
+                "URA Finale", "Unity Cup", GrandConcertScenario.KEY -> "URA Finale"
+                "Trackblazer" -> "Twinkle Star Climax"
+                else -> return null
+            }
         val segments = JSONArray()
         listOf("Junior Year", "Classic Year", "Senior Year").forEachIndexed { i, label ->
             segments.put(JSONObject().put("label", label).put("from", i * 24 + 1).put("to", i * 24 + 24))
         }
-        segments.put(JSONObject().put("label", "URA Finale").put("from", 73).put("to", 75).put("finale", true))
+        segments.put(JSONObject().put("label", finaleLabel).put("from", 73).put("to", 75).put("finale", true))
         return JSONObject().put("finalTurn", 75).put("segments", segments)
     }
 

@@ -2951,7 +2951,7 @@ abstract class Campaign(game: Game) : Task(game) {
     }
 
     private fun publishTurnStatus() {
-        val (year, label) = StatusBoard.dateLabels(date.year.longName, date.phase.name, date.month.name, date.day)
+        val (year, label) = StatusBoard.dateLabels(date.year.longName, date.phase.name, date.month.name, date.day, game.scenario)
         val stats = listOf(trainee.stats.speed, trainee.stats.stamina, trainee.stats.power, trainee.stats.guts, trainee.stats.wit)
         StatusBoard.careerTurn(trainee.name.ifEmpty { null }, game.scenario, year, label, date.day, stats, trainee.energy, trainee.mood.name)
         ProgressNotification.refresh()
