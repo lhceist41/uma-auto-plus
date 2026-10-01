@@ -302,7 +302,7 @@ class AccessibilityRepairTest {
             assertTrue(recover.contains("unknownScreenRebinds.record(game.forceRebindAccessibilityService())"))
             val stop = body(campaign, "    private fun stopForStuckInput(")
             // The episode's reason, checked by the own-input probe, is the halt's key.
-            assertTrue(stop.contains("val key = stuckInputKey(episode.stopKey(), ownInputArrived)"))
+            assertTrue(stop.contains("val key = stuckInputKey(episode.stopKey(), ownInput)"))
             assertTrue(stop.contains("key?.let { requestAccessibilityHalt(it) }"))
         }
 

@@ -69,6 +69,7 @@ import com.steve1316.uma_android_automation.bot.QuickModePlanner
 import com.steve1316.uma_android_automation.utils.BoundedExecution
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.OutcomeCorpus
+import com.steve1316.uma_android_automation.utils.OwnInputProbeResult
 import com.steve1316.uma_android_automation.utils.PersistentSkipStateLog
 import com.steve1316.uma_android_automation.utils.pillVisible
 import com.steve1316.uma_android_automation.utils.PostCareerScreenProbes
@@ -1460,7 +1461,7 @@ class CareerLaunchNavigator(private val context: Context) {
      * the bot's input ([stuckInputKey]): taps that still reach the screen mean the game stopped responding.
      */
     private fun probedStuckKey(key: String): String =
-        if (key == A11Y_INPUT_DEAD || key == A11Y_GRANT_MISSING) stuckInputKey(key, tempGame?.ownInputReachesScreen()) ?: key else key
+        if (key == A11Y_INPUT_DEAD || key == A11Y_GRANT_MISSING) stuckInputKey(key, tempGame?.ownInputReachesScreen() ?: OwnInputProbeResult.INCONCLUSIVE) ?: key else key
 
     /** The stop after the one relaunch did not bring back a screen the navigator knows. */
     private fun gameUnrecoverable(lastState: LaunchScreenState, reason: String): NavigationResult =

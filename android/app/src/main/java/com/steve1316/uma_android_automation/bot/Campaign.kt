@@ -1138,7 +1138,7 @@ abstract class Campaign(game: Game) : Task(game) {
             return
         }
         val ownInput = game.ownInputReachesScreen()
-        MessageLog.i(TAG, "[TEST] [RESTART-TEST] Own-input probe: ${ownInput ?: "could not run"} (true: the bot's taps reach the screen).")
+        MessageLog.i(TAG, "[TEST] [RESTART-TEST] Own-input probe: $ownInput (ARRIVED: the bot's taps reach the screen; LOST: they do not; INCONCLUSIVE: not proven either way).")
         val reopen = game.reopenGame(attempt = 2)
         MessageLog.i(TAG, "[TEST] [RESTART-TEST] Result $reopen: ${reopenOutcomeWords(reopen)}. Start the bot normally to resume a career in progress.")
     }
@@ -5024,8 +5024,8 @@ abstract class Campaign(game: Game) : Task(game) {
      * dead, or the run's tries are spent, the run stops with the truthful key.
      */
     private fun stopForStuckInput(episode: RebindEpisode, message: String) {
-        val ownInputArrived = game.ownInputReachesScreen()
-        val key = stuckInputKey(episode.stopKey(), ownInputArrived)
+        val ownInput = game.ownInputReachesScreen()
+        val key = stuckInputKey(episode.stopKey(), ownInput)
         if (reopensUnresponsiveGame(key, careerScreenObservedThisTask, unresponsiveGameReopens)) {
             val reopen = game.reopenGame(attempt = 2)
             val attempt = unresponsiveGameReopens + 1
@@ -5046,7 +5046,7 @@ abstract class Campaign(game: Game) : Task(game) {
                 return
             }
         }
-        MessageLog.w(TAG, "[RECOVERY] Stopping for taps that changed nothing: own-input probe ${ownInputArrived ?: "could not run"}, reason ${key ?: "none"}.")
+        MessageLog.w(TAG, "[RECOVERY] Stopping for taps that changed nothing: own-input probe $ownInput, reason ${key ?: "none"}.")
         key?.let { requestAccessibilityHalt(it) }
         throw InterruptedException(if (key == GAME_NOT_RESPONDING) "$message The bot's own taps still reached the screen, so the game stopped responding." else message)
     }

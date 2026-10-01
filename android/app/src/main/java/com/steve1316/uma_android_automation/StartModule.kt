@@ -196,8 +196,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
 
         /**
          * Set by a run whose taps changed nothing and whose repair could not help (A11Y_GRANT_MISSING,
-         * A11Y_INPUT_DEAD, or GAME_NOT_RESPONDING when the game ignored taps that still reached the
-         * screen). The run is not replayed and the queue halts after it, keeping the saved queue so
+         * A11Y_INPUT_DEAD, TAPS_HAD_NO_EFFECT when the own-input probe could not tell taps from game, or
+         * GAME_NOT_RESPONDING when the game ignored taps that still reached the screen). The run is not replayed and the queue halts after it, keeping the saved queue so
          * Start continues it once MuMu or the game is restarted or the grant given. Reset every session.
          */
         @Volatile

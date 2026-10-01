@@ -3,8 +3,15 @@ package com.steve1316.uma_android_automation.bot
 import android.view.WindowManager
 import com.steve1316.uma_android_automation.BetweenRunRecovery
 import com.steve1316.uma_android_automation.UnknownScreenLimitStep
+import com.steve1316.uma_android_automation.utils.OWN_INPUT_PROBE_SELF_TOUCH_BUDGET_MS
+import com.steve1316.uma_android_automation.utils.OWN_INPUT_PROBE_SELF_TOUCH_OFFSET
 import com.steve1316.uma_android_automation.utils.OWN_INPUT_PROBE_SIZE
+import com.steve1316.uma_android_automation.utils.OWN_INPUT_PROBE_YS
+import com.steve1316.uma_android_automation.utils.OwnInputProbeResult
+import com.steve1316.uma_android_automation.utils.isProbeTapTouch
 import com.steve1316.uma_android_automation.utils.ownInputProbeParams
+import com.steve1316.uma_android_automation.utils.ownInputProbeResult
+import com.steve1316.uma_android_automation.utils.ownInputProbeY
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -24,16 +31,61 @@ class UnresponsiveGameTest {
     inner class Classification {
         @Test
         fun `a tap that reached the bot's own window names the game, whatever the rebinds did`() {
-            assertEquals(GAME_NOT_RESPONDING, stuckInputKey(A11Y_INPUT_DEAD, ownInputArrived = true))
-            assertEquals(GAME_NOT_RESPONDING, stuckInputKey(A11Y_GRANT_MISSING, ownInputArrived = true))
-            assertEquals(GAME_NOT_RESPONDING, stuckInputKey(null, ownInputArrived = true))
+            assertEquals(GAME_NOT_RESPONDING, stuckInputKey(A11Y_INPUT_DEAD, OwnInputProbeResult.ARRIVED))
+            assertEquals(GAME_NOT_RESPONDING, stuckInputKey(A11Y_GRANT_MISSING, OwnInputProbeResult.ARRIVED))
+            assertEquals(GAME_NOT_RESPONDING, stuckInputKey(null, OwnInputProbeResult.ARRIVED))
         }
 
         @Test
-        fun `a tap that did not arrive, or a probe that could not run, keeps the rebinds' reason`() {
+        fun `a tap lost on a window that provably takes touches keeps the rebinds' reason, dead input included`() {
             for (key in listOf(A11Y_INPUT_DEAD, A11Y_GRANT_MISSING, null)) {
-                assertEquals(key, stuckInputKey(key, ownInputArrived = false))
-                assertEquals(key, stuckInputKey(key, ownInputArrived = null))
+                assertEquals(key, stuckInputKey(key, OwnInputProbeResult.LOST))
+            }
+        }
+
+        @Test
+        fun `an inconclusive probe never claims dead input or a frozen game`() {
+            // The 2026-09-30 false negative: a healthy game, the tap dispatched on a window not yet
+            // proven touchable, and the stop called the input dead.
+            assertEquals(TAPS_HAD_NO_EFFECT, stuckInputKey(A11Y_INPUT_DEAD, OwnInputProbeResult.INCONCLUSIVE))
+            assertEquals(A11Y_GRANT_MISSING, stuckInputKey(A11Y_GRANT_MISSING, OwnInputProbeResult.INCONCLUSIVE), "a refused repair is a fact either way")
+            assertEquals(null, stuckInputKey(null, OwnInputProbeResult.INCONCLUSIVE))
+            for (key in listOf(A11Y_INPUT_DEAD, A11Y_GRANT_MISSING, null)) {
+                val probed = stuckInputKey(key, OwnInputProbeResult.INCONCLUSIVE)
+                assertFalse(probed == A11Y_INPUT_DEAD || probed == GAME_NOT_RESPONDING, "$key -> $probed")
+                assertFalse(reopensUnresponsiveGame(probed, careerObserved = true, reopensThisRun = 0), "no restart on an unproven probe")
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("the probe's verdict")
+    inner class ProbeVerdict {
+        @Test
+        fun `a healthy game - own touch and accessibility tap both arrive - reads ARRIVED`() {
+            assertEquals(OwnInputProbeResult.ARRIVED, ownInputProbeResult(selfTouchArrived = true, dispatched = true, gestureArrived = true))
+        }
+
+        @Test
+        fun `dead input - the window took the app's own touch but not the tap - reads LOST`() {
+            assertEquals(OwnInputProbeResult.LOST, ownInputProbeResult(selfTouchArrived = true, dispatched = true, gestureArrived = false))
+            assertEquals(OwnInputProbeResult.LOST, ownInputProbeResult(selfTouchArrived = true, dispatched = false, gestureArrived = false), "a refused dispatch is dead input too")
+        }
+
+        @Test
+        fun `the app's own touch and the tap land on different halves of the window, so neither counts as the other`() {
+            val centre = OWN_INPUT_PROBE_SIZE / 2f
+            assertTrue(isProbeTapTouch(centre), "the tap lands on the centre")
+            assertFalse(isProbeTapTouch(centre - OWN_INPUT_PROBE_SELF_TOUCH_OFFSET), "the app's own touch")
+            assertTrue(centre - OWN_INPUT_PROBE_SELF_TOUCH_OFFSET > 0, "the app's own touch stays inside the window")
+        }
+
+        @Test
+        fun `a window never proven touchable reads INCONCLUSIVE, whatever else happened`() {
+            for (dispatched in listOf(false, true)) {
+                for (arrived in listOf(false, true)) {
+                    assertEquals(OwnInputProbeResult.INCONCLUSIVE, ownInputProbeResult(selfTouchArrived = false, dispatched = dispatched, gestureArrived = arrived))
+                }
             }
         }
     }
@@ -93,7 +145,41 @@ class UnresponsiveGameTest {
     @Nested
     @DisplayName("the probe window")
     inner class ProbeWindow {
-        private val params = ownInputProbeParams(sdkInt = 32)
+        private val params = ownInputProbeParams(probeY = OWN_INPUT_PROBE_YS[0], sdkInt = 32)
+
+        /** MuMu's 1080x1920 at 3x density: the default 50 dp button plus its 2 dp margins. */
+        private val buttonSize = 162
+
+        @Test
+        fun `with the floating button where it starts, at the screen centre, the probe keeps its usual row`() {
+            assertEquals(640, ownInputProbeY(buttonX = (1080 - buttonSize) / 2, buttonY = (1920 - buttonSize) / 2, buttonSize = buttonSize))
+        }
+
+        @Test
+        fun `a button parked over the usual row moves the probe to a clear one`() {
+            assertEquals(1280, ownInputProbeY(buttonX = 0, buttonY = 600, buttonSize = buttonSize))
+        }
+
+        @Test
+        fun `the app's own touch and the tap never land on the button, even a status bar below its saved y`() {
+            for (bx in 0..400 step 20) {
+                for (by in 0..1900 step 10) {
+                    val y = ownInputProbeY(bx, by, buttonSize)
+                    assertTrue(y != null, "a clear row exists for a normal button at ($bx, $by)")
+                    for (shift in 0..150 step 50) {
+                        val top = by + shift
+                        for ((px, py) in listOf(OWN_INPUT_PROBE_SIZE / 4 to y!! + OWN_INPUT_PROBE_SIZE / 4, OWN_INPUT_PROBE_SIZE / 2 to y + OWN_INPUT_PROBE_SIZE / 2)) {
+                            assertFalse(px in bx..bx + buttonSize && py in top..top + buttonSize, "button ($bx, $top) covers ($px, $py)")
+                        }
+                    }
+                }
+            }
+        }
+
+        @Test
+        fun `a button too big to avoid skips the probe`() {
+            assertEquals(null, ownInputProbeY(buttonX = 0, buttonY = 0, buttonSize = 2000))
+        }
 
         @Test
         fun `takes touches but never focus, as an overlay of this app`() {
@@ -117,8 +203,8 @@ class UnresponsiveGameTest {
         @Test
         fun `the stuck-input stop probes first, restarts before it logs, and halts with the probed key`() {
             val stop = campaign.substringAfter("    private fun stopForStuckInput(").substringBefore("\n    }\n")
-            val probed = stop.indexOf("val ownInputArrived = game.ownInputReachesScreen()")
-            val key = stop.indexOf("val key = stuckInputKey(episode.stopKey(), ownInputArrived)")
+            val probed = stop.indexOf("val ownInput = game.ownInputReachesScreen()")
+            val key = stop.indexOf("val key = stuckInputKey(episode.stopKey(), ownInput)")
             val reopen = stop.indexOf("val reopen = game.reopenGame(attempt = 2)")
             assertTrue(probed in 0 until key && key < reopen, "probe, then key, then the closing restart")
             assertTrue(reopen < stop.indexOf("MessageLog"), "the restart acts before anything is logged")
@@ -183,8 +269,33 @@ class UnresponsiveGameTest {
         @Test
         fun `the probe taps before it logs and never uses MessageLog`() {
             assertFalse(probe.contains("MessageLog"))
-            assertTrue(probe.indexOf("service.dispatchGesture(tap, null, null)") in 0 until probe.indexOf("Log.w(TAG, \"[INPUT_PROBE] Tap at"))
-            assertTrue(probe.contains("if (service == null || !gesturesAllowed) return null"), "no tap while gestures are paused")
+            assertTrue(probe.indexOf("service.dispatchGesture(tap, null, null)") in 0 until probe.indexOf("Log.w(TAG, \"[INPUT_PROBE] At ("))
+            assertTrue(probe.contains("if (service == null || !gesturesAllowed) return OwnInputProbeResult.INCONCLUSIVE"), "no tap while gestures are paused")
+        }
+
+        @Test
+        fun `the probe row is chosen clear of the button before the window is shown, and the own touch has a short total cap`() {
+            val body = probe.substringAfter("internal fun ownInputReachesScreen(").substringBefore("\n}\n")
+            assertTrue(body.indexOf("val probeY = ownInputProbeY(buttonX, buttonY, buttonSize)") in 0 until body.indexOf("windowManager.addView(view, ownInputProbeParams(probeY))"))
+            assertTrue(body.contains("if (probeY == null) {"))
+            // One injection can block up to 30 s, so the tries run on their own thread and the probe waits a bounded time.
+            assertTrue(body.contains("val selfTouchArrived = selfTouched.await(OWN_INPUT_PROBE_SELF_TOUCH_BUDGET_MS, TimeUnit.MILLISECONDS)"))
+            assertTrue(body.indexOf("injectOwnTouch(") in body.indexOf("Thread {") until body.indexOf("injector.start()"), "injection off the probe's thread")
+            assertTrue(OWN_INPUT_PROBE_SELF_TOUCH_BUDGET_MS in 1000L..4000L)
+        }
+
+        @Test
+        fun `the accessibility tap is dispatched only after the app's own touch proved the window takes touches`() {
+            val body = probe.substringAfter("internal fun ownInputReachesScreen(").substringBefore("\n}\n")
+            val selfTouch = body.indexOf("injectOwnTouch(x - OWN_INPUT_PROBE_SELF_TOUCH_OFFSET, y - OWN_INPUT_PROBE_SELF_TOUCH_OFFSET)")
+            val gate = body.indexOf("if (selfTouchArrived) {")
+            val dispatch = body.indexOf("service.dispatchGesture(tap, null, null)")
+            assertTrue(selfTouch in 0 until gate && gate < dispatch, "own touch, then the gate, then the tap")
+            assertEquals(1, Regex(Regex.escape("dispatchGesture(")).findAll(probe).count(), "one tap, inside the gate")
+            assertTrue(body.contains("if (isProbeTapTouch(event.x)) gestureTouched.countDown() else selfTouched.countDown()"), "the tap's touch is told apart from the app's own")
+            val inject = probe.substringAfter("private fun injectOwnTouch(").substringBefore("\n}\n")
+            assertTrue(inject.contains("instrumentation.sendPointerSync(event)"), "Android delivers this only to the app's own windows")
+            assertFalse(inject.contains("dispatchGesture"))
         }
 
         private fun source(relative: String): String {

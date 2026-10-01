@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.bot
 
 import com.steve1316.uma_android_automation.StartModule
+import com.steve1316.uma_android_automation.utils.OwnInputProbeResult
 
 // Honest accounting for the accessibility repairs the stuck-input ladders ask for. No in-app action
 // has been shown to revive MuMu's dead gesture dispatch (restarting MuMu is the reported cure), so
@@ -15,12 +16,22 @@ internal const val A11Y_INPUT_DEAD = "A11Y_INPUT_DEAD"
 /** The bot's own taps still reached the screen, and the game ignored them: the game stopped responding. */
 internal const val GAME_NOT_RESPONDING = "GAME_NOT_RESPONDING"
 
+/** Rebinds were issued and the bot's taps still had no effect, and the own-input probe could not tell whether the taps or the game stopped responding. */
+internal const val TAPS_HAD_NO_EFFECT = "TAPS_HAD_NO_EFFECT"
+
 /**
  * The stop reason for taps that changed nothing, once the own-input probe has run. A tap that
  * reached the bot's own probe window proves its input works, so the game is the one not responding,
- * whatever the rebinds did. Otherwise [rebindKey] stands: a probe that could not run proves nothing.
+ * whatever the rebinds did. A tap lost on a window that provably took touches leaves [rebindKey]
+ * standing. An inconclusive probe proves neither side, so dead input is not claimed: the stop is the
+ * same, under a key that says only what was seen.
  */
-internal fun stuckInputKey(rebindKey: String?, ownInputArrived: Boolean?): String? = if (ownInputArrived == true) GAME_NOT_RESPONDING else rebindKey
+internal fun stuckInputKey(rebindKey: String?, probe: OwnInputProbeResult): String? =
+    when (probe) {
+        OwnInputProbeResult.ARRIVED -> GAME_NOT_RESPONDING
+        OwnInputProbeResult.LOST -> rebindKey
+        OwnInputProbeResult.INCONCLUSIVE -> if (rebindKey == A11Y_INPUT_DEAD) TAPS_HAD_NO_EFFECT else rebindKey
+    }
 
 /**
  * Restarts of an unresponsive game allowed per run, on a screen the bot knows. A game that freezes

@@ -644,6 +644,22 @@
             }
         },
         {
+            "name": "halted in a run: taps changed nothing, cause not proven",
+            "report": {
+                "kind": "RUN_HALTED",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 3,
+                "resumable": true,
+                "reasonKey": "TAPS_HAD_NO_EFFECT"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped during run 3 of 5: its taps stopped changing the screen, even after it restarted its accessibility service, and it could not tell whether its taps or the game had stopped responding.",
+                "nextAction": "Close the game fully and open it again; if taps still do nothing, restart MuMu or the device, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
             "name": "halted in a run: no self-repair permission",
             "report": {
                 "kind": "RUN_HALTED",
@@ -1504,6 +1520,22 @@
                 "title": "Queue paused",
                 "reason": "The queue stopped after run 2 of 5: its taps stopped having any effect, even after it restarted its accessibility service.",
                 "nextAction": "Restart MuMu or the device, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
+            }
+        },
+        {
+            "name": "between runs: TAPS_HAD_NO_EFFECT",
+            "report": {
+                "kind": "NAVIGATION_FAILED_BETWEEN_RUNS",
+                "queueEnabled": true,
+                "totalRuns": 5,
+                "runReached": 2,
+                "resumable": true,
+                "reasonKey": "TAPS_HAD_NO_EFFECT"
+            },
+            "text": {
+                "title": "Queue paused",
+                "reason": "The queue stopped after run 2 of 5: its taps stopped changing the screen, even after it restarted its accessibility service, and it could not tell whether its taps or the game had stopped responding.",
+                "nextAction": "Close the game fully and open it again; if taps still do nothing, restart MuMu or the device, then press Start in UMA Auto+ within 24 hours, with Run Queue on and the same number of runs, to continue the queue."
             }
         },
         {

@@ -47,6 +47,7 @@ import com.steve1316.uma_android_automation.utils.CustomImageUtils
 import com.steve1316.uma_android_automation.utils.ProgressTracker
 import com.steve1316.uma_android_automation.utils.SparkPixelSampler
 import com.steve1316.uma_android_automation.utils.TitleScreenProbe
+import com.steve1316.uma_android_automation.utils.OwnInputProbeResult
 import com.steve1316.uma_android_automation.utils.ownInputReachesScreen
 import com.steve1316.uma_android_automation.utils.TrainingSelectionProbe
 import com.steve1316.uma_android_automation.utils.grandConcertLessonConfirmationPresent
@@ -1051,10 +1052,10 @@ class Game(val myContext: Context, val diagnosticSelection: DebugTestGate.Select
         }
 
     /**
-     * Whether the bot's own taps still reach the screen ([ownInputReachesScreen]): true proves that a
-     * game ignoring them has stopped responding, false that the taps are dead, null that it could not tell.
+     * Whether the bot's own taps still reach the screen ([ownInputReachesScreen]): ARRIVED proves that a
+     * game ignoring them has stopped responding, LOST that the taps are dead, INCONCLUSIVE that it could not tell.
      */
-    internal fun ownInputReachesScreen(): Boolean? =
+    internal fun ownInputReachesScreen(): OwnInputProbeResult =
         ownInputReachesScreen(myContext, runCatching { gestureUtils }.getOrNull(), MyAccessibilityService.isGestureAllowed)
 
     /** Asks Android to end the game's process. A no-op while the game ranks above a cached background app, and on Android 14+. */
