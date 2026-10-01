@@ -66,3 +66,22 @@ SHA-256 `79b9f985cb7bb7e48d72e7f508dc27e1c969aa0836caa2446b1bb006ac655570`. Its 
 order, matching the career log exactly: Speed 2* (stat), Medium 3*
 (aptitude), Behold Thine Emperor's Divine Might 2* (unique), then the whites Arima Kinen 1*,
 Ramp Up 1*, Unity Cup 1*.
+
+## Fourth capture: the 12-row keep dialog (2026-09-30)
+
+The keep dialog is a fixed-size card whose list window holds 11 rows; a longer set scrolls. The
+live read took the dialog footer under the window for the end of the list, read 11 of 12 rows,
+and the count guard refused to confirm, leaving a finished career on the dialog.
+
+| Fixture | Shows |
+|---|---|
+| keep_confirmation_12row_top.png | "Confirmation" dialog, plain green `Sparks` pill, the first 11 rows of a 12-row set, Cancel + Confirm |
+| keep_confirmation_12row_bottom.png | The same dialog scrolled to the bottom: Stamina clipped at the top, rows 2 to 12 visible, the pill scrolled out of view |
+
+Both are `exec-out screencap -p` stills of the live emulator (native RGB, 1080x1920),
+byte-identical copies. SHA-256 `fc7ed40e721eb29f9562c25a251eb71ea77f810382c04c8d35c05951c5ffd412`
+(top) and `6668f811f9a66283e6859b0004d799a5ee7bfb6de99acb6c84d93679b016e978` (bottom). The 12
+rows, in order, matching the career log's complete SPARKS screen read exactly: Stamina 1* (stat),
+Mile 2* (aptitude), You and Me! One-on-One! 1* (unique), then the whites Japanese Oaks 2*,
+Shuka Sho 1*, Standard Distance O 3*, Corner Recovery O 1*, Steadfast 1*, Hesitant Front
+Runners 1*, End Closer Straightaways O 1*, Playtime's Over! 2*, Ignited Spirit SPD 1*.

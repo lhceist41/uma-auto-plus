@@ -126,14 +126,17 @@ import com.steve1316.uma_android_automation.utils.TraineeGridScroll
 import com.steve1316.uma_android_automation.utils.SparkRowCell
 import com.steve1316.uma_android_automation.utils.TraineeNameMatcher
 import com.steve1316.uma_android_automation.utils.TraineePositionStore
+import com.steve1316.uma_android_automation.utils.keepDialogFrameIsCompleteSet
 import com.steve1316.uma_android_automation.utils.parseSparkRowCells
 import com.steve1316.uma_android_automation.utils.parseSparkRowCellsAligned
 import com.steve1316.uma_android_automation.utils.parseSparkRowCellsWithEvidence
+import com.steve1316.uma_android_automation.utils.sparkCellsLeadCorrectly
 import com.steve1316.uma_android_automation.utils.sparkConfirmationStructurePresent
 import com.steve1316.uma_android_automation.utils.sparkIntroStructurePresent
 import com.steve1316.uma_android_automation.utils.sparkPagerActiveDotIndex
 import com.steve1316.uma_android_automation.utils.sparkPagerStructurePresent
 import com.steve1316.uma_android_automation.utils.sparkRerolledStructurePresent
+import com.steve1316.uma_android_automation.utils.sparkWindowShowsListEnd
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -3353,22 +3356,30 @@ class CareerLaunchNavigator(private val context: Context) {
                 val frame = iu.getSourceBitmap()
                 val evidenceCells = parseSparkRowCellsWithEvidence(sparkSampler(frame), SPARKS_CONFIRM_GEOMETRY, frame.height)
                 val named = nameSparkCells(frame, evidenceCells.map { it.toCell() }, SPARKS_CONFIRM_GEOMETRY)
-                val endMarkerSeen = evidenceCells.size < SPARKS_CONFIRM_GEOMETRY.maxRows || named.size < evidenceCells.size
-                val evidence = evidenceCells.take(named.size).map { SparkStarEvidence(it.filledCount, it.ambiguousCount) }
+                val endMarkerSeen = sparkWindowShowsListEnd(SPARKS_CONFIRM_GEOMETRY, evidenceCells.size, named.size)
+                val windowEvidence = evidenceCells.take(named.size).map { SparkStarEvidence(it.filledCount, it.ambiguousCount) }
                 MessageLog.i(
                     TAG,
                     "[SPARKS] keep_confirmation_scan rows=${named.size} endMarker=$endMarkerSeen " +
-                        "ambiguousRows=${evidence.count { it.ambiguousSlots > 0 }} retry=$retries/$maxStarRetries",
+                        "ambiguousRows=${windowEvidence.count { it.ambiguousSlots > 0 }} retry=$retries/$maxStarRetries",
                 )
                 dialogReading =
                     if (endMarkerSeen && named.isNotEmpty()) {
                         SparkSetReading(named, SparkScanTermination.COMPLETE_END_MARKER, 0)
                     } else {
-                        // A set past the single-frame window (never observed; the window holds
-                        // one slot past the largest live set) or an unparseable frame: the
-                        // scrolling reader takes over. It carries no per-slot evidence, so the
-                        // verdict below stays strict for it.
+                        // A set that fills the window (11+ rows) or an unparseable frame: the
+                        // scrolling reader proves the end by a swipe that moves nothing.
                         readCompleteSparkSet(SPARKS_CONFIRM_GEOMETRY, "keep confirmation")
+                    }
+                // The scrolling reader carries no per-slot evidence. This frame's evidence still
+                // describes the leading rows when they read identically; rows below the fold get
+                // none, so their star check stays strict.
+                val evidence =
+                    when {
+                        endMarkerSeen -> windowEvidence
+                        SparkScrollMerge.rowsAlign(named, dialogReading.rows.take(named.size)) ->
+                            windowEvidence + dialogReading.rows.drop(named.size).map { SparkStarEvidence(it.stars, 0) }
+                        else -> null
                     }
                 if (!dialogReading.complete || dialogReading.rows.isEmpty()) {
                     return sparkSelectionBlocked(
@@ -3385,7 +3396,7 @@ class CareerLaunchNavigator(private val context: Context) {
                     keepDialogVerdict(
                         original.rows,
                         dialogReading.rows,
-                        if (endMarkerSeen) evidence else null,
+                        evidence,
                         retries,
                         maxStarRetries,
                     )
@@ -3660,9 +3671,9 @@ class CareerLaunchNavigator(private val context: Context) {
     private var sparksFullSetRecorded = false
 
     /** Clicks Confirm on the SPARKS screen; falls back to re-detection when the click misses.
-     * The click raises the "Keep this set of Sparks?" confirmation, which lists EVERY spark on
-     * one screen (the sparks list itself shows at most 9 unscrolled) - the kept set is recorded
-     * in full from it before the generic dialog handling confirms it away. */
+     * The click raises the "Keep this set of Sparks?" confirmation, which shows up to 11 rows on
+     * one screen; a set it shows in full is recorded from it before the generic dialog handling
+     * confirms it away. */
     private fun confirmSparks(bitmap: Bitmap): TransitionResult {
         if (!ButtonConfirm.click(iu, sourceBitmap = bitmap)) {
             MessageLog.w(TAG, "[NAV] Confirm not clickable on the SPARKS screen. Re-detecting...")
@@ -3676,14 +3687,18 @@ class CareerLaunchNavigator(private val context: Context) {
         if (!sparksFullSetRecorded && transaction?.keptRecorded != true) {
             runCatching {
                 val dialogBitmap = iu.getSourceBitmap()
-                val rows = readSparkRows(dialogBitmap, SPARKS_CONFIRM_GEOMETRY)
-                // Sanity gate: a real spark list always leads stat/aptitude/unique. Anything else
-                // means the dialog is not up (missed click, layout drift) - skip silently and keep
-                // the visible-window record as coverage.
-                val leads = rows.size >= 3 && rows[0].kind == SparkRowKind.STAT && rows[1].kind == SparkRowKind.APTITUDE && rows[2].kind == SparkRowKind.UNIQUE
-                if (leads && transaction == null) {
-                    sparksFullSetRecorded = true
-                    recordSparkRows(rows, "kept")
+                if (transaction == null && dialogBitmap.width >= 1000 && dialogBitmap.height >= 1000) {
+                    val cells = parseSparkRowCells(sparkSampler(dialogBitmap), SPARKS_CONFIRM_GEOMETRY, dialogBitmap.height)
+                    val rows = nameSparkCells(dialogBitmap, cells, SPARKS_CONFIRM_GEOMETRY)
+                    // A list that does not lead stat/aptitude/unique means the dialog is not up
+                    // (missed click, layout drift): skip silently. A list whose end is not on
+                    // screen would record its first 11 rows as the whole kept set: skip it too.
+                    if (keepDialogFrameIsCompleteSet(cells, rows.size)) {
+                        sparksFullSetRecorded = true
+                        recordSparkRows(rows, "kept")
+                    } else if (sparkCellsLeadCorrectly(cells)) {
+                        MessageLog.w(TAG, "[SPARKS] Kept set not recorded: list end not on this screen; a full set cannot be proven from one frame (${rows.size} rows visible).")
+                    }
                 }
             }
         }
@@ -3755,11 +3770,7 @@ class CareerLaunchNavigator(private val context: Context) {
         // measures within 3 px of the fixed grid (fixture-pinned), so this is a no-op there.
         val cells = parseSparkRowCellsAligned(sparkSampler(bitmap), geometry, bitmap.height) ?: return null
         val rows = nameSparkCells(bitmap, cells, geometry)
-        // The parse stops early on the pure-white grid break; the row read additionally stops on
-        // a starless, textless slot. Either one is positive proof the visible window contains
-        // the end of the list.
-        val endMarkerSeen = cells.size < geometry.maxRows || rows.size < cells.size
-        return SparkFrame(rows, endMarkerSeen)
+        return SparkFrame(rows, sparkWindowShowsListEnd(geometry, cells.size, rows.size))
     }
 
     /**
