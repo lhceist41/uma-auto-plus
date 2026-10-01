@@ -4928,6 +4928,13 @@ abstract class Campaign(game: Game) : Task(game) {
             return false
         }
 
+        // A dialog over the career screen dims every control above and leaves its own Skip pill
+        // readable, so none of them vetoes: the Grand Concert "Bonuses Updated" popup was advanced
+        // as a cutscene until a blind tap landed on its Confirm. A cutscene shows no dialog banner.
+        if (DialogUtils.check(game.imageUtils, sourceBitmap = sourceBitmap)) {
+            return false
+        }
+
         val skipState = readSkipPill(sourceBitmap)
         skipStateLog.record(skipState)
         return skipState.pillVisible

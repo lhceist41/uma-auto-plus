@@ -238,6 +238,10 @@ open class DialogHandler(val game: Game) {
                 dialog.close(game.imageUtils)
             }
 
+            "active_concert_bonuses", "bonuses_updated" -> {
+                dialog.close(game.imageUtils)
+            }
+
             "agenda_details" -> {
                 dialog.close(game.imageUtils)
             }

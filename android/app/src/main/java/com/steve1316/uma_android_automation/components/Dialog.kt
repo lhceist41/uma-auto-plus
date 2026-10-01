@@ -55,6 +55,8 @@ import com.steve1316.uma_android_automation.MainActivity
 import com.steve1316.uma_android_automation.components.BaseComponentInterface
 import com.steve1316.uma_android_automation.types.BoundingBox
 import com.steve1316.uma_android_automation.utils.CustomImageUtils
+import com.steve1316.uma_android_automation.utils.SparkPixelSampler
+import com.steve1316.uma_android_automation.utils.grandConcertBonusesUpdatedPresent
 import org.opencv.core.Point
 
 /** Utility class for detecting and handling dialogs in the game. */
@@ -104,7 +106,7 @@ object DialogUtils {
                     return true
                 }
             }
-            return false
+            return titleFromPixels(sourceBitmap) != null
         }
 
         var loc: Point? = null
@@ -115,8 +117,45 @@ object DialogUtils {
                 break
             }
         }
-        return loc != null
+        return loc != null || titleFromPixels(imageUtils.getSourceBitmap()) != null
     }
+
+    /**
+     * The title of a dialog whose title bar OCR cannot read, named from pixels instead. The Grand
+     * Concert "Bonuses Updated!" popup has yellow script on a green band that the OCR path cannot
+     * name. Only a fallback: the popup's green band and green right-hand button are the layout of
+     * every ordinary centred dialog (Warning, Auto-Select, Restore TP), so the yellow script itself
+     * must also be there, and [getTitle] asks this only after the OCR read found no title.
+     */
+    fun titleFromPixels(bitmap: Bitmap): String? {
+        if (bitmap.width != 1080 || bitmap.height != 1920) return null
+        return titleFromPixels(SparkPixelSampler { x, y -> bitmap.getPixel(x, y) })
+    }
+
+    fun titleFromPixels(sampler: SparkPixelSampler): String? =
+        if (grandConcertBonusesUpdatedPresent(sampler) && bonusesUpdatedScriptShare(sampler) >= BONUSES_SCRIPT_MIN_SHARE) DialogBonusesUpdated.title else null
+
+    /** The title read by OCR wins; the pixel read answers only when it found none. */
+    internal fun titleOrPixelFallback(readTitle: String?, sampler: SparkPixelSampler): String? = readTitle ?: titleFromPixels(sampler)
+
+    /** Share of the "Bonuses Updated!" script band (sampled every 4 pixels) that is the title's yellow-green. ~0.13 on the popup, 0.0 on ordinary dialog headers. */
+    private fun bonusesUpdatedScriptShare(sampler: SparkPixelSampler): Double {
+        var hits = 0
+        var total = 0
+        for (y in 525..655 step 4) {
+            for (x in 110..985 step 4) {
+                val argb = sampler.argb(x, y)
+                val r = (argb shr 16) and 0xFF
+                val g = (argb shr 8) and 0xFF
+                val b = argb and 0xFF
+                if (r > 200 && g > 235 && b < 130) hits++
+                total++
+            }
+        }
+        return hits.toDouble() / total
+    }
+
+    private const val BONUSES_SCRIPT_MIN_SHARE = 0.05
 
     /**
      * Get the title bar text of any dialog currently on the screen.
@@ -130,6 +169,10 @@ object DialogUtils {
      */
     fun getTitle(imageUtils: CustomImageUtils, bitmap: Bitmap? = null, logOnMiss: Boolean = true): String? {
         val bitmap: Bitmap = bitmap ?: imageUtils.getSourceBitmap()
+        return readTitle(imageUtils, bitmap, logOnMiss) ?: titleFromPixels(bitmap)
+    }
+
+    private fun readTitle(imageUtils: CustomImageUtils, bitmap: Bitmap, logOnMiss: Boolean): String? {
         var templateBitmap: Bitmap? = null
         var titleLocation: Point? = null
         for (template in titleGradientTemplates) {
@@ -244,7 +287,7 @@ object DialogUtils {
                 return DialogTrophyWon.title
             }
 
-            if (logOnMiss) {
+            if (logOnMiss && titleFromPixels(bitmap) == null) {
                 MessageLog.e(TAG, "[ERROR] getTitle:: Failed to match any dialogs to the extracted title: $text")
             } else {
                 MessageLog.v(TAG, "[INFO] getTitle:: Failed to match any dialogs to the extracted title: $text")
@@ -368,11 +411,13 @@ object DialogObjects {
     val items: List<DialogInterface> =
         listOf(
             DialogAccountLink,
+            DialogActiveConcertBonuses,
             DialogAgeConfirmation,
             DialogAgendaDetails,
             DialogAutoFill,
             DialogAutoSelect,
             DialogAllRewardsEarned,
+            DialogBonusesUpdated,
             DialogBonusUmamusumeDetails,
             DialogBorrowCard,
             DialogBorrowCardConfirmation,
@@ -491,6 +536,18 @@ object DialogAccountLink : DialogInterface {
         )
 }
 
+/** Grand Concert. The detail panel behind the Bonuses Updated dialog's Confirm; only Close leaves it. */
+object DialogActiveConcertBonuses : DialogInterface {
+    override val name: String = "active_concert_bonuses"
+    override val title: String = "Active Concert Bonuses"
+    override val closeButton = null
+    override val okButton = null
+    override val buttons: List<BaseComponentInterface> =
+        listOf(
+            ButtonClose,
+        )
+}
+
 /** Anywhere (ALWAYS THROW ERROR).
  *
  * This dialog has two different OK buttons: ButtonEnter and ButtonOk.
@@ -571,6 +628,18 @@ object DialogAllRewardsEarned : DialogInterface {
 object DialogBonusUmamusumeDetails : DialogInterface {
     override val name: String = "bonus_umamusume_details"
     override val title: String = "Bonus Umamusume Details"
+    override val closeButton = null
+    override val okButton = null
+    override val buttons: List<BaseComponentInterface> =
+        listOf(
+            ButtonClose,
+        )
+}
+
+/** Grand Concert. Close dismisses it; Confirm only opens the Active Concert Bonuses panel, so it is never pressed. */
+object DialogBonusesUpdated : DialogInterface {
+    override val name: String = "bonuses_updated"
+    override val title: String = "Bonuses Updated"
     override val closeButton = null
     override val okButton = null
     override val buttons: List<BaseComponentInterface> =
