@@ -223,6 +223,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
         /** List of stats that required manual correction during analysis. */
         var correctedStats: List<StatName> = emptyList()
 
+        /** Stats whose gains were drawn in gold, so the training takes them past 1200. */
+        var goldStatGains: Set<StatName> = emptySet()
+
         /** The detected failure chance percentage. */
         var failureChance: Int = -1
 
@@ -650,6 +653,13 @@ class Training(private val game: Game, private val campaign: Campaign) {
             val fullPortion = (SOFT_CAP_STAT_VALUE - currentStat).coerceIn(0, statGain)
             return fullPortion + (statGain - fullPortion) * 0.5
         }
+
+        /**
+         * Gains read from a gold row, which the contextual OCR-failure corrections must leave alone: a
+         * stat past 1200 gains little, so its main gain can sit at or below its side effects. A gold row
+         * that read 0 was not read and stays correctable.
+         */
+        fun trustedGoldGains(statGains: Map<StatName, Int>, goldStats: Set<StatName>): Set<StatName> = goldStats.filter { (statGains[it] ?: 0) > 0 }.toSet()
 
         /** Stats gained per finale race win, per stat. Slightly above the actual +10 to account for misc event/card gains. */
         private const val FINALE_RACE_STAT_BONUS = 15
@@ -1830,10 +1840,10 @@ class Training(private val game: Game, private val campaign: Campaign) {
 
                 // Get bitmaps and locations before starting threads to make them safe for parallel processing.
                 val sourceBitmap = game.imageUtils.getSourceBitmap()
-                // [GC_TELEMETRY] Dev-only, read-only: on a Grand Concert exploration career, persist this
-                // facility's analysis frame (its per-type performance "+N" is visible here) so the point-income
-                // formula can be measured offline. Debug-gated, taps nothing, does not touch scoring; uses the
-                // frame already captured above, so no extra screenshot is taken.
+                // [GC_TELEMETRY] Dev-only, read-only: persist this facility's analysis frame (its "+N" gains are
+                // visible here) so the gain reads can be measured offline in every scenario. Debug-gated, taps
+                // nothing, does not touch scoring; uses the frame already captured above, so no extra screenshot
+                // is taken.
                 GrandConcertTelemetry.captureTrainingFacility(game, statName, sourceBitmap)
                 val skillPointsLocation = LabelStatTableHeaderSkillPoints.find(game.imageUtils).first
                 val failureChanceLocation = LabelTrainingFailureChance.find(game.imageUtils).first
@@ -1899,6 +1909,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
                             result.statGains = statGainResult.statGains
                             result.statGainRowValues = statGainResult.rowValuesMap
                             result.correctedStats = statGainResult.correctedStats
+                            result.goldStatGains = statGainResult.goldStats
                         } else {
                             MessageLog.w(TAG, "[WARN] analyzeTrainings:: Skill points location was not found during OCR. Skipping stat gain detection for $statName.")
                             result.statGains = StatName.entries.associateWith { 0 }.toMap()
@@ -2386,6 +2397,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         val sideEffectStats = newStatGains.keys.filter { it != result.name }
         val maxSideEffectGain = sideEffectStats.maxOfOrNull { newStatGains[it] ?: 0 } ?: 0
         val mainStatGain = newStatGains[result.name] ?: 0
+        val trustedGold = trustedGoldGains(result.statGains, result.goldStatGains)
 
         var boosted = false
 
@@ -2394,7 +2406,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
             val speedGain = newStatGains[StatName.SPEED] ?: 0
             var powerGain = newStatGains[StatName.POWER] ?: 0
 
-            if (powerGain < speedGain && !isAtCap(StatName.POWER, powerGain)) {
+            if (powerGain < speedGain && !isAtCap(StatName.POWER, powerGain) && StatName.POWER !in trustedGold) {
                 val originalPowerGain = powerGain
                 while (powerGain <= speedGain) {
                     powerGain += 10
@@ -2436,7 +2448,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         // Check if any expected side effect stat has a higher or equal gain than the main stat.
         // This check only runs if the main stat gain is greater than zero to avoid overlapping with other edge cases.
         // Skip if the main stat is at cap since the low gain is expected.
-        if (mainStatGain > 0 && mainStatGain in 1..maxSideEffectGain && !mainStatAtCap) {
+        if (mainStatGain > 0 && mainStatGain in 1..maxSideEffectGain && !mainStatAtCap && result.name !in trustedGold) {
             newStatGains[result.name] = maxSideEffectGain + 10
 
             val newCorrectedStats = result.correctedStats.toMutableList()
@@ -2473,7 +2485,9 @@ class Training(private val game: Game, private val campaign: Campaign) {
             }
         }
 
-        // Edge case: Main stat is 0 but side effect is > 0, and not near stat cap.
+        // A training below the stat's cap always raises its own stat, so a main gain of 0 with side effects
+        // showing means the digits were not read. Estimate it above the side effects so the facility is not
+        // scored as giving nothing, and say so: the estimate is a guess, not a reading.
         if (mainStatGain == 0 && maxSideEffectGain > 0 && currentStat < effectiveStatCap) {
             var newMainGain = mainStatGain
             while (newMainGain <= maxSideEffectGain) {
@@ -2487,24 +2501,18 @@ class Training(private val game: Game, private val campaign: Campaign) {
                 result.correctedStats = newCorrectedStats
             }
 
-            if (game.imageUtils.debugMode) {
-                MessageLog.d(
-                    TAG,
-                    "[DEBUG] applyContextualStatGainBoost:: Artificially increased ${result.name} stat gain from $mainStatGain to $newMainGain because it was 0, max side effect was $maxSideEffectGain, and current stat $currentStat is not near cap.",
-                )
-            } else {
-                Log.d(
-                    TAG,
-                    "[DEBUG] applyContextualStatGainBoost:: Artificially increased ${result.name} stat gain from $mainStatGain to $newMainGain because it was 0, max side effect was $maxSideEffectGain, and current stat $currentStat is not near cap.",
-                )
-            }
+            val unreadReason = if (result.name in result.goldStatGains) "its gold gain digits could not be read" else "its gain digits could not be read"
+            MessageLog.w(
+                TAG,
+                "[TRAINING] ${result.name} training: $unreadReason, so its ${result.name} gain is estimated at $newMainGain (side effects up to $maxSideEffectGain, current stat $currentStat).",
+            )
             boosted = true
         }
 
         // Edge case: Low stat gains with relationship bars in Senior Year.
         // Skip if the main stat is at cap since the low gain is expected.
         val currentMainStatGain = newStatGains[result.name] ?: 0
-        if (campaign.date.year == DateYear.SENIOR && currentMainStatGain <= 9 && result.relationshipBars.isNotEmpty() && !mainStatAtCap) {
+        if (campaign.date.year == DateYear.SENIOR && currentMainStatGain <= 9 && result.relationshipBars.isNotEmpty() && !mainStatAtCap && result.name !in trustedGold) {
             val boostAmount = result.relationshipBars.size * 5
             newStatGains[result.name] = currentMainStatGain + boostAmount
 
@@ -2532,7 +2540,7 @@ class Training(private val game: Game, private val campaign: Campaign) {
         // Skip if the side effect stat is at cap since the low gain is expected.
         for (sideEffect in expectedSideEffects) {
             val sideGain = newStatGains[sideEffect] ?: 0
-            if (sideGain < 9 && (mainStatGain - sideGain) > 20 && !isAtCap(sideEffect, sideGain)) {
+            if (sideGain < 9 && (mainStatGain - sideGain) > 20 && !isAtCap(sideEffect, sideGain) && sideEffect !in trustedGold) {
                 newStatGains[sideEffect] = sideGain + 10
 
                 val newCorrectedStats = result.correctedStats.toMutableList()

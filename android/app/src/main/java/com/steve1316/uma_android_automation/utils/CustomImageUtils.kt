@@ -253,8 +253,14 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
      * @property statGains Mapping of stat names to their detected integer gain values.
      * @property rowValuesMap Mapping of stat names to individual row values (for multi-row scenarios).
      * @property correctedStats List of stats that required value correction during detection.
+     * @property goldStats Stats whose gains were drawn in gold (the training takes them past 1200), read by [StatGainDigits].
      */
-    data class StatGainResult(val statGains: Map<StatName, Int>, val rowValuesMap: Map<StatName, List<Int>>, val correctedStats: List<StatName> = emptyList())
+    data class StatGainResult(
+        val statGains: Map<StatName, Int>,
+        val rowValuesMap: Map<StatName, List<Int>>,
+        val correctedStats: List<StatName> = emptyList(),
+        val goldStats: Set<StatName> = emptySet(),
+    )
 
     companion object {
         private val TAG: String = "[${MainActivity.loggerTag}]CustomImageUtils"
@@ -1581,6 +1587,7 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
         }
         // Store row values to log them sequentially after threads complete.
         val rowValuesMap = Collections.synchronizedMap(mutableMapOf<StatName, List<Int>>())
+        val goldStats = ConcurrentHashMap.newKeySet<StatName>()
 
         if (skillPointsLocation != null) {
             // Preload all template bitmaps for all suffixes to avoid thread contention.
@@ -1776,21 +1783,47 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
                             return@Thread
                         }
 
-                        // Analyze results and construct the final integer value for this region.
-                        val finalValue =
-                            if (rows.size > 1) {
-                                // For scenarios with multiple rows, sum the values from each row.
-                                val rowValues =
-                                    rowDebugInfo.mapIndexed { index, rowInfo ->
-                                        constructIntegerFromMatches(rowInfo.matches, "for ${rowInfo.config.rowName}")
-                                    }
-                                // Store row values for sequential logging after threads complete.
-                                rowValuesMap[statName] = rowValues
-                                rowValues.sum()
-                            } else {
-                                // For single row scenarios, use the existing behavior.
-                                constructIntegerFromMatches(rowDebugInfo[0].matches, "for stat $statName")
+                        // Once the training would take this stat past 1200 the game draws its gains in gold behind a
+                        // double chevron, which the templates above cannot read. Read each row again from the stat's
+                        // actual column (169 px pitch) and let a gold read replace the template read.
+                        val bitmap = sourceBitmap!!
+                        val sampler = SparkPixelSampler { x, y -> bitmap.getPixel(x, y) }
+                        val columnLeft =
+                            relX(
+                                skillPointsLocation.x,
+                                StatGainDigits.FIRST_COLUMN_CENTER_FROM_SKILL_POINTS + statName.ordinal * StatGainDigits.COLUMN_PITCH - StatGainDigits.COLUMN_WIDTH / 2,
+                            )
+                        val columnWidth = relWidth(StatGainDigits.COLUMN_WIDTH)
+                        val pixelRows =
+                            rows.map { row ->
+                                val top = row.startY - relHeight(5)
+                                val height = row.height + relHeight(5)
+                                if (columnLeft < 0 || top < 0 || columnLeft + columnWidth > bitmap.width || top + height > bitmap.height) {
+                                    null
+                                } else {
+                                    StatGainDigits.readRow(sampler, columnLeft, top, columnWidth, height)
+                                }
                             }
+
+                        // Analyze results and construct the final integer value for this region, summing the rows.
+                        val rowValues =
+                            rowDebugInfo.mapIndexed { index, rowInfo ->
+                                val logLabel = if (rows.size > 1) "for ${rowInfo.config.rowName}" else "for stat $statName"
+                                StatGainDigits.resolveRowValue(constructIntegerFromMatches(rowInfo.matches, logLabel), pixelRows[index])
+                            }
+                        if (rows.size > 1) {
+                            // Store row values for sequential logging after threads complete.
+                            rowValuesMap[statName] = rowValues
+                        }
+                        val finalValue = rowValues.sum()
+                        if (pixelRows.any { it?.gold == true }) {
+                            goldStats.add(statName)
+                            if (pixelRows.any { it?.gold == true && it.value == null }) {
+                                MessageLog.w(TAG, "[TRAINING] The $statName gain on $trainingName training is drawn in gold but its digits could not be read, so it counts as $finalValue.")
+                            } else {
+                                Log.d(TAG, "[DEBUG] determineStatGainFromTraining:: Read gold $statName gain rows ${pixelRows.map { it?.value }} for $trainingName training.")
+                            }
+                        }
                         threadSafeResults[statName] = finalValue
 
                         // Draw final visualization with all matches for this region.
@@ -1860,11 +1893,11 @@ class CustomImageUtils(context: Context, private val game: Game) : ImageUtils(co
 
             // Check if bot is still running.
             if (!BotService.isRunning) {
-                return StatGainResult(threadSafeResults.toMap(), rowValuesMap.toMap())
+                return StatGainResult(threadSafeResults.toMap(), rowValuesMap.toMap(), goldStats = goldStats.toSet())
             }
 
             // Return results with row values map for logging in Training.kt after threads complete.
-            return StatGainResult(threadSafeResults.toMap(), rowValuesMap.toMap())
+            return StatGainResult(threadSafeResults.toMap(), rowValuesMap.toMap(), goldStats = goldStats.toSet())
         } else {
             MessageLog.e(TAG, "[ERROR] determineStatGainFromTraining:: Could not find the skill points location to start determining stat gains for $trainingName training.")
         }
