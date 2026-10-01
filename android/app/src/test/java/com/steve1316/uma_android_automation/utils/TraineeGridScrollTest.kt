@@ -1,6 +1,7 @@
 package com.steve1316.uma_android_automation.utils
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -55,9 +56,14 @@ class TraineeGridScrollTest {
     }
 
     @Test
-    fun `a half-row advance and a two-row advance are both measured`() {
+    fun `a half-row advance and a swipe near the overlap limit are both measured`() {
         assertEquals(96, TraineeGridScroll.measureDeltaPx(frame(0), frame(96), w, h))
-        assertEquals(380, TraineeGridScroll.measureDeltaPx(frame(0), frame(380), w, h))
+        assertEquals(330, TraineeGridScroll.measureDeltaPx(frame(0), frame(330), w, h))
+    }
+
+    @Test
+    fun `a shift that leaves too little band overlap refuses to answer`() {
+        assertNull(TraineeGridScroll.measureDeltaPx(frame(0), frame(380), w, h))
     }
 
     @Test
@@ -91,6 +97,49 @@ class TraineeGridScrollTest {
         assertNull(TraineeGridScroll.measureDeltaPx(frame(0), frame(500), w, h))
     }
 
+    /**
+     * Real frames: the probe columns of five Trainee Select page swipes captured on MuMu (see
+     * `fixtures/rostergrid/PROVENANCE.md`). Synthetic texture cannot catch the fixed
+     * Filters/Name/Asc overlay inside the band, which is what made every real swipe unmeasurable.
+     */
+    @Nested
+    @DisplayName("real roster swipes")
+    inner class RealSwipes {
+        private val firstY = 1000
+        private val lastY = 1600
+        private val probeXs = intArrayOf(340, 540, 739)
+
+        private val strip = requireNotNull(javaClass.getResourceAsStream("/fixtures/rostergrid/swipe_probe_columns.png")).use { FixturePng.read(it) }
+
+        /** Frames are stored before/after per swipe: index 2 * (swipe - 1) is its before frame, the next its after frame. */
+        private fun frameAt(index: Int): SparkPixelSampler =
+            SparkPixelSampler { x, y ->
+                val col = probeXs.indexOf(x)
+                require(col >= 0 && y in firstY..lastY) { "fixture holds only the probe columns of y $firstY..$lastY, asked ($x, $y)" }
+                strip.getRGB(index * probeXs.size + col, y - firstY)
+            }
+
+        private fun before(swipe: Int) = frameAt(2 * (swipe - 1))
+
+        private fun after(swipe: Int) = frameAt(2 * (swipe - 1) + 1)
+
+        @Test
+        fun `every page swipe is measured at the content movement`() {
+            val expected = intArrayOf(292, 286, 288, 274, 274)
+            for (swipe in 1..5) {
+                assertEquals(expected[swipe - 1], TraineeGridScroll.measureDeltaPx(before(swipe), after(swipe), w, h), "swipe $swipe")
+            }
+        }
+
+        @Test
+        fun `a page that did not move reads as no movement`() {
+            // The after frame of one swipe and the before frame of the next show the same page.
+            for (swipe in 1..4) {
+                assertEquals(0, TraineeGridScroll.measureDeltaPx(after(swipe), before(swipe + 1), w, h), "pair $swipe")
+            }
+        }
+    }
+
     @Nested
     @DisplayName("navigator wiring")
     inner class SourceGuard {
@@ -119,6 +168,17 @@ class TraineeGridScrollTest {
                 "both the scan loop and the remembered-position jump must swipe measured",
             )
             assertTrue(nav.contains("TraineePositionStore.putAll(context, discoveredCells)"), "the roster-wide position save left the scan")
+        }
+
+        /** A measured swipe must not shorten the next page. The swipe moves ~1.2 tile rows (235px pitch,
+         * 274-292px on the live frames) while the scan's two tap rows are 190px apart, so a skipped tap
+         * row can leave a whole tile row untapped, which reads as the target being absent. */
+        @Test
+        fun `every roster page is scanned from row 0 whatever the swipe measured`() {
+            val nav = navigatorSource()
+            assertFalse(nav.contains("RosterScanPolicy.nextStartRow("), "the scan consumes a measured advance to skip rows again")
+            assertTrue(Regex("""\n\s+val startRow = 0\n\s+for \(page in 0\.\.traineeMaxSwipes\)""").containsMatchIn(nav), "the scan's start row is no longer fixed at 0")
+            assertTrue(nav.contains("for (row in startRow until traineeGridRows)"), "the scan loop no longer starts at the start row")
         }
 
         /** The trainee EVENT banner ("Trainee Event / ...") reads "Trainee" in the same header

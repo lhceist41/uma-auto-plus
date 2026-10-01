@@ -1,22 +1,13 @@
 package com.steve1316.uma_android_automation.utils
 
 /**
- * Certainty rules for the trainee roster scan's paging.
+ * Certainty rules for the trainee roster scan.
  *
- * The scan reads a grid page, swipes down, and starts the next page below the rows the swipe
- * carried over. That skip is an optimisation, and it was trusting two things it had no right to:
- * that every cell of the previous page actually read, and that the swipe distance was known.
- *
- * On 2026-07-28 both were false at once. Five cells read blank and were silently dropped (no log,
- * no retry), then a swipe measured 262px, the scan computed a one-row advance, and started the next
- * page at row 1 on the belief that row 0 had already been covered. It had been tapped and had
- * failed. Those five cells held Hishi Amazon, Haru Urara, both Grass Wonders and Gold Ship, so an
- * owned trainee was reported as absent from the roster and the queue halted.
- *
- * The rule here is that a skip must be earned. Any uncertainty on the previous page - a blank read,
- * or a swipe whose distance could not be measured - drops the next page back to row 0 and lets the
- * name dedup absorb the re-reads. Re-reading a row costs a few seconds; skipping one cost a halted
- * queue and two unrun careers.
+ * On 2026-07-28 five cells read blank and were silently dropped (no log, no retry), and a page skip
+ * built on that page then started the next page below them. Those five cells held Hishi Amazon,
+ * Haru Urara, both Grass Wonders and Gold Ship, so an owned trainee was reported as absent and the
+ * queue halted. The scan therefore reads every page from row 0 (the name dedup absorbs the
+ * re-reads), retries a blank cell, and earns a second pass when a read failed.
  *
  * Kept free of Android types so the arithmetic is unit-testable.
  */
@@ -32,22 +23,6 @@ object RosterScanPolicy {
 
     /** True while [attempt] (0-based, counting retries only) is still within the cap. */
     fun shouldRetryBlank(attempt: Int): Boolean = attempt < MAX_BLANK_RETRIES
-
-    /**
-     * The row the next page may start at.
-     *
-     * @param gridRows rows in one grid page.
-     * @param advancedRows rows the swipe actually moved, or null when it could not be measured.
-     * @param previousPageFullyRead false when any cell on the previous page failed to read, which
-     *   makes that page's coverage unproven no matter what the swipe reported.
-     */
-    fun nextStartRow(gridRows: Int, advancedRows: Int?, previousPageFullyRead: Boolean): Int {
-        // Unmeasurable swipe: the carry-over is unknown, so nothing may be assumed already read.
-        if (advancedRows == null) return 0
-        // Measured, but the previous page has a hole in it: re-read rather than paper over it.
-        if (!previousPageFullyRead) return 0
-        return (gridRows - advancedRows).coerceIn(0, gridRows)
-    }
 
     /**
      * Whether a not-found scan has earned one full re-anchored second pass.

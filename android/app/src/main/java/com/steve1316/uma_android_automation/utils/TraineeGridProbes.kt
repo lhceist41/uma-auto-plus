@@ -22,9 +22,14 @@ package com.steve1316.uma_android_automation.utils
  */
 object TraineeGridScroll {
     /** The tile band the measurement samples, as height fractions: below the preview pane, above
-     * the filter bar (the same band the scan's two tap rows live in). */
+     * the fixed Filters/Name/Asc bar (the same band the scan's two tap rows live in). The grid
+     * keeps scrolling under that bar, and the bar starts at about 0.759 of the height (y 1457 of
+     * 1920): a band that reaches it compares a strip that never moves and no longer matches at
+     * the true offset (live frames 2026-10-01: all five swipes rejected at a 0.80 bottom, all
+     * five measured at 0.73-0.76). The shorter band also caps what can be measured: a swipe
+     * over ~336px leaves too little overlap and returns null. */
     const val BAND_TOP_FRACTION = 0.54f
-    const val BAND_BOTTOM_FRACTION = 0.80f
+    const val BAND_BOTTOM_FRACTION = 0.75f
 
     /** Probe columns (width fractions) through tile art. Three columns so a single flat column
      * (background between portraits) cannot blind the measurement; costs are summed across all

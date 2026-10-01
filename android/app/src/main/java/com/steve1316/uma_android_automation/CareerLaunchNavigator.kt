@@ -6605,11 +6605,14 @@ class CareerLaunchNavigator(private val context: Context) {
                 scanBitmap = iu.getSourceBitmap()
                 failedReads = 0
             }
-            var startRow = 0
+            // Every page scans from row 0, whatever the swipe measured: the swipe moves about 1.2 tile
+            // rows (235px pitch) while the two tap rows are 190px apart, so a measured advance cannot
+            // prove that a row below the first tap was already read, and a skipped row is never
+            // retried. The name dedup absorbs the re-reads.
+            val startRow = 0
             for (page in 0..traineeMaxSwipes) {
                 val bitmap = scanBitmap
                 var newThisPage = 0
-                var pageFullyRead = true
                 for (row in startRow until traineeGridRows) {
                     for (col in traineeColFractions.indices) {
                         if (!BotService.isRunning || StartModule.queueStopRequested) {
@@ -6622,10 +6625,8 @@ class CareerLaunchNavigator(private val context: Context) {
                         val preview = readRosterCell(bitmap, page, col, row)
                         val norm = preview.lowercase().replace(Regex("[^a-z0-9]"), "")
                         if (norm.isEmpty()) {
-                            // Already logged by readRosterCell. Record it so the page cannot be
-                            // treated as covered and the swipe skip cannot be earned.
+                            // Already logged by readRosterCell; counted so the second pass runs.
                             failedReads++
-                            pageFullyRead = false
                             continue
                         }
                         if (!seen.add(norm)) continue // already scored on an earlier (overlapping) page.
@@ -6701,17 +6702,6 @@ class CareerLaunchNavigator(private val context: Context) {
                             TAG,
                             "[ROTATION] Roster advanced $advancedRows rows in one swipe (more than the $traineeGridRows-row scan " +
                                 "band); some rows were skipped and the scan may need a second pass to find the target.",
-                        )
-                    }
-                    // The skip has to be EARNED: only a measured advance over a page that read
-                    // completely may start the next pass below row 0. An unmeasurable swipe or a
-                    // blank cell drops back to 0 and lets the dedup absorb the re-reads.
-                    startRow = RosterScanPolicy.nextStartRow(traineeGridRows, advancedRows, pageFullyRead)
-                    if (startRow == 0 && advancedRows != null && !pageFullyRead) {
-                        MessageLog.i(
-                            TAG,
-                            "[ROTATION] Page $page had an unreadable cell, so its coverage is unproven; " +
-                                "re-scanning the next page from row 0 instead of skipping $advancedRows row(s).",
                         )
                     }
                 }
