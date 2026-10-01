@@ -506,6 +506,36 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
             queueStopRequested && botStopReason != null && !lastCareerFinished
 
         /**
+         * The result a run reports when a Stop was requested while it ended. A player's Stop (the app,
+         * overlay or notification button: no [botStopReason]) is MANUALLY_STOPPED even when the run came
+         * back as an error, which it does when the Stop lands inside launch navigation and the navigator
+         * reports a failed transition; the card and the notification would otherwise show the player's
+         * own Stop as an error. A bot stop keeps its result, and a run that did not error keeps its own.
+         */
+        fun resultForStoppedRun(result: TaskResult, botStopReason: String?): TaskResult =
+            if (botStopReason == null && result is TaskResult.Error) {
+                TaskResult.Success(TaskResultCode.TASK_RESULT_MANUALLY_STOPPED, "Bot was manually stopped by the user.")
+            } else {
+                result
+            }
+
+        /**
+         * Whether the player stopped a run through the overlay button. The overlay Stop interrupts the bot
+         * thread and ends the service ([BotService.isRunning] false) without setting [queueStopRequested]
+         * (the app and notification Stops do), so a launch navigation that sees the service down before any
+         * wait reports a failure. No bot stop reason and no posted exception (which also ends the service)
+         * means it was the player.
+         */
+        fun isOverlayStop(botRunning: Boolean, botStopReason: String?, runPostedException: Boolean): Boolean =
+            !botRunning && botStopReason == null && !runPostedException
+
+        /**
+         * Whether an [ExceptionEvent] is a crash rather than a player's Stop. The library posts one from any
+         * thread's uncaught exception (and ends the service), and treats an InterruptedException as a manual stop.
+         */
+        fun isCrash(exception: Throwable): Boolean = exception !is InterruptedException
+
+        /**
          * Whether run [runIndex] finished the queue's last career. Decided from that run's own result, not
          * from a count of completed runs: an earlier errored or skipped run is not counted as completed,
          * yet the queue still reaches and finishes its last run.
@@ -1443,7 +1473,8 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                     taskResult = entryPoint.start()
                 } catch (e: Exception) {
                     EventBus.getDefault().postSticky(ExceptionEvent(e))
-                    lastRunPostedException = true
+                    // An InterruptedException is a Stop unwinding through a wait, not a crash: the overlay Stop must stay a Stop.
+                    lastRunPostedException = isCrash(e)
                     taskResult =
                         TaskResult.Error(
                             TaskResultCode.TASK_RESULT_UNHANDLED_EXCEPTION,
@@ -2347,6 +2378,9 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                         result = runSingleGame()
                     }
 
+                    // The overlay Stop sets no flag; give it the one the other Stops set, so everything below treats it alike.
+                    if (isOverlayStop(BotService.isRunning, queueStopReason, lastRunPostedException)) queueStopRequested = true
+
                     // A queue run whose launch stopped before Start Career keeps its reason. One stopped by its
                     // trainee's own conflict started no career: a rotation skips it, and without one it halts.
                     val launchStop = (result as? TaskResult.Error)?.takeIf { enableRunQueue && it.reasonKey.isNotEmpty() }
@@ -2361,7 +2395,7 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
                             }
                             queueStopRequested -> {
                                 MessageLog.i(TAG, "[QUEUE] Run $i stopped: ${queueStopReason ?: "user stop"}.")
-                                result // Use original result
+                                resultForStoppedRun(result, queueStopReason)
                             }
                             unplayable == UnplayableRunStep.SKIP -> {
                                 MessageLog.w(TAG, "[QUEUE] Run $i cannot start its trainee (${launchStop?.reasonKey}). Skipping it; the rotation goes on with the next trainee.")
@@ -3012,6 +3046,16 @@ class StartModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
         // This prevents flooding the bridge during parallel operations where disableOutput is true.
         if (event.isInternal) return
         enqueueJsEvent(event)
+    }
+
+    /**
+     * A crash ends the service like the overlay Stop does; recording it keeps [isOverlayStop] from reading it as the player's.
+     * Priority 1 runs this before the library's subscriber (priority 0), which clears [BotService.isRunning], whatever order
+     * the two registered in.
+     */
+    @Subscribe(priority = 1)
+    fun onExceptionEvent(event: ExceptionEvent) {
+        if (isCrash(event.exception)) lastRunPostedException = true
     }
 
     /**
